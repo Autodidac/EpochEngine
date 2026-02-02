@@ -1,7 +1,8 @@
+// modules/acontext.vulkan.context-device.ixx
 module;
 
-#include <stdexcept>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -16,8 +17,8 @@ import :shared_context;
 import :shared_vk;
 import :swapchain;
 
-namespace almondnamespace::vulkancontext {
-
+namespace almondnamespace::vulkancontext
+{
     inline vk::PhysicalDevice Application::pickPhysicalDevice()
     {
         // Works whether enumeratePhysicalDevices returns ResultValue or vector in your build.
@@ -54,7 +55,7 @@ namespace almondnamespace::vulkancontext {
         QueueFamilyIndices indices{};
 
         const auto queueProps = device.getQueueFamilyProperties();
-        uint32_t i = 0;
+        std::uint32_t i = 0;
 
         for (const auto& qf : queueProps)
         {
@@ -95,7 +96,7 @@ namespace almondnamespace::vulkancontext {
         physicalDevice = pickPhysicalDevice();
         queueFamilyIndices = findQueueFamilies(physicalDevice);
 
-        std::set<uint32_t> uniqueFamilies = {
+        std::set<std::uint32_t> uniqueFamilies = {
             queueFamilyIndices.graphicsFamily.value(),
             queueFamilyIndices.presentFamily.value()
         };
@@ -105,43 +106,28 @@ namespace almondnamespace::vulkancontext {
         std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
         queueCreateInfos.reserve(uniqueFamilies.size());
 
-        for (uint32_t family : uniqueFamilies)
+        for (std::uint32_t family : uniqueFamilies)
         {
             vk::DeviceQueueCreateInfo qci{};
-            qci.sType = vk::StructureType::eDeviceQueueCreateInfo;
-            qci.pNext = nullptr;
-            qci.flags = {};
             qci.queueFamilyIndex = family;
             qci.queueCount = 1;
             qci.pQueuePriorities = &queuePriority;
-
             queueCreateInfos.push_back(qci);
         }
 
+        // Keep this minimal; expand via pNext (vk::PhysicalDeviceFeatures2, etc.) when needed.
         vk::PhysicalDeviceFeatures deviceFeatures{};
 
         vk::DeviceCreateInfo createInfo{};
-        createInfo.sType = vk::StructureType::eDeviceCreateInfo;
-        createInfo.pNext = nullptr;
-        createInfo.flags = {};
-
-        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+        createInfo.queueCreateInfoCount = static_cast<std::uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
 
-        if (validationLayersEnabled)
-        {
-            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-            createInfo.ppEnabledLayerNames = validationLayers.data();
-        }
-        else
-        {
-            createInfo.enabledLayerCount = 0;
-            createInfo.ppEnabledLayerNames = nullptr;
-        }
+        // IMPORTANT (fixes your C4996):
+        // Validation layers are INSTANCE-level. DeviceCreateInfo layer fields are deprecated/ignored.
+        // Do not set enabledLayerCount / ppEnabledLayerNames.
 
-        createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+        createInfo.enabledExtensionCount = static_cast<std::uint32_t>(deviceExtensions.size());
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-
         createInfo.pEnabledFeatures = &deviceFeatures;
 
         auto [dRes, d] = physicalDevice.createDeviceUnique(createInfo);
@@ -162,8 +148,6 @@ namespace almondnamespace::vulkancontext {
             throw std::runtime_error("[Vulkan] Graphics family index not set.");
 
         vk::CommandPoolCreateInfo poolInfo{};
-        poolInfo.sType = vk::StructureType::eCommandPoolCreateInfo;
-        poolInfo.pNext = nullptr;
         poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
         poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
 
@@ -173,5 +157,4 @@ namespace almondnamespace::vulkancontext {
 
         commandPool = std::move(pool);
     }
-
 } // namespace almondnamespace::vulkancontext

@@ -40,7 +40,7 @@
 //#include "aengine.hpp"
 
 //import almondshell; // import the module
-import aengine.core.logger;
+//import aengine.core.logger;
 
 #define RAYLIB_STATIC
 
@@ -82,12 +82,12 @@ inline auto sanity() {
     // Lets Begin
     //TaskScheduler scheduler;
 
-    constexpr std::string_view kLogSystem = "Example.ConsoleApp";
-    auto& log = almondnamespace::logger::get(kLogSystem);
+    //constexpr std::string_view kLogSystem = "Example.ConsoleApp";
+    //auto& log = almondnamespace::logger::get(kLogSystem);
 
-    log.log(almondnamespace::logger::LogLevel::INFO,
-        "[Engine] Starting up...",
-        std::source_location::current());
+    //log.log(almondnamespace::logger::LogLevel::INFO,
+    //    "[Engine] Starting up...",
+    //    std::source_location::current());
 
 
 
@@ -121,8 +121,8 @@ inline auto sanity() {
         if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::steady_clock::now() - start).count() > 10) break;
     }
 */
-    log.log(almondnamespace::logger::LogLevel::INFO,
-        "[Engine] Session ended.",
-        std::source_location::current());
+    //log.log(almondnamespace::logger::LogLevel::INFO,
+    //    "[Engine] Session ended.",
+    //    std::source_location::current());
     //return 0;
 }

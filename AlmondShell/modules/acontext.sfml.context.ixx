@@ -1,4 +1,4 @@
-// acontext.sfml.context.ixx
+// modules/acontext.sfml.context.ixx
 module;
 
 // -----------------------------------------------------------------------------
@@ -23,14 +23,19 @@ module;
 #  endif
 #endif
 
-#define SFML_STATIC
-#include <SFML/Graphics/RenderWindow.hpp>
-#include <SFML/Graphics/Color.hpp>
-#include <SFML/Window/Event.hpp>
-#include <SFML/Window/ContextSettings.hpp>
-#include <SFML/Window/VideoMode.hpp>
-#include <SFML/Window/WindowStyle.hpp>
-#include <SFML/Graphics.hpp>
+#if defined(ALMOND_USING_SFML)
+#  define SFML_STATIC
+#  include <SFML/Graphics/RenderWindow.hpp>
+#  include <SFML/Graphics/View.hpp>
+#  include <SFML/Graphics/Color.hpp>
+#  include <SFML/Graphics/RenderStates.hpp>
+#  include <SFML/Window/ContextSettings.hpp>
+#  include <SFML/Window/VideoMode.hpp>
+#  include <SFML/Window/WindowHandle.hpp>
+#  include <SFML/Window/Event.hpp>
+#  include <SFML/Graphics.hpp>
+#endif
+
 #include <glad/glad.h>
 
 export module acontext.sfml.context;
@@ -51,6 +56,7 @@ import <cstdint>;
 import <functional>;
 import <iostream>;
 import <memory>;
+import <optional>;
 import <stdexcept>;
 import <string>;
 import <utility>;
@@ -59,11 +65,6 @@ export namespace almondnamespace::sfmlcontext
 {
 #if defined(ALMOND_USING_SFML)
 
-    // SFML NOTE:
-    // - SFML's default RenderTarget path uses legacy/fixed-function OpenGL calls.
-    // - Requesting a Core profile context will cause GL_INVALID_OPERATION spam.
-    // - Let SFML own context activation (setActive). Do NOT wglMakeCurrent manually.
-
     struct SFMLState
     {
         std::unique_ptr<sf::RenderWindow> window{};
@@ -71,8 +72,8 @@ export namespace almondnamespace::sfmlcontext
 #if defined(_WIN32)
         HWND  parent = nullptr;
         HWND  hwnd = nullptr;
-        HDC   hdc = nullptr;   // informational / optional
-        HGLRC glContext = nullptr;   // informational / optional
+        HDC   hdc = nullptr;
+        HGLRC glContext = nullptr;
 #endif
 
         unsigned int width = 400;
@@ -134,12 +135,13 @@ export namespace almondnamespace::sfmlcontext
                 sfmlcontext.height = static_cast<unsigned int>((std::max)(1, height));
 
                 if (sfmlcontext.window)
-                    sfmlcontext.window->setView(sf::View(
-                        sf::FloatRect(
-                            0.0f,
-                            0.0f,
-                            static_cast<float>(sfmlcontext.width),
-                            static_cast<float>(sfmlcontext.height))));
+                {
+                    sfmlcontext.window->setView(
+                        sf::View(sf::FloatRect(
+                            { 0.0f, 0.0f },
+                            { static_cast<float>(sfmlcontext.width),
+                             static_cast<float>(sfmlcontext.height) })));
+                }
 
                 auto locked = weakCtx.lock();
                 refresh_dimensions(locked);
@@ -155,28 +157,31 @@ export namespace almondnamespace::sfmlcontext
         if (ctx)
             ctx->onResize = sfmlcontext.onResize;
 
-        // IMPORTANT: request a compatibility-ish context.
-        // Using 2.1 is the safest choice for SFML's default RenderTarget path.
         sf::ContextSettings settings{};
         settings.majorVersion = 2;
         settings.minorVersion = 1;
-        settings.attributeFlags = sf::ContextSettings::Default;
+        settings.attributeFlags = sf::ContextSettings::Attribute::Default;
 
         if (windowTitle.empty() && ctx && ctx->windowData && !ctx->windowData->titleNarrow.empty())
             windowTitle = ctx->windowData->titleNarrow;
         if (windowTitle.empty())
             windowTitle = "SFML Window";
 
+        sfmlcontext.window = std::make_unique<sf::RenderWindow>();
+
         if (attachToHostWindow)
         {
-            sfmlcontext.window = std::make_unique<sf::RenderWindow>(
-                static_cast<sf::WindowHandle>(parentWnd), settings);
+            sfmlcontext.window->create(static_cast<sf::WindowHandle>(parentWnd), settings);
+            sfmlcontext.window->setTitle(windowTitle);
         }
         else
         {
-            sf::VideoMode mode(sfmlcontext.width, sfmlcontext.height, 32u);
-            sfmlcontext.window = std::make_unique<sf::RenderWindow>(
-                mode, windowTitle, sf::Style::Default, settings);
+            sf::VideoMode mode({ sfmlcontext.width, sfmlcontext.height });
+            sfmlcontext.window->create(mode,
+                windowTitle,
+                sf::Style::Default,
+                sf::State::Windowed,
+                settings);
         }
 
         if (!sfmlcontext.window || !sfmlcontext.window->isOpen())
@@ -202,10 +207,10 @@ export namespace almondnamespace::sfmlcontext
         state::s_sfmlstate.window.sfml_window = windowPtr;
 
 #if defined(_WIN32)
-        sfmlcontext.hwnd = static_cast<HWND>(sfmlcontext.window->getSystemHandle());
+        sfmlcontext.hwnd = static_cast<HWND>(sfmlcontext.window->getNativeHandle());
         sfmlcontext.hdc = GetDC(sfmlcontext.hwnd);
 
-#if !defined(ALMOND_MAIN_HEADLESS)
+#  if !defined(ALMOND_MAIN_HEADLESS)
         if (ctx)
             ctx->hwnd = sfmlcontext.hwnd;
 
@@ -216,9 +221,8 @@ export namespace almondnamespace::sfmlcontext
                 static_cast<int>(sfmlcontext.width),
                 static_cast<int>(sfmlcontext.height));
         }
-#endif
+#  endif
 
-        // Ensure the SFML context is current *on this thread* before capturing HGLRC.
         if (!sfmlcontext.window->setActive(true))
         {
             std::cerr << "[SFML] Failed to activate SFML window for context capture\n";
@@ -229,12 +233,11 @@ export namespace almondnamespace::sfmlcontext
         if (!sfmlcontext.glContext)
         {
             std::cerr << "[SFML] Failed to get OpenGL context\n";
-            sfmlcontext.window->setActive(false);
+            (void)sfmlcontext.window->setActive(false);
             return false;
         }
 
-        // Detach for now; render thread will reactivate per-frame.
-        sfmlcontext.window->setActive(false);
+        (void)sfmlcontext.window->setActive(false);
 
         if (sfmlcontext.parent)
         {
@@ -255,17 +258,16 @@ export namespace almondnamespace::sfmlcontext
             sfmlcontext.width = static_cast<unsigned int>(width);
             sfmlcontext.height = static_cast<unsigned int>(height);
 
-            SetWindowPos(
-                sfmlcontext.hwnd, nullptr, 0, 0, width, height,
+            SetWindowPos(sfmlcontext.hwnd, nullptr, 0, 0, width, height,
                 SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
             if (sfmlcontext.onResize)
                 sfmlcontext.onResize(width, height);
 
-#if !defined(ALMOND_MAIN_HEADLESS)
+#  if !defined(ALMOND_MAIN_HEADLESS)
             if (ctx && ctx->windowData)
                 ctx->windowData->set_size(width, height);
-#endif
+#  endif
         }
 #endif
 
@@ -282,7 +284,6 @@ export namespace almondnamespace::sfmlcontext
             core::ContextType::SFML,
             [](const TextureAtlas& atlas)
             {
-                // IMPORTANT: uploader must assume the SFML context is current in sfml_process.
                 sfmlcontext::ensure_uploaded(atlas);
             });
 
@@ -316,7 +317,6 @@ export namespace almondnamespace::sfmlcontext
 
         almond::diagnostics::FrameTiming frameTimer{ backendType, windowId, "SFML" };
 
-        // If the HWND is already dead (e.g., external teardown), bail before any GL calls.
 #if defined(_WIN32)
         if (sfmlcontext.hwnd && ::IsWindow(sfmlcontext.hwnd) == FALSE)
         {
@@ -326,7 +326,6 @@ export namespace almondnamespace::sfmlcontext
         }
 #endif
 
-        // Let SFML own activation. Do NOT call wglMakeCurrent manually.
         if (!sfmlcontext.window->setActive(true))
         {
             std::cerr << "[SFMLRender] Failed to activate SFML window\n";
@@ -347,38 +346,31 @@ export namespace almondnamespace::sfmlcontext
             hasOpenGLDraws || (hasQueuedCommands && !hasSfmlDraws && !hasVulkanDraws);
         const bool shouldResetSfmlState = hasSfmlDraws;
 
-#if !defined(NDEBUG)
-        almondnamespace::logger::info(
-            "SFML",
-            useOpenGLPath ? "Frame render path: OpenGL" : "Frame render path: SFML");
-#endif
-
         if (shouldResetSfmlState)
-        {
-            // Reset before doing any SFML draw calls.
             sfmlcontext.window->resetGLStates();
-        }
 
-        // If uploads use OpenGL, they must run while the SFML context is current.
         atlasmanager::process_pending_uploads(core::ContextType::SFML);
 
-        // Reset again in case uploads touched state.
         if (shouldResetSfmlState)
             sfmlcontext.window->resetGLStates();
 
-        sf::Event event{};
-        while (sfmlcontext.window->pollEvent(event))
+        while (true)
         {
-            if (event.type == sf::Event::Closed)
+            std::optional<sf::Event> ev = sfmlcontext.window->pollEvent();
+            if (!ev) break;
+
+            if (ev->is<sf::Event::Closed>())
             {
                 sfmlcontext.window->close();
                 sfmlcontext.running = false;
                 state::s_sfmlstate.mark_should_close(true);
+                break;
             }
-            else if (event.type == sf::Event::Resized)
+
+            if (const auto* r = ev->getIf<sf::Event::Resized>())
             {
-                const int w = static_cast<int>((std::max)(1u, event.size.width));
-                const int h = static_cast<int>((std::max)(1u, event.size.height));
+                const int w = static_cast<int>((std::max)(1u, r->size.x));
+                const int h = static_cast<int>((std::max)(1u, r->size.y));
                 if (sfmlcontext.onResize) sfmlcontext.onResize(w, h);
             }
         }
@@ -409,9 +401,6 @@ export namespace almondnamespace::sfmlcontext
             telemetry::RendererTelemetryTags{ backendType, windowId, "height" });
 
         const auto clearColor = core::clear_color_for_context(core::ContextType::SFML);
-        const auto r = static_cast<sf::Uint8>(clearColor[0] * 255.0f);
-        const auto g = static_cast<sf::Uint8>(clearColor[1] * 255.0f);
-        const auto b = static_cast<sf::Uint8>(clearColor[2] * 255.0f);
 
         if (useOpenGLPath)
         {
@@ -420,13 +409,16 @@ export namespace almondnamespace::sfmlcontext
         }
         else
         {
+            // SFML 3: no sf::Uint8 typedef; use std::uint8_t (or sf::Color::ComponentType if present).
+            using Byte = std::uint8_t;
+            const auto r = static_cast<Byte>(clearColor[0] * 255.0f);
+            const auto g = static_cast<Byte>(clearColor[1] * 255.0f);
+            const auto b = static_cast<Byte>(clearColor[2] * 255.0f);
             sfmlcontext.window->clear(sf::Color(r, g, b));
         }
 
         queue.drain();
-
         sfmlcontext.window->display();
-
         frameTimer.finish();
 
         (void)sfmlcontext.window->setActive(false);
@@ -435,7 +427,6 @@ export namespace almondnamespace::sfmlcontext
 
     inline void sfml_cleanup(std::shared_ptr<almondnamespace::core::Context>& ctx)
     {
-        // Stop new uploads immediately.
         atlasmanager::unregister_backend_uploader(core::ContextType::SFML);
 
         if (ctx && ctx->windowData)
@@ -445,29 +436,24 @@ export namespace almondnamespace::sfmlcontext
         state::s_sfmlstate.running = false;
         sfmlcontext.running = false;
 
-        // CRITICAL:
-        // clear_gpu_atlases() calls glDeleteTextures. That MUST only happen with an active,
-        // valid SFML context. If the window is already closed/destroyed, skip deletion.
         if (sfmlcontext.window && sfmlcontext.window->isOpen())
         {
             if (sfmlcontext.window->setActive(true))
             {
                 clear_gpu_atlases();
-                sfmlcontext.window->setActive(false);
+                (void)sfmlcontext.window->setActive(false);
             }
             else
             {
                 std::cerr << "[SFML] WARNING: could not activate context during cleanup; skipping GPU atlas delete\n";
             }
 
-            // Close after deleting textures (while context is still valid).
-            sfmlcontext.window->setActive(true);
+            (void)sfmlcontext.window->setActive(true);
             sfmlcontext.window->close();
             sfmlcontext.window.reset();
         }
         else
         {
-            // Window already gone -> don't touch GL.
             sfmlcontext.window.reset();
         }
 

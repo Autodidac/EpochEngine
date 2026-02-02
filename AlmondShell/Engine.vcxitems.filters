@@ -175,12 +175,6 @@
     <None Include="$(MSBuildThisFileDirectory)modules\.gitkeep">
       <Filter>Module Files</Filter>
     </None>
-    <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\frag.spv">
-      <Filter>Module Files\ixx\core\context\backends\vulkan\shaders</Filter>
-    </None>
-    <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\vert.spv">
-      <Filter>Module Files\ixx\core\context\backends\vulkan\shaders</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="$(MSBuildThisFileDirectory)src\WinResource.rc">
@@ -458,9 +452,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.textures.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aopengltriangle.ixx">
-      <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.state.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
@@ -643,6 +634,9 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.dispatch_storage.cpp">
       <Filter>Source Files\core\context\vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aopengltriangle.ixx">
+      <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

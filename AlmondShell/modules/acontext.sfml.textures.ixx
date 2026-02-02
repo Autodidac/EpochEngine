@@ -1,11 +1,11 @@
+// modules/acontext.sfml.textures.ixx
+
 module;
 
 #include <include/aengine.config.hpp>
 
-
 #if defined(ALMOND_USING_SFML)
-#define SFML_STATIC
-#include <SFML/Graphics.hpp>
+#  include <SFML/Graphics.hpp>
 #endif
 
 export module acontext.sfml.textures;
@@ -38,7 +38,7 @@ import <vector>;
 
 export namespace almondnamespace::sfmlcontext
 {
-    using Handle = uint32_t;
+    using Handle = std::uint32_t;
 
     struct AtlasGPU
     {
@@ -81,16 +81,20 @@ export namespace almondnamespace::sfmlcontext
     inline ImageData ensure_rgba(const ImageData& img)
     {
         const size_t pixelCount = static_cast<size_t>(img.width) * img.height;
+        if (pixelCount == 0)
+            throw std::runtime_error("ensure_rgba(): zero-sized image");
+
         const size_t channels = img.pixels.size() / pixelCount;
 
-        if (channels == 4) return img;
+        if (channels == 4)
+            return img;
 
         if (channels != 3)
             throw std::runtime_error("ensure_rgba(): Unsupported channel count: " + std::to_string(channels));
 
-        std::vector<uint8_t> rgba(pixelCount * 4);
-        const uint8_t* src = img.pixels.data();
-        uint8_t* dst = rgba.data();
+        std::vector<std::uint8_t> rgba(pixelCount * 4);
+        const std::uint8_t* src = img.pixels.data();
+        std::uint8_t* dst = rgba.data();
 
         for (size_t i = 0; i < pixelCount; ++i)
         {
@@ -111,6 +115,14 @@ export namespace almondnamespace::sfmlcontext
 
     inline void dump_atlas(const TextureAtlas& atlas, int atlasIdx)
     {
+        // PPM P6 dump (RGB only). Assumes atlas.pixel_data is RGBA8.
+        const std::size_t expected = std::size_t(atlas.width) * std::size_t(atlas.height) * 4;
+        if (atlas.pixel_data.size() < expected)
+        {
+            std::cerr << "[Dump] Skipping dump; pixel_data is not RGBA8 for '" << atlas.name << "'\n";
+            return;
+        }
+
         const std::string filename = make_dump_name(atlasIdx, atlas.name);
         std::ofstream out(filename, std::ios::binary);
         if (!out)
@@ -120,21 +132,22 @@ export namespace almondnamespace::sfmlcontext
         }
 
         out << "P6\n" << atlas.width << " " << atlas.height << "\n255\n";
-        for (size_t i = 0; i < atlas.pixel_data.size(); i += 4)
+        for (size_t i = 0; i < expected; i += 4)
         {
-            out.put(static_cast<char>(atlas.pixel_data[i]));
+            out.put(static_cast<char>(atlas.pixel_data[i + 0]));
             out.put(static_cast<char>(atlas.pixel_data[i + 1]));
             out.put(static_cast<char>(atlas.pixel_data[i + 2]));
         }
+
         std::cerr << "[Dump] Wrote: " << filename << "\n";
     }
 
     inline void upload_atlas_to_gpu(const TextureAtlas& atlas)
     {
+        // If atlas pixels are lazily built, rebuild them.
+        // NOTE: This const_cast is a design smell; prefer making rebuild_pixels() const if it's a cache rebuild.
         if (atlas.pixel_data.empty())
-        {
             const_cast<TextureAtlas&>(atlas).rebuild_pixels();
-        }
 
         auto& gpu = sfml_gpu_atlases[&atlas];
 
@@ -145,18 +158,24 @@ export namespace almondnamespace::sfmlcontext
             return;
         }
 
-        sf::Image image{};
-        image.create(
+        const sf::Vector2u size{
             static_cast<unsigned>(atlas.width),
-            static_cast<unsigned>(atlas.height),
-            reinterpret_cast<const sf::Uint8*>(atlas.pixel_data.data())
-        );
+            static_cast<unsigned>(atlas.height)
+        };
 
+        const std::size_t expected = std::size_t(size.x) * std::size_t(size.y) * 4;
+        if (atlas.pixel_data.size() < expected)
+            throw std::runtime_error("[SFML] atlas pixel_data is not RGBA8: '" + atlas.name + "'");
 
-        if (!gpu.texture.loadFromImage(image))
+        // SFML 3: allocate/resize via resize(Vector2u). (No Texture::create(w,h).)
+        if (gpu.texture.getSize() != size)
         {
-            throw std::runtime_error("[SFML] Failed to load GPU texture from pixel_data for atlas: " + atlas.name);
+            if (!gpu.texture.resize(size))
+                throw std::runtime_error("[SFML] sf::Texture::resize failed for atlas: " + atlas.name);
         }
+
+        // SFML expects RGBA8 bytes. Do NOT use sf::Utf8 (text).
+        gpu.texture.update(reinterpret_cast<const std::uint8_t*>(atlas.pixel_data.data()));
 
         gpu.width = atlas.width;
         gpu.height = atlas.height;
@@ -198,23 +217,23 @@ export namespace almondnamespace::sfmlcontext
         auto rgba = ensure_rgba(img);
 
         Texture texture{
-            .width = static_cast<uint32_t>(rgba.width),
-            .height = static_cast<uint32_t>(rgba.height),
+            .width = static_cast<std::uint32_t>(rgba.width),
+            .height = static_cast<std::uint32_t>(rgba.height),
             .pixels = std::move(rgba.pixels)
         };
 
         auto addedOpt = atlas.add_entry(id, texture);
         if (!addedOpt)
-        {
             throw std::runtime_error("atlas_add_texture: Failed to add: " + id);
-        }
 
         ensure_uploaded(atlas);
 
         return make_handle(atlas.get_index(), addedOpt->index);
     }
 
-    inline void draw_sprite(SpriteHandle handle, std::span<const TextureAtlas* const> atlases,
+    inline void draw_sprite(
+        SpriteHandle handle,
+        std::span<const TextureAtlas* const> atlases,
         float x, float y, float width, float height) noexcept
     {
         if (!handle.is_valid())
@@ -258,6 +277,7 @@ export namespace almondnamespace::sfmlcontext
         const auto& gpu = it->second;
 
         sf::Sprite sprite(gpu.texture);
+
         sf::IntRect rect(
             sf::Vector2i(static_cast<int>(region.x), static_cast<int>(region.y)),
             sf::Vector2i(static_cast<int>(region.width), static_cast<int>(region.height)));

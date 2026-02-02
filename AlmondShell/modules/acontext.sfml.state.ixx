@@ -1,3 +1,4 @@
+// acontext.sfml.state.ixx
 module;
 
 // Must be before anything that might pull <windows.h> (directly or indirectly)
@@ -23,10 +24,11 @@ module;
 #   endif
 #endif
 
-
 #if defined(ALMOND_USING_SFML)
-#define SFML_STATIC
-#include <SFML/Graphics.hpp>
+// Prefer targeted headers over the umbrella to reduce accidental includes.
+#   include <SFML/Graphics/RenderWindow.hpp>
+#   include <SFML/Window/Keyboard.hpp>
+#   include <SFML/Window/Mouse.hpp>
 #endif
 
 export module acontext.sfml.state;
@@ -37,11 +39,20 @@ import aengine.core.time;
 
 import <array>;
 import <bitset>;
+import <cstddef>;
 import <functional>;
 
 export namespace almondnamespace::sfmlcontext::state
 {
 #if defined(ALMOND_USING_SFML)
+
+    // SFML3 note:
+    // Key/button enums are not guaranteed to remain simple "0..Count-1" ints forever.
+    // We keep internal state arrays sized to conservative constants.
+    // If you want exact mapping, implement translation functions at the input layer.
+    inline constexpr std::size_t kMaxMouseButtons = 16;
+    inline constexpr std::size_t kMaxKeys = 256;
+
     struct SFML3State
     {
         SFML3State()
@@ -49,6 +60,7 @@ export namespace almondnamespace::sfmlcontext::state
             window.width = DEFAULT_WINDOW_WIDTH;
             window.height = DEFAULT_WINDOW_HEIGHT;
             window.should_close = false;
+
             screenWidth = window.width;
             screenHeight = window.height;
         }
@@ -56,26 +68,62 @@ export namespace almondnamespace::sfmlcontext::state
         almondnamespace::contextwindow::WindowData window{};
 
         bool shouldClose{ false };
-        int screenWidth{ DEFAULT_WINDOW_WIDTH };
-        int screenHeight{ DEFAULT_WINDOW_HEIGHT };
+        int  screenWidth{ DEFAULT_WINDOW_WIDTH };
+        int  screenHeight{ DEFAULT_WINDOW_HEIGHT };
         bool running{ false };
 
         std::function<void(int, int)> onResize{};
 
         struct MouseState
         {
-            std::array<bool, static_cast<std::size_t>(sf::Mouse::ButtonCount)> down{};
-            std::array<bool, static_cast<std::size_t>(sf::Mouse::ButtonCount)> pressed{};
-            std::array<bool, static_cast<std::size_t>(sf::Mouse::ButtonCount)> prevDown{};
+            std::array<bool, kMaxMouseButtons> down{};
+            std::array<bool, kMaxMouseButtons> pressed{};
+            std::array<bool, kMaxMouseButtons> prevDown{};
             int lastX = 0;
             int lastY = 0;
+
+            static constexpr std::size_t idx(sf::Mouse::Button b) noexcept
+            {
+                // SFML 3 uses enum class; cast through underlying type.
+                const auto i = static_cast<std::size_t>(b);
+                return (i < kMaxMouseButtons) ? i : (kMaxMouseButtons - 1);
+            }
+
+            void begin_frame() noexcept
+            {
+                pressed.fill(false);
+            }
+
+            void update_pressed() noexcept
+            {
+                for (std::size_t i = 0; i < kMaxMouseButtons; ++i)
+                    pressed[i] = down[i] && !prevDown[i];
+                prevDown = down;
+            }
         } mouse{};
 
         struct KeyboardState
         {
-            std::bitset<sf::Keyboard::KeyCount> down;
-            std::bitset<sf::Keyboard::KeyCount> pressed;
-            std::bitset<sf::Keyboard::KeyCount> prevDown;
+            std::bitset<kMaxKeys> down{};
+            std::bitset<kMaxKeys> pressed{};
+            std::bitset<kMaxKeys> prevDown{};
+
+            static constexpr std::size_t idx(sf::Keyboard::Key k) noexcept
+            {
+                const auto i = static_cast<std::size_t>(k);
+                return (i < kMaxKeys) ? i : (kMaxKeys - 1);
+            }
+
+            void begin_frame() noexcept
+            {
+                pressed.reset();
+            }
+
+            void update_pressed() noexcept
+            {
+                pressed = down & (~prevDown);
+                prevDown = down;
+            }
         } keyboard{};
 
         almondnamespace::timing::Timer pollTimer = almondnamespace::timing::createTimer(1.0);
@@ -102,5 +150,6 @@ export namespace almondnamespace::sfmlcontext::state
     };
 
     inline SFML3State s_sfmlstate{};
+
 #endif // ALMOND_USING_SFML
-}
+} // namespace almondnamespace::sfmlcontext::state
