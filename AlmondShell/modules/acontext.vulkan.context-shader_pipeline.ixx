@@ -289,8 +289,8 @@ export namespace almondnamespace::vulkancontext
     void Application::createGuiPipeline()
     {
         auto& guiState = gui_state_for_context(activeGuiContext);
-        const auto vertShaderCode = readFile("shaders/vert.spv");
-        const auto fragShaderCode = readFile("shaders/frag.spv");
+        const auto vertShaderCode = readFile("shaders/gui_vert.spv");
+        const auto fragShaderCode = readFile("shaders/gui_frag.spv");
 
         vk::ShaderModuleCreateInfo vInfo{};
         vInfo.codeSize = vertShaderCode.size();
