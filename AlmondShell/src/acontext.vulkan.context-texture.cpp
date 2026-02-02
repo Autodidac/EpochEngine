@@ -278,7 +278,13 @@ namespace almondnamespace::vulkancontext
         if (entry.version == atlas.version && entry.image)
             return;
 
-        if (atlas.width == 0 || atlas.height == 0 || atlas.pixel_data.empty())
+        if (atlas.width == 0 || atlas.height == 0)
+            return;
+
+        if (atlas.pixel_data.empty())
+            const_cast<TextureAtlas&>(atlas).rebuild_pixels();
+
+        if (atlas.pixel_data.empty())
             return;
 
         entry.image.reset();
