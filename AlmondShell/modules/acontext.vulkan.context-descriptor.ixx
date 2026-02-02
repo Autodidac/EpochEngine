@@ -202,6 +202,7 @@ namespace almondnamespace::vulkancontext
         const float height = swapChainExtent.height ? static_cast<float>(swapChainExtent.height) : 1.0f;
 
         ubo.proj = glm::ortho(0.0f, width, height, 0.0f);
+        ubo.proj[1][1] *= -1.0f;
 
         std::memcpy(guiState->guiUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
