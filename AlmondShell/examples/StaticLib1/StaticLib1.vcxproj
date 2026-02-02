@@ -131,6 +131,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <AdditionalModuleDependencies>
       </AdditionalModuleDependencies>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -158,6 +159,7 @@
       <AdditionalModuleDependencies>
       </AdditionalModuleDependencies>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>

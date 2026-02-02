@@ -1,7 +1,11 @@
 ﻿module;
 
-#include <wtypes.h>
+#include <include/aengine.config.hpp>
 
+#include <wtypes.h>
+#if defined(_WIN32)
+#include <include/aframework.hpp>
+#endif
 // ainput.ixx
 export module aengine.input;
 
@@ -15,7 +19,7 @@ import aengine.context.window;
 
 // Platform framework lives behind aplatform / aframework
 #if defined(_WIN32)
-import aframework;
+//import aframework;
 #elif defined(__APPLE__)
 import <ApplicationServices/ApplicationServices.h>;
 #elif defined(__linux__)

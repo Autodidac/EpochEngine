@@ -3,3 +3,6 @@
 *.cpp linguist-language=C++
 *.hpp linguist-language=C++
 *.css linguist-language=C++
+*.ixx linguist-language=C++
+*.mxx linguist-language=C++
+*.cppm linguist-language=C++

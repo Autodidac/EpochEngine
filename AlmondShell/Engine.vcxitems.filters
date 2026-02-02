@@ -401,15 +401,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascenesnapshot.ixx">
       <Filter>Module Files\ixx\scene</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypes.ixx">
-      <Filter>Module Files\ixx\core\platform</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypesposix.ixx">
-      <Filter>Module Files\ixx\core\platform</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypeswin32.ixx">
-      <Filter>Module Files\ixx\core\platform</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.string.converter.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>

@@ -183,9 +183,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aspriteregistry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atetrislike.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atexture.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypes.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypesposix.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypeswin32.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.system.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.internal_private.ixx" />
@@ -201,7 +198,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sdl.textures.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.scripting.compiler.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.filewatch.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aframework.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aframework.ixx">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.atomicfunction.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ampmcboundedqueue.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.string.converter.ixx" />

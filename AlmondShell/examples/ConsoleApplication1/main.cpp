@@ -39,7 +39,7 @@
 #include "../../include/aengine.hpp"
 //#include "aengine.hpp"
 
-import almondshell; // import the module
+//import almondshell; // import the module
 import aengine.core.logger;
 
 #define RAYLIB_STATIC
