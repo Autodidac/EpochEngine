@@ -684,6 +684,11 @@ namespace almondnamespace::core
                         if (!w->titleNarrow.empty()) narrowTitle = w->titleNarrow;
                     }
 
+                    // Keep the cross-backend fields in sync (used by GUI and shared GL overlays).
+                    ctx->native_window = hwnd;
+                    ctx->native_drawable = ctx->hdc;
+                    ctx->native_gl_context = ctx->hglrc;
+
                     if (narrowTitle.empty())
                     {
                         narrowTitle = (i < createdTitles.size())

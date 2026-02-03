@@ -201,8 +201,9 @@ namespace almondnamespace::vulkancontext
         const float width = swapChainExtent.width ? static_cast<float>(swapChainExtent.width) : 1.0f;
         const float height = swapChainExtent.height ? static_cast<float>(swapChainExtent.height) : 1.0f;
 
+        // For GUI we already flip Y by swapping top/bottom in the ortho call,
+        // so avoid applying the Vulkan clip-space flip again (would push GUI off-screen).
         ubo.proj = glm::ortho(0.0f, width, height, 0.0f);
-        ubo.proj[1][1] *= -1.0f;
 
         std::memcpy(guiState->guiUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
