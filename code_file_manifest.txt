@@ -1,0 +1,304 @@
+# Code File Manifest
+# Format: <path>	<description>
+
+AlmondShell/build.sh	Shell script for build.
+AlmondShell/clean.sh	Shell script for clean.
+AlmondShell/examples/ConsoleApplication1/assets/vulkan/shaders/frag.glsl	GLSL shader source for frag.
+AlmondShell/examples/ConsoleApplication1/assets/vulkan/shaders/vert.glsl	GLSL shader source for vert.
+AlmondShell/examples/ConsoleApplication1/main.cpp	Example C/C++ source for main.
+AlmondShell/examples/StaticLib1/StaticLib1.cpp	Example C/C++ source for StaticLib1.
+AlmondShell/examples/StaticLib1/framework.h	Source file (.h) for framework.
+AlmondShell/examples/StaticLib1/pch.cpp	Example C/C++ source for pch.
+AlmondShell/examples/StaticLib1/pch.h	Source file (.h) for pch.
+AlmondShell/include/acontext.vulkan.hpp	C++ header for acontext vulkan.
+AlmondShell/include/aengine.config.hpp	C++ header for aengine config.
+AlmondShell/include/aengine.hpp	C++ header for aengine.
+AlmondShell/include/aframework.hpp	C++ header for aframework.
+AlmondShell/install.sh	Shell script for install.
+AlmondShell/modules/a2048like.ixx	C++20 module interface for a2048like.
+AlmondShell/modules/aapplicationmodule.ixx	C++20 module interface for aapplicationmodule.
+AlmondShell/modules/aatlas.manager.ixx	C++20 module interface for aatlas manager.
+AlmondShell/modules/aatlas.texture.ixx	C++20 module interface for aatlas texture.
+AlmondShell/modules/acellularsim.ixx	C++20 module interface for acellularsim.
+AlmondShell/modules/acontext.noop.context.ixx	C++20 module interface for acontext noop context.
+AlmondShell/modules/acontext.opengl.context.ixx	C++20 module interface for acontext opengl context.
+AlmondShell/modules/acontext.opengl.platform.ixx	C++20 module interface for acontext opengl platform.
+AlmondShell/modules/acontext.opengl.quad.ixx	C++20 module interface for acontext opengl quad.
+AlmondShell/modules/acontext.opengl.renderer.ixx	C++20 module interface for acontext opengl renderer.
+AlmondShell/modules/acontext.opengl.state.ixx	C++20 module interface for acontext opengl state.
+AlmondShell/modules/acontext.opengl.textures.ixx	C++20 module interface for acontext opengl textures.
+AlmondShell/modules/acontext.raylib.api.ixx	C++20 module interface for acontext raylib api.
+AlmondShell/modules/acontext.raylib.context.ixx	C++20 module interface for acontext raylib context.
+AlmondShell/modules/acontext.raylib.context.win.ixx	C++20 module interface for acontext raylib context win.
+AlmondShell/modules/acontext.raylib.input.ixx	C++20 module interface for acontext raylib input.
+AlmondShell/modules/acontext.raylib.renderer.ixx	C++20 module interface for acontext raylib renderer.
+AlmondShell/modules/acontext.raylib.state.ixx	C++20 module interface for acontext raylib state.
+AlmondShell/modules/acontext.raylib.textures.ixx	C++20 module interface for acontext raylib textures.
+AlmondShell/modules/acontext.sdl.context.ixx	C++20 module interface for acontext sdl context.
+AlmondShell/modules/acontext.sdl.renderer.ixx	C++20 module interface for acontext sdl renderer.
+AlmondShell/modules/acontext.sdl.state.ixx	C++20 module interface for acontext sdl state.
+AlmondShell/modules/acontext.sdl.textures.ixx	C++20 module interface for acontext sdl textures.
+AlmondShell/modules/acontext.sfml.context.ixx	C++20 module interface for acontext sfml context.
+AlmondShell/modules/acontext.sfml.renderer.ixx	C++20 module interface for acontext sfml renderer.
+AlmondShell/modules/acontext.sfml.state.ixx	C++20 module interface for acontext sfml state.
+AlmondShell/modules/acontext.sfml.textures.ixx	C++20 module interface for acontext sfml textures.
+AlmondShell/modules/acontext.softrenderer.context.ixx	C++20 module interface for acontext softrenderer context.
+AlmondShell/modules/acontext.softrenderer.quad.ixx	C++20 module interface for acontext softrenderer quad.
+AlmondShell/modules/acontext.softrenderer.renderer.ixx	C++20 module interface for acontext softrenderer renderer.
+AlmondShell/modules/acontext.softrenderer.state.ixx	C++20 module interface for acontext softrenderer state.
+AlmondShell/modules/acontext.softrenderer.textures.ixx	C++20 module interface for acontext softrenderer textures.
+AlmondShell/modules/acontext.vulkan.camera.ixx	C++20 module interface for acontext vulkan camera.
+AlmondShell/modules/acontext.vulkan.context-api.ixx	C++20 module interface for acontext vulkan context api.
+AlmondShell/modules/acontext.vulkan.context-api_unit.ixx	C++20 module interface for acontext vulkan context api unit.
+AlmondShell/modules/acontext.vulkan.context-buffers.ixx	C++20 module interface for acontext vulkan context buffers.
+AlmondShell/modules/acontext.vulkan.context-commands.ixx	C++20 module interface for acontext vulkan context commands.
+AlmondShell/modules/acontext.vulkan.context-depth.ixx	C++20 module interface for acontext vulkan context depth.
+AlmondShell/modules/acontext.vulkan.context-descriptor.ixx	C++20 module interface for acontext vulkan context descriptor.
+AlmondShell/modules/acontext.vulkan.context-device.ixx	C++20 module interface for acontext vulkan context device.
+AlmondShell/modules/acontext.vulkan.context-instance.ixx	C++20 module interface for acontext vulkan context instance.
+AlmondShell/modules/acontext.vulkan.context-memory.ixx	C++20 module interface for acontext vulkan context memory.
+AlmondShell/modules/acontext.vulkan.context-renderer.ixx	C++20 module interface for acontext vulkan context renderer.
+AlmondShell/modules/acontext.vulkan.context-runtime.ixx	C++20 module interface for acontext vulkan context runtime.
+AlmondShell/modules/acontext.vulkan.context-shader_pipeline.ixx	C++20 module interface for acontext vulkan context shader pipeline.
+AlmondShell/modules/acontext.vulkan.context-shared_context.ixx	C++20 module interface for acontext vulkan context shared context.
+AlmondShell/modules/acontext.vulkan.context-shared_vk.ixx	C++20 module interface for acontext vulkan context shared vk.
+AlmondShell/modules/acontext.vulkan.context-swapchain.ixx	C++20 module interface for acontext vulkan context swapchain.
+AlmondShell/modules/acontext.vulkan.context-texture.ixx	C++20 module interface for acontext vulkan context texture.
+AlmondShell/modules/acontext.vulkan.context-window.ixx	C++20 module interface for acontext vulkan context window.
+AlmondShell/modules/acontext.vulkan.context.ixx	C++20 module interface for acontext vulkan context.
+AlmondShell/modules/acontext.vulkan.meshcube.ixx	C++20 module interface for acontext vulkan meshcube.
+AlmondShell/modules/acontext.vulkan.platform.device.ixx	C++20 module interface for acontext vulkan platform device.
+AlmondShell/modules/acontext.vulkan.platform.dispatcher.ixx	C++20 module interface for acontext vulkan platform dispatcher.
+AlmondShell/modules/acontext.vulkan.platform.instance.ixx	C++20 module interface for acontext vulkan platform instance.
+AlmondShell/modules/acontext.vulkan.platform.loader.ixx	C++20 module interface for acontext vulkan platform loader.
+AlmondShell/modules/acontext.vulkan.quad.ixx	C++20 module interface for acontext vulkan quad.
+AlmondShell/modules/acontext.vulkan.triangle.ixx	C++20 module interface for acontext vulkan triangle.
+AlmondShell/modules/aecs.components.ixx	C++20 module interface for aecs components.
+AlmondShell/modules/aecs.entitycomponentmanager.ixx	C++20 module interface for aecs entitycomponentmanager.
+AlmondShell/modules/aecs.entityhistory.ixx	C++20 module interface for aecs entityhistory.
+AlmondShell/modules/aecs.internal_private.ixx	C++20 module interface for aecs internal private.
+AlmondShell/modules/aecs.ixx	C++20 module interface for aecs.
+AlmondShell/modules/aecs.storage.ixx	C++20 module interface for aecs storage.
+AlmondShell/modules/aeditor.ixx	C++20 module interface for aeditor.
+AlmondShell/modules/aenduserapplication.ixx	C++20 module interface for aenduserapplication.
+AlmondShell/modules/aengine.bindings.ixx	C++20 module interface for aengine bindings.
+AlmondShell/modules/aengine.cli.ixx	C++20 module interface for aengine cli.
+AlmondShell/modules/aengine.context.commandqueue.ixx	C++20 module interface for aengine context commandqueue.
+AlmondShell/modules/aengine.context.control.ixx	C++20 module interface for aengine context control.
+AlmondShell/modules/aengine.context.multiplexer.ixx	C++20 module interface for aengine context multiplexer.
+AlmondShell/modules/aengine.context.platform.utils.ixx	C++20 module interface for aengine context platform utils.
+AlmondShell/modules/aengine.context.type.ixx	C++20 module interface for aengine context type.
+AlmondShell/modules/aengine.context.window.ixx	C++20 module interface for aengine context window.
+AlmondShell/modules/aengine.core.commandline.ixx	C++20 module interface for aengine core commandline.
+AlmondShell/modules/aengine.core.context.ixx	C++20 module interface for aengine core context.
+AlmondShell/modules/aengine.core.logger.ixx	C++20 module interface for aengine core logger.
+AlmondShell/modules/aengine.core.time.ixx	C++20 module interface for aengine core time.
+AlmondShell/modules/aengine.core.types.ixx	C++20 module interface for aengine core types.
+AlmondShell/modules/aengine.core.utilities.ixx	C++20 module interface for aengine core utilities.
+AlmondShell/modules/aengine.diagnostics.ixx	C++20 module interface for aengine diagnostics.
+AlmondShell/modules/aengine.engine_components.ixx	C++20 module interface for aengine engine components.
+AlmondShell/modules/aengine.event.movement.ixx	C++20 module interface for aengine event movement.
+AlmondShell/modules/aengine.eventsystem.ixx	C++20 module interface for aengine eventsystem.
+AlmondShell/modules/aengine.gui.ixx	C++20 module interface for aengine gui.
+AlmondShell/modules/aengine.gui.menu.ixx	C++20 module interface for aengine gui menu.
+AlmondShell/modules/aengine.handles.ixx	C++20 module interface for aengine handles.
+AlmondShell/modules/aengine.input.ixx	C++20 module interface for aengine input.
+AlmondShell/modules/aengine.platform.ixx	C++20 module interface for aengine platform.
+AlmondShell/modules/aengine.saveload.system.ixx	C++20 module interface for aengine saveload system.
+AlmondShell/modules/aengine.scripting.compiler.ixx	C++20 module interface for aengine scripting compiler.
+AlmondShell/modules/aengine.systems.ixx	C++20 module interface for aengine systems.
+AlmondShell/modules/aengine.taskgraph.dotsystem.ixx	C++20 module interface for aengine taskgraph dotsystem.
+AlmondShell/modules/aengine.telemetry.ixx	C++20 module interface for aengine telemetry.
+AlmondShell/modules/aengine.updater.config.ixx	C++20 module interface for aengine updater config.
+AlmondShell/modules/aengine.updater.ixx	C++20 module interface for aengine updater.
+AlmondShell/modules/aengine.updater.system.ixx	C++20 module interface for aengine updater system.
+AlmondShell/modules/aengine.updater.tools.ixx	C++20 module interface for aengine updater tools.
+AlmondShell/modules/aengine.version.ixx	C++20 module interface for aengine version.
+AlmondShell/modules/aentity.ixx	C++20 module interface for aentity.
+AlmondShell/modules/afont.renderer.ixx	C++20 module interface for afont renderer.
+AlmondShell/modules/aframework.ixx	C++20 module interface for aframework.
+AlmondShell/modules/afroggerlike.ixx	C++20 module interface for afroggerlike.
+AlmondShell/modules/agamecore.ixx	C++20 module interface for agamecore.
+AlmondShell/modules/aimage.loader.ixx	C++20 module interface for aimage loader.
+AlmondShell/modules/aimage.writer.ixx	C++20 module interface for aimage writer.
+AlmondShell/modules/aimageatlaswriter.ixx	C++20 module interface for aimageatlaswriter.
+AlmondShell/modules/almondshell.ixx	C++20 module interface for almondshell.
+AlmondShell/modules/amatch3like.ixx	C++20 module interface for amatch3like.
+AlmondShell/modules/aminesweeperlike.ixx	C++20 module interface for aminesweeperlike.
+AlmondShell/modules/amipmapatlas.ixx	C++20 module interface for amipmapatlas.
+AlmondShell/modules/ampmcboundedqueue.ixx	C++20 module interface for ampmcboundedqueue.
+AlmondShell/modules/anet.ixx	C++20 module interface for anet.
+AlmondShell/modules/aopenglfreetype.ixx	C++20 module interface for aopenglfreetype.
+AlmondShell/modules/aopengltriangle.ixx	C++20 module interface for aopengltriangle.
+AlmondShell/modules/apacmanlike.ixx	C++20 module interface for apacmanlike.
+AlmondShell/modules/aplatformpump.ixx	C++20 module interface for aplatformpump.
+AlmondShell/modules/asandsim.ixx	C++20 module interface for asandsim.
+AlmondShell/modules/ascene.ixx	C++20 module interface for ascene.
+AlmondShell/modules/asceneserializer.ixx	C++20 module interface for asceneserializer.
+AlmondShell/modules/ascenesnapshot.ixx	C++20 module interface for ascenesnapshot.
+AlmondShell/modules/ascripting.system.ixx	C++20 module interface for ascripting system.
+AlmondShell/modules/aslidingpuzzlelike.ixx	C++20 module interface for aslidingpuzzlelike.
+AlmondShell/modules/asnakelike.ixx	C++20 module interface for asnakelike.
+AlmondShell/modules/asokobanlike.ixx	C++20 module interface for asokobanlike.
+AlmondShell/modules/asprite.pool.ixx	C++20 module interface for asprite pool.
+AlmondShell/modules/aspritehandle.ixx	C++20 module interface for aspritehandle.
+AlmondShell/modules/aspriteregistry.ixx	C++20 module interface for aspriteregistry.
+AlmondShell/modules/atetrislike.ixx	C++20 module interface for atetrislike.
+AlmondShell/modules/atexture.ixx	C++20 module interface for atexture.
+AlmondShell/modules/autility.allocator.ixx	C++20 module interface for autility allocator.
+AlmondShell/modules/autility.atomicfunction.ixx	C++20 module interface for autility atomicfunction.
+AlmondShell/modules/autility.codeinspector.ixx	C++20 module interface for autility codeinspector.
+AlmondShell/modules/autility.filewatch.ixx	C++20 module interface for autility filewatch.
+AlmondShell/modules/autility.string.converter.ixx	C++20 module interface for autility string converter.
+AlmondShell/run.sh	Shell script for run.
+AlmondShell/src/WinResource.aps	Visual Studio resource file.
+AlmondShell/src/WinResource.rc	Windows resource script.
+AlmondShell/src/acontext.raylib.bridge.cpp	C/C++ source implementation for acontext raylib bridge.
+AlmondShell/src/acontext.vulkan.context-texture.cpp	C/C++ source implementation for acontext vulkan context texture.
+AlmondShell/src/acontext.vulkan.context_buffers.cpp	C/C++ source implementation for acontext vulkan context buffers.
+AlmondShell/src/acontext.vulkan.dispatch_storage.cpp	C/C++ source implementation for acontext vulkan dispatch storage.
+AlmondShell/src/acontext.vulkan.platform.context.cpp	C/C++ source implementation for acontext vulkan platform context.
+AlmondShell/src/acontext.vulkan.platform.descriptors.cpp	C/C++ source implementation for acontext vulkan platform descriptors.
+AlmondShell/src/aeditor.cpp	C/C++ source implementation for aeditor.
+AlmondShell/src/aengine.context.cpp	C/C++ source implementation for aengine context.
+AlmondShell/src/aengine.context.multiplexer.linux.cpp	C/C++ source implementation for aengine context multiplexer linux.
+AlmondShell/src/aengine.context.multiplexer.win.cpp	C/C++ source implementation for aengine context multiplexer win.
+AlmondShell/src/aengine.cpp	C/C++ source implementation for aengine.
+AlmondShell/src/aengine.gui.cpp	C/C++ source implementation for aengine gui.
+AlmondShell/src/aengine.scripting.compiler.cpp	C/C++ source implementation for aengine scripting compiler.
+AlmondShell/src/afilewatch.cpp	C/C++ source implementation for afilewatch.
+AlmondShell/src/afont.renderer.cpp	C/C++ source implementation for afont renderer.
+AlmondShell/src/pch.h	Source file (.h) for pch.
+AlmondShell/src/renderer_smoke_harness.cpp	C/C++ source implementation for renderer smoke harness.
+AlmondShell/src/resource.h	Source file (.h) for resource.
+AlmondShell/src/scripts/editor_launcher.ascript.cpp	C/C++ source implementation for editor launcher ascript.
+AlmondShell/src/stb/stb_image.h	Source file (.h) for stb image.
+AlmondShell/src/stb/stb_image_write.h	Source file (.h) for stb image write.
+AlmondShell/src/stb/stb_truetype.h	Source file (.h) for stb truetype.
+AlmondShell/third_party/glad/include/KHR/khrplatform.h	C++ header for khrplatform.
+AlmondShell/third_party/glad/include/glad/glad.h	C++ header for glad.
+AlmondShell/third_party/glad/src/glad.c	C/C++ source implementation for glad.
+Tools/almondshell_install_build_tools.ps1	PowerShell script for almondshell install build tools.
+Tools/almondshell_install_gui.ps1	PowerShell script for almondshell install gui.
+Tools/install_build_tools.bat	Batch script for install build tools.
+legacy/include/a2048like.hpp	Legacy C++ header for a2048like.
+legacy/include/aallocator.hpp	Legacy C++ header for aallocator.
+legacy/include/aapplicationmodule.hpp	Legacy C++ header for aapplicationmodule.
+legacy/include/aatlasmanager.hpp	Legacy C++ header for aatlasmanager.
+legacy/include/aatlastexture.hpp	Legacy C++ header for aatlastexture.
+legacy/include/aatomicfunction.hpp	Legacy C++ header for aatomicfunction.
+legacy/include/abuildsystem.hpp	Legacy C++ header for abuildsystem.
+legacy/include/acellularsim.hpp	Legacy C++ header for acellularsim.
+legacy/include/acodeinspector.hpp	Legacy C++ header for acodeinspector.
+legacy/include/acommandline.hpp	Legacy C++ header for acommandline.
+legacy/include/acommandqueue.hpp	Legacy C++ header for acommandqueue.
+legacy/include/acompiler.hpp	Legacy C++ header for acompiler.
+legacy/include/acontext.hpp	Legacy C++ header for acontext.
+legacy/include/acontextcontrol.hpp	Legacy C++ header for acontextcontrol.
+legacy/include/acontextmultiplexer.hpp	Legacy C++ header for acontextmultiplexer.
+legacy/include/acontextrenderer.hpp	Legacy C++ header for acontextrenderer.
+legacy/include/acontextstate.hpp	Legacy C++ header for acontextstate.
+legacy/include/acontexttype.hpp	Legacy C++ header for acontexttype.
+legacy/include/acontextwindow.hpp	Legacy C++ header for acontextwindow.
+legacy/include/adiagnostics.hpp	Legacy C++ header for adiagnostics.
+legacy/include/aecs.hpp	Legacy C++ header for aecs.
+legacy/include/aeditor.hpp	Legacy C++ header for aeditor.
+legacy/include/aenginebindings.hpp	Legacy C++ header for aenginebindings.
+legacy/include/aenginehandles.hpp	Legacy C++ header for aenginehandles.
+legacy/include/aenginesystems.hpp	Legacy C++ header for aenginesystems.
+legacy/include/aentity.hpp	Legacy C++ header for aentity.
+legacy/include/aentitycomponentmanager.hpp	Legacy C++ header for aentitycomponentmanager.
+legacy/include/aentitycomponents.hpp	Legacy C++ header for aentitycomponents.
+legacy/include/aentityhistory.hpp	Legacy C++ header for aentityhistory.
+legacy/include/aeventsystem.hpp	Legacy C++ header for aeventsystem.
+legacy/include/afilewatch.hpp	Legacy C++ header for afilewatch.
+legacy/include/afontrenderer.hpp	Legacy C++ header for afontrenderer.
+legacy/include/afroggerlike.hpp	Legacy C++ header for afroggerlike.
+legacy/include/agamecore.hpp	Legacy C++ header for agamecore.
+legacy/include/agui.hpp	Legacy C++ header for agui.
+legacy/include/aguimenu.hpp	Legacy C++ header for aguimenu.
+legacy/include/aimageatlaswriter.hpp	Legacy C++ header for aimageatlaswriter.
+legacy/include/aimageloader.hpp	Legacy C++ header for aimageloader.
+legacy/include/aimagewriter.hpp	Legacy C++ header for aimagewriter.
+legacy/include/ainput.hpp	Legacy C++ header for ainput.
+legacy/include/almondengine.hpp	Legacy C++ header for almondengine.
+legacy/include/almondshell.hpp	Legacy C++ header for almondshell.
+legacy/include/alogger.hpp	Legacy C++ header for alogger.
+legacy/include/amatch3like.hpp	Legacy C++ header for amatch3like.
+legacy/include/aminesweeperlike.hpp	Legacy C++ header for aminesweeperlike.
+legacy/include/amipmapatlas.hpp	Legacy C++ header for amipmapatlas.
+legacy/include/amovementevent.hpp	Legacy C++ header for amovementevent.
+legacy/include/ampmcboundedqueue.hpp	Legacy C++ header for ampmcboundedqueue.
+legacy/include/anet.hpp	Legacy C++ header for anet.
+legacy/include/anoheapguard.hpp	Legacy C++ header for anoheapguard.
+legacy/include/anoopcontext.hpp	Legacy C++ header for anoopcontext.
+legacy/include/aopenglcontext.hpp	Legacy C++ header for aopenglcontext.
+legacy/include/aopenglfreetype.hpp	Legacy C++ header for aopenglfreetype.
+legacy/include/aopenglplatform.hpp	Legacy C++ header for aopenglplatform.
+legacy/include/aopenglquad.hpp	Legacy C++ header for aopenglquad.
+legacy/include/aopenglrenderer.hpp	Legacy C++ header for aopenglrenderer.
+legacy/include/aopenglstate.hpp	Legacy C++ header for aopenglstate.
+legacy/include/aopengltextures.hpp	Legacy C++ header for aopengltextures.
+legacy/include/aopengltriangle.hpp	Legacy C++ header for aopengltriangle.
+legacy/include/apacmanlike.hpp	Legacy C++ header for apacmanlike.
+legacy/include/aplatform.hpp	Legacy C++ header for aplatform.
+legacy/include/aplatformpump.hpp	Legacy C++ header for aplatformpump.
+legacy/include/araylibcontext.hpp	Legacy C++ header for araylibcontext.
+legacy/include/araylibcontextinput.hpp	Legacy C++ header for araylibcontextinput.
+legacy/include/araylibrenderer.hpp	Legacy C++ header for araylibrenderer.
+legacy/include/araylibstate.hpp	Legacy C++ header for araylibstate.
+legacy/include/araylibtextures.hpp	Legacy C++ header for araylibtextures.
+legacy/include/arobusttime.hpp	Legacy C++ header for arobusttime.
+legacy/include/asandsim.hpp	Legacy C++ header for asandsim.
+legacy/include/asaveloadsystem.hpp	Legacy C++ header for asaveloadsystem.
+legacy/include/ascene.hpp	Legacy C++ header for ascene.
+legacy/include/asceneserializer.hpp	Legacy C++ header for asceneserializer.
+legacy/include/ascenesnapshot.hpp	Legacy C++ header for ascenesnapshot.
+legacy/include/ascriptingsystem.hpp	Legacy C++ header for ascriptingsystem.
+legacy/include/asdlcontext.hpp	Legacy C++ header for asdlcontext.
+legacy/include/asdlcontextrenderer.hpp	Legacy C++ header for asdlcontextrenderer.
+legacy/include/asdlstate.hpp	Legacy C++ header for asdlstate.
+legacy/include/asdltextures.hpp	Legacy C++ header for asdltextures.
+legacy/include/asfmlcontext.hpp	Legacy C++ header for asfmlcontext.
+legacy/include/asfmlrenderer.hpp	Legacy C++ header for asfmlrenderer.
+legacy/include/asfmlstate.hpp	Legacy C++ header for asfmlstate.
+legacy/include/asfmltextures.hpp	Legacy C++ header for asfmltextures.
+legacy/include/aslidingpuzzlelike.hpp	Legacy C++ header for aslidingpuzzlelike.
+legacy/include/asnakelike.hpp	Legacy C++ header for asnakelike.
+legacy/include/asoftrenderer_context.hpp	Legacy C++ header for asoftrenderer context.
+legacy/include/asoftrenderer_quad.hpp	Legacy C++ header for asoftrenderer quad.
+legacy/include/asoftrenderer_renderer.hpp	Legacy C++ header for asoftrenderer renderer.
+legacy/include/asoftrenderer_state.hpp	Legacy C++ header for asoftrenderer state.
+legacy/include/asoftrenderer_textures.hpp	Legacy C++ header for asoftrenderer textures.
+legacy/include/asokobanlike.hpp	Legacy C++ header for asokobanlike.
+legacy/include/aspritehandle.hpp	Legacy C++ header for aspritehandle.
+legacy/include/aspritepool.hpp	Legacy C++ header for aspritepool.
+legacy/include/aspriteregistry.hpp	Legacy C++ header for aspriteregistry.
+legacy/include/astringconverter.hpp	Legacy C++ header for astringconverter.
+legacy/include/ataskgraphwithdot.hpp	Legacy C++ header for ataskgraphwithdot.
+legacy/include/atetrislike.hpp	Legacy C++ header for atetrislike.
+legacy/include/atexture.hpp	Legacy C++ header for atexture.
+legacy/include/atypes.hpp	Legacy C++ header for atypes.
+legacy/include/atypesposix.hpp	Legacy C++ header for atypesposix.
+legacy/include/atypeswin32.hpp	Legacy C++ header for atypeswin32.
+legacy/include/aupdateconfig.hpp	Legacy C++ header for aupdateconfig.
+legacy/include/autilities.hpp	Legacy C++ header for autilities.
+legacy/include/aversion.hpp	Legacy C++ header for aversion.
+legacy/include/avulkanglfwsetup.hpp	Legacy C++ header for avulkanglfwsetup.
+legacy/include/avulkanquad.hpp	Legacy C++ header for avulkanquad.
+legacy/include/avulkanrenderer.hpp	Legacy C++ header for avulkanrenderer.
+legacy/include/avulkanshaderpipeline.hpp	Legacy C++ header for avulkanshaderpipeline.
+legacy/include/avulkanswapchain.hpp	Legacy C++ header for avulkanswapchain.
+legacy/include/avulkantexture.hpp	Legacy C++ header for avulkantexture.
+legacy/include/avulkantriangle.hpp	Legacy C++ header for avulkantriangle.
+legacy/include/awindowdata.hpp	Legacy C++ header for awindowdata.
+legacy/src/acompiler.cpp	Legacy C/C++ source implementation for acompiler.
+legacy/src/acontext.cpp	Legacy C/C++ source implementation for acontext.
+legacy/src/acontextmultiplexer_linux.cpp	Legacy C/C++ source implementation for acontextmultiplexer linux.
+legacy/src/aeditor.cpp	Legacy C/C++ source implementation for aeditor.
+legacy/src/afilewatch.cpp	Legacy C/C++ source implementation for afilewatch.
+legacy/src/afontrenderer.cpp	Legacy C/C++ source implementation for afontrenderer.
+legacy/src/agui.cpp	Legacy C/C++ source implementation for agui.
+legacy/src/amodelloader.hpp	Source file (.hpp) for amodelloader.
+legacy/src/aopenglplatform_linux.cpp	Legacy C/C++ source implementation for aopenglplatform linux.
+legacy/src/ascriptingsystem.cpp	Legacy C/C++ source implementation for ascriptingsystem.
