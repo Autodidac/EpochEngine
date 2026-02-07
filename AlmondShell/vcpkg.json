@@ -16,13 +16,5 @@
     "shaderc",
     "spirv-tools",
     "glm",
-    {
-      "name": "libx11",
-      "platform": "linux"
-    },
-    {
-      "name": "libxrandr",
-      "platform": "linux"
-    }
   ]
 }
