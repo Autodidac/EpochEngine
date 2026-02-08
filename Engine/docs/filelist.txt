@@ -1,0 +1,147 @@
+include Directory
+
+Module-first ECS/engine consumption: import `aengine` or
+`aengine.engine_components` instead of including the `aentity*.hpp`/
+`acomponent*` headers directly. Platform and context consumers should prefer
+`aengine.platform`, `aengine.context.*` partitions, and the backend partitions
+(`acontext.opengl.*`, `acontext.sdl.*`, `acontext.raylib.*`,
+`acontext.softrenderer.*`).
+
+•       abuildsystem.hpp
+•       acomponentmanager.hpp
+•       acompiler.hpp
+•       acontext.hpp
+•       acontextwindow.hpp
+•       aeditor.hpp
+•       aengine.hpp
+•       aenginebindings.hpp
+•       aengineconfig.hpp
+•       aentity.hpp
+•       aentitycomponents.hpp
+•       aentitycomponentsystem.hpp
+•       aentityhistory.hpp
+•       aeventsystem.hpp
+•       afilewatch.hpp
+•       aframework.hpp
+•       aglfwcontext.hpp
+•       aimageloader.hpp
+•       almondengine.hpp
+•       almondshell.hpp
+•       alogger.hpp
+•       amovementevent.hpp
+•       aopenglcontext.hpp
+•       aopenglfreetype.hpp
+•       aopenglquad.hpp
+•       aopenglrenderer.hpp
+•       aopengltriangle.hpp
+•       aplatform.hpp
+•       arenderer.hpp
+•       arobusttime.hpp
+•       asaveloadsystem.hpp
+•       ascene.hpp
+•       ascenesnapshot.hpp
+•       ascriptingsystem.hpp
+•       aspritebank.hpp
+•       ataskscheduler.hpp
+•       atexture.hpp
+•       atextureatlas.hpp
+•       atexturepool.hpp
+•       athreadpool.hpp
+•       atypes.hpp
+•       atypesposix.hpp
+•       atypeswin32.hpp
+•       aui.hpp
+•       aupdateconfig.hpp
+•       autilities.hpp
+•       aversion.hpp
+•       avulkanglfwsetup.hpp
+•       avulkanquad.hpp
+•       avulkanrenderer.hpp
+•       avulkanshaderpipeline.hpp
+•       avulkanswapchain.hpp
+•       avulkantexture.hpp
+•       avulkantriangle.hpp
+
+modules Directory (modern import surface)
+
+Aggregates & runtime:
+•       aengine.ixx (aggregate; mirrors aengine.hpp)
+•       aengine.engine_components.ixx
+•       aengine.platform.ixx
+•       aengine.systems.ixx
+•       aengine.gui.ixx
+•       aengine.gui.menu.ixx
+•       aengine.bindings.ixx
+•       aengine.diagnostics.ixx
+•       aengine.handles.ixx
+•       aengine.taskgraph.dotsystem.ixx
+•       aengine.telemetry.ixx
+•       aengine.input.ixx
+•       aengine.cli.ixx
+•       aengine.version.ixx
+•       almondshell.ixx (umbrella alias)
+
+Context/back-end stack:
+•       aengine.context.commandqueue.ixx
+•       aengine.context.control.ixx
+•       aengine.context.multiplexer.ixx
+•       aengine.context.type.ixx
+•       aengine.context.window.ixx
+•       aengine.context.sdl.ixx
+•       aengine.context.cppm (bridge for import scanning)
+•       acontext.noop.context.ixx
+•       acontext.opengl.context.ixx / acontext.opengl.platform.ixx / acontext.opengl.quad.ixx
+•       acontext.opengl.renderer.ixx / acontext.opengl.state.ixx / acontext.opengl.textures.ixx
+•       acontext.sdl.context.ixx / acontext.sdl.renderer.ixx / acontext.sdl.state.ixx / acontext.sdl.textures.ixx
+•       acontext.raylib.context.ixx / acontext.raylib.input.ixx / acontext.raylib.renderer.ixx
+•       acontext.raylib.state.ixx / acontext.raylib.textures.ixx
+•       acontext.softrenderer.context.ixx / acontext.softrenderer.quad.ixx
+•       acontext.softrenderer.renderer.ixx / acontext.softrenderer.state.ixx / acontext.softrenderer.textures.ixx
+
+ECS & runtime helpers:
+•       aecs.ixx / aecs.components.ixx / aecs.storage.ixx / aecs.internal_private.ixx
+•       aengine.core.commandline.ixx / aengine.core.context.ixx / aengine.core.logger.ixx
+•       aengine.core.time.ixx / aengine.core.types.ixx / aengine.core.utilities.ixx
+•       aatlas.manager.ixx
+•       aatlas.texture.ixx
+•       aimage.loader.ixx
+•       aimage.writer.ixx
+•       aimageatlaswriter.ixx
+•       atexture.ixx
+•       autility.allocator.ixx / autility.atomicfunction.ixx / autility.codeinspector.ixx
+•       autility.filewatch.ixx / autility.string.converter.ixx
+•       ascripting.system.ixx
+•       amovementevent.ixx
+•       ascene.ixx
+•       asceneserializer.ixx / ascenesnapshot.ixx
+•       aeventsystem.ixx / aentity.ixx / aentity.component.manager.ixx / aentityhistory.ixx
+•       aplatformpump.ixx
+•       asprite.pool.ixx / aspritehandle.ixx / aspriteregistry.ixx
+
+Updater and CLI:
+•       aengine.updater.ixx
+•       aengine.updater.config.ixx
+•       aengine.updater.system.ixx
+•       aengine.updater.tools.ixx
+•       aapplicationmodule.ixx
+•       aenduserapplication.ixx
+•       aengine.core.commandline.ixx
+
+Mirrored headers: aengine.hpp, aplatform.hpp, acontext*.hpp, awindowdata.hpp,
+aguimenu.hpp, acommandline.hpp, aopenglcontext.hpp, and the ECS headers listed
+above are imported inside their matching partitions to preserve macros and
+transition compatibility.
+
+src Directory
+
+•       acompiler.cpp
+•       acontextcreator.cpp
+•       aeditor.cpp
+•       aengine.cpp
+•       aeventsystem.cpp
+•       afilewatch.cpp
+•       almondengine
+•       almondshell
+•       ascriptingsystem.cpp
+•       agui.cpp
+•       main.cpp
