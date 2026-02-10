@@ -53,7 +53,7 @@
 // ------------------------------------------------------------
 // Engine Context Config
 // ------------------------------------------------------------
-
+#define ALMOND_USE_CLEAR_COLOR 0
 #define ALMOND_SINGLE_PARENT 1
 
 #define ALMOND_USING_OPENGL 

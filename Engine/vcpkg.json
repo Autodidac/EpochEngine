@@ -1,28 +1,24 @@
 {
+  "name": "almond-engine",
+  "version-string": "0.1.0",
   "builtin-baseline": "74ec888e385d189b42d6b398d0bbaa6f1b1d3b0e",
   "dependencies": [
     "asio",
     "fmt",
     "glad",
-    "sfml",
-    "opengl",
-    "sdl3",
-    "sdl3-image",
-    "zlib",
-    "raylib",
+    "glm",
+
     "vulkan-headers",
     "vulkan-loader",
     "volk",
     "shaderc",
     "spirv-tools",
-    "glm",
-    {
-      "name": "libx11",
-      "platform": "linux"
-    },
-    {
-      "name": "libxrandr",
-      "platform": "linux"
-    }
+
+    "sdl3",
+    "sdl3-image",
+    "sfml",
+    "raylib",
+
+    "zlib"
   ]
 }

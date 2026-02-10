@@ -627,9 +627,11 @@ export namespace almondnamespace::openglcontext
 
     inline void opengl_clear()
     {
+#if defined(ALMOND_USE_CLEAR_COLOR) && defined(ALMOND_USE_CLEAR_COLOR)
         const auto color = core::clear_color_for_context(core::ContextType::OpenGL);
         glClearColor(color[0], color[1], color[2], color[3]);
         glClear(GL_COLOR_BUFFER_BIT);
+#endif
     }
 
     inline bool opengl_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue)

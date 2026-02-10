@@ -161,10 +161,12 @@ export namespace almondnamespace::openglrenderer
 
     inline void begin_frame()
     {
+#if defined(ALMOND_USE_CLEAR_COLOR) && defined(ALMOND_USE_CLEAR_COLOR)
         const auto color = core::clear_color_for_context(core::ContextType::OpenGL);
         glClearColor(color[0], color[1], color[2], color[3]);
         glViewport(0, 0, core::cli::window_width, core::cli::window_height);
         glClear(GL_COLOR_BUFFER_BIT);
+#endif
     }
 
     inline void end_frame() noexcept
