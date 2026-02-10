@@ -14,6 +14,7 @@ export module acontext.vulkan.context:commands;
 
 import :shared_vk;
 import aengine.core.context;
+import aatlas.texture;
 
 import <array>;
 import <cstdint>;
