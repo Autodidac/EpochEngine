@@ -1,0 +1,314 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <ItemsProjectGuid>{b2f62625-abdc-43c1-9ac0-379c96b52a74}</ItemsProjectGuid>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AlmondUseRaylib Condition="'$(AlmondUseRaylib)'==''">true</AlmondUseRaylib>
+    <AlmondUseSfml Condition="'$(AlmondUseSfml)'==''">true</AlmondUseSfml>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies Condition="'$(AlmondUseRaylib)'=='true'">%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(AlmondUseSfml)'=='true'">%(AdditionalDependencies);sfml-graphics.lib;sfml-window.lib;sfml-system.lib</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectCapability Include="SourceItemsFromImports" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\acontext.vulkan.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\aengine.config.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\aengine.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\aframework.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\app_api.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.api_types.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.common.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\main.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\_epoch.stl_types.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_bot.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_service.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_types.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\pch.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="$(MSBuildThisFileDirectory)src\icon.ico">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\frag.spv">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\vert.spv">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)modules\.gitkeep" />
+    <None Include="$(MSBuildThisFileDirectory)src\WinResource.aps" />
+    <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="$(MSBuildThisFileDirectory)src\WinResource.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\a2048like.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.api.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.context.win.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.input.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-api.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.camera.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-api_unit.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-buffers.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-commands.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-runtime.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-shared_context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-shared_vk.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.meshcube.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.platform.device.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.platform.dispatcher.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.platform.instance.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.platform.loader.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-depth.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-descriptor.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-device.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-instance.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-memory.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-window.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.entitycomponentmanager.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.entityhistory.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.platform.utils.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.gui.menu.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.saveload.system.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.telemetry.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascripting.system.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.allocator.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aapplicationmodule.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aatlas.manager.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aatlas.texture.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acellularsim.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.codeinspector.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.commandline.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.diagnostics.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.components.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.storage.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aeditor.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.cli.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.engine_components.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.input.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.platform.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.commandqueue.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.control.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.multiplexer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.type.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.window.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.context.ixx">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.taskgraph.dotsystem.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aenduserapplication.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.tools.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.bindings.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.handles.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.systems.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aentity.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.eventsystem.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\afont.renderer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\afroggerlike.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\agamecore.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.gui.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimageatlaswriter.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimage.loader.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimage.writer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.state.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\almondshell.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\amatch3like.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aminesweeperlike.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\amipmapatlas.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.event.movement.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\anet.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.noop.context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aopenglfreetype.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.platform.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.quad.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.state.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aopengltriangle.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\apacmanlike.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aplatformpump.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.renderer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.state.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.textures.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asandsim.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascene.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.config.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.version.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asceneserializer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascenesnapshot.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sdl.state.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sfml.context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sfml.renderer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sfml.state.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sfml.textures.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aslidingpuzzlelike.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asnakelike.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.quad.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.renderer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.textures.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asokobanlike.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aspritehandle.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asprite.pool.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aspriteregistry.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atetrislike.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atexture.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypes.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypesposix.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypeswin32.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.system.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.internal_private.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.logger.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.time.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.types.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.utilities.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.renderer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.textures.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sdl.context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sdl.renderer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sdl.textures.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.scripting.compiler.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.filewatch.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aframework.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.atomicfunction.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ampmcboundedqueue.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.string.converter.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.quad.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-renderer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-shader_pipeline.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-swapchain.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-texture.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.triangle.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.assert.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.env.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.error.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.format.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.id.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.log.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.math.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.path.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.string.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.time.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.ai.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.assets.streaming.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.ecs.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.engine.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.events.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.perf.select.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.perf.tier.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.budgets.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.capabilities.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.window.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.bindings.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.device.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.device.null.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.graph.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.streaming.feedback.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.visibility.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.systems.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\runtime.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.dispatch_storage.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context-texture.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.raylib.bridge.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context_buffers.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.platform.context.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.platform.descriptors.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\aeditor.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\aeditor.scene.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.linux.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.win.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.gui.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.scripting.compiler.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\afilewatch.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\afont.renderer.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.assert.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.env.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.error.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.id.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.math.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.path.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.string.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.time.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.ai.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.engine.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.headers.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.platform.context.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.platform.window.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.render.graph.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.systems.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\main.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderer_smoke_harness.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\runtime.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\editor_launcher.ascript.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,198 @@
+/AlmondShell
+│
+│  NOTE: The ECS, component, and engine systems are now consumed via `import`
+│  rather than `#include`. Pull the consolidated surface from `import aengine;`
+│  or target partitions such as `import aengine.engine_components;` and
+│  `import aengine.platform;` instead of the legacy umbrella headers. Legacy
+│  headers stay mirrored behind the module surface under `include/` so
+│  downstream users can mix `import` and `#include` during migration.
+│
+│  Module consumption quick-start
+│  • Importers: `aengine` (aggregate), `almondshell` (umbrella alias),
+│    `aengine.engine_components`, `aengine.platform`, `aengine.systems`,
+│    `aengine.gui`, `aengine.gui.menu`, `aengine.input`, `aengine.cli`,
+│    `aengine.version`, context surfaces (`aengine.context.commandqueue`,
+│    `.context.control`, `.context.multiplexer`, `.context.type`,
+│    `.context.window`, `.context.sdl`), renderer/context partitions under
+│    `acontext.opengl.*`, `acontext.sdl.*`, `acontext.raylib.*`,
+│    `acontext.softrenderer.*`, direct module mirrors for legacy headers like
+│    `import aatlas.manager;`, `import aatlas.texture;`,
+│    `import aengine.core.commandline;`, `import aentity;`,
+│    `import aentity.component.manager;`, `import aecs.*`, and the updater
+│    partitions (`aengine.updater`, `.updater.config`, `.updater.system`,
+│    `.updater.tools`).
+│  • CMake flags: configure with C++23 plus `-DCMAKE_CXX_SCAN_FOR_MODULES=ON`
+│    (or `-DCMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP=ON` on 3.27–3.28) and a
+│    module-capable compiler (`/std:c++latest` on MSVC, `-fmodules-ts` on
+│    clang/GCC). Presets and build scripts set these by default.
+│  • Mirrored headers: legacy `#include` surfaces live under `include/` and are
+│    imported inside their matching partitions to keep macros and types aligned
+│    for mixed builds.
+│
+│── include/
+│   │── Legacy header mirrors for transitional `#include` consumers; prefer
+│   │   module partitions under `modules/` and implementation units under
+│   │   `src modules/` for authoritative C++23 imports.
+│
+│── modules/
+│   │── Module interface units (.ixx)
+│   │   │── a2048like.ixx
+│   │   │── aapplicationmodule.ixx
+│   │   │── aatlas.manager.ixx
+│   │   │── aatlas.texture.ixx
+│   │   │── aautility.noheapguard.ixx
+│   │   │── acellularsim.ixx
+│   │   │── acontext.noop.context.ixx
+│   │   │── acontext.opengl.context.ixx
+│   │   │── acontext.opengl.platform.ixx
+│   │   │── acontext.opengl.quad.ixx
+│   │   │── acontext.opengl.renderer.ixx
+│   │   │── acontext.opengl.state.ixx
+│   │   │── acontext.opengl.textures.ixx
+│   │   │── acontext.raylib.context.ixx
+│   │   │── acontext.raylib.input.ixx
+│   │   │── acontext.raylib.renderer.ixx
+│   │   │── acontext.raylib.state.ixx
+│   │   │── acontext.raylib.textures.ixx
+│   │   │── acontext.sdl.context.ixx
+│   │   │── acontext.sdl.renderer.ixx
+│   │   │── acontext.sdl.state.ixx
+│   │   │── acontext.sdl.textures.ixx
+│   │   │── acontext.softrenderer.context.ixx
+│   │   │── acontext.softrenderer.quad.ixx
+│   │   │── acontext.softrenderer.renderer.ixx
+│   │   │── acontext.softrenderer.state.ixx
+│   │   │── acontext.softrenderer.textures.ixx
+│   │   │── aecs.components.ixx
+│   │   │── aecs.internal_private.ixx
+│   │   │── aecs.ixx
+│   │   │── aecs.storage.ixx
+│   │   │── aeditor.ixx
+│   │   │── aenduserapplication.ixx
+│   │   │── aengine.bindings.ixx
+│   │   │── aengine.cli.ixx
+│   │   │── aengine.context.commandqueue.ixx
+│   │   │── aengine.context.control.ixx
+│   │   │── aengine.context.multiplexer.ixx
+│   │   │── aengine.context.sdl.ixx
+│   │   │── aengine.context.type.ixx
+│   │   │── aengine.context.window.ixx
+│   │   │── aengine.core.commandline.ixx
+│   │   │── aengine.core.context.ixx
+│   │   │── aengine.core.logger.ixx
+│   │   │── aengine.core.time.ixx
+│   │   │── aengine.core.types.ixx
+│   │   │── aengine.core.utilities.ixx
+│   │   │── aengine.diagnostics.ixx
+│   │   │── aengine.engine_components.ixx
+│   │   │── aengine.gui.ixx
+│   │   │── aengine.gui.menu.ixx
+│   │   │── aengine.handles.ixx
+│   │   │── aengine.input.ixx
+│   │   │── aengine.ixx
+│   │   │── aengine.platform.ixx
+│   │   │── aengine.scripting.compiler.ixx
+│   │   │── aengine.systems.ixx
+│   │   │── aengine.taskgraph.dotsystem.ixx
+│   │   │── aengine.telemetry.ixx
+│   │   │── aengine.updater.config.ixx
+│   │   │── aengine.updater.ixx
+│   │   │── aengine.updater.system.ixx
+│   │   │── aengine.updater.tools.ixx
+│   │   │── aengine.version.ixx
+│   │   │── aentity.component.manager.ixx
+│   │   │── aentity.ixx
+│   │   │── aentityhistory.ixx
+│   │   │── aeventsystem.ixx
+│   │   │── afont.renderer.ixx
+│   │   │── aframework.ixx
+│   │   │── afroggerlike.ixx
+│   │   │── agamecore.ixx
+│   │   │── aimage.loader.ixx
+│   │   │── aimage.writer.ixx
+│   │   │── aimageatlaswriter.ixx
+│   │   │── almondshell.ixx
+│   │   │── amatch3like.ixx
+│   │   │── aminesweeperlike.ixx
+│   │   │── amipmapatlas.ixx
+│   │   │── amovementevent.ixx
+│   │   │── ampmcboundedqueue.ixx
+│   │   │── anet.ixx
+│   │   │── aopenglfreetype.ixx
+│   │   │── aopengltriangle.ixx
+│   │   │── apacmanlike.ixx
+│   │   │── aplatformpump.ixx
+│   │   │── asandsim.ixx
+│   │   │── asaveloadsystem.ixx
+│   │   │── ascene.ixx
+│   │   │── asceneserializer.ixx
+│   │   │── ascenesnapshot.ixx
+│   │   │── ascripting.system.ixx
+│   │   │── asfmlcontext.ixx
+│   │   │── asfmlrenderer.ixx
+│   │   │── asfmlstate.ixx
+│   │   │── asfmltextures.ixx
+│   │   │── aslidingpuzzlelike.ixx
+│   │   │── asnakelike.ixx
+│   │   │── asokobanlike.ixx
+│   │   │── asprite.pool.ixx
+│   │   │── aspritehandle.ixx
+│   │   │── aspriteregistry.ixx
+│   │   │── atetrislike.ixx
+│   │   │── atexture.ixx
+│   │   │── atypes.ixx
+│   │   │── atypesposix.ixx
+│   │   │── atypeswin32.ixx
+│   │   │── autility.allocator.ixx
+│   │   │── autility.atomicfunction.ixx
+│   │   │── autility.codeinspector.ixx
+│   │   │── autility.filewatch.ixx
+│   │   │── autility.string.converter.ixx
+│   │   │── avulkanglfwsetup.ixx
+│   │   │── avulkanquad.ixx
+│   │   │── avulkanrenderer.ixx
+│   │   │── avulkanshaderpipeline.ixx
+│   │   │── avulkanswapchain.ixx
+│   │   │── avulkantexture.ixx
+│   │   │── avulkantriangle.ixx
+│   │── Module bridge units (.cppm)
+│   │   │── aengine.context.cppm
+│
+│── src modules/
+│   │── Module implementation units (.cppm)
+│   │   │── acompiler.cppm
+│   │   │── aeditor.cppm
+│   │   │── aengine.context.multiplexer.win.cppm
+│   │   │── aengine.cppm
+│   │   │── aengine.gui.cppm
+│   │   │── aengine.scripting.compiler.cppm
+│   │   │── afilewatch.cppm
+│   │   │── afont.renderer.cppm
+│   │   │── aopenglplatform_win.cppm
+│
+│── src/
+│   │── acompiler.cpp             # Compiler-related implementation
+│   │── acontextcreator.cpp       # Context creation
+│   │── aeditor.cpp               # Editor implementation
+│   │── aengine.cpp               # Core engine implementation
+│   │── aeventsystem.cpp          # Event system implementation
+│   │── afilewatch.cpp            # File watching implementation
+│   │── almondengine              # Almond engine entry point
+│   │── almondshell               # Almond shell entry point
+│   │── ascriptingsystem.cpp      # Scripting system implementation
+│   │── agui.cpp                  # Immediate-mode GUI implementation
+│   │── main.cpp                  # Main entry point
+│
+│── examples/
+│   │── ConsoleApplication1/
+│   │   │── main.cpp              # Example console application
+│   │   │── ConsoleApplication1.vcxproj.filters # Visual Studio filters
+│   │
+│   │── StaticLib1/
+│   │   │── pch.cpp               # Precompiled header source
+│   │   │── StaticLib1.vcxproj.filters # Visual Studio filters
+│
+│── CMakeLists.txt                # CMake build script
+│── CMakePresets.json             # CMake configure/build presets
+│── Engine.vcxitems               # Shared MSBuild items for Visual Studio
+│── Engine.vcxitems.filters       # Filters for the shared MSBuild items
