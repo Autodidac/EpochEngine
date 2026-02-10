@@ -192,8 +192,11 @@ namespace almondnamespace::vulkancontext
 
             const std::uint32_t baseIndex = static_cast<std::uint32_t>(vertices.size());
 
-            const float v0 = region.v2;
-            const float v1 = region.v1;
+            // Atlas UVs are stored in OpenGL-style space (v grows upward).
+            // Vulkan sampling expects top-left origin for texel lookup, so
+            // keep the atlas V range as-is to avoid vertically mirrored GUI/font quads.
+            const float v0 = region.v1;
+            const float v1 = region.v2;
 
             vertices.push_back(Vertex{ { x0, y0, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u1, v0 } });
             vertices.push_back(Vertex{ { x1, y0, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u2, v0 } });
