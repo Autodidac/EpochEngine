@@ -440,6 +440,7 @@ export namespace almondnamespace::sdlcontext
             static_cast<std::int64_t>(sdlcontext.framebufferHeight),
             telemetry::RendererTelemetryTags{ backendType, windowId, "height" });
 
+#if ALMOND_USE_CLEAR_COLOR
         const auto color = core::clear_color_for_context(core::ContextType::SDL);
         SDL_SetRenderDrawColor(
             sdl_renderer.renderer,
@@ -448,6 +449,7 @@ export namespace almondnamespace::sdlcontext
             static_cast<std::uint8_t>(color[2] * 255.0f),
             static_cast<std::uint8_t>(color[3] * 255.0f));
         SDL_RenderClear(sdl_renderer.renderer);
+#endif
 
         const std::size_t depth = queue.depth();
         telemetry::emit_gauge(
@@ -479,6 +481,7 @@ export namespace almondnamespace::sdlcontext
 
     inline void sdl_clear()
     {
+#if  ALMOND_USE_CLEAR_COLOR
         const auto color = core::clear_color_for_context(core::ContextType::SDL);
         SDL_SetRenderDrawColor(
             sdl_renderer.renderer,
@@ -487,6 +490,7 @@ export namespace almondnamespace::sdlcontext
             static_cast<std::uint8_t>(color[2] * 255.0f),
             static_cast<std::uint8_t>(color[3] * 255.0f));
         SDL_RenderClear(sdl_renderer.renderer);
+#endif
     }
 
     inline void sdl_present()

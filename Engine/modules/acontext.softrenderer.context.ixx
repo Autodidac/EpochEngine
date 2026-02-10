@@ -417,8 +417,7 @@ export namespace almondnamespace::anativecontext
             : 0;
 
         almond::diagnostics::FrameTiming frameTimer{ ctx.type, windowId, "Software" };
-
-        // Clear
+#if ALMOND_USE_CLEAR_COLOR        // Clear
         const auto clearColor = core::clear_color_for_context(core::ContextType::Software);
         const auto clearR = static_cast<std::uint8_t>(
             std::clamp(clearColor[0], 0.0f, 1.0f) * 255.0f);
@@ -448,6 +447,7 @@ export namespace almondnamespace::anativecontext
             static_cast<std::int64_t>(sr.framebuffer.size()),
             telemetry::RendererTelemetryTags{ ctx.type, windowId, "buffer_length" });
 
+#endif
         // debug fullscreen atlas blit
         // Optional draw (disabled in your header)
         //softrenderer_draw_quad(sr);

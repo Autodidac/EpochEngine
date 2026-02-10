@@ -490,6 +490,8 @@ namespace almondnamespace::raylibcontext
 #endif
 
         detail::ensure_frame_started(st);
+
+#if ALMOND_USE_CLEAR_COLOR
         const auto clearColor = core::clear_color_for_context(core::ContextType::RayLib);
         almondnamespace::raylib_api::clear_background(
             almondnamespace::raylib_api::Color{
@@ -498,6 +500,7 @@ namespace almondnamespace::raylibcontext
                 static_cast<unsigned char>(std::clamp(clearColor[2], 0.0f, 1.0f) * 255.0f),
                 static_cast<unsigned char>(std::clamp(clearColor[3], 0.0f, 1.0f) * 255.0f)
             });
+#endif
     }
 
     export inline void raylib_present()

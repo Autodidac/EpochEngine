@@ -407,7 +407,7 @@ export namespace almondnamespace::sfmlcontext
             "renderer.framebuffer.size",
             static_cast<std::int64_t>(framebufferHeight),
             telemetry::RendererTelemetryTags{ backendType, windowId, "height" });
-
+#if ALMOND_USE_CLEAR_COLOR
         const auto clearColor = core::clear_color_for_context(core::ContextType::SFML);
         const auto r = static_cast<sf::Uint8>(clearColor[0] * 255.0f);
         const auto g = static_cast<sf::Uint8>(clearColor[1] * 255.0f);
@@ -422,7 +422,7 @@ export namespace almondnamespace::sfmlcontext
         {
             sfmlcontext.window->clear(sf::Color(r, g, b));
         }
-
+#endif
         queue.drain();
 
         sfmlcontext.window->display();

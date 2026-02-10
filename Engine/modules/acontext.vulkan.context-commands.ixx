@@ -62,20 +62,22 @@ namespace almondnamespace::vulkancontext
         vk::CommandBufferBeginInfo beginInfo{};
         if (cmd.begin(beginInfo) != vk::Result::eSuccess)
             throw std::runtime_error("[Vulkan] CommandBuffer::begin failed.");
-
+#if ALMOND_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
         const auto clearColor = almondnamespace::core::clear_color_for_context(
             almondnamespace::core::ContextType::Vulkan);
         clearValues[0].setColor(
             vk::ClearColorValue{ std::array<float, 4>{ clearColor[0], clearColor[1], clearColor[2], clearColor[3] } });
         clearValues[1].setDepthStencil(vk::ClearDepthStencilValue{ 1.0f, 0 });
-
+#endif
         vk::RenderPassBeginInfo renderPassInfo{};
         renderPassInfo.renderPass = *renderPass;
         renderPassInfo.framebuffer = *framebuffers[imageIndex];
         renderPassInfo.renderArea = vk::Rect2D{ vk::Offset2D{0, 0}, swapChainExtent };
+#if ALMOND_USE_CLEAR_COLOR_VULKAN
         renderPassInfo.clearValueCount = static_cast<std::uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
+#endif
 
         cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
