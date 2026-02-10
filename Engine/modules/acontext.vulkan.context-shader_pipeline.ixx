@@ -4,7 +4,7 @@ module;
 //#ifndef _CRT_SECURE_NO_WARNINGS
 //#   define _CRT_SECURE_NO_WARNINGS
 //#endif
-#include <include/acontext.vulkan.hpp>
+#include "../include/acontext.vulkan.hpp"
 // Include Vulkan-Hpp after config.
 #include <vulkan/vulkan.hpp>
 
@@ -345,7 +345,7 @@ export namespace almondnamespace::vulkancontext
 
     void Application::createGuiPipeline()
     {
-        auto& guiState = gui_state_for_context(activeGuiContext);
+        auto& guiState = gui_state_for_context(activeGuiContextId);
         const auto vertShaderCode = readFile("shaders/vert.spv");
         const auto fragShaderCode = readFile("shaders/frag.spv");
 

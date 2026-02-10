@@ -82,7 +82,7 @@ import aengine.platform;
 
 import aengine.cli;
 import aengine.core.context;
-import aengine.context.multiplexer;
+//import aengine.context.multiplexer;
 
 import acontext.opengl.platform;
 import acontext.opengl.state;
@@ -414,22 +414,28 @@ export namespace almondnamespace::opengltextures
         return static_cast<uint32_t>(tex);
     }
 
-    inline void draw_sprite(SpriteHandle handle,
+    inline void draw_sprite(
+        SpriteHandle handle,
         std::span<const TextureAtlas* const> atlases,
         float x, float y, float width, float height) noexcept
     {
-        // (unchanged from your version)
-        if (!handle.is_valid()) {
-            std::cerr << "[DrawSprite] Invalid sprite handle.\n";
-            return;
-        }
+        // Resolve the owner context from render-thread TLS.
+        // This is set by the multiplexer before executing queued render work.
+        const auto ctx = almondnamespace::core::get_current_render_context();
 
         auto& backend = get_opengl_backend();
+
         almondnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
-        auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
-        if (!desired.valid()) {
+
+        // Choose platform context from the *explicit* owner context.
+        auto desired = (ctx)
+            ? detail::context_to_platform_context(ctx.get())
+            : decltype(detail::context_to_platform_context(nullptr)){};
+
+        // Fallback: backend default / main GL state.
+        if (!desired.valid())
             desired = detail::to_platform_context(backend.glState);
-        }
+
         if (!desired.valid() || !contextGuard.set(desired)) {
             std::cerr << "[DrawSprite] WARNING: Unable to activate OpenGL context; skipping draw.\n";
             return;
@@ -449,16 +455,18 @@ export namespace almondnamespace::opengltextures
             w = static_cast<int>(backend.glState.width);
             h = static_cast<int>(backend.glState.height);
         }
-        if (w <= 0 || h <= 0) {
-            if (auto ctx = core::MultiContextManager::GetCurrent()) {
-                w = (std::max)(1, ctx->get_width_safe());
-                h = (std::max)(1, ctx->get_height_safe());
-            }
+
+        // If still unknown, use the explicit context dimensions (NOT “current manager”).
+        if ((w <= 0 || h <= 0) && ctx) {
+            w = (std::max)(1, ctx->get_width_safe());
+            h = (std::max)(1, ctx->get_height_safe());
         }
+
         if (w <= 0 || h <= 0) {
             w = (std::max)(1, core::cli::window_width);
             h = (std::max)(1, core::cli::window_height);
         }
+
         if (w <= 0 || h <= 0) {
             std::cerr << "[DrawSprite] ERROR: Unable to resolve window dimensions.\n";
             return;
@@ -474,6 +482,7 @@ export namespace almondnamespace::opengltextures
             std::cerr << "[DrawSprite] Atlas index out of bounds: " << atlasIdx << '\n';
             return;
         }
+
         const TextureAtlas* atlas = atlases[atlasIdx];
         if (!atlas) {
             std::cerr << "[DrawSprite] Null atlas pointer at index: " << atlasIdx << '\n';
@@ -487,6 +496,7 @@ export namespace almondnamespace::opengltextures
             return;
         }
 
+        // Must execute GL upload on this same active context.
         ensure_uploaded(*atlas);
 
         GLuint tex = 0;
@@ -494,15 +504,13 @@ export namespace almondnamespace::opengltextures
             std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
             auto it = backend.gpu_atlases.find(atlas);
             if (it == backend.gpu_atlases.end()) {
-                std::cerr << "[DrawSprite] GPU texture not found for atlas '"
-                    << atlas->name << "'\n";
+                std::cerr << "[DrawSprite] GPU texture not found for atlas '" << atlas->name << "'\n";
                 return;
             }
             tex = it->second.textureHandle;
         }
         if (!tex) {
-            std::cerr << "[DrawSprite] GPU texture not found for atlas '"
-                << atlas->name << "'\n";
+            std::cerr << "[DrawSprite] GPU texture not found for atlas '" << atlas->name << "'\n";
             return;
         }
 
@@ -553,14 +561,14 @@ export namespace almondnamespace::opengltextures
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
         const GLenum err = glGetError();
-        if (err != GL_NO_ERROR) {
+        if (err != GL_NO_ERROR)
             std::cerr << "[OpenGL ERROR] glDrawElements failed: " << std::hex << err << "\n";
-        }
 
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glDisable(GL_BLEND);
     }
+
 
 } // namespace almondnamespace::opengltextures
 

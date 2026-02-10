@@ -203,60 +203,47 @@ namespace epoch::platform
                     auto* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
                     self = static_cast<Win32WindowSystem*>(create->lpCreateParams);
                     ::SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
-                    return TRUE;
                 }
 
-                switch (msg)
+                if (self)
                 {
-                case WM_CREATE:
-                {
-                    // Intentionally empty.
-                    // Editor UI is rendered via the engine GUI (software/raylib/opengl/vulkan contexts).
-                    return 0;
-                }
-
-                case WM_SIZE:
-                {
-                    if (self)
+                    switch (msg)
                     {
-                        WindowEvent e{};
-                        e.type = WindowEventType::resized;
-                        e.handle = WindowHandle{ reinterpret_cast<std::uintptr_t>(hwnd) };
-                        e.width = LOWORD(lparam);
-                        e.height = HIWORD(lparam);
-                        self->enqueue(e);
-                    }
-
-                    return 0;
-                }
-
-                case WM_CLOSE:
-                {
-                    if (self)
+                    case WM_CLOSE:
                     {
                         WindowEvent e{};
                         e.type = WindowEventType::close;
                         e.handle = WindowHandle{ reinterpret_cast<std::uintptr_t>(hwnd) };
                         self->enqueue(e);
-                    }
-                    return 0;
-                }
 
-                case WM_DESTROY:
-                {
-                    if (self)
+                        // Do NOT destroy here; let engine decide by calling destroy_window().
+                        return 0;
+                    }
+                    case WM_SIZE:
                     {
+                        WindowEvent e{};
+                        e.type = WindowEventType::resized;
+                        e.handle = WindowHandle{ reinterpret_cast<std::uintptr_t>(hwnd) };
+                        e.width = static_cast<std::int32_t>(LOWORD(lparam));
+                        e.height = static_cast<std::int32_t>(HIWORD(lparam));
+                        self->enqueue(e);
+                        break;
+                    }
+                    case WM_DESTROY:
+                    {
+                        // Optional: keep state consistent even if someone destroys externally.
                         self->windows_.erase(hwnd);
                         if (self->primary_.value == reinterpret_cast<std::uintptr_t>(hwnd))
                             self->primary_ = {};
+                        return 0;
                     }
-                    return 0;
-                }
+                    default:
+                        break;
+                    }
                 }
 
                 return ::DefWindowProcW(hwnd, msg, wparam, lparam);
             }
-
 
             HINSTANCE instance_ = ::GetModuleHandleW(nullptr);
             ATOM class_atom_ = 0;

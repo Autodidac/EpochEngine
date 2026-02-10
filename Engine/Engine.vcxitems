@@ -81,6 +81,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-api_unit.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-buffers.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-commands.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-dispatch_storage.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-platform_context.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-platform_descriptors.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-shared_context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-shared_vk.ixx" />
@@ -98,6 +101,14 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-window.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.entitycomponentmanager.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.entityhistory.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.multiplexer-linux.ixx">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.multiplexer-win.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.docking.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.platform.utils.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.gui.menu.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.saveload.system.ixx" />
@@ -244,15 +255,30 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.visibility.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.systems.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\runtime.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.dispatch_storage.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context-texture.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.dispatch_storage.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context-texture.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.raylib.bridge.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context_buffers.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context_buffers.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.platform.context.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.platform.descriptors.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
@@ -269,12 +295,17 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aeditor.scene.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.linux.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.win.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.win.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.gui.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.scripting.compiler.cpp" />

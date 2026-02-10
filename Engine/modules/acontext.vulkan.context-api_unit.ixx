@@ -4,7 +4,7 @@ module;
 export module acontext.vulkan.context;
 
 import :api;            // brings in declarations for vulkan_* funcs
-import :shared_vk; // brings in vulkan_app() / Application
+import :shared_vk; // brings in Application + registry helpers
 import :texture;
 
 import aengine.core.context;
@@ -39,18 +39,25 @@ export namespace almondnamespace::vulkancontext
         if (!ctx)
             return;
 
-        vulkan_app().enqueue_gui_draw(ctx.get(), sprite, atlases, x, y, w, h);
+        if (auto* app = find_vulkan_app(ctx))
+            app->enqueue_gui_draw(ctx, sprite, atlases, x, y, w, h);
     }
 
     // Small ones first so they're visible no matter what.
     int vulkan_get_width()
     {
-        return vulkan_app().get_framebuffer_width();
+        auto ctx = core::get_current_render_context();
+        if (auto* app = find_vulkan_app(ctx))
+            return app->get_framebuffer_width();
+        return 0;
     }
 
     int vulkan_get_height()
     {
-        return vulkan_app().get_framebuffer_height();
+        auto ctx = core::get_current_render_context();
+        if (auto* app = find_vulkan_app(ctx))
+            return app->get_framebuffer_height();
+        return 0;
     }
 
     bool vulkan_initialize(
@@ -72,7 +79,7 @@ export namespace almondnamespace::vulkancontext
             nativeWindow = ctx->get_hwnd(); // <-- CALL IT
 #endif
 
-        auto& app = vulkan_app();
+        auto& app = vulkan_app_for_context(ctx);
 
         app.set_framebuffer_size(static_cast<int>(w), static_cast<int>(h));
         ctx->framebufferWidth = static_cast<int>(w);
@@ -82,11 +89,14 @@ export namespace almondnamespace::vulkancontext
         ctx->get_width  = &vulkan_get_width;
         ctx->get_height = &vulkan_get_height;
 
-        ctx->onResize = [&app, ctx, resize = std::move(onResize)](int nw, int nh) mutable
+        ctx->onResize = [ctx, resize = std::move(onResize)](int nw, int nh) mutable
         {
-            app.set_framebuffer_size(nw, nh);
-            ctx->framebufferWidth = nw;
-            ctx->framebufferHeight = nh;
+            if (auto* app = find_vulkan_app(ctx))
+            {
+                app->set_framebuffer_size(nw, nh);
+                ctx->framebufferWidth = nw;
+                ctx->framebufferHeight = nh;
+            }
             if (resize) resize(nw, nh);
         };
 
@@ -133,7 +143,7 @@ export namespace almondnamespace::vulkancontext
             static_cast<std::int64_t>(depth),
             telemetry::RendererTelemetryTags{ core::ContextType::Vulkan, windowId });
 
-        auto& app = vulkan_app();
+        auto& app = vulkan_app_for_context(ctx);
         app.set_active_context(ctx.get());
         atlasmanager::process_pending_uploads(core::ContextType::Vulkan);
 
@@ -152,8 +162,11 @@ export namespace almondnamespace::vulkancontext
     void vulkan_cleanup(std::shared_ptr<core::Context> ctx)
     {
         if (ctx)
-            vulkan_app().cleanup_gui_context(ctx.get());
+        {
+            if (auto* app = find_vulkan_app(ctx))
+                app->cleanup_gui_context(ctx.get());
+        }
         atlasmanager::unregister_backend_uploader(core::ContextType::Vulkan);
-        vulkan_app().cleanup();
+        cleanup_vulkan_app_for_context(ctx);
     }
 }

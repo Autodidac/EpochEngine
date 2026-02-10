@@ -839,5 +839,23 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.ai.cpp">
       <Filter>Source Files\core\epoch\ai</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-dispatch_storage.ixx">
+      <Filter>Module Files\ixx\core\context\backends\vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-platform_context.ixx">
+      <Filter>Module Files\ixx\core\context\backends\vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-platform_descriptors.ixx">
+      <Filter>Module Files\ixx\core\context\backends\vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.docking.ixx">
+      <Filter>Module Files\ixx\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.multiplexer-linux.ixx">
+      <Filter>Module Files\ixx\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.multiplexer-win.ixx">
+      <Filter>Module Files\ixx\core\context</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

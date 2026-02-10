@@ -1,19 +1,46 @@
+// ============================================================================
+// modules/acontext.vulkan.context-depth.ixx
+// Partition implementation: acontext.vulkan.context:depth
+// Depth buffer + framebuffers.
+// Compatible with Vulkan-Hpp both with and without VULKAN_HPP_NO_EXCEPTIONS.
+// ============================================================================
+
 module;
 
+#include <include/acontext.vulkan.hpp>
+#include <vulkan/vulkan.hpp>
+
+#include <array>
+#include <cstdint>
 #include <stdexcept>
+#include <vector>
 
 export module acontext.vulkan.context:depth;
 
-import <array>;
-import <cstdint>;
-import <vector>;
-
 import :shared_vk;
 
-export namespace almondnamespace::vulkancontext {
+namespace almondnamespace::vulkancontext
+{
+    // Not exported: internal helpers are fine here (including anonymous namespace).
+    namespace
+    {
+        [[nodiscard]] inline bool has_stencil(vk::Format fmt) noexcept
+        {
+            return fmt == vk::Format::eD32SfloatS8Uint || fmt == vk::Format::eD24UnormS8Uint;
+        }
 
-    // NOTE: your Vulkan-Hpp config apparently does NOT have vk::FormatFeatureFlags.
-    // Use vk::Flags<vk::FormatFeatureFlagBits> instead.
+#if defined(VULKAN_HPP_NO_EXCEPTIONS)
+        template <class ResultValueT>
+        [[nodiscard]] inline auto unwrap_or_throw(ResultValueT&& rv, const char* msg)
+        {
+            if (rv.result != vk::Result::eSuccess)
+                throw std::runtime_error(msg);
+            return std::move(rv.value);
+        }
+#endif
+    } // namespace
+
+    // Export each definition explicitly (no exported namespace => no anonymous export issue).
     export vk::Format Application::findSupportedFormat(
         const std::vector<vk::Format>& candidates,
         vk::ImageTiling tiling,
@@ -51,7 +78,6 @@ export namespace almondnamespace::vulkancontext {
         const vk::Format depthFormat = findDepthFormat();
 
         vk::ImageCreateInfo imageInfo{};
-        imageInfo.flags = {};
         imageInfo.imageType = vk::ImageType::e2D;
         imageInfo.format = depthFormat;
         imageInfo.extent = vk::Extent3D{ swapChainExtent.width, swapChainExtent.height, 1u };
@@ -61,18 +87,18 @@ export namespace almondnamespace::vulkancontext {
         imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
         imageInfo.sharingMode = vk::SharingMode::eExclusive;
-        imageInfo.queueFamilyIndexCount = 0u;
-        imageInfo.pQueueFamilyIndices = nullptr;
         imageInfo.initialLayout = vk::ImageLayout::eUndefined;
 
-        auto [imgRes, img] = device->createImageUnique(imageInfo);
-        if (imgRes != vk::Result::eSuccess)
-            throw std::runtime_error("Failed to create depth image!");
-        depthImage = std::move(img);
+#if defined(VULKAN_HPP_NO_EXCEPTIONS)
+        depthImage = unwrap_or_throw(device->createImageUnique(imageInfo), "Failed to create depth image!");
+#else
+        depthImage = device->createImageUnique(imageInfo);
+#endif
 
         const vk::MemoryRequirements memReq = device->getImageMemoryRequirements(*depthImage);
         const std::uint32_t memTypeIndex =
             findMemoryType(memReq.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
         if (memTypeIndex == UINT32_MAX)
             throw std::runtime_error("Failed to find suitable memory type for depth image!");
 
@@ -80,14 +106,21 @@ export namespace almondnamespace::vulkancontext {
         allocInfo.allocationSize = memReq.size;
         allocInfo.memoryTypeIndex = memTypeIndex;
 
-        auto [memRes, mem] = device->allocateMemoryUnique(allocInfo);
-        if (memRes != vk::Result::eSuccess)
-            throw std::runtime_error("Failed to allocate depth image memory!");
-        depthImageMemory = std::move(mem);
+#if defined(VULKAN_HPP_NO_EXCEPTIONS)
+        depthImageMemory = unwrap_or_throw(device->allocateMemoryUnique(allocInfo), "Failed to allocate depth image memory!");
+#else
+        depthImageMemory = device->allocateMemoryUnique(allocInfo);
+#endif
 
-        (void)device->bindImageMemory(*depthImage, *depthImageMemory, 0);
+        const vk::Result bindRes = device->bindImageMemory(*depthImage, *depthImageMemory, 0);
+        if (bindRes != vk::Result::eSuccess)
+            throw std::runtime_error("Failed to bind depth image memory!");
 
-        depthImageView = createImageViewUnique(*depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
+        vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eDepth;
+        if (has_stencil(depthFormat))
+            aspect |= vk::ImageAspectFlagBits::eStencil;
+
+        depthImageView = createImageViewUnique(*depthImage, depthFormat, aspect);
     }
 
     export void Application::createFramebuffers()
@@ -102,7 +135,6 @@ export namespace almondnamespace::vulkancontext {
             };
 
             vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.flags = {};
             framebufferInfo.renderPass = *renderPass;
             framebufferInfo.attachmentCount = static_cast<std::uint32_t>(attachments.size());
             framebufferInfo.pAttachments = attachments.data();
@@ -110,12 +142,11 @@ export namespace almondnamespace::vulkancontext {
             framebufferInfo.height = swapChainExtent.height;
             framebufferInfo.layers = 1u;
 
-            auto [fbRes, fb] = device->createFramebufferUnique(framebufferInfo);
-            if (fbRes != vk::Result::eSuccess)
-                throw std::runtime_error("Failed to create framebuffer!");
-
-            framebuffers[i] = std::move(fb);
+#if defined(VULKAN_HPP_NO_EXCEPTIONS)
+            framebuffers[i] = unwrap_or_throw(device->createFramebufferUnique(framebufferInfo), "Failed to create framebuffer!");
+#else
+            framebuffers[i] = device->createFramebufferUnique(framebufferInfo);
+#endif
         }
     }
-
 } // namespace almondnamespace::vulkancontext

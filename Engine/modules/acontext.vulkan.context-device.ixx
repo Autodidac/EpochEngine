@@ -150,7 +150,6 @@ namespace almondnamespace::vulkancontext {
 
         device = std::move(d);
 
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(device.get());
 
         graphicsQueue = device->getQueue(queueFamilyIndices.graphicsFamily.value(), 0);
         presentQueue = device->getQueue(queueFamilyIndices.presentFamily.value(), 0);

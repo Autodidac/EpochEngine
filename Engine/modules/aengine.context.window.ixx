@@ -15,7 +15,7 @@ module;
 
 #if defined(_WIN32)
 #   ifdef ALMOND_USING_WINMAIN
-#       include "aframework.hpp"
+#       include "../include/aframework.hpp"
 #   endif
 #endif
 

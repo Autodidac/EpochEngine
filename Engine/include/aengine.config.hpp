@@ -21,7 +21,6 @@
  *   See LICENSE file for full terms.                         *
  *                                                            *
  **************************************************************/
-
 // ============================================================
 // Almond Entry Point / Platform Configuration
 // ============================================================
@@ -30,12 +29,14 @@
 // #define ALMOND_MAIN_HEADLESS
 
 #ifndef ALMOND_MAIN_HANDLED
-#ifndef ALMOND_MAIN_HEADLESS
-#ifdef _WIN32
-
-#define ALMOND_USING_WINMAIN
-#endif
-#endif
+#	ifndef ALMOND_MAIN_HEADLESS
+#		ifdef _WIN32
+#			ifndef _CRT_SECURE_NO_WARNINGS
+#				define _CRT_SECURE_NO_WARNINGS 1
+#			endif
+#			define ALMOND_USING_WINMAIN
+#		endif
+#	endif
 #endif
 
 // ------------------------------------------------------------
@@ -57,11 +58,12 @@
 #define ALMOND_SINGLE_PARENT 1
 
 #define ALMOND_USING_OPENGL 
-#define ALMOND_USING_SFML 
+//#define ALMOND_USING_SFML 
 #define ALMOND_USING_RAYLIB 
 #define ALMOND_USING_SDL 
 #define ALMOND_USING_SOFTWARE_RENDERER 
 #define ALMOND_USING_VULKAN
+//#define ALMOND_VULKAN_STANDALONE
 
 #if defined(ALMOND_FORCE_DISABLE_SDL)
 #undef ALMOND_USING_SDL

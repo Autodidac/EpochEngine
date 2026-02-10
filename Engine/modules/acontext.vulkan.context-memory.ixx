@@ -1,9 +1,11 @@
 module;
 
+#include "../include/aengine.config.hpp"
+
 // Keep this in the global module fragment so it doesn't leak macros into importers.
-#ifndef _CRT_SECURE_NO_WARNINGS
-#   define _CRT_SECURE_NO_WARNINGS
-#endif
+//#ifndef _CRT_SECURE_NO_WARNINGS
+//#   define _CRT_SECURE_NO_WARNINGS
+//#endif
 
 #include <cstdint>
 #include <iostream>

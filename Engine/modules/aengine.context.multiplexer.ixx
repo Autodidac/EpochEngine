@@ -3,9 +3,10 @@
 module;
 
 #if defined(_WIN32)
-#     include <include/aframework.hpp>
-//#   include <windowsx.h>
-//#   include <shellapi.h>
+//#     include "../include/aframework.hpp"
+#   include <windows.h>
+#   include <windowsx.h>
+#   include <shellapi.h>
 #   include <commctrl.h>
 #endif
 
@@ -15,7 +16,7 @@ module;
 #   include <GL/glx.h>
 #endif
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/epoch.config.hpp> // for ALMOND_USING Macros
 
 export module aengine.context.multiplexer;
 

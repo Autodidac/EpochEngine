@@ -1,20 +1,12 @@
-﻿//// acontext.vulkan.platform.context.cpp
+﻿//// acontext.vulkan.context-platform_context.ixx
 //
-// This file MUST be a module implementation unit for `acontext.vulkan.context`
-// because it defines `almondnamespace::vulkancontext::Application` methods.
+// Module partition for `acontext.vulkan.context` that defines
+// `almondnamespace::vulkancontext::Application` methods.
 //
-// It also MUST be the single TU that provides:
-//  - STB_IMAGE_IMPLEMENTATION
-//  - Vulkan-Hpp dynamic dispatch storage (see acontext.vulkan.dispatch_storage.cpp)
-//
-// If you keep vulkan.hpp in the module interface BMI, the safest way to guarantee
-// the dispatch storage exists is to include vulkan.hpp textually here (with the
-// same config macros) before `module acontext.vulkan.context;`.
+// This TU provides the single STB_IMAGE_IMPLEMENTATION definition.
+// Vulkan-Hpp dynamic dispatch storage lives in :dispatch_storage.
 //
 // -----------------------------------------------------------------------------
-//
-// NOTE: No `import acontext.vulkan.context;` here. This file *is* that module.
-//
 
 module;
 
@@ -23,18 +15,14 @@ module;
 #   define STB_IMAGE_IMPLEMENTATION
 #endif
 
-#ifndef VULKAN_HPP_DISPATCH_LOADER_DYNAMIC
-#   define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
-#endif
-#ifndef VULKAN_HPP_NO_EXCEPTIONS
-#   define VULKAN_HPP_NO_EXCEPTIONS 0
-#endif
+// Vulkan-Hpp config (static dispatch)
+#include <include/acontext.vulkan.hpp>
 
-#include <include/aengine.config.hpp>
+#include "../include/epoch.config.hpp"
 
 #if defined(_WIN32)
 #   ifndef VK_USE_PLATFORM_WIN32_KHR
-#       define VK_USE_PLATFORM_WIN32_KHR
+#       define VK_USE_PLATFORM_WIN32_KHR 1
 #   endif
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN
@@ -76,9 +64,9 @@ module;
 #include <vector>
 
 // -----------------------------------------------------------------------------
-// Now enter the named module (implementation unit)
+// Now enter the named module (partition)
 // -----------------------------------------------------------------------------
-module acontext.vulkan.context;
+export module acontext.vulkan.context:platform_context;
 
 import :window;
 import :instance;
@@ -189,6 +177,8 @@ namespace almondnamespace::vulkancontext
             throw std::runtime_error("Vulkan requires a native window handle.");
 #endif
 
+        // IMPORTANT: with VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE defined
+        // in THIS TU, this init call is valid and links cleanly.
 
 #ifdef _DEBUG
         std::cout << "Window configured\n";
@@ -223,10 +213,11 @@ namespace almondnamespace::vulkancontext
 
         set_active_context(ctx.get());
 
-        static auto lastTime = std::chrono::high_resolution_clock::now();
         const auto currentTime = std::chrono::high_resolution_clock::now();
-        const float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
-        lastTime = currentTime;
+        float deltaTime = 0.0f;
+        if (lastFrameTime)
+            deltaTime = std::chrono::duration<float>(currentTime - *lastFrameTime).count();
+        lastFrameTime = currentTime;
 
 #if defined(ALMOND_VULKAN_STANDALONE)
         if (window)
@@ -269,13 +260,13 @@ namespace almondnamespace::vulkancontext
 
         if (framebufferMinimized)
         {
-            if (auto* guiState = find_gui_state(ctx.get()))
+            if (auto* guiState = find_gui_state(context_id_from_ptr(ctx)))
                 guiState->guiDraws.clear();
             queue.drain();
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             return true;
         }
-        if (auto* guiState = find_gui_state(ctx.get()))
+        if (auto* guiState = find_gui_state(context_id_from_ptr(ctx)))
             guiState->guiDraws.clear();
         queue.drain();
         drawFrame();
@@ -286,12 +277,22 @@ namespace almondnamespace::vulkancontext
     {
         context = std::move(ctx);
         nativeWindowHandle = nativeWindow;
-        activeGuiContext = context.lock().get();
+        const auto locked = context.lock();
+        activeGuiContextId = context_id_from_ptr(locked);
+        if (activeGuiContextId != 0u && locked)
+            guiContexts[activeGuiContextId].context = locked;
     }
 
     void Application::set_active_context(const almondnamespace::core::Context* ctx)
     {
-        activeGuiContext = ctx;
+        activeGuiContextId = context_id_from_ptr(ctx);
+        if (activeGuiContextId != 0u)
+        {
+            const auto locked = context.lock();
+            if (locked && locked.get() == ctx)
+                guiContexts[activeGuiContextId].context = locked;
+        }
+        prune_gui_contexts();
     }
 
     void Application::cleanup_gui_context(const almondnamespace::core::Context* ctx)
@@ -299,24 +300,52 @@ namespace almondnamespace::vulkancontext
         if (!ctx)
             return;
 
-        guiContexts.erase(ctx);
-        if (activeGuiContext == ctx)
-            activeGuiContext = nullptr;
+        const ContextId ctxId = context_id_from_ptr(ctx);
+        guiContexts.erase(ctxId);
+        if (activeGuiContextId == ctxId)
+            activeGuiContextId = 0u;
+        prune_gui_contexts();
     }
 
     Application::GuiContextState& Application::gui_state_for_context(
-        const almondnamespace::core::Context* ctx)
+        ContextId ctxId,
+        std::weak_ptr<almondnamespace::core::Context> ctxRef)
     {
-        return guiContexts[ctx];
+        if (ctxId == 0u)
+        {
+            static GuiContextState emptyState{};
+            return emptyState;
+        }
+
+        auto& entry = guiContexts[ctxId];
+        if (entry.context.expired() && !ctxRef.expired())
+            entry.context = std::move(ctxRef);
+        return entry.state;
     }
 
     Application::GuiContextState* Application::find_gui_state(
-        const almondnamespace::core::Context* ctx) noexcept
+        ContextId ctxId) noexcept
     {
-        auto it = guiContexts.find(ctx);
+        if (ctxId == 0u)
+            return nullptr;
+        auto it = guiContexts.find(ctxId);
         if (it == guiContexts.end())
             return nullptr;
-        return &it->second;
+        return &it->second.state;
+    }
+
+    void Application::prune_gui_contexts()
+    {
+        for (auto it = guiContexts.begin(); it != guiContexts.end(); )
+        {
+            if (it->first == 0u || it->second.context.expired())
+                it = guiContexts.erase(it);
+            else
+                ++it;
+        }
+
+        if (activeGuiContextId != 0u && guiContexts.find(activeGuiContextId) == guiContexts.end())
+            activeGuiContextId = 0u;
     }
 
     void Application::reset_gui_swapchain_state(GuiContextState& guiState)
@@ -375,6 +404,7 @@ namespace almondnamespace::vulkancontext
         vertexBuffer.reset();
         vertexBufferMemory.reset();
         guiContexts.clear();
+        activeGuiContextId = 0u;
 
         textureSampler.reset();
         textureImageView.reset();

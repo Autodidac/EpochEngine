@@ -206,7 +206,7 @@ namespace almondnamespace::vulkancontext
         uniformBuffers.clear();
         uniformBuffersMemory.clear();
         uniformBuffersMapped.clear();
-        if (auto* guiState = find_gui_state(activeGuiContext))
+        if (auto* guiState = find_gui_state(activeGuiContextId))
             reset_gui_swapchain_state(*guiState);
     }
 

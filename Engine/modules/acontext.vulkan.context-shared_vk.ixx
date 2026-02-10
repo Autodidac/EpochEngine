@@ -6,6 +6,7 @@
 
 module;
 
+#include "../include/aengine.config.hpp"
 #include <include/acontext.vulkan.hpp>
 
 #if defined(ALMOND_VULKAN_STANDALONE)
@@ -14,6 +15,8 @@ module;
 #   endif
 #   include <GLFW/glfw3.h>
 #endif
+
+//#define _CRT_SECURE_NO_WARNINGS
 
 // Include Vulkan-Hpp after config.
 #include <vulkan/vulkan.hpp>
@@ -29,16 +32,21 @@ struct GLFWwindow; // engine-owned window integration: don't drag GLFW into the 
 import :shared_context;
 
 import <array>;
+import <chrono>;
 import <cstddef>;
 import <cstdint>;
 import <functional>;
 import <optional>;
+import <memory>;
 import <span>;
+import <source_location>;
 import <string>;
+import <string_view>;
 import <unordered_map>;
 import <utility>;
 import <vector>;
 
+import aengine.core.logger;
 import aengine.context.commandqueue;
 import aengine.core.context;
 import aengine.input;
@@ -48,14 +56,43 @@ import aspritehandle;
 
 namespace almondnamespace::vulkancontext
 {
+    export using ContextId = std::uintptr_t;
+
+    inline ContextId context_id_from_ptr(const almondnamespace::core::Context* ctx) noexcept
+    {
+        return ctx ? reinterpret_cast<ContextId>(ctx) : 0u;
+    }
+
+    inline ContextId context_id_from_ptr(const std::shared_ptr<almondnamespace::core::Context>& ctx) noexcept
+    {
+        return ctx ? reinterpret_cast<ContextId>(ctx.get()) : 0u;
+    }
+
     // Debug callback for validation layers
     inline VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
         VkDebugUtilsMessageTypeFlagsEXT /*messageType*/,
-        const VkDebugUtilsMessengerCallbackDataEXT* /*pCallbackData*/,
+        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
         void* /*pUserData*/)
     {
-        (void)messageSeverity;
+        constexpr std::string_view kLogSys = "Vulkan.Validation";
+        almondnamespace::logger::LogLevel level = almondnamespace::logger::LogLevel::INFO;
+
+        if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0)
+            level = almondnamespace::logger::LogLevel::ALMOND_ERROR;
+        else if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0)
+            level = almondnamespace::logger::LogLevel::WARN;
+        else if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) != 0)
+            level = almondnamespace::logger::LogLevel::INFO;
+
+        const char* msg = (pCallbackData && pCallbackData->pMessage)
+            ? pCallbackData->pMessage
+            : "Vulkan validation message";
+
+        almondnamespace::logger::get(kLogSys).log(
+            level,
+            msg,
+            std::source_location::current());
         return VK_FALSE;
     }
 
@@ -105,7 +142,7 @@ namespace almondnamespace::vulkancontext
         }
 
         void enqueue_gui_draw(
-            const almondnamespace::core::Context* ctx,
+            const std::shared_ptr<almondnamespace::core::Context>& ctx,
             const almondnamespace::SpriteHandle& sprite,
             std::span<const almondnamespace::TextureAtlas* const> atlases,
             float x,
@@ -195,11 +232,13 @@ namespace almondnamespace::vulkancontext
 
         bool validationLayersEnabled = false;
 
-        inline static almondnamespace::vulkancamera::State cam =
+        almondnamespace::vulkancamera::State cam =
             almondnamespace::vulkancamera::create(
                 glm::vec3(0.0f, 0.0f, 5.0f),
                 glm::vec3(0.0f, 1.0f, 0.0f),
                 -90.0f, 0.0f);
+
+        std::optional<std::chrono::high_resolution_clock::time_point> lastFrameTime{};
 
         float lastX = 400.0f;
         float lastY = 300.0f;
@@ -212,6 +251,7 @@ namespace almondnamespace::vulkancontext
         void updateCamera(float deltaTime);
 
         void createInstance();
+        void setupDebugMessenger();
         std::vector<const char*> getRequiredExtensions();
 
         vk::PhysicalDevice pickPhysicalDevice();
@@ -262,8 +302,10 @@ namespace almondnamespace::vulkancontext
         void createUniformBuffers();
         void updateUniformBuffer(std::uint32_t currentImage,
             const almondnamespace::vulkancamera::State& camera);
-        GuiContextState& gui_state_for_context(const almondnamespace::core::Context* ctx);
-        GuiContextState* find_gui_state(const almondnamespace::core::Context* ctx) noexcept;
+        GuiContextState& gui_state_for_context(ContextId ctxId,
+            std::weak_ptr<almondnamespace::core::Context> ctxRef = {});
+        GuiContextState* find_gui_state(ContextId ctxId) noexcept;
+        void prune_gui_contexts();
         void reset_gui_swapchain_state(GuiContextState& guiState);
 
         void createDescriptorPool();
@@ -340,12 +382,21 @@ namespace almondnamespace::vulkancontext
             std::vector<GuiDrawCommand> guiDraws{};
         };
 
-        std::unordered_map<const almondnamespace::core::Context*, GuiContextState> guiContexts{};
-        const almondnamespace::core::Context* activeGuiContext = nullptr;
+        struct GuiContextEntry
+        {
+            std::weak_ptr<almondnamespace::core::Context> context{};
+            GuiContextState state{};
+        };
+
+        std::unordered_map<ContextId, GuiContextEntry> guiContexts{};
+        ContextId activeGuiContextId = 0u;
     };
 
     export std::span<const Application::Vertex> cube_vertices() noexcept;
     export std::span<const std::uint16_t>       cube_indices()  noexcept;
 
-    export Application& vulkan_app();
+    export ContextId vulkan_context_id(const std::shared_ptr<almondnamespace::core::Context>& ctx) noexcept;
+    export Application& vulkan_app_for_context(const std::shared_ptr<almondnamespace::core::Context>& ctx);
+    export Application* find_vulkan_app(const std::shared_ptr<almondnamespace::core::Context>& ctx) noexcept;
+    export void cleanup_vulkan_app_for_context(const std::shared_ptr<almondnamespace::core::Context>& ctx);
 }

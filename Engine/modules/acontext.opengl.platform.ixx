@@ -26,8 +26,12 @@ module;
 // - DO NOT include any GL headers here.
 // - DO NOT include GL/wglext.h here.
 // This module only needs core WGL + Win32 types and functions.
-#include <aframework.hpp>
+#if defined(_WIN32)
+#   ifdef ALMOND_USING_WINMAIN
+#       include "../include/aframework.hpp"
 #include <wingdi.h>
+#   endif
+#endif
 
 #elif defined(__linux__)
 

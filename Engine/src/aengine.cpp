@@ -35,6 +35,7 @@
 
 #include "..\include\aengine.config.hpp"
 #include "..\include\aengine.hpp"
+#include "../include/_epoch.stl_types.hpp"
 
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -66,6 +67,16 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
+import core.assert;
+import core.env;
+import core.error;
+import core.format;
+import core.id;
+import core.math;
+import core.path;
+import core.string;
+import core.time;
+
 // -----------------------------
 // Engine/module imports
 // -----------------------------
@@ -83,6 +94,7 @@ import aengine.engine_components;
 import aengine.context.multiplexer;
 import aengine.context.type;
 import aengine.core.context;
+import aengine.context.window;
 
 import aengine.gui;
 import aengine.gui.menu;
@@ -177,6 +189,30 @@ namespace almondnamespace::core
 
     namespace engine
     {
+        struct FpsTracker
+        {
+            std::chrono::steady_clock::time_point last_report{};
+            std::size_t frames = 0;
+        };
+
+        void emit_fps(FpsTracker& tracker, const Context& ctx, const WindowData* win,
+            std::chrono::steady_clock::time_point now)
+        {
+            if (tracker.frames == 0)
+                tracker.last_report = now;
+
+            ++tracker.frames;
+            const auto elapsed = std::chrono::duration<double>(now - tracker.last_report).count();
+            if (elapsed >= 1.0)
+            {
+                const double fps = static_cast<double>(tracker.frames) / elapsed;
+                std::cout << "[Engine] FPS(" << ctx.backendName << ", window="
+                          << (win ? win->hwnd : nullptr) << ")=" << fps << "\n";
+                tracker.last_report = now;
+                tracker.frames = 0;
+            }
+        }
+
         template <typename PumpFunc>
         int RunEditorInterfaceLoop(MultiContextManager& mgr, PumpFunc&& pump_events)
         {
@@ -243,6 +279,7 @@ namespace almondnamespace::core
             init_menus();
 
             std::unordered_map<Context*, std::chrono::steady_clock::time_point> last_frame_times;
+            std::unordered_map<Context*, FpsTracker> fps_trackers;
             bool running = true;
             bool show_games_popup = false;
             auto pump = std::forward<PumpFunc>(pump_events);
@@ -282,6 +319,9 @@ namespace almondnamespace::core
                                 dt = std::chrono::duration<float>(now - it->second).count();
                                 it->second = now;
                             }
+
+                            auto& fps_tracker = fps_trackers[raw];
+                            emit_fps(fps_tracker, *ctx, win, now);
 
                             auto begin_scene = [&](auto make_scene, const char* label)
                                 {
@@ -618,6 +658,7 @@ namespace almondnamespace::core
             init_menu();
 
             std::unordered_map<Context*, std::chrono::steady_clock::time_point> last_frame_times;
+            std::unordered_map<Context*, FpsTracker> fps_trackers;
             bool running = true;
             auto pump = std::forward<PumpFunc>(pump_events);
 
@@ -657,6 +698,9 @@ namespace almondnamespace::core
                                 dt = std::chrono::duration<float>(now - it->second).count();
                                 it->second = now;
                             }
+
+                            auto& fps_tracker = fps_trackers[raw];
+                            emit_fps(fps_tracker, *ctx, win, now);
 
                             auto begin_scene = [&](auto make_scene, SceneID id)
                                 {
@@ -903,7 +947,7 @@ namespace almondnamespace::core
                     /*RayLib*/   1,
                     /*SDL*/      1,
                     /*SFML*/     1,
-                    /*Vulkan*/   1,
+                    /*Vulkan*/   2,
                     /*OpenGL*/   1,
                     /*Software*/ 1,
                     ALMOND_SINGLE_PARENT == 1
@@ -961,7 +1005,7 @@ namespace almondnamespace::core
                     /*RayLib*/   1,
                     /*SDL*/      1,
                     /*SFML*/     1,
-                    /*Vulkan*/   1,
+                    /*Vulkan*/   2,
                     /*OpenGL*/   1,
                     /*Software*/ 1,
                     ALMOND_SINGLE_PARENT == 1
@@ -1030,7 +1074,7 @@ namespace almondnamespace::core
                 /*RayLib*/   1,
                 /*SDL*/      1,
                 /*SFML*/     1,
-                    /*Vulkan*/   1,
+                    /*Vulkan*/   2,
                 /*OpenGL*/   1,
                 /*Software*/ 1,
                 ALMOND_SINGLE_PARENT == 1
@@ -1086,7 +1130,7 @@ namespace almondnamespace::core
                 /*RayLib*/   1,
                 /*SDL*/      1,
                 /*SFML*/     1,
-                    /*Vulkan*/   1,
+                    /*Vulkan*/   2,
                 /*OpenGL*/   1,
                 /*Software*/ 1,
                 ALMOND_SINGLE_PARENT == 1
@@ -1122,6 +1166,41 @@ namespace almondnamespace::core
     }
 } // namespace almondnamespace::core
 
+namespace
+{
+    void run_engine_self_tests()
+    {
+        using epoch::core::asserts::that;
+        using namespace std::literals;
+
+        that(epoch::core::math::clamp(5, 0, 3) == 3);
+        that(epoch::core::math::lerp(0.0, 10.0, 0.5) == 5.0);
+        std::cout << "[OK] core.math\n";
+
+        that(epoch::to_std(epoch::core::string::trim("  hi  ")) == "hi"sv);
+        std::cout << "[OK] core.string\n";
+
+        struct TagA {};
+        epoch::core::id::strong_id<TagA> a{ 42 };
+        that(a.value == 42);
+        std::cout << "[OK] core.id\n";
+
+        (void)epoch::core::env::set("DEMO_TEST_ENV", "123");
+        auto v = epoch::core::env::get("DEMO_TEST_ENV");
+        that(v.has_value() && epoch::to_std(*v) == "123"sv);
+        (void)epoch::core::env::unset("DEMO_TEST_ENV");
+        std::cout << "[OK] core.env\n";
+
+        auto exe = epoch::core::path::executable_path();
+        that(!exe.empty());
+        std::cout << "[OK] core.path\n";
+
+        auto e = epoch::core::error::failed("x");
+        that(static_cast<bool>(e));
+        std::cout << "[OK] core.error\n";
+    }
+}
+
 namespace urls
 {
     const std::string github_base = "https://github.com/";
@@ -1152,6 +1231,8 @@ int WINAPI wWinMain(
 
     try
     {
+        run_engine_self_tests();
+
         const int argc = __argc;
         char** argv = __argv;
 
@@ -1196,6 +1277,8 @@ int main(int argc, char** argv)
 #else
     try
     {
+        run_engine_self_tests();
+
         const auto cli_result = almondnamespace::core::cli::parse(argc, argv);
 
         const almondnamespace::updater::UpdateChannel channel{

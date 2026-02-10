@@ -1,6 +1,7 @@
 module;
 
-#include <include/acontext.vulkan.hpp>
+#include "../include/aengine.config.hpp"
+//#include "../../include/acontext.vulkan.hpp"
 
 #if defined(ALMOND_VULKAN_STANDALONE)
 #   include <GLFW/glfw3.h>
@@ -25,10 +26,12 @@ import :window;
 
 import <algorithm>;
 import <chrono>;
+import <mutex>;
 import <stdexcept>;
+import <unordered_map>;
 import <vector>;
 
-export namespace almondnamespace::vulkancontext
+namespace almondnamespace::vulkancontext
 {
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -38,12 +41,100 @@ export namespace almondnamespace::vulkancontext
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
-    // SINGLE definition lives here.
-    // (Declaration is exported from :shared_context.)
-    Application& vulkan_app()
+    namespace
     {
-        static Application app{};
-        return app;
+        struct AppRegistryEntry
+        {
+            std::weak_ptr<almondnamespace::core::Context> context;
+            Application app{};
+        };
+
+        std::unordered_map<ContextId, AppRegistryEntry> appRegistry{};
+        std::mutex appRegistryMutex;
+
+        ContextId context_id_from(const std::shared_ptr<almondnamespace::core::Context>& ctx) noexcept
+        {
+            return ctx ? reinterpret_cast<ContextId>(ctx.get()) : 0u;
+        }
+
+        void prune_expired_locked()
+        {
+            for (auto it = appRegistry.begin(); it != appRegistry.end();)
+            {
+                if (it->second.context.expired())
+                {
+                    it = appRegistry.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+        }
+    }
+
+    ContextId vulkan_context_id(const std::shared_ptr<almondnamespace::core::Context>& ctx) noexcept
+    {
+        return context_id_from(ctx);
+    }
+
+    Application& vulkan_app_for_context(const std::shared_ptr<almondnamespace::core::Context>& ctx)
+    {
+        if (!ctx)
+            throw std::runtime_error("[Vulkan] Missing context for Vulkan application registry.");
+
+        const ContextId id = context_id_from(ctx);
+        std::scoped_lock lock(appRegistryMutex);
+        prune_expired_locked();
+
+        auto it = appRegistry.find(id);
+        if (it == appRegistry.end())
+        {
+            AppRegistryEntry entry{};
+            entry.context = ctx;
+            auto [insertedIt, _] = appRegistry.emplace(id, std::move(entry));
+            it = insertedIt;
+        }
+
+        return it->second.app;
+    }
+
+    Application* find_vulkan_app(const std::shared_ptr<almondnamespace::core::Context>& ctx) noexcept
+    {
+        if (!ctx)
+            return nullptr;
+
+        const ContextId id = context_id_from(ctx);
+        std::scoped_lock lock(appRegistryMutex);
+        prune_expired_locked();
+
+        auto it = appRegistry.find(id);
+        if (it == appRegistry.end())
+            return nullptr;
+
+        if (it->second.context.expired())
+        {
+            appRegistry.erase(it);
+            return nullptr;
+        }
+
+        return &it->second.app;
+    }
+
+    void cleanup_vulkan_app_for_context(const std::shared_ptr<almondnamespace::core::Context>& ctx)
+    {
+        if (!ctx)
+            return;
+
+        const ContextId id = context_id_from(ctx);
+        std::scoped_lock lock(appRegistryMutex);
+
+        auto it = appRegistry.find(id);
+        if (it == appRegistry.end())
+            return;
+
+        it->second.app.cleanup();
+        appRegistry.erase(it);
     }
 
     // ---- Application method definitions ----

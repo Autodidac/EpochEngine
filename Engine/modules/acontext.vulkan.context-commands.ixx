@@ -19,6 +19,7 @@ import <array>;
 import <cstdint>;
 import <cstring>;
 import <limits>;
+import <memory>;
 import <span>;
 import <stdexcept>;
 import <vector>;
@@ -106,13 +107,12 @@ namespace almondnamespace::vulkancontext
             1u,
             0u,
             0,
-            0u,
-            VULKAN_HPP_DEFAULT_DISPATCHER
+            0u
         );
 
         cmd.nextSubpass(vk::SubpassContents::eInline);
 
-        if (auto* guiState = find_gui_state(activeGuiContext))
+        if (auto* guiState = find_gui_state(activeGuiContextId))
         {
             if (!guiState->guiDraws.empty())
                 recordGuiCommands(cmd, imageIndex, *guiState);
@@ -125,7 +125,7 @@ namespace almondnamespace::vulkancontext
     }
 
     void Application::enqueue_gui_draw(
-        const almondnamespace::core::Context* ctx,
+        const std::shared_ptr<almondnamespace::core::Context>& ctx,
         const almondnamespace::SpriteHandle& sprite,
         std::span<const almondnamespace::TextureAtlas* const> atlases,
         float x,
@@ -143,7 +143,7 @@ namespace almondnamespace::vulkancontext
         if (!atlas)
             return;
 
-        auto& guiState = gui_state_for_context(ctx);
+        auto& guiState = gui_state_for_context(context_id_from_ptr(ctx), ctx);
         guiState.guiDraws.push_back(GuiDrawCommand{
             atlas,
             sprite.localIndex,

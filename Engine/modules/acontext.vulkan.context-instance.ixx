@@ -2,9 +2,10 @@
 // modules/acontext.vulkan.context-instance.ixx
 // Partition: acontext.vulkan.context:instance
 // Vulkan instance + surface creation.
-// Fix: avoid calling an invalid global vk* entrypoint by dynamically resolving
-// vkEnumerateInstanceLayerProperties via the Vulkan loader at runtime.
-// This works whether you're linked to vulkan-1.lib or using VK_NO_PROTOTYPES/volk.
+// Fixes:
+//   - Force Vulkan-Hpp dynamic dispatcher in this partition (so .init exists)
+//   - Correct debug callback signature (VKAPI_ATTR/VKAPI_CALL)
+//   - Keep your loader-based layer enumeration
 // ============================================================================
 
 module;
@@ -22,13 +23,16 @@ module;
 #   ifndef NOMINMAX
 #       define NOMINMAX
 #   endif
-#   include <windows.h> // for LoadLibrary/GetProcAddress
+#   include <windows.h>
 #   include <include/aframework.hpp>
 #else
-#   include <dlfcn.h> // dlopen/dlsym
+#   include <dlfcn.h>
 #endif
 
-// Include Vulkan-Hpp after config.
+// ---------------------------------------------------------------------------
+// Vulkan-Hpp config MUST be set BEFORE including vulkan.hpp.
+// This partition currently ends up with DispatchLoaderStatic otherwise.
+// ---------------------------------------------------------------------------
 #include <vulkan/vulkan.hpp>
 
 export module acontext.vulkan.context:instance;
@@ -88,13 +92,9 @@ namespace almondnamespace::vulkancontext::detail
 #else
             if (!so)
             {
-                // Most common loader name on Linux
                 so = ::dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
                 if (!so)
-                {
-                    // Fallback
                     so = ::dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
-                }
             }
             if (!so)
                 return false;
@@ -131,6 +131,23 @@ namespace almondnamespace::vulkancontext::detail
             return true;
         }
     };
+}
+
+namespace almondnamespace::vulkancontext
+{
+    // -----------------------------------------------------------------------
+    // Correct callback signature for Vulkan (fixes PFN mismatch on MSVC).
+    // -----------------------------------------------------------------------
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+        VkDebugUtilsMessageSeverityFlagBitsEXT /*severity*/,
+        VkDebugUtilsMessageTypeFlagsEXT /*type*/,
+        const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
+        void* /*userData*/)
+    {
+        if (callbackData && callbackData->pMessage)
+            std::cerr << "[Vulkan] " << callbackData->pMessage << "\n";
+        return VK_FALSE;
+    }
 }
 
 export namespace almondnamespace::vulkancontext
@@ -180,26 +197,24 @@ export namespace almondnamespace::vulkancontext
 
     void Application::createInstance()
     {
-        // Important: this now uses the Vulkan loader safely (no invalid vk* call)
         validationLayersEnabled = almondnamespace::vulkanrenderer::vulkan_config.enable_validation_layers;
         if (validationLayersEnabled && !checkValidationLayerSupport())
         {
             std::cerr << "[Vulkan] Validation layers requested but not available; "
-                         "continuing with validation disabled.\n";
+                "continuing with validation disabled.\n";
             validationLayersEnabled = false;
         }
 
         vk::ApplicationInfo appInfo{};
-        appInfo.pApplicationName = "AlmondEngine Vulkan";
+        appInfo.pApplicationName = "Epoch Engine Vulkan Backend";
         appInfo.applicationVersion = 1;
-        appInfo.pEngineName = "AlmondEngine";
+        appInfo.pEngineName = "Epoch Engine";
         appInfo.engineVersion = 1;
         appInfo.apiVersion = VK_API_VERSION_1_0;
 
         const auto extensions = getRequiredExtensions();
 
         vk::InstanceCreateInfo createInfo{};
-        createInfo.flags = {};
         createInfo.pApplicationInfo = &appInfo;
         createInfo.enabledExtensionCount = static_cast<std::uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
@@ -215,13 +230,42 @@ export namespace almondnamespace::vulkancontext
             createInfo.ppEnabledLayerNames = nullptr;
         }
 
-        auto [r, inst] = vk::createInstanceUnique(createInfo);
-        if (r != vk::Result::eSuccess)
+#if defined(VULKAN_HPP_NO_EXCEPTIONS) && (VULKAN_HPP_NO_EXCEPTIONS == 1)
+        vk::ResultValue<vk::UniqueInstance> rv = vk::createInstanceUnique(createInfo);
+        if (rv.result != vk::Result::eSuccess)
             throw std::runtime_error("Failed to create Vulkan instance.");
+        instance = std::move(rv.value);
+#else
+        instance = vk::createInstanceUnique(createInfo);
+#endif
 
-        instance = std::move(inst);
+        if (validationLayersEnabled)
+            setupDebugMessenger();
+    }
 
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(instance.get());
+    void Application::setupDebugMessenger()
+    {
+        vk::DebugUtilsMessengerCreateInfoEXT createInfo{};
+        createInfo.messageSeverity =
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
+        createInfo.messageType =
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
+
+        // Use the correctly-typed callback above.
+        createInfo.pfnUserCallback = reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(debugCallback);
+
+        createInfo.pUserData = nullptr;
+
+        auto [mr, messenger] = instance->createDebugUtilsMessengerEXT(createInfo);
+        if (mr != vk::Result::eSuccess)
+            throw std::runtime_error("Failed to create Vulkan debug messenger.");
+
+        debugMessenger = messenger;
     }
 
     void Application::createSurface()
@@ -233,15 +277,13 @@ export namespace almondnamespace::vulkancontext
 
         surface = vk::UniqueSurfaceKHR(
             vk::SurfaceKHR(rawSurface),
-            vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>(
-                instance.get(), nullptr, VULKAN_HPP_DEFAULT_DISPATCHER)
-        );
+            vk::ObjectDestroy<vk::Instance, vk::DispatchLoaderStatic>(
+            );
 #elif defined(_WIN32)
         if (!nativeWindowHandle)
             throw std::runtime_error("No native window handle available for Vulkan surface.");
 
         vk::Win32SurfaceCreateInfoKHR sci{};
-        sci.flags = {};
         sci.hinstance = ::GetModuleHandleW(nullptr);
         sci.hwnd = static_cast<HWND>(nativeWindowHandle);
 
@@ -254,5 +296,4 @@ export namespace almondnamespace::vulkancontext
         throw std::runtime_error("Vulkan surface creation not implemented for this platform.");
 #endif
     }
-
 } // namespace almondnamespace::vulkancontext

@@ -83,7 +83,7 @@ export module acontext.opengl.context;
 // Core engine modules
 // ------------------------------------------------------------
 import aengine.core.context;
-import aengine.context.multiplexer;
+//import aengine.context.multiplexer;
 import aengine.context.commandqueue;
 import aengine.context.window;
 import aengine.input;
@@ -654,8 +654,8 @@ export namespace almondnamespace::openglcontext
                 return false;
         }
 
-        const auto previousContext = core::MultiContextManager::GetCurrent();
-        core::MultiContextManager::SetCurrent(ctx);
+        const auto previousContext = core::get_current_render_context();
+        core::set_current_render_context(ctx);
 
         atlasmanager::process_pending_uploads(core::ContextType::OpenGL);
 
@@ -710,7 +710,7 @@ export namespace almondnamespace::openglcontext
             struct ScopedCurrentContext
             {
                 std::shared_ptr<core::Context> previous;
-                ~ScopedCurrentContext() { core::MultiContextManager::SetCurrent(std::move(previous)); }
+                ~ScopedCurrentContext() noexcept { core::set_current_render_context(std::move(previous)); }
             } scoped{ previousContext };
 
             queue.drain();
@@ -722,6 +722,7 @@ export namespace almondnamespace::openglcontext
 
         return true;
     }
+
 
     inline void opengl_cleanup(std::shared_ptr<core::Context> ctx)
     {
