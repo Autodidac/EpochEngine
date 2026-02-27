@@ -57,17 +57,13 @@ ninja.zip
 *.idb
 *.log
 *.tlog
-AlmondShell/examples/ConsoleApplication1/atlas_dump/
+Engine/examples/ConsoleApplication1/atlas_dump/
 
-AlmondShell/examples/ConsoleApplication1/atlases/menubuttons_0_0.ppm
-AlmondShell/bin/
-AlmondShell/Bin/
-AlmondShell/docs/api/
-
-AlmondShell/examples/ConsoleApplication1/atlases/__agui_builtin_0_1.ppm
-AlmondShell/examples/ConsoleApplication1/atlases/__agui_builtin_0_0.ppm
-AlmondShell/examples/ConsoleApplication1/atlases/font_atlas_1_1.ppm
-AlmondShell/examples/ConsoleApplication1/atlases/font_atlas_1_2.ppm
+Engine/bin/
+Engine/Bin/
+Engine/docs/api/
 
 *.cmake
 *.bin
+
+project_snapshot.zip
