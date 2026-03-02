@@ -464,6 +464,24 @@ namespace almondnamespace::raylibcontext
         if (almondnamespace::raylib_api::window_should_close())
         {
             detail::raylib_stop_rendering_backend(st);
+
+            st.running = false;
+
+            if (!st.cleanupIssued)
+            {
+#if defined(_WIN32)
+                const bool on_owner_thread = (st.owner_thread == std::this_thread::get_id());
+#else
+                const bool on_owner_thread = true;
+#endif
+
+                st.cleanupIssued = true;
+                if (on_owner_thread)
+                    detail::raylib_cleanup_owner_thread(st.owner_ctx);
+                else
+                    st.cleanupRequested = true;
+            }
+
             return;
         }
 
