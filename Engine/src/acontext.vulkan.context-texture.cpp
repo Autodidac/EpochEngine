@@ -273,6 +273,11 @@ namespace almondnamespace::vulkancontext
         if (!device)
             return;
 
+        if (!activeGuiContext)
+            activeGuiContext = bound_context();
+        if (!activeGuiContext)
+            return;
+
         auto& guiState = gui_state_for_context(activeGuiContext);
         auto& entry = guiState.guiAtlases[&atlas];
         if (entry.version == atlas.version && entry.image)
@@ -464,6 +469,11 @@ namespace almondnamespace::vulkantextures
 {
     void ensure_uploaded(const almondnamespace::TextureAtlas& atlas)
     {
-        almondnamespace::vulkancontext::vulkan_app().ensure_gui_atlas(atlas);
+        if (!almondnamespace::vulkancontext::has_vulkan_apps())
+            return;
+
+        // Atlas uploads are driven from the active Vulkan context render loop.
+        // Context-specific upload happens in Application::enqueue_gui_draw.
+        (void)atlas;
     }
 }

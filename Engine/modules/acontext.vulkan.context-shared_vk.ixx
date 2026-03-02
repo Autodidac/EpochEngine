@@ -99,6 +99,7 @@ namespace almondnamespace::vulkancontext
         int get_framebuffer_height() const noexcept;
 
         void set_context(std::shared_ptr<almondnamespace::core::Context> ctx, void* nativeWindow);
+        void set_active_context(const almondnamespace::core::Context* ctx);
         void cleanup_gui_context(const almondnamespace::core::Context* ctx);
 
         vk::CommandBuffer getCurrentCommandBuffer() const
@@ -142,6 +143,7 @@ namespace almondnamespace::vulkancontext
 
     private:
         std::weak_ptr<almondnamespace::core::Context> context;
+        const almondnamespace::core::Context* activeGuiContext = nullptr;
 
         mutable std::mutex framebufferStateMutex;
         int framebufferWidth = 800;
