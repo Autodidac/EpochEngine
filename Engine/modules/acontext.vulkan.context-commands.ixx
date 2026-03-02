@@ -371,7 +371,6 @@ namespace almondnamespace::vulkancontext
 
         if (framebufferResized)
         {
-            framebufferResized = false;
             recreateSwapChain();
             return;
         }

@@ -22,6 +22,15 @@ import <vector>;
 
 namespace almondnamespace::vulkancontext
 {
+    namespace
+    {
+        class RecoverableSwapChainError final : public std::runtime_error
+        {
+        public:
+            using std::runtime_error::runtime_error;
+        };
+    }
+
     SwapChainSupportDetails Application::querySwapChainSupport(vk::PhysicalDevice dev)
     {
         auto capabilitiesResult = dev.getSurfaceCapabilitiesKHR(*surface);
@@ -93,6 +102,13 @@ namespace almondnamespace::vulkancontext
     void Application::createSwapChain()
     {
         SwapChainSupportDetails details = querySwapChainSupport(physicalDevice);
+
+        if (details.formats.empty())
+            throw RecoverableSwapChainError(
+                "[Vulkan] Swapchain surface formats unavailable; will retry swapchain creation later.");
+        if (details.presentModes.empty())
+            throw RecoverableSwapChainError(
+                "[Vulkan] Swapchain present modes unavailable; will retry swapchain creation later.");
 
         const vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(details.formats);
         const vk::PresentModeKHR presentMode = chooseSwapPresentMode(details.presentModes);
@@ -215,22 +231,43 @@ namespace almondnamespace::vulkancontext
         if (!device)
             throw std::runtime_error("[Vulkan] recreateSwapChain called without a device.");
 
+        if (get_framebuffer_width() <= 0 || get_framebuffer_height() <= 0)
+        {
+            framebufferResized = true;
+            return;
+        }
+
+        const SwapChainSupportDetails details = querySwapChainSupport(physicalDevice);
+        if (details.formats.empty() || details.presentModes.empty())
+        {
+            framebufferResized = true;
+            return;
+        }
+
         (void)device->waitIdle();
 
         cleanupSwapChain();
 
-        createSwapChain();
-        createImageViews();
-        createRenderPass();
-        createGraphicsPipeline();
-        createGuiPipeline();
-        createDepthResources();
-        createFramebuffers();
-        createUniformBuffers();
-        createGuiUniformBuffers();
-        createDescriptorPool();
-        createDescriptorSets();
-        createCommandBuffers();
+        try
+        {
+            createSwapChain();
+            createImageViews();
+            createRenderPass();
+            createGraphicsPipeline();
+            createGuiPipeline();
+            createDepthResources();
+            createFramebuffers();
+            createUniformBuffers();
+            createGuiUniformBuffers();
+            createDescriptorPool();
+            createDescriptorSets();
+            createCommandBuffers();
+            framebufferResized = false;
+        }
+        catch (const RecoverableSwapChainError&)
+        {
+            framebufferResized = true;
+        }
     }
 
 } // namespace almondnamespace::vulkancontext
