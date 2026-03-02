@@ -7,6 +7,8 @@ module;
 #   include <windows.h>
 #   include <winhttp.h>
 #   pragma comment(lib, "winhttp.lib")
+#elif defined(ALMOND_HAS_CURL)
+#   include <curl/curl.h>
 #endif
 
 #include <algorithm>
@@ -273,6 +275,74 @@ namespace epoch::ai
         }
 #endif
 
+#if !defined(_WIN32) && defined(ALMOND_HAS_CURL)
+        static std::size_t curl_write_cb(char* ptr, std::size_t size, std::size_t nmemb, void* userdata)
+        {
+            const std::size_t bytes = size * nmemb;
+            if (userdata && ptr && bytes)
+            {
+                auto* out = static_cast<std::string*>(userdata);
+                out->append(ptr, bytes);
+            }
+            return bytes;
+        }
+
+        static std::string http_post_json(const std::string& url,
+            const std::string& body_utf8,
+            const std::vector<std::pair<std::string, std::string>>& headers)
+        {
+            CURL* curl = curl_easy_init();
+            if (!curl)
+                throw std::runtime_error("CURL: curl_easy_init failed");
+
+            std::string resp;
+            struct curl_slist* request_headers = nullptr;
+            request_headers = curl_slist_append(request_headers, "Content-Type: application/json");
+            request_headers = curl_slist_append(request_headers, "Accept: application/json");
+
+            for (const auto& [k, v] : headers)
+            {
+                std::string hdr = k;
+                hdr += ": ";
+                hdr += v;
+                request_headers = curl_slist_append(request_headers, hdr.c_str());
+            }
+
+            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_POST, 1L);
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body_utf8.c_str());
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body_utf8.size()));
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, request_headers);
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
+            curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+
+            const CURLcode code = curl_easy_perform(curl);
+            if (code != CURLE_OK)
+            {
+                const std::string err = std::string("CURL: curl_easy_perform failed: ") + curl_easy_strerror(code);
+                curl_slist_free_all(request_headers);
+                curl_easy_cleanup(curl);
+                throw std::runtime_error(err);
+            }
+
+            long http_status = 0;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+
+            curl_slist_free_all(request_headers);
+            curl_easy_cleanup(curl);
+
+            if (http_status < 200 || http_status >= 300)
+            {
+                std::ostringstream oss;
+                oss << "CURL: HTTP status " << http_status;
+                throw std::runtime_error(oss.str());
+            }
+
+            return resp;
+        }
+#endif
+
         static std::string extract_lmstudio_message_content(const std::string& response)
         {
             // LM Studio v1: { "output": [ { "type":"message", "content":"..." }, ... ] , ... }
@@ -343,10 +413,6 @@ namespace epoch::ai
             std::string_view input,
             const std::vector<std::pair<std::string, std::string>>& headers)
         {
-#if !defined(_WIN32)
-            (void)endpoint_full; (void)model; (void)system_prompt; (void)input; (void)headers;
-            return {};
-#else
             std::string body;
             body.reserve(256 + input.size());
             body += "{";
@@ -355,9 +421,27 @@ namespace epoch::ai
             body += "\"input\":\"" + json_escape(input) + "\"";
             body += "}";
 
-            const std::string resp = winhttp_post_json(endpoint_full, body, headers);
-            return extract_lmstudio_message_content(resp);
+            try
+            {
+#if defined(_WIN32)
+                const std::string resp = winhttp_post_json(endpoint_full, body, headers);
+#elif defined(ALMOND_HAS_CURL)
+                const std::string resp = http_post_json(endpoint_full, body, headers);
+#else
+                (void)endpoint_full;
+                (void)headers;
+                core::log::error("ai", "LM Studio request failed: no non-Windows HTTP transport is configured (build with libcurl).");
+                return {};
 #endif
+                return trim(extract_lmstudio_message_content(resp));
+            }
+            catch (const std::exception& ex)
+            {
+                std::string msg = "LM Studio request failed: ";
+                msg += ex.what();
+                core::log::error("ai", msg);
+                return {};
+            }
         }
 
         static std::string build_transcript(std::string_view system_prompt, std::string_view user_text)
