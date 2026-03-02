@@ -4,7 +4,7 @@ module;
 export module acontext.vulkan.context;
 
 import :api;            // brings in declarations for vulkan_* funcs
-import :shared_vk; // brings in vulkan_app() / Application
+import :shared_vk; // brings in per-context Application registry helpers
 import :texture;
 
 import aengine.core.context;
@@ -39,18 +39,33 @@ export namespace almondnamespace::vulkancontext
         if (!ctx)
             return;
 
-        vulkan_app().enqueue_gui_draw(ctx.get(), sprite, atlases, x, y, w, h);
+        if (auto* app = try_get_vulkan_app(ctx.get()))
+            app->enqueue_gui_draw(ctx.get(), sprite, atlases, x, y, w, h);
     }
 
     // Small ones first so they're visible no matter what.
     int vulkan_get_width()
     {
-        return vulkan_app().get_framebuffer_width();
+        auto ctx = core::get_current_render_context();
+        if (!ctx)
+            return 0;
+
+        if (auto* app = try_get_vulkan_app(ctx.get()))
+            return app->get_framebuffer_width();
+
+        return 0;
     }
 
     int vulkan_get_height()
     {
-        return vulkan_app().get_framebuffer_height();
+        auto ctx = core::get_current_render_context();
+        if (!ctx)
+            return 0;
+
+        if (auto* app = try_get_vulkan_app(ctx.get()))
+            return app->get_framebuffer_height();
+
+        return 0;
     }
 
     bool vulkan_initialize(
@@ -72,7 +87,7 @@ export namespace almondnamespace::vulkancontext
             nativeWindow = ctx->get_hwnd(); // <-- CALL IT
 #endif
 
-        auto& app = vulkan_app();
+        auto& app = bind_vulkan_app(ctx);
 
         app.set_framebuffer_size(static_cast<int>(w), static_cast<int>(h));
         ctx->framebufferWidth = static_cast<int>(w);
@@ -82,11 +97,17 @@ export namespace almondnamespace::vulkancontext
         ctx->get_width  = &vulkan_get_width;
         ctx->get_height = &vulkan_get_height;
 
-        ctx->onResize = [&app, ctx, resize = std::move(onResize)](int nw, int nh) mutable
+        ctx->onResize = [ctxWeak = std::weak_ptr<core::Context>{ ctx }, resize = std::move(onResize)](int nw, int nh) mutable
         {
-            app.set_framebuffer_size(nw, nh);
-            ctx->framebufferWidth = nw;
-            ctx->framebufferHeight = nh;
+            if (auto ctxStrong = ctxWeak.lock())
+            {
+                if (auto* app = try_get_vulkan_app(ctxStrong.get()))
+                    app->set_framebuffer_size(nw, nh);
+
+                ctxStrong->framebufferWidth = nw;
+                ctxStrong->framebufferHeight = nh;
+            }
+
             if (resize) resize(nw, nh);
         };
 
@@ -115,8 +136,12 @@ export namespace almondnamespace::vulkancontext
 
         almond::diagnostics::FrameTiming frameTimer{ core::ContextType::Vulkan, windowId, "Vulkan" };
 
-        const int fbW = (std::max)(1, vulkan_get_width());
-        const int fbH = (std::max)(1, vulkan_get_height());
+        auto* app = try_get_vulkan_app(ctx.get());
+        if (!app)
+            return false;
+
+        const int fbW = (std::max)(1, app->get_framebuffer_width());
+        const int fbH = (std::max)(1, app->get_framebuffer_height());
 
         telemetry::emit_gauge(
             "renderer.framebuffer.size",
@@ -133,11 +158,9 @@ export namespace almondnamespace::vulkancontext
             static_cast<std::int64_t>(depth),
             telemetry::RendererTelemetryTags{ core::ContextType::Vulkan, windowId });
 
-        auto& app = vulkan_app();
-        app.set_active_context(ctx.get());
         atlasmanager::process_pending_uploads(core::ContextType::Vulkan);
 
-        const bool result = app.process(ctx, queue);
+        const bool result = app->process(ctx, queue);
 
         frameTimer.finish();
 
@@ -151,9 +174,18 @@ export namespace almondnamespace::vulkancontext
 
     void vulkan_cleanup(std::shared_ptr<core::Context> ctx)
     {
-        if (ctx)
-            vulkan_app().cleanup_gui_context(ctx.get());
-        atlasmanager::unregister_backend_uploader(core::ContextType::Vulkan);
-        vulkan_app().cleanup();
+        if (!ctx)
+            return;
+
+        if (auto* app = try_get_vulkan_app(ctx.get()))
+        {
+            app->cleanup_gui_context(ctx.get());
+            app->cleanup();
+        }
+
+        (void)release_vulkan_app(ctx.get());
+
+        if (!has_vulkan_apps())
+            atlasmanager::unregister_backend_uploader(core::ContextType::Vulkan);
     }
 }

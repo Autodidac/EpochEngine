@@ -131,7 +131,7 @@ namespace almondnamespace::vulkancontext
 
     void Application::createGuiUniformBuffers()
     {
-        auto& guiState = gui_state_for_context(activeGuiContext);
+        auto& guiState = gui_state_for_context(bound_context());
         const std::size_t n = swapChainImages.size();
 
         guiState.guiUniformBuffers.resize(n);
@@ -187,7 +187,7 @@ namespace almondnamespace::vulkancontext
 
     void Application::updateGuiUniformBuffer(std::uint32_t currentImage)
     {
-        auto* guiState = find_gui_state(activeGuiContext);
+        auto* guiState = find_gui_state(bound_context());
         if (!guiState)
             return;
         if (guiState->guiUniformBuffersMapped.empty()

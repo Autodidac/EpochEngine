@@ -115,7 +115,7 @@ namespace almondnamespace::vulkancontext
 
         cmd.nextSubpass(vk::SubpassContents::eInline);
 
-        if (auto* guiState = find_gui_state(activeGuiContext))
+        if (auto* guiState = find_gui_state(bound_context()))
         {
             if (!guiState->guiDraws.empty())
                 recordGuiCommands(cmd, imageIndex, *guiState);

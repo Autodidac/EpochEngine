@@ -32,6 +32,7 @@ import <array>;
 import <cstddef>;
 import <cstdint>;
 import <functional>;
+import <memory>;
 import <optional>;
 import <span>;
 import <string>;
@@ -96,7 +97,6 @@ namespace almondnamespace::vulkancontext
         int get_framebuffer_height() const noexcept;
 
         void set_context(std::shared_ptr<almondnamespace::core::Context> ctx, void* nativeWindow);
-        void set_active_context(const almondnamespace::core::Context* ctx);
         void cleanup_gui_context(const almondnamespace::core::Context* ctx);
 
         vk::CommandBuffer getCurrentCommandBuffer() const
@@ -264,6 +264,7 @@ namespace almondnamespace::vulkancontext
             const almondnamespace::vulkancamera::State& camera);
         GuiContextState& gui_state_for_context(const almondnamespace::core::Context* ctx);
         GuiContextState* find_gui_state(const almondnamespace::core::Context* ctx) noexcept;
+        const almondnamespace::core::Context* bound_context() const noexcept;
         void reset_gui_swapchain_state(GuiContextState& guiState);
 
         void createDescriptorPool();
@@ -341,11 +342,13 @@ namespace almondnamespace::vulkancontext
         };
 
         std::unordered_map<const almondnamespace::core::Context*, GuiContextState> guiContexts{};
-        const almondnamespace::core::Context* activeGuiContext = nullptr;
     };
 
     export std::span<const Application::Vertex> cube_vertices() noexcept;
     export std::span<const std::uint16_t>       cube_indices()  noexcept;
 
-    export Application& vulkan_app();
+    export Application& bind_vulkan_app(const std::shared_ptr<almondnamespace::core::Context>& ctx);
+    export Application* try_get_vulkan_app(const almondnamespace::core::Context* ctx) noexcept;
+    export bool release_vulkan_app(const almondnamespace::core::Context* ctx) noexcept;
+    export bool has_vulkan_apps() noexcept;
 }
