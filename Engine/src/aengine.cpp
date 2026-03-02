@@ -460,7 +460,10 @@ namespace almondnamespace::core
                             }
 
                             if (!ctx_running)
+                            {
+                                almondnamespace::cleanup_chat_context(raw);
                                 last_frame_times.erase(raw);
+                            }
 
                             return ctx_running;
                         };
@@ -510,6 +513,8 @@ namespace almondnamespace::core
                     {
                         if (!ctx) return;
 
+                        almondnamespace::cleanup_chat_context(ctx.get());
+
                         switch (type)
                         {
 #if defined(ALMOND_USING_OPENGL)
@@ -547,6 +552,7 @@ namespace almondnamespace::core
                 for (auto& ctx : contexts) cleanup_backend(ctx);
             }
 
+            almondnamespace::shutdown_chat_system();
             mgr.StopAll();
 
             return 0;
@@ -783,7 +789,10 @@ namespace almondnamespace::core
                             }
 
                             if (!ctx_running)
+                            {
+                                almondnamespace::cleanup_chat_context(raw);
                                 last_frame_times.erase(raw);
+                            }
 
                             return ctx_running;
                         };
@@ -834,6 +843,8 @@ namespace almondnamespace::core
                     {
                         if (!ctx) return;
 
+                        almondnamespace::cleanup_chat_context(ctx.get());
+
                         switch (type)
                         {
 #if defined(ALMOND_USING_OPENGL)
@@ -873,6 +884,7 @@ namespace almondnamespace::core
                 for (auto& ctx : contexts) cleanup_backend(ctx);
             }
 
+            almondnamespace::shutdown_chat_system();
             mgr.StopAll();
 
             return 0;

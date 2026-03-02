@@ -15,4 +15,7 @@ export namespace almondnamespace
     // Returns true when the user clicks "Run Game" in the editor UI.
     bool editor_run(const std::shared_ptr<core::Context>& ctx,
         gui::WidgetBounds* out_bounds = nullptr);
+
+    void cleanup_chat_context(const core::Context* ctx);
+    void shutdown_chat_system();
 }

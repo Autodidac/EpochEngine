@@ -59,7 +59,6 @@ namespace almondnamespace
 
             AiChat()
             {
-                epoch::ai::init_bot();
                 lines.emplace_back("bot> Ready. Endpoint: http://localhost:1234");
             }
 
@@ -68,12 +67,6 @@ namespace almondnamespace
             AiChat& operator=(const AiChat&) = delete;
             AiChat(AiChat&&) noexcept = default;
             AiChat& operator=(AiChat&&) noexcept = default;
-
-            ~AiChat()
-            {
-                // If bot lifetime is owned elsewhere, remove these two calls.
-                epoch::ai::shutdown_bot();
-            }
 
             void pump()
             {
@@ -112,37 +105,73 @@ namespace almondnamespace
             }
         };
 
-        struct SharedPtrHash
+        struct ContextPtrHash
         {
-            std::size_t operator()(const std::shared_ptr<core::Context>& p) const noexcept
+            std::size_t operator()(const core::Context* p) const noexcept
             {
-                return std::hash<const void*>{}(p.get());
+                return std::hash<const void*>{}(p);
             }
         };
 
-        struct SharedPtrEq
+        struct ContextPtrEq
         {
-            bool operator()(const std::shared_ptr<core::Context>& a,
-                const std::shared_ptr<core::Context>& b) const noexcept
+            bool operator()(const core::Context* a, const core::Context* b) const noexcept
             {
-                return a.get() == b.get();
+                return a == b;
             }
         };
 
-        // If you can, use a stable ContextId instead.
+        struct ChatStorage
+        {
+            std::mutex mutex{};
+            bool bot_initialized{ false };
+            std::unordered_map<const core::Context*, AiChat, ContextPtrHash, ContextPtrEq> chats{};
+        };
+
+        ChatStorage& chat_storage()
+        {
+            static ChatStorage storage;
+            return storage;
+        }
+
         AiChat& chat_state_for(const std::shared_ptr<core::Context>& ctx)
         {
-            static std::mutex m;
-            static std::unordered_map<std::shared_ptr<core::Context>, AiChat, SharedPtrHash, SharedPtrEq> chats;
+            auto& storage = chat_storage();
+            std::scoped_lock lock(storage.mutex);
 
-            std::scoped_lock lock(m);
+            if (!storage.bot_initialized)
+            {
+                epoch::ai::init_bot();
+                storage.bot_initialized = true;
+            }
 
-            // Construct AiChat in-place to avoid any copy/move argument games.
-            auto [it, inserted] = chats.try_emplace(ctx);
+            auto [it, inserted] = storage.chats.try_emplace(ctx.get());
             return it->second;
         }
 
     } // namespace
+
+    void cleanup_chat_context(const core::Context* ctx)
+    {
+        if (!ctx) return;
+
+        auto& storage = chat_storage();
+        std::scoped_lock lock(storage.mutex);
+        storage.chats.erase(ctx);
+    }
+
+    void shutdown_chat_system()
+    {
+        auto& storage = chat_storage();
+        std::scoped_lock lock(storage.mutex);
+        storage.chats.clear();
+
+        if (storage.bot_initialized)
+        {
+            epoch::ai::shutdown_bot();
+            storage.bot_initialized = false;
+        }
+    }
 
     bool editor_run(const std::shared_ptr<core::Context>& ctx, gui::WidgetBounds* out_bounds)
     {
