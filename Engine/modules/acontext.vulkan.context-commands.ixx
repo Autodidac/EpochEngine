@@ -373,6 +373,17 @@ namespace almondnamespace::vulkancontext
             recreateSwapChain();
             return;
         }
+        if (acquireRes == vk::Result::eErrorSurfaceLostKHR)
+        {
+            set_framebuffer_resize_intent(true);
+            request_render_stop();
+            return;
+        }
+        if (acquireRes == vk::Result::eErrorDeviceLost)
+        {
+            request_render_stop();
+            return;
+        }
         if (acquireRes != vk::Result::eSuccess && acquireRes != vk::Result::eSuboptimalKHR)
             throw std::runtime_error("[Vulkan] Failed to acquire swap chain image.");
 
@@ -425,6 +436,12 @@ namespace almondnamespace::vulkancontext
         if (presentRes == vk::Result::eErrorOutOfDateKHR || presentRes == vk::Result::eSuboptimalKHR)
         {
             recreateSwapChain();
+        }
+        else if (presentRes == vk::Result::eErrorSurfaceLostKHR)
+        {
+            set_framebuffer_resize_intent(true);
+            request_render_stop();
+            return;
         }
         else if (presentRes != vk::Result::eSuccess)
         {

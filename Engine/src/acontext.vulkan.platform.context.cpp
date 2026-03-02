@@ -374,6 +374,20 @@ namespace almondnamespace::vulkancontext
         framebufferResized = resized;
     }
 
+    bool Application::consume_render_stop_intent() noexcept
+    {
+        std::scoped_lock lock(framebufferStateMutex);
+        const bool stopRequested = stopRenderingRequested;
+        stopRenderingRequested = false;
+        return stopRequested;
+    }
+
+    void Application::request_render_stop() noexcept
+    {
+        std::scoped_lock lock(framebufferStateMutex);
+        stopRenderingRequested = true;
+    }
+
     void Application::bind_render_thread() noexcept
     {
         std::scoped_lock lock(framebufferStateMutex);

@@ -149,6 +149,7 @@ namespace almondnamespace::vulkancontext
         int framebufferWidth = 800;
         int framebufferHeight = 600;
         bool framebufferResized = false;
+        bool stopRenderingRequested = false;
 
         std::thread::id renderThreadId{};
 
@@ -284,6 +285,8 @@ namespace almondnamespace::vulkancontext
         void cleanupSwapChain();
         bool consume_framebuffer_resize_intent() noexcept;
         void set_framebuffer_resize_intent(bool resized) noexcept;
+        bool consume_render_stop_intent() noexcept;
+        void request_render_stop() noexcept;
         void bind_render_thread() noexcept;
         void assert_thread_affinity() const noexcept;
 
