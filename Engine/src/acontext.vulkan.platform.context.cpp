@@ -62,6 +62,7 @@ module;
 #include "src/stb/stb_image.h"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -69,6 +70,7 @@ module;
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <thread>
@@ -167,6 +169,8 @@ namespace almondnamespace::vulkancontext
 
     void Application::initWindow()
     {
+        bind_render_thread();
+        assert_thread_affinity();
 #if defined(ALMOND_VULKAN_STANDALONE)
         if (!glfwInit())
             throw std::runtime_error("Failed to initialize GLFW");
@@ -174,7 +178,7 @@ namespace almondnamespace::vulkancontext
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-        window = glfwCreateWindow(framebufferWidth, framebufferHeight, "Vulkan Cube", nullptr, nullptr);
+        window = glfwCreateWindow(get_framebuffer_width(), get_framebuffer_height(), "Vulkan Cube", nullptr, nullptr);
         if (!window)
             throw std::runtime_error("Failed to create GLFW window");
 
@@ -224,6 +228,9 @@ namespace almondnamespace::vulkancontext
         if (!device)
             return false;
 
+        bind_render_thread();
+        assert_thread_affinity();
+
         set_active_context(ctx.get());
 
         static auto lastTime = std::chrono::high_resolution_clock::now();
@@ -253,7 +260,7 @@ namespace almondnamespace::vulkancontext
         {
             const int fbWidth = (std::max)(1, ctx->framebufferWidth);
             const int fbHeight = (std::max)(1, ctx->framebufferHeight);
-            if (fbWidth != framebufferWidth || fbHeight != framebufferHeight)
+            if (fbWidth != get_framebuffer_width() || fbHeight != get_framebuffer_height())
                 set_framebuffer_size(fbWidth, fbHeight);
 
             framebufferMinimized = ctx->framebufferWidth == 0 || ctx->framebufferHeight == 0;
@@ -333,6 +340,9 @@ namespace almondnamespace::vulkancontext
 
     void Application::set_framebuffer_size(int width, int height)
     {
+        bind_render_thread();
+        assert_thread_affinity();
+        std::scoped_lock lock(framebufferStateMutex);
         framebufferWidth = (std::max)(1, width);
         framebufferHeight = (std::max)(1, height);
         framebufferResized = true;
@@ -340,12 +350,45 @@ namespace almondnamespace::vulkancontext
 
     int Application::get_framebuffer_width() const noexcept
     {
+        std::scoped_lock lock(framebufferStateMutex);
         return (std::max)(1, framebufferWidth);
     }
 
     int Application::get_framebuffer_height() const noexcept
     {
+        std::scoped_lock lock(framebufferStateMutex);
         return (std::max)(1, framebufferHeight);
+    }
+
+    bool Application::consume_framebuffer_resize_intent() noexcept
+    {
+        std::scoped_lock lock(framebufferStateMutex);
+        const bool resized = framebufferResized;
+        framebufferResized = false;
+        return resized;
+    }
+
+    void Application::set_framebuffer_resize_intent(bool resized) noexcept
+    {
+        std::scoped_lock lock(framebufferStateMutex);
+        framebufferResized = resized;
+    }
+
+    void Application::bind_render_thread() noexcept
+    {
+        std::scoped_lock lock(framebufferStateMutex);
+        if (renderThreadId == std::thread::id{})
+            renderThreadId = std::this_thread::get_id();
+    }
+
+    void Application::assert_thread_affinity() const noexcept
+    {
+#ifndef NDEBUG
+        std::scoped_lock lock(framebufferStateMutex);
+        const std::thread::id expected = renderThreadId;
+        if (expected != std::thread::id{})
+            assert(expected == std::this_thread::get_id());
+#endif
     }
 
     void Application::cleanup()

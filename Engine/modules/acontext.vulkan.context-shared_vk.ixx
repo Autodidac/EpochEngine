@@ -33,9 +33,11 @@ import <cstddef>;
 import <cstdint>;
 import <functional>;
 import <memory>;
+import <mutex>;
 import <optional>;
 import <span>;
 import <string>;
+import <thread>;
 import <unordered_map>;
 import <utility>;
 import <vector>;
@@ -141,8 +143,12 @@ namespace almondnamespace::vulkancontext
     private:
         std::weak_ptr<almondnamespace::core::Context> context;
 
+        mutable std::mutex framebufferStateMutex;
         int framebufferWidth = 800;
         int framebufferHeight = 600;
+        bool framebufferResized = false;
+
+        std::thread::id renderThreadId{};
 
         vk::UniqueInstance instance;
         vk::DebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
@@ -182,7 +188,6 @@ namespace almondnamespace::vulkancontext
         std::vector<vk::UniqueFence> inFlightFences;
 
         std::size_t currentFrame = 0;
-        bool framebufferResized = false;
 
         vk::UniqueImage depthImage;
         vk::UniqueDeviceMemory depthImageMemory;
@@ -275,6 +280,10 @@ namespace almondnamespace::vulkancontext
 
         void recreateSwapChain();
         void cleanupSwapChain();
+        bool consume_framebuffer_resize_intent() noexcept;
+        void set_framebuffer_resize_intent(bool resized) noexcept;
+        void bind_render_thread() noexcept;
+        void assert_thread_affinity() const noexcept;
 
         static std::vector<char> readFile(const std::string& filename);
 
