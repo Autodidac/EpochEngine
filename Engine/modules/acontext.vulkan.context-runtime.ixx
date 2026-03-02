@@ -42,7 +42,7 @@ export namespace almondnamespace::vulkancontext
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
-    namespace
+    namespace appreg
     {
         class ApplicationRegistry
         {
@@ -98,22 +98,22 @@ export namespace almondnamespace::vulkancontext
 
     Application& bind_vulkan_app(const std::shared_ptr<core::Context>& ctx)
     {
-        return application_registry().bind(ctx);
+        return appreg::application_registry().bind(ctx);
     }
 
     Application* try_get_vulkan_app(const core::Context* ctx) noexcept
     {
-        return application_registry().get(ctx);
+        return appreg::application_registry().get(ctx);
     }
 
     bool release_vulkan_app(const core::Context* ctx) noexcept
     {
-        return application_registry().release(ctx);
+        return appreg::application_registry().release(ctx);
     }
 
     bool has_vulkan_apps() noexcept
     {
-        return application_registry().any();
+        return appreg::application_registry().any();
     }
 
     const core::Context* Application::bound_context() const noexcept
