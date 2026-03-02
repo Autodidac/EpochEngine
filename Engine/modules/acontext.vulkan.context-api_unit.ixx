@@ -160,11 +160,20 @@ export namespace almondnamespace::vulkancontext
 
         atlasmanager::process_pending_uploads(core::ContextType::Vulkan);
 
+        if (app->consume_render_stop_intent())
+        {
+            frameTimer.finish();
+            return false;
+        }
+
         const bool result = app->process(ctx, queue);
 
         frameTimer.finish();
 
-        return result;
+        if (!result)
+            return false;
+
+        return !app->consume_render_stop_intent();
     }
 
     void vulkan_present()
