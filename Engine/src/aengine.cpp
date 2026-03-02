@@ -118,6 +118,7 @@ import acontext.sfml.context;
 #endif
 #if defined(ALMOND_USING_RAYLIB)
 import acontext.raylib.context;
+import acontext.raylib.state;
 #endif
 
 namespace input = almondnamespace::input;
@@ -260,6 +261,25 @@ namespace almondnamespace::core
                 auto snapshot = collect_backend_contexts();
 #if !defined(ALMOND_SINGLE_PARENT)
                 bool any_context_alive = false;
+                std::size_t active_context_count = 0;
+                for (auto& [_, contexts] : snapshot)
+                {
+                    for (auto& ctx : contexts)
+                    {
+                        if (ctx) ++active_context_count;
+                    }
+                }
+
+                bool raylib_close_from_window = false;
+#if defined(ALMOND_USING_RAYLIB)
+                {
+                    const auto& raylib_state = almondnamespace::raylibstate::s_raylibstate;
+                    raylib_close_from_window = raylib_state.running && !raylib_state.renderingActive;
+
+                    if (raylib_close_from_window)
+                        almondnamespace::raylibstate::s_raylibstate.renderingActive = false;
+                }
+#endif
 #endif
                 for (auto& [type, contexts] : snapshot)
                 {
@@ -492,7 +512,19 @@ namespace almondnamespace::core
                     if (!running) break;
                 }
 #if !defined(ALMOND_SINGLE_PARENT)
-                if (!any_context_alive) running = false;
+                if (!any_context_alive)
+                {
+#if defined(ALMOND_USING_RAYLIB)
+                    if (raylib_close_from_window && active_context_count > 1)
+                    {
+                        running = true;
+                    }
+                    else
+#endif
+                    {
+                        running = false;
+                    }
+                }
 #endif
 
                 std::this_thread::sleep_for(std::chrono::milliseconds(16));
@@ -640,6 +672,25 @@ namespace almondnamespace::core
                 auto snapshot = collect_backend_contexts();
 #if !defined(ALMOND_SINGLE_PARENT)
                 bool any_context_alive = false;
+                std::size_t active_context_count = 0;
+                for (auto& [_, contexts] : snapshot)
+                {
+                    for (auto& ctx : contexts)
+                    {
+                        if (ctx) ++active_context_count;
+                    }
+                }
+
+                bool raylib_close_from_window = false;
+#if defined(ALMOND_USING_RAYLIB)
+                {
+                    const auto& raylib_state = almondnamespace::raylibstate::s_raylibstate;
+                    raylib_close_from_window = raylib_state.running && !raylib_state.renderingActive;
+
+                    if (raylib_close_from_window)
+                        almondnamespace::raylibstate::s_raylibstate.renderingActive = false;
+                }
+#endif
 #endif
                 for (auto& [type, contexts] : snapshot)
                 {
@@ -821,7 +872,19 @@ namespace almondnamespace::core
                     if (!running) break;
                 }
 #if !defined(ALMOND_SINGLE_PARENT)
-                if (!any_context_alive) running = false;
+                if (!any_context_alive)
+                {
+#if defined(ALMOND_USING_RAYLIB)
+                    if (raylib_close_from_window && active_context_count > 1)
+                    {
+                        running = true;
+                    }
+                    else
+#endif
+                    {
+                        running = false;
+                    }
+                }
 #endif
 
                 std::this_thread::sleep_for(std::chrono::milliseconds(16));
