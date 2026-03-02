@@ -1188,22 +1188,10 @@ namespace almondnamespace::gui
         advance_cursor({ 0.0f, height + kContentPadding });
     }
 
-    ConsoleWindowResult console_window(const ConsoleWindowOptions& options, std::string& input)
+    ConsoleWindowResult console_window(const ConsoleWindowOptions& options) noexcept
     {
         ConsoleWindowResult result{};
         if (!g_frame.ctx) return result;
-
-        // Prefer the explicit parameter, but allow legacy options.input.
-        std::string* inputPtr = &input;
-        if (options.input && options.input != &input)
-        {
-            // If callers pass a different pointer, honor options.input (but this should be avoided).
-            inputPtr = options.input;
-        }
-        else if (options.input)
-        {
-            inputPtr = options.input;
-        }
 
         begin_window(options.title, options.position, options.size);
         if (!g_frame.insideWindow || !g_frame.ctx) { end_window(); return result; }
@@ -1239,11 +1227,11 @@ namespace almondnamespace::gui
 
         set_cursor({ logPos.x, logPos.y + logHeight + kContentPadding });
 
-        if (inputPtr)
+        if (options.input)
         {
             const float fieldHeight = base_line_height(kFontScale) + 2.0f * kBoxInnerPadding;
             Vec2 inputSize{ availableWidth, fieldHeight };
-            result.input = edit_box(*inputPtr, inputSize, options.max_input_chars, options.multiline_input);
+            result.input = edit_box(*options.input, inputSize, options.max_input_chars, options.multiline_input);
         }
 
         end_window();

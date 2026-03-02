@@ -243,13 +243,13 @@ namespace almondnamespace
             .multiline_input = false,
         };
 
-        //gui::ConsoleWindowResult r = gui::console_window(opts, chat.input);
-        //if (r.input.submitted)
-        //{
-        //    std::string text = std::move(chat.input);
-        //    chat.input.clear();
-        //    chat.submit(std::move(text));
-        //}
+        gui::ConsoleWindowResult r = gui::console_window(opts);
+        if (r.input.submitted)
+        {
+            std::string text = std::move(chat.input);
+            chat.input.clear();
+            chat.submit(std::move(text));
+        }
 
         gui::end_window();
 
