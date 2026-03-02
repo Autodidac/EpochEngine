@@ -73,11 +73,16 @@ export namespace almondnamespace::gui
         std::string* input{ nullptr };
         std::size_t max_input_chars{ 4096 };
         bool multiline_input{ false };
+        bool show_send_button{ false };
+        bool send_button_enabled{ true };
+        float send_button_width{ 96.0f };
+        std::string_view send_button_label{ "Send >" };
     };
 
     export struct ConsoleWindowResult
     {
         EditBoxResult input{};
+        bool send_clicked{};
     };
 
     export void push_input(const InputEvent& e) noexcept;

@@ -1230,8 +1230,26 @@ namespace almondnamespace::gui
         if (options.input)
         {
             const float fieldHeight = base_line_height(kFontScale) + 2.0f * kBoxInnerPadding;
-            Vec2 inputSize{ availableWidth, fieldHeight };
-            result.input = edit_box(*options.input, inputSize, options.max_input_chars, options.multiline_input);
+            const float rowY = g_frame.cursor.y;
+
+            if (options.show_send_button)
+            {
+                const float buttonWidth = (std::max)(32.0f, options.send_button_width);
+                const float inputWidth = (std::max)(1.0f, availableWidth - buttonWidth - kContentPadding);
+
+                set_cursor({ logPos.x, rowY });
+                Vec2 inputSize{ inputWidth, fieldHeight };
+                result.input = edit_box(*options.input, inputSize, options.max_input_chars, options.multiline_input);
+
+                set_cursor({ logPos.x + inputWidth + kContentPadding, rowY });
+                if (button(options.send_button_label, { buttonWidth, fieldHeight }) && options.send_button_enabled)
+                    result.send_clicked = true;
+            }
+            else
+            {
+                Vec2 inputSize{ availableWidth, fieldHeight };
+                result.input = edit_box(*options.input, inputSize, options.max_input_chars, options.multiline_input);
+            }
         }
 
         end_window();
