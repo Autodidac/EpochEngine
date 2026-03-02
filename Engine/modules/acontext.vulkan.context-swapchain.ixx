@@ -228,19 +228,22 @@ namespace almondnamespace::vulkancontext
 
     void Application::recreateSwapChain()
     {
+        assert_thread_affinity();
         if (!device)
             throw std::runtime_error("[Vulkan] recreateSwapChain called without a device.");
 
-        if (get_framebuffer_width() <= 0 || get_framebuffer_height() <= 0)
+        const int framebufferWidth = get_framebuffer_width();
+        const int framebufferHeight = get_framebuffer_height();
+        if (framebufferWidth <= 0 || framebufferHeight <= 0)
         {
-            framebufferResized = true;
+            set_framebuffer_resize_intent(true);
             return;
         }
 
         const SwapChainSupportDetails details = querySwapChainSupport(physicalDevice);
         if (details.formats.empty() || details.presentModes.empty())
         {
-            framebufferResized = true;
+            set_framebuffer_resize_intent(true);
             return;
         }
 
@@ -262,11 +265,11 @@ namespace almondnamespace::vulkancontext
             createDescriptorPool();
             createDescriptorSets();
             createCommandBuffers();
-            framebufferResized = false;
+            set_framebuffer_resize_intent(false);
         }
         catch (const RecoverableSwapChainError&)
         {
-            framebufferResized = true;
+            set_framebuffer_resize_intent(true);
         }
     }
 

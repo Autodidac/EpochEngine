@@ -342,6 +342,7 @@ namespace almondnamespace::vulkancontext
 
     void Application::drawFrame()
     {
+        assert_thread_affinity();
         const auto timeout = (std::numeric_limits<std::uint64_t>::max)();
 
         // Wait for CPU/GPU sync for this frame.
@@ -350,6 +351,12 @@ namespace almondnamespace::vulkancontext
             const vk::Result r = device->waitForFences(1, &f, VK_TRUE, timeout);
             if (r != vk::Result::eSuccess)
                 throw std::runtime_error("[Vulkan] waitForFences failed.");
+        }
+
+        if (consume_framebuffer_resize_intent())
+        {
+            recreateSwapChain();
+            return;
         }
 
         std::uint32_t imageIndex = 0;
@@ -369,11 +376,6 @@ namespace almondnamespace::vulkancontext
         if (acquireRes != vk::Result::eSuccess && acquireRes != vk::Result::eSuboptimalKHR)
             throw std::runtime_error("[Vulkan] Failed to acquire swap chain image.");
 
-        if (framebufferResized)
-        {
-            recreateSwapChain();
-            return;
-        }
 
         // Reset fence for this frame.
         {
