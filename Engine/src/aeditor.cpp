@@ -34,7 +34,7 @@ module aeditor; // implements the interface unit
 
 import aengine.gui;
 import aengine.core.context;
-//import epoch.ai;
+import epoch.ai;
 
 namespace almondnamespace
 {
@@ -59,7 +59,7 @@ namespace almondnamespace
 
             AiChat()
             {
-                //epoch::ai::init_bot();
+                epoch::ai::init_bot();
                 lines.emplace_back("bot> Ready. Endpoint: http://localhost:1234");
             }
 
@@ -72,7 +72,7 @@ namespace almondnamespace
             ~AiChat()
             {
                 // If bot lifetime is owned elsewhere, remove these two calls.
-              //  epoch::ai::shutdown_bot();
+                epoch::ai::shutdown_bot();
             }
 
             void pump()
@@ -106,9 +106,9 @@ namespace almondnamespace
 
                 lines.emplace_back("you> " + text);
 
-          /*      pending.emplace(std::async(std::launch::async, [t = std::move(text)]() mutable {
+                pending.emplace(std::async(std::launch::async, [t = std::move(text)]() mutable {
                     return epoch::ai::send_to_bot(t);
-                    }));*/
+                }));
             }
         };
 
