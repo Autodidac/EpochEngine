@@ -439,7 +439,7 @@ namespace epoch::ai
             {
                 std::string msg = "LM Studio request failed: ";
                 msg += ex.what();
-                core::log::error("ai", msg);
+                core::log::error("ai", epoch::string_view{msg.data(), msg.size()});
                 return {};
             }
         }

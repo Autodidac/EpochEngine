@@ -1140,7 +1140,7 @@ namespace urls
     const std::string github_raw_base = "https://raw.githubusercontent.com/";
 
     const std::string owner = "Autodidac/";
-    const std::string repo = "Cpp_Ultimate_Project_Updater";
+    const std::string repo = "EpochEngine";
     const std::string branch = "main/";
 
     const std::string version_url = github_raw_base + owner + repo + "/" + branch + "/modules/aengine.version.ixx";
