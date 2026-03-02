@@ -80,6 +80,7 @@ export namespace almondnamespace::raylibstate
 
         // Lifecycle
         bool running = false;
+        bool renderingActive = false;
         bool cleanupIssued = false;
         bool cleanupRequested = false;
 
