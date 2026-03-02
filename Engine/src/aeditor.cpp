@@ -227,15 +227,13 @@ namespace almondnamespace
         gui::label("[info] If Vulkan is alive, the clear color will pulse.");
         gui::end_window();
 
-        gui::begin_window("AI Chat", chat_pos, chat_size);
-
         auto& chat = chat_state_for(ctx);
         chat.pump();
 
         gui::ConsoleWindowOptions opts{
             .title = "AI Chat",
-            .position = { 0.0f, 0.0f },
-            .size = { 0.0f, 0.0f },
+            .position = chat_pos,
+            .size = chat_size,
             .lines = chat.lines,
             .max_visible_lines = 200,
             .input = &chat.input,
@@ -254,8 +252,6 @@ namespace almondnamespace
             chat.input.clear();
             chat.submit(std::move(text));
         }
-
-        gui::end_window();
 
         return false;
     }
