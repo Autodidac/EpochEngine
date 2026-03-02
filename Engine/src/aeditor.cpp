@@ -241,10 +241,14 @@ namespace almondnamespace
             .input = &chat.input,
             .max_input_chars = 1024,
             .multiline_input = false,
+            .show_send_button = true,
+            .send_button_enabled = !chat.pending.has_value(),
+            .send_button_width = 88.0f,
+            .send_button_label = chat.pending ? "Send > (busy)" : "Send >",
         };
 
         gui::ConsoleWindowResult r = gui::console_window(opts);
-        if (r.input.submitted)
+        if (r.input.submitted || r.send_clicked)
         {
             std::string text = std::move(chat.input);
             chat.input.clear();
