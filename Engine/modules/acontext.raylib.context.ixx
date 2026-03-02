@@ -215,6 +215,34 @@ namespace almondnamespace::raylibcontext
 
     namespace detail
     {
+        inline void raylib_stop_rendering_backend(almondnamespace::raylibstate::RaylibState& st)
+        {
+            if (!st.renderingActive)
+                return;
+
+            almondnamespace::raylibtextures::shutdown_current_context_backend();
+
+            if (st.frameActive)
+            {
+                if (st.frameInTextureMode)
+                    almondnamespace::raylib_api::end_texture_mode();
+                else
+                    almondnamespace::raylib_api::end_drawing();
+                st.frameActive = false;
+                st.frameInTextureMode = false;
+            }
+
+            if (st.offscreen.id != 0)
+            {
+                almondnamespace::raylib_api::unload_render_texture(st.offscreen);
+                st.offscreen = {};
+                st.offscreenWidth = 0;
+                st.offscreenHeight = 0;
+            }
+
+            st.renderingActive = false;
+        }
+
         inline void ensure_frame_started(almondnamespace::raylibstate::RaylibState& st)
         {
             if (st.frameActive)
@@ -371,6 +399,7 @@ namespace almondnamespace::raylibcontext
             ctx->onResize = st.onResize;
 
         st.running = true;
+        st.renderingActive = true;
         st.cleanupIssued = false;
 
         almondnamespace::atlasmanager::register_backend_uploader(
@@ -434,7 +463,7 @@ namespace almondnamespace::raylibcontext
 
         if (almondnamespace::raylib_api::window_should_close())
         {
-            st.running = false;
+            detail::raylib_stop_rendering_backend(st);
             return;
         }
 
@@ -449,7 +478,7 @@ namespace almondnamespace::raylibcontext
     export inline void raylib_idle_frame()
     {
         auto& st = almondnamespace::raylibstate::s_raylibstate;
-        if (!st.running)
+        if (!st.running || !st.renderingActive)
             return;
 
 #if defined(_WIN32)
@@ -481,7 +510,7 @@ namespace almondnamespace::raylibcontext
         (void)a;
 
         auto& st = almondnamespace::raylibstate::s_raylibstate;
-        if (!st.running)
+        if (!st.running || !st.renderingActive)
             return;
 
 #if defined(_WIN32)
@@ -506,7 +535,7 @@ namespace almondnamespace::raylibcontext
     export inline void raylib_present()
     {
         auto& st = almondnamespace::raylibstate::s_raylibstate;
-        if (!st.running)
+        if (!st.running || !st.renderingActive)
             return;
 
         if (!raylib_make_current())
@@ -545,24 +574,7 @@ namespace almondnamespace::raylibcontext
             (void)raylib_make_current();
 #endif
 
-            almondnamespace::raylibtextures::shutdown_current_context_backend();
-            if (st.frameActive)
-            {
-                if (st.frameInTextureMode)
-                    almondnamespace::raylib_api::end_texture_mode();
-                else
-                    almondnamespace::raylib_api::end_drawing();
-                st.frameActive = false;
-                st.frameInTextureMode = false;
-            }
-
-            if (st.offscreen.id != 0)
-            {
-                almondnamespace::raylib_api::unload_render_texture(st.offscreen);
-                st.offscreen = {};
-                st.offscreenWidth = 0;
-                st.offscreenHeight = 0;
-            }
+            detail::raylib_stop_rendering_backend(st);
 
             if (ctx && ctx->windowData)
             {
