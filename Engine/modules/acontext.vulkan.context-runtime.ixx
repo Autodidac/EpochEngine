@@ -25,7 +25,11 @@ import :window;
 
 import <algorithm>;
 import <chrono>;
+import <memory>;
+import <mutex>;
+import <shared_mutex>;
 import <stdexcept>;
+import <unordered_map>;
 import <vector>;
 
 export namespace almondnamespace::vulkancontext
@@ -38,12 +42,85 @@ export namespace almondnamespace::vulkancontext
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
-    // SINGLE definition lives here.
-    // (Declaration is exported from :shared_context.)
-    Application& vulkan_app()
+    namespace
     {
-        static Application app{};
-        return app;
+        class ApplicationRegistry
+        {
+        public:
+            Application& bind(const std::shared_ptr<core::Context>& ctx)
+            {
+                if (!ctx)
+                    throw std::runtime_error("[Vulkan] ApplicationRegistry::bind requires non-null Context");
+
+                std::unique_lock lock{ mutex_ };
+                auto& slot = apps_[ctx.get()];
+                if (!slot)
+                    slot = std::make_unique<Application>();
+                return *slot;
+            }
+
+            Application* get(const core::Context* ctx) noexcept
+            {
+                if (!ctx)
+                    return nullptr;
+
+                std::shared_lock lock{ mutex_ };
+                auto it = apps_.find(ctx);
+                return (it != apps_.end() && it->second) ? it->second.get() : nullptr;
+            }
+
+            bool release(const core::Context* ctx) noexcept
+            {
+                if (!ctx)
+                    return false;
+
+                std::unique_lock lock{ mutex_ };
+                return apps_.erase(ctx) > 0;
+            }
+
+            bool any() const noexcept
+            {
+                std::shared_lock lock{ mutex_ };
+                return !apps_.empty();
+            }
+
+        private:
+            mutable std::shared_mutex mutex_{};
+            std::unordered_map<const core::Context*, std::unique_ptr<Application>> apps_{};
+        };
+
+        ApplicationRegistry& application_registry() noexcept
+        {
+            static ApplicationRegistry registry{};
+            return registry;
+        }
+    }
+
+    Application& bind_vulkan_app(const std::shared_ptr<core::Context>& ctx)
+    {
+        return application_registry().bind(ctx);
+    }
+
+    Application* try_get_vulkan_app(const core::Context* ctx) noexcept
+    {
+        return application_registry().get(ctx);
+    }
+
+    bool release_vulkan_app(const core::Context* ctx) noexcept
+    {
+        return application_registry().release(ctx);
+    }
+
+    bool has_vulkan_apps() noexcept
+    {
+        return application_registry().any();
+    }
+
+    const core::Context* Application::bound_context() const noexcept
+    {
+        if (const auto ctx = context.lock())
+            return ctx.get();
+        return nullptr;
     }
 
     // ---- Application method definitions ----
