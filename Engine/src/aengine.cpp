@@ -34,7 +34,6 @@
 //#include "pch.h"
 
 #include "..\include\aengine.config.hpp"
-#include "..\include\aengine.hpp"
 
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
