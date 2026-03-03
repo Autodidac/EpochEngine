@@ -360,6 +360,11 @@ namespace almondnamespace::vulkancontext
         return (std::max)(1, framebufferHeight);
     }
 
+    bool Application::should_stop_rendering() noexcept
+    {
+        return consume_render_stop_intent();
+    }
+
     bool Application::consume_framebuffer_resize_intent() noexcept
     {
         std::scoped_lock lock(framebufferStateMutex);

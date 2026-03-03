@@ -160,7 +160,7 @@ export namespace almondnamespace::vulkancontext
 
         atlasmanager::process_pending_uploads(core::ContextType::Vulkan);
 
-        if (app->consume_render_stop_intent())
+        if (app->should_stop_rendering())
         {
             frameTimer.finish();
             return false;
@@ -173,7 +173,7 @@ export namespace almondnamespace::vulkancontext
         if (!result)
             return false;
 
-        return !app->consume_render_stop_intent();
+        return !app->should_stop_rendering();
     }
 
     void vulkan_present()
