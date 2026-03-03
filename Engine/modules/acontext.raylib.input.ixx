@@ -15,6 +15,7 @@ import <atomic>;
 import <shared_mutex>;
 
 import acontext.raylib.api;
+import aengine.core.context;
 import aengine.input;
 
 #if defined(ALMOND_USING_RAYLIB)
@@ -127,7 +128,11 @@ namespace almondnamespace::raylibcontext
 
         mouseX.store(almondnamespace::raylib_api::get_mouse_x(), std::memory_order_relaxed);
         mouseY.store(almondnamespace::raylib_api::get_mouse_y(), std::memory_order_relaxed);
-        set_mouse_coords_are_global(false);
+        const auto currentContext = core::get_current_render_context();
+        const auto contextId = currentContext
+            ? reinterpret_cast<MouseCoordsContextId>(currentContext.get())
+            : kDefaultMouseCoordsContextId;
+        set_mouse_coords_are_global_for_context(contextId, false);
 
         mouseWheel.store(
             static_cast<int>(almondnamespace::raylib_api::get_mouse_wheel_move()),

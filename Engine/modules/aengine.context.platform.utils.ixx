@@ -6,6 +6,7 @@ import <wtypes.h>;
 import <memory>;
 
 import aengine.core.context;
+import aengine.input;
 
 namespace
 {
@@ -17,7 +18,8 @@ namespace
         HWND hwnd = ctx->get_hwnd();
         if (!hwnd) return;
 
-        if (almondnamespace::input::are_mouse_coords_global())
+        const auto contextId = reinterpret_cast<almondnamespace::input::MouseCoordsContextId>(ctx.get());
+        if (almondnamespace::input::are_mouse_coords_global_for_context(contextId))
             return;
 
         RECT rc{};
@@ -37,7 +39,8 @@ namespace
     {
         if (!ctx) return;
 
-        if (almondnamespace::input::are_mouse_coords_global())
+        const auto contextId = reinterpret_cast<almondnamespace::input::MouseCoordsContextId>(ctx.get());
+        if (almondnamespace::input::are_mouse_coords_global_for_context(contextId))
             return;
 
         const int width = (std::max)(1, ctx->width);
