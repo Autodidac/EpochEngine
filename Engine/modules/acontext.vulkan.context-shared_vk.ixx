@@ -101,6 +101,7 @@ namespace almondnamespace::vulkancontext
         void set_context(std::shared_ptr<almondnamespace::core::Context> ctx, void* nativeWindow);
         void set_active_context(const almondnamespace::core::Context* ctx);
         void cleanup_gui_context(const almondnamespace::core::Context* ctx);
+        bool should_stop_rendering() noexcept;
 
         vk::CommandBuffer getCurrentCommandBuffer() const
         {
