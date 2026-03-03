@@ -1,5 +1,5 @@
 ﻿/**************************************************************
- *   AlmondShell - Modular C++ Framework
+ *   epochengine - Modular C++ Framework
  **************************************************************/
 
 module;
@@ -32,7 +32,7 @@ import atexture;        // provides Texture
 // MODULE EXPORTS
 // ────────────────────────────────────────────────────────────
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     using u8 = std::uint8_t;
     using u32 = std::uint32_t;
@@ -223,7 +223,7 @@ export namespace almondnamespace
     };
 }
 
-namespace almondnamespace
+namespace epochnamespace
 {
     inline std::optional<AtlasEntry> TextureAtlas::add_entry(const std::string& id, const Texture& tex)
     {

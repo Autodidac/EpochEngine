@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  **************************************************************/
@@ -56,7 +56,7 @@ import acontext.opengl.platform;   // PlatformGLContext
 
 #if defined(ALMOND_USING_OPENGL)
 
-export namespace almondnamespace::openglstate
+export namespace epochnamespace::openglstate
 {
     struct OpenGL4State
     {

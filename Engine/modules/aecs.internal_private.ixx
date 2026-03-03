@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -32,11 +32,11 @@ import aengine.core.logger;
 import aengine.core.time;
 import aengine.eventsystem;
 
-namespace almondnamespace::ecs::_detail
+namespace epochnamespace::ecs::_detail
 {
-	using namespace almondnamespace::logger;
-    using namespace almondnamespace::timing;
-    //using namespace almondnamespace::ecs;
+	using namespace epochnamespace::logger;
+    using namespace epochnamespace::timing;
+    //using namespace epochnamespace::ecs;
 
     inline void notify(Logger* log,
         Timer* clk,

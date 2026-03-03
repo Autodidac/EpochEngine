@@ -25,7 +25,7 @@ import afont.renderer;
 import aatlas.manager;
 import aatlas.texture;
 
-namespace almondnamespace::font
+namespace epochnamespace::font
 {
     namespace
     {
@@ -49,7 +49,7 @@ namespace almondnamespace::font
         }
     }
 
-    almondnamespace::font::FontRenderer::FontRenderer(logger::Logger* log)
+    epochnamespace::font::FontRenderer::FontRenderer(logger::Logger* log)
         : logger_(log)
     {
     }
@@ -179,7 +179,7 @@ namespace almondnamespace::font
         asset.metrics = metrics;
         asset.kerning_pairs = std::move(kerning_pairs);
 
-        almondnamespace::atlasmanager::ensure_uploaded(atlas);
+        epochnamespace::atlasmanager::ensure_uploaded(atlas);
 
         loaded_fonts_.emplace(name, std::move(asset));
         return true;

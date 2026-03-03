@@ -32,7 +32,7 @@ module;
 #elif defined(__linux__)
 
 #   pragma push_macro("Font")
-#   define Font almondshell_X11Font
+#   define Font epochengine_X11Font
 #   include <X11/Xlib.h>
 #   include <GL/glx.h>
 #   pragma pop_macro("Font")
@@ -53,7 +53,7 @@ import <algorithm>;
 
 #if defined(ALMOND_USING_OPENGL)
 
-export namespace almondnamespace::openglcontext::PlatformGL
+export namespace epochnamespace::openglcontext::PlatformGL
 {
     struct PlatformGLContext
     {

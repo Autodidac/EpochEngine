@@ -14,12 +14,12 @@ import <utility>;
 import :shared_vk;
 import aatlas.texture;
 
-export namespace almondnamespace::vulkantextures
+export namespace epochnamespace::vulkantextures
 {
-    void ensure_uploaded(const almondnamespace::TextureAtlas& atlas);
+    void ensure_uploaded(const epochnamespace::TextureAtlas& atlas);
 }
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     void Application::transitionImageLayout(vk::Image image, vk::Format /*format*/,
         vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
@@ -136,4 +136,4 @@ namespace almondnamespace::vulkancontext
 
         textureSampler = std::move(samp);
     }
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

@@ -24,7 +24,7 @@ import asprite.pool;
 
 // ────────────────────────────────────────────────────────────
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     // Forward declaration only — definition lives in atlas module
     struct TextureAtlas;

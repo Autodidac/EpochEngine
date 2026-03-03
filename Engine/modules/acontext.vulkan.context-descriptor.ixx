@@ -20,7 +20,7 @@ import :shared_context;
 import :shared_vk;
 import acontext.vulkan.camera;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     void Application::createDescriptorPool()
     {
@@ -205,4 +205,4 @@ namespace almondnamespace::vulkancontext
 
         std::memcpy(guiState->guiUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

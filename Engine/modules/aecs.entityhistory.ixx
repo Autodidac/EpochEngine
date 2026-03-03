@@ -11,7 +11,7 @@ export module aecs.entityhistory;
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -41,7 +41,7 @@ export module aecs.entityhistory;
 ////import aecs.internal_private;
 //
 //
-//namespace almondnamespace::ecs
+//namespace epochnamespace::ecs
 //{
 //    /// History container: map from EntityID → list of past (x,y) states
 //    using History = std::unordered_map<EntityID, std::vector<std::pair<float, float>>>;
@@ -110,4 +110,4 @@ export module aecs.entityhistory;
 //        return ok;
 //    }
 //
-//} // namespace almondnamespace::ecs
+//} // namespace epochnamespace::ecs

@@ -19,7 +19,7 @@ module acontext.vulkan.context:buffers;
 import :shared_vk;
 import :meshcube;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     void Application::createVertexBuffer()
     {

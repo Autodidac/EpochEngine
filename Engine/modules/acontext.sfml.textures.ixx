@@ -36,7 +36,7 @@ import <string_view>;
 import <unordered_map>;
 import <vector>;
 
-export namespace almondnamespace::sfmlcontext
+export namespace epochnamespace::sfmlcontext
 {
     using Handle = uint32_t;
 
@@ -281,6 +281,6 @@ export namespace almondnamespace::sfmlcontext
         sf::RenderStates renderStates{};
         state::s_sfmlstate.window.sfml_window->draw(sprite, renderStates);
     }
-} // namespace almondnamespace::sfmlcontext
+} // namespace epochnamespace::sfmlcontext
 
 #endif // ALMOND_USING_SFML

@@ -32,7 +32,7 @@ import aimage.loader;
 import aatlas.texture;
 import :shared_vk;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     namespace
     {
@@ -41,22 +41,22 @@ namespace almondnamespace::vulkancontext
         inline void log_info(std::string_view msg,
             const std::source_location& loc = std::source_location::current())
         {
-            almondnamespace::logger::get(kLogSys).log(
-                almondnamespace::logger::LogLevel::INFO, msg, loc);
+            epochnamespace::logger::get(kLogSys).log(
+                epochnamespace::logger::LogLevel::INFO, msg, loc);
         }
 
         inline void log_warn(std::string_view msg,
             const std::source_location& loc = std::source_location::current())
         {
-            almondnamespace::logger::get(kLogSys).log(
-                almondnamespace::logger::LogLevel::WARN, msg, loc);
+            epochnamespace::logger::get(kLogSys).log(
+                epochnamespace::logger::LogLevel::WARN, msg, loc);
         }
 
         inline void log_error(std::string_view msg,
             const std::source_location& loc = std::source_location::current())
         {
-            almondnamespace::logger::get(kLogSys).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR, msg, loc);
+            epochnamespace::logger::get(kLogSys).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR, msg, loc);
         }
 
         std::filesystem::path resolve_texture_path(const std::source_location& loc)
@@ -67,8 +67,8 @@ namespace almondnamespace::vulkancontext
             const std::array<fs::path, 4> candidates = {
                 target,
                 fs::path("assets") / "vulkan" / target,
-                fs::path("AlmondShell") / "assets" / "vulkan" / target,
-                fs::path("..") / "AlmondShell" / "assets" / "vulkan" / target,
+                fs::path("epochengine") / "assets" / "vulkan" / target,
+                fs::path("..") / "epochengine" / "assets" / "vulkan" / target,
             };
 
             for (const auto& path : candidates)
@@ -83,7 +83,7 @@ namespace almondnamespace::vulkancontext
             for (const auto& p : candidates)
             {
                 tried += "\n  - ";
-                tried += almondnamespace::text::path_to_utf8(fs::absolute(p).lexically_normal());
+                tried += epochnamespace::text::path_to_utf8(fs::absolute(p).lexically_normal());
             }
 
             log_error(std::format("Failed to load texture image. Tried paths:{}", tried), loc);
@@ -141,7 +141,7 @@ namespace almondnamespace::vulkancontext
         const auto loc = std::source_location::current();
 
         const std::filesystem::path texturePath = resolve_texture_path(loc);
-        const std::string texturePathUtf8 = almondnamespace::text::path_to_utf8(texturePath);
+        const std::string texturePathUtf8 = epochnamespace::text::path_to_utf8(texturePath);
 
         ImageData texture = [&]() -> ImageData {
             try
@@ -463,13 +463,13 @@ namespace almondnamespace::vulkancontext
         entry.width = atlas.width;
         entry.height = atlas.height;
     }
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext
 
-namespace almondnamespace::vulkantextures
+namespace epochnamespace::vulkantextures
 {
-    void ensure_uploaded(const almondnamespace::TextureAtlas& atlas)
+    void ensure_uploaded(const epochnamespace::TextureAtlas& atlas)
     {
-        if (!almondnamespace::vulkancontext::has_vulkan_apps())
+        if (!epochnamespace::vulkancontext::has_vulkan_apps())
             return;
 
         // Atlas uploads are driven from the active Vulkan context render loop.

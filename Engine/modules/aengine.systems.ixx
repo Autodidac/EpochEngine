@@ -37,7 +37,7 @@ import <cstddef>;
 // Scheduler + coroutine utilities
 // ============================================================
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     // ---------------------------------------------------------
     // Coroutine Task (public coroutine handle type)

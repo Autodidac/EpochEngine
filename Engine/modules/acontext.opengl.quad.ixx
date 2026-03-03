@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -46,7 +46,7 @@ import <utility>;
 
 #if defined(ALMOND_USING_OPENGL)
 
-export namespace almondnamespace::openglquad
+export namespace epochnamespace::openglquad
 {
     // ---------------------------------------------------------------------
     // Quad VAO wrapper (renderer depends on this type existing)
@@ -412,11 +412,11 @@ void main() {
 
     // Back-compat wrapper: existing code may still call ensure_quad_pipeline(state).
     // We deliberately ignore the passed-in state to avoid cross-context handle stomping.
-    export bool ensure_quad_pipeline(almondnamespace::openglstate::OpenGL4State& /*unused*/)
+    export bool ensure_quad_pipeline(epochnamespace::openglstate::OpenGL4State& /*unused*/)
     {
         return ensure_quad_pipeline();
     }
-} // namespace almondnamespace::openglquad
+} // namespace epochnamespace::openglquad
 
 
 #endif // ALMOND_USING_OPENGL

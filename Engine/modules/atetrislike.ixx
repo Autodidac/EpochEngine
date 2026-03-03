@@ -24,7 +24,7 @@ import <stdexcept>;
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -53,7 +53,7 @@ import aplatformpump;
 import aengine.core.context;
 
 
-export namespace almondnamespace::tetrislike
+export namespace epochnamespace::tetrislike
 {
     struct TetrisLikeScene : public scene::Scene {
         TetrisLikeScene(logger::Logger* L = nullptr, timing::Timer* C = nullptr)
@@ -71,7 +71,7 @@ export namespace almondnamespace::tetrislike
             game_over = false;
         }
 
-        bool frame(std::shared_ptr<almondnamespace::core::Context> ctx, contextwindow::WindowData*) override {
+        bool frame(std::shared_ptr<epochnamespace::core::Context> ctx, contextwindow::WindowData*) override {
             if (game_over) return false;
 
             //platformpump::pump_events();
@@ -332,4 +332,4 @@ export namespace almondnamespace::tetrislike
         return running;
     }
 
-} // export namespace almondnamespace
+} // export namespace epochnamespace

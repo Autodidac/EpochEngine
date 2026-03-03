@@ -21,7 +21,7 @@ import <string_view>;
 import <unordered_map>;
 import <vector>;
 
-// AlmondShell diagnostics helpers
+// epochengine diagnostics helpers
 // --------------------------------
 // Lightweight utilities for reporting the current engine build
 // configuration.  The helpers are header-only so they can be used
@@ -32,7 +32,7 @@ import <vector>;
 
 
 export namespace almond::diagnostics {
-    using almondnamespace::core::ContextType;
+    using epochnamespace::core::ContextType;
 
     struct FrameTiming
     {
@@ -67,15 +67,15 @@ export namespace almond::diagnostics {
             lastMs = std::chrono::duration<double, std::milli>(end - start).count();
             finished = true;
 
-            almondnamespace::telemetry::emit_histogram_ms(
+            epochnamespace::telemetry::emit_histogram_ms(
                 "renderer.frame.time_ms",
                 lastMs,
-                almondnamespace::telemetry::RendererTelemetryTags{ backendType, windowId });
+                epochnamespace::telemetry::RendererTelemetryTags{ backendType, windowId });
 
             if (lastMs > slowFrameMs)
             {
                 const std::string_view backend = backendName.empty() ? "Unknown" : backendName;
-                almondnamespace::logger::warn(
+                epochnamespace::logger::warn(
                     "Renderer",
                     std::format("[{}] Slow frame {:.2f} ms (> {:.2f} ms)", backend, lastMs, slowFrameMs));
             }

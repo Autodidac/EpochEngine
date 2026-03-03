@@ -8,7 +8,7 @@ import <type_traits>;
 import <vector>;
 import <utility>;
 
-export namespace almondnamespace::mem
+export namespace epochnamespace::mem
 {
     // ─────────────────────────────────────────────────────────────────────────────
     // helpers

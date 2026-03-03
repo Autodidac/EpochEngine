@@ -3,7 +3,7 @@ module;
 export module aminesweeperlike;
 
 // ------------------------------------------------------------
-// Almond engine / project modules
+// Epoch engine / project modules
 // ------------------------------------------------------------
 import aplatformpump;             // aplatformpump.hpp
 import aengine.core.context;      // Context (core)
@@ -39,7 +39,7 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::minesweeperlike
+export namespace epochnamespace::minesweeperlike
 {
     inline constexpr int GRID_W = 16;
     inline constexpr int GRID_H = 16;
@@ -268,4 +268,4 @@ export namespace almondnamespace::minesweeperlike
         scene.unload();
         return running;
     }
-} // namespace almondnamespace::minesweeper
+} // namespace epochnamespace::minesweeper

@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -52,7 +52,7 @@ import <iostream>;
 import <type_traits>;
 import <utility>;
 
-export namespace almondnamespace::utilities
+export namespace epochnamespace::utilities
 {
 #ifdef _WIN32
     [[nodiscard]] inline bool isConsoleApplication() noexcept
@@ -92,4 +92,4 @@ export namespace almondnamespace::utilities
                 }
             };
     }
-} // namespace almondnamespace::utilities
+} // namespace epochnamespace::utilities

@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -33,7 +33,7 @@ import <typeinfo>;
 import <unordered_map>;
 import <utility>;
 
-export namespace almondnamespace::ecs
+export namespace epochnamespace::ecs
 {
     /// The basic ID type
     using EntityID = std::size_t;

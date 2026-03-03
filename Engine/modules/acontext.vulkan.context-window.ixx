@@ -7,7 +7,7 @@ import :shared_vk;
 import acontext.vulkan.camera;
 import aengine.input;
 
-export namespace almondnamespace::vulkancontext {
+export namespace epochnamespace::vulkancontext {
 
     //// Forward declaration or definition of Application class
     //export class Application {
@@ -18,7 +18,7 @@ export namespace almondnamespace::vulkancontext {
     //    bool firstMouse = true;
     //    float lastX = 0.0f;
     //    float lastY = 0.0f;
-    //    almondnamespace::vulkancamera::State cam; // Use the correct Camera type
+    //    epochnamespace::vulkancamera::State cam; // Use the correct Camera type
     //};
 
 #if defined(ALMOND_VULKAN_STANDALONE)
@@ -46,19 +46,19 @@ export namespace almondnamespace::vulkancontext {
         lastX = static_cast<float>(xpos);
         lastY = static_cast<float>(ypos);
 
-        almondnamespace::vulkancamera::processMouse(cam, xOffset, yOffset);
+        epochnamespace::vulkancamera::processMouse(cam, xOffset, yOffset);
     }
 
     void Application::updateCamera(float deltaTime) {
         // Process WASD keyboard input for camera movement (engine input)
-        if (almondnamespace::input::is_key_held(almondnamespace::input::Key::W))
-            almondnamespace::vulkancamera::processKeyboard(cam, almondnamespace::vulkancamera::Direction::Forward, deltaTime);
-        if (almondnamespace::input::is_key_held(almondnamespace::input::Key::S))
-            almondnamespace::vulkancamera::processKeyboard(cam, almondnamespace::vulkancamera::Direction::Backward, deltaTime);
-        if (almondnamespace::input::is_key_held(almondnamespace::input::Key::A))
-            almondnamespace::vulkancamera::processKeyboard(cam, almondnamespace::vulkancamera::Direction::Left, deltaTime);
-        if (almondnamespace::input::is_key_held(almondnamespace::input::Key::D))
-            almondnamespace::vulkancamera::processKeyboard(cam, almondnamespace::vulkancamera::Direction::Right, deltaTime);
+        if (epochnamespace::input::is_key_held(epochnamespace::input::Key::W))
+            epochnamespace::vulkancamera::processKeyboard(cam, epochnamespace::vulkancamera::Direction::Forward, deltaTime);
+        if (epochnamespace::input::is_key_held(epochnamespace::input::Key::S))
+            epochnamespace::vulkancamera::processKeyboard(cam, epochnamespace::vulkancamera::Direction::Backward, deltaTime);
+        if (epochnamespace::input::is_key_held(epochnamespace::input::Key::A))
+            epochnamespace::vulkancamera::processKeyboard(cam, epochnamespace::vulkancamera::Direction::Left, deltaTime);
+        if (epochnamespace::input::is_key_held(epochnamespace::input::Key::D))
+            epochnamespace::vulkancamera::processKeyboard(cam, epochnamespace::vulkancamera::Direction::Right, deltaTime);
     }
 
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

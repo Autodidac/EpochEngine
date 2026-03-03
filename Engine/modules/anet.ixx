@@ -12,7 +12,7 @@ module;
 //   • <asio.hpp> (header-only ≥1.30.2)
 //   • Steam SDK 1.53a (or GameNetworkingSockets ≥v1.4.0)
 //
-// Runtime: call almondnamespace::net::init(); once, almondnamespace::net::poll(); each frame.
+// Runtime: call epochnamespace::net::init(); once, epochnamespace::net::poll(); each frame.
 
 #define ASIO_STANDALONE
 #define ASIO_HAS_CO_AWAIT
@@ -49,7 +49,7 @@ import <variant>;
 import aengine.platform;
 //import aengine.config;
 
-export namespace almondnamespace::net {
+export namespace epochnamespace::net {
 
     // Generic views and callback aliases
     using bytes_view = std::span<const std::byte>;
@@ -185,4 +185,4 @@ export namespace almondnamespace::net {
 
     // async_recv left to caller to wire into their event loop for brevity
 
-} // namespace almondnamespace::net
+} // namespace epochnamespace::net

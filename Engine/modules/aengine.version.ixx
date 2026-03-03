@@ -7,7 +7,7 @@ import <cstdio>;
 import <string>;
 import <string_view>;
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     // ─────────────────────────────────────────────
     // Version constants (compile-time safe)
@@ -17,7 +17,7 @@ export namespace almondnamespace
     export constexpr int minor = 81;
     export constexpr int revision = 23;
 
-    export constexpr std::string_view kEngineName = "Almond Shell";
+    export constexpr std::string_view kEngineName = "Epoch engine";
 
     // ─────────────────────────────────────────────
     // Accessors
@@ -73,4 +73,4 @@ export namespace almondnamespace
 }
 
 // Legacy alias (kept intentionally)
-export namespace almondshell = almondnamespace;
+export namespace epochengine = epochnamespace;

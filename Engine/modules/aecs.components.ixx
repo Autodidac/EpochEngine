@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -32,7 +32,7 @@ import <vector>;
 import aengine.core.logger; // LogLevel lives here
 import aengine.core.time;   // Timer lives here
 
-export namespace almondnamespace::ecs
+export namespace epochnamespace::ecs
 {
     // ─── Position ─────────────────────────────────────────────────────────
     struct Position
@@ -70,9 +70,9 @@ export namespace almondnamespace::ecs
         std::string system{ "ECS" };
 
         // Minimum level to emit when THIS entity logs (call sites check this).
-        almondnamespace::logger::LogLevel min_level{ almondnamespace::logger::LogLevel::INFO };
+        epochnamespace::logger::LogLevel min_level{ epochnamespace::logger::LogLevel::INFO };
 
         // Optional entity-owned clock (nullptr means "use global timing utilities").
-        almondnamespace::timing::Timer* clock{ nullptr };
+        epochnamespace::timing::Timer* clock{ nullptr };
     };
-} // namespace almondnamespace::ecs
+} // namespace epochnamespace::ecs

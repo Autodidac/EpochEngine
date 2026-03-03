@@ -24,7 +24,7 @@ module;
 export module acontext.vulkan.platform.loader;
 
 #if ALMOND_VULKAN_CUSTOM_LOADER
-export namespace almondnamespace::vulkan {
+export namespace epochnamespace::vulkan {
 
     // OS/dynamic-loader calls are runtime by definition: NOT constexpr.
     inline auto LoadLibrary() noexcept -> void*
@@ -60,9 +60,9 @@ export namespace almondnamespace::vulkan {
 #endif
     }
 
-} // namespace almondnamespace::vulkan
+} // namespace epochnamespace::vulkan
 #else
-export namespace almondnamespace::vulkan
+export namespace epochnamespace::vulkan
 {
     // Custom loader disabled: no dynamic loader entry points are exported.
 }

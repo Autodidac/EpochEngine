@@ -2,7 +2,7 @@ module;
 
 export module aslidingpuzzlelike;
 
-// Almond engine / project modules
+// Epoch engine / project modules
 import aengine.core.context;      // core::Context
 import aengine.context.window;    // core::WindowData
 import aengine.input;             // input::Key
@@ -26,7 +26,7 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::slidinglike
+export namespace epochnamespace::slidinglike
 {
     struct SlidingPuzzleLikeScene : public scene::Scene
     {
@@ -188,4 +188,4 @@ export namespace almondnamespace::slidinglike
         scene.unload();
         return running;
     }
-} // namespace almondnamespace::slidingpuzzlelike
+} // namespace epochnamespace::slidingpuzzlelike

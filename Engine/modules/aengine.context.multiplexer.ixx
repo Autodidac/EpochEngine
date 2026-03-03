@@ -31,10 +31,10 @@ import <vector>;
 
 import aengine.platform;
 
-import aengine.context.type;         // almondnamespace::core::ContextType
-import aengine.context.commandqueue; // almondnamespace::core::CommandQueue
-import aengine.context.window;       // almondnamespace::core::WindowData
-import aengine.core.context;         // almondnamespace::core::Context + Set/Get current render ctx
+import aengine.context.type;         // epochnamespace::core::ContextType
+import aengine.context.commandqueue; // epochnamespace::core::CommandQueue
+import aengine.context.window;       // epochnamespace::core::WindowData
+import aengine.core.context;         // epochnamespace::core::Context + Set/Get current render ctx
 
 #if !defined(_WIN32)
 struct POINT { long x{}; long y{}; };
@@ -56,7 +56,7 @@ using HDC = void*;
 using HGLRC = void*;
 #endif
 
-export namespace almondnamespace::core
+export namespace epochnamespace::core
 {
 #if defined(_WIN32)
 
@@ -116,8 +116,8 @@ export namespace almondnamespace::core
         void EnqueueRenderCommand(HWND hwnd, RenderCommand cmd);
 
         // Stable API used across the engine (GUI etc.)
-        static void SetCurrent(std::shared_ptr<core::Context> ctx) { almondnamespace::core::set_current_render_context(std::move(ctx)); }
-        static std::shared_ptr<core::Context> GetCurrent() { return almondnamespace::core::get_current_render_context(); }
+        static void SetCurrent(std::shared_ptr<core::Context> ctx) { epochnamespace::core::set_current_render_context(std::move(ctx)); }
+        static std::shared_ptr<core::Context> GetCurrent() { return epochnamespace::core::get_current_render_context(); }
 
         static LRESULT CALLBACK ParentProc(HWND, UINT, WPARAM, LPARAM);
         static LRESULT CALLBACK ChildProc(HWND, UINT, WPARAM, LPARAM);
@@ -266,4 +266,4 @@ export namespace almondnamespace::core
     };
 
 #endif
-} // namespace almondnamespace::core
+} // namespace epochnamespace::core

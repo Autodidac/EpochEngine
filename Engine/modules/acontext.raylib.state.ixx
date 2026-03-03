@@ -26,7 +26,7 @@ import <thread>;
 
 #if defined(ALMOND_USING_RAYLIB)
 
-export namespace almondnamespace::raylibstate
+export namespace epochnamespace::raylibstate
 {
     // ------------------------------------------------------------
     // Viewport info (renderer-only, no window management)
@@ -59,7 +59,7 @@ export namespace almondnamespace::raylibstate
         bool ownsDC = false;
 
         // Owning engine context + thread
-        almondnamespace::core::Context* owner_ctx = nullptr;
+        epochnamespace::core::Context* owner_ctx = nullptr;
         std::thread::id owner_thread{};
 
         // Optional user resize callback (engine-driven only)
@@ -73,7 +73,7 @@ export namespace almondnamespace::raylibstate
         unsigned offscreenHeight = 0;
 
         // Offscreen render target owned by the host OpenGL context
-        almondnamespace::raylib_api::RenderTexture2D offscreen{};
+        epochnamespace::raylib_api::RenderTexture2D offscreen{};
 
         bool frameActive = false;
         bool frameInTextureMode = false;

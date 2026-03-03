@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -31,7 +31,7 @@ import <string>;
 import <string_view>;
 import <unordered_map>;
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     namespace timing
     {
@@ -193,4 +193,4 @@ export namespace almondnamespace
                 std::chrono::floor<std::chrono::seconds>(now));
         }
     }
-} // namespace almondnamespace::timing
+} // namespace epochnamespace::timing

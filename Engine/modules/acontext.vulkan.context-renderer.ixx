@@ -8,7 +8,7 @@ export module acontext.vulkan.context:renderer;
 
 import <cstdint>;
 
-export namespace almondnamespace::vulkanrenderer
+export namespace epochnamespace::vulkanrenderer
 {
     struct RendererContext
     {

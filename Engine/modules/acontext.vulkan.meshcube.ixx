@@ -14,7 +14,7 @@ import <array>;
 import <cstdint>;
 import <span>;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     using Vertex = Application::Vertex;
 

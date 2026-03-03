@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝
  *
  *   This file is part of the Almond Project.
- *   AlmondShell - Modular C++ Framework
+ *   epochengine - Modular C++ Framework
  *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell
  **************************************************************/
@@ -28,7 +28,7 @@
 // Import the module interface (exports declarations).
 import acontext.raylib.api;
 
-namespace almondnamespace::raylib_api
+namespace epochnamespace::raylib_api
 {
     // ------------------------------------------------------------
     // Constants
@@ -213,4 +213,4 @@ namespace almondnamespace::raylib_api
     {
         ::DrawTexturePro(to_rl(tex), to_rl(src), to_rl(dst), to_rl(origin), rotation, to_rl(tint));
     }
-} // namespace almondnamespace::raylib_api
+} // namespace epochnamespace::raylib_api

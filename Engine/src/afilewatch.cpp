@@ -9,7 +9,7 @@ import <vector>;
 
 import autility.filewatch;
 
-namespace almondnamespace::filewatch
+namespace epochnamespace::filewatch
 {
     static std::uint64_t compute_file_hash(const std::filesystem::path& p)
     {

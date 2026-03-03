@@ -17,7 +17,7 @@ export module acontext.vulkan.context:memory;
 
 import :shared_vk;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     std::uint32_t Application::findMemoryType(std::uint32_t typeFilter, vk::MemoryPropertyFlags properties)
     {
@@ -127,4 +127,4 @@ namespace almondnamespace::vulkancontext
         cmd->copyBuffer(srcBuffer, dstBuffer, 1u, &copyRegion);
         endSingleTimeCommands(cmd);
     }
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

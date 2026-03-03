@@ -54,7 +54,7 @@ import <memory>;
 import aengine.context.type;
 import aengine.context.commandqueue;
 
-export namespace almondnamespace::core
+export namespace epochnamespace::core
 {
     class Context;
 
@@ -192,7 +192,7 @@ export namespace almondnamespace::core
     };
 }
 
-export namespace almondnamespace::contextwindow
+export namespace epochnamespace::contextwindow
 {
-    export using WindowData = almondnamespace::core::WindowData;
+    export using WindowData = epochnamespace::core::WindowData;
 }

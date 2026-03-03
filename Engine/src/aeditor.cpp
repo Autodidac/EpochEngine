@@ -7,12 +7,12 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  **************************************************************/
  /**************************************************************
-  *   AlmondShell - Modular C++ Framework
+  *   epochengine - Modular C++ Framework
   *   Editor Implementation
   *
   *   SPDX-License-Identifier: LicenseRef-MIT-NoSell
@@ -36,7 +36,7 @@ import aengine.gui;
 import aengine.core.context;
 import epoch.ai;
 
-namespace almondnamespace
+namespace epochnamespace
 {
     namespace
     {
@@ -286,4 +286,4 @@ namespace almondnamespace
     }
 
 
-} // namespace almondnamespace
+} // namespace epochnamespace

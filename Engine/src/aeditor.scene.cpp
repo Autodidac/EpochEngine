@@ -8,7 +8,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -44,7 +44,7 @@ static inline void AERR(std::string_view s)
 }
 
 
-namespace almondnamespace::editor
+namespace epochnamespace::editor
 {
     // =========================================================================
     // Small math: keep this local; replace with your real Vec/Quat if you want.
@@ -857,4 +857,4 @@ inline bool apply_ai_ops(CommandBus& bus, std::span<const AiOp> ops, std::string
         // Here, keep it simple: wire your own id routing once integrated.
     }
 
-} // namespace almondnamespace::editor
+} // namespace epochnamespace::editor

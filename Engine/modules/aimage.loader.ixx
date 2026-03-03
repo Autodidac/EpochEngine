@@ -12,7 +12,7 @@ import <stdexcept>;
 import <string>;
 import <vector>;
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     struct ImageData
     {

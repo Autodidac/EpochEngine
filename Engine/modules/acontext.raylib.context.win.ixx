@@ -1,5 +1,5 @@
 /**************************************************************
- *   AlmondShell – Raylib Context (Win32 glue)
+ *   epochengine – Raylib Context (Win32 glue)
  *   Purpose: Host-managed OpenGL context integration (no reparenting).
  *   This module may include Win32 headers. It does NOT include raylib.h.
  **************************************************************/
@@ -25,7 +25,7 @@ export module acontext.raylib.context.win;
 
 #if defined(_WIN32) && defined(ALMOND_USING_RAYLIB)
 
-export namespace almondnamespace::raylibcontext::win
+export namespace epochnamespace::raylibcontext::win
 {
     // Intentionally empty: Raylib no longer owns/reparents a window on Win32.
 }

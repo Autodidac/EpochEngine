@@ -2,7 +2,7 @@ module;
 
 export module aplatformpump;
 
-export namespace almondnamespace::platformpump
+export namespace epochnamespace::platformpump
 {
 
 }

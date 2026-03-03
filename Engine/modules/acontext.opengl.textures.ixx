@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -97,14 +97,14 @@ import aspritehandle;
 // defines them. Uncomment the correct one in your project.
 // import atypes;
 
-export namespace almondnamespace::opengltextures
+export namespace epochnamespace::opengltextures
 {
     namespace detail
     {
-        inline almondnamespace::openglcontext::PlatformGL::PlatformGLContext
-            to_platform_context(const almondnamespace::openglstate::OpenGL4State& state) noexcept
+        inline epochnamespace::openglcontext::PlatformGL::PlatformGLContext
+            to_platform_context(const epochnamespace::openglstate::OpenGL4State& state) noexcept
         {
-            almondnamespace::openglcontext::PlatformGL::PlatformGLContext ctx{};
+            epochnamespace::openglcontext::PlatformGL::PlatformGLContext ctx{};
 #if defined(_WIN32)
             ctx.device = state.hdc;
             ctx.context = state.hglrc;
@@ -116,10 +116,10 @@ export namespace almondnamespace::opengltextures
             return ctx;
         }
 
-        inline almondnamespace::openglcontext::PlatformGL::PlatformGLContext
+        inline epochnamespace::openglcontext::PlatformGL::PlatformGLContext
             context_to_platform_context(const core::Context* ctx) noexcept
         {
-            almondnamespace::openglcontext::PlatformGL::PlatformGLContext result{};
+            epochnamespace::openglcontext::PlatformGL::PlatformGLContext result{};
             if (!ctx) return result;
 
 #if defined(_WIN32)
@@ -160,14 +160,14 @@ export namespace almondnamespace::opengltextures
         std::unordered_map<const TextureAtlas*, AtlasGPU,
             TextureAtlasPtrHash, TextureAtlasPtrEqual> gpu_atlases;
         std::mutex gpuMutex;
-        almondnamespace::openglstate::OpenGL4State glState{};
+        epochnamespace::openglstate::OpenGL4State glState{};
     };
 
     inline BackendData& get_opengl_backend() {
         BackendData* data = nullptr;
         {
-            std::unique_lock lock(almondnamespace::core::g_backendsMutex);
-            auto& backend = almondnamespace::core::g_backends[almondnamespace::core::ContextType::OpenGL];
+            std::unique_lock lock(epochnamespace::core::g_backendsMutex);
+            auto& backend = epochnamespace::core::g_backends[epochnamespace::core::ContextType::OpenGL];
             if (!backend.data) {
                 backend.data = {
                     new BackendData(),
@@ -258,7 +258,7 @@ export namespace almondnamespace::opengltextures
         }
 
         const auto platformCtx = detail::to_platform_context(glState);
-        almondnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!contextGuard.set(platformCtx)) {
             std::cerr << "[UploadAtlas] Failed to activate GL context for upload\n";
             return;
@@ -340,9 +340,9 @@ export namespace almondnamespace::opengltextures
         upload_atlas_to_gpu(atlas);
     }
 
-    inline bool ensure_created_pipeline(almondnamespace::openglstate::OpenGL4State& glState)
+    inline bool ensure_created_pipeline(epochnamespace::openglstate::OpenGL4State& glState)
     {
-        return almondnamespace::openglquad::ensure_quad_pipeline(glState);
+        return epochnamespace::openglquad::ensure_quad_pipeline(glState);
     }
 
     inline void clear_gpu_atlases() noexcept
@@ -425,7 +425,7 @@ export namespace almondnamespace::opengltextures
         }
 
         auto& backend = get_opengl_backend();
-        almondnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
         auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
         if (!desired.valid()) {
             desired = detail::to_platform_context(backend.glState);
@@ -506,7 +506,7 @@ export namespace almondnamespace::opengltextures
             return;
         }
 
-        auto& pipe = almondnamespace::openglquad::quad_pipeline_state();
+        auto& pipe = epochnamespace::openglquad::quad_pipeline_state();
         glUseProgram(pipe.shader);
         glBindVertexArray(pipe.vao);
 
@@ -562,6 +562,6 @@ export namespace almondnamespace::opengltextures
         glDisable(GL_BLEND);
     }
 
-} // namespace almondnamespace::opengltextures
+} // namespace epochnamespace::opengltextures
 
 #endif // ALMOND_USING_OPENGL

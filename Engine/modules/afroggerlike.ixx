@@ -2,7 +2,7 @@ module;
 
 export module afroggerlike;
 
-// Almond engine / project modules
+// Epoch engine / project modules
 import aengine.core.context;      // core::Context
 import aengine.context.window;    // core::WindowData
 import aengine.input;             // input::Key
@@ -27,7 +27,7 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::froggerlike
+export namespace epochnamespace::froggerlike
 {
     struct FroggerLikeScene : public scene::Scene
     {
@@ -176,4 +176,4 @@ export namespace almondnamespace::froggerlike
         scene.unload();
         return running;
     }
-} // namespace almondnamespace::froggerlike
+} // namespace epochnamespace::froggerlike

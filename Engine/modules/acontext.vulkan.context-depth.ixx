@@ -10,7 +10,7 @@ import <vector>;
 
 import :shared_vk;
 
-export namespace almondnamespace::vulkancontext {
+export namespace epochnamespace::vulkancontext {
 
     // NOTE: your Vulkan-Hpp config apparently does NOT have vk::FormatFeatureFlags.
     // Use vk::Flags<vk::FormatFeatureFlagBits> instead.
@@ -118,4 +118,4 @@ export namespace almondnamespace::vulkancontext {
         }
     }
 
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

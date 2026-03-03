@@ -1,7 +1,7 @@
 ﻿//// acontext.vulkan.platform.context.cpp
 //
 // This file MUST be a module implementation unit for `acontext.vulkan.context`
-// because it defines `almondnamespace::vulkancontext::Application` methods.
+// because it defines `epochnamespace::vulkancontext::Application` methods.
 //
 // It also MUST be the single TU that provides:
 //  - STB_IMAGE_IMPLEMENTATION
@@ -104,13 +104,13 @@ import acontext.opengl.platform;
 
 // -----------------------------------------------------------------------------
 // Correct namespace for the exported type declared in the interface:
-// export namespace almondnamespace::vulkancontext { export class Application ... }
+// export namespace epochnamespace::vulkancontext { export class Application ... }
 // -----------------------------------------------------------------------------
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     void Application::run()
     {
-        almondnamespace::core::CommandQueue queue;
+        epochnamespace::core::CommandQueue queue;
         initWindow();
         initVulkan();
 
@@ -222,8 +222,8 @@ namespace almondnamespace::vulkancontext
 #endif
     }
 
-    bool Application::process(std::shared_ptr<almondnamespace::core::Context> ctx,
-        almondnamespace::core::CommandQueue& queue)
+    bool Application::process(std::shared_ptr<epochnamespace::core::Context> ctx,
+        epochnamespace::core::CommandQueue& queue)
     {
         if (!device)
             return false;
@@ -292,19 +292,19 @@ namespace almondnamespace::vulkancontext
         return true;
     }
 
-    void Application::set_context(std::shared_ptr<almondnamespace::core::Context> ctx, void* nativeWindow)
+    void Application::set_context(std::shared_ptr<epochnamespace::core::Context> ctx, void* nativeWindow)
     {
         context = std::move(ctx);
         nativeWindowHandle = nativeWindow;
         activeGuiContext = context.lock().get();
     }
 
-    void Application::set_active_context(const almondnamespace::core::Context* ctx)
+    void Application::set_active_context(const epochnamespace::core::Context* ctx)
     {
         activeGuiContext = ctx;
     }
 
-    void Application::cleanup_gui_context(const almondnamespace::core::Context* ctx)
+    void Application::cleanup_gui_context(const epochnamespace::core::Context* ctx)
     {
         if (!ctx)
             return;
@@ -315,13 +315,13 @@ namespace almondnamespace::vulkancontext
     }
 
     Application::GuiContextState& Application::gui_state_for_context(
-        const almondnamespace::core::Context* ctx)
+        const epochnamespace::core::Context* ctx)
     {
         return guiContexts[ctx];
     }
 
     Application::GuiContextState* Application::find_gui_state(
-        const almondnamespace::core::Context* ctx) noexcept
+        const epochnamespace::core::Context* ctx) noexcept
     {
         auto it = guiContexts.find(ctx);
         if (it == guiContexts.end())
@@ -478,4 +478,4 @@ namespace almondnamespace::vulkancontext
 #endif
     }
 
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

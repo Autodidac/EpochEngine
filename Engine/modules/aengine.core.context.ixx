@@ -49,7 +49,7 @@ import aspritehandle;
 import aimage.loader;
 import acontext.raylib.api; // for ImageData
 
-export namespace almondnamespace::core
+export namespace epochnamespace::core
 {
     class MultiContextManager;
 
@@ -293,7 +293,7 @@ export namespace almondnamespace::core
                     if (!self || !self->draw_sprite) return;
 
                     // Snapshot by value (safe)
-                    auto av = almondnamespace::atlasmanager::get_atlas_vector_snapshot();
+                    auto av = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
                     std::span<const TextureAtlas* const> span(av.data(), av.size());
                     self->draw_sprite(sprite, span, x, y, w, hgt);
                 }, renderPath);
@@ -398,4 +398,4 @@ export namespace almondnamespace::core
     std::shared_ptr<Context> CloneContext(const Context& prototype);
     void AddContextForBackend(core::ContextType type, std::shared_ptr<Context> context);
     bool ProcessAllContexts();
-} // namespace almondnamespace::core
+} // namespace epochnamespace::core

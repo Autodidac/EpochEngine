@@ -8,7 +8,7 @@ import <memory>;
 import <stdexcept>;
 import <utility>;
 
-export namespace almondnamespace::core {
+export namespace epochnamespace::core {
 
     // Thread-safe, reusable, header-only function wrapper
     template <typename Signature>
@@ -54,4 +54,4 @@ export namespace almondnamespace::core {
         explicit operator bool() const noexcept { return !empty(); }
     };
 
-} // namespace almondnamespace::core
+} // namespace epochnamespace::core

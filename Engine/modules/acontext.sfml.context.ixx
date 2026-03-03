@@ -55,7 +55,7 @@ import <stdexcept>;
 import <string>;
 import <utility>;
 
-export namespace almondnamespace::sfmlcontext
+export namespace epochnamespace::sfmlcontext
 {
 #if defined(ALMOND_USING_SFML)
 
@@ -245,7 +245,7 @@ export namespace almondnamespace::sfmlcontext
             style |= WS_CHILD | WS_VISIBLE;
             SetWindowLongPtr(sfmlcontext.hwnd, GWL_STYLE, style);
 
-            almondnamespace::core::MakeDockable(sfmlcontext.hwnd, sfmlcontext.parent);
+            epochnamespace::core::MakeDockable(sfmlcontext.hwnd, sfmlcontext.parent);
 
             RECT client{};
             GetClientRect(sfmlcontext.parent, &client);
@@ -348,7 +348,7 @@ export namespace almondnamespace::sfmlcontext
         const bool shouldResetSfmlState = hasSfmlDraws;
 
 #if !defined(NDEBUG)
-        almondnamespace::logger::info(
+        epochnamespace::logger::info(
             "SFML",
             useOpenGLPath ? "Frame render path: OpenGL" : "Frame render path: SFML");
 #endif
@@ -425,6 +425,15 @@ export namespace almondnamespace::sfmlcontext
 #endif
         queue.drain();
 
+        // Let SFML own activation. Do NOT call wglMakeCurrent manually.
+        if (!sfmlcontext.window->setActive(true))
+        {
+            std::cerr << "[SFMLRender] Failed to activate SFML window\n";
+            sfmlcontext.running = false;
+            state::s_sfmlstate.running = false;
+            return false;
+        }
+
         sfmlcontext.window->display();
 
         frameTimer.finish();
@@ -433,7 +442,7 @@ export namespace almondnamespace::sfmlcontext
         return sfmlcontext.running;
     }
 
-    inline void sfml_cleanup(std::shared_ptr<almondnamespace::core::Context>& ctx)
+    inline void sfml_cleanup(std::shared_ptr<epochnamespace::core::Context>& ctx)
     {
         // Stop new uploads immediately.
         atlasmanager::unregister_backend_uploader(core::ContextType::SFML);
@@ -489,4 +498,4 @@ export namespace almondnamespace::sfmlcontext
     }
 
 #endif // ALMOND_USING_SFML
-} // namespace almondnamespace::sfmlcontext
+} // namespace epochnamespace::sfmlcontext

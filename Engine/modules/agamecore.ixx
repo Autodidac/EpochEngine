@@ -20,7 +20,7 @@ import aatlas.texture;
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -42,7 +42,7 @@ import aatlas.texture;
 //#include <utility>
 //#include <cassert>
 //
-export namespace almondnamespace
+export namespace epochnamespace
 {
     namespace gamecore
     {

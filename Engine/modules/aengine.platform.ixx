@@ -40,13 +40,13 @@ import <string>;
 // You were previously redefining this via macro.
 // For modules, make this explicit and stable.
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     // This namespace intentionally left minimal.
     // Platform-specific helpers live in other modules.
 }
 
-export namespace almondnamespace::platform
+export namespace epochnamespace::platform
 {
 #if defined(__linux__)
     bool pump_events();

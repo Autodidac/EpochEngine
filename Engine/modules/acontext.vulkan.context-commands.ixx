@@ -24,7 +24,7 @@ import <span>;
 import <stdexcept>;
 import <vector>;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     inline constexpr std::size_t kMaxFramesInFlight = 2;
 
@@ -64,8 +64,8 @@ namespace almondnamespace::vulkancontext
             throw std::runtime_error("[Vulkan] CommandBuffer::begin failed.");
 #if ALMOND_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
-        const auto clearColor = almondnamespace::core::clear_color_for_context(
-            almondnamespace::core::ContextType::Vulkan);
+        const auto clearColor = epochnamespace::core::clear_color_for_context(
+            epochnamespace::core::ContextType::Vulkan);
         clearValues[0].setColor(
             vk::ClearColorValue{ std::array<float, 4>{ clearColor[0], clearColor[1], clearColor[2], clearColor[3] } });
         clearValues[1].setDepthStencil(vk::ClearDepthStencilValue{ 1.0f, 0 });
@@ -128,9 +128,9 @@ namespace almondnamespace::vulkancontext
     }
 
     void Application::enqueue_gui_draw(
-        const almondnamespace::core::Context* ctx,
-        const almondnamespace::SpriteHandle& sprite,
-        std::span<const almondnamespace::TextureAtlas* const> atlases,
+        const epochnamespace::core::Context* ctx,
+        const epochnamespace::SpriteHandle& sprite,
+        std::span<const epochnamespace::TextureAtlas* const> atlases,
         float x,
         float y,
         float w,
@@ -431,6 +431,7 @@ namespace almondnamespace::vulkancontext
 
 
         // this needs protected from thread and cross context make current...
+        // also needs an if running
         vk::Result presentRes = presentQueue.presentKHR(presentInfo);
 
         if (presentRes == vk::Result::eErrorOutOfDateKHR || presentRes == vk::Result::eSuboptimalKHR)
@@ -450,4 +451,4 @@ namespace almondnamespace::vulkancontext
 
         currentFrame = (currentFrame + 1) % kMaxFramesInFlight;
     }
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

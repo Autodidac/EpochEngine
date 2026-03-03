@@ -8,7 +8,7 @@ import <vector>;
 
 import aimage.writer;
 
-export namespace almondnamespace::atlaswriter
+export namespace epochnamespace::atlaswriter
 {
     /// Writes a full atlas image (RGBA pixels) to a file.
     /// Supports any format your a_writeImage supports by extension.
@@ -20,7 +20,7 @@ export namespace almondnamespace::atlaswriter
         bool flipVertically = false)
     {
         // Placeholder for atlas-specific logging or validation.
-        return almondnamespace::a_writeImage(filepath, pixels, width, height, flipVertically);
+        return epochnamespace::a_writeImage(filepath, pixels, width, height, flipVertically);
     }
 
     /// Writes a single slice of an atlas.

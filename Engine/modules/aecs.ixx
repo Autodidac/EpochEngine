@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -49,7 +49,7 @@ import aecs.entityhistory;            // EntityID, history tracking
 import aecs.storage;               // ComponentStorage
 
 // ─────────────────────────────────────────────────────────────
-export namespace almondnamespace::ecs
+export namespace epochnamespace::ecs
 {
     // Public alias
     using Entity = EntityID;
@@ -146,7 +146,7 @@ export namespace almondnamespace::ecs
     export template<typename C, typename... Cs>
         inline void add_component(reg_ex<Cs...>& R, Entity e, C c)
     {
-        ::almondnamespace::ecs::add_component<C>(
+        ::epochnamespace::ecs::add_component<C>(
             R.storage, e, std::move(c));
 
         detail::notify(R, "addComponent", e, typeid(C).name());
@@ -155,7 +155,7 @@ export namespace almondnamespace::ecs
     export template<typename C, typename... Cs>
         inline void remove_component(reg_ex<Cs...>& R, Entity e)
     {
-        ::almondnamespace::ecs::remove_component<C>(
+        ::epochnamespace::ecs::remove_component<C>(
             R.storage, e);
 
         detail::notify(R, "removeComponent", e, typeid(C).name());
@@ -166,7 +166,7 @@ export namespace almondnamespace::ecs
             const reg_ex<Cs...>& R,
             Entity e)
     {
-        return ::almondnamespace::ecs::has_component<C>(
+        return ::epochnamespace::ecs::has_component<C>(
             R.storage, e);
     }
 
@@ -175,7 +175,7 @@ export namespace almondnamespace::ecs
             reg_ex<Cs...>& R,
             Entity e)
     {
-        return ::almondnamespace::ecs::get_component<C>(
+        return ::epochnamespace::ecs::get_component<C>(
             R.storage, e);
     }
 
@@ -195,4 +195,4 @@ export namespace almondnamespace::ecs
         }
     }
 
-} // namespace almondnamespace::ecs
+} // namespace epochnamespace::ecs

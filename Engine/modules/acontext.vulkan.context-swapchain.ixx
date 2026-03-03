@@ -20,7 +20,7 @@ import <limits>;
 import <stdexcept>;
 import <vector>;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     namespace
     {
@@ -273,4 +273,4 @@ namespace almondnamespace::vulkancontext
         }
     }
 
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

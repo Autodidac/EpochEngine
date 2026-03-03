@@ -18,7 +18,7 @@ import <cassert>;
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -36,7 +36,7 @@ import <cassert>;
 
 
 
-export namespace almondnamespace::ecs {
+export namespace epochnamespace::ecs {
     /// The basic ID type
     using EntityID = std::size_t;
 
@@ -107,4 +107,4 @@ export namespace almondnamespace::ecs {
         }
     }
 
-} // namespace almondnamespace::ecs
+} // namespace epochnamespace::ecs

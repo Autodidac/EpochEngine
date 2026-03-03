@@ -25,7 +25,7 @@ import <memory>;
 import <iostream>;
 import <span>;
 
-export namespace almondnamespace::vulkancontext
+export namespace epochnamespace::vulkancontext
 {
     void vulkan_draw_sprite(
         SpriteHandle sprite,

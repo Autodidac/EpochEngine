@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondEngine - Modular C++ Game Engine                   *
+ *   epochengine - Modular C++ Game Engine                   *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -45,7 +45,7 @@ import <vector>;
 // If your textures unit is named differently, change this import to match.
 import acontext.softrenderer.textures;
 
-export namespace almondnamespace::anativecontext
+export namespace epochnamespace::anativecontext
 {
     struct Vec3 { float x = 0.0f, y = 0.0f, z = 0.0f; };
     struct Vec2 { float u = 0.0f, v = 0.0f; };
@@ -320,9 +320,9 @@ export namespace almondnamespace::anativecontext
             }
         }
     };
-} // namespace almondnamespace::anativecontext
+} // namespace epochnamespace::anativecontext
 
 #else
 // If the backend is disabled, still provide the module (empty) so imports don't explode.
-export namespace almondnamespace::anativecontext {}
+export namespace epochnamespace::anativecontext {}
 #endif // ALMOND_USING_SOFTWARE_RENDERER

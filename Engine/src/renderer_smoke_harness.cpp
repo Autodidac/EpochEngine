@@ -7,7 +7,7 @@
 // *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
 // *                                                            *
 // *   This file is part of the Almond Project.                 *
-// *   AlmondShell - Modular C++ Framework                      *
+// *   epochengine - Modular C++ Framework                      *
 // *                                                            *
 // *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
 // *                                                            *
@@ -197,7 +197,7 @@
 //            {
 //                std::cout
 //                    << "Renderer smoke harness\n"
-//                    << "  --binary <path>    Path to AlmondShell binary (default ./Bin/GCC-Debug/cmakeapp1/cmakeapp1)\n"
+//                    << "  --binary <path>    Path to epochengine binary (default ./Bin/GCC-Debug/cmakeapp1/cmakeapp1)\n"
 //                    << "  --backend <name>   Run a single backend (opengl|sdl|raylib|raylib_nogl|software)\n"
 //                    << "  --capture          Enable capture scheduling + asset manifests\n"
 //                    << "  --duration <sec>   Override scene duration (default 60)\n";

@@ -18,7 +18,7 @@ import <cstdint>;
 import <optional>;
 import <vector>;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     export extern const std::vector<const char*> validationLayers;
     export extern const std::vector<const char*> deviceExtensions;

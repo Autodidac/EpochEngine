@@ -7,8 +7,8 @@ module;
 export module acontext.vulkan.camera;
 
 // Export what importers must see.
-// Match what acontext.vulkan.context.ixx is referencing: almondnamespace::vulkancamera::...
-export namespace almondnamespace::vulkancamera {
+// Match what acontext.vulkan.context.ixx is referencing: epochnamespace::vulkancamera::...
+export namespace epochnamespace::vulkancamera {
 
     enum class Direction { Forward, Backward, Left, Right };
 
@@ -86,4 +86,4 @@ export namespace almondnamespace::vulkancamera {
         return glm::lookAt(s.Position, s.Position + s.Front, s.Up);
     }
 
-} // namespace almondnamespace::vulkancamera
+} // namespace epochnamespace::vulkancamera

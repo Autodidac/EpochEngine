@@ -7,7 +7,7 @@ import <filesystem>;
 import <string>;
 import <vector>;
 
-export namespace almondnamespace::filewatch
+export namespace epochnamespace::filewatch
 {
     using file_time = std::filesystem::file_time_type;
 

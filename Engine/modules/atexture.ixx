@@ -5,7 +5,7 @@ import <cstdint>;
 import <string>;
 import <vector>;
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     // Represents a raw texture asset (typically RGBA8) before GPU upload
     struct Texture

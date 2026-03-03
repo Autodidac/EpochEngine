@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -48,15 +48,15 @@
 // Window dimensions
 //inline constexpr int DEFAULT_WINDOW_WIDTH = 1024;
 //inline constexpr int DEFAULT_WINDOW_HEIGHT = 768;
-inline constexpr int DEFAULT_WINDOW_WIDTH = 1920;
-inline constexpr int DEFAULT_WINDOW_HEIGHT = 1080;
+//inline constexpr int DEFAULT_WINDOW_WIDTH = 1920;
+//inline constexpr int DEFAULT_WINDOW_HEIGHT = 1080;
 //inline constexpr int DEFAULT_WINDOW_WIDTH = 2048;
 //inline constexpr int DEFAULT_WINDOW_HEIGHT = 1080;
 //inline constexpr int DEFAULT_WINDOW_WIDTH = 2732;
 //inline constexpr int DEFAULT_WINDOW_HEIGHT = 1536;
 
-//inline constexpr int DEFAULT_WINDOW_WIDTH = 3840;
-//inline constexpr int DEFAULT_WINDOW_HEIGHT = 2160;
+inline constexpr int DEFAULT_WINDOW_WIDTH = 3840;
+inline constexpr int DEFAULT_WINDOW_HEIGHT = 2160;
 //inline constexpr int DEFAULT_WINDOW_WIDTH = 4096;
 //inline constexpr int DEFAULT_WINDOW_HEIGHT = 2160;
 
@@ -65,7 +65,7 @@ inline constexpr int DEFAULT_WINDOW_HEIGHT = 1080;
 // Max string length for title and class name
 #define MAX_LOADSTRING 100
 
-namespace almondnamespace::core
+namespace epochnamespace::core
 {
     // Forward declarations of Win32 functions
     ATOM RegisterWindowClass(HINSTANCE hInstance, LPCWSTR window_name, LPCWSTR child_name);

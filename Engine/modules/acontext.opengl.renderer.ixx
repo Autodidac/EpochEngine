@@ -1,5 +1,5 @@
 /**************************************************************
- *   AlmondShell - Modular C++ Framework
+ *   epochengine - Modular C++ Framework
  **************************************************************/
 
 module;
@@ -35,7 +35,7 @@ import aspritehandle;
 
 #if defined(ALMOND_USING_OPENGL)
 
-export namespace almondnamespace::openglrenderer
+export namespace epochnamespace::openglrenderer
 {
     // --------------------------------------------------------
     // GL STATE ACCESS
@@ -52,7 +52,7 @@ export namespace almondnamespace::openglrenderer
     inline openglstate::OpenGL4State& renderer_gl_state_with_pipeline() noexcept
     {
         auto& glState = renderer_gl_state();
-        if (!almondnamespace::openglquad::ensure_quad_pipeline())
+        if (!epochnamespace::openglquad::ensure_quad_pipeline())
             std::cerr << "[OpenGL] Failed to rebuild quad pipeline\n";
         return glState;
     }
@@ -132,7 +132,7 @@ export namespace almondnamespace::openglrenderer
     inline void draw_quad(const openglquad::Quad& quad, GLuint texture)
     {
         auto& glState = renderer_gl_state_with_pipeline();
-        auto& pipe = almondnamespace::openglquad::quad_pipeline_state();
+        auto& pipe = epochnamespace::openglquad::quad_pipeline_state();
 
         glUseProgram(pipe.shader);
 

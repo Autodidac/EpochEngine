@@ -10,7 +10,7 @@ import <string>;
 import <vector>;
 import <iostream>;
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     inline bool a_writeBMP(const std::filesystem::path& filepath, const std::vector<uint8_t>& pixels, int width, int height, bool flipVertically)
     {

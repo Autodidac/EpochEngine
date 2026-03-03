@@ -22,7 +22,7 @@ export module acontext.vulkan.context:shader_pipeline;
 
 import :shared_vk;
 
-export namespace almondnamespace::vulkancontext
+export namespace epochnamespace::vulkancontext
 {
     export void Application::createRenderPass()
     {
@@ -174,11 +174,11 @@ export namespace almondnamespace::vulkancontext
         const fs::path target = filename;
         const std::array<fs::path, 6> candidates = {
             target,
-            fs::path("AlmondShell") / target,
-            fs::path("..") / "AlmondShell" / target,
+            fs::path("epochengine") / target,
+            fs::path("..") / "epochengine" / target,
             fs::path("assets") / "vulkan" / target,
-            fs::path("AlmondShell") / "assets" / "vulkan" / target,
-            fs::path("..") / "AlmondShell" / "assets" / "vulkan" / target,
+            fs::path("epochengine") / "assets" / "vulkan" / target,
+            fs::path("..") / "epochengine" / "assets" / "vulkan" / target,
         };
 
 #if defined(_DEBUG)

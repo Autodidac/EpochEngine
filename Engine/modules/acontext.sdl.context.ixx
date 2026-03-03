@@ -57,7 +57,7 @@ import <stdexcept>;
 import <string>;
 import <utility>;
 
-export namespace almondnamespace::sdlcontext
+export namespace epochnamespace::sdlcontext
 {
 #if defined(ALMOND_USING_SDL)
 
@@ -349,7 +349,7 @@ export namespace almondnamespace::sdlcontext
                 style |= WS_CHILD | WS_VISIBLE;
                 SetWindowLongPtr(sdlcontext.hwnd, GWL_STYLE, style);
 
-                almondnamespace::core::MakeDockable(sdlcontext.hwnd, sdlcontext.parent);
+                epochnamespace::core::MakeDockable(sdlcontext.hwnd, sdlcontext.parent);
             }
 
             if (!windowTitle.empty())
@@ -498,7 +498,7 @@ export namespace almondnamespace::sdlcontext
         SDL_RenderPresent(sdl_renderer.renderer);
     }
 
-    inline void sdl_cleanup(std::shared_ptr<almondnamespace::core::Context>& ctx)
+    inline void sdl_cleanup(std::shared_ptr<epochnamespace::core::Context>& ctx)
     {
         (void)ctx;
 
@@ -607,4 +607,4 @@ export namespace almondnamespace::sdlcontext
     }
 
 #endif // ALMOND_USING_SDL
-} // namespace almondnamespace::sdlcontext
+} // namespace epochnamespace::sdlcontext

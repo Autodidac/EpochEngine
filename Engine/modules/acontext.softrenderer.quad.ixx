@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondEngine - Modular C++ Game Engine                   *
+ *   epochengine - Modular C++ Game Engine                   *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  **************************************************************/
@@ -27,7 +27,7 @@ import acontext.softrenderer.textures; // BackendData, Texture, TexturePtr, crea
 import aatlas.manager;                 // atlasmanager::atlas_vector (and atlas types)
 import aatlas.texture;                 // TextureAtlas
 
-export namespace almondnamespace::anativecontext
+export namespace epochnamespace::anativecontext
 {
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
 
@@ -37,7 +37,7 @@ export namespace almondnamespace::anativecontext
     }
 
     // Assumes atlas->pixel_data is RGBA8 (width*height*4 bytes).
-    export void upload_rgba8_to_software_texture(Texture& tex, const almondnamespace::TextureAtlas& atlas)
+    export void upload_rgba8_to_software_texture(Texture& tex, const epochnamespace::TextureAtlas& atlas)
     {
         const auto expected = std::size_t(atlas.width) * std::size_t(atlas.height) * 4u;
         if (atlas.width <= 0 || atlas.height <= 0) return;
@@ -138,4 +138,4 @@ export namespace almondnamespace::anativecontext
     }
 
 #endif // ALMOND_USING_SOFTWARE_RENDERER
-} // namespace almondnamespace::anativecontext
+} // namespace epochnamespace::anativecontext

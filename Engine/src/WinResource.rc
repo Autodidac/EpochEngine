@@ -8,7 +8,7 @@
  *                                                           *
  *   This file is part of the Almond Project                 *
  *                                                           *
- *   AlmondShell - Modular C++ Framework                     *
+ *   epochengine - Modular C++ Framework                     *
  *                                                           *
  *   Copyright (c) 2025 Adam Rushford                        *
  *   All rights reserved.                                    *
@@ -38,7 +38,7 @@
 STRINGTABLE
 BEGIN
 IDS_APP_TITLE           "EntryPoint Example"         // Title of the app
-IDC_ALMONDSHELLPROJECT  "SampleWindowClass"          // Window class name
+IDC_epochenginePROJECT  "SampleWindowClass"          // Window class name
 END
 
 // Icon

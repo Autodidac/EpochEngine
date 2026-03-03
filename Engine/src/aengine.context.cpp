@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝
  *
  *   This file is part of the Almond Project.
- *   AlmondShell - Modular C++ Framework
+ *   epochengine - Modular C++ Framework
  *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell
  **************************************************************/
@@ -99,12 +99,12 @@ namespace
     // ------------------------------------------------------------
     // Atlas helpers that do NOT depend on removed backend APIs.
     // ------------------------------------------------------------
-    std::uint32_t default_add_atlas(const almondnamespace::TextureAtlas& atlas,
-        almondnamespace::core::ContextType type) noexcept
+    std::uint32_t default_add_atlas(const epochnamespace::TextureAtlas& atlas,
+        epochnamespace::core::ContextType type) noexcept
     {
         try {
-            almondnamespace::atlasmanager::ensure_uploaded(atlas);
-            almondnamespace::atlasmanager::process_pending_uploads(type);
+            epochnamespace::atlasmanager::ensure_uploaded(atlas);
+            epochnamespace::atlasmanager::process_pending_uploads(type);
         }
         catch (...) {}
 
@@ -112,8 +112,8 @@ namespace
         return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
     }
 
-    std::uint32_t default_add_texture(almondnamespace::TextureAtlas&, std::string,
-        const almondnamespace::ImageData&) noexcept
+    std::uint32_t default_add_texture(epochnamespace::TextureAtlas&, std::string,
+        const epochnamespace::ImageData&) noexcept
     {
         return 0u;
     }
@@ -122,7 +122,7 @@ namespace
     // Helpers: keep core TU platform-neutral.
     // We never name HWND here; we pass opaque handles through.
     // ------------------------------------------------------------
-    inline void* ctx_native_window_handle(const std::shared_ptr<almondnamespace::core::Context>& ctx) noexcept
+    inline void* ctx_native_window_handle(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
     {
         if (!ctx) return nullptr;
         if (auto h = ctx->get_hwnd()) return h;               // assumed void*/opaque
@@ -133,7 +133,7 @@ namespace
 #if defined(ALMOND_USING_OPENGL)
     void opengl_initialize_adapter()
     {
-        auto ctx = almondnamespace::core::MultiContextManager::GetCurrent();
+        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
         if (!ctx) return;
 
         void* native = ctx_native_window_handle(ctx);
@@ -143,18 +143,18 @@ namespace
 
         try {
             // backend owns the platform cast
-            (void)almondnamespace::openglcontext::opengl_initialize(ctx, native, w, h, ctx->onResize);
+            (void)epochnamespace::openglcontext::opengl_initialize(ctx, native, w, h, ctx->onResize);
         }
         catch (const std::exception& e) {
-            almondnamespace::logger::get(kLogOpenGL).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogOpenGL).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
         }
         catch (...) {
-            almondnamespace::logger::get(kLogOpenGL).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogOpenGL).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -162,37 +162,37 @@ namespace
 
     void opengl_cleanup_adapter()
     {
-        auto ctx = almondnamespace::core::MultiContextManager::GetCurrent();
+        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
         if (!ctx) return;
 
-        try { almondnamespace::openglcontext::opengl_cleanup(ctx); }
+        try { epochnamespace::openglcontext::opengl_cleanup(ctx); }
         catch (const std::exception& e) {
-            almondnamespace::logger::get(kLogOpenGL).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogOpenGL).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
         }
         catch (...) {
-            almondnamespace::logger::get(kLogOpenGL).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogOpenGL).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
     }
 
-    bool opengl_process_adapter(std::shared_ptr<almondnamespace::core::Context> ctx,
-        almondnamespace::core::CommandQueue& queue)
+    bool opengl_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
+        epochnamespace::core::CommandQueue& queue)
     {
         if (!ctx) return false;
-        return almondnamespace::openglcontext::opengl_process(ctx, queue);
+        return epochnamespace::openglcontext::opengl_process(ctx, queue);
     }
 #endif
 
 #if defined(ALMOND_USING_VULKAN)
     void vulkan_initialize_adapter()
     {
-        auto ctx = almondnamespace::core::MultiContextManager::GetCurrent();
+        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
         if (!ctx) return;
 
         void* native = ctx_native_window_handle(ctx);
@@ -202,20 +202,20 @@ namespace
 
         ctx->init_failed = false;
         try {
-            (void)almondnamespace::vulkancontext::vulkan_initialize(ctx, native, w, h, ctx->onResize);
+            (void)epochnamespace::vulkancontext::vulkan_initialize(ctx, native, w, h, ctx->onResize);
         }
         catch (const std::exception& e) {
             ctx->init_failed = true;
-            almondnamespace::logger::get(kLogVulkan).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogVulkan).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
         }
         catch (...) {
             ctx->init_failed = true;
-            almondnamespace::logger::get(kLogVulkan).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogVulkan).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -223,41 +223,41 @@ namespace
 
     void vulkan_cleanup_adapter()
     {
-        auto ctx = almondnamespace::core::MultiContextManager::GetCurrent();
+        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
         if (!ctx) return;
 
-        try { almondnamespace::vulkancontext::vulkan_cleanup(ctx); }
+        try { epochnamespace::vulkancontext::vulkan_cleanup(ctx); }
         catch (const std::exception& e) {
-            almondnamespace::logger::get(kLogVulkan).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogVulkan).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
         }
         catch (...) {
-            almondnamespace::logger::get(kLogVulkan).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogVulkan).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
     }
 
-    bool vulkan_process_adapter(std::shared_ptr<almondnamespace::core::Context> ctx,
-        almondnamespace::core::CommandQueue& queue)
+    bool vulkan_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
+        epochnamespace::core::CommandQueue& queue)
     {
         if (!ctx) return false;
-        return almondnamespace::vulkancontext::vulkan_process(ctx, queue);
+        return epochnamespace::vulkancontext::vulkan_process(ctx, queue);
     }
 #endif
 
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
     void softrenderer_initialize_adapter()
     {
-        auto ctx = almondnamespace::core::MultiContextManager::GetCurrent();
+        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
         if (!ctx) return;
 
         try {
-            (void)almondnamespace::anativecontext::softrenderer_initialize(
+            (void)epochnamespace::anativecontext::softrenderer_initialize(
                 ctx,
                 ctx->get_hwnd(),
                 static_cast<unsigned>((std::max)(1, ctx->width)),
@@ -266,15 +266,15 @@ namespace
             );
         }
         catch (const std::exception& e) {
-            almondnamespace::logger::get(kLogSoftRenderer).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSoftRenderer).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
         }
         catch (...) {
-            almondnamespace::logger::get(kLogSoftRenderer).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSoftRenderer).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -282,40 +282,40 @@ namespace
 
     void softrenderer_cleanup_adapter()
     {
-        auto ctx = almondnamespace::core::MultiContextManager::GetCurrent();
+        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
         if (!ctx) return;
 
         try {
             auto copy = ctx;
-            almondnamespace::anativecontext::softrenderer_cleanup(copy);
+            epochnamespace::anativecontext::softrenderer_cleanup(copy);
         }
         catch (const std::exception& e) {
-            almondnamespace::logger::get(kLogSoftRenderer).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSoftRenderer).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
         }
         catch (...) {
-            almondnamespace::logger::get(kLogSoftRenderer).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSoftRenderer).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
     }
 
-    bool softrenderer_process_adapter(std::shared_ptr<almondnamespace::core::Context> ctx,
-        almondnamespace::core::CommandQueue& queue)
+    bool softrenderer_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
+        epochnamespace::core::CommandQueue& queue)
     {
         if (!ctx) return false;
-        return almondnamespace::anativecontext::softrenderer_process(*ctx, queue);
+        return epochnamespace::anativecontext::softrenderer_process(*ctx, queue);
     }
 #endif
 
 #if defined(ALMOND_USING_SFML)
     void sfml_initialize_adapter()
     {
-        auto ctx = almondnamespace::core::MultiContextManager::GetCurrent();
+        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
         if (!ctx) return;
 
         void* native = ctx_native_window_handle(ctx);
@@ -327,7 +327,7 @@ namespace
             std::string windowTitle{};
             if (ctx->windowData)
                 windowTitle = ctx->windowData->titleNarrow;
-            (void)almondnamespace::sfmlcontext::sfml_initialize(
+            (void)epochnamespace::sfmlcontext::sfml_initialize(
                 ctx,
                 reinterpret_cast<HWND>(native),
                 w,
@@ -337,15 +337,15 @@ namespace
             );
         }
         catch (const std::exception& e) {
-            almondnamespace::logger::get(kLogSfml).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSfml).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
         }
         catch (...) {
-            almondnamespace::logger::get(kLogSfml).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSfml).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -353,31 +353,31 @@ namespace
 
     void sfml_cleanup_adapter()
     {
-        if (auto ctx = almondnamespace::core::MultiContextManager::GetCurrent()) {
+        if (auto ctx = epochnamespace::core::MultiContextManager::GetCurrent()) {
             auto copy = ctx;
-            almondnamespace::sfmlcontext::sfml_cleanup(copy);
+            epochnamespace::sfmlcontext::sfml_cleanup(copy);
         }
     }
 
-    bool sfml_process_adapter(std::shared_ptr<almondnamespace::core::Context> ctx,
-        almondnamespace::core::CommandQueue& queue)
+    bool sfml_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
+        epochnamespace::core::CommandQueue& queue)
     {
         if (!ctx) return false;
-        return almondnamespace::sfmlcontext::sfml_process(ctx, queue);
+        return epochnamespace::sfmlcontext::sfml_process(ctx, queue);
     }
 #endif
 
 #if defined(ALMOND_USING_SDL)
     void sdl_initialize_adapter()
     {
-        auto ctx = almondnamespace::core::MultiContextManager::GetCurrent();
+        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
         if (!ctx) return;
 
         HWND parent = ctx->get_hwnd();
         if (!parent && ctx->windowData) parent = ctx->windowData->hwnd;
 
         try {
-            (void)almondnamespace::sdlcontext::sdl_initialize(
+            (void)epochnamespace::sdlcontext::sdl_initialize(
                 ctx,
                 parent,
                 static_cast<int>((std::max)(1, ctx->width)),
@@ -387,15 +387,15 @@ namespace
             );
         }
         catch (const std::exception& e) {
-            almondnamespace::logger::get(kLogSdl).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSdl).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
         }
         catch (...) {
-            almondnamespace::logger::get(kLogSdl).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSdl).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -403,59 +403,59 @@ namespace
 
     void sdl_cleanup_adapter()
     {
-        auto ctx = almondnamespace::core::MultiContextManager::GetCurrent();
+        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
         if (!ctx) return;
 
         try {
             auto copy = ctx;
-            almondnamespace::sdlcontext::sdl_cleanup(copy);
+            epochnamespace::sdlcontext::sdl_cleanup(copy);
         }
         catch (const std::exception& e) {
-            almondnamespace::logger::get(kLogSdl).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSdl).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
         }
         catch (...) {
-            almondnamespace::logger::get(kLogSdl).log(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSdl).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
     }
 
-    bool sdl_process_adapter(std::shared_ptr<almondnamespace::core::Context> ctx,
-        almondnamespace::core::CommandQueue& queue)
+    bool sdl_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
+        epochnamespace::core::CommandQueue& queue)
     {
         if (!ctx) return false;
-        return almondnamespace::sdlcontext::sdl_process(ctx, queue);
+        return epochnamespace::sdlcontext::sdl_process(ctx, queue);
     }
 #endif
 
 
 #if defined(ALMOND_USING_RAYLIB)
-    bool raylib_process_adapter(std::shared_ptr<almondnamespace::core::Context> ctx,
-        almondnamespace::core::CommandQueue& queue)
+    bool raylib_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
+        epochnamespace::core::CommandQueue& queue)
     {
         if (!ctx) return false;
 
-        almondnamespace::raylibcontext::raylib_process();
+        epochnamespace::raylibcontext::raylib_process();
 
-        almondnamespace::atlasmanager::process_pending_uploads(almondnamespace::core::ContextType::RayLib);
+        epochnamespace::atlasmanager::process_pending_uploads(epochnamespace::core::ContextType::RayLib);
 
         const bool ran_commands = queue.drain();
         if (!ran_commands)
         {
-            almondnamespace::raylibcontext::raylib_idle_frame();
+            epochnamespace::raylibcontext::raylib_idle_frame();
         }
 
-        return almondnamespace::raylibstate::s_raylibstate.running;
+        return epochnamespace::raylibstate::s_raylibstate.running;
     }
 #endif
 } // namespace
 
-namespace almondnamespace::core
+namespace epochnamespace::core
 {
     std::map<ContextType, BackendState> g_backends{};
     std::shared_mutex g_backendsMutex{};
@@ -559,11 +559,11 @@ namespace almondnamespace::core
             ctx->initialize = opengl_initialize_adapter;
             ctx->cleanup = opengl_cleanup_adapter;
             ctx->process = opengl_process_adapter;
-            ctx->clear = almondnamespace::openglcontext::opengl_clear;
+            ctx->clear = epochnamespace::openglcontext::opengl_clear;
             // OpenGL swaps in opengl_process; keep present unset to avoid double-swap.
             ctx->present = nullptr;
-            ctx->get_width = almondnamespace::openglcontext::opengl_get_width;
-            ctx->get_height = almondnamespace::openglcontext::opengl_get_height;
+            ctx->get_width = epochnamespace::openglcontext::opengl_get_width;
+            ctx->get_height = epochnamespace::openglcontext::opengl_get_height;
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
@@ -571,7 +571,7 @@ namespace almondnamespace::core
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
-            ctx->draw_sprite = almondnamespace::opengltextures::draw_sprite;
+            ctx->draw_sprite = epochnamespace::opengltextures::draw_sprite;
             ctx->add_texture = &add_texture_default;
             ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::OpenGL); };
 
@@ -587,10 +587,10 @@ namespace almondnamespace::core
             ctx->initialize = sfml_initialize_adapter;
             ctx->cleanup = sfml_cleanup_adapter;
             ctx->process = sfml_process_adapter;
-            //ctx->clear = almondnamespace::sfmlcontext::sfml_clear;
-            //ctx->present = almondnamespace::sfmlcontext::sfml_present;
-            //ctx->get_width = almondnamespace::sfmlcontext::sfml_get_width;
-            //ctx->get_height = almondnamespace::sfmlcontext::sfml_get_height;
+            //ctx->clear = epochnamespace::sfmlcontext::sfml_clear;
+            //ctx->present = epochnamespace::sfmlcontext::sfml_present;
+            //ctx->get_width = epochnamespace::sfmlcontext::sfml_get_width;
+            //ctx->get_height = epochnamespace::sfmlcontext::sfml_get_height;
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
@@ -598,7 +598,7 @@ namespace almondnamespace::core
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
-            ctx->draw_sprite = almondnamespace::sfmlcontext::draw_sprite;
+            ctx->draw_sprite = epochnamespace::sfmlcontext::draw_sprite;
             ctx->add_texture = &add_texture_default;
             ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::SFML); };
 
@@ -616,13 +616,13 @@ namespace almondnamespace::core
             ctx->backendName = "RayLib";
 
             ctx->initialize = []() {
-                auto current = almondnamespace::core::MultiContextManager::GetCurrent();
+                auto current = epochnamespace::core::MultiContextManager::GetCurrent();
                 if (!current) return;
 
                 void* parent = ctx_native_window_handle(current);
 
                 try {
-                    (void)almondnamespace::raylibcontext::raylib_initialize(
+                    (void)epochnamespace::raylibcontext::raylib_initialize(
                         current,
                         parent,
                         static_cast<unsigned>((std::max)(1, current->width)),
@@ -632,45 +632,45 @@ namespace almondnamespace::core
                     );
                 }
                 catch (const std::exception& e) {
-                    almondnamespace::logger::get(kLogRaylib).logf(
-                        almondnamespace::logger::LogLevel::ALMOND_ERROR,
+                    epochnamespace::logger::get(kLogRaylib).logf(
+                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
                         std::source_location::current(),
                         "init exception: {}",
                         e.what());
                 }
                 catch (...) {
-                    almondnamespace::logger::get(kLogRaylib).log(
-                        almondnamespace::logger::LogLevel::ALMOND_ERROR,
+                    epochnamespace::logger::get(kLogRaylib).log(
+                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
                         "init unknown exception",
                         std::source_location::current());
                 }
                 };
 
             ctx->cleanup = []() {
-                auto current = almondnamespace::core::MultiContextManager::GetCurrent();
+                auto current = epochnamespace::core::MultiContextManager::GetCurrent();
                 if (!current) return;
 
-                try { almondnamespace::raylibcontext::raylib_cleanup(current); }
+                try { epochnamespace::raylibcontext::raylib_cleanup(current); }
                 catch (const std::exception& e) {
-                    almondnamespace::logger::get(kLogRaylib).logf(
-                        almondnamespace::logger::LogLevel::ALMOND_ERROR,
+                    epochnamespace::logger::get(kLogRaylib).logf(
+                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
                         std::source_location::current(),
                         "cleanup exception: {}",
                         e.what());
                 }
                 catch (...) {
-                    almondnamespace::logger::get(kLogRaylib).log(
-                        almondnamespace::logger::LogLevel::ALMOND_ERROR,
+                    epochnamespace::logger::get(kLogRaylib).log(
+                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
                         "cleanup unknown exception",
                         std::source_location::current());
                 }
                 };
 
             ctx->process = raylib_process_adapter;
-            ctx->clear = []() { almondnamespace::raylibcontext::raylib_clear(0.0f, 0.0f, 0.0f, 1.0f); };
-            ctx->present = almondnamespace::raylibcontext::raylib_present;
-            ctx->get_width = almondnamespace::raylibcontext::raylib_get_width;
-            ctx->get_height = almondnamespace::raylibcontext::raylib_get_height;
+            ctx->clear = []() { epochnamespace::raylibcontext::raylib_clear(0.0f, 0.0f, 0.0f, 1.0f); };
+            ctx->present = epochnamespace::raylibcontext::raylib_present;
+            ctx->get_width = epochnamespace::raylibcontext::raylib_get_width;
+            ctx->get_height = epochnamespace::raylibcontext::raylib_get_height;
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
@@ -678,7 +678,7 @@ namespace almondnamespace::core
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
-            ctx->draw_sprite = almondnamespace::raylibrenderer::draw_sprite;
+            ctx->draw_sprite = epochnamespace::raylibrenderer::draw_sprite;
             ctx->add_texture = &add_texture_default;
             ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::RayLib); };
 
@@ -695,9 +695,9 @@ namespace almondnamespace::core
             ctx->initialize = vulkan_initialize_adapter;
             ctx->cleanup = vulkan_cleanup_adapter;
             ctx->process = vulkan_process_adapter;
-            ctx->present = almondnamespace::vulkancontext::vulkan_present;
-            ctx->get_width = almondnamespace::vulkancontext::vulkan_get_width;
-            ctx->get_height = almondnamespace::vulkancontext::vulkan_get_height;
+            ctx->present = epochnamespace::vulkancontext::vulkan_present;
+            ctx->get_width = epochnamespace::vulkancontext::vulkan_get_width;
+            ctx->get_height = epochnamespace::vulkancontext::vulkan_get_height;
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
@@ -705,7 +705,7 @@ namespace almondnamespace::core
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
-            ctx->draw_sprite = almondnamespace::vulkancontext::vulkan_draw_sprite;
+            ctx->draw_sprite = epochnamespace::vulkancontext::vulkan_draw_sprite;
             ctx->add_texture = &add_texture_default;
             ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::Vulkan); };
 
@@ -722,10 +722,10 @@ namespace almondnamespace::core
             ctx->initialize = sdl_initialize_adapter;
             ctx->cleanup = sdl_cleanup_adapter;
             ctx->process = sdl_process_adapter;
-            //ctx->clear = almondnamespace::sdlcontext::sdl_clear;
-            //ctx->present = almondnamespace::sdlcontext::sdl_present;
-            //ctx->get_width = almondnamespace::sdlcontext::sdl_get_width;
-            //ctx->get_height = almondnamespace::sdlcontext::sdl_get_height;
+            //ctx->clear = epochnamespace::sdlcontext::sdl_clear;
+            //ctx->present = epochnamespace::sdlcontext::sdl_present;
+            //ctx->get_width = epochnamespace::sdlcontext::sdl_get_width;
+            //ctx->get_height = epochnamespace::sdlcontext::sdl_get_height;
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
@@ -757,7 +757,7 @@ namespace almondnamespace::core
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
-            ctx->draw_sprite = almondnamespace::anativecontext::draw_sprite;
+            ctx->draw_sprite = epochnamespace::anativecontext::draw_sprite;
             ctx->add_texture = &add_texture_default;
             ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::Software); };
 
@@ -771,13 +771,13 @@ namespace almondnamespace::core
             ctx->type = ContextType::Noop;
             ctx->backendName = "Noop";
 
-            ctx->initialize = almondnamespace::noopcontext::noop_initialize;
-            ctx->cleanup = almondnamespace::noopcontext::noop_cleanup;
-            ctx->process = almondnamespace::noopcontext::noop_process;
-            ctx->clear = almondnamespace::noopcontext::noop_clear;
-            ctx->present = almondnamespace::noopcontext::noop_present;
-            ctx->get_width = almondnamespace::noopcontext::noop_get_width;
-            ctx->get_height = almondnamespace::noopcontext::noop_get_height;
+            ctx->initialize = epochnamespace::noopcontext::noop_initialize;
+            ctx->cleanup = epochnamespace::noopcontext::noop_cleanup;
+            ctx->process = epochnamespace::noopcontext::noop_process;
+            ctx->clear = epochnamespace::noopcontext::noop_clear;
+            ctx->present = epochnamespace::noopcontext::noop_present;
+            ctx->get_width = epochnamespace::noopcontext::noop_get_width;
+            ctx->get_height = epochnamespace::noopcontext::noop_get_height;
 
             ctx->draw_sprite = nullptr;
             ctx->add_texture = &add_texture_default;
@@ -829,4 +829,4 @@ namespace almondnamespace::core
 
         return anyRunning;
     }
-} // namespace almondnamespace::core
+} // namespace epochnamespace::core

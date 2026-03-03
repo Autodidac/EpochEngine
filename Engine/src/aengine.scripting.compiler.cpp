@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -30,7 +30,7 @@ import <string>;
 import <string_view>;
 import <vector>;
 
-namespace almondnamespace::compiler
+namespace epochnamespace::compiler
 {
     // Builds a single TU into a shared library (DLL/.so).
     // Returns true on success (exit code == 0).
@@ -99,4 +99,4 @@ namespace almondnamespace::compiler
 
         return true;
     }
-} // namespace almondnamespace::compiler
+} // namespace epochnamespace::compiler

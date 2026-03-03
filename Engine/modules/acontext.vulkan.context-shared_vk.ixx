@@ -49,7 +49,7 @@ import acontext.vulkan.camera;
 import aatlas.texture;
 import aspritehandle;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     // Debug callback for validation layers
     inline VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -79,8 +79,8 @@ namespace almondnamespace::vulkancontext
         void initWindow();
         void initVulkan();
 
-        bool process(std::shared_ptr<almondnamespace::core::Context> ctx,
-            almondnamespace::core::CommandQueue& queue);
+        bool process(std::shared_ptr<epochnamespace::core::Context> ctx,
+            epochnamespace::core::CommandQueue& queue);
 
         void cleanup();
 
@@ -98,9 +98,9 @@ namespace almondnamespace::vulkancontext
         int get_framebuffer_width() const noexcept;
         int get_framebuffer_height() const noexcept;
 
-        void set_context(std::shared_ptr<almondnamespace::core::Context> ctx, void* nativeWindow);
-        void set_active_context(const almondnamespace::core::Context* ctx);
-        void cleanup_gui_context(const almondnamespace::core::Context* ctx);
+        void set_context(std::shared_ptr<epochnamespace::core::Context> ctx, void* nativeWindow);
+        void set_active_context(const epochnamespace::core::Context* ctx);
+        void cleanup_gui_context(const epochnamespace::core::Context* ctx);
         bool should_stop_rendering() noexcept;
 
         vk::CommandBuffer getCurrentCommandBuffer() const
@@ -109,14 +109,14 @@ namespace almondnamespace::vulkancontext
         }
 
         void enqueue_gui_draw(
-            const almondnamespace::core::Context* ctx,
-            const almondnamespace::SpriteHandle& sprite,
-            std::span<const almondnamespace::TextureAtlas* const> atlases,
+            const epochnamespace::core::Context* ctx,
+            const epochnamespace::SpriteHandle& sprite,
+            std::span<const epochnamespace::TextureAtlas* const> atlases,
             float x,
             float y,
             float w,
             float h);
-        void ensure_gui_atlas(const almondnamespace::TextureAtlas& atlas);
+        void ensure_gui_atlas(const epochnamespace::TextureAtlas& atlas);
 
         std::vector<vk::Image> swapChainImages;
 
@@ -143,8 +143,8 @@ namespace almondnamespace::vulkancontext
         std::uint32_t indexCount = 0;
 
     private:
-        std::weak_ptr<almondnamespace::core::Context> context;
-        const almondnamespace::core::Context* activeGuiContext = nullptr;
+        std::weak_ptr<epochnamespace::core::Context> context;
+        const epochnamespace::core::Context* activeGuiContext = nullptr;
 
         mutable std::mutex framebufferStateMutex;
         int framebufferWidth = 800;
@@ -204,8 +204,8 @@ namespace almondnamespace::vulkancontext
 
         bool validationLayersEnabled = false;
 
-        inline static almondnamespace::vulkancamera::State cam =
-            almondnamespace::vulkancamera::create(
+        inline static epochnamespace::vulkancamera::State cam =
+            epochnamespace::vulkancamera::create(
                 glm::vec3(0.0f, 0.0f, 5.0f),
                 glm::vec3(0.0f, 1.0f, 0.0f),
                 -90.0f, 0.0f);
@@ -270,10 +270,10 @@ namespace almondnamespace::vulkancontext
 
         void createUniformBuffers();
         void updateUniformBuffer(std::uint32_t currentImage,
-            const almondnamespace::vulkancamera::State& camera);
-        GuiContextState& gui_state_for_context(const almondnamespace::core::Context* ctx);
-        GuiContextState* find_gui_state(const almondnamespace::core::Context* ctx) noexcept;
-        const almondnamespace::core::Context* bound_context() const noexcept;
+            const epochnamespace::vulkancamera::State& camera);
+        GuiContextState& gui_state_for_context(const epochnamespace::core::Context* ctx);
+        GuiContextState* find_gui_state(const epochnamespace::core::Context* ctx) noexcept;
+        const epochnamespace::core::Context* bound_context() const noexcept;
         void reset_gui_swapchain_state(GuiContextState& guiState);
 
         void createDescriptorPool();
@@ -356,14 +356,14 @@ namespace almondnamespace::vulkancontext
             std::vector<GuiDrawCommand> guiDraws{};
         };
 
-        std::unordered_map<const almondnamespace::core::Context*, GuiContextState> guiContexts{};
+        std::unordered_map<const epochnamespace::core::Context*, GuiContextState> guiContexts{};
     };
 
     export std::span<const Application::Vertex> cube_vertices() noexcept;
     export std::span<const std::uint16_t>       cube_indices()  noexcept;
 
-    export Application& bind_vulkan_app(const std::shared_ptr<almondnamespace::core::Context>& ctx);
-    export Application* try_get_vulkan_app(const almondnamespace::core::Context* ctx) noexcept;
-    export bool release_vulkan_app(const almondnamespace::core::Context* ctx) noexcept;
+    export Application& bind_vulkan_app(const std::shared_ptr<epochnamespace::core::Context>& ctx);
+    export Application* try_get_vulkan_app(const epochnamespace::core::Context* ctx) noexcept;
+    export bool release_vulkan_app(const epochnamespace::core::Context* ctx) noexcept;
     export bool has_vulkan_apps() noexcept;
 }

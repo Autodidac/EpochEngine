@@ -1,6 +1,6 @@
 module; 
 
-export module almondshell;
+export module epochengine;
 
 //export import aengine;
 // export import other public-facing modules if you want:
@@ -24,7 +24,7 @@ import aapplicationmodule;
 
 
 // this is required for module linkage
-export namespace almondnamespace::core
+export namespace epochnamespace::core
 {
 
 

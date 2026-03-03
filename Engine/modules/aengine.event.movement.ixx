@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -30,7 +30,7 @@ import <iostream>;
 import aengine.platform;
 import aecs;
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     class MovementEvent
     {
@@ -66,4 +66,4 @@ export namespace almondnamespace
         float deltaX{ 0.f };    // Change in X position
         float deltaY{ 0.f };    // Change in Y position
     };
-} // namespace almondnamespace
+} // namespace epochnamespace

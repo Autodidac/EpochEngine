@@ -17,14 +17,14 @@ import <vector>;
 
 import aatlas.texture;        // TextureAtlas
 import acontext.softrenderer.state;   // SoftRendState
-import aengine.platform;    // almondnamespace
-import aengine.input;       // almondnamespace::input
-//import aengine.config; // almondnamespace::input
+import aengine.platform;    // epochnamespace
+import aengine.input;       // epochnamespace::input
+//import aengine.config; // epochnamespace::input
 
 
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
 
-export namespace almondnamespace::anativecontext
+export namespace epochnamespace::anativecontext
 {
     // ─── Texture container for software backend ───────────────
     struct Texture
@@ -62,8 +62,8 @@ export namespace almondnamespace::anativecontext
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
 
         // Renderer state (framebuffer, dimensions, etc.)
-        almondnamespace::anativecontext::SoftRendState srState;
+        epochnamespace::anativecontext::SoftRendState srState;
 #endif 
     };
-} // namespace almondnamespace::anativecontext
+} // namespace epochnamespace::anativecontext
 #endif

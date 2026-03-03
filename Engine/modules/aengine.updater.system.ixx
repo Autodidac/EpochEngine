@@ -14,7 +14,7 @@ import <string>;
 import aengine.updater.tools;
 import aengine.updater.config;
 
-export namespace almondnamespace::updater
+export namespace epochnamespace::updater
 {
     // ─────────────────────────────────────────────
     // Results / channels
@@ -39,7 +39,7 @@ export namespace almondnamespace::updater
     {
         namespace fs = std::filesystem;
 
-        if (!almondnamespace::updater::LEAVE_NO_FILES_ALWAYS_REDOWNLOAD)
+        if (!epochnamespace::updater::LEAVE_NO_FILES_ALWAYS_REDOWNLOAD)
             return;
 
         std::vector<fs::path> targets;
@@ -50,7 +50,7 @@ export namespace almondnamespace::updater
         targets.emplace_back("replace_and_restart.sh");
 #endif
         targets.emplace_back(
-            almondnamespace::updater::REPO + "-main");
+            epochnamespace::updater::REPO + "-main");
 
         for (const auto& t : targets)
         {
@@ -95,7 +95,7 @@ export namespace almondnamespace::updater
 
     void replace_binary(const std::string& new_binary)
     {
-        almondnamespace::updater::clean_up_build_files();
+        epochnamespace::updater::clean_up_build_files();
         replace_binary_from_script(new_binary);
     }
 
@@ -106,7 +106,7 @@ export namespace almondnamespace::updater
     {
         constexpr char tmp[] = "remote_version.txt";
 
-        if (!almondnamespace::updater::download_file(url, tmp))
+        if (!epochnamespace::updater::download_file(url, tmp))
             return false;
 
         std::ifstream in(tmp);
@@ -116,10 +116,10 @@ export namespace almondnamespace::updater
         std::filesystem::remove(tmp);
 
         std::cout << "[INFO] Local  : "
-            << almondnamespace::updater::PROJECT_VERSION << '\n';
+            << epochnamespace::updater::PROJECT_VERSION << '\n';
         std::cout << "[INFO] Remote : " << latest << '\n';
 
-        return latest != almondnamespace::updater::PROJECT_VERSION;
+        return latest != epochnamespace::updater::PROJECT_VERSION;
     }
 
     // ─────────────────────────────────────────────
@@ -127,9 +127,9 @@ export namespace almondnamespace::updater
     // ─────────────────────────────────────────────
     void install_from_binary(const std::string& url)
     {
-        const auto bin = almondnamespace::updater::OUTPUT_BINARY();
+        const auto bin = epochnamespace::updater::OUTPUT_BINARY();
 
-        if (!almondnamespace::updater::download_file(url, bin))
+        if (!epochnamespace::updater::download_file(url, bin))
             return;
 
         replace_binary(bin);

@@ -19,7 +19,7 @@ import <algorithm>;
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -37,7 +37,7 @@ import <algorithm>;
 #undef min
 
 
-export namespace almondnamespace::codeinspector {
+export namespace epochnamespace::codeinspector {
 
     struct InspectionResult {
         std::filesystem::path filePath;
@@ -96,7 +96,7 @@ export namespace almondnamespace::codeinspector {
     }
 
     inline bool uses_almond_namespace(const std::vector<std::string>& lines) {
-        constexpr std::string_view ns = "namespace almondnamespace";
+        constexpr std::string_view ns = "namespace epochnamespace";
         return std::any_of(lines.begin(), lines.end(),
             [&](const std::string& line) { return line.find(ns) != std::string::npos; });
     }
@@ -197,7 +197,7 @@ export namespace almondnamespace::codeinspector {
 
             // Namespace check
             if (!uses_almond_namespace(lines)) {
-                result.issues.emplace_back("Does not use 'almondnamespace' namespace");
+                result.issues.emplace_back("Does not use 'epochnamespace' namespace");
             }
 
             // Trailing whitespace
@@ -221,4 +221,4 @@ export namespace almondnamespace::codeinspector {
     }
 
 
-} // namespace almondnamespace::codeinspector
+} // namespace epochnamespace::codeinspector

@@ -19,13 +19,13 @@ import aengine.core.logger;    // Logger, LogLevel
 import std;
 
 
-export namespace almondnamespace::scene
+export namespace epochnamespace::scene
 {
-    using almondnamespace::ecs::Entity;
-    using almondnamespace::ecs::reg_ex;
-    using almondnamespace::logger::Logger;
-    using almondnamespace::logger::LogLevel;
-    using almondnamespace::timing::Timer;
+    using epochnamespace::ecs::Entity;
+    using epochnamespace::ecs::reg_ex;
+    using epochnamespace::logger::Logger;
+    using epochnamespace::logger::LogLevel;
+    using epochnamespace::timing::Timer;
 
     // ------------------------------------------------------------
     // SCENE
@@ -88,8 +88,8 @@ export namespace almondnamespace::scene
 
         // Per-frame hook (override in derived scenes)
         virtual bool frame(
-            std::shared_ptr<almondnamespace::core::Context>,
-            almondnamespace::core::WindowData*)
+            std::shared_ptr<epochnamespace::core::Context>,
+            epochnamespace::core::WindowData*)
         {
             return true; // default: no-op
         }
@@ -175,4 +175,4 @@ export namespace almondnamespace::scene
         LogLevel  sceneLogLevel{ LogLevel::INFO };
     };
 
-} // namespace almondnamespace::scene
+} // namespace epochnamespace::scene

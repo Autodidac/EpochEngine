@@ -44,7 +44,7 @@ import <iostream>;
 import <stdexcept>;
 import <vector>;
 
-namespace almondnamespace::vulkancontext::detail
+namespace epochnamespace::vulkancontext::detail
 {
     using PFN_EnumLayers = VkResult(VKAPI_PTR*)(uint32_t*, VkLayerProperties*);
     using PFN_GetInstanceProcAddr = PFN_vkGetInstanceProcAddr;
@@ -133,7 +133,7 @@ namespace almondnamespace::vulkancontext::detail
     };
 }
 
-export namespace almondnamespace::vulkancontext
+export namespace epochnamespace::vulkancontext
 {
     bool Application::checkValidationLayerSupport()
     {
@@ -181,7 +181,7 @@ export namespace almondnamespace::vulkancontext
     void Application::createInstance()
     {
         // Important: this now uses the Vulkan loader safely (no invalid vk* call)
-        validationLayersEnabled = almondnamespace::vulkanrenderer::vulkan_config.enable_validation_layers;
+        validationLayersEnabled = epochnamespace::vulkanrenderer::vulkan_config.enable_validation_layers;
         if (validationLayersEnabled && !checkValidationLayerSupport())
         {
             std::cerr << "[Vulkan] Validation layers requested but not available; "
@@ -190,9 +190,9 @@ export namespace almondnamespace::vulkancontext
         }
 
         vk::ApplicationInfo appInfo{};
-        appInfo.pApplicationName = "AlmondEngine Vulkan";
+        appInfo.pApplicationName = "epochengine Vulkan";
         appInfo.applicationVersion = 1;
-        appInfo.pEngineName = "AlmondEngine";
+        appInfo.pEngineName = "epochengine";
         appInfo.engineVersion = 1;
         appInfo.apiVersion = VK_API_VERSION_1_0;
 
@@ -255,4 +255,4 @@ export namespace almondnamespace::vulkancontext
 #endif
     }
 
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

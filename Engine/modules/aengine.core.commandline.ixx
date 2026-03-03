@@ -9,13 +9,12 @@ import <filesystem>;
 import <iostream>;
 import <string_view>;
 
-//import aengine;
 import aengine.version;
 
-inline constexpr int DEFAULT_WINDOW_WIDTH = 1280;
-inline constexpr int DEFAULT_WINDOW_HEIGHT = 720;
+inline constexpr int DEFAULT_WINDOW_WIDTH = 1277;
+inline constexpr int DEFAULT_WINDOW_HEIGHT = 1277;
 
-export namespace almondnamespace::core::cli 
+export namespace epochnamespace::core::cli 
 {
     inline int  window_width = DEFAULT_WINDOW_WIDTH;
     inline int  window_height = DEFAULT_WINDOW_HEIGHT;
@@ -34,7 +33,7 @@ export namespace almondnamespace::core::cli
     };
 
     inline void print_engine_info() {
-        std::cout << almondnamespace::GetEngineName() << " v" << almondnamespace::GetEngineVersion() << '\n';
+        std::cout << epochnamespace::GetEngineName() << " v" << epochnamespace::GetEngineVersion() << '\n';
     }
 
     inline ParseResult parse(int argc, char* argv[]) {
@@ -66,7 +65,7 @@ export namespace almondnamespace::core::cli
                     "  --trace-raylib-design Log framebuffer vs design canvas dimensions\n"
                     "  --editor              Start the editor interface\n"
                     "  --menu                Start the menu + games loop\n"
-                    "  --update, -u          Check for a newer AlmondShell build\n"
+                    "  --update, -u          Check for a newer epochengine build\n"
                     "  --force               Apply the available update immediately\n";
             }
             else if (arg == "--version"sv || arg == "-v"sv) {

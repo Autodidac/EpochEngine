@@ -39,7 +39,7 @@ import <array>;
 import <bitset>;
 import <functional>;
 
-export namespace almondnamespace::sfmlcontext::state
+export namespace epochnamespace::sfmlcontext::state
 {
 #if defined(ALMOND_USING_SFML)
     struct SFML3State
@@ -53,7 +53,7 @@ export namespace almondnamespace::sfmlcontext::state
             screenHeight = window.height;
         }
 
-        almondnamespace::contextwindow::WindowData window{};
+        epochnamespace::contextwindow::WindowData window{};
 
         bool shouldClose{ false };
         int screenWidth{ DEFAULT_WINDOW_WIDTH };
@@ -78,8 +78,8 @@ export namespace almondnamespace::sfmlcontext::state
             std::bitset<sf::Keyboard::KeyCount> prevDown;
         } keyboard{};
 
-        almondnamespace::timing::Timer pollTimer = almondnamespace::timing::createTimer(1.0);
-        almondnamespace::timing::Timer fpsTimer = almondnamespace::timing::createTimer(1.0);
+        epochnamespace::timing::Timer pollTimer = epochnamespace::timing::createTimer(1.0);
+        epochnamespace::timing::Timer fpsTimer = epochnamespace::timing::createTimer(1.0);
         int frameCount = 0;
 
         [[nodiscard]] sf::RenderWindow* get_sfml_window() const noexcept

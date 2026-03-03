@@ -14,14 +14,14 @@ import aengine.context.commandqueue;
 import aengine.core.context;
 import aengine.diagnostics;
 
-namespace almondnamespace::noopcontext
+namespace epochnamespace::noopcontext
 {
 #if defined(ALMOND_USING_NOOP_HEADLESS)
     inline std::atomic_bool running{ false };
 #endif
 }
 
-export namespace almondnamespace::noopcontext
+export namespace epochnamespace::noopcontext
 {
 #if defined(ALMOND_USING_NOOP_HEADLESS)
     inline void noop_initialize()

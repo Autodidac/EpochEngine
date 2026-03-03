@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -72,7 +72,7 @@ import <vector>;
 import aengine.platform;
 //import aengine.config;
 
-import almondshell;
+import epochengine;
 
 import aengine.cli;
 import aengine.version;
@@ -121,11 +121,11 @@ import acontext.raylib.context;
 import acontext.raylib.state;
 #endif
 
-namespace input = almondnamespace::input;
-namespace menu = almondnamespace::menu;
-namespace gui = almondnamespace::gui;
+namespace input = epochnamespace::input;
+namespace menu = epochnamespace::menu;
+namespace gui = epochnamespace::gui;
 
-namespace almondnamespace::core
+namespace epochnamespace::core
 {
     void RunEngine();
     void StartEngine();
@@ -189,32 +189,32 @@ namespace almondnamespace::core
             };
 
             EditorSceneState state = EditorSceneState::Editor;
-            std::unique_ptr<almondnamespace::scene::Scene> active_scene{};
+            std::unique_ptr<epochnamespace::scene::Scene> active_scene{};
 
-            using MenuOverlay = almondnamespace::menu::MenuOverlay;
-            using EditorCommandOverlay = almondnamespace::menu::EditorCommandOverlay;
+            using MenuOverlay = epochnamespace::menu::MenuOverlay;
+            using EditorCommandOverlay = epochnamespace::menu::EditorCommandOverlay;
             MenuOverlay games_menu{};
             EditorCommandOverlay editor_menu{};
 
-            games_menu.set_max_columns(almondnamespace::core::cli::menu_columns);
+            games_menu.set_max_columns(epochnamespace::core::cli::menu_columns);
             editor_menu.initialize();
 
             auto collect_backend_contexts = []()
                 {
                     using ContextGroup = std::pair<
-                        almondnamespace::core::ContextType,
-                        std::vector<std::shared_ptr<almondnamespace::core::Context>>
+                        epochnamespace::core::ContextType,
+                        std::vector<std::shared_ptr<epochnamespace::core::Context>>
                     >;
 
                     std::vector<ContextGroup> snapshot;
 
                     {
-                        std::shared_lock lock(almondnamespace::core::g_backendsMutex);
-                        snapshot.reserve(almondnamespace::core::g_backends.size());
+                        std::shared_lock lock(epochnamespace::core::g_backendsMutex);
+                        snapshot.reserve(epochnamespace::core::g_backends.size());
 
-                        for (auto& [type, state] : almondnamespace::core::g_backends)
+                        for (auto& [type, state] : epochnamespace::core::g_backends)
                         {
-                            std::vector<std::shared_ptr<almondnamespace::core::Context>> contexts;
+                            std::vector<std::shared_ptr<epochnamespace::core::Context>> contexts;
                             contexts.reserve(1 + state.duplicates.size());
 
                             if (state.master) contexts.push_back(state.master);
@@ -273,11 +273,11 @@ namespace almondnamespace::core
                 bool raylib_close_from_window = false;
 #if defined(ALMOND_USING_RAYLIB)
                 {
-                    const auto& raylib_state = almondnamespace::raylibstate::s_raylibstate;
+                    const auto& raylib_state = epochnamespace::raylibstate::s_raylibstate;
                     raylib_close_from_window = raylib_state.running && !raylib_state.renderingActive;
 
                     if (raylib_close_from_window)
-                        almondnamespace::raylibstate::s_raylibstate.renderingActive = false;
+                        epochnamespace::raylibstate::s_raylibstate.renderingActive = false;
                 }
 #endif
 #endif
@@ -339,29 +339,29 @@ namespace almondnamespace::core
                                 };
 
                                 const bool mouse_left_down =
-                                    almondnamespace::input::mouseDown.test(almondnamespace::input::MouseButton::MouseLeft);
+                                    epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
 
                                 const bool up_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Up);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Up);
                                 const bool down_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Down);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Down);
                                 const bool left_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Left);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Left);
                                 const bool right_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Right);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Right);
                                 const bool enter_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Enter);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Enter);
 
                                 ctx->clear_safe();
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                                 gui::WidgetBounds editor_bounds{};
-                                const bool editor_clicked = almondnamespace::editor_run(ctx, &editor_bounds);
+                                const bool editor_clicked = epochnamespace::editor_run(ctx, &editor_bounds);
                                 if (editor_clicked)
                                     show_games_popup = !show_games_popup;
 
                                 const bool draw_editor_overlay = !show_games_popup;
                                 const bool menu_has_focus = draw_editor_overlay;
-                                std::optional<almondnamespace::menu::EditorCommandChoice> command_choice{};
+                                std::optional<epochnamespace::menu::EditorCommandChoice> command_choice{};
                                 if (draw_editor_overlay)
                                 {
                                     command_choice = editor_menu.update_and_draw(
@@ -377,7 +377,7 @@ namespace almondnamespace::core
 
                                 if (command_choice)
                                 {
-                                    using almondnamespace::menu::EditorCommandChoice;
+                                    using epochnamespace::menu::EditorCommandChoice;
 
                                     switch (*command_choice)
                                     {
@@ -424,30 +424,30 @@ namespace almondnamespace::core
 
                                     if (game_choice)
                                     {
-                                        using almondnamespace::menu::Choice;
+                                        using epochnamespace::menu::Choice;
 
                                         if (*game_choice == Choice::Snake)
-                                            begin_scene([] { return std::make_unique<almondnamespace::snakelike::SnakeLikeScene>(); }, "Snake");
+                                            begin_scene([] { return std::make_unique<epochnamespace::snakelike::SnakeLikeScene>(); }, "Snake");
                                         else if (*game_choice == Choice::Tetris)
-                                            begin_scene([] { return std::make_unique<almondnamespace::tetrislike::TetrisLikeScene>(); }, "Tetris");
+                                            begin_scene([] { return std::make_unique<epochnamespace::tetrislike::TetrisLikeScene>(); }, "Tetris");
                                         else if (*game_choice == Choice::Frogger)
-                                            begin_scene([] { return std::make_unique<almondnamespace::froggerlike::FroggerLikeScene>(); }, "Frogger");
+                                            begin_scene([] { return std::make_unique<epochnamespace::froggerlike::FroggerLikeScene>(); }, "Frogger");
                                         else if (*game_choice == Choice::Pacman)
-                                            begin_scene([] { return std::make_unique<almondnamespace::pacmanlike::PacmanLikeScene>(); }, "Pacman");
+                                            begin_scene([] { return std::make_unique<epochnamespace::pacmanlike::PacmanLikeScene>(); }, "Pacman");
                                         else if (*game_choice == Choice::Sokoban)
-                                            begin_scene([] { return std::make_unique<almondnamespace::sokobanlike::SokobanLikeScene>(); }, "Sokoban");
+                                            begin_scene([] { return std::make_unique<epochnamespace::sokobanlike::SokobanLikeScene>(); }, "Sokoban");
                                         else if (*game_choice == Choice::Bejeweled)
-                                            begin_scene([] { return std::make_unique<almondnamespace::match3like::Match3LikeScene>(); }, "Match-3");
+                                            begin_scene([] { return std::make_unique<epochnamespace::match3like::Match3LikeScene>(); }, "Match-3");
                                         else if (*game_choice == Choice::Puzzle)
-                                            begin_scene([] { return std::make_unique<almondnamespace::slidinglike::SlidingPuzzleLikeScene>(); }, "Sliding Puzzle");
+                                            begin_scene([] { return std::make_unique<epochnamespace::slidinglike::SlidingPuzzleLikeScene>(); }, "Sliding Puzzle");
                                         else if (*game_choice == Choice::Minesweep)
-                                            begin_scene([] { return std::make_unique<almondnamespace::minesweeperlike::MinesweeperLikeScene>(); }, "Minesweeper");
+                                            begin_scene([] { return std::make_unique<epochnamespace::minesweeperlike::MinesweeperLikeScene>(); }, "Minesweeper");
                                         else if (*game_choice == Choice::Fourty)
-                                            begin_scene([] { return std::make_unique<almondnamespace::a2048like::A2048LikeScene>(); }, "2048");
+                                            begin_scene([] { return std::make_unique<epochnamespace::a2048like::A2048LikeScene>(); }, "2048");
                                         else if (*game_choice == Choice::Sandsim)
-                                            begin_scene([] { return std::make_unique<almondnamespace::sandsim::SandSimScene>(); }, "Sand Sim");
+                                            begin_scene([] { return std::make_unique<epochnamespace::sandsim::SandSimScene>(); }, "Sand Sim");
                                         else if (*game_choice == Choice::Cellular)
-                                            begin_scene([] { return std::make_unique<almondnamespace::cellularsim::CellularSimScene>(); }, "Cellular");
+                                            begin_scene([] { return std::make_unique<epochnamespace::cellularsim::CellularSimScene>(); }, "Cellular");
                                     }
                                 }
 
@@ -481,7 +481,7 @@ namespace almondnamespace::core
 
                             if (!ctx_running)
                             {
-                                almondnamespace::cleanup_chat_context(raw);
+                                epochnamespace::cleanup_chat_context(raw);
                                 last_frame_times.erase(raw);
                             }
 
@@ -541,40 +541,40 @@ namespace almondnamespace::core
             auto snapshot2 = collect_backend_contexts();
             for (auto& [type, contexts] : snapshot2)
             {
-                auto cleanup_backend = [&](std::shared_ptr<almondnamespace::core::Context> ctx)
+                auto cleanup_backend = [&](std::shared_ptr<epochnamespace::core::Context> ctx)
                     {
                         if (!ctx) return;
 
-                        almondnamespace::cleanup_chat_context(ctx.get());
+                        epochnamespace::cleanup_chat_context(ctx.get());
 
                         switch (type)
                         {
 #if defined(ALMOND_USING_OPENGL)
-                        case almondnamespace::core::ContextType::OpenGL:
-                            almondnamespace::openglcontext::opengl_cleanup(ctx);
+                        case epochnamespace::core::ContextType::OpenGL:
+                            epochnamespace::openglcontext::opengl_cleanup(ctx);
                             break;
 #endif
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
-                        case almondnamespace::core::ContextType::Software:
-                            // almondnamespace::anativecontext::softrenderer_cleanup(ctx);
+                        case epochnamespace::core::ContextType::Software:
+                            // epochnamespace::anativecontext::softrenderer_cleanup(ctx);
                             break;
 #endif
 #if defined(ALMOND_USING_SDL)
-                        case almondnamespace::core::ContextType::SDL:
-                            //  almondnamespace::sdlcontext::sdl_cleanup(ctx);
+                        case epochnamespace::core::ContextType::SDL:
+                            //  epochnamespace::sdlcontext::sdl_cleanup(ctx);
                             break;
 #endif
 #if defined(ALMOND_USING_SFML)
-                        case almondnamespace::core::ContextType::SFML:
-                            almondnamespace::sfmlcontext::sfml_cleanup(ctx);
+                        case epochnamespace::core::ContextType::SFML:
+                            epochnamespace::sfmlcontext::sfml_cleanup(ctx);
                             break;
 #endif
 #if defined(ALMOND_USING_RAYLIB)
-                        case almondnamespace::core::ContextType::RayLib:
-                            almondnamespace::raylibcontext::raylib_cleanup(ctx);
+                        case epochnamespace::core::ContextType::RayLib:
+                            epochnamespace::raylibcontext::raylib_cleanup(ctx);
                             break;
 #endif
-                        case almondnamespace::core::ContextType::Noop:
+                        case epochnamespace::core::ContextType::Noop:
                             break;
                         default:
                             break;
@@ -584,7 +584,7 @@ namespace almondnamespace::core
                 for (auto& ctx : contexts) cleanup_backend(ctx);
             }
 
-            almondnamespace::shutdown_chat_system();
+            epochnamespace::shutdown_chat_system();
             mgr.StopAll();
 
             return 0;
@@ -611,28 +611,28 @@ namespace almondnamespace::core
             };
 
             SceneID scene_id = SceneID::Menu;
-            std::unique_ptr<almondnamespace::scene::Scene> active_scene{};
+            std::unique_ptr<epochnamespace::scene::Scene> active_scene{};
 
-            using MenuOverlay = almondnamespace::menu::MenuOverlay;
+            using MenuOverlay = epochnamespace::menu::MenuOverlay;
             MenuOverlay menu{};
-            menu.set_max_columns(almondnamespace::core::cli::menu_columns);
+            menu.set_max_columns(epochnamespace::core::cli::menu_columns);
 
             auto collect_backend_contexts = []()
                 {
                     using ContextGroup = std::pair<
-                        almondnamespace::core::ContextType,
-                        std::vector<std::shared_ptr<almondnamespace::core::Context>>
+                        epochnamespace::core::ContextType,
+                        std::vector<std::shared_ptr<epochnamespace::core::Context>>
                     >;
 
                     std::vector<ContextGroup> snapshot;
 
                     {
-                        std::shared_lock lock(almondnamespace::core::g_backendsMutex);
-                        snapshot.reserve(almondnamespace::core::g_backends.size());
+                        std::shared_lock lock(epochnamespace::core::g_backendsMutex);
+                        snapshot.reserve(epochnamespace::core::g_backends.size());
 
-                        for (auto& [type, state] : almondnamespace::core::g_backends)
+                        for (auto& [type, state] : epochnamespace::core::g_backends)
                         {
-                            std::vector<std::shared_ptr<almondnamespace::core::Context>> contexts;
+                            std::vector<std::shared_ptr<epochnamespace::core::Context>> contexts;
                             contexts.reserve(1 + state.duplicates.size());
 
                             if (state.master) contexts.push_back(state.master);
@@ -684,11 +684,11 @@ namespace almondnamespace::core
                 bool raylib_close_from_window = false;
 #if defined(ALMOND_USING_RAYLIB)
                 {
-                    const auto& raylib_state = almondnamespace::raylibstate::s_raylibstate;
+                    const auto& raylib_state = epochnamespace::raylibstate::s_raylibstate;
                     raylib_close_from_window = raylib_state.running && !raylib_state.renderingActive;
 
                     if (raylib_close_from_window)
-                        almondnamespace::raylibstate::s_raylibstate.renderingActive = false;
+                        epochnamespace::raylibstate::s_raylibstate.renderingActive = false;
                 }
 #endif
 #endif
@@ -751,18 +751,18 @@ namespace almondnamespace::core
                                 };
 
                                 const bool mouse_left_down =
-                                    almondnamespace::input::mouseDown.test(almondnamespace::input::MouseButton::MouseLeft);
+                                    epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
 
                                 const bool up_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Up);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Up);
                                 const bool down_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Down);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Down);
                                 const bool left_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Left);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Left);
                                 const bool right_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Right);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Right);
                                 const bool enter_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Enter);
+                                    epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Enter);
 
                                 ctx->clear_safe();
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
@@ -772,30 +772,30 @@ namespace almondnamespace::core
 
                                 if (choice)
                                 {
-                                    using almondnamespace::menu::Choice;
+                                    using epochnamespace::menu::Choice;
 
                                     if (*choice == Choice::Snake)
-                                        begin_scene([] { return std::make_unique<almondnamespace::snakelike::SnakeLikeScene>(); }, SceneID::Snake);
+                                        begin_scene([] { return std::make_unique<epochnamespace::snakelike::SnakeLikeScene>(); }, SceneID::Snake);
                                     else if (*choice == Choice::Tetris)
-                                        begin_scene([] { return std::make_unique<almondnamespace::tetrislike::TetrisLikeScene>(); }, SceneID::Tetris);
+                                        begin_scene([] { return std::make_unique<epochnamespace::tetrislike::TetrisLikeScene>(); }, SceneID::Tetris);
                                     else if (*choice == Choice::Frogger)
-                                        begin_scene([] { return std::make_unique<almondnamespace::froggerlike::FroggerLikeScene>(); }, SceneID::Frogger);
+                                        begin_scene([] { return std::make_unique<epochnamespace::froggerlike::FroggerLikeScene>(); }, SceneID::Frogger);
                                     else if (*choice == Choice::Pacman)
-                                        begin_scene([] { return std::make_unique<almondnamespace::pacmanlike::PacmanLikeScene>(); }, SceneID::Pacman);
+                                        begin_scene([] { return std::make_unique<epochnamespace::pacmanlike::PacmanLikeScene>(); }, SceneID::Pacman);
                                     else if (*choice == Choice::Sokoban)
-                                        begin_scene([] { return std::make_unique<almondnamespace::sokobanlike::SokobanLikeScene>(); }, SceneID::Sokoban);
+                                        begin_scene([] { return std::make_unique<epochnamespace::sokobanlike::SokobanLikeScene>(); }, SceneID::Sokoban);
                                     else if (*choice == Choice::Bejeweled)
-                                        begin_scene([] { return std::make_unique<almondnamespace::match3like::Match3LikeScene>(); }, SceneID::Match3);
+                                        begin_scene([] { return std::make_unique<epochnamespace::match3like::Match3LikeScene>(); }, SceneID::Match3);
                                     else if (*choice == Choice::Puzzle)
-                                        begin_scene([] { return std::make_unique<almondnamespace::slidinglike::SlidingPuzzleLikeScene>(); }, SceneID::Sliding);
+                                        begin_scene([] { return std::make_unique<epochnamespace::slidinglike::SlidingPuzzleLikeScene>(); }, SceneID::Sliding);
                                     else if (*choice == Choice::Minesweep)
-                                        begin_scene([] { return std::make_unique<almondnamespace::minesweeperlike::MinesweeperLikeScene>(); }, SceneID::Minesweeper);
+                                        begin_scene([] { return std::make_unique<epochnamespace::minesweeperlike::MinesweeperLikeScene>(); }, SceneID::Minesweeper);
                                     else if (*choice == Choice::Fourty)
-                                        begin_scene([] { return std::make_unique<almondnamespace::a2048like::A2048LikeScene>(); }, SceneID::Game2048);
+                                        begin_scene([] { return std::make_unique<epochnamespace::a2048like::A2048LikeScene>(); }, SceneID::Game2048);
                                     else if (*choice == Choice::Sandsim)
-                                        begin_scene([] { return std::make_unique<almondnamespace::sandsim::SandSimScene>(); }, SceneID::Sandsim);
+                                        begin_scene([] { return std::make_unique<epochnamespace::sandsim::SandSimScene>(); }, SceneID::Sandsim);
                                     else if (*choice == Choice::Cellular)
-                                        begin_scene([] { return std::make_unique<almondnamespace::cellularsim::CellularSimScene>(); }, SceneID::Cellular);
+                                        begin_scene([] { return std::make_unique<epochnamespace::cellularsim::CellularSimScene>(); }, SceneID::Cellular);
                                     else if (*choice == Choice::Settings)
                                         std::cout << "[Menu] Settings selected.\n";
                                     else if (*choice == Choice::Exit)
@@ -841,7 +841,7 @@ namespace almondnamespace::core
 
                             if (!ctx_running)
                             {
-                                almondnamespace::cleanup_chat_context(raw);
+                                epochnamespace::cleanup_chat_context(raw);
                                 last_frame_times.erase(raw);
                             }
 
@@ -902,42 +902,42 @@ namespace almondnamespace::core
             auto snapshot2 = collect_backend_contexts();
             for (auto& [type, contexts] : snapshot2)
             {
-                auto cleanup_backend = [&](std::shared_ptr<almondnamespace::core::Context> ctx)
+                auto cleanup_backend = [&](std::shared_ptr<epochnamespace::core::Context> ctx)
                     {
                         if (!ctx) return;
 
-                        almondnamespace::cleanup_chat_context(ctx.get());
+                        epochnamespace::cleanup_chat_context(ctx.get());
 
                         switch (type)
                         {
 #if defined(ALMOND_USING_OPENGL)
-                        case almondnamespace::core::ContextType::OpenGL:
-                            almondnamespace::openglcontext::opengl_cleanup(ctx);
+                        case epochnamespace::core::ContextType::OpenGL:
+                            epochnamespace::openglcontext::opengl_cleanup(ctx);
                             break;
 #endif
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
-                        case almondnamespace::core::ContextType::Software:
-                           // almondnamespace::anativecontext::softrenderer_cleanup(ctx);
+                        case epochnamespace::core::ContextType::Software:
+                           // epochnamespace::anativecontext::softrenderer_cleanup(ctx);
                             break;
 #endif
 #if defined(ALMOND_USING_SDL)
-                        case almondnamespace::core::ContextType::SDL:
-                          //  almondnamespace::sdlcontext::sdl_cleanup(ctx);
+                        case epochnamespace::core::ContextType::SDL:
+                          //  epochnamespace::sdlcontext::sdl_cleanup(ctx);
                             break;
 #endif
 #if defined(ALMOND_USING_SFML)
-                        case almondnamespace::core::ContextType::SFML:
-                            almondnamespace::sfmlcontext::sfml_cleanup(ctx);
+                        case epochnamespace::core::ContextType::SFML:
+                            epochnamespace::sfmlcontext::sfml_cleanup(ctx);
                             break;
 #endif
 #if defined(ALMOND_USING_RAYLIB)
-                        case almondnamespace::core::ContextType::RayLib:
-                            almondnamespace::raylibcontext::raylib_cleanup(ctx);
+                        case epochnamespace::core::ContextType::RayLib:
+                            epochnamespace::raylibcontext::raylib_cleanup(ctx);
                             break;
 #endif
 
 
-                        case almondnamespace::core::ContextType::Noop:
+                        case epochnamespace::core::ContextType::Noop:
                             break;
                         default:
                             break;
@@ -947,7 +947,7 @@ namespace almondnamespace::core
                 for (auto& ctx : contexts) cleanup_backend(ctx);
             }
 
-            almondnamespace::shutdown_chat_system();
+            epochnamespace::shutdown_chat_system();
             mgr.StopAll();
 
             return 0;
@@ -956,7 +956,7 @@ namespace almondnamespace::core
         template <typename PumpFunc>
         int RunEngineMainLoopCommon(MultiContextManager& mgr, PumpFunc&& pump_events)
         {
-            if (almondnamespace::core::cli::run_menu_loop)
+            if (epochnamespace::core::cli::run_menu_loop)
                 return RunMenuAndGamesLoop(mgr, std::forward<PumpFunc>(pump_events));
 
             return RunEditorInterfaceLoop(mgr, std::forward<PumpFunc>(pump_events));
@@ -969,7 +969,7 @@ namespace almondnamespace::core
 
             try
             {
-                almondnamespace::core::MultiContextManager mgr;
+                epochnamespace::core::MultiContextManager mgr;
 
                 HINSTANCE hi = hInstance ? hInstance : GetModuleHandleW(nullptr);
 
@@ -1029,7 +1029,7 @@ namespace almondnamespace::core
         {
             try
             {
-                almondnamespace::core::MultiContextManager mgr;
+                epochnamespace::core::MultiContextManager mgr;
 
                 const bool ok = mgr.Initialize(
                     nullptr,
@@ -1055,7 +1055,7 @@ namespace almondnamespace::core
 
                 auto pump = []() -> bool
                     {
-                        return almondnamespace::platform::pump_events();
+                        return epochnamespace::platform::pump_events();
                     };
 
                 return RunEngineMainLoopCommon(mgr, pump);
@@ -1087,7 +1087,7 @@ namespace almondnamespace::core
 
     void StartEngine()
     {
-        std::cout << "AlmondShell Engine v" << almondnamespace::GetEngineVersion() << '\n';
+        std::cout << "epochengine Engine v" << epochnamespace::GetEngineVersion() << '\n';
         RunEngine();
     }
 
@@ -1096,7 +1096,7 @@ namespace almondnamespace::core
 #if defined(_WIN32)
         try
         {
-            almondnamespace::core::MultiContextManager mgr;
+            epochnamespace::core::MultiContextManager mgr;
 
             const HINSTANCE hi = GetModuleHandleW(nullptr);
 
@@ -1154,7 +1154,7 @@ namespace almondnamespace::core
 #elif defined(__linux__)
         try
         {
-            almondnamespace::core::MultiContextManager mgr;
+            epochnamespace::core::MultiContextManager mgr;
 
             const bool ok = mgr.Initialize(
                 nullptr,
@@ -1180,7 +1180,7 @@ namespace almondnamespace::core
 
             auto pump = []() -> bool
                 {
-                    return almondnamespace::platform::pump_events();
+                    return epochnamespace::platform::pump_events();
                 };
 
             const int result = engine::RunEditorInterfaceLoop(mgr, pump);
@@ -1195,7 +1195,7 @@ namespace almondnamespace::core
         std::cerr << "[Editor] RunEditorInterface is not implemented for this platform yet.\n";
 #endif
     }
-} // namespace almondnamespace::core
+} // namespace epochnamespace::core
 
 namespace urls
 {
@@ -1222,7 +1222,7 @@ int WINAPI wWinMain(
     UNREFERENCED_PARAMETER(nCmdShow);
 
 #if defined(_DEBUG)
-    almondnamespace::core::ShowConsole();
+    epochnamespace::core::ShowConsole();
 #endif
 
     try
@@ -1230,9 +1230,9 @@ int WINAPI wWinMain(
         const int argc = __argc;
         char** argv = __argv;
 
-        const auto cli_result = almondnamespace::core::cli::parse(argc, argv);
+        const auto cli_result = epochnamespace::core::cli::parse(argc, argv);
 
-        const almondnamespace::updater::UpdateChannel channel{
+        const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,
             .binary_url = urls::binary_url,
         };
@@ -1240,7 +1240,7 @@ int WINAPI wWinMain(
         if (cli_result.update_requested)
         {
             const auto update_result =
-                almondnamespace::updater::run_update_command(channel, cli_result.force_update);
+                epochnamespace::updater::run_update_command(channel, cli_result.force_update);
 
             if (update_result.force_required && !cli_result.force_update)
                 return 2;
@@ -1250,11 +1250,11 @@ int WINAPI wWinMain(
 
         if (cli_result.editor_requested)
         {
-            almondnamespace::core::RunEditorInterface();
+            epochnamespace::core::RunEditorInterface();
             return 0;
         }
 
-        return almondnamespace::core::engine::RunEngineMainLoopInternal(hInstance, SW_SHOWNORMAL);
+        return epochnamespace::core::engine::RunEngineMainLoopInternal(hInstance, SW_SHOWNORMAL);
     }
     catch (const std::exception& ex)
     {
@@ -1271,9 +1271,9 @@ int main(int argc, char** argv)
 #else
     try
     {
-        const auto cli_result = almondnamespace::core::cli::parse(argc, argv);
+        const auto cli_result = epochnamespace::core::cli::parse(argc, argv);
 
-        const almondnamespace::updater::UpdateChannel channel{
+        const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,
             .binary_url = urls::binary_url,
         };
@@ -1281,7 +1281,7 @@ int main(int argc, char** argv)
         if (cli_result.update_requested)
         {
             const auto update_result =
-                almondnamespace::updater::run_update_command(channel, cli_result.force_update);
+                epochnamespace::updater::run_update_command(channel, cli_result.force_update);
 
             if (update_result.force_required && !cli_result.force_update)
                 return 2;
@@ -1291,11 +1291,11 @@ int main(int argc, char** argv)
 
         if (cli_result.editor_requested)
         {
-            almondnamespace::core::RunEditorInterface();
+            epochnamespace::core::RunEditorInterface();
             return 0;
         }
 
-        almondnamespace::core::StartEngine();
+        epochnamespace::core::StartEngine();
         return 0;
     }
     catch (const std::exception& ex)

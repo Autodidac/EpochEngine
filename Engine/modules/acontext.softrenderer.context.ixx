@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondEngine - Modular C++ Game Engine                   *
+ *   epochengine - Modular C++ Game Engine                   *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -59,8 +59,8 @@ import <mutex>;
 import <utility>;
 import <vector>;
 
-import aengine.core.context;             // almondnamespace::core::Context
-import aengine.context.commandqueue;     // almondnamespace::core::CommandQueue
+import aengine.core.context;             // epochnamespace::core::Context
+import aengine.context.commandqueue;     // epochnamespace::core::CommandQueue
 
 import acontext.softrenderer.state;      // s_softrendererstate, SoftRendState
 import acontext.softrenderer.textures;   // Texture, TexturePtr (as in your project)
@@ -69,7 +69,7 @@ import aatlas.manager;                  // atlasmanager::atlas_vector (as in you
 import aengine.diagnostics;
 import aengine.telemetry;
 
-namespace almondnamespace::anativecontext
+namespace epochnamespace::anativecontext
 {
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
 
@@ -109,12 +109,12 @@ namespace almondnamespace::anativecontext
 #endif
 }
 
-export namespace almondnamespace::anativecontext
+export namespace epochnamespace::anativecontext
 {
     int get_width();
     int get_height();
 
-    namespace almondnamespace::anativecontext::detail
+    namespace epochnamespace::anativecontext::detail
     {
         inline void refresh_dimensions(core::Context& ctx) noexcept
         {
@@ -173,14 +173,14 @@ export namespace almondnamespace::anativecontext
         ctx->get_width = get_width;
         ctx->get_height = get_height;
 
-        almondnamespace::anativecontext::detail::refresh_dimensions(*ctx);
+        epochnamespace::anativecontext::detail::refresh_dimensions(*ctx);
 
         std::weak_ptr<core::Context> weakCtx = ctx;
         ctx->onResize = [weakCtx, resize = std::move(onResize)](int newWidth, int newHeight) mutable
             {
                 softrenderer_resize(newWidth, newHeight);
                 if (auto locked = weakCtx.lock())
-                    almondnamespace::anativecontext::detail::refresh_dimensions(*locked);
+                    epochnamespace::anativecontext::detail::refresh_dimensions(*locked);
                 if (resize)
                     resize(newWidth, newHeight);
             };
@@ -411,7 +411,7 @@ export namespace almondnamespace::anativecontext
     bool softrenderer_process(core::Context& ctx, core::CommandQueue& queue)
     {
         auto& sr = s_softrendererstate;
-        almondnamespace::anativecontext::detail::refresh_dimensions(ctx);
+        epochnamespace::anativecontext::detail::refresh_dimensions(ctx);
         const std::uintptr_t windowId = ctx.windowData
             ? reinterpret_cast<std::uintptr_t>(ctx.windowData->hwnd)
             : 0;
@@ -526,8 +526,8 @@ export namespace almondnamespace::anativecontext
         return false;
     }
     bool softrenderer_process(core::Context&, core::CommandQueue&) { return false; }
-    void softrenderer_cleanup(std::shared_ptr<almondnamespace::core::Context>&) {}
+    void softrenderer_cleanup(std::shared_ptr<epochnamespace::core::Context>&) {}
     int get_width() { return 0; }
     int get_height() { return 0; }
 #endif
-} // namespace almondnamespace::anativecontext
+} // namespace epochnamespace::anativecontext

@@ -3,7 +3,7 @@ module;
 export module apacmanlike;
 
 // ------------------------------------------------------------
-// Almond engine / project modules
+// Epoch engine / project modules
 // ------------------------------------------------------------
 import aengine.core.context;      // core::Context
 import aengine.context.window;    // core::WindowData
@@ -35,7 +35,7 @@ import <string_view>;
 import <tuple>;
 import <utility>;
 
-export namespace almondnamespace::pacmanlike
+export namespace epochnamespace::pacmanlike
 {
     inline constexpr int GRID_W = 28;
     inline constexpr int GRID_H = 31;
@@ -248,4 +248,4 @@ export namespace almondnamespace::pacmanlike
         scene.unload();
         return running;
     }
-} // namespace almondnamespace::pacman
+} // namespace epochnamespace::pacman

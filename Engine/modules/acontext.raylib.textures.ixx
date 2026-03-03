@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -55,7 +55,7 @@ import acontext.raylib.state;
 
 #if defined(ALMOND_USING_RAYLIB)
 
-export namespace almondnamespace::raylibtextures
+export namespace epochnamespace::raylibtextures
 {
     using Handle = std::uint32_t;
     using u32 = std::uint32_t;
@@ -63,7 +63,7 @@ export namespace almondnamespace::raylibtextures
 
     struct AtlasGPU
     {
-        almondnamespace::raylib_api::Texture2D texture{};
+        epochnamespace::raylib_api::Texture2D texture{};
         u64 version = static_cast<u64>(-1);
         u64 uploadingVersion = static_cast<u64>(-1);
         bool uploading = false;
@@ -95,7 +95,7 @@ export namespace almondnamespace::raylibtextures
 
     inline BackendData& get_raylib_backend()
     {
-        auto ctx = almondnamespace::core::get_current_render_context();
+        auto ctx = epochnamespace::core::get_current_render_context();
         if (!ctx)
             throw std::runtime_error("[RaylibTextures] No current render context");
 
@@ -112,7 +112,7 @@ export namespace almondnamespace::raylibtextures
             auto& backend = get_raylib_backend();
 
             // Move textures out under lock, destroy them unlocked.
-            std::vector<almondnamespace::raylib_api::Texture2D> to_free;
+            std::vector<epochnamespace::raylib_api::Texture2D> to_free;
             {
                 std::scoped_lock lock(backend.gpuMutex);
                 to_free.reserve(backend.gpu_atlases.size());
@@ -125,9 +125,9 @@ export namespace almondnamespace::raylibtextures
             }
 
             for (auto& t : to_free)
-                almondnamespace::raylib_api::unload_texture(t);
+                epochnamespace::raylib_api::unload_texture(t);
 
-            if (auto ctx = almondnamespace::core::get_current_render_context(); ctx && ctx->native_drawable)
+            if (auto ctx = epochnamespace::core::get_current_render_context(); ctx && ctx->native_drawable)
             {
                 delete static_cast<BackendData*>(ctx->native_drawable);
                 ctx->native_drawable = nullptr;
@@ -203,20 +203,20 @@ export namespace almondnamespace::raylibtextures
     }
 
     // ---- Core rule: no raylib calls while holding gpuMutex ----
-    inline almondnamespace::raylib_api::Texture2D upload_texture_raylib(const TextureAtlas& atlas)
+    inline epochnamespace::raylib_api::Texture2D upload_texture_raylib(const TextureAtlas& atlas)
     {
         // Ensure pixels exist (may rebuild CPU-side).
         if (atlas.pixel_data.empty())
             const_cast<TextureAtlas&>(atlas).rebuild_pixels();
 
-        almondnamespace::raylib_api::Image img{};
+        epochnamespace::raylib_api::Image img{};
         img.data = const_cast<unsigned char*>(atlas.pixel_data.data());
         img.width = atlas.width;
         img.height = atlas.height;
         img.mipmaps = 1;
-        img.format = almondnamespace::raylib_api::pixelformat_rgba8;
+        img.format = epochnamespace::raylib_api::pixelformat_rgba8;
 
-        return almondnamespace::raylib_api::load_texture_from_image(img);
+        return epochnamespace::raylib_api::load_texture_from_image(img);
     }
 
     // Fast check: only attempt upload when the current context is a raylib context.
@@ -225,9 +225,9 @@ export namespace almondnamespace::raylibtextures
     {
         try
         {
-            auto ctx = almondnamespace::core::get_current_render_context();
+            auto ctx = epochnamespace::core::get_current_render_context();
             if (!ctx) return false;
-            return ctx->type == almondnamespace::core::ContextType::RayLib;
+            return ctx->type == epochnamespace::core::ContextType::RayLib;
         }
         catch (...) { return false; }
     }
@@ -235,7 +235,7 @@ export namespace almondnamespace::raylibtextures
 #if defined(_WIN32)
     inline void ensure_raylib_context_current() noexcept
     {
-        auto& st = almondnamespace::raylibstate::s_raylibstate;
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
         if (st.hdc && st.hglrc)
             (void)::wglMakeCurrent(st.hdc, st.hglrc);
     }
@@ -267,7 +267,7 @@ export namespace almondnamespace::raylibtextures
         }
 
         // 2) Upload unlocked (raylib/GL work).
-        almondnamespace::raylib_api::Texture2D newTex = upload_texture_raylib(atlas);
+        epochnamespace::raylib_api::Texture2D newTex = upload_texture_raylib(atlas);
 
         if (newTex.id == 0)
         {
@@ -290,7 +290,7 @@ export namespace almondnamespace::raylibtextures
         dump_atlas_rgb_ppm(atlas, atlas.index);
 
         // 3) Commit under lock; if someone else updated in the meantime, keep the newest.
-        almondnamespace::raylib_api::Texture2D oldTex{};
+        epochnamespace::raylib_api::Texture2D oldTex{};
         bool freeOld = false;
 
         {
@@ -328,10 +328,10 @@ export namespace almondnamespace::raylibtextures
 
         // 4) Free old texture(s) unlocked.
         if (freeOld && oldTex.id != 0)
-            almondnamespace::raylib_api::unload_texture(oldTex);
+            epochnamespace::raylib_api::unload_texture(oldTex);
     }
 
-    export inline const almondnamespace::raylib_api::Texture2D* try_get_texture(const TextureAtlas& atlas) noexcept
+    export inline const epochnamespace::raylib_api::Texture2D* try_get_texture(const TextureAtlas& atlas) noexcept
     {
         try
         {
@@ -359,7 +359,7 @@ export namespace almondnamespace::raylibtextures
         {
             auto& backend = get_raylib_backend();
 
-            std::vector<almondnamespace::raylib_api::Texture2D> to_free;
+            std::vector<epochnamespace::raylib_api::Texture2D> to_free;
             {
                 std::scoped_lock lock(backend.gpuMutex);
                 to_free.reserve(backend.gpu_atlases.size());
@@ -374,7 +374,7 @@ export namespace almondnamespace::raylibtextures
             }
 
             for (auto& t : to_free)
-                almondnamespace::raylib_api::unload_texture(t);
+                epochnamespace::raylib_api::unload_texture(t);
         }
         catch (...) {}
     }

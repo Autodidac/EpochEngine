@@ -40,7 +40,7 @@ import <thread>;
 // ============================================================
 // Input core
 // ============================================================
-export namespace almondnamespace::input
+export namespace epochnamespace::input
 {
     // --------------------------------------------------------
     // Key / Mouse enums
@@ -272,7 +272,7 @@ export namespace almondnamespace::input
         std::shared_lock lock(g_inputMutex);
         return mousePressed.test(static_cast<size_t>(b));
     }
-} // namespace almondnamespace::input
+} // namespace epochnamespace::input
 
 // ============================================================
 // Win32 WndProc hook (module-visible, header-only → module)
@@ -281,7 +281,7 @@ export namespace almondnamespace::input
 
 export inline LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
 {
-    using namespace almondnamespace::input;
+    using namespace epochnamespace::input;
 
     switch (msg)
     {

@@ -25,7 +25,7 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::a2048like
+export namespace epochnamespace::a2048like
 {
     struct A2048LikeScene : public scene::Scene
     {
@@ -188,4 +188,4 @@ export namespace almondnamespace::a2048like
         scene.unload();
         return running;
     }
-} // namespace almondnamespace::a2048like
+} // namespace epochnamespace::a2048like

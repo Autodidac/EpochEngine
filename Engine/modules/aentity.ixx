@@ -23,10 +23,10 @@ import aecs.components;         // Position, History, LoggerComponent
 
 
 // ─────────────────────────────────────────────────────────────
-export namespace almondnamespace::ecs
+export namespace epochnamespace::ecs
 {
-    using almondnamespace::timing::Timer;
-    using almondnamespace::logger::LogLevel;
+    using epochnamespace::timing::Timer;
+    using epochnamespace::logger::LogLevel;
 
     // ─────────────────────────────────────────────────────────
     // SPAWN ENTITY
@@ -51,7 +51,7 @@ export namespace almondnamespace::ecs
             R.log->log(std::format(
                 "[ECS] Entity {} spawned at {}",
                 e,
-                almondnamespace::timing::getCurrentTimeString()));
+                epochnamespace::timing::getCurrentTimeString()));
         }
 
         events::push_event(events::Event{
@@ -85,7 +85,7 @@ export namespace almondnamespace::ecs
         pos.y += dy;
 
         auto& lc = get_component<LoggerComponent>(R, e);
-        almondnamespace::logger::Logger logger{ lc.file, *lc.clock, lc.level };
+        epochnamespace::logger::Logger logger{ lc.file, *lc.clock, lc.level };
 
         const std::string ts = lc.clock->getCurrentTimeString();
         logger.log(std::format(
@@ -124,7 +124,7 @@ export namespace almondnamespace::ecs
         pos.y = py;
 
         auto& lc = get_component<LoggerComponent>(R, e);
-        almondnamespace::logger::Logger logger{ lc.file, *lc.clock, lc.level };
+        epochnamespace::logger::Logger logger{ lc.file, *lc.clock, lc.level };
 
         const std::string ts = lc.clock->getCurrentTimeString();
         logger.log(std::format(
@@ -147,4 +147,4 @@ export namespace almondnamespace::ecs
         return true;
     }
 
-} // namespace almondnamespace::ecs
+} // namespace epochnamespace::ecs

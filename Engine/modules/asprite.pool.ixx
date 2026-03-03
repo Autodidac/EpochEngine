@@ -27,11 +27,11 @@ import aengine.taskgraph.dotsystem;      // taskgraph::TaskGraph, Node
 
 // ────────────────────────────────────────────────────────────
 
-export namespace almondnamespace::spritepool
+export namespace epochnamespace::spritepool
 {
-    using almondnamespace::SpriteHandle;
-    using almondnamespace::Task;
-    using almondnamespace::taskgraph::Node;
+    using epochnamespace::SpriteHandle;
+    using epochnamespace::Task;
+    using epochnamespace::taskgraph::Node;
 
     // ────────────────────────────────────────────────────────
     // Pool state (module-local singletons)

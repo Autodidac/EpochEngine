@@ -23,7 +23,7 @@ import <thread>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::scripting
+export namespace epochnamespace::scripting
 {
     using ScriptScheduler = taskgraph::TaskGraph;
 

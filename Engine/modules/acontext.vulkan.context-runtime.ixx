@@ -32,7 +32,7 @@ import <stdexcept>;
 import <unordered_map>;
 import <vector>;
 
-export namespace almondnamespace::vulkancontext
+export namespace epochnamespace::vulkancontext
 {
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -180,8 +180,8 @@ export namespace almondnamespace::vulkancontext
 //        createSyncObjects();
 //    }
 //
-//    bool Application::process(std::shared_ptr<almondnamespace::core::Context> ctx,
-//        almondnamespace::core::CommandQueue& queue)
+//    bool Application::process(std::shared_ptr<epochnamespace::core::Context> ctx,
+//        epochnamespace::core::CommandQueue& queue)
 //    {
 //        if (!device)
 //            return false;
@@ -302,7 +302,7 @@ export namespace almondnamespace::vulkancontext
 //    int Application::get_framebuffer_width() const noexcept { return framebufferWidth; }
 //    int Application::get_framebuffer_height() const noexcept { return framebufferHeight; }
 //
-//    void Application::set_context(std::shared_ptr<almondnamespace::core::Context> ctx, void* nativeWindow)
+//    void Application::set_context(std::shared_ptr<epochnamespace::core::Context> ctx, void* nativeWindow)
 //    {
 //        context = ctx;
 //        nativeWindowHandle = nativeWindow;

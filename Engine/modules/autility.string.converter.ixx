@@ -16,7 +16,7 @@ import <filesystem>;
 import <string>;
 import <string_view>;
 
-export namespace almondnamespace::text
+export namespace epochnamespace::text
 {
     // -----------------------------------------
     // char8_t helpers
@@ -118,4 +118,4 @@ export namespace almondnamespace::text
 #endif
     }
 
-} // namespace almondnamespace::text
+} // namespace epochnamespace::text

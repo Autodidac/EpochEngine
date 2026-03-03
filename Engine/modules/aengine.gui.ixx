@@ -10,7 +10,7 @@ import <string>;
 import <string_view>;
 import <vector>;
 
-export namespace almondnamespace::gui
+export namespace epochnamespace::gui
 {
     export struct Vec2
     {

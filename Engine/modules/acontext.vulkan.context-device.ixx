@@ -16,7 +16,7 @@ import :shared_context;
 import :shared_vk;
 import :swapchain;
 
-namespace almondnamespace::vulkancontext {
+namespace epochnamespace::vulkancontext {
 
     inline vk::PhysicalDevice Application::pickPhysicalDevice()
     {
@@ -174,4 +174,4 @@ namespace almondnamespace::vulkancontext {
         commandPool = std::move(pool);
     }
 
-} // namespace almondnamespace::vulkancontext
+} // namespace epochnamespace::vulkancontext

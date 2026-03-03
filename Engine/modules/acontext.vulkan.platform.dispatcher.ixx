@@ -17,9 +17,9 @@ module;
 export module acontext.vulkan.platform.dispatcher;
 
 #if ALMOND_VULKAN_CUSTOM_LOADER
-import acontext.vulkan.platform.loader; // almondnamespace::vulkan::LoadLibrary / LoadFunction wrappers
+import acontext.vulkan.platform.loader; // epochnamespace::vulkan::LoadLibrary / LoadFunction wrappers
 
-export namespace almondnamespace::vulkancontext::platform
+export namespace epochnamespace::vulkancontext::platform
 {
     // Global function to get vkGetInstanceProcAddr from the Vulkan Loader.
     inline auto getInstanceProcAddr() noexcept -> PFN_vkGetInstanceProcAddr
@@ -28,11 +28,11 @@ export namespace almondnamespace::vulkancontext::platform
         if (!fp)
         {
             // IMPORTANT: qualify the wrapper so we don't hit Win32 LoadLibraryW.
-            void* lib = almondnamespace::vulkan::LoadLibrary();
+            void* lib = epochnamespace::vulkan::LoadLibrary();
             if (lib)
             {
                 fp = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
-                    almondnamespace::vulkan::LoadFunction(lib, "vkGetInstanceProcAddr"));
+                    epochnamespace::vulkan::LoadFunction(lib, "vkGetInstanceProcAddr"));
             }
         }
         return fp;
@@ -44,11 +44,11 @@ export namespace almondnamespace::vulkancontext::platform
         static PFN_vkGetDeviceProcAddr fp = nullptr;
         if (!fp)
         {
-            void* lib = almondnamespace::vulkan::LoadLibrary();
+            void* lib = epochnamespace::vulkan::LoadLibrary();
             if (lib)
             {
                 fp = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
-                    almondnamespace::vulkan::LoadFunction(lib, "vkGetDeviceProcAddr"));
+                    epochnamespace::vulkan::LoadFunction(lib, "vkGetDeviceProcAddr"));
             }
         }
         return fp;
@@ -99,9 +99,9 @@ export namespace almondnamespace::vulkancontext::platform
             reinterpret_cast<PFN_vkQueueSubmit>(GetDeviceFunction(device, "vkQueueSubmit"));
         return table;
     }
-} // namespace almondnamespace::vulkancontext::platform
+} // namespace epochnamespace::vulkancontext::platform
 #else
-export namespace almondnamespace::vulkancontext::platform
+export namespace epochnamespace::vulkancontext::platform
 {
     // Custom loader disabled: no dispatcher entry points are exported.
 }

@@ -6,7 +6,7 @@ export module acontext.sfml.renderer;
 
 #if defined(ALMOND_USING_SFML)
 
-export namespace almondnamespace::sfmlcontext
+export namespace epochnamespace::sfmlcontext
 {
     struct RendererContext
     {

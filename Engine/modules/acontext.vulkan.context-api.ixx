@@ -20,7 +20,7 @@ import aengine.context.commandqueue;
 import <functional>;
 import <memory>;
 
-namespace almondnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     // Engine-facing API (no Vulkan types in the signatures).
     export bool vulkan_initialize(

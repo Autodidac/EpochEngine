@@ -10,8 +10,8 @@ export module aengine.taskgraph.dotsystem;
 // Engine dependencies (header units / modules)
 // ------------------------------------------------------------
 
-import ampmcboundedqueue;   // provides almondnamespace::MPMCQueue
-import aengine.systems;     // provides almondnamespace::Task
+import ampmcboundedqueue;   // provides epochnamespace::MPMCQueue
+import aengine.systems;     // provides epochnamespace::Task
 
 // ------------------------------------------------------------
 // Standard library
@@ -32,7 +32,7 @@ import <algorithm>;
 // Task graph system
 // ============================================================
 
-export namespace almondnamespace::taskgraph
+export namespace epochnamespace::taskgraph
 {
     struct Node
     {

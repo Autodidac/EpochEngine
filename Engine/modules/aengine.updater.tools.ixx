@@ -12,7 +12,7 @@ import <chrono>;
 
 import aengine.updater.config;
 
-export namespace almondnamespace::updater
+export namespace epochnamespace::updater
 {
     // ─────────────────────────────────────────────
     // Download file

@@ -8,7 +8,7 @@ import <iostream>;
 import <string>;
 import <vector>;
 
-export namespace almondnamespace::compiler 
+export namespace epochnamespace::compiler 
 {
 
     export bool compile_script_to_dll(const std::filesystem::path& input, const std::filesystem::path& output) {

@@ -2,7 +2,7 @@ module;
 
 export module asnakelike;
 
-// Almond engine / project modules
+// Epoch engine / project modules
 import aengine.core.context;      // core::Context
 import aengine.context.window;    // core::WindowData
 import aengine.input;             // input::Key
@@ -25,7 +25,7 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::snakelike
+export namespace epochnamespace::snakelike
 {
     struct SnakeLikeScene : public scene::Scene
     {
@@ -135,7 +135,7 @@ export namespace almondnamespace::snakelike
         std::unordered_map<std::string, SpriteHandle> sprites{};
     };
 
-    export bool run_snakelike(std::shared_ptr<almondnamespace::core::Context> ctx)
+    export bool run_snakelike(std::shared_ptr<epochnamespace::core::Context> ctx)
     {
         SnakeLikeScene scene;
         scene.load();
@@ -149,4 +149,4 @@ export namespace almondnamespace::snakelike
         scene.unload();
         return running;
     }
-} // namespace almondnamespace::snakelike
+} // namespace epochnamespace::snakelike

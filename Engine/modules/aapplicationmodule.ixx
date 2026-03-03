@@ -4,10 +4,10 @@ module;
     static void NAME##_init    () noexcept;                                  \
     static void NAME##_update  (float) noexcept;                             \
     static void NAME##_shutdown() noexcept;                                  \
-    static almondnamespace::application_module NAME##_desc {                 \
+    static epochnamespace::application_module NAME##_desc {                 \
         &NAME##_init, &NAME##_update, &NAME##_shutdown                       \
     };                                                                       \
-    static almondnamespace::_module_registrar NAME##_auto { &NAME##_desc };  \
+    static epochnamespace::_module_registrar NAME##_auto { &NAME##_desc };  \
     static void NAME##_init() noexcept
 
 export module aapplicationmodule;
@@ -15,7 +15,7 @@ export module aapplicationmodule;
 import <cstdint>;
 import <vector>;
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     // ─── Contract ────────────────────────────────────────────────────────────────
     struct application_module {

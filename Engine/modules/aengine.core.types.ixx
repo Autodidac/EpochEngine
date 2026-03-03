@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -28,7 +28,7 @@ export module aengine.core.types;
 import <cstddef>;
 import <cstdint>;
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     using int8 = int8_t;
     using uint8 = uint8_t;
@@ -46,4 +46,4 @@ export namespace almondnamespace
     {
         return (value << 24) | ((value << 8) & 0x00FF0000) | ((value >> 8) & 0x0000FF00) | (value >> 24);
     }
-} // namespace almondnamespace
+} // namespace epochnamespace

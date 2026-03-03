@@ -1,13 +1,13 @@
 module;
 /**************************************************************
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  **************************************************************/
 export module aengine.eventsystem;
 
 import std;
 
-export namespace almondnamespace::events {
+export namespace epochnamespace::events {
 
     enum class EventType : std::uint8_t {
         MouseButtonClick,
@@ -85,5 +85,5 @@ export namespace almondnamespace::events {
             for (auto& fn : g_callbacks()) fn(e);
     }
 
-} // namespace almondnamespace::events
+} // namespace epochnamespace::events
 

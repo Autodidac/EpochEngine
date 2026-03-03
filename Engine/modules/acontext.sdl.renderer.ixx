@@ -15,9 +15,9 @@ import <SDL3/SDL.h>;
 import aengine.core.context;
 import acontext.sdl.state;
 
-export namespace almondnamespace::sdlcontext
+export namespace epochnamespace::sdlcontext
 {
-   // using almondnamespace::sdlcontext::state::SDL3State::s_sdlstate;
+   // using epochnamespace::sdlcontext::state::SDL3State::s_sdlstate;
 
     struct RendererContext
     {
@@ -47,8 +47,8 @@ export namespace almondnamespace::sdlcontext
             throw std::runtime_error("SDL_Renderer is null");
         }
         sdl_renderer.renderer = renderer;
-        const auto color = almondnamespace::core::clear_color_for_context(
-            almondnamespace::core::ContextType::SDL);
+        const auto color = epochnamespace::core::clear_color_for_context(
+            epochnamespace::core::ContextType::SDL);
         SDL_SetRenderDrawColor(
             sdl_renderer.renderer,
             static_cast<Uint8>(color[0] * 255.0f),
@@ -60,8 +60,8 @@ export namespace almondnamespace::sdlcontext
 
     inline void begin_frame()
     {
-        const auto color = almondnamespace::core::clear_color_for_context(
-            almondnamespace::core::ContextType::SDL);
+        const auto color = epochnamespace::core::clear_color_for_context(
+            epochnamespace::core::ContextType::SDL);
         SDL_SetRenderDrawColor(
             sdl_renderer.renderer,
             static_cast<Uint8>(color[0] * 255.0f),

@@ -12,7 +12,7 @@ export module aengine.saveload.system;
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -35,7 +35,7 @@ export module aengine.saveload.system;
 //#include <fstream>
 //#include <sstream>
 //
-//namespace almondnamespace {
+//namespace epochnamespace {
 //
 //    namespace detail {
 //        [[nodiscard]] inline std::string encode_utf8_char(char32_t codepoint) {
@@ -99,7 +99,7 @@ export module aengine.saveload.system;
 //
 //    class SaveSystem {
 //    public:
-//        static void SaveGame(const std::string& filename, const std::vector<almondnamespace::events::Event>& events) {
+//        static void SaveGame(const std::string& filename, const std::vector<epochnamespace::events::Event>& events) {
 //           std::ofstream ofs(filename, std::ios::binary);  
 //           if (!ofs) {  
 //               std::cerr << "Error opening file for saving!" << std::endl;  
@@ -125,7 +125,7 @@ export module aengine.saveload.system;
 //           ofs.close();  
 //        }
 //
-//        static void LoadGame(const std::string& filename, std::vector<almondnamespace::events::Event>& events) {
+//        static void LoadGame(const std::string& filename, std::vector<epochnamespace::events::Event>& events) {
 //            std::ifstream ifs(filename, std::ios::binary);
 //            if (!ifs) {
 //                std::cerr << "Error opening file for loading!" << std::endl;
@@ -146,7 +146,7 @@ export module aengine.saveload.system;
 //                    continue;
 //                }
 //
-//                event.type = almondnamespace::events::event_type_from(line.substr(0, typeEnd));
+//                event.type = epochnamespace::events::event_type_from(line.substr(0, typeEnd));
 //                std::string details = line.substr(typeEnd + 1);
 //
 //                size_t semicolonPos;

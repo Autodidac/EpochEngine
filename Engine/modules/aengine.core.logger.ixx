@@ -29,7 +29,7 @@ import <utility>;
 
 import aengine.core.time;
 
-export namespace almondnamespace::logger
+export namespace epochnamespace::logger
 {
     // ---------------------------------------------------------------------
     // Levels (keep legacy names compiling)
@@ -408,4 +408,4 @@ export namespace almondnamespace::logger
         std::string m_system;
     };
 
-} // namespace almondnamespace::logger
+} // namespace epochnamespace::logger

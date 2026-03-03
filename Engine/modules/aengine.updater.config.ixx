@@ -13,7 +13,7 @@ import <string_view>;
 // ─────────────────────────────────────────────
 import aengine.version;
 
-export namespace almondnamespace::updater
+export namespace epochnamespace::updater
 {
     // ─────────────────────────────────────────
     // Installation behavior
@@ -30,7 +30,7 @@ export namespace almondnamespace::updater
     export inline std::string BRANCH = "main";
 
     export inline std::string PROJECT_VERSION =
-        almondnamespace::GetEngineVersionString();
+        epochnamespace::GetEngineVersionString();
 
     // ─────────────────────────────────────────
     // Build / output

@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -97,12 +97,12 @@ namespace
 {
     // TU-owned globals.
     std::unordered_map<HWND, std::thread> g_threads;
-    almondnamespace::core::DragState       g_drag;
+    epochnamespace::core::DragState       g_drag;
     struct PendingWindowCleanup
     {
         HWND hwnd{};
         std::thread thread{};
-        std::unique_ptr<almondnamespace::core::WindowData> window{};
+        std::unique_ptr<epochnamespace::core::WindowData> window{};
     };
     std::vector<PendingWindowCleanup> g_pendingCleanups;
     constexpr std::string_view kLogSys = "Context.Multiplexer.Win";
@@ -185,14 +185,14 @@ namespace
         case WM_LBUTTONDOWN:
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
-            return almondnamespace::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
+            return epochnamespace::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
         }
 
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
 #endif
 
-    inline void cleanup_window_resources(std::unique_ptr<almondnamespace::core::WindowData>& window) noexcept
+    inline void cleanup_window_resources(std::unique_ptr<epochnamespace::core::WindowData>& window) noexcept
     {
 #if defined(ALMOND_USING_OPENGL)
         if (window && window->glContext)
@@ -214,7 +214,7 @@ namespace
     }
 }
 
-namespace almondnamespace::core
+namespace epochnamespace::core
 {
 #if defined(ALMOND_USING_RAYLIB)
     // Raylib embeds a real GLFW-created HWND. Re-parenting must be performed on the
@@ -445,7 +445,7 @@ namespace almondnamespace::core
         RegisterParentClass(hInst, L"AlmondParent");
         RegisterChildClass(hInst, L"AlmondChild");
 
-        almondnamespace::core::InitializeAllContexts();
+        epochnamespace::core::InitializeAllContexts();
 
         // ---------------- Parent (dock container) ----------------
         if (parented)
@@ -453,8 +453,8 @@ namespace almondnamespace::core
             int cols = 1, rows = 1;
             while (cols * rows < totalRequested) (cols <= rows ? ++cols : ++rows);
 
-            const int cellW = (totalRequested == 1) ? cli::window_width : 800;
-            const int cellH = (totalRequested == 1) ? cli::window_height : 600;
+            const int cellW = (totalRequested == 1) ? cli::window_width : 1277;
+            const int cellH = (totalRequested == 1) ? cli::window_height : 1277;
 
             const int clientW = cols * cellW;
             const int clientH = rows * cellH;
@@ -517,8 +517,8 @@ namespace almondnamespace::core
             if (!gladInitialized)
             {
                 gladInitialized = (gladLoadGL() != 0);
-                almondnamespace::logger::get(kLogSys).log(
-                    almondnamespace::logger::LogLevel::WARN,
+                epochnamespace::logger::get(kLogSys).log(
+                    epochnamespace::logger::LogLevel::WARN,
                     "GLAD loaded on dummy context",
                     std::source_location::current());
             }
@@ -542,7 +542,7 @@ namespace almondnamespace::core
                 for (int i = 0; i < count; ++i)
                 {
                     const std::wstring windowTitle = backend::BuildChildWindowTitle(type, i);
-                    const std::string narrowTitle = almondnamespace::text::narrow_utf8(windowTitle);
+                    const std::string narrowTitle = epochnamespace::text::narrow_utf8(windowTitle);
 
                     HWND hwnd = ::CreateWindowExW(
                         0,
@@ -551,7 +551,7 @@ namespace almondnamespace::core
                         (parent
                             ? (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS)
                             : (WS_OVERLAPPEDWINDOW | WS_VISIBLE)),
-                        0, 0, 800, 600,
+                        0, 0, 1280, 1277,
                         parent,
                         nullptr,
                         hInst,
@@ -612,8 +612,8 @@ namespace almondnamespace::core
                     auto it = g_backends.find(type);
                     if (it == g_backends.end() || !it->second.master)
                     {
-                        almondnamespace::logger::get(kLogSys).logf(
-                            almondnamespace::logger::LogLevel::ALMOND_ERROR,
+                        epochnamespace::logger::get(kLogSys).logf(
+                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
                             std::source_location::current(),
                             "Missing prototype context for backend type {}",
                             static_cast<int>(type));
@@ -688,7 +688,7 @@ namespace almondnamespace::core
                     {
                         narrowTitle = (i < createdTitles.size())
                             ? createdTitles[i]
-                            : almondnamespace::text::narrow_utf8(backend::BuildChildWindowTitle(type, static_cast<int>(i)));
+                            : epochnamespace::text::narrow_utf8(backend::BuildChildWindowTitle(type, static_cast<int>(i)));
                     }
 
                     if (w && w->titleNarrow.empty())
@@ -705,20 +705,20 @@ namespace almondnamespace::core
                         {
                             if (!::wglMakeCurrent(ctx->hdc, ctx->hglrc))
                             {
-                                almondnamespace::logger::get(kLogSys).logf(
-                                    almondnamespace::logger::LogLevel::ALMOND_ERROR,
+                                epochnamespace::logger::get(kLogSys).logf(
+                                    epochnamespace::logger::LogLevel::ALMOND_ERROR,
                                     std::source_location::current(),
                                     "wglMakeCurrent failed for hwnd={}",
                                     static_cast<void*>(hwnd));
                             }
                             else
                             {
-                                almondnamespace::logger::get(kLogSys).logf(
-                                    almondnamespace::logger::LogLevel::WARN,
+                                epochnamespace::logger::get(kLogSys).logf(
+                                    epochnamespace::logger::LogLevel::WARN,
                                     std::source_location::current(),
                                     "Running OpenGL init for hwnd={}",
                                     static_cast<void*>(hwnd));
-                                almondnamespace::openglcontext::opengl_initialize(
+                                epochnamespace::openglcontext::opengl_initialize(
                                     ctx,
                                     hwnd,
                                     ctx->width,
@@ -731,12 +731,12 @@ namespace almondnamespace::core
 #endif
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
                     case ContextType::Software:
-                        almondnamespace::logger::get(kLogSys).logf(
-                            almondnamespace::logger::LogLevel::WARN,
+                        epochnamespace::logger::get(kLogSys).logf(
+                            epochnamespace::logger::LogLevel::WARN,
                             std::source_location::current(),
                             "Initializing Software renderer for hwnd={}",
                             static_cast<void*>(hwnd));
-                        almondnamespace::anativecontext::softrenderer_initialize(
+                        epochnamespace::anativecontext::softrenderer_initialize(
                             ctx,
                             hwnd,
                             ctx->width,
@@ -746,8 +746,8 @@ namespace almondnamespace::core
 #endif
 #if defined(ALMOND_USING_RAYLIB)
                     case ContextType::RayLib:
-                        almondnamespace::logger::get(kLogSys).logf(
-                            almondnamespace::logger::LogLevel::WARN,
+                        epochnamespace::logger::get(kLogSys).logf(
+                            epochnamespace::logger::LogLevel::WARN,
                             std::source_location::current(),
                             "Deferring Raylib init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -755,8 +755,8 @@ namespace almondnamespace::core
 #endif
 #if defined(ALMOND_USING_SDL)
                     case ContextType::SDL:
-                        almondnamespace::logger::get(kLogSys).logf(
-                            almondnamespace::logger::LogLevel::WARN,
+                        epochnamespace::logger::get(kLogSys).logf(
+                            epochnamespace::logger::LogLevel::WARN,
                             std::source_location::current(),
                             "Deferring SDL init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -764,8 +764,8 @@ namespace almondnamespace::core
 #endif
 #if defined(ALMOND_USING_VULKAN)
                     case ContextType::Vulkan:
-                        almondnamespace::logger::get(kLogSys).logf(
-                            almondnamespace::logger::LogLevel::WARN,
+                        epochnamespace::logger::get(kLogSys).logf(
+                            epochnamespace::logger::LogLevel::WARN,
                             std::source_location::current(),
                             "Deferring Vulkan init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -773,8 +773,8 @@ namespace almondnamespace::core
 #endif
 #if defined(ALMOND_USING_SFML)
                     case ContextType::SFML:
-                        almondnamespace::logger::get(kLogSys).logf(
-                            almondnamespace::logger::LogLevel::WARN,
+                        epochnamespace::logger::get(kLogSys).logf(
+                            epochnamespace::logger::LogLevel::WARN,
                             std::source_location::current(),
                             "Deferring SFML init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -1189,12 +1189,12 @@ namespace almondnamespace::core
 #if defined(ALMOND_USING_SDL)
         if (ctx->type == ContextType::SDL)
         {
-            almondnamespace::logger::get(kLogSys).logf(
-                almondnamespace::logger::LogLevel::WARN,
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::WARN,
                 std::source_location::current(),
                 "SDL init. host={}",
                 static_cast<void*>(win.hwnd));
-            almondnamespace::sdlcontext::sdl_initialize(
+            epochnamespace::sdlcontext::sdl_initialize(
                 ctx,
                 win.hwnd,
                 static_cast<unsigned>(ctx->width),
@@ -1206,12 +1206,12 @@ namespace almondnamespace::core
 #if defined(ALMOND_USING_SFML)
         if (ctx->type == ContextType::SFML)
         {
-            almondnamespace::logger::get(kLogSys).logf(
-                almondnamespace::logger::LogLevel::WARN,
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::WARN,
                 std::source_location::current(),
                 "SFML init. host={}",
                 static_cast<void*>(win.hwnd));
-            const bool ok = almondnamespace::sfmlcontext::sfml_initialize(
+            const bool ok = epochnamespace::sfmlcontext::sfml_initialize(
                 ctx,
                 win.hwnd,
                 static_cast<unsigned>(ctx->width),
@@ -1226,12 +1226,12 @@ namespace almondnamespace::core
 #if defined(ALMOND_USING_RAYLIB)
         if (ctx->type == ContextType::RayLib)
         {
-            almondnamespace::logger::get(kLogSys).logf(
-                almondnamespace::logger::LogLevel::WARN,
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::WARN,
                 std::source_location::current(),
                 "Raylib init. host={}",
                 static_cast<void*>(win.hwnd));
-            const bool initialized = almondnamespace::raylibcontext::raylib_initialize(
+            const bool initialized = epochnamespace::raylibcontext::raylib_initialize(
                 ctx,
                 win.hwnd,
                 static_cast<unsigned>(ctx->width),
@@ -1269,8 +1269,8 @@ namespace almondnamespace::core
 
         if (ctx->init_failed)
         {
-            almondnamespace::logger::get(kLogSys).logf(
-                almondnamespace::logger::LogLevel::ALMOND_ERROR,
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
                 "Backend init failed for {}. Keeping window alive with no-op process.",
                 ctx->backendName);

@@ -40,7 +40,7 @@ import <string_view>;
 import <unordered_map>;
 import <vector>;
 
-export namespace almondnamespace::sdltextures
+export namespace epochnamespace::sdltextures
 {
     using Handle = uint32_t;
 
@@ -363,5 +363,5 @@ export namespace almondnamespace::sdltextures
 
         sdlcontext::check_sdl_error("SDL_RenderTexture");
     }
-} // namespace almondnamespace::sdltextures
+} // namespace epochnamespace::sdltextures
 #endif // ALMOND_USING_SDL

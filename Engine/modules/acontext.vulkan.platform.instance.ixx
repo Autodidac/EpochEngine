@@ -18,7 +18,7 @@ export module acontext.vulkan.platform.instance;
 #if ALMOND_VULKAN_CUSTOM_LOADER
 import acontext.vulkan.platform.dispatcher;
 
-export namespace almondnamespace::vulkancontext::platform
+export namespace epochnamespace::vulkancontext::platform
 {
     inline VkInstance createInstance(const VkInstanceCreateInfo& createInfo) noexcept
     {
@@ -45,9 +45,9 @@ export namespace almondnamespace::vulkancontext::platform
         if (table.vkDestroyInstance && instance)
             table.vkDestroyInstance(instance, nullptr);
     }
-} // namespace almondnamespace::vulkancontext::platform
+} // namespace epochnamespace::vulkancontext::platform
 #else
-export namespace almondnamespace::vulkancontext::platform
+export namespace epochnamespace::vulkancontext::platform
 {
     // Custom loader disabled: no instance entry points are exported.
 }

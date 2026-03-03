@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -116,7 +116,7 @@ import <string_view>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::openglcontext
+export namespace epochnamespace::openglcontext
 {
 #if !defined(ALMOND_USING_OPENGL)
 
@@ -174,7 +174,7 @@ export namespace almondnamespace::openglcontext
         }
 #endif
 
-        inline PlatformGL::PlatformGLContext state_to_platform_context(const almondnamespace::openglstate::OpenGL4State& state) noexcept
+        inline PlatformGL::PlatformGLContext state_to_platform_context(const epochnamespace::openglstate::OpenGL4State& state) noexcept
         {
             PlatformGL::PlatformGLContext ctx{};
 #if defined(_WIN32)
@@ -215,7 +215,7 @@ export namespace almondnamespace::openglcontext
 
 #if defined(_WIN32)
         inline DrawableSize query_drawable_size(const core::Context* ctx,
-            const almondnamespace::openglstate::OpenGL4State& state) noexcept
+            const epochnamespace::openglstate::OpenGL4State& state) noexcept
         {
             DrawableSize size{};
             HWND hwnd = nullptr;
@@ -240,7 +240,7 @@ export namespace almondnamespace::openglcontext
         }
 #elif defined(__linux__)
         inline DrawableSize query_drawable_size(const PlatformGL::PlatformGLContext& active,
-            const almondnamespace::openglstate::OpenGL4State& state) noexcept
+            const epochnamespace::openglstate::OpenGL4State& state) noexcept
         {
             DrawableSize size{};
             Display* display = active.display ? active.display : state.display;
@@ -282,7 +282,7 @@ export namespace almondnamespace::openglcontext
         if (!ctx)
             throw std::runtime_error("[OpenGL] opengl_initialize requires non-null Context");
 
-        auto& backend = almondnamespace::opengltextures::get_opengl_backend();
+        auto& backend = epochnamespace::opengltextures::get_opengl_backend();
         auto& glState = backend.glState;
 
         glState.width = w;
@@ -590,16 +590,16 @@ export namespace almondnamespace::openglcontext
         throw std::runtime_error("[OpenGL] Unsupported platform");
 #endif
 
-        if (!almondnamespace::openglquad::ensure_quad_pipeline())
+        if (!epochnamespace::openglquad::ensure_quad_pipeline())
             throw std::runtime_error("[OpenGL] Failed to build/ensure quad pipeline");
 
         atlasmanager::register_backend_uploader(core::ContextType::OpenGL,
             [](const TextureAtlas& atlas) { opengltextures::ensure_uploaded(atlas); });
 
-        ctx->is_key_held = [](almondnamespace::input::Key k) { return almondnamespace::input::is_key_held(k); };
-        ctx->is_key_down = [](almondnamespace::input::Key k) { return almondnamespace::input::is_key_down(k); };
-        ctx->is_mouse_button_held = [](almondnamespace::input::MouseButton b) { return almondnamespace::input::is_mouse_button_held(b); };
-        ctx->is_mouse_button_down = [](almondnamespace::input::MouseButton b) { return almondnamespace::input::is_mouse_button_down(b); };
+        ctx->is_key_held = [](epochnamespace::input::Key k) { return epochnamespace::input::is_key_held(k); };
+        ctx->is_key_down = [](epochnamespace::input::Key k) { return epochnamespace::input::is_key_down(k); };
+        ctx->is_mouse_button_held = [](epochnamespace::input::MouseButton b) { return epochnamespace::input::is_mouse_button_held(b); };
+        ctx->is_mouse_button_down = [](epochnamespace::input::MouseButton b) { return epochnamespace::input::is_mouse_button_down(b); };
 
         return true;
     }
@@ -685,7 +685,7 @@ export namespace almondnamespace::openglcontext
 
         glViewport(0, 0, fbW, fbH);
 
-        if (!almondnamespace::openglquad::ensure_quad_pipeline())
+        if (!epochnamespace::openglquad::ensure_quad_pipeline())
         {
             queue.drain();
             PlatformGL::swap_buffers(guard.target());
@@ -758,4 +758,4 @@ export namespace almondnamespace::openglcontext
     }
 
 #endif // ALMOND_USING_OPENGL
-} // namespace almondnamespace::openglcontext
+} // namespace epochnamespace::openglcontext

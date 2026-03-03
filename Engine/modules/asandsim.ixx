@@ -2,7 +2,7 @@ module;
 
 export module asandsim;
 
-// Almond engine / project modules
+// Epoch engine / project modules
 import aengine.core.context;      // core::Context
 import aengine.context.window;    // core::WindowData
 import aengine.input;             // input::Key
@@ -27,7 +27,7 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::sandsim
+export namespace epochnamespace::sandsim
 {
     struct SandSimScene : public scene::Scene
     {
@@ -188,4 +188,4 @@ export namespace almondnamespace::sandsim
         scene.unload();
         return running;
     }
-} // namespace almondnamespace::sandsim
+} // namespace epochnamespace::sandsim

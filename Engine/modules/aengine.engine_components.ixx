@@ -17,65 +17,65 @@ export module aengine.engine_components;
 //import "atetrislike.hpp";
 //import "asandsim.hpp";
 //
-//export namespace almondnamespace
+//export namespace epochnamespace
 //{
 //    namespace scene
 //    {
-//        using namespace ::almondnamespace::scene;
+//        using namespace ::epochnamespace::scene;
 //    }
 //
 //    namespace game2048
 //    {
-//        using namespace ::almondnamespace::game2048;
+//        using namespace ::epochnamespace::game2048;
 //    }
 //
 //    namespace cellular
 //    {
-//        using namespace ::almondnamespace::cellular;
+//        using namespace ::epochnamespace::cellular;
 //    }
 //
 //    namespace frogger
 //    {
-//        using namespace ::almondnamespace::frogger;
+//        using namespace ::epochnamespace::frogger;
 //    }
 //
 //    namespace match3
 //    {
-//        using namespace ::almondnamespace::match3;
+//        using namespace ::epochnamespace::match3;
 //    }
 //
 //    namespace minesweeper
 //    {
-//        using namespace ::almondnamespace::minesweeper;
+//        using namespace ::epochnamespace::minesweeper;
 //    }
 //
 //    namespace pacman
 //    {
-//        using namespace ::almondnamespace::pacman;
+//        using namespace ::epochnamespace::pacman;
 //    }
 //
 //    namespace slidingpuzzle
 //    {
-//        using namespace ::almondnamespace::slidingpuzzle;
+//        using namespace ::epochnamespace::slidingpuzzle;
 //    }
 //
 //    namespace snakelike
 //    {
-//        using namespace ::almondnamespace::snakelike;
+//        using namespace ::epochnamespace::snakelike;
 //    }
 //
 //    namespace sokoban
 //    {
-//        using namespace ::almondnamespace::sokoban;
+//        using namespace ::epochnamespace::sokoban;
 //    }
 //
 //    namespace tetris
 //    {
-//        using namespace ::almondnamespace::tetris;
+//        using namespace ::epochnamespace::tetris;
 //    }
 //
 //    namespace sandsim
 //    {
-//        using namespace ::almondnamespace::sandsim;
+//        using namespace ::epochnamespace::sandsim;
 //    }
 //}

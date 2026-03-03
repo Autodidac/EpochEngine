@@ -21,7 +21,7 @@ import <utility>;
 // Command queue (thread-safe, no raw mutex access)
 // ============================================================
 
-export namespace almondnamespace::core
+export namespace epochnamespace::core
 {
     enum class RenderPath : std::uint8_t
     {

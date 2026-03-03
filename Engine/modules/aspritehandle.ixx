@@ -10,7 +10,7 @@ import <compare>;
 import <limits>;
 import <cstddef>;
 
-export namespace almondnamespace
+export namespace epochnamespace
 {
     struct SpriteHandle
     {

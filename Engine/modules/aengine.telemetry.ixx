@@ -8,7 +8,7 @@ import <string_view>;
 
 import aengine.context.type;
 
-export namespace almondnamespace::telemetry
+export namespace epochnamespace::telemetry
 {
     struct RendererTelemetryTags
     {

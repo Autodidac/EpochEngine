@@ -2,7 +2,7 @@ module;
 
 export module asokobanlike;
 
-// Almond engine / project modules
+// Epoch engine / project modules
 import aengine.core.context;      // core::Context
 import aengine.context.window;    // core::WindowData
 import aengine.input;             // input::Key
@@ -26,7 +26,7 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::sokobanlike
+export namespace epochnamespace::sokobanlike
 {
     struct SokobanLikeScene : public scene::Scene
     {
@@ -201,4 +201,4 @@ export namespace almondnamespace::sokobanlike
         scene.unload();
         return running;
     }
-} // namespace almondnamespace::sokobanlike
+} // namespace epochnamespace::sokobanlike

@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝
  *
  *   This file is part of the Almond Project.
- *   AlmondShell - Modular C++ Framework
+ *   epochengine - Modular C++ Framework
  *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell
  **************************************************************/
@@ -22,7 +22,7 @@ module;
 
 export module acontext.raylib.api;
 
-export namespace almondnamespace::raylib_api
+export namespace epochnamespace::raylib_api
 {
     // ------------------------------------------------------------
     // ABI-stable mirror types (match raylib's public structs)
@@ -188,4 +188,4 @@ export namespace almondnamespace::raylib_api
         Vector2 origin,
         float rotation,
         Color tint);
-} // namespace almondnamespace::raylib_api
+} // namespace epochnamespace::raylib_api

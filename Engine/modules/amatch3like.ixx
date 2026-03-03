@@ -2,7 +2,7 @@ module;
 
 export module amatch3like;
 
-// Almond engine / project modules
+// Epoch engine / project modules
 import aengine.core.context;      // core::Context
 import aengine.context.window;    // core::WindowData
 import aengine.input;             // input::Key
@@ -27,7 +27,7 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::match3like
+export namespace epochnamespace::match3like
 {
     struct Match3LikeScene : public scene::Scene
     {
@@ -193,4 +193,4 @@ export namespace almondnamespace::match3like
         scene.unload();
         return running;
     }
-} // namespace almondnamespace::match3like
+} // namespace epochnamespace::match3like

@@ -25,16 +25,16 @@ import <unordered_map>;
 import <utility>;
 import <vector>;
 
-export namespace almondnamespace::atlasmanager
+export namespace epochnamespace::atlasmanager
 {
-    using almondnamespace::spritepool::SpriteHandle;
-    using almondnamespace::spritepool::allocate;
+    using epochnamespace::spritepool::SpriteHandle;
+    using epochnamespace::spritepool::allocate;
 
-    using almondnamespace::TextureAtlas;
-    using almondnamespace::AtlasConfig;
-    using almondnamespace::u8;
-    using almondnamespace::u32;
-    using almondnamespace::u64;
+    using epochnamespace::TextureAtlas;
+    using epochnamespace::AtlasConfig;
+    using epochnamespace::u8;
+    using epochnamespace::u32;
+    using epochnamespace::u64;
 
     export inline SpriteRegistry registry{};
 
@@ -389,4 +389,4 @@ export namespace almondnamespace::atlasmanager
         if (detail::activeBackend && !detail::processingUploads)
             process_pending_uploads(*detail::activeBackend);
     }
-} // namespace almondnamespace::atlasmanager
+} // namespace epochnamespace::atlasmanager

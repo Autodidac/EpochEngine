@@ -2,7 +2,7 @@ module;
 
 export module aengine.context.type;
 
-export namespace almondnamespace::core
+export namespace epochnamespace::core
 {
 #ifdef None
 #undef None

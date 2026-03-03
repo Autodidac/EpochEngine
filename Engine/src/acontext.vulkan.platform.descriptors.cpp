@@ -1,6 +1,6 @@
 //import acontext.vulkan.descriptor;
 //
-//namespace almondnamespace::vulkancontext {
+//namespace epochnamespace::vulkancontext {
 //
 //    DescriptorSets DescriptorSets::create(const Context& ctx,
 //        const BufferPackage& uniformBuffer,
@@ -80,4 +80,4 @@
 //        return ds;
 //    }
 //
-//} // namespace almondnamespace::vulkancontext
+//} // namespace epochnamespace::vulkancontext

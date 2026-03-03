@@ -8,7 +8,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -49,9 +49,9 @@ import atexture;
 
 import aengine.gui;
 
-namespace almondnamespace::gui
+namespace epochnamespace::gui
 {
-    using Context = almondnamespace::core::Context;
+    using Context = epochnamespace::core::Context;
 
     constexpr const char* kAtlasName = "__agui_builtin";
     constexpr float       kContentPadding = 1.0f;
@@ -191,17 +191,17 @@ namespace almondnamespace::gui
             if (!entry)
                 throw std::runtime_error("[agui] Failed to add atlas entry: " + name);
 
-            if (almondnamespace::spritepool::capacity == 0)
-                almondnamespace::spritepool::initialize(2048);
+            if (epochnamespace::spritepool::capacity == 0)
+                epochnamespace::spritepool::initialize(2048);
 
-            SpriteHandle handle = almondnamespace::spritepool::allocate();
+            SpriteHandle handle = epochnamespace::spritepool::allocate();
             if (!handle.is_valid())
                 throw std::runtime_error("[agui] Sprite pool exhausted while registering GUI sprite");
 
             handle.atlasIndex = static_cast<std::uint32_t>(atlas.get_index());
             handle.localIndex = static_cast<std::uint32_t>(entry->index);
 
-            almondnamespace::atlasmanager::registry.add(
+            epochnamespace::atlasmanager::registry.add(
                 name, handle,
                 entry->region.u1,
                 entry->region.v1,
@@ -244,8 +244,8 @@ namespace almondnamespace::gui
                 std::filesystem::path{kDefaultFontFile},
                 std::filesystem::path{"assets/fonts"} / kDefaultFontFile,
                 std::filesystem::path{"Fonts"} / kDefaultFontFile,
-                std::filesystem::path{"AlmondShell/assets/fonts"} / kDefaultFontFile,
-                std::filesystem::path{"../AlmondShell/assets/fonts"} / kDefaultFontFile,
+                std::filesystem::path{"epochengine/assets/fonts"} / kDefaultFontFile,
+                std::filesystem::path{"../epochengine/assets/fonts"} / kDefaultFontFile,
             };
 
             const auto try_with_root = [&](const std::filesystem::path& root) -> std::filesystem::path
@@ -334,7 +334,7 @@ namespace almondnamespace::gui
             g_resources.font.metrics = g_resources.font.asset->metrics;
             populate_font_lookup(g_resources.font);
 
-            auto atlasVec = almondnamespace::atlasmanager::get_atlas_vector_snapshot(); // by value snapshot
+            auto atlasVec = epochnamespace::atlasmanager::get_atlas_vector_snapshot(); // by value snapshot
             if (g_resources.font.asset->atlas_index >= 0 &&
                 static_cast<std::size_t>(g_resources.font.asset->atlas_index) < atlasVec.size())
             {
@@ -343,8 +343,8 @@ namespace almondnamespace::gui
 
             if (!g_resources.font.atlas)
             {
-                if (auto it = almondnamespace::atlasmanager::atlas_map.find("font_atlas");
-                    it != almondnamespace::atlasmanager::atlas_map.end())
+                if (auto it = epochnamespace::atlasmanager::atlas_map.find("font_atlas");
+                    it != epochnamespace::atlasmanager::atlas_map.end())
                 {
                     g_resources.font.atlas = it->second.get();
                 }
@@ -357,18 +357,18 @@ namespace almondnamespace::gui
 
             if (!g_resources.atlasBuilt)
             {
-                auto atlasIt = almondnamespace::atlasmanager::atlas_map.find(kAtlasName);
-                if (atlasIt == almondnamespace::atlasmanager::atlas_map.end())
+                auto atlasIt = epochnamespace::atlasmanager::atlas_map.find(kAtlasName);
+                if (atlasIt == epochnamespace::atlasmanager::atlas_map.end())
                 {
-                    almondnamespace::atlasmanager::create_atlas({
+                    epochnamespace::atlasmanager::create_atlas({
                         .name = kAtlasName,
                         .width = 512,
                         .height = 512,
                         .generate_mipmaps = false
                         });
 
-                    atlasIt = almondnamespace::atlasmanager::atlas_map.find(kAtlasName);
-                    if (atlasIt == almondnamespace::atlasmanager::atlas_map.end())
+                    atlasIt = epochnamespace::atlasmanager::atlas_map.find(kAtlasName);
+                    if (atlasIt == epochnamespace::atlasmanager::atlas_map.end())
                         throw std::runtime_error("[agui] Unable to create GUI atlas");
                 }
 
@@ -468,7 +468,7 @@ namespace almondnamespace::gui
                         if (!ctxShared)
                             return;
 
-                        auto atlases = almondnamespace::atlasmanager::get_atlas_vector_snapshot();
+                        auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
                         std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
                         ctxShared->draw_sprite_safe(handle, span, x, y, w, h);
                     }, renderPath);
@@ -482,7 +482,7 @@ namespace almondnamespace::gui
 
             if (!ctx->windowData || onRenderThread)
             {
-                auto atlases = almondnamespace::atlasmanager::get_atlas_vector_snapshot();
+                auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
                 std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
                 ctx->draw_sprite_safe(handle, span, x, y, w, h);
             }
@@ -1255,4 +1255,4 @@ namespace almondnamespace::gui
         end_window();
         return result;
     }
-} // namespace almondnamespace::gui
+} // namespace epochnamespace::gui

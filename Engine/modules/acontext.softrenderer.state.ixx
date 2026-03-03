@@ -7,7 +7,7 @@
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
- *   AlmondEngine - Modular C++ Game Engine                   *
+ *   epochengine - Modular C++ Game Engine                   *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -52,7 +52,7 @@ import aengine.core.time;
 
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
 
-export namespace almondnamespace::anativecontext
+export namespace epochnamespace::anativecontext
 {
     struct SoftRendState
     {

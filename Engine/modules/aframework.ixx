@@ -37,7 +37,7 @@ export module aframework;
 
 #if defined(_WIN32)
 
-export namespace almondnamespace::platform::win32
+export namespace epochnamespace::platform::win32
 {
     using hwnd = HWND;
     using hinst = HINSTANCE;

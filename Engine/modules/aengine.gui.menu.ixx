@@ -38,9 +38,9 @@ import <sstream>;
 // Menu
 // ============================================================
 
-namespace gui = almondnamespace::gui;
+namespace gui = epochnamespace::gui;
 
-export namespace almondnamespace::menu
+export namespace epochnamespace::menu
 {
     enum class Choice {
         Snake, Tetris, Pacman, Frogger, Sokoban,
@@ -136,7 +136,7 @@ export namespace almondnamespace::menu
 
         // ----------------------------------------------------
         void recompute_layout(
-            std::shared_ptr<almondnamespace::core::Context> ctx,
+            std::shared_ptr<epochnamespace::core::Context> ctx,
             int widthPixels,
             int heightPixels)
         {

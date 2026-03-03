@@ -6,7 +6,7 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝
  *
- *   AlmondShell – Raylib Context (Portable)
+ *   epochengine – Raylib Context (Portable)
  **************************************************************/
 
 module;
@@ -60,13 +60,13 @@ import <utility>;
 
 #if defined(ALMOND_USING_RAYLIB)
 
-namespace almondnamespace::raylibcontext
+namespace epochnamespace::raylibcontext
 {
     using NativeWindowHandle = void*;
 
     inline std::string& title_storage()
     {
-        static std::string s_title = "AlmondShell";
+        static std::string s_title = "epochengine";
         return s_title;
     }
 
@@ -92,7 +92,7 @@ namespace almondnamespace::raylibcontext
         }
 
         // Debug helper: verify the multiplexer has made the raylib context current
-        inline void debug_expect_raylib_current(const almondnamespace::raylibstate::RaylibState& st, const char* where)
+        inline void debug_expect_raylib_current(const epochnamespace::raylibstate::RaylibState& st, const char* where)
         {
 #if defined(_DEBUG)
             const auto dc = current_dc();
@@ -145,7 +145,7 @@ namespace almondnamespace::raylibcontext
         }
 
         inline void adopt_raylib_window(
-            almondnamespace::raylibstate::RaylibState& st,
+            epochnamespace::raylibstate::RaylibState& st,
             std::shared_ptr<core::Context> ctx,
             HWND parent,
             HWND raylibHwnd)
@@ -187,7 +187,7 @@ namespace almondnamespace::raylibcontext
                     static_cast<int>(st.height),
                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-                almondnamespace::core::MakeDockable(raylibHwnd, dockParent);
+                epochnamespace::core::MakeDockable(raylibHwnd, dockParent);
 
                 if (attachedToDock && parent && parent != dockParent)
                 {
@@ -215,26 +215,26 @@ namespace almondnamespace::raylibcontext
 
     namespace detail
     {
-        inline void raylib_stop_rendering_backend(almondnamespace::raylibstate::RaylibState& st)
+        inline void raylib_stop_rendering_backend(epochnamespace::raylibstate::RaylibState& st)
         {
             if (!st.renderingActive)
                 return;
 
-            almondnamespace::raylibtextures::shutdown_current_context_backend();
+            epochnamespace::raylibtextures::shutdown_current_context_backend();
 
             if (st.frameActive)
             {
                 if (st.frameInTextureMode)
-                    almondnamespace::raylib_api::end_texture_mode();
+                    epochnamespace::raylib_api::end_texture_mode();
                 else
-                    almondnamespace::raylib_api::end_drawing();
+                    epochnamespace::raylib_api::end_drawing();
                 st.frameActive = false;
                 st.frameInTextureMode = false;
             }
 
             if (st.offscreen.id != 0)
             {
-                almondnamespace::raylib_api::unload_render_texture(st.offscreen);
+                epochnamespace::raylib_api::unload_render_texture(st.offscreen);
                 st.offscreen = {};
                 st.offscreenWidth = 0;
                 st.offscreenHeight = 0;
@@ -243,12 +243,12 @@ namespace almondnamespace::raylibcontext
             st.renderingActive = false;
         }
 
-        inline void ensure_frame_started(almondnamespace::raylibstate::RaylibState& st)
+        inline void ensure_frame_started(epochnamespace::raylibstate::RaylibState& st)
         {
             if (st.frameActive)
                 return;
 
-            almondnamespace::raylib_api::begin_drawing();
+            epochnamespace::raylib_api::begin_drawing();
             st.frameActive = true;
             st.frameInTextureMode = false;
         }
@@ -262,7 +262,7 @@ namespace almondnamespace::raylibcontext
         std::function<void(int, int)> resizeCallback = nullptr,
         std::string title = {})
     {
-        auto& st = almondnamespace::raylibstate::s_raylibstate;
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
 
         if (width == 0)  width = static_cast<unsigned>(core::cli::window_width);
         if (height == 0) height = static_cast<unsigned>(core::cli::window_height);
@@ -311,10 +311,10 @@ namespace almondnamespace::raylibcontext
         }
 #endif
 
-        almondnamespace::raylib_api::set_config_flags(
-            static_cast<unsigned>(almondnamespace::raylib_api::flag_msaa_4x_hint));
+        epochnamespace::raylib_api::set_config_flags(
+            static_cast<unsigned>(epochnamespace::raylib_api::flag_msaa_4x_hint));
 
-        almondnamespace::raylib_api::init_window(
+        epochnamespace::raylib_api::init_window(
             static_cast<int>(st.width),
             static_cast<int>(st.height),
             title_storage().c_str());
@@ -345,15 +345,15 @@ namespace almondnamespace::raylibcontext
                 static_cast<const void*>(st.hglrc)));
 #endif
 
-        const HWND raylibHwnd = static_cast<HWND>(almondnamespace::raylib_api::get_window_handle());
+        const HWND raylibHwnd = static_cast<HWND>(epochnamespace::raylib_api::get_window_handle());
         const HWND parentHwnd = static_cast<HWND>(parent);
         HWND adoptedHwnd = raylibHwnd;
         for (int attempt = 0; attempt < 5 && !adoptedHwnd; ++attempt)
         {
-            almondnamespace::raylib_api::begin_drawing();
-            almondnamespace::raylib_api::end_drawing();
+            epochnamespace::raylib_api::begin_drawing();
+            epochnamespace::raylib_api::end_drawing();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            adoptedHwnd = static_cast<HWND>(almondnamespace::raylib_api::get_window_handle());
+            adoptedHwnd = static_cast<HWND>(epochnamespace::raylib_api::get_window_handle());
         }
         if (adoptedHwnd)
         {
@@ -365,11 +365,11 @@ namespace almondnamespace::raylibcontext
         }
 #endif
 
-        almondnamespace::raylib_api::set_target_fps(0);
+        epochnamespace::raylib_api::set_target_fps(0);
 
         st.onResize = [](int w, int h)
             {
-                auto& state = almondnamespace::raylibstate::s_raylibstate;
+                auto& state = epochnamespace::raylibstate::s_raylibstate;
                 const int clampedW = (std::max)(1, w);
                 const int clampedH = (std::max)(1, h);
                 state.width = static_cast<unsigned>(clampedW);
@@ -402,9 +402,9 @@ namespace almondnamespace::raylibcontext
         st.renderingActive = true;
         st.cleanupIssued = false;
 
-        almondnamespace::atlasmanager::register_backend_uploader(
-            almondnamespace::core::ContextType::RayLib,
-            almondnamespace::raylibtextures::ensure_uploaded);
+        epochnamespace::atlasmanager::register_backend_uploader(
+            epochnamespace::core::ContextType::RayLib,
+            epochnamespace::raylibtextures::ensure_uploaded);
 
         return true;
     }
@@ -412,7 +412,7 @@ namespace almondnamespace::raylibcontext
     export inline bool raylib_make_current() noexcept
     {
 #if defined(_WIN32)
-        auto& st = almondnamespace::raylibstate::s_raylibstate;
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
         if (!st.hdc || !st.hglrc)
             return false;
 
@@ -424,12 +424,12 @@ namespace almondnamespace::raylibcontext
 
     namespace detail
     {
-        void raylib_cleanup_owner_thread(almondnamespace::core::Context* ctx);
+        void raylib_cleanup_owner_thread(epochnamespace::core::Context* ctx);
     }
 
     export inline void raylib_process()
     {
-        auto& st = almondnamespace::raylibstate::s_raylibstate;
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
         if (st.cleanupRequested)
         {
             detail::raylib_cleanup_owner_thread(st.owner_ctx);
@@ -445,7 +445,7 @@ namespace almondnamespace::raylibcontext
                 : 0);
 
         almond::diagnostics::FrameTiming frameTimer{
-            almondnamespace::core::ContextType::RayLib,
+            epochnamespace::core::ContextType::RayLib,
             windowId,
             "Raylib"
         };
@@ -461,7 +461,7 @@ namespace almondnamespace::raylibcontext
         }
 #endif
 
-        if (almondnamespace::raylib_api::window_should_close())
+        if (epochnamespace::raylib_api::window_should_close())
         {
             detail::raylib_stop_rendering_backend(st);
 
@@ -495,7 +495,7 @@ namespace almondnamespace::raylibcontext
 
     export inline void raylib_idle_frame()
     {
-        auto& st = almondnamespace::raylibstate::s_raylibstate;
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
         if (!st.running || !st.renderingActive)
             return;
 
@@ -506,12 +506,12 @@ namespace almondnamespace::raylibcontext
 
         if (!st.frameActive)
         {
-            almondnamespace::raylib_api::begin_drawing();
+            epochnamespace::raylib_api::begin_drawing();
             st.frameActive = true;
             st.frameInTextureMode = false;
         }
 
-        almondnamespace::raylib_api::end_drawing();
+        epochnamespace::raylib_api::end_drawing();
         st.frameActive = false;
         st.frameInTextureMode = false;
 
@@ -527,7 +527,7 @@ namespace almondnamespace::raylibcontext
         (void)b;
         (void)a;
 
-        auto& st = almondnamespace::raylibstate::s_raylibstate;
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
         if (!st.running || !st.renderingActive)
             return;
 
@@ -540,8 +540,8 @@ namespace almondnamespace::raylibcontext
 
 #if ALMOND_USE_CLEAR_COLOR
         const auto clearColor = core::clear_color_for_context(core::ContextType::RayLib);
-        almondnamespace::raylib_api::clear_background(
-            almondnamespace::raylib_api::Color{
+        epochnamespace::raylib_api::clear_background(
+            epochnamespace::raylib_api::Color{
                 static_cast<unsigned char>(std::clamp(clearColor[0], 0.0f, 1.0f) * 255.0f),
                 static_cast<unsigned char>(std::clamp(clearColor[1], 0.0f, 1.0f) * 255.0f),
                 static_cast<unsigned char>(std::clamp(clearColor[2], 0.0f, 1.0f) * 255.0f),
@@ -552,7 +552,7 @@ namespace almondnamespace::raylibcontext
 
     export inline void raylib_present()
     {
-        auto& st = almondnamespace::raylibstate::s_raylibstate;
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
         if (!st.running || !st.renderingActive)
             return;
 
@@ -561,9 +561,9 @@ namespace almondnamespace::raylibcontext
         if (st.frameActive)
         {
             if (st.frameInTextureMode)
-                almondnamespace::raylib_api::end_texture_mode();
+                epochnamespace::raylib_api::end_texture_mode();
             else
-                almondnamespace::raylib_api::end_drawing();
+                epochnamespace::raylib_api::end_drawing();
             st.frameActive = false;
             st.frameInTextureMode = false;
         }
@@ -575,9 +575,9 @@ namespace almondnamespace::raylibcontext
 
     namespace detail
     {
-        inline void raylib_cleanup_owner_thread(almondnamespace::core::Context* ctx)
+        inline void raylib_cleanup_owner_thread(epochnamespace::core::Context* ctx)
         {
-            auto& st = almondnamespace::raylibstate::s_raylibstate;
+            auto& st = epochnamespace::raylibstate::s_raylibstate;
 
 #if defined(_WIN32)
             const HDC   previousDC = detail::current_dc();
@@ -585,8 +585,8 @@ namespace almondnamespace::raylibcontext
             const bool window_alive = (st.hwnd != nullptr) && (::IsWindow(st.hwnd) != FALSE);
 #endif
 
-            almondnamespace::atlasmanager::unregister_backend_uploader(
-                almondnamespace::core::ContextType::RayLib);
+            epochnamespace::atlasmanager::unregister_backend_uploader(
+                epochnamespace::core::ContextType::RayLib);
 
 #if defined(_WIN32)
             (void)raylib_make_current();
@@ -603,17 +603,17 @@ namespace almondnamespace::raylibcontext
 #endif
             }
 
-            if (almondnamespace::raylib_api::is_window_ready())
+            if (epochnamespace::raylib_api::is_window_ready())
             {
 #if defined(_WIN32)
                 if (window_alive)
                 {
                     // If docked as child, detach to top-level before closing to avoid teardown deadlocks.
                     detail::promote_raylib_to_top_level(st.hwnd);
-                    almondnamespace::raylib_api::close_window();
+                    epochnamespace::raylib_api::close_window();
                 }
 #else
-                almondnamespace::raylib_api::close_window();
+                epochnamespace::raylib_api::close_window();
 #endif
             }
 
@@ -636,7 +636,7 @@ namespace almondnamespace::raylibcontext
 
     export inline void raylib_cleanup(std::shared_ptr<core::Context> ctx)
     {
-        auto& st = almondnamespace::raylibstate::s_raylibstate;
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
         if (st.cleanupIssued)
             return;
 
@@ -661,27 +661,27 @@ namespace almondnamespace::raylibcontext
     export inline void raylib_set_window_title(std::string_view title)
     {
         title_storage().assign(title.begin(), title.end());
-        almondnamespace::raylib_api::set_window_title(title_storage().c_str());
+        epochnamespace::raylib_api::set_window_title(title_storage().c_str());
     }
 
     export inline int raylib_get_width()
     {
-        return static_cast<int>(almondnamespace::raylibstate::s_raylibstate.width);
+        return static_cast<int>(epochnamespace::raylibstate::s_raylibstate.width);
     }
 
     export inline int raylib_get_height()
     {
-        return static_cast<int>(almondnamespace::raylibstate::s_raylibstate.height);
+        return static_cast<int>(epochnamespace::raylibstate::s_raylibstate.height);
     }
 
-    export inline almondnamespace::raylib_api::Vector2 raylib_get_mouse_position()
+    export inline epochnamespace::raylib_api::Vector2 raylib_get_mouse_position()
     {
-        return almondnamespace::raylib_api::get_mouse_position();
+        return epochnamespace::raylib_api::get_mouse_position();
     }
 
     export inline NativeWindowHandle raylib_get_native_window()
     {
-        return almondnamespace::raylibstate::s_raylibstate.hwnd;
+        return epochnamespace::raylibstate::s_raylibstate.hwnd;
     }
 }
 

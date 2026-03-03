@@ -25,7 +25,7 @@ import acontext.raylib.api;
 
 #if defined(ALMOND_USING_RAYLIB)
 
-namespace almondnamespace::raylibrenderer
+namespace epochnamespace::raylibrenderer
 {
     // DO NOT call BeginDrawing/EndDrawing here.
     // The context layer owns frame boundaries; this renderer only issues draw calls.
@@ -53,21 +53,21 @@ namespace almondnamespace::raylibrenderer
         if (!atlas->try_get_entry_info(i, r))
             return;
 
-        auto& st = almondnamespace::raylibstate::s_raylibstate;
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
         if (!st.running)
             return;
 
         if (!st.frameActive && st.offscreen.id != 0)
         {
-            almondnamespace::raylib_api::begin_texture_mode(st.offscreen);
+            epochnamespace::raylib_api::begin_texture_mode(st.offscreen);
             st.frameActive = true;
             st.frameInTextureMode = true;
         }
 
         // Upload (this will no-op if cached + correct version).
-        almondnamespace::raylibtextures::ensure_uploaded(*atlas);
+        epochnamespace::raylibtextures::ensure_uploaded(*atlas);
 
-        const auto* texPtr = almondnamespace::raylibtextures::try_get_texture(*atlas);
+        const auto* texPtr = epochnamespace::raylibtextures::try_get_texture(*atlas);
         if (!texPtr || texPtr->id == 0)
             return;
 
@@ -76,14 +76,14 @@ namespace almondnamespace::raylibrenderer
 
         const auto& tex = *texPtr;
 
-        const almondnamespace::raylib_api::Rectangle src{
+        const epochnamespace::raylib_api::Rectangle src{
             static_cast<float>(r.x),
             static_cast<float>(r.y),
             static_cast<float>(r.width),
             static_cast<float>(r.height)
         };
 
-        const auto fit = almondnamespace::raylibstate::get_last_viewport_fit();
+        const auto fit = epochnamespace::raylibstate::get_last_viewport_fit();
 
         const float viewportScale = (fit.scale > 0.0f) ? fit.scale : 1.0f;
         const float designWidth = static_cast<float>((std::max)(1, fit.refW));
@@ -131,15 +131,15 @@ namespace almondnamespace::raylibrenderer
             ph = (std::max)(scaledH, 1.0f);
         }
 
-        const almondnamespace::raylib_api::Rectangle dst{ px, py, pw, ph };
+        const epochnamespace::raylib_api::Rectangle dst{ px, py, pw, ph };
 
-        almondnamespace::raylib_api::draw_texture_pro(
+        epochnamespace::raylib_api::draw_texture_pro(
             tex,
             src,
             dst,
-            almondnamespace::raylib_api::Vector2{ 0.0f, 0.0f },
+            epochnamespace::raylib_api::Vector2{ 0.0f, 0.0f },
             0.0f,
-            almondnamespace::raylib_api::white);
+            epochnamespace::raylib_api::white);
     }
 }
 

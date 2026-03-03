@@ -8,9 +8,9 @@ export module aenduserapplication;
 ////import "ainput.hpp";
 //import aengine.core.time;
 //
-//namespace almondnamespace::app
+//namespace epochnamespace::app
 //{
-//    namespace events = almondnamespace::events;
+//    namespace events = epochnamespace::events;
 //
 //    // ─── helper: enqueue raw input as events (no coupling) ──────────────
 //    void translate_input(const core::Context& ctx) noexcept
@@ -29,7 +29,7 @@ export module aenduserapplication;
 //    }
 //
 //    // ─── Main loop (ECS-free stub – slots neatly into your engine) ─────
-//    bool run_app(std::shared_ptr<almondnamespace::core::Context>& ctx)
+//    bool run_app(std::shared_ptr<epochnamespace::core::Context>& ctx)
 //    {
 //        // reset GL / load sprites
 //        //opengl::reset_texture_system();
@@ -42,7 +42,7 @@ export module aenduserapplication;
 //        double acc = 0.0;
 //
 //        // one-shot init for external modules
-//        for (auto m : almondnamespace::detail::get_modules()) if (m->init) m->init();
+//        for (auto m : epochnamespace::detail::get_modules()) if (m->init) m->init();
 //
 //        bool game_over = false;
 //        //while (!game_over && ctx->process(*ctx))
@@ -58,7 +58,7 @@ export module aenduserapplication;
 //        //        // --- update gameplay here (snake ECS not shown) ---
 //
 //        //        // let user modules run
-//        //        for (auto m : almondnamespace::detail::get_modules())
+//        //        for (auto m : epochnamespace::detail::get_modules())
 //        //            if (m->update) m->update(static_cast<float>(STEP_S));
 //
 //        //        acc -= STEP_S;
@@ -71,7 +71,7 @@ export module aenduserapplication;
 //        //    ctx->present();
 //        //}
 //
-//        for (auto m : almondnamespace::detail::get_modules()) if (m->shutdown) m->shutdown();
+//        for (auto m : epochnamespace::detail::get_modules()) if (m->shutdown) m->shutdown();
 //        return game_over;
 //    }
 //}

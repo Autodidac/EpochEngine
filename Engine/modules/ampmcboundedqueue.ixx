@@ -8,7 +8,7 @@ import <cstddef>;
 import <memory>;
 import <type_traits>;
 
-export namespace almondnamespace {
+export namespace epochnamespace {
     template<typename T>
     class MPMCQueue {
     public:
