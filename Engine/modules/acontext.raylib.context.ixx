@@ -44,6 +44,7 @@ import acontext.raylib.textures;
 import acontext.raylib.renderer;
 import acontext.raylib.input;
 import acontext.raylib.api;
+import aengine.input;
 
 import <algorithm>;
 import <cmath>;
@@ -396,7 +397,21 @@ namespace almondnamespace::raylibcontext
 #endif
 
         if (ctx)
+        {
             ctx->onResize = st.onResize;
+
+            const auto inputContextId = reinterpret_cast<almondnamespace::input::InputContextId>(ctx.get());
+            ctx->is_key_held = [inputContextId](almondnamespace::input::Key k)
+                { return almondnamespace::input::is_key_held_for_context(inputContextId, k); };
+            ctx->is_key_down = [inputContextId](almondnamespace::input::Key k)
+                { return almondnamespace::input::is_key_down_for_context(inputContextId, k); };
+            ctx->is_mouse_button_held = [inputContextId](almondnamespace::input::MouseButton b)
+                { return almondnamespace::input::is_mouse_button_held_for_context(inputContextId, b); };
+            ctx->is_mouse_button_down = [inputContextId](almondnamespace::input::MouseButton b)
+                { return almondnamespace::input::is_mouse_button_down_for_context(inputContextId, b); };
+            ctx->get_mouse_position = [inputContextId](int& x, int& y)
+                { almondnamespace::input::get_mouse_position_for_context(inputContextId, x, y); };
+        }
 
         st.running = true;
         st.renderingActive = true;

@@ -27,16 +27,17 @@ namespace almondnamespace::raylibcontext
         using namespace almondnamespace::input;
 
         std::unique_lock<std::shared_mutex> lock(g_inputMutex);
+        auto& snapshot = get_or_create_snapshot_for_context(get_current_input_context_id());
 
         // ---- Clear "pressed this frame" + wheel ----
         // Do NOT rely on .reset() existing (types differ across your backends).
         for (int k = 0; k < Key::Count; ++k)
-            keyPressed[k] = false;
+            snapshot.keyPressed[k] = false;
 
         for (int b = 0; b < MouseButton::MouseCount; ++b)
-            mousePressed[b] = false;
+            snapshot.mousePressed[b] = false;
 
-        mouseWheel.store(0, std::memory_order_relaxed);
+        snapshot.mouseWheel = 0;
 
         // ---- Keyboard ----
         for (int k = 0; k < Key::Count; ++k)
@@ -101,8 +102,8 @@ namespace almondnamespace::raylibcontext
             const bool down = almondnamespace::raylib_api::is_key_down(ray);
 
             // "pressed" = down this frame, was up last frame
-            keyPressed[k] = down && !static_cast<bool>(keyDown[k]);
-            keyDown[k] = down;
+            snapshot.keyPressed[k] = down && !static_cast<bool>(snapshot.keyDown[k]);
+            snapshot.keyDown[k] = down;
         }
 
         // ---- Mouse ----
@@ -122,21 +123,19 @@ namespace almondnamespace::raylibcontext
             if (ray == 0) continue;
 
             const bool down = almondnamespace::raylib_api::is_mouse_button_down(ray);
-            mousePressed[b] = down && !static_cast<bool>(mouseDown[b]);
-            mouseDown[b] = down;
+            snapshot.mousePressed[b] = down && !static_cast<bool>(snapshot.mouseDown[b]);
+            snapshot.mouseDown[b] = down;
         }
 
-        mouseX.store(almondnamespace::raylib_api::get_mouse_x(), std::memory_order_relaxed);
-        mouseY.store(almondnamespace::raylib_api::get_mouse_y(), std::memory_order_relaxed);
+        snapshot.mouseX = almondnamespace::raylib_api::get_mouse_x();
+        snapshot.mouseY = almondnamespace::raylib_api::get_mouse_y();
         const auto currentContext = core::get_current_render_context();
         const auto contextId = currentContext
             ? reinterpret_cast<MouseCoordsContextId>(currentContext.get())
             : kDefaultMouseCoordsContextId;
         set_mouse_coords_are_global_for_context(contextId, false);
 
-        mouseWheel.store(
-            static_cast<int>(almondnamespace::raylib_api::get_mouse_wheel_move()),
-            std::memory_order_relaxed);
+        snapshot.mouseWheel = static_cast<int>(almondnamespace::raylib_api::get_mouse_wheel_move());
     }
 }
 
