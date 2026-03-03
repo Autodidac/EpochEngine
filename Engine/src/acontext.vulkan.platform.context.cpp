@@ -340,8 +340,6 @@ namespace almondnamespace::vulkancontext
 
     void Application::set_framebuffer_size(int width, int height)
     {
-        bind_render_thread();
-        assert_thread_affinity();
         std::scoped_lock lock(framebufferStateMutex);
         framebufferWidth = (std::max)(1, width);
         framebufferHeight = (std::max)(1, height);
