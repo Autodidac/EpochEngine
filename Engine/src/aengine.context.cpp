@@ -567,7 +567,7 @@ namespace almondnamespace::core
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
+            ctx->get_mouse_position = [](int& x, int& y) { input::get_mouse_position(x, y); };
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
@@ -594,7 +594,7 @@ namespace almondnamespace::core
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
+            ctx->get_mouse_position = [](int& x, int& y) { input::get_mouse_position(x, y); };
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
@@ -674,7 +674,7 @@ namespace almondnamespace::core
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
+            ctx->get_mouse_position = [](int& x, int& y) { input::get_mouse_position(x, y); };
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
@@ -701,7 +701,7 @@ namespace almondnamespace::core
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
+            ctx->get_mouse_position = [](int& x, int& y) { input::get_mouse_position(x, y); };
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
@@ -729,7 +729,7 @@ namespace almondnamespace::core
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
+            ctx->get_mouse_position = [](int& x, int& y) { input::get_mouse_position(x, y); };
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
@@ -753,7 +753,7 @@ namespace almondnamespace::core
 
             ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
             ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
+            ctx->get_mouse_position = [](int& x, int& y) { input::get_mouse_position(x, y); };
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
