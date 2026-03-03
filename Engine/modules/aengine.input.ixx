@@ -102,14 +102,21 @@ export namespace almondnamespace::input
     inline std::atomic<bool>     g_pollingThreadLocked{ false };
     inline std::shared_mutex     g_inputMutex{};
 
-    inline std::bitset<Key::Count>               keyDown{};
-    inline std::bitset<Key::Count>               keyPressed{};
-    inline std::bitset<MouseButton::MouseCount>  mouseDown{};
-    inline std::bitset<MouseButton::MouseCount>  mousePressed{};
+    export using InputContextId = std::uintptr_t;
+    inline constexpr InputContextId kDefaultInputContextId = 0;
 
-    inline std::atomic<int>   mouseX{ 0 };
-    inline std::atomic<int>   mouseY{ 0 };
-    inline std::atomic<int>   mouseWheel{ 0 };
+    export struct InputSnapshot final
+    {
+        std::bitset<Key::Count> keyDown{};
+        std::bitset<Key::Count> keyPressed{};
+        std::bitset<MouseButton::MouseCount> mouseDown{};
+        std::bitset<MouseButton::MouseCount> mousePressed{};
+        int mouseX = 0;
+        int mouseY = 0;
+        int mouseWheel = 0;
+    };
+
+    inline std::unordered_map<InputContextId, InputSnapshot> g_inputSnapshots{};
 
     export using MouseCoordsContextId = std::uintptr_t;
     inline constexpr MouseCoordsContextId kDefaultMouseCoordsContextId = 0;
@@ -124,6 +131,55 @@ export namespace almondnamespace::input
             return reinterpret_cast<MouseCoordsContextId>(ctx.get());
 
         return kDefaultMouseCoordsContextId;
+    }
+
+    export inline InputContextId get_current_input_context_id()
+    {
+        if (auto ctx = core::get_current_render_context(); ctx)
+            return reinterpret_cast<InputContextId>(ctx.get());
+
+        return kDefaultInputContextId;
+    }
+
+    export inline InputSnapshot& get_or_create_snapshot_for_context(InputContextId contextId)
+    {
+        return g_inputSnapshots[contextId];
+    }
+
+    export inline InputSnapshot get_snapshot_for_context(InputContextId contextId)
+    {
+        std::shared_lock lock(g_inputMutex);
+        if (const auto it = g_inputSnapshots.find(contextId); it != g_inputSnapshots.end())
+            return it->second;
+
+        return {};
+    }
+
+    export inline InputSnapshot get_snapshot_for_current_context()
+    {
+        return get_snapshot_for_context(get_current_input_context_id());
+    }
+
+    export inline void get_mouse_position_for_context(InputContextId contextId, int& x, int& y)
+    {
+        const auto snapshot = get_snapshot_for_context(contextId);
+        x = snapshot.mouseX;
+        y = snapshot.mouseY;
+    }
+
+    export inline void get_mouse_position(int& x, int& y)
+    {
+        get_mouse_position_for_context(get_current_input_context_id(), x, y);
+    }
+
+    export inline int get_mouse_wheel_for_context(InputContextId contextId)
+    {
+        return get_snapshot_for_context(contextId).mouseWheel;
+    }
+
+    export inline int get_mouse_wheel()
+    {
+        return get_mouse_wheel_for_context(get_current_input_context_id());
     }
 
     inline void debug_verify_context_mouse_mode_divergence_locked()
@@ -292,10 +348,11 @@ export namespace almondnamespace::input
             return;
 
         std::unique_lock lock(g_inputMutex);
+        auto& snapshot = get_or_create_snapshot_for_context(get_current_input_context_id());
 
-        keyPressed.reset();
-        mousePressed.reset();
-        mouseWheel.store(0, std::memory_order_relaxed);
+        snapshot.keyPressed.reset();
+        snapshot.mousePressed.reset();
+        snapshot.mouseWheel = 0;
 
         for (std::uint16_t k = 0; k < Key::Count; ++k)
         {
@@ -303,10 +360,10 @@ export namespace almondnamespace::input
             if (!vk) continue;
 
             bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
-            if (down && !keyDown.test(k))
-                keyPressed.set(k);
+            if (down && !snapshot.keyDown.test(k))
+                snapshot.keyPressed.set(k);
 
-            keyDown.set(k, down);
+            snapshot.keyDown.set(k, down);
         }
 
         for (std::uint8_t b = 0; b < MouseButton::MouseCount; ++b)
@@ -315,17 +372,17 @@ export namespace almondnamespace::input
             if (!vk) continue;
 
             bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
-            if (down && !mouseDown.test(b))
-                mousePressed.set(b);
+            if (down && !snapshot.mouseDown.test(b))
+                snapshot.mousePressed.set(b);
 
-            mouseDown.set(b, down);
+            snapshot.mouseDown.set(b, down);
         }
 
         POINT p{};
         if (GetCursorPos(&p))
         {
-            mouseX.store(p.x, std::memory_order_relaxed);
-            mouseY.store(p.y, std::memory_order_relaxed);
+            snapshot.mouseX = p.x;
+            snapshot.mouseY = p.y;
             set_mouse_coords_are_global_for_context(get_current_mouse_coords_context_id(), true);
         }
     }
@@ -335,28 +392,83 @@ export namespace almondnamespace::input
     // ========================================================
     // Query helpers (platform independent)
     // ========================================================
+    // Compatibility wrappers:
+    // these functions now resolve through core::get_current_render_context()
+    // rather than reading a process-global input state.
     export inline bool is_key_held(Key k)
     {
         std::shared_lock lock(g_inputMutex);
-        return keyDown.test(static_cast<size_t>(k));
+        const auto contextId = get_current_input_context_id();
+        if (const auto it = g_inputSnapshots.find(contextId); it != g_inputSnapshots.end())
+            return it->second.keyDown.test(static_cast<size_t>(k));
+
+        return false;
     }
 
     export inline bool is_key_down(Key k)
     {
         std::shared_lock lock(g_inputMutex);
-        return keyPressed.test(static_cast<size_t>(k));
+        const auto contextId = get_current_input_context_id();
+        if (const auto it = g_inputSnapshots.find(contextId); it != g_inputSnapshots.end())
+            return it->second.keyPressed.test(static_cast<size_t>(k));
+
+        return false;
     }
 
     export inline bool is_mouse_button_held(MouseButton b)
     {
         std::shared_lock lock(g_inputMutex);
-        return mouseDown.test(static_cast<size_t>(b));
+        const auto contextId = get_current_input_context_id();
+        if (const auto it = g_inputSnapshots.find(contextId); it != g_inputSnapshots.end())
+            return it->second.mouseDown.test(static_cast<size_t>(b));
+
+        return false;
     }
 
     export inline bool is_mouse_button_down(MouseButton b)
     {
         std::shared_lock lock(g_inputMutex);
-        return mousePressed.test(static_cast<size_t>(b));
+        const auto contextId = get_current_input_context_id();
+        if (const auto it = g_inputSnapshots.find(contextId); it != g_inputSnapshots.end())
+            return it->second.mousePressed.test(static_cast<size_t>(b));
+
+        return false;
+    }
+
+    export inline bool is_key_held_for_context(InputContextId contextId, Key k)
+    {
+        std::shared_lock lock(g_inputMutex);
+        if (const auto it = g_inputSnapshots.find(contextId); it != g_inputSnapshots.end())
+            return it->second.keyDown.test(static_cast<size_t>(k));
+
+        return false;
+    }
+
+    export inline bool is_key_down_for_context(InputContextId contextId, Key k)
+    {
+        std::shared_lock lock(g_inputMutex);
+        if (const auto it = g_inputSnapshots.find(contextId); it != g_inputSnapshots.end())
+            return it->second.keyPressed.test(static_cast<size_t>(k));
+
+        return false;
+    }
+
+    export inline bool is_mouse_button_held_for_context(InputContextId contextId, MouseButton b)
+    {
+        std::shared_lock lock(g_inputMutex);
+        if (const auto it = g_inputSnapshots.find(contextId); it != g_inputSnapshots.end())
+            return it->second.mouseDown.test(static_cast<size_t>(b));
+
+        return false;
+    }
+
+    export inline bool is_mouse_button_down_for_context(InputContextId contextId, MouseButton b)
+    {
+        std::shared_lock lock(g_inputMutex);
+        if (const auto it = g_inputSnapshots.find(contextId); it != g_inputSnapshots.end())
+            return it->second.mousePressed.test(static_cast<size_t>(b));
+
+        return false;
     }
 } // namespace almondnamespace::input
 
@@ -371,13 +483,36 @@ export inline LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 
     switch (msg)
     {
-    case WM_LBUTTONDOWN: mouseDown.set(MouseLeft); break;
-    case WM_LBUTTONUP:   mouseDown.reset(MouseLeft); break;
-    case WM_RBUTTONDOWN: mouseDown.set(MouseRight); break;
-    case WM_RBUTTONUP:   mouseDown.reset(MouseRight); break;
-    case WM_MOUSEWHEEL:
-        mouseWheel.fetch_add(GET_WHEEL_DELTA_WPARAM(wParam), std::memory_order_relaxed);
+    case WM_LBUTTONDOWN:
+    {
+        std::unique_lock lock(g_inputMutex);
+        get_or_create_snapshot_for_context(get_current_input_context_id()).mouseDown.set(MouseLeft);
         break;
+    }
+    case WM_LBUTTONUP:
+    {
+        std::unique_lock lock(g_inputMutex);
+        get_or_create_snapshot_for_context(get_current_input_context_id()).mouseDown.reset(MouseLeft);
+        break;
+    }
+    case WM_RBUTTONDOWN:
+    {
+        std::unique_lock lock(g_inputMutex);
+        get_or_create_snapshot_for_context(get_current_input_context_id()).mouseDown.set(MouseRight);
+        break;
+    }
+    case WM_RBUTTONUP:
+    {
+        std::unique_lock lock(g_inputMutex);
+        get_or_create_snapshot_for_context(get_current_input_context_id()).mouseDown.reset(MouseRight);
+        break;
+    }
+    case WM_MOUSEWHEEL:
+    {
+        std::unique_lock lock(g_inputMutex);
+        get_or_create_snapshot_for_context(get_current_input_context_id()).mouseWheel += GET_WHEEL_DELTA_WPARAM(wParam);
+        break;
+    }
     default:
         break;
     }

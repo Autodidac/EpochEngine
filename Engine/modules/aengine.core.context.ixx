@@ -241,8 +241,7 @@ export namespace almondnamespace::core
                 return;
             }
 
-            x = input::mouseX.load(std::memory_order_acquire);
-            y = input::mouseY.load(std::memory_order_acquire);
+            input::get_mouse_position(x, y);
         }
 
         bool is_mouse_button_held_safe(input::MouseButton b) const noexcept

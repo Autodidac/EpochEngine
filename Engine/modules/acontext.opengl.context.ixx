@@ -596,10 +596,17 @@ export namespace almondnamespace::openglcontext
         atlasmanager::register_backend_uploader(core::ContextType::OpenGL,
             [](const TextureAtlas& atlas) { opengltextures::ensure_uploaded(atlas); });
 
-        ctx->is_key_held = [](almondnamespace::input::Key k) { return almondnamespace::input::is_key_held(k); };
-        ctx->is_key_down = [](almondnamespace::input::Key k) { return almondnamespace::input::is_key_down(k); };
-        ctx->is_mouse_button_held = [](almondnamespace::input::MouseButton b) { return almondnamespace::input::is_mouse_button_held(b); };
-        ctx->is_mouse_button_down = [](almondnamespace::input::MouseButton b) { return almondnamespace::input::is_mouse_button_down(b); };
+        const auto inputContextId = reinterpret_cast<almondnamespace::input::InputContextId>(ctx.get());
+        ctx->is_key_held = [inputContextId](almondnamespace::input::Key k)
+            { return almondnamespace::input::is_key_held_for_context(inputContextId, k); };
+        ctx->is_key_down = [inputContextId](almondnamespace::input::Key k)
+            { return almondnamespace::input::is_key_down_for_context(inputContextId, k); };
+        ctx->is_mouse_button_held = [inputContextId](almondnamespace::input::MouseButton b)
+            { return almondnamespace::input::is_mouse_button_held_for_context(inputContextId, b); };
+        ctx->is_mouse_button_down = [inputContextId](almondnamespace::input::MouseButton b)
+            { return almondnamespace::input::is_mouse_button_down_for_context(inputContextId, b); };
+        ctx->get_mouse_position = [inputContextId](int& x, int& y)
+            { almondnamespace::input::get_mouse_position_for_context(inputContextId, x, y); };
 
         return true;
     }
