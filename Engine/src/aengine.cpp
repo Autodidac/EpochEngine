@@ -339,18 +339,18 @@ namespace almondnamespace::core
                                 };
 
                                 const bool mouse_left_down =
-                                    almondnamespace::input::mouseDown.test(almondnamespace::input::MouseButton::MouseLeft);
+                                    almondnamespace::input::is_mouse_button_down(almondnamespace::input::MouseButton::MouseLeft);
 
                                 const bool up_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Up);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Up);
                                 const bool down_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Down);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Down);
                                 const bool left_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Left);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Left);
                                 const bool right_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Right);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Right);
                                 const bool enter_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Enter);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Enter);
 
                                 ctx->clear_safe();
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
@@ -751,18 +751,18 @@ namespace almondnamespace::core
                                 };
 
                                 const bool mouse_left_down =
-                                    almondnamespace::input::mouseDown.test(almondnamespace::input::MouseButton::MouseLeft);
+                                    almondnamespace::input::is_mouse_button_down(almondnamespace::input::MouseButton::MouseLeft);
 
                                 const bool up_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Up);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Up);
                                 const bool down_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Down);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Down);
                                 const bool left_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Left);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Left);
                                 const bool right_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Right);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Right);
                                 const bool enter_pressed =
-                                    almondnamespace::input::keyPressed.test(almondnamespace::input::Key::Enter);
+                                    almondnamespace::input::is_key_down(almondnamespace::input::Key::Enter);
 
                                 ctx->clear_safe();
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
