@@ -31,11 +31,20 @@ import <X11/extensions/XInput2.h>;
 import <atomic>;
 import <array>;
 import <bitset>;
+import <cstddef>;
 import <cstdint>;
 import <iostream>;
+import <memory>;
 import <mutex>;
 import <shared_mutex>;
 import <thread>;
+import <unordered_map>;
+
+namespace almondnamespace::core
+{
+    class Context;
+    std::shared_ptr<Context> get_current_render_context() noexcept;
+}
 
 // ============================================================
 // Input core
@@ -101,19 +110,96 @@ export namespace almondnamespace::input
     inline std::atomic<int>   mouseX{ 0 };
     inline std::atomic<int>   mouseY{ 0 };
     inline std::atomic<int>   mouseWheel{ 0 };
-    inline std::atomic<bool>  mouseCoordsAreGlobal{ true };
+
+    export using MouseCoordsContextId = std::uintptr_t;
+    inline constexpr MouseCoordsContextId kDefaultMouseCoordsContextId = 0;
+
+    inline std::mutex g_mouseCoordsModeMutex{};
+    inline std::unordered_map<MouseCoordsContextId, bool> g_mouseCoordsAreGlobalByContext{};
+    inline bool g_mouseCoordsDivergenceLogged = false;
+
+    inline MouseCoordsContextId get_current_mouse_coords_context_id()
+    {
+        if (auto ctx = core::get_current_render_context(); ctx)
+            return reinterpret_cast<MouseCoordsContextId>(ctx.get());
+
+        return kDefaultMouseCoordsContextId;
+    }
+
+    inline void debug_verify_context_mouse_mode_divergence_locked()
+    {
+#if !defined(NDEBUG)
+        bool sawGlobal = false;
+        bool sawLocal = false;
+        MouseCoordsContextId globalId = kDefaultMouseCoordsContextId;
+        MouseCoordsContextId localId = kDefaultMouseCoordsContextId;
+
+        for (const auto& [id, modeIsGlobal] : g_mouseCoordsAreGlobalByContext)
+        {
+            if (modeIsGlobal)
+            {
+                sawGlobal = true;
+                globalId = id;
+            }
+            else
+            {
+                sawLocal = true;
+                localId = id;
+            }
+
+            if (sawGlobal && sawLocal)
+                break;
+        }
+
+        const bool divergent = sawGlobal && sawLocal;
+        if (divergent && !g_mouseCoordsDivergenceLogged)
+        {
+            std::clog
+                << "[input] Verified per-context mouse mode divergence: context 0x"
+                << std::hex << globalId
+                << " is global and context 0x"
+                << localId
+                << " is local.\n"
+                << std::dec;
+            g_mouseCoordsDivergenceLogged = true;
+        }
+        else if (!divergent)
+        {
+            g_mouseCoordsDivergenceLogged = false;
+        }
+#endif
+    }
 
     // --------------------------------------------------------
     // Thread ownership helpers
     // --------------------------------------------------------
+    export inline void set_mouse_coords_are_global_for_context(MouseCoordsContextId contextId, bool v)
+    {
+        std::lock_guard lock(g_mouseCoordsModeMutex);
+        g_mouseCoordsAreGlobalByContext[contextId] = v;
+        debug_verify_context_mouse_mode_divergence_locked();
+    }
+
+    export inline bool are_mouse_coords_global_for_context(MouseCoordsContextId contextId)
+    {
+        std::lock_guard lock(g_mouseCoordsModeMutex);
+        if (const auto it = g_mouseCoordsAreGlobalByContext.find(contextId);
+            it != g_mouseCoordsAreGlobalByContext.end())
+        {
+            return it->second;
+        }
+
+        return true;
+    }
+
     export inline void set_mouse_coords_are_global(bool v)
     {
-        mouseCoordsAreGlobal.store(v, std::memory_order_release);
+        set_mouse_coords_are_global_for_context(get_current_mouse_coords_context_id(), v);
     }
 
     export inline bool are_mouse_coords_global()
     {
-        return mouseCoordsAreGlobal.load(std::memory_order_acquire);
+        return are_mouse_coords_global_for_context(get_current_mouse_coords_context_id());
     }
 
     export inline void designate_polling_thread(std::thread::id id)
@@ -240,7 +326,7 @@ export namespace almondnamespace::input
         {
             mouseX.store(p.x, std::memory_order_relaxed);
             mouseY.store(p.y, std::memory_order_relaxed);
-            set_mouse_coords_are_global(true);
+            set_mouse_coords_are_global_for_context(get_current_mouse_coords_context_id(), true);
         }
     }
 
