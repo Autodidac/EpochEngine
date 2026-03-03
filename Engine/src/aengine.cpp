@@ -177,6 +177,43 @@ namespace almondnamespace::core
 
     namespace engine
     {
+        inline void PollInputAcrossActiveContexts(MultiContextManager& mgr, std::string_view mode)
+        {
+            std::vector<std::shared_ptr<Context>> active_contexts;
+
+            {
+                std::shared_lock lock(almondnamespace::core::g_backendsMutex);
+                for (auto& [_, state] : almondnamespace::core::g_backends)
+                {
+                    if (state.master)
+                        active_contexts.push_back(state.master);
+
+                    for (auto& duplicate : state.duplicates)
+                        if (duplicate)
+                            active_contexts.push_back(duplicate);
+                }
+            }
+
+            for (auto& ctx : active_contexts)
+            {
+                if (!ctx) continue;
+
+                auto* win = mgr.findWindowByContext(ctx);
+                if (!win || !win->running) continue;
+
+                core::set_current_render_context(ctx);
+                input::poll_input();
+
+                std::cout
+                    << '[' << mode << "] polled input context id="
+                    << input::get_current_input_context_id()
+                    << " for context=" << static_cast<const void*>(ctx.get())
+                    << '\n';
+            }
+
+            core::set_current_render_context({});
+        }
+
         template <typename PumpFunc>
         int RunEditorInterfaceLoop(MultiContextManager& mgr, PumpFunc&& pump_events)
         {
@@ -994,7 +1031,7 @@ namespace almondnamespace::core
                 mgr.StartRenderThreads();
                 mgr.ArrangeDockedWindowsGrid();
 
-                auto pump = []() -> bool
+                auto pump = [&mgr]() -> bool
                     {
                         MSG msg{};
                         bool keep = true;
@@ -1011,7 +1048,7 @@ namespace almondnamespace::core
 
                         if (!keep) return false;
 
-                        input::poll_input();
+                        engine::PollInputAcrossActiveContexts(mgr, "Engine");
                         return true;
                     };
 
@@ -1052,9 +1089,13 @@ namespace almondnamespace::core
                 mgr.StartRenderThreads();
                 mgr.ArrangeDockedWindowsGrid();
 
-                auto pump = []() -> bool
+                auto pump = [&mgr]() -> bool
                     {
-                        return almondnamespace::platform::pump_events();
+                        if (!almondnamespace::platform::pump_events())
+                            return false;
+
+                        engine::PollInputAcrossActiveContexts(mgr, "Engine");
+                        return true;
                     };
 
                 return RunEngineMainLoopCommon(mgr, pump);
@@ -1121,7 +1162,7 @@ namespace almondnamespace::core
             mgr.StartRenderThreads();
             mgr.ArrangeDockedWindowsGrid();
 
-            auto pump = []() -> bool
+            auto pump = [&mgr]() -> bool
                 {
                     MSG msg{};
                     bool keep = true;
@@ -1138,7 +1179,7 @@ namespace almondnamespace::core
 
                     if (!keep) return false;
 
-                    input::poll_input();
+                    engine::PollInputAcrossActiveContexts(mgr, "Editor");
                     return true;
                 };
 
@@ -1177,9 +1218,13 @@ namespace almondnamespace::core
             mgr.StartRenderThreads();
             mgr.ArrangeDockedWindowsGrid();
 
-            auto pump = []() -> bool
+            auto pump = [&mgr]() -> bool
                 {
-                    return almondnamespace::platform::pump_events();
+                    if (!almondnamespace::platform::pump_events())
+                        return false;
+
+                    engine::PollInputAcrossActiveContexts(mgr, "Editor");
+                    return true;
                 };
 
             const int result = engine::RunEditorInterfaceLoop(mgr, pump);
