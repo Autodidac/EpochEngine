@@ -22,6 +22,37 @@ import <stdexcept>;
 import <string>;
 import <vector>;
 
+namespace
+{
+    [[nodiscard]] vk::CompositeAlphaFlagBitsKHR chooseCompositeAlpha(
+        vk::CompositeAlphaFlagsKHR supportedFlags)
+    {
+        constexpr vk::CompositeAlphaFlagBitsKHR preferredModes[] = {
+            vk::CompositeAlphaFlagBitsKHR::eOpaque,
+            vk::CompositeAlphaFlagBitsKHR::ePreMultiplied,
+            vk::CompositeAlphaFlagBitsKHR::ePostMultiplied,
+            vk::CompositeAlphaFlagBitsKHR::eInherit,
+        };
+
+        for (const auto mode : preferredModes)
+        {
+            if ((supportedFlags & mode) == mode)
+                return mode;
+        }
+
+        throw std::runtime_error("[Vulkan] Surface reports no supported composite alpha mode.");
+    }
+
+    [[nodiscard]] bool isRecoverableSwapchainError(vk::Result result) noexcept
+    {
+        return result == vk::Result::eErrorOutOfDateKHR
+            || result == vk::Result::eSuboptimalKHR
+            || result == vk::Result::eErrorSurfaceLostKHR
+            || result == vk::Result::eTimeout
+            || result == vk::Result::eNotReady;
+    }
+}
+
 namespace epochnamespace::vulkancontext
 {
     SwapChainSupportDetails Application::querySwapChainSupport(vk::PhysicalDevice dev)
@@ -164,7 +195,7 @@ namespace epochnamespace::vulkancontext
         }
 
         createInfo.preTransform = details.capabilities.currentTransform;
-        createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+        createInfo.compositeAlpha = chooseCompositeAlpha(details.capabilities.supportedCompositeAlpha);
         createInfo.presentMode = presentMode;
         createInfo.clipped = VK_TRUE;
         createInfo.oldSwapchain = vk::SwapchainKHR{}; // no VK_NULL_HANDLE macro
@@ -172,7 +203,12 @@ namespace epochnamespace::vulkancontext
         // ---- create swapchain (Unique + ResultValue) ----
         auto [scRes, sc] = device->createSwapchainKHRUnique(createInfo);
         if (scRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] createSwapchainKHRUnique failed.");
+        {
+            if (isRecoverableSwapchainError(scRes))
+                throw RecoverableSwapChainError("[Vulkan] createSwapchainKHRUnique failed with recoverable result " + vk::to_string(scRes) + ".");
+
+            throw std::runtime_error("[Vulkan] createSwapchainKHRUnique failed with " + vk::to_string(scRes) + ".");
+        }
         swapChain = std::move(sc);
 
         // ---- images ----
