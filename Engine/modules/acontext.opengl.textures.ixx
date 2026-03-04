@@ -226,6 +226,22 @@ export namespace epochnamespace::opengltextures
         return backend.contextStates.erase(ctx) > 0;
     }
 
+    inline const core::Context* resolve_context_for_platform(
+        const epochnamespace::openglcontext::PlatformGL::PlatformGLContext& platformCtx) noexcept
+    {
+        if (!platformCtx.valid())
+            return nullptr;
+
+        auto& backend = get_opengl_backend();
+        std::lock_guard<std::mutex> stateLock(backend.stateMutex);
+        for (const auto& [ctx, state] : backend.contextStates) {
+            const auto statePlatformCtx = detail::to_platform_context(state);
+            if (statePlatformCtx == platformCtx)
+                return ctx;
+        }
+        return nullptr;
+    }
+
     using Handle = uint32_t;
 
     inline std::atomic_uint8_t  s_generation{ 1 };
@@ -508,18 +524,26 @@ export namespace epochnamespace::opengltextures
         }
 
         auto& backend = get_opengl_backend();
-        auto* currentCtx = core::MultiContextManager::GetCurrent().get();
-        auto* currentState = find_state_for_context(currentCtx);
+        auto* requestedCtx = core::MultiContextManager::GetCurrent().get();
+        auto* requestedState = find_state_for_context(requestedCtx);
         epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
         auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
         if (!desired.valid()) {
-            if (currentState)
-                desired = detail::to_platform_context(*currentState);
+            if (requestedState)
+                desired = detail::to_platform_context(*requestedState);
         }
         if (!desired.valid() || !contextGuard.set(desired)) {
             std::cerr << "[DrawSprite] WARNING: Unable to activate OpenGL context; skipping draw.\n";
             return;
         }
+
+        const core::Context* effectiveCtx = resolve_context_for_platform(desired);
+        if (!effectiveCtx) {
+            std::cerr << "[DrawSprite] ERROR: Active OpenGL platform context could not be mapped to a backend context; skipping draw.\n";
+            return;
+        }
+
+        auto* currentState = find_state_for_context(effectiveCtx);
 
         if (!currentState || !ensure_created_pipeline(*currentState)) {
             std::cerr << "[DrawSprite] Missing quad pipeline; skipping draw\n";
@@ -582,7 +606,7 @@ export namespace epochnamespace::opengltextures
         GLuint tex = 0;
         {
             std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-            auto ctxIt = backend.gpu_atlases.find(currentCtx);
+            auto ctxIt = backend.gpu_atlases.find(effectiveCtx);
             if (ctxIt == backend.gpu_atlases.end()) {
                 std::cerr << "[DrawSprite] GPU texture not found for active context and atlas '"
                     << atlas->name << "'\n";
