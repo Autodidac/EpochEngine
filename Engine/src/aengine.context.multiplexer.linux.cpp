@@ -125,6 +125,13 @@ namespace epochnamespace::core
         constexpr int kDefaultHeight = 600;
 
         std::once_flag g_xlibInitFlag;
+        std::atomic<int> g_requestedRaylibWindows{ 0 };
+
+        [[nodiscard]] inline int sanitize_count(int value) noexcept
+        {
+            return (value > 0) ? value : 0;
+        }
+
         bool g_xlibInitialized = false;
 
         inline ::Window to_xwindow(HWND handle) noexcept
@@ -230,6 +237,26 @@ namespace epochnamespace::core
         int SoftwareWinCount,
         bool /*parented*/)
     {
+        RayLibWinCount = sanitize_count(RayLibWinCount);
+        SDLWinCount = sanitize_count(SDLWinCount);
+        SFMLWinCount = sanitize_count(SFMLWinCount);
+        OpenGLWinCount = sanitize_count(OpenGLWinCount);
+        SoftwareWinCount = sanitize_count(SoftwareWinCount);
+
+        g_requestedRaylibWindows.store(RayLibWinCount, std::memory_order_release);
+
+        if (OpenGLWinCount > 0 && (RayLibWinCount > 0 || SDLWinCount > 0 || SFMLWinCount > 0 || SoftwareWinCount > 0))
+        {
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::WARN,
+                std::source_location::current(),
+                "OpenGL requested with additional backend windows (raylib={}, sdl={}, sfml={}, software={}). Strict OpenGL mode requires all non-OpenGL counts to be 0.",
+                RayLibWinCount,
+                SDLWinCount,
+                SFMLWinCount,
+                SoftwareWinCount);
+        }
+
         const int totalRequested =
             RayLibWinCount + SDLWinCount + SFMLWinCount + OpenGLWinCount + SoftwareWinCount;
 
@@ -683,6 +710,33 @@ namespace epochnamespace::core
         create_backend_windows(ContextType::SFML, SFMLWinCount);
         create_backend_windows(ContextType::RayLib, RayLibWinCount);
         create_backend_windows(ContextType::Software, SoftwareWinCount);
+
+        {
+            std::unordered_map<ContextType, int> actualCounts;
+            for (const auto& win : windows)
+            {
+                if (!win) continue;
+                ++actualCounts[win->type];
+            }
+
+            const auto& logger = epochnamespace::logger::get(kLogSys);
+            auto log_line = [&](ContextType type, std::string_view name)
+                {
+                    const int created = actualCounts.contains(type) ? actualCounts[type] : 0;
+                    logger.logf(
+                        epochnamespace::logger::LogLevel::WARN,
+                        std::source_location::current(),
+                        "Created {} windows: {}",
+                        name,
+                        created);
+                };
+
+            log_line(ContextType::OpenGL, "OpenGL");
+            log_line(ContextType::RayLib, "RayLib");
+            log_line(ContextType::SDL, "SDL");
+            log_line(ContextType::SFML, "SFML");
+            log_line(ContextType::Software, "Software");
+        }
 
         StartRenderThreads();
         return true;
@@ -1273,6 +1327,10 @@ namespace epochnamespace::core
             ::Window xwin = to_xwindow(win->hwnd);
             if (!threads.contains(xwin))
             {
+#if defined(ALMOND_USING_RAYLIB)
+                if (win->type == ContextType::RayLib && g_requestedRaylibWindows.load(std::memory_order_acquire) <= 0)
+                    continue;
+#endif
                 WindowData* raw = win.get();
                 threads[xwin] = std::thread([this, raw]() { RenderLoop(*raw); });
             }
@@ -1400,6 +1458,16 @@ namespace epochnamespace::core
                 MultiContextManager::SetCurrent(nullptr);
             }
         } reset{ localDisplay, glxCtx };
+
+        if (ctx->type == ContextType::RayLib && g_requestedRaylibWindows.load(std::memory_order_acquire) <= 0)
+        {
+            epochnamespace::logger::get(kLogSys).log(
+                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                "Raylib render-thread initialization reached with requested Raylib window count = 0. Skipping initialization.",
+                std::source_location::current());
+            win.running = false;
+            return;
+        }
 
         if (win.threadInitialize)
         {
