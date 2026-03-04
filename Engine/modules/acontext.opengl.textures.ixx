@@ -71,6 +71,7 @@ import <format>;
 import <fstream>;
 import <iostream>;
 import <mutex>;
+import <memory>;
 import <span>;
 import <string>;
 import <unordered_map>;
@@ -82,6 +83,7 @@ import aengine.platform;
 
 import aengine.cli;
 import aengine.core.context;
+import aengine.context.commandqueue;
 import aengine.context.multiplexer;
 
 import acontext.opengl.platform;
@@ -225,6 +227,56 @@ export namespace epochnamespace::opengltextures
         std::lock_guard<std::mutex> stateLock(backend.stateMutex);
         return backend.contextStates.erase(ctx) > 0;
     }
+
+    inline void purge_stale_context_entries(const core::Context* ctx) noexcept
+    {
+        if (!ctx)
+            return;
+
+        auto& backend = get_opengl_backend();
+        {
+            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
+            backend.gpu_atlases.erase(ctx);
+        }
+        {
+            std::lock_guard<std::mutex> stateLock(backend.stateMutex);
+            backend.contextStates.erase(ctx);
+        }
+    }
+
+    inline bool is_context_alive_for_draw(const core::Context* ctx) noexcept
+    {
+        if (!ctx || !ctx->windowData || !ctx->windowData->running)
+            return false;
+
+#if defined(_WIN32)
+        if (!ctx->windowData->hwnd || !ctx->native_drawable || !ctx->native_gl_context)
+            return false;
+#elif defined(__linux__)
+        if (!ctx->native_window || !ctx->native_drawable || !ctx->native_gl_context)
+            return false;
+#endif
+
+        return true;
+    }
+
+    inline void log_draw_sprite_warning_rate_limited(const std::string& message) noexcept
+    {
+        static std::atomic_uint32_t s_warningTick{ 0 };
+        const std::uint32_t tick = s_warningTick.fetch_add(1, std::memory_order_relaxed);
+        if ((tick % 60u) == 0u)
+            std::cerr << message << '\n';
+    }
+
+    inline void schedule_draw_sprite_retry(
+        const core::Context* owner,
+        SpriteHandle handle,
+        std::vector<const TextureAtlas*> atlases,
+        float x,
+        float y,
+        float width,
+        float height,
+        std::uint8_t retryCount) noexcept;
 
     inline const core::Context* resolve_context_for_platform(
         const epochnamespace::openglcontext::PlatformGL::PlatformGLContext& platformCtx) noexcept
@@ -513,11 +565,11 @@ export namespace epochnamespace::opengltextures
         return static_cast<uint32_t>(tex);
     }
 
-    inline void draw_sprite(SpriteHandle handle,
+    inline void draw_sprite_impl(SpriteHandle handle,
         std::span<const TextureAtlas* const> atlases,
-        float x, float y, float width, float height) noexcept
+        float x, float y, float width, float height,
+        std::uint8_t retryCount) noexcept
     {
-        // (unchanged from your version)
         if (!handle.is_valid()) {
             std::cerr << "[DrawSprite] Invalid sprite handle.\n";
             return;
@@ -525,6 +577,13 @@ export namespace epochnamespace::opengltextures
 
         auto& backend = get_opengl_backend();
         auto* requestedCtx = core::MultiContextManager::GetCurrent().get();
+
+        if (!is_context_alive_for_draw(requestedCtx)) {
+            purge_stale_context_entries(requestedCtx);
+            log_draw_sprite_warning_rate_limited("[DrawSprite] Skipping draw: context/window is no longer alive; stale OpenGL entries purged.");
+            return;
+        }
+
         auto* requestedState = find_state_for_context(requestedCtx);
         epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
         auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
@@ -545,8 +604,14 @@ export namespace epochnamespace::opengltextures
 
         auto* currentState = find_state_for_context(effectiveCtx);
 
+        if (!is_context_alive_for_draw(effectiveCtx)) {
+            purge_stale_context_entries(effectiveCtx);
+            log_draw_sprite_warning_rate_limited("[DrawSprite] Skipping draw: resolved context/window is no longer alive; stale OpenGL entries purged.");
+            return;
+        }
+
         if (!currentState || !ensure_created_pipeline(*currentState)) {
-            std::cerr << "[DrawSprite] Missing quad pipeline; skipping draw\n";
+            schedule_draw_sprite_retry(effectiveCtx, handle, { atlases.begin(), atlases.end() }, x, y, width, height, retryCount);
             return;
         }
 
@@ -680,6 +745,62 @@ export namespace epochnamespace::opengltextures
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glDisable(GL_BLEND);
+    }
+
+    inline void schedule_draw_sprite_retry(
+        const core::Context* owner,
+        SpriteHandle handle,
+        std::vector<const TextureAtlas*> atlases,
+        float x,
+        float y,
+        float width,
+        float height,
+        std::uint8_t retryCount) noexcept
+    {
+        constexpr std::uint8_t kMaxRetries = 3;
+        if (!owner || !owner->windowData)
+            return;
+
+        if (retryCount >= kMaxRetries) {
+            log_draw_sprite_warning_rate_limited("[DrawSprite] Dropping draw after retry cap due to missing OpenGL state/pipeline.");
+            return;
+        }
+
+        std::weak_ptr<core::Context> weakOwner = owner->windowData->context;
+        owner->windowData->commandQueue.enqueue(
+            [weakOwner,
+            handle,
+            atlases = std::move(atlases),
+            x,
+            y,
+            width,
+            height,
+            retryCount]() mutable
+            {
+                auto locked = weakOwner.lock();
+                if (!locked)
+                    return;
+
+                core::MultiContextManager::SetCurrent(locked);
+                draw_sprite_impl(
+                    handle,
+                    std::span<const TextureAtlas* const>(atlases.data(), atlases.size()),
+                    x,
+                    y,
+                    width,
+                    height,
+                    static_cast<std::uint8_t>(retryCount + 1));
+            },
+            core::RenderPath::OpenGL);
+
+        log_draw_sprite_warning_rate_limited("[DrawSprite] OpenGL state/pipeline unavailable; queued one-shot retry.");
+    }
+
+    inline void draw_sprite(SpriteHandle handle,
+        std::span<const TextureAtlas* const> atlases,
+        float x, float y, float width, float height) noexcept
+    {
+        draw_sprite_impl(handle, atlases, x, y, width, height, 0);
     }
 
 } // namespace epochnamespace::opengltextures
