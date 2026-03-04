@@ -267,6 +267,72 @@ export namespace epochnamespace::openglcontext
             return v == 0u || v == 1u || v == 2u || v == 3u || v == static_cast<std::uintptr_t>(-1);
         }
 #endif
+
+        inline std::pair<int, int> parse_major_minor(std::string_view version) noexcept
+        {
+            const auto start = version.find_first_of("0123456789");
+            if (start == std::string_view::npos) return { 0, 0 };
+
+            version.remove_prefix(start);
+            const auto dot = version.find('.');
+            if (dot == std::string_view::npos) return { 0, 0 };
+
+            const auto to_int = [](std::string_view text) noexcept
+                {
+                    int value = 0;
+                    for (const char ch : text)
+                    {
+                        if (ch < '0' || ch > '9') break;
+                        value = value * 10 + (ch - '0');
+                    }
+                    return value;
+                };
+
+            const int major = to_int(version.substr(0, dot));
+            const int minor = to_int(version.substr(dot + 1));
+            return { major, minor };
+        }
+
+        inline bool has_quad_pipeline_capability(std::string* reason = nullptr) noexcept
+        {
+            GLint glMajor = 0;
+            GLint glMinor = 0;
+            ::glGetIntegerv(GL_MAJOR_VERSION, &glMajor);
+            ::glGetIntegerv(GL_MINOR_VERSION, &glMinor);
+
+            if (glMajor == 0 && glMinor == 0)
+            {
+                const auto* glVersion = reinterpret_cast<const char*>(::glGetString(GL_VERSION));
+                const auto [parsedMajor, parsedMinor] = parse_major_minor(glVersion ? std::string_view{ glVersion } : std::string_view{});
+                glMajor = parsedMajor;
+                glMinor = parsedMinor;
+            }
+
+            GLint glslMajor = 0;
+            GLint glslMinor = 0;
+            const auto* glslVersion = reinterpret_cast<const char*>(::glGetString(GL_SHADING_LANGUAGE_VERSION));
+            if (glslVersion)
+            {
+                const auto [parsedMajor, parsedMinor] = parse_major_minor(glslVersion);
+                glslMajor = parsedMajor;
+                glslMinor = parsedMinor;
+            }
+
+            const bool glOk = (glMajor > 2) || (glMajor == 2 && glMinor >= 1);
+            const bool glslOk = (glslMajor > 1) || (glslMajor == 1 && glslMinor >= 20);
+
+            if (reason && (!glOk || !glslOk))
+            {
+                *reason = std::format(
+                    "requires at least OpenGL 2.1 and GLSL 1.20 (detected GL {}.{} / GLSL {}.{})",
+                    glMajor,
+                    glMinor,
+                    glslMajor,
+                    glslMinor);
+            }
+
+            return glOk && glslOk;
+        }
     } // namespace detail
 
 
@@ -303,6 +369,8 @@ export namespace epochnamespace::openglcontext
                     resize(clampedWidth, clampedHeight);
             };
 
+        bool reusedExternalContext = false;
+
 #if defined(_WIN32)
         HWND parentHwnd = static_cast<HWND>(parentWindowOpaque);
         if (ctx->windowData && ctx->windowData->hwnd)
@@ -325,6 +393,7 @@ export namespace epochnamespace::openglcontext
             glState.hdc = ctx->windowData->hdc;
             glState.hglrc = ctx->windowData->glContext;
             usingExternalContext = true;
+            reusedExternalContext = true;
         }
         else if (ctx->hwnd && ctx->hdc && ctx->hglrc)
         {
@@ -332,6 +401,7 @@ export namespace epochnamespace::openglcontext
             glState.hdc = ctx->hdc;
             glState.hglrc = ctx->hglrc;
             usingExternalContext = true;
+            reusedExternalContext = true;
         }
 
         if (!usingExternalContext)
@@ -494,7 +564,10 @@ export namespace epochnamespace::openglcontext
         if (!glState.window && ctx->native_window)
             glState.window = static_cast<::Window>(reinterpret_cast<std::uintptr_t>(ctx->native_window));
         if (!glState.glxContext && ctx->native_gl_context)
+        {
             glState.glxContext = static_cast<GLXContext>(ctx->native_gl_context);
+            reusedExternalContext = true;
+        }
 
         Display* display = glState.display;
         if (!display)
@@ -636,6 +709,13 @@ export namespace epochnamespace::openglcontext
         (void)parentWindowOpaque;
         throw std::runtime_error("[OpenGL] Unsupported platform");
 #endif
+
+        if (reusedExternalContext)
+        {
+            std::string reason;
+            if (!detail::has_quad_pipeline_capability(&reason))
+                throw std::runtime_error(std::format("[OpenGL] External context capability check failed: {}", reason));
+        }
 
         if (!epochnamespace::openglquad::ensure_quad_pipeline())
             throw std::runtime_error("[OpenGL] Failed to build/ensure quad pipeline");
