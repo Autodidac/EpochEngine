@@ -49,6 +49,44 @@ namespace almondnamespace::sfmlcontext
 {
     using Handle = uint32_t;
 
+    class ScopedSFMLContextActivation final
+    {
+    public:
+        ScopedSFMLContextActivation()
+        {
+            auto* window = state::s_sfmlstate.window.sfml_window;
+            if (!window || !window->isOpen()) {
+                return;
+            }
+
+            if (!window->setActive(true)) {
+                std::cerr << "[SFML] Failed to activate SFML context for atlas upload\n";
+                return;
+            }
+
+            m_window = window;
+            m_active = true;
+        }
+
+        ScopedSFMLContextActivation(const ScopedSFMLContextActivation&) = delete;
+        ScopedSFMLContextActivation& operator=(const ScopedSFMLContextActivation&) = delete;
+
+        ~ScopedSFMLContextActivation()
+        {
+            if (!m_active || !m_window) {
+                return;
+            }
+
+            (void)m_window->setActive(false);
+        }
+
+        [[nodiscard]] bool is_active() const noexcept { return m_active; }
+
+    private:
+        sf::RenderWindow* m_window = nullptr;
+        bool m_active = false;
+    };
+
     struct AtlasGPU
     {
         sf::Texture texture{};
@@ -128,6 +166,13 @@ namespace almondnamespace::sfmlcontext
     }
 
     inline void upload_atlas_to_gpu(const TextureAtlas& atlas) {
+        ScopedSFMLContextActivation activeContext;
+        if (!activeContext.is_active()) {
+            std::cerr << "[SFML] Skipping atlas upload for '" << atlas.name
+                << "' because no active SFML context is available\n";
+            return;
+        }
+
         if (atlas.pixel_data.empty()) {
             const_cast<TextureAtlas&>(atlas).rebuild_pixels();
         }
