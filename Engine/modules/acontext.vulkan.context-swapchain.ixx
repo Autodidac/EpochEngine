@@ -17,6 +17,7 @@ import :shared_vk;
 import <algorithm>;
 import <cstdint>;
 import <limits>;
+import <mutex>;
 import <stdexcept>;
 import <vector>;
 
@@ -222,8 +223,11 @@ namespace epochnamespace::vulkancontext
         uniformBuffers.clear();
         uniformBuffersMemory.clear();
         uniformBuffersMapped.clear();
-        if (auto* guiState = find_gui_state(bound_context()))
+        if (auto guiState = find_gui_state(bound_context()))
+        {
+            std::scoped_lock guiLock(guiState->mutex);
             reset_gui_swapchain_state(*guiState);
+        }
     }
 
     void Application::recreateSwapChain()

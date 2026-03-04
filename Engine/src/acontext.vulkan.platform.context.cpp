@@ -279,14 +279,20 @@ namespace epochnamespace::vulkancontext
 
         if (framebufferMinimized)
         {
-            if (auto* guiState = find_gui_state(ctx.get()))
+            if (auto guiState = find_gui_state(ctx.get()))
+            {
+                std::scoped_lock guiLock(guiState->mutex);
                 guiState->guiDraws.clear();
+            }
             queue.drain();
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             return true;
         }
-        if (auto* guiState = find_gui_state(ctx.get()))
+        if (auto guiState = find_gui_state(ctx.get()))
+        {
+            std::scoped_lock guiLock(guiState->mutex);
             guiState->guiDraws.clear();
+        }
         queue.drain();
         drawFrame();
         return true;
@@ -296,11 +302,13 @@ namespace epochnamespace::vulkancontext
     {
         context = std::move(ctx);
         nativeWindowHandle = nativeWindow;
+        std::scoped_lock lock(guiContextStateMutex);
         activeGuiContext = context.lock().get();
     }
 
     void Application::set_active_context(const epochnamespace::core::Context* ctx)
     {
+        std::scoped_lock lock(guiContextStateMutex);
         activeGuiContext = ctx;
     }
 
@@ -309,24 +317,30 @@ namespace epochnamespace::vulkancontext
         if (!ctx)
             return;
 
+        std::scoped_lock lock(guiContextStateMutex);
         guiContexts.erase(ctx);
         if (activeGuiContext == ctx)
             activeGuiContext = nullptr;
     }
 
-    Application::GuiContextState& Application::gui_state_for_context(
+    std::shared_ptr<Application::GuiContextState> Application::gui_state_for_context(
         const epochnamespace::core::Context* ctx)
     {
-        return guiContexts[ctx];
+        std::scoped_lock lock(guiContextStateMutex);
+        auto& guiState = guiContexts[ctx];
+        if (!guiState)
+            guiState = std::make_shared<GuiContextState>();
+        return guiState;
     }
 
-    Application::GuiContextState* Application::find_gui_state(
+    std::shared_ptr<Application::GuiContextState> Application::find_gui_state(
         const epochnamespace::core::Context* ctx) noexcept
     {
+        std::scoped_lock lock(guiContextStateMutex);
         auto it = guiContexts.find(ctx);
         if (it == guiContexts.end())
             return nullptr;
-        return &it->second;
+        return it->second;
     }
 
     void Application::reset_gui_swapchain_state(GuiContextState& guiState)
@@ -437,7 +451,11 @@ namespace epochnamespace::vulkancontext
         indexBufferMemory.reset();
         vertexBuffer.reset();
         vertexBufferMemory.reset();
-        guiContexts.clear();
+        {
+            std::scoped_lock guiLock(guiContextStateMutex);
+            guiContexts.clear();
+            activeGuiContext = nullptr;
+        }
 
         textureSampler.reset();
         textureImageView.reset();
