@@ -122,7 +122,7 @@ namespace
             ++actualCounts[win->type];
         }
 
-        const auto& logger = epochnamespace::logger::get(kLogSys);
+        auto& logger = epochnamespace::logger::get(kLogSys);
         auto log_line = [&](epochnamespace::core::ContextType type, std::string_view name)
             {
                 const int created = actualCounts.contains(type) ? actualCounts[type] : 0;
