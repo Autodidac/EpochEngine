@@ -37,6 +37,10 @@
 #   ifndef NOMINMAX
 #       define NOMINMAX
 #   endif
+#   ifndef ALMOND_USING_WINMAIN
+#       include <windows.h>
+#   endif
+#   include <wingdi.h>
 #   include <windowsx.h>
 #   include <commctrl.h>
 #   include <shellapi.h>
@@ -60,6 +64,15 @@
 #   include <vector>
 
 #   include <glad/glad.h>
+#   if defined(__has_include)
+#       if __has_include(<glad/glad_wgl.h>)
+#           include <glad/glad_wgl.h>
+#       else
+#           include <GL/wglext.h>
+#       endif
+#   else
+#       include <GL/wglext.h>
+#   endif
 #endif
 
 import aengine.platform;
