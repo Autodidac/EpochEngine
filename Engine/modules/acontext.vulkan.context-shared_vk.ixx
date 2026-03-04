@@ -36,6 +36,7 @@ import <memory>;
 import <mutex>;
 import <optional>;
 import <span>;
+import <stdexcept>;
 import <string>;
 import <thread>;
 import <unordered_map>;
@@ -51,6 +52,12 @@ import aspritehandle;
 
 namespace epochnamespace::vulkancontext
 {
+    class RecoverableSwapChainError final : public std::runtime_error
+    {
+    public:
+        using std::runtime_error::runtime_error;
+    };
+
     // Debug callback for validation layers
     inline VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,

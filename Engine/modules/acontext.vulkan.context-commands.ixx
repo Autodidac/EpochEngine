@@ -376,9 +376,16 @@ namespace epochnamespace::vulkancontext
                     && inFlightFences[currentFrame];
             };
 
-        if (!device || !swapChain || !has_frame_sync())
+        if (!device || !has_frame_sync())
         {
             request_render_stop();
+            return;
+        }
+
+        if (!swapChain)
+        {
+            if (consume_framebuffer_resize_intent())
+                recreateSwapChain();
             return;
         }
 

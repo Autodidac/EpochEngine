@@ -23,15 +23,6 @@ import <vector>;
 
 namespace epochnamespace::vulkancontext
 {
-    namespace
-    {
-        class RecoverableSwapChainError final : public std::runtime_error
-        {
-        public:
-            using std::runtime_error::runtime_error;
-        };
-    }
-
     SwapChainSupportDetails Application::querySwapChainSupport(vk::PhysicalDevice dev)
     {
         auto capabilitiesResult = dev.getSurfaceCapabilitiesKHR(*surface);

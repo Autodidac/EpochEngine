@@ -145,26 +145,37 @@ namespace epochnamespace::vulkancontext
         queueFamilyIndices = findQueueFamilies(physicalDevice);
 
         createLogicalDevice();
-        createSwapChain();
-        createImageViews();
-        createRenderPass();
         createDescriptorSetLayout();
-        createGraphicsPipeline();
-        createGuiPipeline();
         createCommandPool();
-        createDepthResources();
-        createFramebuffers();
+
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
         createVertexBuffer();
         createIndexBuffer();
-        createUniformBuffers();
-        createGuiUniformBuffers();
-        createDescriptorPool();
-        createDescriptorSets();
-        createCommandBuffers();
+
         createSyncObjects();
+
+        try
+        {
+            createSwapChain();
+            createImageViews();
+            createRenderPass();
+            createGraphicsPipeline();
+            createGuiPipeline();
+            createDepthResources();
+            createFramebuffers();
+            createUniformBuffers();
+            createGuiUniformBuffers();
+            createDescriptorPool();
+            createDescriptorSets();
+            createCommandBuffers();
+        }
+        catch (const RecoverableSwapChainError&)
+        {
+            std::cout << "[Vulkan] Initial swapchain unavailable; deferring until resize/next frame\n";
+            set_framebuffer_resize_intent(true);
+        }
     }
 
     void Application::initWindow()
