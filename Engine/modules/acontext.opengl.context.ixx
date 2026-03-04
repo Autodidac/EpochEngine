@@ -685,7 +685,7 @@ export namespace epochnamespace::openglcontext
     {
         if (!ctx) return false;
 
-        auto* glStatePtr = opengltextures::find_state_for_context(ctx.get());
+        auto* glStatePtr = opengltextures::ensure_state_for_context(ctx.get());
         if (!glStatePtr)
             return false;
         auto& glState = *glStatePtr;
@@ -707,6 +707,13 @@ export namespace epochnamespace::openglcontext
 
         const auto previousContext = core::MultiContextManager::GetCurrent();
         core::MultiContextManager::SetCurrent(ctx);
+
+        if (!epochnamespace::openglquad::ensure_quad_pipeline())
+        {
+            PlatformGL::swap_buffers(guard.target());
+            core::MultiContextManager::SetCurrent(previousContext);
+            return true;
+        }
 
         atlasmanager::process_pending_uploads(core::ContextType::OpenGL);
 
@@ -733,13 +740,6 @@ export namespace epochnamespace::openglcontext
         ctx->framebufferHeight = fbH;
 
         glViewport(0, 0, fbW, fbH);
-
-        if (!epochnamespace::openglquad::ensure_quad_pipeline())
-        {
-            queue.drain();
-            PlatformGL::swap_buffers(guard.target());
-            return true;
-        }
 
         telemetry::emit_gauge(
             "renderer.framebuffer.size",
