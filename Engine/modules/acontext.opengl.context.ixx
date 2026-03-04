@@ -282,20 +282,22 @@ export namespace epochnamespace::openglcontext
         if (!ctx)
             throw std::runtime_error("[OpenGL] opengl_initialize requires non-null Context");
 
-        auto& backend = epochnamespace::opengltextures::get_opengl_backend();
-        auto& glState = backend.glState;
+        auto* glStatePtr = epochnamespace::opengltextures::ensure_state_for_context(ctx.get());
+        if (!glStatePtr)
+            throw std::runtime_error("[OpenGL] Failed to allocate per-context OpenGL state");
+        auto& glState = *glStatePtr;
 
         glState.width = w;
         glState.height = h;
-        auto* glStatePtr = &glState;
+        auto* resizeStatePtr = &glState;
 
-        ctx->onResize = [glStatePtr, resize = std::move(onResize)](int newWidth, int newHeight) mutable
+        ctx->onResize = [resizeStatePtr, resize = std::move(onResize)](int newWidth, int newHeight) mutable
             {
                 const int clampedWidth = (std::max)(1, newWidth);
                 const int clampedHeight = (std::max)(1, newHeight);
 
-                glStatePtr->width = static_cast<unsigned int>(clampedWidth);
-                glStatePtr->height = static_cast<unsigned int>(clampedHeight);
+                resizeStatePtr->width = static_cast<unsigned int>(clampedWidth);
+                resizeStatePtr->height = static_cast<unsigned int>(clampedHeight);
 
                 if (resize)
                     resize(clampedWidth, clampedHeight);
@@ -656,17 +658,17 @@ export namespace epochnamespace::openglcontext
 
     inline int opengl_get_width()
     {
-        auto& backend = opengltextures::get_opengl_backend();
-        if (backend.glState.width > 0)
-            return static_cast<int>(backend.glState.width);
+        auto current = core::MultiContextManager::GetCurrent();
+        if (auto* state = opengltextures::find_state_for_context(current.get()); state && state->width > 0)
+            return static_cast<int>(state->width);
         return (std::max)(1, core::cli::window_width);
     }
 
     inline int opengl_get_height()
     {
-        auto& backend = opengltextures::get_opengl_backend();
-        if (backend.glState.height > 0)
-            return static_cast<int>(backend.glState.height);
+        auto current = core::MultiContextManager::GetCurrent();
+        if (auto* state = opengltextures::find_state_for_context(current.get()); state && state->height > 0)
+            return static_cast<int>(state->height);
         return (std::max)(1, core::cli::window_height);
     }
 
@@ -683,8 +685,10 @@ export namespace epochnamespace::openglcontext
     {
         if (!ctx) return false;
 
-        auto& backend = opengltextures::get_opengl_backend();
-        auto& glState = backend.glState;
+        auto* glStatePtr = opengltextures::find_state_for_context(ctx.get());
+        if (!glStatePtr)
+            return false;
+        auto& glState = *glStatePtr;
 
         const std::uintptr_t windowId = ctx->windowData
             ? reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd)
@@ -772,9 +776,10 @@ export namespace epochnamespace::openglcontext
 
     inline void opengl_cleanup(std::shared_ptr<core::Context> ctx)
     {
-        auto& backend = opengltextures::get_opengl_backend();
-        auto& glState = backend.glState;
-        (void)ctx;
+        auto* glStatePtr = opengltextures::find_state_for_context(ctx.get());
+        if (!glStatePtr)
+            return;
+        auto& glState = *glStatePtr;
 
 #if defined(_WIN32)
         PlatformGL::clear_current();
@@ -830,6 +835,8 @@ export namespace epochnamespace::openglcontext
         glState.ownsContext = false;
         glState.ownsColormap = false;
 #endif
+
+        opengltextures::remove_state_for_context(ctx.get());
     }
 
 #endif // ALMOND_USING_OPENGL
