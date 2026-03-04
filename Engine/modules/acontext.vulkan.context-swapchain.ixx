@@ -19,6 +19,7 @@ import <cstdint>;
 import <limits>;
 import <mutex>;
 import <stdexcept>;
+import <string>;
 import <vector>;
 
 namespace epochnamespace::vulkancontext
@@ -105,6 +106,33 @@ namespace epochnamespace::vulkancontext
         const vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(details.formats);
         const vk::PresentModeKHR presentMode = chooseSwapPresentMode(details.presentModes);
         const vk::Extent2D extent = chooseSwapExtent(details.capabilities);
+
+        if (extent.width == 0 || extent.height == 0)
+        {
+            throw RecoverableSwapChainError(
+                "[Vulkan] Swapchain extent is invalid for creation (width="
+                + std::to_string(extent.width)
+                + ", height=" + std::to_string(extent.height)
+                + "); will retry swapchain creation later.");
+        }
+
+        if (details.capabilities.currentExtent.width != (std::numeric_limits<std::uint32_t>::max)())
+        {
+            const bool extentOutOfBounds =
+                extent.width < details.capabilities.minImageExtent.width
+                || extent.width > details.capabilities.maxImageExtent.width
+                || extent.height < details.capabilities.minImageExtent.height
+                || extent.height > details.capabilities.maxImageExtent.height;
+
+            if (extentOutOfBounds)
+            {
+                throw RecoverableSwapChainError(
+                    "[Vulkan] Surface reported fixed swapchain extent outside supported bounds "
+                    "(width=" + std::to_string(extent.width)
+                    + ", height=" + std::to_string(extent.height)
+                    + "); will retry swapchain creation later.");
+            }
+        }
 
         std::uint32_t imageCount = details.capabilities.minImageCount + 1;
         if (details.capabilities.maxImageCount > 0 && imageCount > details.capabilities.maxImageCount)
