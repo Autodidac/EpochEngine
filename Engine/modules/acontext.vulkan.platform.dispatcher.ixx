@@ -1,18 +1,18 @@
 module;
 
-#include <include/aengine.config.hpp>
+#include <include/acontext.vulkan.hpp>
+
 
 // This module uses Vk* and PFN_* types => MUST include Vulkan C header.
 #if defined(_WIN32)
 #   ifndef VK_USE_PLATFORM_WIN32_KHR
-#       define VK_USE_PLATFORM_WIN32_KHR
+#       define VK_USE_PLATFORM_WIN32_KHR 1
 #   endif
 #endif
 
 #include <vulkan/vulkan.h>
 
 #include <include/aframework.hpp>
-#include <include/acontext.vulkan.hpp>
 
 export module acontext.vulkan.platform.dispatcher;
 
