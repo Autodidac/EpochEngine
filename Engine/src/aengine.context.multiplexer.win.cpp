@@ -106,6 +106,41 @@ namespace
     };
     std::vector<PendingWindowCleanup> g_pendingCleanups;
     constexpr std::string_view kLogSys = "Context.Multiplexer.Win";
+    std::atomic<int> g_requestedRaylibWindows{ 0 };
+
+    [[nodiscard]] inline int sanitize_count(int value) noexcept
+    {
+        return (value > 0) ? value : 0;
+    }
+
+    void log_window_creation_summary(const epochnamespace::core::MultiContextManager& mgr)
+    {
+        std::unordered_map<epochnamespace::core::ContextType, int> actualCounts;
+        for (const auto& win : mgr.GetWindows())
+        {
+            if (!win) continue;
+            ++actualCounts[win->type];
+        }
+
+        const auto& logger = epochnamespace::logger::get(kLogSys);
+        auto log_line = [&](epochnamespace::core::ContextType type, std::string_view name)
+            {
+                const int created = actualCounts.contains(type) ? actualCounts[type] : 0;
+                logger.logf(
+                    epochnamespace::logger::LogLevel::WARN,
+                    std::source_location::current(),
+                    "Created {} windows: {}",
+                    name,
+                    created);
+            };
+
+        log_line(epochnamespace::core::ContextType::OpenGL, "OpenGL");
+        log_line(epochnamespace::core::ContextType::RayLib, "RayLib");
+        log_line(epochnamespace::core::ContextType::SDL, "SDL");
+        log_line(epochnamespace::core::ContextType::SFML, "SFML");
+        log_line(epochnamespace::core::ContextType::Vulkan, "Vulkan");
+        log_line(epochnamespace::core::ContextType::Software, "Software");
+    }
 
    // [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
 
@@ -436,6 +471,35 @@ namespace epochnamespace::core
         int SoftwareWinCount,
         bool parented)
     {
+        const int requestedRayLibCountRaw = RayLibWinCount;
+        const int requestedSDLCountRaw = SDLWinCount;
+        const int requestedSFMLCountRaw = SFMLWinCount;
+        const int requestedOpenGLCountRaw = OpenGLWinCount;
+        const int requestedVulkanCountRaw = VulkanWinCount;
+        const int requestedSoftwareCountRaw = SoftwareWinCount;
+
+        RayLibWinCount = sanitize_count(requestedRayLibCountRaw);
+        SDLWinCount = sanitize_count(requestedSDLCountRaw);
+        SFMLWinCount = sanitize_count(requestedSFMLCountRaw);
+        OpenGLWinCount = sanitize_count(requestedOpenGLCountRaw);
+        VulkanWinCount = sanitize_count(requestedVulkanCountRaw);
+        SoftwareWinCount = sanitize_count(requestedSoftwareCountRaw);
+
+        g_requestedRaylibWindows.store(RayLibWinCount, std::memory_order_release);
+
+        if (OpenGLWinCount > 0 && (RayLibWinCount > 0 || SDLWinCount > 0 || SFMLWinCount > 0 || VulkanWinCount > 0 || SoftwareWinCount > 0))
+        {
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::WARN,
+                std::source_location::current(),
+                "OpenGL requested with additional backend windows (raylib={}, sdl={}, sfml={}, vulkan={}, software={}). Strict OpenGL mode requires all non-OpenGL counts to be 0.",
+                RayLibWinCount,
+                SDLWinCount,
+                SFMLWinCount,
+                VulkanWinCount,
+                SoftwareWinCount);
+        }
+
         const int totalRequested = RayLibWinCount + SDLWinCount + SFMLWinCount + OpenGLWinCount + VulkanWinCount + SoftwareWinCount;
         if (totalRequested <= 0) return false;
 
@@ -807,6 +871,8 @@ namespace epochnamespace::core
         make_backend_windows(ContextType::SFML, SFMLWinCount);
 #endif
 
+        log_window_creation_summary(*this);
+
         ArrangeDockedWindowsGrid();
         StartRenderThreads();
 
@@ -1010,18 +1076,23 @@ namespace epochnamespace::core
 
     void MultiContextManager::StartRenderThreads()
     {
-        std::vector<HWND> hwnds;
+        std::vector<std::pair<HWND, ContextType>> windowsToStart;
         {
             std::scoped_lock lock(windowsMutex);
-            hwnds.reserve(windows.size());
+            windowsToStart.reserve(windows.size());
             for (const auto& w : windows)
-                if (w && w->hwnd) hwnds.push_back(w->hwnd);
+                if (w && w->hwnd) windowsToStart.emplace_back(w->hwnd, w->type);
         }
 
         auto& threads = Threads();
 
-        for (HWND hwnd : hwnds)
+        for (const auto& [hwnd, type] : windowsToStart)
         {
+#if defined(ALMOND_USING_RAYLIB)
+            if (type == ContextType::RayLib && g_requestedRaylibWindows.load(std::memory_order_acquire) <= 0)
+                continue;
+#endif
+
             if (threads.contains(hwnd)) continue;
 
             threads[hwnd] = std::thread([this, hwnd]()
@@ -1226,6 +1297,16 @@ namespace epochnamespace::core
 #if defined(ALMOND_USING_RAYLIB)
         if (ctx->type == ContextType::RayLib)
         {
+            if (g_requestedRaylibWindows.load(std::memory_order_acquire) <= 0)
+            {
+                epochnamespace::logger::get(kLogSys).log(
+                    epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                    "Raylib render-thread initialization reached with requested Raylib window count = 0. Skipping initialization.",
+                    std::source_location::current());
+                win.running = false;
+                return;
+            }
+
             epochnamespace::logger::get(kLogSys).logf(
                 epochnamespace::logger::LogLevel::WARN,
                 std::source_location::current(),
