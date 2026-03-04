@@ -1415,6 +1415,19 @@ namespace epochnamespace::core
         {
             bool keepRunning = true;
 
+            if (ctx->init_failed)
+            {
+                epochnamespace::logger::get(kLogSys).logf(
+                    epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                    std::source_location::current(),
+                    "Stopping render loop for {} due to backend init/pipeline failure. window={} ctx={}",
+                    ctx->backendName,
+                    static_cast<void*>(win.hwnd),
+                    static_cast<const void*>(ctx.get()));
+                win.running = false;
+                break;
+            }
+
             {
                 const std::size_t depth = win.commandQueue.depth();
                 telemetry::emit_gauge(
@@ -1431,6 +1444,16 @@ namespace epochnamespace::core
 
             if (!keepRunning)
             {
+                if (ctx->init_failed)
+                {
+                    epochnamespace::logger::get(kLogSys).logf(
+                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                        std::source_location::current(),
+                        "Backend reported init/pipeline failure from process() for {}. window={} ctx={}",
+                        ctx->backendName,
+                        static_cast<void*>(win.hwnd),
+                        static_cast<const void*>(ctx.get()));
+                }
                 win.running = false;
                 break;
             }
