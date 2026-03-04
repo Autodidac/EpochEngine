@@ -83,6 +83,26 @@ export namespace epochnamespace::sfmlcontext
 
     inline SFMLState sfmlcontext{};
 
+    template <typename Work>
+    inline bool with_active_upload_context(Work&& work)
+    {
+        if (!sfmlcontext.window || !sfmlcontext.window->isOpen())
+            return false;
+
+        if (!sfmlcontext.window->setActive(true))
+        {
+            std::cerr << "[SFML] Failed to activate SFML window for texture upload\n";
+            return false;
+        }
+
+        std::forward<Work>(work)();
+
+        if (!sfmlcontext.window->setActive(false))
+            std::cerr << "[SFML] WARNING: failed to deactivate SFML window after texture upload\n";
+
+        return true;
+    }
+
     inline void refresh_dimensions(const std::shared_ptr<core::Context>& ctx) noexcept
     {
         if (!ctx) return;
@@ -282,8 +302,11 @@ export namespace epochnamespace::sfmlcontext
             core::ContextType::SFML,
             [](const TextureAtlas& atlas)
             {
-                // IMPORTANT: uploader must assume the SFML context is current in sfml_process.
-                sfmlcontext::ensure_uploaded(atlas);
+                (void)with_active_upload_context(
+                    [&atlas]()
+                    {
+                        sfmlcontext::ensure_uploaded_for_window(sfmlcontext.window.get(), atlas);
+                    });
             });
 
         return true;
@@ -361,6 +384,15 @@ export namespace epochnamespace::sfmlcontext
 
         // If uploads use OpenGL, they must run while the SFML context is current.
         atlasmanager::process_pending_uploads(core::ContextType::SFML);
+
+        // Upload callbacks may detach context after a guarded upload path.
+        if (!sfmlcontext.window->setActive(true))
+        {
+            std::cerr << "[SFMLRender] Failed to reactivate SFML window after uploads\n";
+            sfmlcontext.running = false;
+            state::s_sfmlstate.running = false;
+            return false;
+        }
 
         // Reset again in case uploads touched state.
         if (shouldResetSfmlState)
@@ -461,7 +493,7 @@ export namespace epochnamespace::sfmlcontext
         {
             if (sfmlcontext.window->setActive(true))
             {
-                clear_gpu_atlases();
+                clear_gpu_atlases_for_window(sfmlcontext.window.get());
                 sfmlcontext.window->setActive(false);
             }
             else
