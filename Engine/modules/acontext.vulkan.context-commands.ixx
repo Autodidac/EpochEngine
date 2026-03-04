@@ -10,6 +10,16 @@ module;
 // Include Vulkan-Hpp after config.
 #include <vulkan/vulkan.hpp>
 
+#if defined(_WIN32)
+#   ifndef WIN32_LEAN_AND_MEAN
+#       define WIN32_LEAN_AND_MEAN
+#   endif
+#   ifndef NOMINMAX
+#       define NOMINMAX
+#   endif
+#   include <windows.h>
+#endif
+
 export module acontext.vulkan.context:commands;
 
 import :shared_vk;
@@ -343,6 +353,26 @@ namespace epochnamespace::vulkancontext
     void Application::drawFrame()
     {
         assert_thread_affinity();
+
+        if (should_stop_rendering())
+            return;
+
+        const auto has_frame_sync = [this]() noexcept
+            {
+                return currentFrame < imageAvailableSemaphores.size()
+                    && currentFrame < renderFinishedSemaphores.size()
+                    && currentFrame < inFlightFences.size()
+                    && imageAvailableSemaphores[currentFrame]
+                    && renderFinishedSemaphores[currentFrame]
+                    && inFlightFences[currentFrame];
+            };
+
+        if (!device || !swapChain || !has_frame_sync())
+        {
+            request_render_stop();
+            return;
+        }
+
         const auto timeout = (std::numeric_limits<std::uint64_t>::max)();
 
         // Wait for CPU/GPU sync for this frame.
@@ -430,8 +460,33 @@ namespace epochnamespace::vulkancontext
         presentInfo.pImageIndices = &imageIndex;
 
 
-        // this needs protected from thread and cross context make current...
-        // also needs an if running
+        bool context_window_is_valid = true;
+        if (const auto* ctx = bound_context())
+        {
+            if (ctx->windowData)
+            {
+                if (!ctx->windowData->running || ctx->windowData->should_close)
+                    context_window_is_valid = false;
+
+#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+                if (context_window_is_valid)
+                {
+                    const HWND hwnd = ctx->windowData->hwnd
+                        ? ctx->windowData->hwnd
+                        : static_cast<HWND>(ctx->native_window);
+                    if (!hwnd || ::IsWindow(hwnd) == FALSE)
+                        context_window_is_valid = false;
+                }
+#endif
+            }
+        }
+
+        if (!device || !swapChain || !has_frame_sync() || !context_window_is_valid)
+        {
+            request_render_stop();
+            return;
+        }
+
         vk::Result presentRes = presentQueue.presentKHR(presentInfo);
 
         if (presentRes == vk::Result::eErrorOutOfDateKHR || presentRes == vk::Result::eSuboptimalKHR)
@@ -441,6 +496,14 @@ namespace epochnamespace::vulkancontext
         else if (presentRes == vk::Result::eErrorSurfaceLostKHR)
         {
             set_framebuffer_resize_intent(true);
+            request_render_stop();
+            return;
+        }
+        else if (presentRes == vk::Result::eErrorDeviceLost
+            || presentRes == vk::Result::eErrorOutOfHostMemory
+            || presentRes == vk::Result::eErrorOutOfDeviceMemory
+            || presentRes == vk::Result::eErrorFullScreenExclusiveModeLostEXT)
+        {
             request_render_stop();
             return;
         }
