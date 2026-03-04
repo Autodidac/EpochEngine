@@ -159,8 +159,9 @@ export namespace epochnamespace::opengltextures
     struct BackendData {
         std::unordered_map<const TextureAtlas*, AtlasGPU,
             TextureAtlasPtrHash, TextureAtlasPtrEqual> gpu_atlases;
+        std::unordered_map<const core::Context*, epochnamespace::openglstate::OpenGL4State> contextStates;
         std::mutex gpuMutex;
-        epochnamespace::openglstate::OpenGL4State glState{};
+        std::mutex stateMutex;
     };
 
     inline BackendData& get_opengl_backend() {
@@ -177,6 +178,39 @@ export namespace epochnamespace::opengltextures
             data = static_cast<BackendData*>(backend.data.get());
         }
         return *data;
+    }
+
+    inline epochnamespace::openglstate::OpenGL4State* find_state_for_context(const core::Context* ctx) noexcept
+    {
+        if (!ctx)
+            return nullptr;
+
+        auto& backend = get_opengl_backend();
+        std::lock_guard<std::mutex> stateLock(backend.stateMutex);
+        auto it = backend.contextStates.find(ctx);
+        if (it == backend.contextStates.end())
+            return nullptr;
+        return &it->second;
+    }
+
+    inline epochnamespace::openglstate::OpenGL4State* ensure_state_for_context(const core::Context* ctx)
+    {
+        if (!ctx)
+            return nullptr;
+
+        auto& backend = get_opengl_backend();
+        std::lock_guard<std::mutex> stateLock(backend.stateMutex);
+        return &backend.contextStates[ctx];
+    }
+
+    inline bool remove_state_for_context(const core::Context* ctx) noexcept
+    {
+        if (!ctx)
+            return false;
+
+        auto& backend = get_opengl_backend();
+        std::lock_guard<std::mutex> stateLock(backend.stateMutex);
+        return backend.contextStates.erase(ctx) > 0;
     }
 
     using Handle = uint32_t;
@@ -249,7 +283,12 @@ export namespace epochnamespace::opengltextures
             std::cerr << "[UploadAtlas] OpenGL backendData not initialized!\n";
             return;
         }
-        auto& glState = oglData->glState;
+        auto* activeCtx = core::MultiContextManager::GetCurrent().get();
+        auto* glState = find_state_for_context(activeCtx);
+        if (!glState) {
+            std::cerr << "[UploadAtlas] No OpenGL context state registered for upload\n";
+            return;
+        }
 
         if (atlas.pixel_data.empty()) {
             std::cerr << "[UploadAtlas] Pixel data empty for '" << atlas.name
@@ -257,7 +296,7 @@ export namespace epochnamespace::opengltextures
             const_cast<TextureAtlas&>(atlas).rebuild_pixels();
         }
 
-        const auto platformCtx = detail::to_platform_context(glState);
+        const auto platformCtx = detail::to_platform_context(*glState);
         epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!contextGuard.set(platformCtx)) {
             std::cerr << "[UploadAtlas] Failed to activate GL context for upload\n";
@@ -425,17 +464,20 @@ export namespace epochnamespace::opengltextures
         }
 
         auto& backend = get_opengl_backend();
+        auto* currentCtx = core::MultiContextManager::GetCurrent().get();
+        auto* currentState = find_state_for_context(currentCtx);
         epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
         auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
         if (!desired.valid()) {
-            desired = detail::to_platform_context(backend.glState);
+            if (currentState)
+                desired = detail::to_platform_context(*currentState);
         }
         if (!desired.valid() || !contextGuard.set(desired)) {
             std::cerr << "[DrawSprite] WARNING: Unable to activate OpenGL context; skipping draw.\n";
             return;
         }
 
-        if (!ensure_created_pipeline(backend.glState)) {
+        if (!currentState || !ensure_created_pipeline(*currentState)) {
             std::cerr << "[DrawSprite] Missing quad pipeline; skipping draw\n";
             return;
         }
@@ -446,8 +488,10 @@ export namespace epochnamespace::opengltextures
         int h = viewport[3];
 
         if (w <= 0 || h <= 0) {
-            w = static_cast<int>(backend.glState.width);
-            h = static_cast<int>(backend.glState.height);
+            if (currentState) {
+                w = static_cast<int>(currentState->width);
+                h = static_cast<int>(currentState->height);
+            }
         }
         if (w <= 0 || h <= 0) {
             if (auto ctx = core::MultiContextManager::GetCurrent()) {
@@ -464,8 +508,10 @@ export namespace epochnamespace::opengltextures
             return;
         }
 
-        backend.glState.width = static_cast<unsigned int>(w);
-        backend.glState.height = static_cast<unsigned int>(h);
+        if (currentState) {
+            currentState->width = static_cast<unsigned int>(w);
+            currentState->height = static_cast<unsigned int>(h);
+        }
 
         const int atlasIdx = int(handle.atlasIndex);
         const int localIdx = int(handle.localIndex);
