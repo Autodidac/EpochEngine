@@ -312,6 +312,9 @@ export namespace epochnamespace::openglcontext
             throw std::runtime_error("[OpenGL] No parent HWND available");
 
         bool usingExternalContext = false;
+        glState.ownsWindow = false;
+        glState.ownsDC = false;
+        glState.ownsContext = false;
 
         // IMPORTANT: match your WindowData naming (your working header used glContext).
         if (ctx->windowData && ctx->windowData->hwnd && ctx->windowData->hdc && ctx->windowData->glContext)
@@ -349,11 +352,14 @@ export namespace epochnamespace::openglcontext
 
                 if (!glState.hwnd)
                     throw std::runtime_error("[OpenGL] CreateWindowExW failed for child GL window");
+
+                glState.ownsWindow = true;
             }
 
             glState.hdc = ::GetDC(glState.hwnd);
             if (!glState.hdc)
                 throw std::runtime_error("[OpenGL] GetDC failed");
+            glState.ownsDC = true;
 
             // SetPixelFormat is one-time per HDC.
             if (::GetPixelFormat(glState.hdc) == 0)
@@ -435,7 +441,15 @@ export namespace epochnamespace::openglcontext
                 glState.hglrc = tmp;
                 tmp = nullptr;
             }
+
+            glState.ownsContext = true;
         }
+
+        std::cerr
+            << "[OpenGL] init ownership (Win32): ownsWindow=" << (glState.ownsWindow ? "true" : "false")
+            << ", ownsDC=" << (glState.ownsDC ? "true" : "false")
+            << ", ownsContext=" << (glState.ownsContext ? "true" : "false")
+            << "\n";
 
         // Publish through PlatformGL (so the rest of the engine uses the same path).
         PlatformGL::PlatformGLContext finalCtx{};
@@ -468,10 +482,28 @@ export namespace epochnamespace::openglcontext
 #elif defined(__linux__)
         (void)parentWindowOpaque;
 
-        Display* display = glState.display ? glState.display : XOpenDisplay(nullptr);
+        glState.ownsDisplay = false;
+        glState.ownsWindow = false;
+        glState.ownsContext = false;
+        glState.ownsColormap = false;
+
+        if (!glState.display && ctx->native_drawable)
+            glState.display = static_cast<Display*>(ctx->native_drawable);
+        if (!glState.window && ctx->native_window)
+            glState.window = static_cast<::Window>(reinterpret_cast<std::uintptr_t>(ctx->native_window));
+        if (!glState.glxContext && ctx->native_gl_context)
+            glState.glxContext = static_cast<GLXContext>(ctx->native_gl_context);
+
+        Display* display = glState.display;
         if (!display)
-            throw std::runtime_error("[OpenGL] XOpenDisplay failed");
-        glState.display = display;
+        {
+            display = XOpenDisplay(nullptr);
+            if (!display)
+                throw std::runtime_error("[OpenGL] XOpenDisplay failed");
+
+            glState.display = display;
+            glState.ownsDisplay = true;
+        }
 
         const int screen = DefaultScreen(display);
 
@@ -509,6 +541,8 @@ export namespace epochnamespace::openglcontext
                 XFree(vi);
                 throw std::runtime_error("[OpenGL] XCreateColormap failed");
             }
+
+            glState.ownsColormap = true;
         }
 
         if (!glState.window)
@@ -531,6 +565,8 @@ export namespace epochnamespace::openglcontext
             XStoreName(display, glState.window, "Almond OpenGL");
             XMapWindow(display, glState.window);
             XFlush(display);
+
+            glState.ownsWindow = true;
         }
 
         XFree(vi);
@@ -558,7 +594,16 @@ export namespace epochnamespace::openglcontext
 
             if (!glState.glxContext)
                 throw std::runtime_error("[OpenGL] Failed to create GLX context");
+
+            glState.ownsContext = true;
         }
+
+        std::cerr
+            << "[OpenGL] init ownership (Linux): ownsDisplay=" << (glState.ownsDisplay ? "true" : "false")
+            << ", ownsWindow=" << (glState.ownsWindow ? "true" : "false")
+            << ", ownsContext=" << (glState.ownsContext ? "true" : "false")
+            << ", ownsColormap=" << (glState.ownsColormap ? "true" : "false")
+            << "\n";
 
         PlatformGL::PlatformGLContext finalCtx{};
         finalCtx.display = display;
@@ -734,19 +779,45 @@ export namespace epochnamespace::openglcontext
 #if defined(_WIN32)
         PlatformGL::clear_current();
 
-        if (glState.hglrc) { ::wglDeleteContext(glState.hglrc); glState.hglrc = nullptr; }
-        if (glState.hdc && glState.hwnd) { ::ReleaseDC(glState.hwnd, glState.hdc); }
-        glState.hdc = nullptr;
+        std::cerr
+            << "[OpenGL] cleanup (Win32): ownsWindow=" << (glState.ownsWindow ? "true" : "false")
+            << ", ownsDC=" << (glState.ownsDC ? "true" : "false")
+            << ", ownsContext=" << (glState.ownsContext ? "true" : "false")
+            << "\n";
 
-        if (glState.hwnd) { ::DestroyWindow(glState.hwnd); glState.hwnd = nullptr; }
+        if (glState.hglrc && glState.ownsContext)
+            ::wglDeleteContext(glState.hglrc);
+        if (glState.hdc && glState.hwnd && glState.ownsDC)
+            ::ReleaseDC(glState.hwnd, glState.hdc);
+        glState.hdc = nullptr;
+        glState.hglrc = nullptr;
+
+        if (glState.hwnd && glState.ownsWindow)
+            ::DestroyWindow(glState.hwnd);
+        glState.hwnd = nullptr;
         glState.parent = nullptr;
+        glState.ownsWindow = false;
+        glState.ownsDC = false;
+        glState.ownsContext = false;
 
 #elif defined(__linux__)
         PlatformGL::clear_current();
-        if (glState.display && glState.glxContext) glXDestroyContext(glState.display, glState.glxContext);
-        if (glState.display && glState.window) XDestroyWindow(glState.display, glState.window);
-        if (glState.display && glState.colormap) XFreeColormap(glState.display, glState.colormap);
-        if (glState.display) XCloseDisplay(glState.display);
+
+        std::cerr
+            << "[OpenGL] cleanup (Linux): ownsDisplay=" << (glState.ownsDisplay ? "true" : "false")
+            << ", ownsWindow=" << (glState.ownsWindow ? "true" : "false")
+            << ", ownsContext=" << (glState.ownsContext ? "true" : "false")
+            << ", ownsColormap=" << (glState.ownsColormap ? "true" : "false")
+            << "\n";
+
+        if (glState.display && glState.glxContext && glState.ownsContext)
+            glXDestroyContext(glState.display, glState.glxContext);
+        if (glState.display && glState.window && glState.ownsWindow)
+            XDestroyWindow(glState.display, glState.window);
+        if (glState.display && glState.colormap && glState.ownsColormap)
+            XFreeColormap(glState.display, glState.colormap);
+        if (glState.display && glState.ownsDisplay)
+            XCloseDisplay(glState.display);
 
         glState.display = nullptr;
         glState.window = 0;
@@ -754,6 +825,10 @@ export namespace epochnamespace::openglcontext
         glState.glxContext = nullptr;
         glState.colormap = 0;
         glState.fbConfig = nullptr;
+        glState.ownsDisplay = false;
+        glState.ownsWindow = false;
+        glState.ownsContext = false;
+        glState.ownsColormap = false;
 #endif
     }
 
