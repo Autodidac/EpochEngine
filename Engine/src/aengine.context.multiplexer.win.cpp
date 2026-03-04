@@ -1322,6 +1322,13 @@ namespace epochnamespace::core
 
             if (!initialized)
             {
+                epochnamespace::logger::get(kLogSys).logf(
+                    epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                    std::source_location::current(),
+                    "Raylib initialization rejected/failed for ctx={} host={}. Enforcing single active Raylib context.",
+                    static_cast<const void*>(ctx.get()),
+                    static_cast<void*>(win.hwnd));
+                ctx->init_failed = true;
                 win.running = false;
                 return;
             }

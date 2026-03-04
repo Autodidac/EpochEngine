@@ -273,9 +273,54 @@ namespace epochnamespace::raylibcontext
         if (!title.empty())
             title_storage() = std::move(title);
 
-        // Prevent re-initializing raylib (it initializes global state once).
+        // Re-initialization semantics (singleton backend):
+        // 1) Re-open same Raylib context while already running:
+        //    accepted as a no-op refresh for callback + dimensions.
+        // 2) Second Raylib initialization request while first is active:
+        //    rejected (single active owner/window contract).
+        // 3) Close-then-reopen:
+        //    allowed, because cleanup clears running and next init becomes a full re-init.
         if (st.running)
         {
+#if defined(_WIN32)
+            const auto requestedParent = static_cast<HWND>(parent ? parent : (ctx ? ctx->hwnd : nullptr));
+            const auto activeOwnerHwnd = (st.owner_ctx && st.owner_ctx->windowData)
+                ? st.owner_ctx->windowData->hwnd
+                : nullptr;
+#else
+            const auto requestedParent = parent ? parent : (ctx ? ctx->hwnd : nullptr);
+            const auto activeOwnerHwnd = (st.owner_ctx && st.owner_ctx->windowData)
+                ? st.owner_ctx->windowData->hwnd
+                : nullptr;
+#endif
+
+            const bool sameOwner = (ctx.get() != nullptr) && (ctx.get() == st.owner_ctx);
+            const bool sameWindow = (requestedParent == st.hwnd) || (requestedParent == activeOwnerHwnd);
+            if (!sameOwner || !sameWindow)
+            {
+                logger::error(
+                    "Raylib",
+                    std::format(
+                        "raylib_initialize rejected: singleton backend already running (active owner={}, active hwnd={:p}, requested owner={}, requested parent={:p}).",
+                        static_cast<const void*>(st.owner_ctx),
+                        st.hwnd,
+                        static_cast<const void*>(ctx.get()),
+                        requestedParent));
+                return false;
+            }
+
+            st.width = (std::max)(1u, width);
+            st.height = (std::max)(1u, height);
+            st.userResize = std::move(resizeCallback);
+            if (ctx)
+            {
+                st.owner_ctx = ctx.get();
+                ctx->onResize = st.onResize;
+            }
+
+            logger::info(
+                "Raylib",
+                "raylib_initialize called for active owner; refreshed callbacks and dimensions without reinitializing window.");
             return true;
         }
 
