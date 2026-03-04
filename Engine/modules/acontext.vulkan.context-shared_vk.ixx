@@ -69,6 +69,16 @@ namespace epochnamespace::vulkancontext
         std::vector<vk::PresentModeKHR> presentModes;
     };
 
+    struct GuiDrawCommand
+    {
+        const TextureAtlas* atlas{};
+        std::uint32_t localIndex{};
+        float x{};
+        float y{};
+        float w{};
+        float h{};
+    };
+
     export class Application
     {
     public:
@@ -90,10 +100,11 @@ namespace epochnamespace::vulkancontext
         void updateGuiUniformBuffer(std::uint32_t currentImage);
         void createGuiPipeline();
         void recordCommandBuffer(std::uint32_t imageIndex);
-        void recordGuiCommands(vk::CommandBuffer cmd,
+        void recordGuiCommands(
+            vk::CommandBuffer cmd,
             std::uint32_t imageIndex,
-            std::shared_ptr<struct GuiContextState> guiState,
-            std::vector<struct GuiDrawCommand> guiDrawSnapshot);
+            std::shared_ptr<GuiContextState> guiState,
+            std::vector<GuiDrawCommand> guiDrawSnapshot);
 
         void drawFrame();
 
@@ -319,16 +330,6 @@ namespace epochnamespace::vulkancontext
                     { 2u, 0u, vk::Format::eR32G32Sfloat,    static_cast<std::uint32_t>(offsetof(Vertex, texCoord)) },
                 } };
             }
-        };
-
-        struct GuiDrawCommand
-        {
-            const TextureAtlas* atlas{};
-            std::uint32_t localIndex{};
-            float x{};
-            float y{};
-            float w{};
-            float h{};
         };
 
         struct GuiAtlasResources
