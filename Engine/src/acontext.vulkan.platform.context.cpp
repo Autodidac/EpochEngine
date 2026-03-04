@@ -27,14 +27,14 @@ module;
 #   define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #endif
 #ifndef VULKAN_HPP_NO_EXCEPTIONS
-#   define VULKAN_HPP_NO_EXCEPTIONS
+#   define VULKAN_HPP_NO_EXCEPTIONS 1
 #endif
 
-#include <include/aengine.config.hpp>
+#include <include/acontext.vulkan.hpp>
 
 #if defined(_WIN32)
 #   ifndef VK_USE_PLATFORM_WIN32_KHR
-#       define VK_USE_PLATFORM_WIN32_KHR
+#       define VK_USE_PLATFORM_WIN32_KHR 1
 #   endif
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN

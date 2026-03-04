@@ -1,17 +1,17 @@
 module;
 
-#include <include/aengine.config.hpp>
+#include <include/acontext.vulkan.hpp>
+
 
 #if defined(_WIN32)
 #   ifndef VK_USE_PLATFORM_WIN32_KHR
-#       define VK_USE_PLATFORM_WIN32_KHR
+#       define VK_USE_PLATFORM_WIN32_KHR 1
 #   endif
 #endif
 
 // We are using Vk* / PFN_* types.
 #include <vulkan/vulkan.h>
 
-#include <include/acontext.vulkan.hpp>
 
 export module acontext.vulkan.platform.instance;
 
