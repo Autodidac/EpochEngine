@@ -193,20 +193,24 @@ namespace epochnamespace::raylibcontext
 
                 if (attachedToDock && parent && parent != dockParent)
                 {
+                    // Never destroy host/dock windows from backend adoption code.
+                    // Keep this non-destructive; at most hide a temporary wrapper if one exists.
                     ::ShowWindow(parent, SW_HIDE);
-                    ::DestroyWindow(parent);
                 }
             }
 
             if (ctx)
             {
-                const HWND previousHost = ctx->windowData ? ctx->windowData->hwnd : nullptr;
+                const HWND previousHost = ctx->windowData
+                    ? (ctx->windowData->host_hwnd ? ctx->windowData->host_hwnd : ctx->windowData->hwnd)
+                    : nullptr;
+                const HWND resolvedHost = dockParent ? dockParent : (previousHost ? previousHost : parent);
                 ctx->hwnd = raylibHwnd;
                 ctx->native_window = raylibHwnd;
                 if (ctx->windowData)
                 {
                     ctx->windowData->hwnd = raylibHwnd;
-                    ctx->windowData->host_hwnd = previousHost ? previousHost : parent;
+                    ctx->windowData->host_hwnd = resolvedHost;
                     ctx->windowData->hwndChild = raylibHwnd;
                 }
             }
