@@ -790,9 +790,36 @@ export namespace epochnamespace::openglcontext
 
         if (!epochnamespace::openglquad::ensure_quad_pipeline())
         {
-            PlatformGL::swap_buffers(guard.target());
+            const auto* glVersionBytes = ::glGetString(GL_VERSION);
+            const auto* glslVersionBytes = ::glGetString(GL_SHADING_LANGUAGE_VERSION);
+            const std::string glVersion = glVersionBytes
+                ? reinterpret_cast<const char*>(glVersionBytes)
+                : "unknown";
+            const std::string glslVersion = glslVersionBytes
+                ? reinterpret_cast<const char*>(glslVersionBytes)
+                : "unknown";
+
+            if (!glState.quadPipelineFailureLatched)
+            {
+                glState.quadPipelineFailureLatched = true;
+
+                std::cerr
+                    << "[OpenGL] Quad pipeline ensure failed. ctx=" << static_cast<const void*>(ctx.get())
+                    << " windowId=" << windowId
+                    << " gl=" << glVersion
+                    << " glsl=" << glslVersion
+                    << "\n";
+
+                telemetry::emit_counter(
+                    "renderer.opengl.quad_pipeline.ensure_failed",
+                    1,
+                    telemetry::RendererTelemetryTags{ core::ContextType::OpenGL, windowId, "latched" });
+            }
+
+            // Policy (a): mark context as failed and stop processing this backend context.
+            ctx->init_failed = true;
             core::MultiContextManager::SetCurrent(previousContext);
-            return true;
+            return false;
         }
 
         atlasmanager::process_pending_uploads(core::ContextType::OpenGL);
