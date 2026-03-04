@@ -479,36 +479,51 @@ export namespace epochnamespace::sfmlcontext
         // Stop new uploads immediately.
         atlasmanager::unregister_backend_uploader(core::ContextType::SFML);
 
+        // Stop render loop activity before any teardown work.
+        sfmlcontext.running = false;
+        state::s_sfmlstate.running = false;
+
         if (ctx && ctx->windowData)
             ctx->windowData->sfml_window = nullptr;
 
         state::s_sfmlstate.window.sfml_window = nullptr;
-        state::s_sfmlstate.running = false;
-        sfmlcontext.running = false;
+
+        const bool windowOpen = sfmlcontext.window && sfmlcontext.window->isOpen();
+
+#if defined(_WIN32)
+        const bool nativeHandleValid =
+            sfmlcontext.hwnd && ::IsWindow(sfmlcontext.hwnd) != FALSE;
+#else
+        const bool nativeHandleValid = true;
+#endif
+
+        // Idempotent teardown: only touch GL once, and only when both SFML + native handles are valid.
+        const bool canAttemptGpuCleanup = windowOpen && nativeHandleValid;
+
+        if (windowOpen && !nativeHandleValid)
+            std::cerr << "[SFML] WARNING: native window handle is no longer valid during cleanup; skipping GPU atlas delete\n";
 
         // CRITICAL:
         // clear_gpu_atlases() calls glDeleteTextures. That MUST only happen with an active,
         // valid SFML context. If the window is already closed/destroyed, skip deletion.
-        if (sfmlcontext.window && sfmlcontext.window->isOpen())
+        if (canAttemptGpuCleanup)
         {
             if (sfmlcontext.window->setActive(true))
             {
                 clear_gpu_atlases_for_window(sfmlcontext.window.get());
-                sfmlcontext.window->setActive(false);
+                (void)sfmlcontext.window->setActive(false);
             }
             else
             {
                 std::cerr << "[SFML] WARNING: could not activate context during cleanup; skipping GPU atlas delete\n";
             }
-
-            // Close after deleting textures (while context is still valid).
-            sfmlcontext.window->setActive(true);
-            sfmlcontext.window->close();
-            sfmlcontext.window.reset();
         }
-        else
+
+        if (sfmlcontext.window)
         {
-            // Window already gone -> don't touch GL.
+            if (sfmlcontext.window->isOpen())
+                sfmlcontext.window->close();
+
             sfmlcontext.window.reset();
         }
 
