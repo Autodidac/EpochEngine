@@ -90,7 +90,10 @@ namespace epochnamespace::vulkancontext
         void updateGuiUniformBuffer(std::uint32_t currentImage);
         void createGuiPipeline();
         void recordCommandBuffer(std::uint32_t imageIndex);
-        void recordGuiCommands(vk::CommandBuffer cmd, std::uint32_t imageIndex, struct GuiContextState& guiState);
+        void recordGuiCommands(vk::CommandBuffer cmd,
+            std::uint32_t imageIndex,
+            std::shared_ptr<struct GuiContextState> guiState,
+            std::vector<struct GuiDrawCommand> guiDrawSnapshot);
 
         void drawFrame();
 
@@ -145,6 +148,9 @@ namespace epochnamespace::vulkancontext
     private:
         std::weak_ptr<epochnamespace::core::Context> context;
         const epochnamespace::core::Context* activeGuiContext = nullptr;
+        // Protects GUI context ownership/mapping state shared between the render thread
+        // and cleanup/context-management call paths.
+        mutable std::mutex guiContextStateMutex;
 
         mutable std::mutex framebufferStateMutex;
         int framebufferWidth = 800;
@@ -271,8 +277,8 @@ namespace epochnamespace::vulkancontext
         void createUniformBuffers();
         void updateUniformBuffer(std::uint32_t currentImage,
             const epochnamespace::vulkancamera::State& camera);
-        GuiContextState& gui_state_for_context(const epochnamespace::core::Context* ctx);
-        GuiContextState* find_gui_state(const epochnamespace::core::Context* ctx) noexcept;
+        std::shared_ptr<GuiContextState> gui_state_for_context(const epochnamespace::core::Context* ctx);
+        std::shared_ptr<GuiContextState> find_gui_state(const epochnamespace::core::Context* ctx) noexcept;
         const epochnamespace::core::Context* bound_context() const noexcept;
         void reset_gui_swapchain_state(GuiContextState& guiState);
 
@@ -340,6 +346,9 @@ namespace epochnamespace::vulkancontext
 
         struct GuiContextState
         {
+            // Protects this context's GUI resource/draw vectors. Rendering should snapshot
+            // draw commands under this lock, then release it before expensive command work.
+            mutable std::mutex mutex{};
             std::unordered_map<const TextureAtlas*, GuiAtlasResources> guiAtlases{};
 
             vk::UniqueBuffer guiVertexBuffer{};
@@ -356,7 +365,9 @@ namespace epochnamespace::vulkancontext
             std::vector<GuiDrawCommand> guiDraws{};
         };
 
-        std::unordered_map<const epochnamespace::core::Context*, GuiContextState> guiContexts{};
+        // Context-keyed GUI state table. Values are shared_ptr to keep each state alive
+        // while command recording is in flight even if cleanup removes the map entry.
+        std::unordered_map<const epochnamespace::core::Context*, std::shared_ptr<GuiContextState>> guiContexts{};
     };
 
     export std::span<const Application::Vertex> cube_vertices() noexcept;
