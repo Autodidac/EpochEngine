@@ -333,11 +333,14 @@ namespace epochnamespace::raylibcontext
                 logger::error(
                     "Raylib",
                     std::format(
-                        "raylib_initialize rejected: singleton backend already running (active owner={}, active hwnd={:p}, requested owner={}, requested parent={:p}).",
+                        "raylib_initialize rejected: singleton backend already running "
+                        "(active owner={:p}, active hwnd={:p}, requested owner={:p}, requested parent={:p}).",
                         static_cast<const void*>(st.owner_ctx),
-                        st.hwnd,
+                        static_cast<const void*>(st.hwnd),
                         static_cast<const void*>(ctx.get()),
-                        requestedParent));
+                        static_cast<const void*>(requestedParent)
+                    )
+                );
                 return false;
             }
 

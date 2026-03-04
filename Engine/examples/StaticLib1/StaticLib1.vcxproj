@@ -575,6 +575,9 @@
     <ClCompile Update="C:\Users\iammi\source\repos\epochengine\AlmondShell\src\aopenglplatform_win.cppm">
       <FileType>Document</FileType>
     </ClCompile>
+    <ClCompile Update="C:\Users\iammi\source\repos\epochengine\Engine\modules\epochengine.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Update="C:\Users\iammi\source\repos\epochengine\AlmondShell\modules\almond.core.time.cppm">
