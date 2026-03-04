@@ -283,11 +283,17 @@ namespace almondnamespace::sfmlcontext
 
         clear_gpu_atlases();
 
-        if (sfmlcontext.running && sfmlcontext.window) {
-            sfmlcontext.window->close();
+        if (sfmlcontext.window) {
+            if (sfmlcontext.window->isOpen()) {
+                sfmlcontext.window->close();
+            }
             sfmlcontext.window.reset();
-            sfmlcontext.running = false;
         }
+
+        sfmlcontext.running = false;
+        sfmlcontext.hwnd = nullptr;
+        sfmlcontext.hdc = nullptr;
+        sfmlcontext.glContext = nullptr;
     }
 
     inline bool SFMLIsRunning(std::shared_ptr<core::Context> ctx)
