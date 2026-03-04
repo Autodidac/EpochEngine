@@ -430,16 +430,63 @@ namespace epochnamespace::core
     HGLRC MultiContextManager::CreateSharedGLContext(HDC hdc)
     {
         SetupPixelFormat(hdc);
-        HGLRC ctx = ::wglCreateContext(hdc);
-        if (!ctx) throw std::runtime_error("Failed to create OpenGL context");
+        HGLRC bootstrap = ::wglCreateContext(hdc);
+        if (!bootstrap)
+            throw std::runtime_error("Failed to create OpenGL bootstrap context");
 
-        if (sharedContext && !::wglShareLists(sharedContext, ctx))
+        if (!::wglMakeCurrent(hdc, bootstrap))
         {
-            ::wglDeleteContext(ctx);
+            ::wglDeleteContext(bootstrap);
+            throw std::runtime_error("Failed to make OpenGL bootstrap context current");
+        }
+
+        const auto is_bad_wgl_ptr = [](void* ptr) noexcept
+            {
+                const auto v = reinterpret_cast<std::uintptr_t>(ptr);
+                return v == 0u || v == 1u || v == 2u || v == 3u || v == static_cast<std::uintptr_t>(-1);
+            };
+
+        PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB = nullptr;
+        {
+            void* raw = reinterpret_cast<void*>(::wglGetProcAddress("wglCreateContextAttribsARB"));
+            if (!is_bad_wgl_ptr(raw))
+                wglCreateContextAttribsARB = reinterpret_cast<PFNWGLCREATECONTEXTATTRIBSARBPROC>(raw);
+        }
+
+        HGLRC finalContext = nullptr;
+        const auto try_create = [&](int major, int minor, int profileMask) -> HGLRC
+            {
+                if (!wglCreateContextAttribsARB) return nullptr;
+                const int attribs[] = {
+                    WGL_CONTEXT_MAJOR_VERSION_ARB, major,
+                    WGL_CONTEXT_MINOR_VERSION_ARB, minor,
+                    WGL_CONTEXT_PROFILE_MASK_ARB, profileMask,
+                    0
+                };
+                return wglCreateContextAttribsARB(hdc, nullptr, attribs);
+            };
+
+        finalContext = try_create(4, 6, WGL_CONTEXT_CORE_PROFILE_BIT_ARB);
+        if (!finalContext)
+            finalContext = try_create(4, 1, WGL_CONTEXT_CORE_PROFILE_BIT_ARB);
+        if (!finalContext)
+            finalContext = try_create(4, 1, WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB);
+        if (!finalContext)
+            finalContext = ::wglCreateContext(hdc);
+
+        (void)::wglMakeCurrent(nullptr, nullptr);
+        ::wglDeleteContext(bootstrap);
+
+        if (!finalContext)
+            throw std::runtime_error("Failed to create OpenGL context (attribs + compatibility fallback)");
+
+        if (sharedContext && !::wglShareLists(sharedContext, finalContext))
+        {
+            ::wglDeleteContext(finalContext);
             throw std::runtime_error("Failed to share GL context");
         }
 
-        return ctx;
+        return finalContext;
     }
 
     int MultiContextManager::get_title_bar_thickness(const HWND window_handle)
@@ -566,8 +613,7 @@ namespace epochnamespace::core
             if (!dummy) return false;
 
             HDC dummyDC = ::GetDC(dummy);
-            SetupPixelFormat(dummyDC);
-            sharedContext = ::wglCreateContext(dummyDC);
+            sharedContext = CreateSharedGLContext(dummyDC);
             if (!sharedContext)
             {
                 ::ReleaseDC(dummy, dummyDC);
