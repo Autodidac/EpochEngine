@@ -29,6 +29,7 @@ import <filesystem>;
 import <format>;
 import <fstream>;
 import <iostream>;
+import <mutex>;
 import <span>;
 import <stdexcept>;
 import <string>;
@@ -48,23 +49,32 @@ export namespace epochnamespace::sfmlcontext
         u32 height = 0;
     };
 
-    struct TextureAtlasPtrHash
+    struct AtlasWindowKey
     {
-        size_t operator()(const TextureAtlas* atlas) const noexcept
+        sf::RenderWindow* window = nullptr;
+        const TextureAtlas* atlas = nullptr;
+    };
+
+    struct AtlasWindowKeyHash
+    {
+        size_t operator()(const AtlasWindowKey& key) const noexcept
         {
-            return std::hash<const TextureAtlas*>{}(atlas);
+            const auto windowHash = std::hash<sf::RenderWindow*>{}(key.window);
+            const auto atlasHash = std::hash<const TextureAtlas*>{}(key.atlas);
+            return windowHash ^ (atlasHash + 0x9e3779b97f4a7c15ULL + (windowHash << 6) + (windowHash >> 2));
         }
     };
 
-    struct TextureAtlasPtrEqual
+    struct AtlasWindowKeyEqual
     {
-        bool operator()(const TextureAtlas* lhs, const TextureAtlas* rhs) const noexcept
+        bool operator()(const AtlasWindowKey& lhs, const AtlasWindowKey& rhs) const noexcept
         {
-            return lhs == rhs;
+            return lhs.window == rhs.window && lhs.atlas == rhs.atlas;
         }
     };
 
-    inline std::unordered_map<const TextureAtlas*, AtlasGPU, TextureAtlasPtrHash, TextureAtlasPtrEqual> sfml_gpu_atlases;
+    inline std::unordered_map<AtlasWindowKey, AtlasGPU, AtlasWindowKeyHash, AtlasWindowKeyEqual> sfml_gpu_atlases;
+    inline std::mutex s_sfmlGpuAtlasesMutex;
 
     inline std::atomic_uint8_t s_generation{ 1 };
     inline std::atomic_uint32_t s_dumpSerial{ 0 };
@@ -129,14 +139,27 @@ export namespace epochnamespace::sfmlcontext
         std::cerr << "[Dump] Wrote: " << filename << "\n";
     }
 
-    inline void upload_atlas_to_gpu(const TextureAtlas& atlas)
+    inline sf::RenderWindow* active_window() noexcept
     {
+        return state::s_sfmlstate.get_sfml_window();
+    }
+
+    inline void upload_atlas_to_gpu(sf::RenderWindow* window, const TextureAtlas& atlas)
+    {
+        if (!window)
+        {
+            std::cerr << "[SFML] Cannot upload atlas '" << atlas.name << "': no active SFML window/context\n";
+            return;
+        }
+
         if (atlas.pixel_data.empty())
         {
             const_cast<TextureAtlas&>(atlas).rebuild_pixels();
         }
 
-        auto& gpu = sfml_gpu_atlases[&atlas];
+        const AtlasWindowKey key{ window, &atlas };
+        std::scoped_lock lock(s_sfmlGpuAtlasesMutex);
+        auto& gpu = sfml_gpu_atlases[key];
 
         if (gpu.version == atlas.version && gpu.texture.getSize().x > 0)
         {
@@ -168,20 +191,38 @@ export namespace epochnamespace::sfmlcontext
             << "' (" << gpu.width << "x" << gpu.height << ")\n";
     }
 
-    inline void ensure_uploaded(const TextureAtlas& atlas)
+    inline void ensure_uploaded_for_window(sf::RenderWindow* window, const TextureAtlas& atlas)
     {
-        auto it = sfml_gpu_atlases.find(&atlas);
-        if (it != sfml_gpu_atlases.end())
         {
-            if (it->second.version == atlas.version && it->second.texture.getSize().x > 0)
-                return;
+            std::scoped_lock lock(s_sfmlGpuAtlasesMutex);
+            const AtlasWindowKey key{ window, &atlas };
+            auto it = sfml_gpu_atlases.find(key);
+            if (it != sfml_gpu_atlases.end())
+            {
+                if (it->second.version == atlas.version && it->second.texture.getSize().x > 0)
+                    return;
+            }
         }
-        upload_atlas_to_gpu(atlas);
+
+        upload_atlas_to_gpu(window, atlas);
     }
 
-    inline void clear_gpu_atlases() noexcept
+    inline void ensure_uploaded(const TextureAtlas& atlas)
     {
-        sfml_gpu_atlases.clear();
+        ensure_uploaded_for_window(active_window(), atlas);
+    }
+
+    inline void clear_gpu_atlases_for_window(sf::RenderWindow* window) noexcept
+    {
+        std::scoped_lock lock(s_sfmlGpuAtlasesMutex);
+        for (auto it = sfml_gpu_atlases.begin(); it != sfml_gpu_atlases.end();)
+        {
+            if (it->first.window == window)
+                it = sfml_gpu_atlases.erase(it);
+            else
+                ++it;
+        }
+
         s_generation.fetch_add(1, std::memory_order_relaxed);
     }
 
@@ -248,7 +289,9 @@ export namespace epochnamespace::sfmlcontext
 
         ensure_uploaded(*atlas);
 
-        auto it = sfml_gpu_atlases.find(atlas);
+        const AtlasWindowKey key{ state::s_sfmlstate.get_sfml_window(), atlas };
+        std::scoped_lock lock(s_sfmlGpuAtlasesMutex);
+        auto it = sfml_gpu_atlases.find(key);
         if (it == sfml_gpu_atlases.end())
         {
             std::cerr << "[SFML_DrawSprite] GPU texture not found for atlas '" << atlas->name << "'\n";
