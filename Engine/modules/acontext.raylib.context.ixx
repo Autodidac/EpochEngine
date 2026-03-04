@@ -593,6 +593,7 @@ namespace epochnamespace::raylibcontext
 #endif
 
             detail::raylib_stop_rendering_backend(st);
+            epochnamespace::raylibtextures::shutdown_backend_for_context(ctx);
 
             if (ctx && ctx->windowData)
             {
