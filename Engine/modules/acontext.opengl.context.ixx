@@ -781,6 +781,16 @@ export namespace epochnamespace::openglcontext
             return;
         auto& glState = *glStatePtr;
 
+        {
+            auto platformCtx = detail::context_to_platform_context(ctx.get());
+            if (!platformCtx.valid())
+                platformCtx = detail::state_to_platform_context(glState);
+            PlatformGL::ScopedContext guard;
+            if (platformCtx.valid() && guard.set(platformCtx)) {
+                opengltextures::clear_gpu_atlases_for_context(ctx.get());
+            }
+        }
+
 #if defined(_WIN32)
         PlatformGL::clear_current();
 
