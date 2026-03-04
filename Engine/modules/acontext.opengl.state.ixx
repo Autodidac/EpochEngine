@@ -65,6 +65,10 @@ export namespace epochnamespace::openglstate
         HDC     hdc = nullptr;
         HGLRC   hglrc = nullptr;
 
+        bool ownsWindow = false;
+        bool ownsDC = false;
+        bool ownsContext = false;
+
         WNDPROC oldWndProc = nullptr;
         WNDPROC getOldWndProc() const noexcept { return oldWndProc; }
 
