@@ -25,7 +25,6 @@ import <iostream>;
 import aengine.platform;
 import aengine.cli;
 import aengine.core.context;
-import aengine.context.multiplexer;
 
 import acontext.opengl.context;
 import acontext.opengl.state;
@@ -44,14 +43,10 @@ export namespace epochnamespace::openglrenderer
 
     inline openglstate::OpenGL4State& renderer_gl_state() noexcept
     {
-        if (auto current = core::MultiContextManager::GetCurrent())
-        {
-            if (auto* state = opengltextures::find_state_for_context(current.get()))
-                return *state;
-        }
-
-        static openglstate::OpenGL4State fallback{};
-        return fallback;
+        static openglstate::OpenGL4State* cached = nullptr;
+        if (!cached)
+            cached = &opengltextures::get_opengl_backend().glState;
+        return *cached;
     }
 
     inline openglstate::OpenGL4State& renderer_gl_state_with_pipeline() noexcept

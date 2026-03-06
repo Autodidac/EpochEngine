@@ -10,16 +10,6 @@ module;
 // Include Vulkan-Hpp after config.
 #include <vulkan/vulkan.hpp>
 
-#if defined(_WIN32)
-#   ifndef WIN32_LEAN_AND_MEAN
-#       define WIN32_LEAN_AND_MEAN
-#   endif
-#   ifndef NOMINMAX
-#       define NOMINMAX
-#   endif
-#   include <windows.h>
-#endif
-
 export module acontext.vulkan.context:commands;
 
 import :shared_vk;
@@ -30,8 +20,6 @@ import <array>;
 import <cstdint>;
 import <cstring>;
 import <limits>;
-import <memory>;
-import <mutex>;
 import <span>;
 import <stdexcept>;
 import <vector>;
@@ -127,16 +115,10 @@ namespace epochnamespace::vulkancontext
 
         cmd.nextSubpass(vk::SubpassContents::eInline);
 
-        if (auto guiState = find_gui_state(bound_context()))
+        if (auto* guiState = find_gui_state(bound_context()))
         {
-            std::vector<GuiDrawCommand> guiDrawSnapshot;
-            {
-                std::scoped_lock guiLock(guiState->mutex);
-                guiDrawSnapshot = guiState->guiDraws;
-            }
-
-            if (!guiDrawSnapshot.empty())
-                recordGuiCommands(cmd, imageIndex, std::move(guiState), std::move(guiDrawSnapshot));
+            if (!guiState->guiDraws.empty())
+                recordGuiCommands(cmd, imageIndex, *guiState);
         }
 
         cmd.endRenderPass();
@@ -164,9 +146,8 @@ namespace epochnamespace::vulkancontext
         if (!atlas)
             return;
 
-        auto guiState = gui_state_for_context(ctx);
-        std::scoped_lock guiLock(guiState->mutex);
-        guiState->guiDraws.push_back(GuiDrawCommand{
+        auto& guiState = gui_state_for_context(ctx);
+        guiState.guiDraws.push_back(GuiDrawCommand{
             atlas,
             sprite.localIndex,
             x,
@@ -176,38 +157,28 @@ namespace epochnamespace::vulkancontext
             });
     }
 
-    void Application::recordGuiCommands(vk::CommandBuffer cmd,
-        std::uint32_t imageIndex,
-        std::shared_ptr<GuiContextState> guiState,
-        std::vector<GuiDrawCommand> guiDrawSnapshot)
+    void Application::recordGuiCommands(vk::CommandBuffer cmd, std::uint32_t imageIndex, GuiContextState& guiState)
     {
-        if (!guiState || guiDrawSnapshot.empty() || !device)
+        if (guiState.guiDraws.empty() || !device)
             return;
 
-        bool needsGuiPipeline = false;
-        bool needsGuiUniformBuffers = false;
-        {
-            std::scoped_lock guiLock(guiState->mutex);
-            needsGuiPipeline = !guiState->guiPipeline;
-            needsGuiUniformBuffers = guiState->guiUniformBuffers.empty();
-        }
-
-        if (needsGuiPipeline)
+        if (!guiState.guiPipeline)
             createGuiPipeline();
-        if (needsGuiUniformBuffers)
+
+        if (guiState.guiUniformBuffers.empty())
             createGuiUniformBuffers();
 
         std::vector<Vertex> vertices{};
         std::vector<std::uint32_t> indices{};
         std::vector<GuiBatch> batches{};
 
-        vertices.reserve(guiDrawSnapshot.size() * 4u);
-        indices.reserve(guiDrawSnapshot.size() * 6u);
-        batches.reserve(guiDrawSnapshot.size());
+        vertices.reserve(guiState.guiDraws.size() * 4u);
+        indices.reserve(guiState.guiDraws.size() * 6u);
+        batches.reserve(guiState.guiDraws.size());
 
         const TextureAtlas* currentAtlas = nullptr;
 
-        for (const auto& draw : guiDrawSnapshot)
+        for (const auto& draw : guiState.guiDraws)
         {
             if (!draw.atlas)
                 continue;
@@ -222,6 +193,10 @@ namespace epochnamespace::vulkancontext
             const float y1 = draw.y + draw.h;
 
             const std::uint32_t baseIndex = static_cast<std::uint32_t>(vertices.size());
+
+            // Atlas UVs are stored in OpenGL-style space (v grows upward).
+            // Vulkan sampling expects top-left origin for texel lookup, so
+            // keep the atlas V range as-is to avoid vertically mirrored GUI/font quads.
             const float v0 = region.v1;
             const float v1 = region.v2;
 
@@ -233,7 +208,11 @@ namespace epochnamespace::vulkancontext
             if (draw.atlas != currentAtlas)
             {
                 currentAtlas = draw.atlas;
-                batches.push_back(GuiBatch{ currentAtlas, static_cast<std::uint32_t>(indices.size()), 0u });
+                batches.push_back(GuiBatch{
+                    currentAtlas,
+                    static_cast<std::uint32_t>(indices.size()),
+                    0u
+                    });
             }
 
             indices.push_back(baseIndex + 0u);
@@ -247,52 +226,56 @@ namespace epochnamespace::vulkancontext
         }
 
         if (vertices.empty() || indices.empty())
+        {
+            guiState.guiDraws.clear();
             return;
+        }
 
         const std::size_t vertexCount = vertices.size();
         const std::size_t indexCount = indices.size();
 
+        if (vertexCount > guiState.guiVertexCapacity)
         {
-            std::scoped_lock guiLock(guiState->mutex);
-
-            if (vertexCount > guiState->guiVertexCapacity)
-            {
-                guiState->guiVertexCapacity = vertexCount;
-                std::tie(guiState->guiVertexBuffer, guiState->guiVertexBufferMemory) = createBuffer(
-                    sizeof(Vertex) * guiState->guiVertexCapacity,
-                    vk::BufferUsageFlagBits::eVertexBuffer,
-                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-            }
-
-            if (indexCount > guiState->guiIndexCapacity)
-            {
-                guiState->guiIndexCapacity = indexCount;
-                std::tie(guiState->guiIndexBuffer, guiState->guiIndexBufferMemory) = createBuffer(
-                    sizeof(std::uint32_t) * guiState->guiIndexCapacity,
-                    vk::BufferUsageFlagBits::eIndexBuffer,
-                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-            }
-
-            const vk::DeviceSize vertexBytes = sizeof(Vertex) * vertexCount;
-            auto [vertexMapRes, vertexMapped] = device->mapMemory(*guiState->guiVertexBufferMemory, 0, vertexBytes);
-            if (vertexMapRes != vk::Result::eSuccess || !vertexMapped)
-                throw std::runtime_error("[Vulkan] Failed to map GUI vertex buffer.");
-            std::memcpy(vertexMapped, vertices.data(), static_cast<std::size_t>(vertexBytes));
-            device->unmapMemory(*guiState->guiVertexBufferMemory);
-
-            const vk::DeviceSize indexBytes = sizeof(std::uint32_t) * indexCount;
-            auto [indexMapRes, indexMapped] = device->mapMemory(*guiState->guiIndexBufferMemory, 0, indexBytes);
-            if (indexMapRes != vk::Result::eSuccess || !indexMapped)
-                throw std::runtime_error("[Vulkan] Failed to map GUI index buffer.");
-            std::memcpy(indexMapped, indices.data(), static_cast<std::size_t>(indexBytes));
-            device->unmapMemory(*guiState->guiIndexBufferMemory);
-
-            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *guiState->guiPipeline);
-            const vk::Buffer vb[] = { *guiState->guiVertexBuffer };
-            const vk::DeviceSize offsets[] = { 0 };
-            cmd.bindVertexBuffers(0, 1, vb, offsets);
-            cmd.bindIndexBuffer(*guiState->guiIndexBuffer, 0, vk::IndexType::eUint32);
+            guiState.guiVertexCapacity = vertexCount;
+            std::tie(guiState.guiVertexBuffer, guiState.guiVertexBufferMemory) = createBuffer(
+                sizeof(Vertex) * guiState.guiVertexCapacity,
+                vk::BufferUsageFlagBits::eVertexBuffer,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
         }
+
+        if (indexCount > guiState.guiIndexCapacity)
+        {
+            guiState.guiIndexCapacity = indexCount;
+            std::tie(guiState.guiIndexBuffer, guiState.guiIndexBufferMemory) = createBuffer(
+                sizeof(std::uint32_t) * guiState.guiIndexCapacity,
+                vk::BufferUsageFlagBits::eIndexBuffer,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        }
+
+        {
+            const vk::DeviceSize vertexBytes = sizeof(Vertex) * vertexCount;
+            auto [mapRes, mapped] = device->mapMemory(*guiState.guiVertexBufferMemory, 0, vertexBytes);
+            if (mapRes != vk::Result::eSuccess || !mapped)
+                throw std::runtime_error("[Vulkan] Failed to map GUI vertex buffer.");
+            std::memcpy(mapped, vertices.data(), static_cast<std::size_t>(vertexBytes));
+            device->unmapMemory(*guiState.guiVertexBufferMemory);
+        }
+
+        {
+            const vk::DeviceSize indexBytes = sizeof(std::uint32_t) * indexCount;
+            auto [mapRes, mapped] = device->mapMemory(*guiState.guiIndexBufferMemory, 0, indexBytes);
+            if (mapRes != vk::Result::eSuccess || !mapped)
+                throw std::runtime_error("[Vulkan] Failed to map GUI index buffer.");
+            std::memcpy(mapped, indices.data(), static_cast<std::size_t>(indexBytes));
+            device->unmapMemory(*guiState.guiIndexBufferMemory);
+        }
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *guiState.guiPipeline);
+
+        const vk::Buffer vb[] = { *guiState.guiVertexBuffer };
+        const vk::DeviceSize offsets[] = { 0 };
+        cmd.bindVertexBuffers(0, 1, vb, offsets);
+        cmd.bindIndexBuffer(*guiState.guiIndexBuffer, 0, vk::IndexType::eUint32);
 
         for (const auto& batch : batches)
         {
@@ -300,18 +283,14 @@ namespace epochnamespace::vulkancontext
                 continue;
 
             ensure_gui_atlas(*batch.atlas);
+            auto it = guiState.guiAtlases.find(batch.atlas);
+            if (it == guiState.guiAtlases.end() || it->second.descriptorSets.empty())
+                continue;
 
-            vk::DescriptorSet set{};
-            {
-                std::scoped_lock guiLock(guiState->mutex);
-                auto it = guiState->guiAtlases.find(batch.atlas);
-                if (it == guiState->guiAtlases.end() || it->second.descriptorSets.empty())
-                    continue;
-                if (imageIndex >= it->second.descriptorSets.size())
-                    continue;
-                set = *it->second.descriptorSets[imageIndex];
-            }
+            if (imageIndex >= it->second.descriptorSets.size())
+                continue;
 
+            vk::DescriptorSet set = *it->second.descriptorSets[imageIndex];
             cmd.bindDescriptorSets(
                 vk::PipelineBindPoint::eGraphics,
                 *pipelineLayout,
@@ -324,6 +303,8 @@ namespace epochnamespace::vulkancontext
 
             cmd.drawIndexed(batch.indexCount, 1u, batch.indexOffset, 0, 0);
         }
+
+        guiState.guiDraws.clear();
     }
 
     void Application::createSyncObjects()
@@ -362,33 +343,6 @@ namespace epochnamespace::vulkancontext
     void Application::drawFrame()
     {
         assert_thread_affinity();
-
-        if (should_stop_rendering())
-            return;
-
-        const auto has_frame_sync = [this]() noexcept
-            {
-                return currentFrame < imageAvailableSemaphores.size()
-                    && currentFrame < renderFinishedSemaphores.size()
-                    && currentFrame < inFlightFences.size()
-                    && imageAvailableSemaphores[currentFrame]
-                    && renderFinishedSemaphores[currentFrame]
-                    && inFlightFences[currentFrame];
-            };
-
-        if (!device || !has_frame_sync())
-        {
-            request_render_stop();
-            return;
-        }
-
-        if (!swapChain)
-        {
-            if (consume_framebuffer_resize_intent())
-                recreateSwapChain();
-            return;
-        }
-
         const auto timeout = (std::numeric_limits<std::uint64_t>::max)();
 
         // Wait for CPU/GPU sync for this frame.
@@ -476,33 +430,8 @@ namespace epochnamespace::vulkancontext
         presentInfo.pImageIndices = &imageIndex;
 
 
-        bool context_window_is_valid = true;
-        if (const auto* ctx = bound_context())
-        {
-            if (ctx->windowData)
-            {
-                if (!ctx->windowData->running || ctx->windowData->should_close)
-                    context_window_is_valid = false;
-
-#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
-                if (context_window_is_valid)
-                {
-                    const HWND hwnd = ctx->windowData->hwnd
-                        ? ctx->windowData->hwnd
-                        : static_cast<HWND>(ctx->native_window);
-                    if (!hwnd || ::IsWindow(hwnd) == FALSE)
-                        context_window_is_valid = false;
-                }
-#endif
-            }
-        }
-
-        if (!device || !swapChain || !has_frame_sync() || !context_window_is_valid)
-        {
-            request_render_stop();
-            return;
-        }
-
+        // this needs protected from thread and cross context make current...
+        // also needs an if running
         vk::Result presentRes = presentQueue.presentKHR(presentInfo);
 
         if (presentRes == vk::Result::eErrorOutOfDateKHR || presentRes == vk::Result::eSuboptimalKHR)
@@ -512,14 +441,6 @@ namespace epochnamespace::vulkancontext
         else if (presentRes == vk::Result::eErrorSurfaceLostKHR)
         {
             set_framebuffer_resize_intent(true);
-            request_render_stop();
-            return;
-        }
-        else if (presentRes == vk::Result::eErrorDeviceLost
-            || presentRes == vk::Result::eErrorOutOfHostMemory
-            || presentRes == vk::Result::eErrorOutOfDeviceMemory
-            || presentRes == vk::Result::eErrorFullScreenExclusiveModeLostEXT)
-        {
             request_render_stop();
             return;
         }

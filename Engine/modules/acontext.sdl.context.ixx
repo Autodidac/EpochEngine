@@ -397,9 +397,6 @@ export namespace epochnamespace::sdlcontext
 
     inline bool sdl_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue)
     {
-        if (!sdlcontext.running || !sdlcontext.window || !sdlcontext.renderer)
-            return false;
-
         const core::ContextType backendType = ctx ? ctx->type : core::ContextType::SDL;
 
         std::uintptr_t windowId = 0u;
@@ -430,9 +427,6 @@ export namespace epochnamespace::sdlcontext
             if (sdl_event.type == SDL_EVENT_WINDOW_RESIZED && sdlcontext.onResize)
                 sdlcontext.onResize(sdl_event.window.data1, sdl_event.window.data2);
         }
-
-        if (!sdlcontext.running || !sdlcontext.window || !sdlcontext.renderer)
-            return false;
 
         refresh_dimensions(ctx);
 
@@ -465,22 +459,7 @@ export namespace epochnamespace::sdlcontext
 
         queue.drain();
 
-        if (!sdlcontext.running || !sdlcontext.window || !sdlcontext.renderer)
-            return false;
-
-        SDL_ClearError();
         SDL_RenderPresent(sdl_renderer.renderer);
-
-        const char* presentError = SDL_GetError();
-        if (presentError && *presentError)
-        {
-            std::cerr << "[SDL] SDL_RenderPresent failed: " << presentError << "\n";
-            SDL_ClearError();
-            sdlcontext.running = false;
-            state::get_sdl_state().running = false;
-            state::get_sdl_state().mark_should_close(true);
-            return false;
-        }
 
         if (sdlcontext.parent && sdlcontext.useFrameLimiter)
         {
@@ -523,9 +502,6 @@ export namespace epochnamespace::sdlcontext
     {
         (void)ctx;
 
-        sdlcontext.running = false;
-        state::get_sdl_state().running = false;
-
         if (sdlcontext.renderer)
         {
             SDL_DestroyRenderer(sdlcontext.renderer);
@@ -539,6 +515,8 @@ export namespace epochnamespace::sdlcontext
         }
 
         SDL_Quit();
+        sdlcontext.running = false;
+        state::get_sdl_state().running = false;
         state::get_sdl_state().window.sdl_window = nullptr;
         sdltextures::sdl_renderer = nullptr;
         sdltextures::clear_gpu_atlases();

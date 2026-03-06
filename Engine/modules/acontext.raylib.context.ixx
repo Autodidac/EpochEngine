@@ -46,14 +46,12 @@ import acontext.raylib.input;
 import acontext.raylib.api;
 
 import <algorithm>;
-import <atomic>;
 import <cmath>;
 import <cstdint>;
 import <chrono>;
 import <format>;
 import <functional>;
 import <memory>;
-import <mutex>;
 import <string>;
 import <string_view>;
 import <thread>;
@@ -193,24 +191,20 @@ namespace epochnamespace::raylibcontext
 
                 if (attachedToDock && parent && parent != dockParent)
                 {
-                    // Never destroy host/dock windows from backend adoption code.
-                    // Keep this non-destructive; at most hide a temporary wrapper if one exists.
                     ::ShowWindow(parent, SW_HIDE);
+                    ::DestroyWindow(parent);
                 }
             }
 
             if (ctx)
             {
-                const HWND previousHost = ctx->windowData
-                    ? (ctx->windowData->host_hwnd ? ctx->windowData->host_hwnd : ctx->windowData->hwnd)
-                    : nullptr;
-                const HWND resolvedHost = dockParent ? dockParent : (previousHost ? previousHost : parent);
+                const HWND previousHost = ctx->windowData ? ctx->windowData->hwnd : nullptr;
                 ctx->hwnd = raylibHwnd;
                 ctx->native_window = raylibHwnd;
                 if (ctx->windowData)
                 {
                     ctx->windowData->hwnd = raylibHwnd;
-                    ctx->windowData->host_hwnd = resolvedHost;
+                    ctx->windowData->host_hwnd = previousHost ? previousHost : parent;
                     ctx->windowData->hwndChild = raylibHwnd;
                 }
             }
@@ -221,39 +215,9 @@ namespace epochnamespace::raylibcontext
 
     namespace detail
     {
-        [[nodiscard]] inline bool running(const epochnamespace::raylibstate::RaylibState& st) noexcept
-        {
-            return st.running.load(std::memory_order_acquire);
-        }
-
-        [[nodiscard]] inline bool rendering_active(const epochnamespace::raylibstate::RaylibState& st) noexcept
-        {
-            return st.renderingActive.load(std::memory_order_acquire);
-        }
-
-        [[nodiscard]] inline bool cleanup_issued(const epochnamespace::raylibstate::RaylibState& st) noexcept
-        {
-            return st.cleanupIssued.load(std::memory_order_acquire);
-        }
-
-        inline void log_cleanup_transition(const char* state)
-        {
-            logger::info("Raylib", std::format("Cleanup transition: {}", state));
-        }
-
-        [[nodiscard]] inline bool issue_cleanup(epochnamespace::raylibstate::RaylibState& st) noexcept
-        {
-            bool expected = false;
-            if (!st.cleanupIssued.compare_exchange_strong(expected, true, std::memory_order_acq_rel, std::memory_order_acquire))
-                return false;
-
-            st.running.store(false, std::memory_order_release);
-            return true;
-        }
-
         inline void raylib_stop_rendering_backend(epochnamespace::raylibstate::RaylibState& st)
         {
-            if (!rendering_active(st))
+            if (!st.renderingActive)
                 return;
 
             epochnamespace::raylibtextures::shutdown_current_context_backend();
@@ -276,7 +240,7 @@ namespace epochnamespace::raylibcontext
                 st.offscreenHeight = 0;
             }
 
-            st.renderingActive.store(false, std::memory_order_release);
+            st.renderingActive = false;
         }
 
         inline void ensure_frame_started(epochnamespace::raylibstate::RaylibState& st)
@@ -309,57 +273,9 @@ namespace epochnamespace::raylibcontext
         if (!title.empty())
             title_storage() = std::move(title);
 
-        // Re-initialization semantics (singleton backend):
-        // 1) Re-open same Raylib context while already running:
-        //    accepted as a no-op refresh for callback + dimensions.
-        // 2) Second Raylib initialization request while first is active:
-        //    rejected (single active owner/window contract).
-        // 3) Close-then-reopen:
-        //    allowed, because cleanup clears running and next init becomes a full re-init.
-        if (detail::running(st))
+        // Prevent re-initializing raylib (it initializes global state once).
+        if (st.running)
         {
-#if defined(_WIN32)
-            const auto requestedParent = static_cast<HWND>(parent ? parent : (ctx ? ctx->hwnd : nullptr));
-            const auto activeOwnerHwnd = (st.owner_ctx && st.owner_ctx->windowData)
-                ? st.owner_ctx->windowData->hwnd
-                : nullptr;
-#else
-            const auto requestedParent = parent ? parent : (ctx ? ctx->hwnd : nullptr);
-            const auto activeOwnerHwnd = (st.owner_ctx && st.owner_ctx->windowData)
-                ? st.owner_ctx->windowData->hwnd
-                : nullptr;
-#endif
-
-            const bool sameOwner = (ctx.get() != nullptr) && (ctx.get() == st.owner_ctx);
-            const bool sameWindow = (requestedParent == st.hwnd) || (requestedParent == activeOwnerHwnd);
-            if (!sameOwner || !sameWindow)
-            {
-                logger::error(
-                    "Raylib",
-                    std::format(
-                        "raylib_initialize rejected: singleton backend already running "
-                        "(active owner={:p}, active hwnd={:p}, requested owner={:p}, requested parent={:p}).",
-                        static_cast<const void*>(st.owner_ctx),
-                        static_cast<const void*>(st.hwnd),
-                        static_cast<const void*>(ctx.get()),
-                        static_cast<const void*>(requestedParent)
-                    )
-                );
-                return false;
-            }
-
-            st.width = (std::max)(1u, width);
-            st.height = (std::max)(1u, height);
-            st.userResize = std::move(resizeCallback);
-            if (ctx)
-            {
-                st.owner_ctx = ctx.get();
-                ctx->onResize = st.onResize;
-            }
-
-            logger::info(
-                "Raylib",
-                "raylib_initialize called for active owner; refreshed callbacks and dimensions without reinitializing window.");
             return true;
         }
 
@@ -410,9 +326,8 @@ namespace epochnamespace::raylibcontext
         if (!st.hdc || !st.hglrc)
         {
             logger::warn("Raylib", "Failed to capture Raylib OpenGL context after initialization.");
-            st.running.store(false, std::memory_order_release);
-            st.cleanupIssued.store(false, std::memory_order_release);
-            st.cleanupRequested.store(false, std::memory_order_release);
+            st.running = false;
+            st.cleanupIssued = false;
             return false;
         }
         if (ctx && ctx->windowData)
@@ -483,10 +398,9 @@ namespace epochnamespace::raylibcontext
         if (ctx)
             ctx->onResize = st.onResize;
 
-        st.running.store(true, std::memory_order_release);
-        st.renderingActive.store(true, std::memory_order_release);
-        st.cleanupIssued.store(false, std::memory_order_release);
-        st.cleanupRequested.store(false, std::memory_order_release);
+        st.running = true;
+        st.renderingActive = true;
+        st.cleanupIssued = false;
 
         epochnamespace::atlasmanager::register_backend_uploader(
             epochnamespace::core::ContextType::RayLib,
@@ -516,12 +430,12 @@ namespace epochnamespace::raylibcontext
     export inline void raylib_process()
     {
         auto& st = epochnamespace::raylibstate::s_raylibstate;
-        if (st.cleanupRequested.exchange(false, std::memory_order_acq_rel))
+        if (st.cleanupRequested)
         {
             detail::raylib_cleanup_owner_thread(st.owner_ctx);
             return;
         }
-        if (!detail::running(st))
+        if (!st.running)
             return;
 
         const std::uintptr_t windowId = st.hwnd
@@ -542,7 +456,7 @@ namespace epochnamespace::raylibcontext
             logger::warn(
                 "Raylib",
                 "Failed to make raylib context current during process; shutting down.");
-            st.running.store(false, std::memory_order_release);
+            st.running = false;
             return;
         }
 #endif
@@ -551,26 +465,21 @@ namespace epochnamespace::raylibcontext
         {
             detail::raylib_stop_rendering_backend(st);
 
-            if (detail::issue_cleanup(st))
+            st.running = false;
+
+            if (!st.cleanupIssued)
             {
-                detail::log_cleanup_transition("issued");
 #if defined(_WIN32)
                 const bool on_owner_thread = (st.owner_thread == std::this_thread::get_id());
 #else
                 const bool on_owner_thread = true;
 #endif
 
+                st.cleanupIssued = true;
                 if (on_owner_thread)
                     detail::raylib_cleanup_owner_thread(st.owner_ctx);
                 else
-                {
-                    std::scoped_lock lifecycleLock(st.lifecycleMutex);
-                    if (st.cleanupIssued.load(std::memory_order_acquire))
-                    {
-                        st.cleanupRequested.store(true, std::memory_order_release);
-                        detail::log_cleanup_transition("requested");
-                    }
-                }
+                    st.cleanupRequested = true;
             }
 
             return;
@@ -587,7 +496,7 @@ namespace epochnamespace::raylibcontext
     export inline void raylib_idle_frame()
     {
         auto& st = epochnamespace::raylibstate::s_raylibstate;
-        if (!detail::running(st) || !detail::rendering_active(st))
+        if (!st.running || !st.renderingActive)
             return;
 
 #if defined(_WIN32)
@@ -619,7 +528,7 @@ namespace epochnamespace::raylibcontext
         (void)a;
 
         auto& st = epochnamespace::raylibstate::s_raylibstate;
-        if (!detail::running(st) || !detail::rendering_active(st))
+        if (!st.running || !st.renderingActive)
             return;
 
 #if defined(_WIN32)
@@ -644,7 +553,7 @@ namespace epochnamespace::raylibcontext
     export inline void raylib_present()
     {
         auto& st = epochnamespace::raylibstate::s_raylibstate;
-        if (!detail::running(st) || !detail::rendering_active(st))
+        if (!st.running || !st.renderingActive)
             return;
 
         if (!raylib_make_current())
@@ -669,7 +578,6 @@ namespace epochnamespace::raylibcontext
         inline void raylib_cleanup_owner_thread(epochnamespace::core::Context* ctx)
         {
             auto& st = epochnamespace::raylibstate::s_raylibstate;
-            std::scoped_lock lifecycleLock(st.lifecycleMutex);
 
 #if defined(_WIN32)
             const HDC   previousDC = detail::current_dc();
@@ -685,7 +593,6 @@ namespace epochnamespace::raylibcontext
 #endif
 
             detail::raylib_stop_rendering_backend(st);
-            epochnamespace::raylibtextures::shutdown_backend_for_context(ctx);
 
             if (ctx && ctx->windowData)
             {
@@ -722,40 +629,15 @@ namespace epochnamespace::raylibcontext
                     detail::clear_current();
             }
 #endif
-            st.hwnd = nullptr;
-            st.hdc = nullptr;
-            st.hglrc = nullptr;
-            st.parent = nullptr;
-            st.ownsDC = false;
-            st.owner_ctx = nullptr;
-            st.owner_thread = {};
-            st.onResize = {};
-            st.userResize = {};
-            st.width = 0;
-            st.height = 0;
-            st.offscreen = {};
-            st.offscreenWidth = 0;
-            st.offscreenHeight = 0;
-            st.frameActive = false;
-            st.frameInTextureMode = false;
-            st.running.store(false, std::memory_order_release);
-            st.renderingActive.store(false, std::memory_order_release);
-            st.cleanupIssued.store(false, std::memory_order_release);
-            st.cleanupRequested.store(false, std::memory_order_release);
-            st.pollTimer = timing::createTimer(1.0);
-            st.fpsTimer = timing::createTimer(1.0);
-            st.frameTimer = timing::createTimer(1.0);
-            st.frameCount = 0;
-            st.lastViewport = {};
 
-            detail::log_cleanup_transition("completed");
+            st = {};
         }
     }
 
     export inline void raylib_cleanup(std::shared_ptr<core::Context> ctx)
     {
         auto& st = epochnamespace::raylibstate::s_raylibstate;
-        if (detail::cleanup_issued(st))
+        if (st.cleanupIssued)
             return;
 
 #if defined(_WIN32)
@@ -764,19 +646,12 @@ namespace epochnamespace::raylibcontext
         const bool on_owner_thread = true;
 #endif
 
-        if (!detail::issue_cleanup(st))
-            return;
-
-        detail::log_cleanup_transition("issued");
+        st.cleanupIssued = true;
+        st.running = false;
 
         if (!on_owner_thread)
         {
-            std::scoped_lock lifecycleLock(st.lifecycleMutex);
-            if (st.cleanupIssued.load(std::memory_order_acquire))
-            {
-                st.cleanupRequested.store(true, std::memory_order_release);
-                detail::log_cleanup_transition("requested");
-            }
+            st.cleanupRequested = true;
             return;
         }
 

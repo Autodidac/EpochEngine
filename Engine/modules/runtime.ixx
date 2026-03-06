@@ -4,10 +4,18 @@ export module runtime;
 
 export namespace runtime
 {
-    int run();
-    //extern "C" bool app_should_quit()
-    //{
-    //    return g_request_quit.load(std::memory_order_relaxed);
-    //}
+    enum class Path
+    {
+        EpochNative,
+        LegacyParity,
+    };
 
+    struct LaunchOptions
+    {
+        Path path = Path::EpochNative;
+        bool editor_requested = false;
+    };
+
+    int run();
+    int run(const LaunchOptions& options);
 }

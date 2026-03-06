@@ -24,13 +24,11 @@ set(ALMONDSHELL_SOURCES
     src/afilewatch.cpp
     src/afont.renderer.cpp
     src/acontext.raylib.bridge.cpp
+    src/acontext.vulkan.platform.context.cpp
+    src/acontext.vulkan.platform.descriptors.cpp
     src/acontext.vulkan.context-texture.cpp
     src/acontext.vulkan.context_buffers.cpp
     src/acontext.vulkan.dispatch_storage.cpp
-    src/acontext.vulkan.platform.context.cpp
-    src/acontext.vulkan.platform.descriptors.cpp
-    src/aengine.context.multiplexer.linux.cpp
-    src/aengine.context.multiplexer.win.cpp
     src/core.assert.cpp
     src/core.env.cpp
     src/core.error.cpp
@@ -48,7 +46,6 @@ set(ALMONDSHELL_SOURCES
     src/epoch.render.graph.cpp
     src/epoch.systems.cpp
     src/main.cpp
-    src/renderer_smoke_harness.cpp
     src/runtime.cpp
 )
 
@@ -65,38 +62,48 @@ elseif(UNIX AND NOT APPLE)
 endif()
 
 add_executable(almondshell ${ALMONDSHELL_SOURCES})
+add_executable(epoch ALIAS almondshell)
+set_target_properties(almondshell PROPERTIES OUTPUT_NAME epoch)
 
-add_executable(almondshell_renderer_smoke
-    "src modules/renderer_smoke_harness.cppm"
+add_executable(epoch_renderer_smoke
+    src/renderer_smoke_harness.cpp
+)
+add_executable(almondshell_renderer_smoke ALIAS epoch_renderer_smoke)
+
+if(WIN32)
+    set(ALMOND_COMPAT_BINARY "almondshell.exe")
+else()
+    set(ALMOND_COMPAT_BINARY "almondshell")
+endif()
+
+add_custom_command(
+    TARGET almondshell POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:almondshell>
+        $<TARGET_FILE_DIR:almondshell>/${ALMOND_COMPAT_BINARY}
 )
 
 set(ALMONDSHELL_MODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
 file(GLOB ALMONDSHELL_MODULE_FILES ${ALMONDSHELL_MODULE_DIR}/*.ixx)
 list(SORT ALMONDSHELL_MODULE_FILES)
 
-set(ALMONDSHELL_MODULE_HEADERS
-    ${ALMONDSHELL_MODULE_DIR}/almond.core.time.hpp
-)
-
 target_sources(almondshell PRIVATE
     FILE_SET almondshell_modules TYPE CXX_MODULES
         BASE_DIRS ${ALMONDSHELL_MODULE_DIR}
         FILES ${ALMONDSHELL_MODULE_FILES}
-    FILE_SET almondshell_module_headers TYPE HEADERS
-        BASE_DIRS ${ALMONDSHELL_MODULE_DIR}
-        FILES ${ALMONDSHELL_MODULE_HEADERS}
 )
 
 target_include_directories(almondshell PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stb
 )
 
-target_include_directories(almondshell_renderer_smoke PRIVATE
+target_include_directories(epoch_renderer_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/modules
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    "${CMAKE_CURRENT_SOURCE_DIR}/src modules"
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stb
 )
 
@@ -135,7 +142,7 @@ if(GLSLANG_VALIDATOR)
     )
 
     add_dependencies(almondshell almond_vulkan_shaders)
-    add_dependencies(almondshell_renderer_smoke almond_vulkan_shaders)
+    add_dependencies(epoch_renderer_smoke almond_vulkan_shaders)
 else()
     message(WARNING "glslangValidator not found; Vulkan SPIR-V shaders will not be generated.")
 endif()
@@ -156,11 +163,11 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(almondshell_renderer_smoke PRIVATE /std:c++latest)
+    target_compile_options(epoch_renderer_smoke PRIVATE /std:c++latest)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(almondshell_renderer_smoke PRIVATE -fmodules-ts)
+    target_compile_options(epoch_renderer_smoke PRIVATE -fmodules-ts)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(almondshell_renderer_smoke PRIVATE -fmodules-ts)
+    target_compile_options(epoch_renderer_smoke PRIVATE -fmodules-ts)
 endif()
 
 option(ALMOND_ENABLE_RAYLIB "Enable the Raylib backend" ON)
@@ -350,12 +357,8 @@ if(ALMOND_VULKAN_ACTIVE)
 
     if(ALMOND_VULKAN_ACTIVE)
         list(APPEND ALMONDSHELL_SOURCES
-            src/acontext.vulkan.platform.context.cpp
-            src/acontext.vulkan.platform.descriptors.cpp
         )
         target_sources(almondshell PRIVATE
-            src/acontext.vulkan.platform.context.cpp
-            src/acontext.vulkan.platform.descriptors.cpp
         )
     endif()
 endif()
@@ -374,7 +377,7 @@ else()
 endif()
 
 set(ALMOND_GLAD_SHOULD_LINK OFF)
-if((ALMOND_OPENGL_ACTIVE OR ALMOND_SDL_ACTIVE) AND NOT ALMOND_RAYLIB_ACTIVE)
+if(ALMOND_OPENGL_ACTIVE OR ALMOND_SDL_ACTIVE OR ALMOND_RAYLIB_ACTIVE)
     set(ALMOND_GLAD_SHOULD_LINK ON)
 endif()
 
@@ -430,7 +433,12 @@ if(ALMOND_GLAD_NEED_HEADERS)
     endif()
 endif()
 
+if(MSVC AND ALMOND_RAYLIB_ACTIVE AND ALMOND_GLAD_SHOULD_LINK)
+    target_link_options(almondshell PRIVATE /FORCE:MULTIPLE)
+endif()
+
 target_compile_definitions(almondshell PRIVATE
+    EPOCH_MAIN_IN_MAIN_CPP=1
     $<$<BOOL:${ALMOND_RAYLIB_ACTIVE}>:ALMOND_FORCE_ENABLE_RAYLIB>
     $<$<NOT:$<BOOL:${ALMOND_RAYLIB_ACTIVE}>>:ALMOND_FORCE_DISABLE_RAYLIB>
     $<$<BOOL:${ALMOND_SDL_ACTIVE}>:ALMOND_FORCE_ENABLE_SDL>
@@ -501,3 +509,8 @@ if(DOXYGEN_FOUND)
 else()
     message(STATUS "Doxygen not found; the 'docs' target will be skipped.")
 endif()
+
+
+
+
+

@@ -147,7 +147,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimage.loader.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimage.writer.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.state.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epochengine.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\almondshell.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\amatch3like.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aminesweeperlike.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\amipmapatlas.ixx" />

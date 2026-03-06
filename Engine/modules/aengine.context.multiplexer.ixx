@@ -1,4 +1,4 @@
-﻿
+
 // aengine.context.multiplexer.ixx
 module;
 
@@ -232,7 +232,7 @@ export namespace epochnamespace::core
         using RenderCommand = std::function<void()>;
 
         static void ShowConsole() {}
-        bool Initialize(HINSTANCE, int, int, int, int, int, bool) { return false; }
+        bool Initialize(HINSTANCE, int, int, int, int, int, int, bool) { return false; }
         void StopAll() {}
         bool IsRunning() const noexcept { return false; }
         void StopRunning() noexcept {}
@@ -267,3 +267,4 @@ export namespace epochnamespace::core
 
 #endif
 } // namespace epochnamespace::core
+

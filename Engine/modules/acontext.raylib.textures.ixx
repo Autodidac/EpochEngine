@@ -99,52 +99,39 @@ export namespace epochnamespace::raylibtextures
         if (!ctx)
             throw std::runtime_error("[RaylibTextures] No current render context");
 
-        if (ctx->type != epochnamespace::core::ContextType::RayLib)
-        {
-            throw std::runtime_error(
-                std::format("[RaylibTextures] Invalid context type for raylib backend storage (expected RayLib, got {}).",
-                    static_cast<int>(ctx->type)));
-        }
+        if (!ctx->native_drawable)
+            ctx->native_drawable = new BackendData();
 
-        if (!ctx->backend_private)
-            ctx->backend_private = new BackendData();
-
-        return *static_cast<BackendData*>(ctx->backend_private);
-    }
-
-    export inline void shutdown_backend_for_context(epochnamespace::core::Context* ctx) noexcept
-    {
-        if (!ctx || !ctx->backend_private)
-            return;
-
-        auto* backend = static_cast<BackendData*>(ctx->backend_private);
-
-        // Move textures out under lock, destroy them unlocked.
-        std::vector<epochnamespace::raylib_api::Texture2D> to_free;
-        {
-            std::scoped_lock lock(backend->gpuMutex);
-            to_free.reserve(backend->gpu_atlases.size());
-            for (auto& [_, gpu] : backend->gpu_atlases)
-            {
-                if (gpu.texture.id != 0)
-                    to_free.push_back(gpu.texture);
-            }
-            backend->gpu_atlases.clear();
-        }
-
-        for (auto& t : to_free)
-            epochnamespace::raylib_api::unload_texture(t);
-
-        delete backend;
-        ctx->backend_private = nullptr;
+        return *static_cast<BackendData*>(ctx->native_drawable);
     }
 
     export inline void shutdown_current_context_backend() noexcept
     {
         try
         {
-            if (auto ctx = epochnamespace::core::get_current_render_context())
-                shutdown_backend_for_context(ctx.get());
+            auto& backend = get_raylib_backend();
+
+            // Move textures out under lock, destroy them unlocked.
+            std::vector<epochnamespace::raylib_api::Texture2D> to_free;
+            {
+                std::scoped_lock lock(backend.gpuMutex);
+                to_free.reserve(backend.gpu_atlases.size());
+                for (auto& [_, gpu] : backend.gpu_atlases)
+                {
+                    if (gpu.texture.id != 0)
+                        to_free.push_back(gpu.texture);
+                }
+                backend.gpu_atlases.clear();
+            }
+
+            for (auto& t : to_free)
+                epochnamespace::raylib_api::unload_texture(t);
+
+            if (auto ctx = epochnamespace::core::get_current_render_context(); ctx && ctx->native_drawable)
+            {
+                delete static_cast<BackendData*>(ctx->native_drawable);
+                ctx->native_drawable = nullptr;
+            }
         }
         catch (...) {}
     }

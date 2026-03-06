@@ -71,7 +71,6 @@ import <format>;
 import <fstream>;
 import <iostream>;
 import <mutex>;
-import <memory>;
 import <span>;
 import <string>;
 import <unordered_map>;
@@ -83,7 +82,6 @@ import aengine.platform;
 
 import aengine.cli;
 import aengine.core.context;
-import aengine.context.commandqueue;
 import aengine.context.multiplexer;
 
 import acontext.opengl.platform;
@@ -156,27 +154,13 @@ export namespace epochnamespace::opengltextures
         }
     };
 
-    struct ContextPtrHash {
-        size_t operator()(const core::Context* ctx) const noexcept {
-            return std::hash<const core::Context*>{}(ctx);
-        }
-    };
-
-    struct ContextPtrEqual {
-        bool operator()(const core::Context* lhs, const core::Context* rhs) const noexcept {
-            return lhs == rhs;
-        }
-    };
-
-    using AtlasGPUMap = std::unordered_map<const TextureAtlas*, AtlasGPU,
-        TextureAtlasPtrHash, TextureAtlasPtrEqual>;
+    inline std::unordered_map<const TextureAtlas*, AtlasGPU, TextureAtlasPtrHash, TextureAtlasPtrEqual> opengl_gpu_atlases;
 
     struct BackendData {
-        std::unordered_map<const core::Context*, AtlasGPUMap,
-            ContextPtrHash, ContextPtrEqual> gpu_atlases;
-        std::unordered_map<const core::Context*, epochnamespace::openglstate::OpenGL4State> contextStates;
+        std::unordered_map<const TextureAtlas*, AtlasGPU,
+            TextureAtlasPtrHash, TextureAtlasPtrEqual> gpu_atlases;
         std::mutex gpuMutex;
-        std::mutex stateMutex;
+        epochnamespace::openglstate::OpenGL4State glState{};
     };
 
     inline BackendData& get_opengl_backend() {
@@ -193,105 +177,6 @@ export namespace epochnamespace::opengltextures
             data = static_cast<BackendData*>(backend.data.get());
         }
         return *data;
-    }
-
-    inline epochnamespace::openglstate::OpenGL4State* find_state_for_context(const core::Context* ctx) noexcept
-    {
-        if (!ctx)
-            return nullptr;
-
-        auto& backend = get_opengl_backend();
-        std::lock_guard<std::mutex> stateLock(backend.stateMutex);
-        auto it = backend.contextStates.find(ctx);
-        if (it == backend.contextStates.end())
-            return nullptr;
-        return &it->second;
-    }
-
-    inline epochnamespace::openglstate::OpenGL4State* ensure_state_for_context(const core::Context* ctx)
-    {
-        if (!ctx)
-            return nullptr;
-
-        auto& backend = get_opengl_backend();
-        std::lock_guard<std::mutex> stateLock(backend.stateMutex);
-        return &backend.contextStates[ctx];
-    }
-
-    inline bool remove_state_for_context(const core::Context* ctx) noexcept
-    {
-        if (!ctx)
-            return false;
-
-        auto& backend = get_opengl_backend();
-        std::lock_guard<std::mutex> stateLock(backend.stateMutex);
-        return backend.contextStates.erase(ctx) > 0;
-    }
-
-    inline void purge_stale_context_entries(const core::Context* ctx) noexcept
-    {
-        if (!ctx)
-            return;
-
-        auto& backend = get_opengl_backend();
-        {
-            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-            backend.gpu_atlases.erase(ctx);
-        }
-        {
-            std::lock_guard<std::mutex> stateLock(backend.stateMutex);
-            backend.contextStates.erase(ctx);
-        }
-    }
-
-    inline bool is_context_alive_for_draw(const core::Context* ctx) noexcept
-    {
-        if (!ctx || !ctx->windowData || !ctx->windowData->running)
-            return false;
-
-#if defined(_WIN32)
-        if (!ctx->windowData->hwnd || !ctx->native_drawable || !ctx->native_gl_context)
-            return false;
-#elif defined(__linux__)
-        if (!ctx->native_window || !ctx->native_drawable || !ctx->native_gl_context)
-            return false;
-#endif
-
-        return true;
-    }
-
-    inline void log_draw_sprite_warning_rate_limited(const std::string& message) noexcept
-    {
-        static std::atomic_uint32_t s_warningTick{ 0 };
-        const std::uint32_t tick = s_warningTick.fetch_add(1, std::memory_order_relaxed);
-        if ((tick % 60u) == 0u)
-            std::cerr << message << '\n';
-    }
-
-    inline void schedule_draw_sprite_retry(
-        const core::Context* owner,
-        SpriteHandle handle,
-        std::vector<const TextureAtlas*> atlases,
-        float x,
-        float y,
-        float width,
-        float height,
-        std::uint8_t retryCount) noexcept;
-
-    inline const core::Context* resolve_context_for_platform(
-        const epochnamespace::openglcontext::PlatformGL::PlatformGLContext& platformCtx) noexcept
-    {
-        if (!platformCtx.valid())
-            return nullptr;
-
-        auto& backend = get_opengl_backend();
-        std::lock_guard<std::mutex> stateLock(backend.stateMutex);
-        for (const auto& [ctx, state] : backend.contextStates) {
-            const auto statePlatformCtx = detail::to_platform_context(state);
-            if (statePlatformCtx == platformCtx)
-                return ctx;
-        }
-        return nullptr;
     }
 
     using Handle = uint32_t;
@@ -352,17 +237,19 @@ export namespace epochnamespace::opengltextures
 
     inline void upload_atlas_to_gpu(const TextureAtlas& atlas)
     {
-        auto& backend = get_opengl_backend();
-        auto* activeCtx = core::MultiContextManager::GetCurrent().get();
-        if (!activeCtx) {
-            std::cerr << "[UploadAtlas] No active context for upload\n";
+        BackendData* oglData = nullptr;
+        {
+            std::shared_lock lock(core::g_backendsMutex);
+            auto it = core::g_backends.find(core::ContextType::OpenGL);
+            if (it != core::g_backends.end()) {
+                oglData = static_cast<BackendData*>(it->second.data.get());
+            }
+        }
+        if (!oglData) {
+            std::cerr << "[UploadAtlas] OpenGL backendData not initialized!\n";
             return;
         }
-        auto* glState = find_state_for_context(activeCtx);
-        if (!glState) {
-            std::cerr << "[UploadAtlas] No OpenGL context state registered for upload\n";
-            return;
-        }
+        auto& glState = oglData->glState;
 
         if (atlas.pixel_data.empty()) {
             std::cerr << "[UploadAtlas] Pixel data empty for '" << atlas.name
@@ -370,38 +257,34 @@ export namespace epochnamespace::opengltextures
             const_cast<TextureAtlas&>(atlas).rebuild_pixels();
         }
 
-        const auto platformCtx = detail::to_platform_context(*glState);
+        const auto platformCtx = detail::to_platform_context(glState);
         epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!contextGuard.set(platformCtx)) {
             std::cerr << "[UploadAtlas] Failed to activate GL context for upload\n";
             return;
         }
 
-        AtlasGPU snapshot{};
-        {
-            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-            auto& gpuByContext = backend.gpu_atlases[activeCtx];
-            snapshot = gpuByContext[&atlas];
-        }
+        std::lock_guard<std::mutex> gpuLock(oglData->gpuMutex);
+        auto& gpu = oglData->gpu_atlases[&atlas];
 
-        if (snapshot.version == atlas.version && snapshot.textureHandle != 0) {
-            std::cerr << "[UploadAtlas] SKIPPING upload for '" << atlas.name
-                << "' version = " << atlas.version << "\n";
-            return;
-        }
-
-        if (!snapshot.textureHandle) {
-            glGenTextures(1, &snapshot.textureHandle);
-            if (!snapshot.textureHandle) {
+        if (!gpu.textureHandle) {
+            glGenTextures(1, &gpu.textureHandle);
+            if (!gpu.textureHandle) {
                 std::cerr << "[OpenGL] Failed to generate texture for atlas: "
                     << atlas.name << "\n";
                 return;
             }
         }
 
-        glBindTexture(GL_TEXTURE_2D, snapshot.textureHandle);
+        if (gpu.version == atlas.version) {
+            std::cerr << "[UploadAtlas] SKIPPING upload for '" << atlas.name
+                << "' version = " << atlas.version << "\n";
+            return;
+        }
 
-        if (snapshot.width != atlas.width || snapshot.height != atlas.height) {
+        glBindTexture(GL_TEXTURE_2D, gpu.textureHandle);
+
+        if (gpu.width != atlas.width || gpu.height != atlas.height) {
 #ifdef GL_ARB_texture_storage
             glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, atlas.width, atlas.height);
 #else
@@ -409,8 +292,8 @@ export namespace epochnamespace::opengltextures
                 atlas.width, atlas.height,
                 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 #endif
-            snapshot.width = atlas.width;
-            snapshot.height = atlas.height;
+            gpu.width = atlas.width;
+            gpu.height = atlas.height;
         }
 
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
@@ -423,38 +306,35 @@ export namespace epochnamespace::opengltextures
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        snapshot.version = atlas.version;
-
-        {
-            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-            auto& gpu = backend.gpu_atlases[activeCtx][&atlas];
-            gpu = snapshot;
-        }
+        gpu.version = atlas.version;
 
         glBindTexture(GL_TEXTURE_2D, 0);
 
         std::cerr << "[OpenGL] Uploaded atlas '" << atlas.name
-            << "' (tex id " << snapshot.textureHandle << ")\n";
+            << "' (tex id " << gpu.textureHandle << ")\n";
     }
 
     inline void ensure_uploaded(const TextureAtlas& atlas)
     {
-        auto& backend = get_opengl_backend();
-        auto* activeCtx = core::MultiContextManager::GetCurrent().get();
-        if (!activeCtx) {
-            std::cerr << "[EnsureUploaded] No active context for atlas upload\n";
+        BackendData* oglData = nullptr;
+        {
+            std::shared_lock lock(core::g_backendsMutex);
+            auto it = core::g_backends.find(core::ContextType::OpenGL);
+            if (it != core::g_backends.end()) {
+                oglData = static_cast<BackendData*>(it->second.data.get());
+            }
+        }
+        if (!oglData) {
+            std::cerr << "[EnsureUploaded] OpenGL backendData not initialized!\n";
             return;
         }
 
         {
-            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-            auto ctxIt = backend.gpu_atlases.find(activeCtx);
-            if (ctxIt != backend.gpu_atlases.end()) {
-                auto atlasIt = ctxIt->second.find(&atlas);
-                if (atlasIt != ctxIt->second.end()) {
-                    if (atlasIt->second.version == atlas.version && atlasIt->second.textureHandle != 0)
-                        return;
-                }
+            std::lock_guard<std::mutex> gpuLock(oglData->gpuMutex);
+            auto it = oglData->gpu_atlases.find(&atlas);
+            if (it != oglData->gpu_atlases.end()) {
+                if (it->second.version == atlas.version && it->second.textureHandle != 0)
+                    return;
             }
         }
         upload_atlas_to_gpu(atlas);
@@ -467,54 +347,23 @@ export namespace epochnamespace::opengltextures
 
     inline void clear_gpu_atlases() noexcept
     {
-        auto* activeCtx = core::MultiContextManager::GetCurrent().get();
-        if (!activeCtx)
-            return;
-
-        auto& backend = get_opengl_backend();
-        std::vector<GLuint> handles;
+        BackendData* oglData = nullptr;
         {
-            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-            auto ctxIt = backend.gpu_atlases.find(activeCtx);
-            if (ctxIt == backend.gpu_atlases.end())
-                return;
-            handles.reserve(ctxIt->second.size());
-            for (const auto& [_, gpu] : ctxIt->second) {
-                if (gpu.textureHandle)
-                    handles.push_back(gpu.textureHandle);
+            std::shared_lock lock(core::g_backendsMutex);
+            auto it = core::g_backends.find(core::ContextType::OpenGL);
+            if (it != core::g_backends.end()) {
+                oglData = static_cast<BackendData*>(it->second.data.get());
             }
-            backend.gpu_atlases.erase(ctxIt);
         }
 
-        for (GLuint handle : handles) {
-            glDeleteTextures(1, &handle);
-        }
-
-        s_generation.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    inline void clear_gpu_atlases_for_context(const core::Context* ctx) noexcept
-    {
-        if (!ctx)
-            return;
-
-        auto& backend = get_opengl_backend();
-        std::vector<GLuint> handles;
-        {
-            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-            auto ctxIt = backend.gpu_atlases.find(ctx);
-            if (ctxIt == backend.gpu_atlases.end())
-                return;
-            handles.reserve(ctxIt->second.size());
-            for (const auto& [_, gpu] : ctxIt->second) {
-                if (gpu.textureHandle)
-                    handles.push_back(gpu.textureHandle);
+        if (oglData) {
+            std::lock_guard<std::mutex> gpuLock(oglData->gpuMutex);
+            for (auto& [_, gpu] : oglData->gpu_atlases) {
+                if (gpu.textureHandle) {
+                    glDeleteTextures(1, &gpu.textureHandle);
+                }
             }
-            backend.gpu_atlases.erase(ctxIt);
-        }
-
-        for (GLuint handle : handles) {
-            glDeleteTextures(1, &handle);
+            oglData->gpu_atlases.clear();
         }
 
         s_generation.fetch_add(1, std::memory_order_relaxed);
@@ -565,53 +414,29 @@ export namespace epochnamespace::opengltextures
         return static_cast<uint32_t>(tex);
     }
 
-    inline void draw_sprite_impl(SpriteHandle handle,
+    inline void draw_sprite(SpriteHandle handle,
         std::span<const TextureAtlas* const> atlases,
-        float x, float y, float width, float height,
-        std::uint8_t retryCount) noexcept
+        float x, float y, float width, float height) noexcept
     {
+        // (unchanged from your version)
         if (!handle.is_valid()) {
             std::cerr << "[DrawSprite] Invalid sprite handle.\n";
             return;
         }
 
         auto& backend = get_opengl_backend();
-        auto* requestedCtx = core::MultiContextManager::GetCurrent().get();
-
-        if (!is_context_alive_for_draw(requestedCtx)) {
-            purge_stale_context_entries(requestedCtx);
-            log_draw_sprite_warning_rate_limited("[DrawSprite] Skipping draw: context/window is no longer alive; stale OpenGL entries purged.");
-            return;
-        }
-
-        auto* requestedState = find_state_for_context(requestedCtx);
         epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
         auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
         if (!desired.valid()) {
-            if (requestedState)
-                desired = detail::to_platform_context(*requestedState);
+            desired = detail::to_platform_context(backend.glState);
         }
         if (!desired.valid() || !contextGuard.set(desired)) {
             std::cerr << "[DrawSprite] WARNING: Unable to activate OpenGL context; skipping draw.\n";
             return;
         }
 
-        const core::Context* effectiveCtx = resolve_context_for_platform(desired);
-        if (!effectiveCtx) {
-            std::cerr << "[DrawSprite] ERROR: Active OpenGL platform context could not be mapped to a backend context; skipping draw.\n";
-            return;
-        }
-
-        auto* currentState = find_state_for_context(effectiveCtx);
-
-        if (!is_context_alive_for_draw(effectiveCtx)) {
-            purge_stale_context_entries(effectiveCtx);
-            log_draw_sprite_warning_rate_limited("[DrawSprite] Skipping draw: resolved context/window is no longer alive; stale OpenGL entries purged.");
-            return;
-        }
-
-        if (!currentState || !ensure_created_pipeline(*currentState)) {
-            schedule_draw_sprite_retry(effectiveCtx, handle, { atlases.begin(), atlases.end() }, x, y, width, height, retryCount);
+        if (!ensure_created_pipeline(backend.glState)) {
+            std::cerr << "[DrawSprite] Missing quad pipeline; skipping draw\n";
             return;
         }
 
@@ -621,10 +446,8 @@ export namespace epochnamespace::opengltextures
         int h = viewport[3];
 
         if (w <= 0 || h <= 0) {
-            if (currentState) {
-                w = static_cast<int>(currentState->width);
-                h = static_cast<int>(currentState->height);
-            }
+            w = static_cast<int>(backend.glState.width);
+            h = static_cast<int>(backend.glState.height);
         }
         if (w <= 0 || h <= 0) {
             if (auto ctx = core::MultiContextManager::GetCurrent()) {
@@ -641,10 +464,8 @@ export namespace epochnamespace::opengltextures
             return;
         }
 
-        if (currentState) {
-            currentState->width = static_cast<unsigned int>(w);
-            currentState->height = static_cast<unsigned int>(h);
-        }
+        backend.glState.width = static_cast<unsigned int>(w);
+        backend.glState.height = static_cast<unsigned int>(h);
 
         const int atlasIdx = int(handle.atlasIndex);
         const int localIdx = int(handle.localIndex);
@@ -671,14 +492,8 @@ export namespace epochnamespace::opengltextures
         GLuint tex = 0;
         {
             std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-            auto ctxIt = backend.gpu_atlases.find(effectiveCtx);
-            if (ctxIt == backend.gpu_atlases.end()) {
-                std::cerr << "[DrawSprite] GPU texture not found for active context and atlas '"
-                    << atlas->name << "'\n";
-                return;
-            }
-            auto it = ctxIt->second.find(atlas);
-            if (it == ctxIt->second.end()) {
+            auto it = backend.gpu_atlases.find(atlas);
+            if (it == backend.gpu_atlases.end()) {
                 std::cerr << "[DrawSprite] GPU texture not found for atlas '"
                     << atlas->name << "'\n";
                 return;
@@ -745,62 +560,6 @@ export namespace epochnamespace::opengltextures
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glDisable(GL_BLEND);
-    }
-
-    inline void schedule_draw_sprite_retry(
-        const core::Context* owner,
-        SpriteHandle handle,
-        std::vector<const TextureAtlas*> atlases,
-        float x,
-        float y,
-        float width,
-        float height,
-        std::uint8_t retryCount) noexcept
-    {
-        constexpr std::uint8_t kMaxRetries = 3;
-        if (!owner || !owner->windowData)
-            return;
-
-        if (retryCount >= kMaxRetries) {
-            log_draw_sprite_warning_rate_limited("[DrawSprite] Dropping draw after retry cap due to missing OpenGL state/pipeline.");
-            return;
-        }
-
-        std::weak_ptr<core::Context> weakOwner = owner->windowData->context;
-        owner->windowData->commandQueue.enqueue(
-            [weakOwner,
-            handle,
-            atlases = std::move(atlases),
-            x,
-            y,
-            width,
-            height,
-            retryCount]() mutable
-            {
-                auto locked = weakOwner.lock();
-                if (!locked)
-                    return;
-
-                core::MultiContextManager::SetCurrent(locked);
-                draw_sprite_impl(
-                    handle,
-                    std::span<const TextureAtlas* const>(atlases.data(), atlases.size()),
-                    x,
-                    y,
-                    width,
-                    height,
-                    static_cast<std::uint8_t>(retryCount + 1));
-            },
-            core::RenderPath::OpenGL);
-
-        log_draw_sprite_warning_rate_limited("[DrawSprite] OpenGL state/pipeline unavailable; queued one-shot retry.");
-    }
-
-    inline void draw_sprite(SpriteHandle handle,
-        std::span<const TextureAtlas* const> atlases,
-        float x, float y, float width, float height) noexcept
-    {
-        draw_sprite_impl(handle, atlases, x, y, width, height, 0);
     }
 
 } // namespace epochnamespace::opengltextures

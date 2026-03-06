@@ -1,10 +1,10 @@
-Ôªø/**************************************************************
- *   ‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó ‚ñà‚ñà‚ïó     ‚ñà‚ñà‚ñà‚ïó   ‚ñà‚ñà‚ñà‚ïó   ‚ñà‚ñà‚ñà‚ïó   ‚ñà‚ñà‚ïó    ‚ñà‚ñà‚ïó‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó    *
- *  ‚ñà‚ñà‚ïî‚ïê‚ïê‚ñà‚ñà‚ïó‚ñà‚ñà‚ïë     ‚ñà‚ñà‚ñà‚ñà‚ïó ‚ñà‚ñà‚ñà‚ñà‚ïë ‚ñà‚ñà‚ïî‚ïê‚ïê‚ïê‚ñà‚ñà‚ïó‚ñà‚ñà‚ñà‚ñà‚ïó  ‚ñà‚ñà‚ïë‚ñà‚ñà‚ïî‚ïê‚ïê‚ñà‚ñà‚ïó   *
- *  ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïë‚ñà‚ñà‚ïë     ‚ñà‚ñà‚ïî‚ñà‚ñà‚ñà‚ñà‚ïî‚ñà‚ñà‚ïë ‚ñà‚ñà‚ïë   ‚ñà‚ñà‚ïë‚ñà‚ñà‚ïî‚ñà‚ñà‚ïó ‚ñà‚ñà‚ïë‚ñà‚ñà‚ïë  ‚ñà‚ñà‚ïë   *
- *  ‚ñà‚ñà‚ïî‚ïê‚ïê‚ñà‚ñà‚ïë‚ñà‚ñà‚ïë     ‚ñà‚ñà‚ïë‚ïö‚ñà‚ñà‚ïî‚ïù‚ñà‚ñà‚ïë ‚ñà‚ñà‚ïë   ‚ñà‚ñà‚ïë‚ñà‚ñà‚ïë‚ïö‚ñà‚ñà‚ïó‚ñà‚ñà‚ïë‚ñà‚ñà‚ïë  ‚ñà‚ñà‚ïë   *
- *  ‚ñà‚ñà‚ïë  ‚ñà‚ñà‚ïë‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó‚ñà‚ñà‚ïë ‚ïö‚ïê‚ïù ‚ñà‚ñà‚ïë ‚ïö‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïî‚ïù‚ñà‚ñà‚ïë ‚ïö‚ñà‚ñà‚ñà‚ñà‚ïë‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïî‚ïù   *
- *  ‚ïö‚ïê‚ïù  ‚ïö‚ïê‚ïù‚ïö‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïù‚ïö‚ïê‚ïù     ‚ïö‚ïê‚ïù  ‚ïö‚ïê‚ïê‚ïê‚ïê‚ïê‚ïù ‚ïö‚ïê‚ïù  ‚ïö‚ïê‚ïê‚ïê‚ïù‚ïö‚ïê‚ïê‚ïê‚ïê‚ïê‚ïù    *
+/**************************************************************
+ *   ¶¶¶¶¶+ ¶¶+     ¶¶¶+   ¶¶¶+   ¶¶¶+   ¶¶+    ¶¶+¶¶¶¶¶¶+    *
+ *  ¶¶+--¶¶+¶¶¶     ¶¶¶¶+ ¶¶¶¶¶ ¶¶+---¶¶+¶¶¶¶+  ¶¶¶¶¶+--¶¶+   *
+ *  ¶¶¶¶¶¶¶¶¶¶¶     ¶¶+¶¶¶¶+¶¶¶ ¶¶¶   ¶¶¶¶¶+¶¶+ ¶¶¶¶¶¶  ¶¶¶   *
+ *  ¶¶+--¶¶¶¶¶¶     ¶¶¶+¶¶++¶¶¶ ¶¶¶   ¶¶¶¶¶¶+¶¶+¶¶¶¶¶¶  ¶¶¶   *
+ *  ¶¶¶  ¶¶¶¶¶¶¶¶¶¶+¶¶¶ +-+ ¶¶¶ +¶¶¶¶¶¶++¶¶¶ +¶¶¶¶¶¶¶¶¶¶¶++   *
+ *  +-+  +-++------++-+     +-+  +-----+ +-+  +---++-----+    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
  *   epochengine - Modular C++ Framework                      *
@@ -37,10 +37,6 @@
 #   ifndef NOMINMAX
 #       define NOMINMAX
 #   endif
-#   ifndef ALMOND_USING_WINMAIN
-#       include <windows.h>
-#   endif
-#   include <wingdi.h>
 #   include <windowsx.h>
 #   include <commctrl.h>
 #   include <shellapi.h>
@@ -64,15 +60,6 @@
 #   include <vector>
 
 #   include <glad/glad.h>
-#   if defined(__has_include)
-#       if __has_include(<glad/glad_wgl.h>)
-#           include <glad/glad_wgl.h>
-#       else
-#           include <GL/wglext.h>
-#       endif
-#   else
-#       include <GL/wglext.h>
-#   endif
 #endif
 
 import aengine.platform;
@@ -119,41 +106,6 @@ namespace
     };
     std::vector<PendingWindowCleanup> g_pendingCleanups;
     constexpr std::string_view kLogSys = "Context.Multiplexer.Win";
-    std::atomic<int> g_requestedRaylibWindows{ 0 };
-
-    [[nodiscard]] inline int sanitize_count(int value) noexcept
-    {
-        return (value > 0) ? value : 0;
-    }
-
-    void log_window_creation_summary(const epochnamespace::core::MultiContextManager& mgr)
-    {
-        std::unordered_map<epochnamespace::core::ContextType, int> actualCounts;
-        for (const auto& win : mgr.GetWindows())
-        {
-            if (!win) continue;
-            ++actualCounts[win->type];
-        }
-
-        auto& logger = epochnamespace::logger::get(kLogSys);
-        auto log_line = [&](epochnamespace::core::ContextType type, std::string_view name)
-            {
-                const int created = actualCounts.contains(type) ? actualCounts[type] : 0;
-                logger.logf(
-                    epochnamespace::logger::LogLevel::WARN,
-                    std::source_location::current(),
-                    "Created {} windows: {}",
-                    name,
-                    created);
-            };
-
-        log_line(epochnamespace::core::ContextType::OpenGL, "OpenGL");
-        log_line(epochnamespace::core::ContextType::RayLib, "RayLib");
-        log_line(epochnamespace::core::ContextType::SDL, "SDL");
-        log_line(epochnamespace::core::ContextType::SFML, "SFML");
-        log_line(epochnamespace::core::ContextType::Vulkan, "Vulkan");
-        log_line(epochnamespace::core::ContextType::Software, "Software");
-    }
 
    // [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
 
@@ -443,63 +395,16 @@ namespace epochnamespace::core
     HGLRC MultiContextManager::CreateSharedGLContext(HDC hdc)
     {
         SetupPixelFormat(hdc);
-        HGLRC bootstrap = ::wglCreateContext(hdc);
-        if (!bootstrap)
-            throw std::runtime_error("Failed to create OpenGL bootstrap context");
+        HGLRC ctx = ::wglCreateContext(hdc);
+        if (!ctx) throw std::runtime_error("Failed to create OpenGL context");
 
-        if (!::wglMakeCurrent(hdc, bootstrap))
+        if (sharedContext && !::wglShareLists(sharedContext, ctx))
         {
-            ::wglDeleteContext(bootstrap);
-            throw std::runtime_error("Failed to make OpenGL bootstrap context current");
-        }
-
-        const auto is_bad_wgl_ptr = [](void* ptr) noexcept
-            {
-                const auto v = reinterpret_cast<std::uintptr_t>(ptr);
-                return v == 0u || v == 1u || v == 2u || v == 3u || v == static_cast<std::uintptr_t>(-1);
-            };
-
-        PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB = nullptr;
-        {
-            void* raw = reinterpret_cast<void*>(::wglGetProcAddress("wglCreateContextAttribsARB"));
-            if (!is_bad_wgl_ptr(raw))
-                wglCreateContextAttribsARB = reinterpret_cast<PFNWGLCREATECONTEXTATTRIBSARBPROC>(raw);
-        }
-
-        HGLRC finalContext = nullptr;
-        const auto try_create = [&](int major, int minor, int profileMask) -> HGLRC
-            {
-                if (!wglCreateContextAttribsARB) return nullptr;
-                const int attribs[] = {
-                    WGL_CONTEXT_MAJOR_VERSION_ARB, major,
-                    WGL_CONTEXT_MINOR_VERSION_ARB, minor,
-                    WGL_CONTEXT_PROFILE_MASK_ARB, profileMask,
-                    0
-                };
-                return wglCreateContextAttribsARB(hdc, nullptr, attribs);
-            };
-
-        finalContext = try_create(4, 6, WGL_CONTEXT_CORE_PROFILE_BIT_ARB);
-        if (!finalContext)
-            finalContext = try_create(4, 1, WGL_CONTEXT_CORE_PROFILE_BIT_ARB);
-        if (!finalContext)
-            finalContext = try_create(4, 1, WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB);
-        if (!finalContext)
-            finalContext = ::wglCreateContext(hdc);
-
-        (void)::wglMakeCurrent(nullptr, nullptr);
-        ::wglDeleteContext(bootstrap);
-
-        if (!finalContext)
-            throw std::runtime_error("Failed to create OpenGL context (attribs + compatibility fallback)");
-
-        if (sharedContext && !::wglShareLists(sharedContext, finalContext))
-        {
-            ::wglDeleteContext(finalContext);
+            ::wglDeleteContext(ctx);
             throw std::runtime_error("Failed to share GL context");
         }
 
-        return finalContext;
+        return ctx;
     }
 
     int MultiContextManager::get_title_bar_thickness(const HWND window_handle)
@@ -526,41 +431,12 @@ namespace epochnamespace::core
         int RayLibWinCount,
         int SDLWinCount,
         int SFMLWinCount,
-        int OpenGLWinCount,
         int VulkanWinCount,
+        int OpenGLWinCount,
         int SoftwareWinCount,
         bool parented)
     {
-        const int requestedRayLibCountRaw = RayLibWinCount;
-        const int requestedSDLCountRaw = SDLWinCount;
-        const int requestedSFMLCountRaw = SFMLWinCount;
-        const int requestedOpenGLCountRaw = OpenGLWinCount;
-        const int requestedVulkanCountRaw = VulkanWinCount;
-        const int requestedSoftwareCountRaw = SoftwareWinCount;
-
-        RayLibWinCount = sanitize_count(requestedRayLibCountRaw);
-        SDLWinCount = sanitize_count(requestedSDLCountRaw);
-        SFMLWinCount = sanitize_count(requestedSFMLCountRaw);
-        OpenGLWinCount = sanitize_count(requestedOpenGLCountRaw);
-        VulkanWinCount = sanitize_count(requestedVulkanCountRaw);
-        SoftwareWinCount = sanitize_count(requestedSoftwareCountRaw);
-
-        g_requestedRaylibWindows.store(RayLibWinCount, std::memory_order_release);
-
-        if (OpenGLWinCount > 0 && (RayLibWinCount > 0 || SDLWinCount > 0 || SFMLWinCount > 0 || VulkanWinCount > 0 || SoftwareWinCount > 0))
-        {
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::WARN,
-                std::source_location::current(),
-                "OpenGL requested with additional backend windows (raylib={}, sdl={}, sfml={}, vulkan={}, software={}). Strict OpenGL mode requires all non-OpenGL counts to be 0.",
-                RayLibWinCount,
-                SDLWinCount,
-                SFMLWinCount,
-                VulkanWinCount,
-                SoftwareWinCount);
-        }
-
-        const int totalRequested = RayLibWinCount + SDLWinCount + SFMLWinCount + OpenGLWinCount + VulkanWinCount + SoftwareWinCount;
+        const int totalRequested = RayLibWinCount + SDLWinCount + SFMLWinCount + VulkanWinCount + OpenGLWinCount + SoftwareWinCount;
         if (totalRequested <= 0) return false;
 
         running.store(true, std::memory_order_release);
@@ -626,7 +502,8 @@ namespace epochnamespace::core
             if (!dummy) return false;
 
             HDC dummyDC = ::GetDC(dummy);
-            sharedContext = CreateSharedGLContext(dummyDC);
+            SetupPixelFormat(dummyDC);
+            sharedContext = ::wglCreateContext(dummyDC);
             if (!sharedContext)
             {
                 ::ReleaseDC(dummy, dummyDC);
@@ -930,8 +807,6 @@ namespace epochnamespace::core
         make_backend_windows(ContextType::SFML, SFMLWinCount);
 #endif
 
-        log_window_creation_summary(*this);
-
         ArrangeDockedWindowsGrid();
         StartRenderThreads();
 
@@ -1135,23 +1010,18 @@ namespace epochnamespace::core
 
     void MultiContextManager::StartRenderThreads()
     {
-        std::vector<std::pair<HWND, ContextType>> windowsToStart;
+        std::vector<HWND> hwnds;
         {
             std::scoped_lock lock(windowsMutex);
-            windowsToStart.reserve(windows.size());
+            hwnds.reserve(windows.size());
             for (const auto& w : windows)
-                if (w && w->hwnd) windowsToStart.emplace_back(w->hwnd, w->type);
+                if (w && w->hwnd) hwnds.push_back(w->hwnd);
         }
 
         auto& threads = Threads();
 
-        for (const auto& [hwnd, type] : windowsToStart)
+        for (HWND hwnd : hwnds)
         {
-#if defined(ALMOND_USING_RAYLIB)
-            if (type == ContextType::RayLib && g_requestedRaylibWindows.load(std::memory_order_acquire) <= 0)
-                continue;
-#endif
-
             if (threads.contains(hwnd)) continue;
 
             threads[hwnd] = std::thread([this, hwnd]()
@@ -1356,16 +1226,6 @@ namespace epochnamespace::core
 #if defined(ALMOND_USING_RAYLIB)
         if (ctx->type == ContextType::RayLib)
         {
-            if (g_requestedRaylibWindows.load(std::memory_order_acquire) <= 0)
-            {
-                epochnamespace::logger::get(kLogSys).log(
-                    epochnamespace::logger::LogLevel::ALMOND_ERROR,
-                    "Raylib render-thread initialization reached with requested Raylib window count = 0. Skipping initialization.",
-                    std::source_location::current());
-                win.running = false;
-                return;
-            }
-
             epochnamespace::logger::get(kLogSys).logf(
                 epochnamespace::logger::LogLevel::WARN,
                 std::source_location::current(),
@@ -1381,13 +1241,6 @@ namespace epochnamespace::core
 
             if (!initialized)
             {
-                epochnamespace::logger::get(kLogSys).logf(
-                    epochnamespace::logger::LogLevel::ALMOND_ERROR,
-                    std::source_location::current(),
-                    "Raylib initialization rejected/failed for ctx={} host={}. Enforcing single active Raylib context.",
-                    static_cast<const void*>(ctx.get()),
-                    static_cast<void*>(win.hwnd));
-                ctx->init_failed = true;
                 win.running = false;
                 return;
             }
@@ -1428,19 +1281,6 @@ namespace epochnamespace::core
         {
             bool keepRunning = true;
 
-            if (ctx->init_failed)
-            {
-                epochnamespace::logger::get(kLogSys).logf(
-                    epochnamespace::logger::LogLevel::ALMOND_ERROR,
-                    std::source_location::current(),
-                    "Stopping render loop for {} due to backend init/pipeline failure. window={} ctx={}",
-                    ctx->backendName,
-                    static_cast<void*>(win.hwnd),
-                    static_cast<const void*>(ctx.get()));
-                win.running = false;
-                break;
-            }
-
             {
                 const std::size_t depth = win.commandQueue.depth();
                 telemetry::emit_gauge(
@@ -1457,16 +1297,6 @@ namespace epochnamespace::core
 
             if (!keepRunning)
             {
-                if (ctx->init_failed)
-                {
-                    epochnamespace::logger::get(kLogSys).logf(
-                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
-                        std::source_location::current(),
-                        "Backend reported init/pipeline failure from process() for {}. window={} ctx={}",
-                        ctx->backendName,
-                        static_cast<void*>(win.hwnd),
-                        static_cast<const void*>(ctx.get()));
-                }
                 win.running = false;
                 break;
             }
@@ -1757,3 +1587,5 @@ namespace epochnamespace::core
 }
 
 #endif // _WIN32
+
+

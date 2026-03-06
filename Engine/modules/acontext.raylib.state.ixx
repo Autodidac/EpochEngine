@@ -18,11 +18,9 @@ import aengine.core.context;
 import acontext.raylib.api;
 
 import <array>;
-import <atomic>;
 import <bitset>;
 import <cstdint>;
 import <functional>;
-import <mutex>;
 import <thread>;
 
 
@@ -77,16 +75,14 @@ export namespace epochnamespace::raylibstate
         // Offscreen render target owned by the host OpenGL context
         epochnamespace::raylib_api::RenderTexture2D offscreen{};
 
-        // Render-thread confined flags; only read/write from the active raylib render thread.
         bool frameActive = false;
         bool frameInTextureMode = false;
 
         // Lifecycle
-        std::atomic<bool> running{ false };
-        std::atomic<bool> renderingActive{ false };
-        std::atomic<bool> cleanupIssued{ false };
-        std::atomic<bool> cleanupRequested{ false };
-        std::mutex lifecycleMutex{};
+        bool running = false;
+        bool renderingActive = false;
+        bool cleanupIssued = false;
+        bool cleanupRequested = false;
 
         // Timers (unchanged, preserved)
         timing::Timer pollTimer = timing::createTimer(1.0);

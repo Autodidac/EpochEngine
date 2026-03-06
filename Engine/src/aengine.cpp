@@ -1,10 +1,10 @@
-ï»¿/**************************************************************
- *   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•—     â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ•—    â–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—    *
- *  â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â–ˆâ–ˆâ–ˆâ–ˆâ•”â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â–ˆâ–ˆâ•— â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘ â•šâ•â• â–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•   *
- *  â•šâ•â•  â•šâ•â•â•šâ•â•â•â•â•â•â•â•šâ•â•     â•šâ•â•  â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•â•â•šâ•â•â•â•â•â•    *
+/**************************************************************
+ *   ¦¦¦¦¦+ ¦¦+     ¦¦¦+   ¦¦¦+   ¦¦¦+   ¦¦+    ¦¦+¦¦¦¦¦¦+    *
+ *  ¦¦+--¦¦+¦¦¦     ¦¦¦¦+ ¦¦¦¦¦ ¦¦+---¦¦+¦¦¦¦+  ¦¦¦¦¦+--¦¦+   *
+ *  ¦¦¦¦¦¦¦¦¦¦¦     ¦¦+¦¦¦¦+¦¦¦ ¦¦¦   ¦¦¦¦¦+¦¦+ ¦¦¦¦¦¦  ¦¦¦   *
+ *  ¦¦+--¦¦¦¦¦¦     ¦¦¦+¦¦++¦¦¦ ¦¦¦   ¦¦¦¦¦¦+¦¦+¦¦¦¦¦¦  ¦¦¦   *
+ *  ¦¦¦  ¦¦¦¦¦¦¦¦¦¦+¦¦¦ +-+ ¦¦¦ +¦¦¦¦¦¦++¦¦¦ +¦¦¦¦¦¦¦¦¦¦¦++   *
+ *  +-+  +-++------++-+     +-+  +-----+ +-+  +---++-----+    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
  *   epochengine - Modular C++ Framework                      *
@@ -29,7 +29,7 @@
  //    We only query windows via MultiContextManager APIs.
  //  - Removed non-constant switch case labels for ContextType::Unknown/Noop
  //    because your ContextType in your current modules is not an enum with those
- //    exact enumerators (or theyâ€™re not visible here). Default handles it.
+ //    exact enumerators (or they’re not visible here). Default handles it.
  //
 //#include "pch.h"
 
@@ -54,6 +54,7 @@ import <chrono>;
 //import <exception>;
 import <format>;
 import <iostream>;
+import <limits>;
 import <memory>;
 import <mutex>;
 import <optional>;
@@ -130,6 +131,64 @@ namespace epochnamespace::core
     void RunEngine();
     void StartEngine();
     void RunEditorInterface();
+    namespace bridge
+    {
+        int run_legacy_runtime(bool editor_mode);
+    }
+
+    struct LegacyLaunchConfig
+    {
+        int raylib_count = 1;
+        int sdl_count = 1;
+        int sfml_count = 1;
+        int vulkan_count = 1;
+        int opengl_count = 1;
+        int software_count = 1;
+        bool parented = (ALMOND_SINGLE_PARENT == 1);
+    };
+
+    [[nodiscard]] inline LegacyLaunchConfig resolve_legacy_launch_config()
+    {
+        LegacyLaunchConfig cfg{};
+        cfg.raylib_count = (std::max)(0, cli::raylib_window_count);
+        cfg.sdl_count = (std::max)(0, cli::sdl_window_count);
+        cfg.sfml_count = (std::max)(0, cli::sfml_window_count);
+        cfg.vulkan_count = (std::max)(0, cli::vulkan_window_count);
+        cfg.opengl_count = (std::max)(0, cli::opengl_window_count);
+        cfg.software_count = (std::max)(0, cli::software_window_count);
+        cfg.parented = cli::parented_mode;
+
+        const int total_requested =
+            cfg.raylib_count +
+            cfg.sdl_count +
+            cfg.sfml_count +
+            cfg.vulkan_count +
+            cfg.opengl_count +
+            cfg.software_count;
+
+        if (total_requested > 0)
+            return cfg;
+
+#if defined(ALMOND_USING_OPENGL)
+        cfg.opengl_count = 1;
+#elif defined(ALMOND_USING_VULKAN)
+        cfg.vulkan_count = 1;
+#elif defined(ALMOND_USING_SDL)
+        cfg.sdl_count = 1;
+#elif defined(ALMOND_USING_RAYLIB)
+        cfg.raylib_count = 1;
+#elif defined(ALMOND_USING_SFML)
+        cfg.sfml_count = 1;
+#else
+        cfg.software_count = 1;
+#endif
+        return cfg;
+    }
+
+    [[nodiscard]] inline std::uint64_t smoke_frame_budget() noexcept
+    {
+        return cli::smoke_requested ? 300u : (std::numeric_limits<std::uint64_t>::max)();
+    }
 
     struct TextureUploadTask
     {
@@ -246,10 +305,17 @@ namespace epochnamespace::core
             std::unordered_map<Context*, std::chrono::steady_clock::time_point> last_frame_times;
             bool running = true;
             bool show_games_popup = false;
+            std::uint64_t frame_count = 0;
+            const std::uint64_t smoke_max_frames = smoke_frame_budget();
             auto pump = std::forward<PumpFunc>(pump_events);
 
             while (running)
             {
+                if (frame_count++ >= smoke_max_frames)
+                {
+                    running = false;
+                    break;
+                }
                 if (!pump())
                 {
                     running = false;
@@ -657,10 +723,17 @@ namespace epochnamespace::core
 
             std::unordered_map<Context*, std::chrono::steady_clock::time_point> last_frame_times;
             bool running = true;
+            std::uint64_t frame_count = 0;
+            const std::uint64_t smoke_max_frames = smoke_frame_budget();
             auto pump = std::forward<PumpFunc>(pump_events);
 
             while (running)
             {
+                if (frame_count++ >= smoke_max_frames)
+                {
+                    running = false;
+                    break;
+                }
                 if (!pump())
                 {
                     running = false;
@@ -973,15 +1046,17 @@ namespace epochnamespace::core
 
                 HINSTANCE hi = hInstance ? hInstance : GetModuleHandleW(nullptr);
 
+                const auto launch_cfg = resolve_legacy_launch_config();
+
                 const bool ok = mgr.Initialize(
                     hi,
-                    /*RayLib*/   1,
-                    /*SDL*/      1,
-                    /*SFML*/     1,
-                    /*Vulkan*/   1,
-                    /*OpenGL*/   1,
-                    /*Software*/ 1,
-                    ALMOND_SINGLE_PARENT == 1
+                    launch_cfg.raylib_count,
+                    launch_cfg.sdl_count,
+                    launch_cfg.sfml_count,
+                    launch_cfg.vulkan_count,
+                    launch_cfg.opengl_count,
+                    launch_cfg.software_count,
+                    launch_cfg.parented
                 );
 
                 if (!ok)
@@ -994,6 +1069,13 @@ namespace epochnamespace::core
 
                 mgr.StartRenderThreads();
                 mgr.ArrangeDockedWindowsGrid();
+
+                if (epochnamespace::core::cli::smoke_requested)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    mgr.StopAll();
+                    return 0;
+                }
 
                 auto pump = []() -> bool
                     {
@@ -1031,15 +1113,17 @@ namespace epochnamespace::core
             {
                 epochnamespace::core::MultiContextManager mgr;
 
+                const auto launch_cfg = resolve_legacy_launch_config();
+
                 const bool ok = mgr.Initialize(
                     nullptr,
-                    /*RayLib*/   1,
-                    /*SDL*/      1,
-                    /*SFML*/     1,
-                    /*Vulkan*/   1,
-                    /*OpenGL*/   1,
-                    /*Software*/ 1,
-                    ALMOND_SINGLE_PARENT == 1
+                    launch_cfg.raylib_count,
+                    launch_cfg.sdl_count,
+                    launch_cfg.sfml_count,
+                    launch_cfg.vulkan_count,
+                    launch_cfg.opengl_count,
+                    launch_cfg.software_count,
+                    launch_cfg.parented
                 );
 
                 if (!ok)
@@ -1052,6 +1136,13 @@ namespace epochnamespace::core
 
                 mgr.StartRenderThreads();
                 mgr.ArrangeDockedWindowsGrid();
+
+                if (epochnamespace::core::cli::smoke_requested)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    mgr.StopAll();
+                    return 0;
+                }
 
                 auto pump = []() -> bool
                     {
@@ -1100,16 +1191,18 @@ namespace epochnamespace::core
 
             const HINSTANCE hi = GetModuleHandleW(nullptr);
 
-            const bool ok = mgr.Initialize(
-                hi,
-                /*RayLib*/   1,
-                /*SDL*/      1,
-                /*SFML*/     1,
-                    /*Vulkan*/   1,
-                /*OpenGL*/   1,
-                /*Software*/ 1,
-                ALMOND_SINGLE_PARENT == 1
-            );
+            const auto launch_cfg = resolve_legacy_launch_config();
+
+                const bool ok = mgr.Initialize(
+                    hi,
+                    launch_cfg.raylib_count,
+                    launch_cfg.sdl_count,
+                    launch_cfg.sfml_count,
+                    launch_cfg.vulkan_count,
+                    launch_cfg.opengl_count,
+                    launch_cfg.software_count,
+                    launch_cfg.parented
+                );
 
             if (!ok)
             {
@@ -1120,7 +1213,14 @@ namespace epochnamespace::core
             input::designate_polling_thread_to_current();
 
             mgr.StartRenderThreads();
-            mgr.ArrangeDockedWindowsGrid();
+                mgr.ArrangeDockedWindowsGrid();
+
+                if (epochnamespace::core::cli::smoke_requested)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    mgr.StopAll();
+                   // return 0;
+                }
 
             auto pump = []() -> bool
                 {
@@ -1156,16 +1256,18 @@ namespace epochnamespace::core
         {
             epochnamespace::core::MultiContextManager mgr;
 
-            const bool ok = mgr.Initialize(
-                nullptr,
-                /*RayLib*/   1,
-                /*SDL*/      1,
-                /*SFML*/     1,
-                    /*Vulkan*/   1,
-                /*OpenGL*/   1,
-                /*Software*/ 1,
-                ALMOND_SINGLE_PARENT == 1
-            );
+            const auto launch_cfg = resolve_legacy_launch_config();
+
+                const bool ok = mgr.Initialize(
+                    nullptr,
+                    launch_cfg.raylib_count,
+                    launch_cfg.sdl_count,
+                    launch_cfg.sfml_count,
+                    launch_cfg.vulkan_count,
+                    launch_cfg.opengl_count,
+                    launch_cfg.software_count,
+                    launch_cfg.parented
+                );
 
             if (!ok)
             {
@@ -1176,7 +1278,14 @@ namespace epochnamespace::core
             input::designate_polling_thread_to_current();
 
             mgr.StartRenderThreads();
-            mgr.ArrangeDockedWindowsGrid();
+                mgr.ArrangeDockedWindowsGrid();
+
+                if (epochnamespace::core::cli::smoke_requested)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    mgr.StopAll();
+                    return 0;
+                }
 
             auto pump = []() -> bool
                 {
@@ -1195,8 +1304,32 @@ namespace epochnamespace::core
         std::cerr << "[Editor] RunEditorInterface is not implemented for this platform yet.\n";
 #endif
     }
+
+    namespace bridge
+    {
+        int run_legacy_runtime(bool editor_mode)
+        {
+            if (editor_mode)
+            {
+                RunEditorInterface();
+                return 0;
+            }
+
+#if defined(_WIN32)
+            const HINSTANCE instance = GetModuleHandleW(nullptr);
+            return engine::RunEngineMainLoopInternal(instance, SW_SHOWNORMAL);
+#elif defined(__linux__)
+            return engine::RunEngineMainLoopLinux();
+#else
+            std::cerr << "[Engine] Legacy bridge runtime is not implemented for this platform yet.\n";
+            return -1;
+#endif
+        }
+    }
 } // namespace epochnamespace::core
 
+
+#if !defined(EPOCH_MAIN_IN_MAIN_CPP)
 namespace urls
 {
     const std::string github_base = "https://github.com/";
@@ -1305,3 +1438,9 @@ int main(int argc, char** argv)
     }
 #endif
 }
+
+#endif // !defined(EPOCH_MAIN_IN_MAIN_CPP)
+
+
+
+

@@ -3,7 +3,6 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
-#include <mutex>
 #include <cstring>
 #include <stdexcept>
 #include <vector>
@@ -132,13 +131,12 @@ namespace epochnamespace::vulkancontext
 
     void Application::createGuiUniformBuffers()
     {
-        auto guiState = gui_state_for_context(bound_context());
-        std::scoped_lock guiLock(guiState->mutex);
+        auto& guiState = gui_state_for_context(bound_context());
         const std::size_t n = swapChainImages.size();
 
-        guiState->guiUniformBuffers.resize(n);
-        guiState->guiUniformBuffersMemory.resize(n);
-        guiState->guiUniformBuffersMapped.resize(n);
+        guiState.guiUniformBuffers.resize(n);
+        guiState.guiUniformBuffersMemory.resize(n);
+        guiState.guiUniformBuffersMapped.resize(n);
 
         const vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
 
@@ -150,14 +148,14 @@ namespace epochnamespace::vulkancontext
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
             );
 
-            guiState->guiUniformBuffers[i] = std::move(buf);
-            guiState->guiUniformBuffersMemory[i] = std::move(mem);
+            guiState.guiUniformBuffers[i] = std::move(buf);
+            guiState.guiUniformBuffersMemory[i] = std::move(mem);
 
-            auto [mapRes, ptr] = device->mapMemory(*guiState->guiUniformBuffersMemory[i], 0, bufferSize);
+            auto [mapRes, ptr] = device->mapMemory(*guiState.guiUniformBuffersMemory[i], 0, bufferSize);
             if (mapRes != vk::Result::eSuccess || ptr == nullptr)
                 throw std::runtime_error("[Vulkan] Failed to map GUI uniform buffer memory.");
 
-            guiState->guiUniformBuffersMapped[i] = ptr;
+            guiState.guiUniformBuffersMapped[i] = ptr;
         }
     }
 
@@ -189,11 +187,9 @@ namespace epochnamespace::vulkancontext
 
     void Application::updateGuiUniformBuffer(std::uint32_t currentImage)
     {
-        auto guiState = find_gui_state(bound_context());
+        auto* guiState = find_gui_state(bound_context());
         if (!guiState)
             return;
-
-        std::scoped_lock guiLock(guiState->mutex);
         if (guiState->guiUniformBuffersMapped.empty()
             || currentImage >= guiState->guiUniformBuffersMapped.size())
             return;

@@ -51,6 +51,8 @@ cmake --build --preset macos-release
 For script-driven builds, use `./AlmondShell/build.sh` (see
 `AlmondShell/docs/build_scripts.md`).
 
+Runtime entry is `epoch` (the legacy `almondshell` filename is kept as a compatibility copy).
+
 ## Configuration highlights
 
 Build-time switches live in `AlmondShell/include/aengine.config.hpp` and are
@@ -73,3 +75,8 @@ commercial product. For substantial changes, open an issue first.
 ## License
 
 `LicenseRef-MIT-NoSell` — see `LICENSE` for full terms.
+
+
+Runtime entry is epoch (the legacy lmondshell filename is kept as a compatibility copy).
+
+

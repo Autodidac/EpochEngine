@@ -12,7 +12,6 @@ module;
 #include <cassert>
 #include <cstdint>
 #include <filesystem>
-#include <mutex>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -346,7 +345,7 @@ export namespace epochnamespace::vulkancontext
 
     void Application::createGuiPipeline()
     {
-        auto guiState = gui_state_for_context(bound_context());
+        auto& guiState = gui_state_for_context(bound_context());
         const auto vertShaderCode = readFile("shaders/vert.spv");
         const auto fragShaderCode = readFile("shaders/frag.spv");
 
@@ -459,9 +458,6 @@ export namespace epochnamespace::vulkancontext
         auto gp = device->createGraphicsPipelineUnique(vk::PipelineCache{}, pipelineInfo);
         if (gp.result != vk::Result::eSuccess)
             throw std::runtime_error("[Vulkan] createGuiPipeline failed.");
-        {
-            std::scoped_lock guiLock(guiState->mutex);
-            guiState->guiPipeline = std::move(gp.value);
-        }
+        guiState.guiPipeline = std::move(gp.value);
     }
 }

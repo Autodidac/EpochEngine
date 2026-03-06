@@ -1,57 +1,70 @@
-//#include "main.h"
-//
-//#include <_epoch.stl_types.hpp>
-//#include <print>
-//
-//import core.assert;
-//import core.env;
-//import core.error;
-//import core.format;
-//import core.id;
-//import core.math;
-//import core.path;
-//import core.string;
-//import core.time;
-//
-//import runtime;
-//
-//int main()
-//{
-//    using epoch::core::asserts::that;
-//    using namespace std::literals;
-//
-//    // core.math
-//    that(epoch::core::math::clamp(5, 0, 3) == 3);
-//    that(epoch::core::math::lerp(0.0, 10.0, 0.5) == 5.0);
-//    std::println("[OK] core.math");
-//
-//    // core.string
-//    // trim(...) returns epoch::string_view (or epoch::string). Convert before comparing.
-//    that(epoch::to_std(epoch::core::string::trim("  hi  ")) == "hi"sv);
-//    std::println("[OK] core.string");
-//
-//    // core.id (basic compile-time sanity)
-//    struct TagA {};
-//    epoch::core::id::strong_id<TagA> a{ 42 };
-//    that(a.value == 42);
-//    std::println("[OK] core.id");
-//
-//    // core.env
-//    (void)epoch::core::env::set("DEMO_TEST_ENV", "123");
-//    auto v = epoch::core::env::get("DEMO_TEST_ENV");
-//    that(v.has_value() && epoch::to_std(*v) == "123"sv);
-//    (void)epoch::core::env::unset("DEMO_TEST_ENV");
-//    std::println("[OK] core.env");
-//
-//    // core.path (best-effort existence)
-//    auto exe = epoch::core::path::executable_path();
-//    that(!exe.empty());
-//    std::println("[OK] core.path");
-//
-//    // core.error (source_location present)
-//    auto e = epoch::core::error::failed("x");
-//    that((bool)e);
-//    std::println("[OK] core.error");
-//
-//    return runtime::run();
-//}
+#include "../include/aengine.config.hpp"
+
+#include <exception>
+#include <iostream>
+#include <string>
+
+import aengine.cli;
+import aengine.updater;
+import core.env;
+import runtime;
+
+namespace
+{
+    constexpr const char* kGithubBase = "https://github.com/";
+    constexpr const char* kGithubRawBase = "https://raw.githubusercontent.com/";
+    constexpr const char* kOwner = "Autodidac/";
+    constexpr const char* kRepo = "EpochEngine";
+    constexpr const char* kBranch = "main/";
+
+    [[nodiscard]] std::string make_version_url()
+    {
+        return std::string(kGithubRawBase) + kOwner + kRepo + "/" + kBranch + "/modules/aengine.version.ixx";
+    }
+
+    [[nodiscard]] std::string make_binary_url()
+    {
+        return std::string(kGithubBase) + kOwner + kRepo + "/releases/latest/download/ConsoleApplication1.exe";
+    }
+}
+
+int main(int argc, char** argv)
+{
+    try
+    {
+        const auto cli_result = epochnamespace::core::cli::parse(argc, argv);
+
+        if (epochnamespace::core::cli::smoke_requested)
+            (void)epoch::core::env::set("DEMO_SMOKE", "1");
+
+        const epochnamespace::updater::UpdateChannel channel{
+            .version_url = make_version_url(),
+            .binary_url = make_binary_url(),
+        };
+
+        if (cli_result.update_requested)
+        {
+            const auto update_result =
+                epochnamespace::updater::run_update_command(channel, cli_result.force_update);
+
+            if (update_result.force_required && !cli_result.force_update)
+                return 2;
+
+            return 0;
+        }
+
+        runtime::LaunchOptions launch{};
+        launch.editor_requested = cli_result.editor_requested;
+        launch.path = (cli_result.runtime == epochnamespace::core::cli::RuntimePath::Legacy)
+            ? runtime::Path::LegacyParity
+            : runtime::Path::EpochNative;
+
+        return runtime::run(launch);
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "[Fatal] " << ex.what() << '\n';
+        return -1;
+    }
+}
+

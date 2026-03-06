@@ -27,14 +27,14 @@ module;
 #   define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #endif
 #ifndef VULKAN_HPP_NO_EXCEPTIONS
-#   define VULKAN_HPP_NO_EXCEPTIONS 1
+#   define VULKAN_HPP_NO_EXCEPTIONS
 #endif
 
-#include <include/acontext.vulkan.hpp>
+#include <include/aengine.config.hpp>
 
 #if defined(_WIN32)
 #   ifndef VK_USE_PLATFORM_WIN32_KHR
-#       define VK_USE_PLATFORM_WIN32_KHR 1
+#       define VK_USE_PLATFORM_WIN32_KHR
 #   endif
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN
@@ -145,37 +145,26 @@ namespace epochnamespace::vulkancontext
         queueFamilyIndices = findQueueFamilies(physicalDevice);
 
         createLogicalDevice();
+        createSwapChain();
+        createImageViews();
+        createRenderPass();
         createDescriptorSetLayout();
+        createGraphicsPipeline();
+        createGuiPipeline();
         createCommandPool();
-
+        createDepthResources();
+        createFramebuffers();
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
         createVertexBuffer();
         createIndexBuffer();
-
+        createUniformBuffers();
+        createGuiUniformBuffers();
+        createDescriptorPool();
+        createDescriptorSets();
+        createCommandBuffers();
         createSyncObjects();
-
-        try
-        {
-            createSwapChain();
-            createImageViews();
-            createRenderPass();
-            createGraphicsPipeline();
-            createGuiPipeline();
-            createDepthResources();
-            createFramebuffers();
-            createUniformBuffers();
-            createGuiUniformBuffers();
-            createDescriptorPool();
-            createDescriptorSets();
-            createCommandBuffers();
-        }
-        catch (const RecoverableSwapChainError&)
-        {
-            std::cout << "[Vulkan] Initial swapchain unavailable; deferring until resize/next frame\n";
-            set_framebuffer_resize_intent(true);
-        }
     }
 
     void Application::initWindow()
@@ -290,20 +279,14 @@ namespace epochnamespace::vulkancontext
 
         if (framebufferMinimized)
         {
-            if (auto guiState = find_gui_state(ctx.get()))
-            {
-                std::scoped_lock guiLock(guiState->mutex);
+            if (auto* guiState = find_gui_state(ctx.get()))
                 guiState->guiDraws.clear();
-            }
             queue.drain();
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             return true;
         }
-        if (auto guiState = find_gui_state(ctx.get()))
-        {
-            std::scoped_lock guiLock(guiState->mutex);
+        if (auto* guiState = find_gui_state(ctx.get()))
             guiState->guiDraws.clear();
-        }
         queue.drain();
         drawFrame();
         return true;
@@ -313,13 +296,11 @@ namespace epochnamespace::vulkancontext
     {
         context = std::move(ctx);
         nativeWindowHandle = nativeWindow;
-        std::scoped_lock lock(guiContextStateMutex);
         activeGuiContext = context.lock().get();
     }
 
     void Application::set_active_context(const epochnamespace::core::Context* ctx)
     {
-        std::scoped_lock lock(guiContextStateMutex);
         activeGuiContext = ctx;
     }
 
@@ -328,30 +309,24 @@ namespace epochnamespace::vulkancontext
         if (!ctx)
             return;
 
-        std::scoped_lock lock(guiContextStateMutex);
         guiContexts.erase(ctx);
         if (activeGuiContext == ctx)
             activeGuiContext = nullptr;
     }
 
-    std::shared_ptr<Application::GuiContextState> Application::gui_state_for_context(
+    Application::GuiContextState& Application::gui_state_for_context(
         const epochnamespace::core::Context* ctx)
     {
-        std::scoped_lock lock(guiContextStateMutex);
-        auto& guiState = guiContexts[ctx];
-        if (!guiState)
-            guiState = std::make_shared<GuiContextState>();
-        return guiState;
+        return guiContexts[ctx];
     }
 
-    std::shared_ptr<Application::GuiContextState> Application::find_gui_state(
+    Application::GuiContextState* Application::find_gui_state(
         const epochnamespace::core::Context* ctx) noexcept
     {
-        std::scoped_lock lock(guiContextStateMutex);
         auto it = guiContexts.find(ctx);
         if (it == guiContexts.end())
             return nullptr;
-        return it->second;
+        return &it->second;
     }
 
     void Application::reset_gui_swapchain_state(GuiContextState& guiState)
@@ -462,11 +437,7 @@ namespace epochnamespace::vulkancontext
         indexBufferMemory.reset();
         vertexBuffer.reset();
         vertexBufferMemory.reset();
-        {
-            std::scoped_lock guiLock(guiContextStateMutex);
-            guiContexts.clear();
-            activeGuiContext = nullptr;
-        }
+        guiContexts.clear();
 
         textureSampler.reset();
         textureImageView.reset();

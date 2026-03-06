@@ -65,10 +65,6 @@ export namespace epochnamespace::openglstate
         HDC     hdc = nullptr;
         HGLRC   hglrc = nullptr;
 
-        bool ownsWindow = false;
-        bool ownsDC = false;
-        bool ownsContext = false;
-
         WNDPROC oldWndProc = nullptr;
         WNDPROC getOldWndProc() const noexcept { return oldWndProc; }
 
@@ -126,9 +122,6 @@ export namespace epochnamespace::openglstate
         GLuint vbo = 0;
         GLuint ebo = 0;
         GLuint fbo = 0;
-
-        // Latches one-time pipeline init failure reporting to avoid per-frame spam.
-        bool quadPipelineFailureLatched = false;
     };
 
     // header-dominant style: single TU-safe in C++20+ modules

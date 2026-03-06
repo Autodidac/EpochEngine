@@ -17,44 +17,20 @@ import :shared_vk;
 import <algorithm>;
 import <cstdint>;
 import <limits>;
-import <mutex>;
 import <stdexcept>;
-import <string>;
 import <vector>;
-
-namespace
-{
-    [[nodiscard]] vk::CompositeAlphaFlagBitsKHR chooseCompositeAlpha(
-        vk::CompositeAlphaFlagsKHR supportedFlags)
-    {
-        constexpr vk::CompositeAlphaFlagBitsKHR preferredModes[] = {
-            vk::CompositeAlphaFlagBitsKHR::eOpaque,
-            vk::CompositeAlphaFlagBitsKHR::ePreMultiplied,
-            vk::CompositeAlphaFlagBitsKHR::ePostMultiplied,
-            vk::CompositeAlphaFlagBitsKHR::eInherit,
-        };
-
-        for (const auto mode : preferredModes)
-        {
-            if ((supportedFlags & mode) == mode)
-                return mode;
-        }
-
-        throw std::runtime_error("[Vulkan] Surface reports no supported composite alpha mode.");
-    }
-
-    [[nodiscard]] bool isRecoverableSwapchainError(vk::Result result) noexcept
-    {
-        return result == vk::Result::eErrorOutOfDateKHR
-            || result == vk::Result::eSuboptimalKHR
-            || result == vk::Result::eErrorSurfaceLostKHR
-            || result == vk::Result::eTimeout
-            || result == vk::Result::eNotReady;
-    }
-}
 
 namespace epochnamespace::vulkancontext
 {
+    namespace
+    {
+        class RecoverableSwapChainError final : public std::runtime_error
+        {
+        public:
+            using std::runtime_error::runtime_error;
+        };
+    }
+
     SwapChainSupportDetails Application::querySwapChainSupport(vk::PhysicalDevice dev)
     {
         auto capabilitiesResult = dev.getSurfaceCapabilitiesKHR(*surface);
@@ -138,33 +114,6 @@ namespace epochnamespace::vulkancontext
         const vk::PresentModeKHR presentMode = chooseSwapPresentMode(details.presentModes);
         const vk::Extent2D extent = chooseSwapExtent(details.capabilities);
 
-        if (extent.width == 0 || extent.height == 0)
-        {
-            throw RecoverableSwapChainError(
-                "[Vulkan] Swapchain extent is invalid for creation (width="
-                + std::to_string(extent.width)
-                + ", height=" + std::to_string(extent.height)
-                + "); will retry swapchain creation later.");
-        }
-
-        if (details.capabilities.currentExtent.width != (std::numeric_limits<std::uint32_t>::max)())
-        {
-            const bool extentOutOfBounds =
-                extent.width < details.capabilities.minImageExtent.width
-                || extent.width > details.capabilities.maxImageExtent.width
-                || extent.height < details.capabilities.minImageExtent.height
-                || extent.height > details.capabilities.maxImageExtent.height;
-
-            if (extentOutOfBounds)
-            {
-                throw RecoverableSwapChainError(
-                    "[Vulkan] Surface reported fixed swapchain extent outside supported bounds "
-                    "(width=" + std::to_string(extent.width)
-                    + ", height=" + std::to_string(extent.height)
-                    + "); will retry swapchain creation later.");
-            }
-        }
-
         std::uint32_t imageCount = details.capabilities.minImageCount + 1;
         if (details.capabilities.maxImageCount > 0 && imageCount > details.capabilities.maxImageCount)
             imageCount = details.capabilities.maxImageCount;
@@ -195,7 +144,7 @@ namespace epochnamespace::vulkancontext
         }
 
         createInfo.preTransform = details.capabilities.currentTransform;
-        createInfo.compositeAlpha = chooseCompositeAlpha(details.capabilities.supportedCompositeAlpha);
+        createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
         createInfo.presentMode = presentMode;
         createInfo.clipped = VK_TRUE;
         createInfo.oldSwapchain = vk::SwapchainKHR{}; // no VK_NULL_HANDLE macro
@@ -203,12 +152,7 @@ namespace epochnamespace::vulkancontext
         // ---- create swapchain (Unique + ResultValue) ----
         auto [scRes, sc] = device->createSwapchainKHRUnique(createInfo);
         if (scRes != vk::Result::eSuccess)
-        {
-            if (isRecoverableSwapchainError(scRes))
-                throw RecoverableSwapChainError("[Vulkan] createSwapchainKHRUnique failed with recoverable result " + vk::to_string(scRes) + ".");
-
-            throw std::runtime_error("[Vulkan] createSwapchainKHRUnique failed with " + vk::to_string(scRes) + ".");
-        }
+            throw std::runtime_error("[Vulkan] createSwapchainKHRUnique failed.");
         swapChain = std::move(sc);
 
         // ---- images ----
@@ -278,11 +222,8 @@ namespace epochnamespace::vulkancontext
         uniformBuffers.clear();
         uniformBuffersMemory.clear();
         uniformBuffersMapped.clear();
-        if (auto guiState = find_gui_state(bound_context()))
-        {
-            std::scoped_lock guiLock(guiState->mutex);
+        if (auto* guiState = find_gui_state(bound_context()))
             reset_gui_swapchain_state(*guiState);
-        }
     }
 
     void Application::recreateSwapChain()

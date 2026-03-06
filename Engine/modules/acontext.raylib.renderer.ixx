@@ -14,7 +14,6 @@ module;
 export module acontext.raylib.renderer;
 
 import <algorithm>;
-import <atomic>;
 import <cstdint>;
 import <span>;
 
@@ -55,7 +54,7 @@ namespace epochnamespace::raylibrenderer
             return;
 
         auto& st = epochnamespace::raylibstate::s_raylibstate;
-        if (!st.running.load(std::memory_order_acquire))
+        if (!st.running)
             return;
 
         if (!st.frameActive && st.offscreen.id != 0)

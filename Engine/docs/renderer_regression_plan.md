@@ -42,8 +42,8 @@ performed for OpenGL and Raylib immediately after the first resize.
 1. **Automated launch harness** – extend the existing smoke harness to accept a
    `--capture` flag. When set, spawn the renderer with deterministic window sizes
    (1280×720 baseline) before scripted resizes and dock actions. The harness
-   entry point lives at `AlmondShell/src modules/renderer_smoke_harness.cppm` and builds
-   as the `almondshell_renderer_smoke` target.
+   entry point lives at `Engine/src/renderer_smoke_harness.cpp` and builds
+   as the `epoch_renderer_smoke` target (`almondshell_renderer_smoke` remains a compatibility alias).
 2. **Frame capture** –
    - OpenGL: trigger RenderDoc capture on the second frame after each resize.
    - SDL: capture via OBS recording of window region; use SDL renderer stats for
@@ -122,7 +122,7 @@ Build the harness target alongside the engine and run it from the AlmondShell
 root (binary path can be overridden as needed):
 
 ```
-./almondshell_renderer_smoke --binary ./Bin/GCC-Debug/cmakeapp1/cmakeapp1 --capture
+./epoch_renderer_smoke --binary ./epoch --capture
 ```
 
 The harness iterates the backend scenes defined above, launches each with
@@ -139,3 +139,5 @@ timeline. Logs, manifests, and capture notes are written under
 - Add CLI switches for backend-specific instrumentation (e.g. forcing Raylib to
   log logical vs framebuffer dimensions every frame when `--trace-raylib-resize`
   is provided).
+
+

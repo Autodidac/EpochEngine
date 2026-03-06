@@ -330,7 +330,6 @@ export namespace epochnamespace::core
         void* native_window = nullptr;
         void* native_drawable = nullptr;
         void* native_gl_context = nullptr;
-        void* backend_private = nullptr;
 
 #if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
         HWND  hwnd = nullptr;

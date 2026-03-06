@@ -267,72 +267,6 @@ export namespace epochnamespace::openglcontext
             return v == 0u || v == 1u || v == 2u || v == 3u || v == static_cast<std::uintptr_t>(-1);
         }
 #endif
-
-        inline std::pair<int, int> parse_major_minor(std::string_view version) noexcept
-        {
-            const auto start = version.find_first_of("0123456789");
-            if (start == std::string_view::npos) return { 0, 0 };
-
-            version.remove_prefix(start);
-            const auto dot = version.find('.');
-            if (dot == std::string_view::npos) return { 0, 0 };
-
-            const auto to_int = [](std::string_view text) noexcept
-                {
-                    int value = 0;
-                    for (const char ch : text)
-                    {
-                        if (ch < '0' || ch > '9') break;
-                        value = value * 10 + (ch - '0');
-                    }
-                    return value;
-                };
-
-            const int major = to_int(version.substr(0, dot));
-            const int minor = to_int(version.substr(dot + 1));
-            return { major, minor };
-        }
-
-        inline bool has_quad_pipeline_capability(std::string* reason = nullptr) noexcept
-        {
-            GLint glMajor = 0;
-            GLint glMinor = 0;
-            ::glGetIntegerv(GL_MAJOR_VERSION, &glMajor);
-            ::glGetIntegerv(GL_MINOR_VERSION, &glMinor);
-
-            if (glMajor == 0 && glMinor == 0)
-            {
-                const auto* glVersion = reinterpret_cast<const char*>(::glGetString(GL_VERSION));
-                const auto [parsedMajor, parsedMinor] = parse_major_minor(glVersion ? std::string_view{ glVersion } : std::string_view{});
-                glMajor = parsedMajor;
-                glMinor = parsedMinor;
-            }
-
-            GLint glslMajor = 0;
-            GLint glslMinor = 0;
-            const auto* glslVersion = reinterpret_cast<const char*>(::glGetString(GL_SHADING_LANGUAGE_VERSION));
-            if (glslVersion)
-            {
-                const auto [parsedMajor, parsedMinor] = parse_major_minor(glslVersion);
-                glslMajor = parsedMajor;
-                glslMinor = parsedMinor;
-            }
-
-            const bool glOk = (glMajor > 2) || (glMajor == 2 && glMinor >= 1);
-            const bool glslOk = (glslMajor > 1) || (glslMajor == 1 && glslMinor >= 20);
-
-            if (reason && (!glOk || !glslOk))
-            {
-                *reason = std::format(
-                    "requires at least OpenGL 2.1 and GLSL 1.20 (detected GL {}.{} / GLSL {}.{})",
-                    glMajor,
-                    glMinor,
-                    glslMajor,
-                    glslMinor);
-            }
-
-            return glOk && glslOk;
-        }
     } // namespace detail
 
 
@@ -348,28 +282,24 @@ export namespace epochnamespace::openglcontext
         if (!ctx)
             throw std::runtime_error("[OpenGL] opengl_initialize requires non-null Context");
 
-        auto* glStatePtr = epochnamespace::opengltextures::ensure_state_for_context(ctx.get());
-        if (!glStatePtr)
-            throw std::runtime_error("[OpenGL] Failed to allocate per-context OpenGL state");
-        auto& glState = *glStatePtr;
+        auto& backend = epochnamespace::opengltextures::get_opengl_backend();
+        auto& glState = backend.glState;
 
         glState.width = w;
         glState.height = h;
-        auto* resizeStatePtr = &glState;
+        auto* glStatePtr = &glState;
 
-        ctx->onResize = [resizeStatePtr, resize = std::move(onResize)](int newWidth, int newHeight) mutable
+        ctx->onResize = [glStatePtr, resize = std::move(onResize)](int newWidth, int newHeight) mutable
             {
                 const int clampedWidth = (std::max)(1, newWidth);
                 const int clampedHeight = (std::max)(1, newHeight);
 
-                resizeStatePtr->width = static_cast<unsigned int>(clampedWidth);
-                resizeStatePtr->height = static_cast<unsigned int>(clampedHeight);
+                glStatePtr->width = static_cast<unsigned int>(clampedWidth);
+                glStatePtr->height = static_cast<unsigned int>(clampedHeight);
 
                 if (resize)
                     resize(clampedWidth, clampedHeight);
             };
-
-        bool reusedExternalContext = false;
 
 #if defined(_WIN32)
         HWND parentHwnd = static_cast<HWND>(parentWindowOpaque);
@@ -382,9 +312,6 @@ export namespace epochnamespace::openglcontext
             throw std::runtime_error("[OpenGL] No parent HWND available");
 
         bool usingExternalContext = false;
-        glState.ownsWindow = false;
-        glState.ownsDC = false;
-        glState.ownsContext = false;
 
         // IMPORTANT: match your WindowData naming (your working header used glContext).
         if (ctx->windowData && ctx->windowData->hwnd && ctx->windowData->hdc && ctx->windowData->glContext)
@@ -393,7 +320,6 @@ export namespace epochnamespace::openglcontext
             glState.hdc = ctx->windowData->hdc;
             glState.hglrc = ctx->windowData->glContext;
             usingExternalContext = true;
-            reusedExternalContext = true;
         }
         else if (ctx->hwnd && ctx->hdc && ctx->hglrc)
         {
@@ -401,7 +327,6 @@ export namespace epochnamespace::openglcontext
             glState.hdc = ctx->hdc;
             glState.hglrc = ctx->hglrc;
             usingExternalContext = true;
-            reusedExternalContext = true;
         }
 
         if (!usingExternalContext)
@@ -424,14 +349,11 @@ export namespace epochnamespace::openglcontext
 
                 if (!glState.hwnd)
                     throw std::runtime_error("[OpenGL] CreateWindowExW failed for child GL window");
-
-                glState.ownsWindow = true;
             }
 
             glState.hdc = ::GetDC(glState.hwnd);
             if (!glState.hdc)
                 throw std::runtime_error("[OpenGL] GetDC failed");
-            glState.ownsDC = true;
 
             // SetPixelFormat is one-time per HDC.
             if (::GetPixelFormat(glState.hdc) == 0)
@@ -513,15 +435,7 @@ export namespace epochnamespace::openglcontext
                 glState.hglrc = tmp;
                 tmp = nullptr;
             }
-
-            glState.ownsContext = true;
         }
-
-        std::cerr
-            << "[OpenGL] init ownership (Win32): ownsWindow=" << (glState.ownsWindow ? "true" : "false")
-            << ", ownsDC=" << (glState.ownsDC ? "true" : "false")
-            << ", ownsContext=" << (glState.ownsContext ? "true" : "false")
-            << "\n";
 
         // Publish through PlatformGL (so the rest of the engine uses the same path).
         PlatformGL::PlatformGLContext finalCtx{};
@@ -554,31 +468,10 @@ export namespace epochnamespace::openglcontext
 #elif defined(__linux__)
         (void)parentWindowOpaque;
 
-        glState.ownsDisplay = false;
-        glState.ownsWindow = false;
-        glState.ownsContext = false;
-        glState.ownsColormap = false;
-
-        if (!glState.display && ctx->native_drawable)
-            glState.display = static_cast<Display*>(ctx->native_drawable);
-        if (!glState.window && ctx->native_window)
-            glState.window = static_cast<::Window>(reinterpret_cast<std::uintptr_t>(ctx->native_window));
-        if (!glState.glxContext && ctx->native_gl_context)
-        {
-            glState.glxContext = static_cast<GLXContext>(ctx->native_gl_context);
-            reusedExternalContext = true;
-        }
-
-        Display* display = glState.display;
+        Display* display = glState.display ? glState.display : XOpenDisplay(nullptr);
         if (!display)
-        {
-            display = XOpenDisplay(nullptr);
-            if (!display)
-                throw std::runtime_error("[OpenGL] XOpenDisplay failed");
-
-            glState.display = display;
-            glState.ownsDisplay = true;
-        }
+            throw std::runtime_error("[OpenGL] XOpenDisplay failed");
+        glState.display = display;
 
         const int screen = DefaultScreen(display);
 
@@ -616,8 +509,6 @@ export namespace epochnamespace::openglcontext
                 XFree(vi);
                 throw std::runtime_error("[OpenGL] XCreateColormap failed");
             }
-
-            glState.ownsColormap = true;
         }
 
         if (!glState.window)
@@ -640,8 +531,6 @@ export namespace epochnamespace::openglcontext
             XStoreName(display, glState.window, "Almond OpenGL");
             XMapWindow(display, glState.window);
             XFlush(display);
-
-            glState.ownsWindow = true;
         }
 
         XFree(vi);
@@ -669,16 +558,7 @@ export namespace epochnamespace::openglcontext
 
             if (!glState.glxContext)
                 throw std::runtime_error("[OpenGL] Failed to create GLX context");
-
-            glState.ownsContext = true;
         }
-
-        std::cerr
-            << "[OpenGL] init ownership (Linux): ownsDisplay=" << (glState.ownsDisplay ? "true" : "false")
-            << ", ownsWindow=" << (glState.ownsWindow ? "true" : "false")
-            << ", ownsContext=" << (glState.ownsContext ? "true" : "false")
-            << ", ownsColormap=" << (glState.ownsColormap ? "true" : "false")
-            << "\n";
 
         PlatformGL::PlatformGLContext finalCtx{};
         finalCtx.display = display;
@@ -710,13 +590,6 @@ export namespace epochnamespace::openglcontext
         throw std::runtime_error("[OpenGL] Unsupported platform");
 #endif
 
-        if (reusedExternalContext)
-        {
-            std::string reason;
-            if (!detail::has_quad_pipeline_capability(&reason))
-                throw std::runtime_error(std::format("[OpenGL] External context capability check failed: {}", reason));
-        }
-
         if (!epochnamespace::openglquad::ensure_quad_pipeline())
             throw std::runtime_error("[OpenGL] Failed to build/ensure quad pipeline");
 
@@ -738,17 +611,17 @@ export namespace epochnamespace::openglcontext
 
     inline int opengl_get_width()
     {
-        auto current = core::MultiContextManager::GetCurrent();
-        if (auto* state = opengltextures::find_state_for_context(current.get()); state && state->width > 0)
-            return static_cast<int>(state->width);
+        auto& backend = opengltextures::get_opengl_backend();
+        if (backend.glState.width > 0)
+            return static_cast<int>(backend.glState.width);
         return (std::max)(1, core::cli::window_width);
     }
 
     inline int opengl_get_height()
     {
-        auto current = core::MultiContextManager::GetCurrent();
-        if (auto* state = opengltextures::find_state_for_context(current.get()); state && state->height > 0)
-            return static_cast<int>(state->height);
+        auto& backend = opengltextures::get_opengl_backend();
+        if (backend.glState.height > 0)
+            return static_cast<int>(backend.glState.height);
         return (std::max)(1, core::cli::window_height);
     }
 
@@ -765,10 +638,8 @@ export namespace epochnamespace::openglcontext
     {
         if (!ctx) return false;
 
-        auto* glStatePtr = opengltextures::ensure_state_for_context(ctx.get());
-        if (!glStatePtr)
-            return false;
-        auto& glState = *glStatePtr;
+        auto& backend = opengltextures::get_opengl_backend();
+        auto& glState = backend.glState;
 
         const std::uintptr_t windowId = ctx->windowData
             ? reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd)
@@ -787,40 +658,6 @@ export namespace epochnamespace::openglcontext
 
         const auto previousContext = core::MultiContextManager::GetCurrent();
         core::MultiContextManager::SetCurrent(ctx);
-
-        if (!epochnamespace::openglquad::ensure_quad_pipeline())
-        {
-            const auto* glVersionBytes = ::glGetString(GL_VERSION);
-            const auto* glslVersionBytes = ::glGetString(GL_SHADING_LANGUAGE_VERSION);
-            const std::string glVersion = glVersionBytes
-                ? reinterpret_cast<const char*>(glVersionBytes)
-                : "unknown";
-            const std::string glslVersion = glslVersionBytes
-                ? reinterpret_cast<const char*>(glslVersionBytes)
-                : "unknown";
-
-            if (!glState.quadPipelineFailureLatched)
-            {
-                glState.quadPipelineFailureLatched = true;
-
-                std::cerr
-                    << "[OpenGL] Quad pipeline ensure failed. ctx=" << static_cast<const void*>(ctx.get())
-                    << " windowId=" << windowId
-                    << " gl=" << glVersion
-                    << " glsl=" << glslVersion
-                    << "\n";
-
-                telemetry::emit_counter(
-                    "renderer.opengl.quad_pipeline.ensure_failed",
-                    1,
-                    telemetry::RendererTelemetryTags{ core::ContextType::OpenGL, windowId, "latched" });
-            }
-
-            // Policy (a): mark context as failed and stop processing this backend context.
-            ctx->init_failed = true;
-            core::MultiContextManager::SetCurrent(previousContext);
-            return false;
-        }
 
         atlasmanager::process_pending_uploads(core::ContextType::OpenGL);
 
@@ -847,6 +684,13 @@ export namespace epochnamespace::openglcontext
         ctx->framebufferHeight = fbH;
 
         glViewport(0, 0, fbW, fbH);
+
+        if (!epochnamespace::openglquad::ensure_quad_pipeline())
+        {
+            queue.drain();
+            PlatformGL::swap_buffers(guard.target());
+            return true;
+        }
 
         telemetry::emit_gauge(
             "renderer.framebuffer.size",
@@ -883,63 +727,26 @@ export namespace epochnamespace::openglcontext
 
     inline void opengl_cleanup(std::shared_ptr<core::Context> ctx)
     {
-        auto* glStatePtr = opengltextures::find_state_for_context(ctx.get());
-        if (!glStatePtr)
-            return;
-        auto& glState = *glStatePtr;
-
-        {
-            auto platformCtx = detail::context_to_platform_context(ctx.get());
-            if (!platformCtx.valid())
-                platformCtx = detail::state_to_platform_context(glState);
-            PlatformGL::ScopedContext guard;
-            if (platformCtx.valid() && guard.set(platformCtx)) {
-                opengltextures::clear_gpu_atlases_for_context(ctx.get());
-            }
-        }
+        auto& backend = opengltextures::get_opengl_backend();
+        auto& glState = backend.glState;
+        (void)ctx;
 
 #if defined(_WIN32)
         PlatformGL::clear_current();
 
-        std::cerr
-            << "[OpenGL] cleanup (Win32): ownsWindow=" << (glState.ownsWindow ? "true" : "false")
-            << ", ownsDC=" << (glState.ownsDC ? "true" : "false")
-            << ", ownsContext=" << (glState.ownsContext ? "true" : "false")
-            << "\n";
-
-        if (glState.hglrc && glState.ownsContext)
-            ::wglDeleteContext(glState.hglrc);
-        if (glState.hdc && glState.hwnd && glState.ownsDC)
-            ::ReleaseDC(glState.hwnd, glState.hdc);
+        if (glState.hglrc) { ::wglDeleteContext(glState.hglrc); glState.hglrc = nullptr; }
+        if (glState.hdc && glState.hwnd) { ::ReleaseDC(glState.hwnd, glState.hdc); }
         glState.hdc = nullptr;
-        glState.hglrc = nullptr;
 
-        if (glState.hwnd && glState.ownsWindow)
-            ::DestroyWindow(glState.hwnd);
-        glState.hwnd = nullptr;
+        if (glState.hwnd) { ::DestroyWindow(glState.hwnd); glState.hwnd = nullptr; }
         glState.parent = nullptr;
-        glState.ownsWindow = false;
-        glState.ownsDC = false;
-        glState.ownsContext = false;
 
 #elif defined(__linux__)
         PlatformGL::clear_current();
-
-        std::cerr
-            << "[OpenGL] cleanup (Linux): ownsDisplay=" << (glState.ownsDisplay ? "true" : "false")
-            << ", ownsWindow=" << (glState.ownsWindow ? "true" : "false")
-            << ", ownsContext=" << (glState.ownsContext ? "true" : "false")
-            << ", ownsColormap=" << (glState.ownsColormap ? "true" : "false")
-            << "\n";
-
-        if (glState.display && glState.glxContext && glState.ownsContext)
-            glXDestroyContext(glState.display, glState.glxContext);
-        if (glState.display && glState.window && glState.ownsWindow)
-            XDestroyWindow(glState.display, glState.window);
-        if (glState.display && glState.colormap && glState.ownsColormap)
-            XFreeColormap(glState.display, glState.colormap);
-        if (glState.display && glState.ownsDisplay)
-            XCloseDisplay(glState.display);
+        if (glState.display && glState.glxContext) glXDestroyContext(glState.display, glState.glxContext);
+        if (glState.display && glState.window) XDestroyWindow(glState.display, glState.window);
+        if (glState.display && glState.colormap) XFreeColormap(glState.display, glState.colormap);
+        if (glState.display) XCloseDisplay(glState.display);
 
         glState.display = nullptr;
         glState.window = 0;
@@ -947,13 +754,7 @@ export namespace epochnamespace::openglcontext
         glState.glxContext = nullptr;
         glState.colormap = 0;
         glState.fbConfig = nullptr;
-        glState.ownsDisplay = false;
-        glState.ownsWindow = false;
-        glState.ownsContext = false;
-        glState.ownsColormap = false;
 #endif
-
-        opengltextures::remove_state_for_context(ctx.get());
     }
 
 #endif // ALMOND_USING_OPENGL

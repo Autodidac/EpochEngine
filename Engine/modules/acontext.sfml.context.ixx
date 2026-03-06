@@ -83,26 +83,6 @@ export namespace epochnamespace::sfmlcontext
 
     inline SFMLState sfmlcontext{};
 
-    template <typename Work>
-    inline bool with_active_upload_context(Work&& work)
-    {
-        if (!sfmlcontext.window || !sfmlcontext.window->isOpen())
-            return false;
-
-        if (!sfmlcontext.window->setActive(true))
-        {
-            std::cerr << "[SFML] Failed to activate SFML window for texture upload\n";
-            return false;
-        }
-
-        std::forward<Work>(work)();
-
-        if (!sfmlcontext.window->setActive(false))
-            std::cerr << "[SFML] WARNING: failed to deactivate SFML window after texture upload\n";
-
-        return true;
-    }
-
     inline void refresh_dimensions(const std::shared_ptr<core::Context>& ctx) noexcept
     {
         if (!ctx) return;
@@ -302,11 +282,8 @@ export namespace epochnamespace::sfmlcontext
             core::ContextType::SFML,
             [](const TextureAtlas& atlas)
             {
-                (void)with_active_upload_context(
-                    [&atlas]()
-                    {
-                        sfmlcontext::ensure_uploaded_for_window(sfmlcontext.window.get(), atlas);
-                    });
+                // IMPORTANT: uploader must assume the SFML context is current in sfml_process.
+                sfmlcontext::ensure_uploaded(atlas);
             });
 
         return true;
@@ -384,15 +361,6 @@ export namespace epochnamespace::sfmlcontext
 
         // If uploads use OpenGL, they must run while the SFML context is current.
         atlasmanager::process_pending_uploads(core::ContextType::SFML);
-
-        // Upload callbacks may detach context after a guarded upload path.
-        if (!sfmlcontext.window->setActive(true))
-        {
-            std::cerr << "[SFMLRender] Failed to reactivate SFML window after uploads\n";
-            sfmlcontext.running = false;
-            state::s_sfmlstate.running = false;
-            return false;
-        }
 
         // Reset again in case uploads touched state.
         if (shouldResetSfmlState)
@@ -479,51 +447,36 @@ export namespace epochnamespace::sfmlcontext
         // Stop new uploads immediately.
         atlasmanager::unregister_backend_uploader(core::ContextType::SFML);
 
-        // Stop render loop activity before any teardown work.
-        sfmlcontext.running = false;
-        state::s_sfmlstate.running = false;
-
         if (ctx && ctx->windowData)
             ctx->windowData->sfml_window = nullptr;
 
         state::s_sfmlstate.window.sfml_window = nullptr;
-
-        const bool windowOpen = sfmlcontext.window && sfmlcontext.window->isOpen();
-
-#if defined(_WIN32)
-        const bool nativeHandleValid =
-            sfmlcontext.hwnd && ::IsWindow(sfmlcontext.hwnd) != FALSE;
-#else
-        const bool nativeHandleValid = true;
-#endif
-
-        // Idempotent teardown: only touch GL once, and only when both SFML + native handles are valid.
-        const bool canAttemptGpuCleanup = windowOpen && nativeHandleValid;
-
-        if (windowOpen && !nativeHandleValid)
-            std::cerr << "[SFML] WARNING: native window handle is no longer valid during cleanup; skipping GPU atlas delete\n";
+        state::s_sfmlstate.running = false;
+        sfmlcontext.running = false;
 
         // CRITICAL:
         // clear_gpu_atlases() calls glDeleteTextures. That MUST only happen with an active,
         // valid SFML context. If the window is already closed/destroyed, skip deletion.
-        if (canAttemptGpuCleanup)
+        if (sfmlcontext.window && sfmlcontext.window->isOpen())
         {
             if (sfmlcontext.window->setActive(true))
             {
-                clear_gpu_atlases_for_window(sfmlcontext.window.get());
-                (void)sfmlcontext.window->setActive(false);
+                clear_gpu_atlases();
+                sfmlcontext.window->setActive(false);
             }
             else
             {
                 std::cerr << "[SFML] WARNING: could not activate context during cleanup; skipping GPU atlas delete\n";
             }
+
+            // Close after deleting textures (while context is still valid).
+            sfmlcontext.window->setActive(true);
+            sfmlcontext.window->close();
+            sfmlcontext.window.reset();
         }
-
-        if (sfmlcontext.window)
+        else
         {
-            if (sfmlcontext.window->isOpen())
-                sfmlcontext.window->close();
-
+            // Window already gone -> don't touch GL.
             sfmlcontext.window.reset();
         }
 

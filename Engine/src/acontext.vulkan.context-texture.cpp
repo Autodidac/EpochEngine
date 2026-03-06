@@ -18,7 +18,6 @@ import <cstdint>;
 import <cstring>;
 import <filesystem>;
 import <format>;
-import <mutex>;
 import <source_location>;
 import <sstream>;
 import <stdexcept>;
@@ -274,34 +273,25 @@ namespace epochnamespace::vulkancontext
         if (!device)
             return;
 
-        const epochnamespace::core::Context* contextForAtlas = nullptr;
-        {
-            std::scoped_lock contextLock(guiContextStateMutex);
-            if (!activeGuiContext)
-                activeGuiContext = bound_context();
-            contextForAtlas = activeGuiContext;
-        }
-
-        if (!contextForAtlas)
+        if (!activeGuiContext)
+            activeGuiContext = bound_context();
+        if (!activeGuiContext)
             return;
 
-        auto guiState = gui_state_for_context(contextForAtlas);
-        std::unique_lock guiLock(guiState->mutex);
-        auto& entryRef = guiState->guiAtlases[&atlas];
-        if (entryRef.version == atlas.version && entryRef.image)
+        auto& guiState = gui_state_for_context(activeGuiContext);
+        auto& entry = guiState.guiAtlases[&atlas];
+        if (entry.version == atlas.version && entry.image)
             return;
-
-        auto* entry = &entryRef;
 
         if (atlas.width == 0 || atlas.height == 0 || atlas.pixel_data.empty())
             return;
 
-        entry->image.reset();
-        entry->memory.reset();
-        entry->view.reset();
-        entry->sampler.reset();
-        entry->descriptorPool.reset();
-        entry->descriptorSets.clear();
+        entry.image.reset();
+        entry.memory.reset();
+        entry.view.reset();
+        entry.sampler.reset();
+        entry.descriptorPool.reset();
+        entry.descriptorSets.clear();
 
         const vk::DeviceSize imageSize = static_cast<vk::DeviceSize>(atlas.pixel_data.size());
 
@@ -337,9 +327,9 @@ namespace epochnamespace::vulkancontext
         if (imgRes != vk::Result::eSuccess)
             throw std::runtime_error("[Vulkan] Failed to create GUI atlas image.");
 
-        entry->image = std::move(img);
+        entry.image = std::move(img);
 
-        const vk::MemoryRequirements memReq = device->getImageMemoryRequirements(*entry->image);
+        const vk::MemoryRequirements memReq = device->getImageMemoryRequirements(*entry.image);
         vk::MemoryAllocateInfo allocInfo{};
         allocInfo.allocationSize = memReq.size;
         allocInfo.memoryTypeIndex = findMemoryType(
@@ -350,32 +340,32 @@ namespace epochnamespace::vulkancontext
         if (memRes != vk::Result::eSuccess)
             throw std::runtime_error("[Vulkan] Failed to allocate GUI atlas memory.");
 
-        entry->memory = std::move(mem);
+        entry.memory = std::move(mem);
 
-        const vk::Result bindRes = device->bindImageMemory(*entry->image, *entry->memory, 0);
+        const vk::Result bindRes = device->bindImageMemory(*entry.image, *entry.memory, 0);
         if (bindRes != vk::Result::eSuccess)
             throw std::runtime_error("[Vulkan] Failed to bind GUI atlas memory.");
 
         transitionImageLayout(
-            *entry->image,
+            *entry.image,
             vk::Format::eR8G8B8A8Srgb,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eTransferDstOptimal);
 
         copyBufferToImage(
             *stagingBuffer,
-            *entry->image,
+            *entry.image,
             atlas.width,
             atlas.height);
 
         transitionImageLayout(
-            *entry->image,
+            *entry.image,
             vk::Format::eR8G8B8A8Srgb,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal);
 
-        entry->view = createImageViewUnique(
-            *entry->image,
+        entry.view = createImageViewUnique(
+            *entry.image,
             vk::Format::eR8G8B8A8Srgb,
             vk::ImageAspectFlagBits::eColor);
 
@@ -401,15 +391,10 @@ namespace epochnamespace::vulkancontext
         if (sRes != vk::Result::eSuccess)
             throw std::runtime_error("[Vulkan] Failed to create GUI atlas sampler.");
 
-        entry->sampler = std::move(sampler);
+        entry.sampler = std::move(sampler);
 
-        if (guiState->guiUniformBuffers.empty())
-        {
-            guiLock.unlock();
+        if (guiState.guiUniformBuffers.empty())
             createGuiUniformBuffers();
-            guiLock.lock();
-            entry = &guiState->guiAtlases[&atlas];
-        }
 
         const std::uint32_t count = static_cast<std::uint32_t>(swapChainImages.size());
 
@@ -429,12 +414,12 @@ namespace epochnamespace::vulkancontext
         if (poolRes != vk::Result::eSuccess)
             throw std::runtime_error("[Vulkan] Failed to create GUI atlas descriptor pool.");
 
-        entry->descriptorPool = std::move(pool);
+        entry.descriptorPool = std::move(pool);
 
         std::vector<vk::DescriptorSetLayout> layouts(count, *descriptorSetLayout);
 
         vk::DescriptorSetAllocateInfo descriptorAllocInfo{};
-        descriptorAllocInfo.descriptorPool = *entry->descriptorPool;
+        descriptorAllocInfo.descriptorPool = *entry.descriptorPool;
         descriptorAllocInfo.descriptorSetCount = count;
         descriptorAllocInfo.pSetLayouts = layouts.data();
 
@@ -442,29 +427,29 @@ namespace epochnamespace::vulkancontext
         if (setRes != vk::Result::eSuccess)
             throw std::runtime_error("[Vulkan] Failed to allocate GUI atlas descriptor sets.");
 
-        entry->descriptorSets = std::move(sets);
+        entry.descriptorSets = std::move(sets);
 
         for (std::size_t i = 0; i < count; ++i)
         {
             vk::DescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = *guiState->guiUniformBuffers[i];
+            bufferInfo.buffer = *guiState.guiUniformBuffers[i];
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
             vk::DescriptorImageInfo imageInfo{};
-            imageInfo.sampler = *entry->sampler;
-            imageInfo.imageView = *entry->view;
+            imageInfo.sampler = *entry.sampler;
+            imageInfo.imageView = *entry.view;
             imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
             std::array<vk::WriteDescriptorSet, 2> writes{};
-            writes[0].dstSet = *entry->descriptorSets[i];
+            writes[0].dstSet = *entry.descriptorSets[i];
             writes[0].dstBinding = 0;
             writes[0].dstArrayElement = 0;
             writes[0].descriptorCount = 1;
             writes[0].descriptorType = vk::DescriptorType::eUniformBuffer;
             writes[0].pBufferInfo = &bufferInfo;
 
-            writes[1].dstSet = *entry->descriptorSets[i];
+            writes[1].dstSet = *entry.descriptorSets[i];
             writes[1].dstBinding = 1;
             writes[1].dstArrayElement = 0;
             writes[1].descriptorCount = 1;
@@ -474,9 +459,9 @@ namespace epochnamespace::vulkancontext
             device->updateDescriptorSets(writes, {});
         }
 
-        entry->version = atlas.version;
-        entry->width = atlas.width;
-        entry->height = atlas.height;
+        entry.version = atlas.version;
+        entry.width = atlas.width;
+        entry.height = atlas.height;
     }
 } // namespace epochnamespace::vulkancontext
 
