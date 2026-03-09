@@ -1,4 +1,33 @@
-// ============================================================================
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 // modules/acontext.vulkan.context-swapchain.ixx
 // Partition implementation: acontext.vulkan.context:swapchain
 // Swapchain + image views implementation.
@@ -12,12 +41,14 @@ module;
 
 export module acontext.vulkan.context:swapchain;
 
+import acontext.vulkan.context;
 import :shared_vk;
 
 import <algorithm>;
 import <cstdint>;
 import <limits>;
 import <stdexcept>;
+import <string>;
 import <vector>;
 
 namespace epochnamespace::vulkancontext
@@ -31,7 +62,7 @@ namespace epochnamespace::vulkancontext
         };
     }
 
-    SwapChainSupportDetails Application::querySwapChainSupport(vk::PhysicalDevice dev)
+    vulkancontext::SwapChainSupportDetails Application::querySwapChainSupport(vk::PhysicalDevice dev)
     {
         auto capabilitiesResult = dev.getSurfaceCapabilitiesKHR(*surface);
         if (capabilitiesResult.result != vk::Result::eSuccess)
@@ -101,6 +132,15 @@ namespace epochnamespace::vulkancontext
 
     void Application::createSwapChain()
     {
+        if (!device)
+            throw std::runtime_error("[Vulkan] createSwapChain called without a logical device.");
+        if (!surface)
+            throw std::runtime_error("[Vulkan] createSwapChain called without a surface.");
+        if (!physicalDevice)
+            throw std::runtime_error("[Vulkan] createSwapChain called without a physical device.");
+        if (!queueFamilyIndices.isComplete())
+            throw std::runtime_error("[Vulkan] createSwapChain called with incomplete queue family indices.");
+
         SwapChainSupportDetails details = querySwapChainSupport(physicalDevice);
 
         if (details.formats.empty())
@@ -113,6 +153,9 @@ namespace epochnamespace::vulkancontext
         const vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(details.formats);
         const vk::PresentModeKHR presentMode = chooseSwapPresentMode(details.presentModes);
         const vk::Extent2D extent = chooseSwapExtent(details.capabilities);
+
+        if (extent.width == 0 || extent.height == 0)
+            throw RecoverableSwapChainError("[Vulkan] Swapchain extent is zero; waiting for a valid framebuffer size.");
 
         std::uint32_t imageCount = details.capabilities.minImageCount + 1;
         if (details.capabilities.maxImageCount > 0 && imageCount > details.capabilities.maxImageCount)
@@ -147,19 +190,43 @@ namespace epochnamespace::vulkancontext
         createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
         createInfo.presentMode = presentMode;
         createInfo.clipped = VK_TRUE;
-        createInfo.oldSwapchain = vk::SwapchainKHR{}; // no VK_NULL_HANDLE macro
+        createInfo.oldSwapchain = vk::SwapchainKHR{};
 
-        // ---- create swapchain (Unique + ResultValue) ----
-        auto [scRes, sc] = device->createSwapchainKHRUnique(createInfo);
-        if (scRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] createSwapchainKHRUnique failed.");
-        swapChain = std::move(sc);
+        vk::SwapchainKHR rawSwapchain{};
+        const vk::Result scResult = device->createSwapchainKHR(
+            &createInfo,
+            nullptr,
+            &rawSwapchain);
+        if (scResult == vk::Result::eErrorOutOfDateKHR ||
+            scResult == vk::Result::eSuboptimalKHR ||
+            scResult == vk::Result::eErrorSurfaceLostKHR ||
+            scResult == vk::Result::eErrorInitializationFailed)
+        {
+            throw RecoverableSwapChainError("[Vulkan] Swapchain creation returned a recoverable result; will retry.");
+        }
 
-        // ---- images ----
-        auto [imgsRes, imgs] = device->getSwapchainImagesKHR(*swapChain);
-        if (imgsRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] getSwapchainImagesKHR failed.");
-        swapChainImages = std::move(imgs);
+        if (scResult != vk::Result::eSuccess || !rawSwapchain)
+            throw std::runtime_error("[Vulkan] createSwapchainKHR failed. VkResult=" + std::to_string(static_cast<int>(scResult)));
+
+        swapChain = vk::UniqueSwapchainKHR(
+            rawSwapchain,
+            vk::detail::ObjectDestroy<vk::Device, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>(
+                *device,
+                nullptr,
+                VULKAN_HPP_DEFAULT_DISPATCHER));
+
+        std::uint32_t imageCountOut = 0;
+        vk::Result imagesResult = device->getSwapchainImagesKHR(*swapChain, &imageCountOut, nullptr);
+        if (imagesResult != vk::Result::eSuccess)
+            throw std::runtime_error("[Vulkan] getSwapchainImagesKHR(count) failed. VkResult=" + std::to_string(static_cast<int>(imagesResult)));
+
+        std::vector<vk::Image> images(imageCountOut);
+        imagesResult = device->getSwapchainImagesKHR(*swapChain, &imageCountOut, images.data());
+        if (imagesResult != vk::Result::eSuccess)
+            throw std::runtime_error("[Vulkan] getSwapchainImagesKHR(data) failed. VkResult=" + std::to_string(static_cast<int>(imagesResult)));
+
+        images.resize(imageCountOut);
+        swapChainImages = std::move(images);
 
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
@@ -176,10 +243,10 @@ namespace epochnamespace::vulkancontext
         viewInfo.format = format;
         viewInfo.subresourceRange = vk::ImageSubresourceRange(aspectFlags, 0, 1, 0, 1);
 
-        auto [ivRes, iv] = device->createImageViewUnique(viewInfo);
-        if (ivRes != vk::Result::eSuccess)
+        auto ivResult = device->createImageViewUnique(viewInfo);
+        if (ivResult.result != vk::Result::eSuccess || !ivResult.value)
             throw std::runtime_error("[Vulkan] createImageViewUnique failed.");
-        return std::move(iv);
+        return std::move(ivResult.value);
     }
 
     void Application::createImageViews()
@@ -274,3 +341,17 @@ namespace epochnamespace::vulkancontext
     }
 
 } // namespace epochnamespace::vulkancontext
+
+
+
+
+
+
+
+
+
+
+
+
+
+

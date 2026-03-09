@@ -1,4 +1,33 @@
-
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 export module acontext.vulkan.context;
@@ -19,6 +48,7 @@ import <algorithm>;
 import <cstddef>;
 import <cstdint>;
 import <functional>;
+import <fstream>;
 import <stdexcept>;
 import <utility>;
 import <memory>;
@@ -130,6 +160,13 @@ export namespace epochnamespace::vulkancontext
         if (!ctx)
             return false;
 
+        {
+            std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
+            diag << "[Vulkan] api_process hwnd=" << static_cast<void*>(ctx->windowData ? ctx->windowData->hwnd : nullptr)
+                 << " queueDepth=" << queue.depth()
+                 << "\n";
+        }
+
         const std::uintptr_t windowId = ctx->windowData
             ? reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd)
             : reinterpret_cast<std::uintptr_t>(ctx->native_window);
@@ -198,3 +235,4 @@ export namespace epochnamespace::vulkancontext
             atlasmanager::unregister_backend_uploader(core::ContextType::Vulkan);
     }
 }
+

@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.28)
+﻿cmake_minimum_required(VERSION 3.28)
 
 if(CMAKE_VERSION VERSION_LESS 3.29)
-    # CMake 3.27–3.28 require the experimental dyndep scanner to emit BMI rules.
+    # CMake 3.27â€“3.28 require the experimental dyndep scanner to emit BMI rules.
     set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP 1)
 endif()
 
@@ -509,6 +509,7 @@ if(DOXYGEN_FOUND)
 else()
     message(STATUS "Doxygen not found; the 'docs' target will be skipped.")
 endif()
+
 
 
 

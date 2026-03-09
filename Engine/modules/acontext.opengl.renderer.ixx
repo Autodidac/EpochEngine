@@ -1,7 +1,33 @@
-/**************************************************************
- *   epochengine - Modular C++ Framework
- **************************************************************/
-
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 // Global module fragment: macros + headers only.
@@ -52,7 +78,7 @@ export namespace epochnamespace::openglrenderer
     inline openglstate::OpenGL4State& renderer_gl_state_with_pipeline() noexcept
     {
         auto& glState = renderer_gl_state();
-        if (!epochnamespace::openglquad::ensure_quad_pipeline())
+        if (!epochnamespace::openglquad::ensure_quad_pipeline(glState))
             std::cerr << "[OpenGL] Failed to rebuild quad pipeline\n";
         return glState;
     }

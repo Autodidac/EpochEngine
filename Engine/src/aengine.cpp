@@ -1,9 +1,9 @@
-/**************************************************************
- *   �����+ ��+     ���+   ���+   ���+   ��+    ��+������+    *
- *  ��+--��+���     ����+ ����� ��+---��+����+  �����+--��+   *
- *  �����������     ��+����+��� ���   �����+��+ ������  ���   *
- *  ��+--������     ���+��++��� ���   ������+��+������  ���   *
- *  ���  ����������+��� +-+ ��� +������++��� +�����������++   *
+﻿/**************************************************************
+ *   Â¦Â¦Â¦Â¦Â¦+ Â¦Â¦+     Â¦Â¦Â¦+   Â¦Â¦Â¦+   Â¦Â¦Â¦+   Â¦Â¦+    Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+    *
+ *  Â¦Â¦+--Â¦Â¦+Â¦Â¦Â¦     Â¦Â¦Â¦Â¦+ Â¦Â¦Â¦Â¦Â¦ Â¦Â¦+---Â¦Â¦+Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦+--Â¦Â¦+   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦+Â¦Â¦Â¦Â¦+Â¦Â¦Â¦ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+ Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  Â¦Â¦+--Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦+Â¦Â¦++Â¦Â¦Â¦ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦ +-+ Â¦Â¦Â¦ +Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦ +Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦++   *
  *  +-+  +-++------++-+     +-+  +-----+ +-+  +---++-----+    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
@@ -29,7 +29,7 @@
  //    We only query windows via MultiContextManager APIs.
  //  - Removed non-constant switch case labels for ContextType::Unknown/Noop
  //    because your ContextType in your current modules is not an enum with those
- //    exact enumerators (or they�re not visible here). Default handles it.
+ //    exact enumerators (or theyâ€™re not visible here). Default handles it.
  //
 //#include "pch.h"
 
@@ -250,14 +250,6 @@ namespace epochnamespace::core
             EditorSceneState state = EditorSceneState::Editor;
             std::unique_ptr<epochnamespace::scene::Scene> active_scene{};
 
-            using MenuOverlay = epochnamespace::menu::MenuOverlay;
-            using EditorCommandOverlay = epochnamespace::menu::EditorCommandOverlay;
-            MenuOverlay games_menu{};
-            EditorCommandOverlay editor_menu{};
-
-            games_menu.set_max_columns(epochnamespace::core::cli::menu_columns);
-            editor_menu.initialize();
-
             auto collect_backend_contexts = []()
                 {
                     using ContextGroup = std::pair<
@@ -286,25 +278,8 @@ namespace epochnamespace::core
                     return snapshot;
                 };
 
-            auto init_menus = [&]()
-                {
-                    auto snapshot = collect_backend_contexts();
-                    for (auto& [_, contexts] : snapshot)
-                        for (auto& ctx : contexts)
-                        {
-                            if (ctx)
-                            {
-                                games_menu.initialize_game_choices();
-                                games_menu.recompute_layout(ctx, ctx->get_width_safe(), ctx->get_height_safe());
-                            }
-                        }
-                };
-
-            init_menus();
-
             std::unordered_map<Context*, std::chrono::steady_clock::time_point> last_frame_times;
             bool running = true;
-            bool show_games_popup = false;
             std::uint64_t frame_count = 0;
             const std::uint64_t smoke_max_frames = smoke_frame_budget();
             auto pump = std::forward<PumpFunc>(pump_events);
@@ -381,22 +356,45 @@ namespace epochnamespace::core
                                         for (auto& c : group)
                                             clear_commands(c);
 
-                                    games_menu.cleanup();
-
                                     if (active_scene)
                                         active_scene->unload();
 
                                     active_scene = make_scene();
                                     active_scene->load();
-                                   // state = EditorSceneState::Game;
-                                    state = EditorSceneState::Editor;
-                                    show_games_popup = false;
+                                    state = EditorSceneState::Game;
                                     std::cout << "[Editor] Launching " << label << " scene.\n";
+                                };
+
+                            auto launch_requested_game = [&](std::string_view game_id)
+                                {
+                                    if (game_id == "snake")
+                                        begin_scene([] { return std::make_unique<epochnamespace::snakelike::SnakeLikeScene>(); }, "Snake");
+                                    else if (game_id == "tetris")
+                                        begin_scene([] { return std::make_unique<epochnamespace::tetrislike::TetrisLikeScene>(); }, "Tetris");
+                                    else if (game_id == "frogger")
+                                        begin_scene([] { return std::make_unique<epochnamespace::froggerlike::FroggerLikeScene>(); }, "Frogger");
+                                    else if (game_id == "pacman")
+                                        begin_scene([] { return std::make_unique<epochnamespace::pacmanlike::PacmanLikeScene>(); }, "Pacman");
+                                    else if (game_id == "sokoban")
+                                        begin_scene([] { return std::make_unique<epochnamespace::sokobanlike::SokobanLikeScene>(); }, "Sokoban");
+                                    else if (game_id == "bejeweled")
+                                        begin_scene([] { return std::make_unique<epochnamespace::match3like::Match3LikeScene>(); }, "Match-3");
+                                    else if (game_id == "puzzle")
+                                        begin_scene([] { return std::make_unique<epochnamespace::slidinglike::SlidingPuzzleLikeScene>(); }, "Sliding Puzzle");
+                                    else if (game_id == "minesweep")
+                                        begin_scene([] { return std::make_unique<epochnamespace::minesweeperlike::MinesweeperLikeScene>(); }, "Minesweeper");
+                                    else if (game_id == "fourty")
+                                        begin_scene([] { return std::make_unique<epochnamespace::a2048like::A2048LikeScene>(); }, "2048");
+                                    else if (game_id == "sandsim")
+                                        begin_scene([] { return std::make_unique<epochnamespace::sandsim::SandSimScene>(); }, "Sand Sim");
+                                    else if (game_id == "cellular")
+                                        begin_scene([] { return std::make_unique<epochnamespace::cellularsim::CellularSimScene>(); }, "Cellular");
                                 };
 
                             if (state == EditorSceneState::Editor)
                             {
-                                int mx = 0, my = 0;
+                                int mx = 0;
+                                int my = 0;
                                 ctx->get_mouse_position_safe(mx, my);
 
                                 const gui::Vec2 mouse_pos{
@@ -406,7 +404,6 @@ namespace epochnamespace::core
 
                                 const bool mouse_left_down =
                                     epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
-
                                 const bool up_pressed =
                                     epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Up);
                                 const bool down_pressed =
@@ -420,101 +417,26 @@ namespace epochnamespace::core
 
                                 ctx->clear_safe();
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
-                                gui::WidgetBounds editor_bounds{};
-                                const bool editor_clicked = epochnamespace::editor_run(ctx, &editor_bounds);
-                                if (editor_clicked)
-                                    show_games_popup = !show_games_popup;
+                                const auto editor_frame = epochnamespace::editor_run(ctx);
 
-                                const bool draw_editor_overlay = !show_games_popup;
-                                const bool menu_has_focus = draw_editor_overlay;
-                                std::optional<epochnamespace::menu::EditorCommandChoice> command_choice{};
-                                if (draw_editor_overlay)
+                                switch (editor_frame.command)
                                 {
-                                    command_choice = editor_menu.update_and_draw(
-                                        ctx,
-                                        win,
-                                        dt,
-                                        menu_has_focus ? up_pressed : false,
-                                        menu_has_focus ? down_pressed : false,
-                                        menu_has_focus ? enter_pressed : false,
-                                        menu_has_focus,
-                                        editor_bounds);
-                                }
-
-                                if (command_choice)
-                                {
-                                    using epochnamespace::menu::EditorCommandChoice;
-
-                                    switch (*command_choice)
-                                    {
-                                    case EditorCommandChoice::OpenProject:
-                                        std::cout << "[Editor] Open Project selected.\n";
-                                        break;
-                                    case EditorCommandChoice::Settings:
-                                        std::cout << "[Editor] Settings selected.\n";
-                                        break;
-                                    case EditorCommandChoice::RunGame:
-                                        show_games_popup = !show_games_popup;
-                                        break;
-                                    case EditorCommandChoice::Exit:
-                                        state = EditorSceneState::Exit;
-                                        running = false;
-                                        break;
-                                    }
-                                }
-
-                                if (show_games_popup)
-                                {
-                                    const float popup_width = (std::max)(600.0f, ctx->get_width_safe() * 0.7f);
-                                    const float popup_height = (std::max)(360.0f, ctx->get_height_safe() * 0.6f);
-
-                                    const gui::Vec2 popup_size{ popup_width, popup_height };
-                                    const gui::Vec2 popup_pos{
-                                        (ctx->get_width_safe() - popup_size.x) * 0.5f,
-                                        (ctx->get_height_safe() - popup_size.y) * 0.5f
-                                    };
-
-                                    auto game_choice = games_menu.update_and_draw_in_window(
-                                        ctx,
-                                        win,
-                                        dt,
-                                        up_pressed,
-                                        down_pressed,
-                                        left_pressed,
-                                        right_pressed,
-                                        enter_pressed,
-                                        "Games",
-                                        popup_pos,
-                                        popup_size,
-                                        true);
-
-                                    if (game_choice)
-                                    {
-                                        using epochnamespace::menu::Choice;
-
-                                        if (*game_choice == Choice::Snake)
-                                            begin_scene([] { return std::make_unique<epochnamespace::snakelike::SnakeLikeScene>(); }, "Snake");
-                                        else if (*game_choice == Choice::Tetris)
-                                            begin_scene([] { return std::make_unique<epochnamespace::tetrislike::TetrisLikeScene>(); }, "Tetris");
-                                        else if (*game_choice == Choice::Frogger)
-                                            begin_scene([] { return std::make_unique<epochnamespace::froggerlike::FroggerLikeScene>(); }, "Frogger");
-                                        else if (*game_choice == Choice::Pacman)
-                                            begin_scene([] { return std::make_unique<epochnamespace::pacmanlike::PacmanLikeScene>(); }, "Pacman");
-                                        else if (*game_choice == Choice::Sokoban)
-                                            begin_scene([] { return std::make_unique<epochnamespace::sokobanlike::SokobanLikeScene>(); }, "Sokoban");
-                                        else if (*game_choice == Choice::Bejeweled)
-                                            begin_scene([] { return std::make_unique<epochnamespace::match3like::Match3LikeScene>(); }, "Match-3");
-                                        else if (*game_choice == Choice::Puzzle)
-                                            begin_scene([] { return std::make_unique<epochnamespace::slidinglike::SlidingPuzzleLikeScene>(); }, "Sliding Puzzle");
-                                        else if (*game_choice == Choice::Minesweep)
-                                            begin_scene([] { return std::make_unique<epochnamespace::minesweeperlike::MinesweeperLikeScene>(); }, "Minesweeper");
-                                        else if (*game_choice == Choice::Fourty)
-                                            begin_scene([] { return std::make_unique<epochnamespace::a2048like::A2048LikeScene>(); }, "2048");
-                                        else if (*game_choice == Choice::Sandsim)
-                                            begin_scene([] { return std::make_unique<epochnamespace::sandsim::SandSimScene>(); }, "Sand Sim");
-                                        else if (*game_choice == Choice::Cellular)
-                                            begin_scene([] { return std::make_unique<epochnamespace::cellularsim::CellularSimScene>(); }, "Cellular");
-                                    }
+                                case epochnamespace::EditorCommand::OpenProject:
+                                    std::cout << "[Editor] Open Project: " << editor_frame.command_argument << "\n";
+                                    break;
+                                case epochnamespace::EditorCommand::Settings:
+                                    std::cout << "[Editor] Settings selected.\n";
+                                    break;
+                                case epochnamespace::EditorCommand::RunGame:
+                                    launch_requested_game(editor_frame.command_argument);
+                                    break;
+                                case epochnamespace::EditorCommand::Exit:
+                                    state = EditorSceneState::Exit;
+                                    running = false;
+                                    break;
+                                case epochnamespace::EditorCommand::None:
+                                default:
+                                    break;
                                 }
 
                                 gui::end_frame();
@@ -522,6 +444,7 @@ namespace epochnamespace::core
                             }
                             else if (state == EditorSceneState::Game)
                             {
+                                ctx->clear_scene_viewport();
                                 if (active_scene)
                                 {
                                     ctx_running = active_scene->frame(ctx, win);
@@ -530,14 +453,13 @@ namespace epochnamespace::core
                                         active_scene->unload();
                                         active_scene.reset();
                                         state = EditorSceneState::Editor;
-                                        games_menu.cleanup();
-                                        games_menu.initialize_game_choices();
-                                        editor_menu.reset_selection();
+                                        ctx_running = true;
                                     }
                                 }
                                 else
                                 {
                                     state = EditorSceneState::Editor;
+                                    ctx_running = true;
                                 }
                             }
                             else if (state == EditorSceneState::Exit)
@@ -601,8 +523,6 @@ namespace epochnamespace::core
                 active_scene->unload();
                 active_scene.reset();
             }
-
-            games_menu.cleanup();
 
             auto snapshot2 = collect_backend_contexts();
             for (auto& [type, contexts] : snapshot2)
@@ -825,7 +745,6 @@ namespace epochnamespace::core
 
                                 const bool mouse_left_down =
                                     epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
-
                                 const bool up_pressed =
                                     epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Up);
                                 const bool down_pressed =
@@ -1440,6 +1359,14 @@ int main(int argc, char** argv)
 }
 
 #endif // !defined(EPOCH_MAIN_IN_MAIN_CPP)
+
+
+
+
+
+
+
+
 
 
 

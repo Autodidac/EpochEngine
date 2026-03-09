@@ -1,10 +1,10 @@
-ï»¿/**************************************************************
- *   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•—     â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ•—    â–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—
- *  â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â–ˆâ–ˆâ–ˆâ–ˆâ•”â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â–ˆâ–ˆâ•— â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘
- *  â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘
- *  â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘ â•šâ•â• â–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•
- *  â•šâ•â•  â•šâ•â•â•šâ•â•â•â•â•â•â•â•šâ•â•     â•šâ•â•  â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•â•â•šâ•â•â•â•â•â•
+/**************************************************************
+ *   ¦¦¦¦¦+ ¦¦+     ¦¦¦+   ¦¦¦+   ¦¦¦+   ¦¦+    ¦¦+¦¦¦¦¦¦+
+ *  ¦¦+--¦¦+¦¦¦     ¦¦¦¦+ ¦¦¦¦¦ ¦¦+---¦¦+¦¦¦¦+  ¦¦¦¦¦+--¦¦+
+ *  ¦¦¦¦¦¦¦¦¦¦¦     ¦¦+¦¦¦¦+¦¦¦ ¦¦¦   ¦¦¦¦¦+¦¦+ ¦¦¦¦¦¦  ¦¦¦
+ *  ¦¦+--¦¦¦¦¦¦     ¦¦¦+¦¦++¦¦¦ ¦¦¦   ¦¦¦¦¦¦+¦¦+¦¦¦¦¦¦  ¦¦¦
+ *  ¦¦¦  ¦¦¦¦¦¦¦¦¦¦+¦¦¦ +-+ ¦¦¦ +¦¦¦¦¦¦++¦¦¦ +¦¦¦¦¦¦¦¦¦¦¦++
+ *  +-+  +-++------++-+     +-+  +-----+ +-+  +---++-----+
  *
  *   This file is part of the Almond Project.
  *   epochengine - Modular C++ Framework
@@ -15,7 +15,7 @@
  // aengine.context.cpp  (TU implementation; NOT a module interface)
  //
 
-#include <include/aengine.config.hpp> // macros only â€” must NOT include windows
+#include <include/aengine.config.hpp> // macros only — must NOT include windows
 
 import <algorithm>;
 import <cstdint>;
@@ -141,11 +141,13 @@ namespace
         const unsigned w = static_cast<unsigned>((std::max)(1, ctx->width));
         const unsigned h = static_cast<unsigned>((std::max)(1, ctx->height));
 
+        ctx->init_failed = false;
         try {
             // backend owns the platform cast
             (void)epochnamespace::openglcontext::opengl_initialize(ctx, native, w, h, ctx->onResize);
         }
         catch (const std::exception& e) {
+            ctx->init_failed = true;
             epochnamespace::logger::get(kLogOpenGL).logf(
                 epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
@@ -153,6 +155,7 @@ namespace
                 e.what());
         }
         catch (...) {
+            ctx->init_failed = true;
             epochnamespace::logger::get(kLogOpenGL).log(
                 epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "init unknown exception",
@@ -167,6 +170,7 @@ namespace
 
         try { epochnamespace::openglcontext::opengl_cleanup(ctx); }
         catch (const std::exception& e) {
+            ctx->init_failed = true;
             epochnamespace::logger::get(kLogOpenGL).logf(
                 epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 std::source_location::current(),
@@ -174,6 +178,7 @@ namespace
                 e.what());
         }
         catch (...) {
+            ctx->init_failed = true;
             epochnamespace::logger::get(kLogOpenGL).log(
                 epochnamespace::logger::LogLevel::ALMOND_ERROR,
                 "cleanup unknown exception",
@@ -323,6 +328,7 @@ namespace
         const unsigned w = static_cast<unsigned>((std::max)(1, ctx->width));
         const unsigned h = static_cast<unsigned>((std::max)(1, ctx->height));
 
+        ctx->init_failed = false;
         try {
             std::string windowTitle{};
             if (ctx->windowData)

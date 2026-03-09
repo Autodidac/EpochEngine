@@ -1,26 +1,33 @@
-﻿/**************************************************************
- *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
- *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
- *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
- *  ██╔══██╗██║     ██║╚██╔╝██║ ██║   ██║██║╚██╗██║██║  ██║   *
- *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
- *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
- *                                                            *
- *   This file is part of the Almond Project.                 *
- *   epochengine - Modular C++ Framework                      *
- *                                                            *
- *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
- *                                                            *
- *   Provided "AS IS", without warranty of any kind.          *
- *   Use permitted for Non-Commercial Purposes ONLY,          *
- *   without prior commercial licensing agreement.            *
- *                                                            *
- *   Redistribution Allowed with This Notice and              *
- *   LICENSE file. No obligation to disclose modifications.   *
- *                                                            *
- *   See LICENSE file for full terms.                         *
- *                                                            *
- **************************************************************/
+﻿/************************************************
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
  // acontext.opengl.quad.ixx  (Quad + shader pipeline)
  // QUAD_V3: prints GL/GLSL versions + produces single-line shader errors.
 
@@ -119,20 +126,17 @@ export namespace epochnamespace::openglquad
     // ---------------------------------------------------------------------
     // Quad shader+VAO pipeline (per-thread/per-context)
     // ---------------------------------------------------------------------
-    struct QuadPipelineState
+    using QuadPipelineState = epochnamespace::openglstate::OpenGL4State;
+
+    inline thread_local QuadPipelineState* s_active_pipeline_state =
+        &epochnamespace::openglstate::s_openglstate;
+
+    export QuadPipelineState& quad_pipeline_state() noexcept
     {
-        GLuint shader = 0;
-        GLint  uUVRegionLoc = -1;
-        GLint  uTransformLoc = -1;
-        GLint  uSamplerLoc = -1;
-        GLuint vao = 0;
-        GLuint vbo = 0;
-        GLuint ebo = 0;
-    };
-
-    inline thread_local QuadPipelineState s_tls_pipeline{};
-
-    export QuadPipelineState& quad_pipeline_state() noexcept { return s_tls_pipeline; }
+        return s_active_pipeline_state
+            ? *s_active_pipeline_state
+            : epochnamespace::openglstate::s_openglstate;
+    }
 
     // ---------------------------------------------------------------------
     // Helpers
@@ -328,7 +332,7 @@ in vec2 vUV;
 out vec4 outColor;
 uniform sampler2D uTexture;
 void main() {
-    outColor = texture(uTexture, vUV);
+    outColor = texture2D(uTexture, vUV);
 })";
         }
 
@@ -392,7 +396,7 @@ void main() {
 
     export bool ensure_quad_pipeline()
     {
-        auto& s = s_tls_pipeline;
+        auto& s = quad_pipeline_state();
 
         // If no GL context is current on this thread, glGetString returns null.
         // Do not try to rebuild in that situation.
@@ -410,13 +414,29 @@ void main() {
         return build_quad_pipeline(s);
     }
 
-    // Back-compat wrapper: existing code may still call ensure_quad_pipeline(state).
-    // We deliberately ignore the passed-in state to avoid cross-context handle stomping.
-    export bool ensure_quad_pipeline(epochnamespace::openglstate::OpenGL4State& /*unused*/)
+    // Bind the quad pipeline to the backend-managed state for the active GL context.
+    export bool ensure_quad_pipeline(epochnamespace::openglstate::OpenGL4State& state)
     {
-        return ensure_quad_pipeline();
+        s_active_pipeline_state = &state;
+
+        // If no GL context is current on this thread, glGetString returns null.
+        // Do not try to rebuild in that situation.
+        if (::glGetString(GL_VERSION) == nullptr)
+            return (state.shader != 0) && (state.vao != 0) && (state.vbo != 0) && (state.ebo != 0);
+
+        const bool shaderOk = state.shader != 0 && glIsProgram(state.shader) == GL_TRUE;
+        const bool vaoOk = state.vao != 0 && glIsVertexArray(state.vao) == GL_TRUE;
+        const bool vboOk = state.vbo != 0 && glIsBuffer(state.vbo) == GL_TRUE;
+        const bool eboOk = state.ebo != 0 && glIsBuffer(state.ebo) == GL_TRUE;
+
+        if (shaderOk && vaoOk && vboOk && eboOk)
+            return true;
+
+        return build_quad_pipeline(state);
     }
 } // namespace epochnamespace::openglquad
 
 
 #endif // ALMOND_USING_OPENGL
+
+

@@ -1,11 +1,11 @@
-﻿// Engine/src/aengine.gui.cpp
+// Engine/src/aengine.gui.cpp
 /**************************************************************
- *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
- *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
- *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
- *  ██╔══██║██║     ██║╚██╔╝██║ ██║   ██║██║╚██╗██║██║  ██║   *
- *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
- *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
+ *   Â¦Â¦Â¦Â¦Â¦+ Â¦Â¦+     Â¦Â¦Â¦+   Â¦Â¦Â¦+   Â¦Â¦Â¦+   Â¦Â¦+    Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+    *
+ *  Â¦Â¦+--Â¦Â¦+Â¦Â¦Â¦     Â¦Â¦Â¦Â¦+ Â¦Â¦Â¦Â¦Â¦ Â¦Â¦+---Â¦Â¦+Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦+--Â¦Â¦+   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦+Â¦Â¦Â¦Â¦+Â¦Â¦Â¦ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+ Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  Â¦Â¦+--Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦+Â¦Â¦++Â¦Â¦Â¦ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦ +-+ Â¦Â¦Â¦ +Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦ +Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦++   *
+ *  +-+  +-++------++-+     +-+  +-----+ +-+  +---++-----+    *
  *                                                            *
  *   This file is part of the Almond Project.                 *
  *   epochengine - Modular C++ Framework                      *
@@ -69,7 +69,7 @@ namespace epochnamespace::gui
 
     namespace
     {
-        [[nodiscard]] static core::RenderPath render_path_for_context(const core::Context* ctx) noexcept
+                        [[nodiscard]] static core::RenderPath render_path_for_context(const core::Context* ctx) noexcept
         {
             if (!ctx)
                 return core::RenderPath::Unknown;
@@ -84,6 +84,30 @@ namespace epochnamespace::gui
                 return core::RenderPath::Vulkan;
             default:
                 return core::RenderPath::Unknown;
+            }
+        }
+
+        [[nodiscard]] static const char* viewport_fallback_name(const core::Context* ctx) noexcept
+        {
+            if (!ctx)
+                return "Scene";
+
+            switch (ctx->type)
+            {
+            case core::ContextType::RayLib:
+                return "RayLib";
+            case core::ContextType::SDL:
+                return "SDL";
+            case core::ContextType::SFML:
+                return "SFML";
+            case core::ContextType::Software:
+                return "Software";
+            case core::ContextType::OpenGL:
+                return "OpenGL";
+            case core::ContextType::Vulkan:
+                return "Vulkan";
+            default:
+                return "Scene";
             }
         }
 
@@ -476,16 +500,9 @@ namespace epochnamespace::gui
                 return;
             }
 
-            bool onRenderThread = false;
-            if (auto current = core::MultiContextManager::GetCurrent())
-                onRenderThread = (current.get() == ctx);
-
-            if (!ctx->windowData || onRenderThread)
-            {
-                auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
-                std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
-                ctx->draw_sprite_safe(handle, span, x, y, w, h);
-            }
+            auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+            std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
+            ctx->draw_sprite_safe(handle, span, x, y, w, h);
         }
 
         [[nodiscard]] static bool point_in_rect(Vec2 p, float x, float y, float w, float h) noexcept
@@ -929,6 +946,73 @@ namespace epochnamespace::gui
         g_frame.insideWindow = false;
     }
 
+    WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept
+    {
+        WidgetBounds bounds{};
+        if (!g_frame.ctx) return bounds;
+
+        try { ensure_resources(); }
+        catch (...) { return bounds; }
+
+        const float width = (std::max)(0.0f, size.x);
+        const float height = (std::max)(0.0f, size.y);
+        const float border = 2.0f;
+
+        const float titleHeight = line_advance_amount(kTitleScale);
+        const float titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
+        const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
+
+        draw_sprite(g_resources.titleBar, position.x, position.y, width, titleBarHeight);
+        draw_text_line(title, position.x + kContentPadding, titleTextY, kTitleScale);
+
+        const float contentY = position.y + titleBarHeight;
+        const float contentHeight = (std::max)(0.0f, height - titleBarHeight - border);
+        const float contentWidth = (std::max)(0.0f, width - border * 2.0f);
+
+        const core::RenderPath renderPath = render_path_for_context(g_frame.ctx);
+        const bool needsViewportFallback = renderPath != core::RenderPath::OpenGL
+            && renderPath != core::RenderPath::Vulkan;
+
+        if (needsViewportFallback && contentWidth > 0.0f && contentHeight > 0.0f)
+        {
+            draw_sprite(g_resources.consoleBackground, position.x + border, contentY, contentWidth, contentHeight);
+
+            const float inset = 18.0f;
+            const float cardX = position.x + border + inset;
+            const float cardY = contentY + inset;
+            const float cardW = (std::max)(48.0f, contentWidth - inset * 2.0f);
+            const float cardH = (std::max)(48.0f, contentHeight - inset * 2.0f);
+            draw_sprite(g_resources.panelBackground, cardX, cardY, cardW, cardH);
+
+            const float previewScale = 1.15f;
+            const float lineHeight = line_advance_amount(previewScale);
+            draw_text_line(std::string(viewport_fallback_name(g_frame.ctx)) + " Preview", cardX + 16.0f, cardY + 16.0f, previewScale);
+            draw_text_line("Scene output pending backend pass", cardX + 16.0f, cardY + 16.0f + lineHeight + 10.0f, kFontScale);
+            draw_text_line("GUI remains live in this viewport", cardX + 16.0f, cardY + 16.0f + lineHeight * 2.0f + 18.0f, kFontScale);
+        }
+
+        if (contentHeight > 0.0f)
+        {
+            draw_sprite(g_resources.panelBackground, position.x, contentY, border, contentHeight);
+            draw_sprite(g_resources.panelBackground,
+                position.x + (std::max)(0.0f, width - border),
+                contentY,
+                border,
+                contentHeight);
+        }
+        if (height > border)
+        {
+            draw_sprite(g_resources.panelBackground,
+                position.x,
+                position.y + (std::max)(0.0f, height - border),
+                width,
+                border);
+        }
+
+        bounds.position = { position.x + border, contentY };
+        bounds.size = { contentWidth, contentHeight };
+        return bounds;
+    }
     bool button(std::string_view label, Vec2 size) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return false;
@@ -1256,3 +1340,5 @@ namespace epochnamespace::gui
         return result;
     }
 } // namespace epochnamespace::gui
+
+

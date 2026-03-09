@@ -205,7 +205,7 @@ export namespace epochnamespace::core::cli
         parented_mode = detail::default_parented_mode();
         runtime_path = RuntimePath::Epoch;
 
-        apply_backend_selection("auto");
+        auto isBackendAutomatic = apply_backend_selection("auto");
 
         if (argc < 1)
         {

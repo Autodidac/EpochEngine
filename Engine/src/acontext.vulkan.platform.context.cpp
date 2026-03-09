@@ -23,14 +23,7 @@ module;
 #   define STB_IMAGE_IMPLEMENTATION
 #endif
 
-#ifndef VULKAN_HPP_DISPATCH_LOADER_DYNAMIC
-#   define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
-#endif
-#ifndef VULKAN_HPP_NO_EXCEPTIONS
-#   define VULKAN_HPP_NO_EXCEPTIONS
-#endif
-
-#include <include/aengine.config.hpp>
+#include <include/acontext.vulkan.hpp>
 
 #if defined(_WIN32)
 #   ifndef VK_USE_PLATFORM_WIN32_KHR
@@ -65,6 +58,7 @@ module;
 #include <cassert>
 #include <chrono>
 #include <cstddef>
+#include <fstream>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -288,6 +282,17 @@ namespace epochnamespace::vulkancontext
         if (auto* guiState = find_gui_state(ctx.get()))
             guiState->guiDraws.clear();
         queue.drain();
+
+        {
+            std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
+            const auto* guiState = find_gui_state(ctx.get());
+            diag << "[Vulkan] process hwnd=" << static_cast<void*>(ctx && ctx->windowData ? ctx->windowData->hwnd : nullptr)
+                 << " fb=" << get_framebuffer_width() << "x" << get_framebuffer_height()
+                 << " queuedGui=" << (guiState ? guiState->guiDraws.size() : 0)
+                 << " queueDepth=" << queue.depth()
+                 << "\n";
+        }
+
         drawFrame();
         return true;
     }
@@ -479,3 +484,9 @@ namespace epochnamespace::vulkancontext
     }
 
 } // namespace epochnamespace::vulkancontext
+
+
+
+
+
+

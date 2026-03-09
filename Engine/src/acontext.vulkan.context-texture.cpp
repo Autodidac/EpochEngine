@@ -27,6 +27,7 @@ import <utility>;
 import <vector>;
 
 import aengine.core.logger;
+import aengine.cli;
 import autility.string.converter;
 import aimage.loader;
 import aatlas.texture;
@@ -63,12 +64,19 @@ namespace epochnamespace::vulkancontext
         {
             namespace fs = std::filesystem;
 
-            const fs::path target = "texture.ppm";
-            const std::array<fs::path, 4> candidates = {
+                        const fs::path target = "texture.ppm";
+            const fs::path exeDir = epochnamespace::core::cli::exe_path.empty()
+                ? fs::path{}
+                : fs::absolute(epochnamespace::core::cli::exe_path).parent_path();
+            const std::array<fs::path, 8> candidates = {
+                exeDir / target,
+                exeDir / "assets" / "vulkan" / target,
                 target,
                 fs::path("assets") / "vulkan" / target,
                 fs::path("epochengine") / "assets" / "vulkan" / target,
                 fs::path("..") / "epochengine" / "assets" / "vulkan" / target,
+                fs::path("..") / ".." / ".." / "x64" / "Debug" / target,
+                fs::path("..") / ".." / ".." / "x64" / "Debug" / "assets" / "vulkan" / target,
             };
 
             for (const auto& path : candidates)

@@ -1,4 +1,34 @@
-﻿// ============================================================================
+/************************************************
+ *  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€   *
+ *  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   *
+ *  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ     ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   *
+ *  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ     ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   *
+ *  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ     ÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬â€œÃ‹â€ ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   *
+ *  ÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â      ÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â  ÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â  ÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
+ // ============================================================================
 // modules/acontext.vulkan.context-commands.ixx
 // Partition implementation: acontext.vulkan.context:commands
 // Command buffers + sync + per-frame submit/present.
@@ -16,8 +46,10 @@ import :shared_vk;
 import aengine.core.context;
 import aatlas.texture;
 
+import <algorithm>;
 import <array>;
 import <cstdint>;
+import <fstream>;
 import <cstring>;
 import <limits>;
 import <span>;
@@ -64,10 +96,10 @@ namespace epochnamespace::vulkancontext
             throw std::runtime_error("[Vulkan] CommandBuffer::begin failed.");
 #if ALMOND_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
-        const auto clearColor = epochnamespace::core::clear_color_for_context(
+        const auto sceneClearColor = epochnamespace::core::clear_color_for_context(
             epochnamespace::core::ContextType::Vulkan);
-        clearValues[0].setColor(
-            vk::ClearColorValue{ std::array<float, 4>{ clearColor[0], clearColor[1], clearColor[2], clearColor[3] } });
+        constexpr std::array<float, 4> frameClearColor{ 0.11f, 0.12f, 0.14f, 1.0f };
+        clearValues[0].setColor(vk::ClearColorValue{ frameClearColor });
         clearValues[1].setDepthStencil(vk::ClearDepthStencilValue{ 1.0f, 0 });
 #endif
         vk::RenderPassBeginInfo renderPassInfo{};
@@ -98,6 +130,63 @@ namespace epochnamespace::vulkancontext
         );
 
         cmd.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
+
+        int viewportX = 0;
+        int viewportY = 0;
+        int viewportWidth = static_cast<int>(swapChainExtent.width);
+        int viewportHeight = static_cast<int>(swapChainExtent.height);
+        bool hasSceneViewport = false;
+
+        if (const auto* ctx = bound_context())
+        {
+            const auto sceneViewport = ctx->scene_viewport();
+            if (sceneViewport.valid())
+            {
+                hasSceneViewport = true;
+                viewportX = (std::max)(0, (std::min)(sceneViewport.x, viewportWidth - 1));
+                viewportY = (std::max)(0, (std::min)(sceneViewport.y, viewportHeight - 1));
+                viewportWidth = (std::max)(1, (std::min)(sceneViewport.width, viewportWidth - viewportX));
+                viewportHeight = (std::max)(1, (std::min)(sceneViewport.height, viewportHeight - viewportY));
+            }
+        }
+
+        vk::Viewport viewport{};
+        viewport.x = static_cast<float>(viewportX);
+        viewport.y = static_cast<float>(viewportY);
+        viewport.width = static_cast<float>(viewportWidth);
+        viewport.height = static_cast<float>(viewportHeight);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        cmd.setViewport(0, viewport);
+
+        vk::Rect2D scissor{};
+        scissor.offset = vk::Offset2D{ viewportX, viewportY };
+        scissor.extent = vk::Extent2D{
+            static_cast<std::uint32_t>(viewportWidth),
+            static_cast<std::uint32_t>(viewportHeight)
+        };
+        cmd.setScissor(0, scissor);
+
+#if ALMOND_USE_CLEAR_COLOR_VULKAN
+        if (hasSceneViewport)
+        {
+            vk::ClearAttachment sceneAttachment{};
+            sceneAttachment.aspectMask = vk::ImageAspectFlagBits::eColor;
+            sceneAttachment.colorAttachment = 0;
+            sceneAttachment.clearValue.setColor(
+                vk::ClearColorValue{ std::array<float, 4>{ sceneClearColor[0], sceneClearColor[1], sceneClearColor[2], sceneClearColor[3] } });
+
+            vk::ClearRect sceneRect{};
+            sceneRect.rect.offset = vk::Offset2D{ viewportX, viewportY };
+            sceneRect.rect.extent = vk::Extent2D{
+                static_cast<std::uint32_t>(viewportWidth),
+                static_cast<std::uint32_t>(viewportHeight)
+            };
+            sceneRect.baseArrayLayer = 0;
+            sceneRect.layerCount = 1;
+            cmd.clearAttachments(1, &sceneAttachment, 1, &sceneRect);
+        }
+#endif
 
         // You MUST have this set when you create/fill the index buffer.
         const std::uint32_t safeIndexCount = indexCount;
@@ -193,17 +282,15 @@ namespace epochnamespace::vulkancontext
             const float y1 = draw.y + draw.h;
 
             const std::uint32_t baseIndex = static_cast<std::uint32_t>(vertices.size());
+            // Atlas regions are stored in OpenGL UV space. Vulkan sampling uses
+            // top-left image memory order here, so convert the V range once.
+            const float vTop = 1.0f - region.v2;
+            const float vBottom = 1.0f - region.v1;
 
-            // Atlas UVs are stored in OpenGL-style space (v grows upward).
-            // Vulkan sampling expects top-left origin for texel lookup, so
-            // keep the atlas V range as-is to avoid vertically mirrored GUI/font quads.
-            const float v0 = region.v1;
-            const float v1 = region.v2;
-
-            vertices.push_back(Vertex{ { x0, y0, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u1, v0 } });
-            vertices.push_back(Vertex{ { x1, y0, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u2, v0 } });
-            vertices.push_back(Vertex{ { x1, y1, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u2, v1 } });
-            vertices.push_back(Vertex{ { x0, y1, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u1, v1 } });
+            vertices.push_back(Vertex{ { x0, y0, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u1, vTop } });
+            vertices.push_back(Vertex{ { x1, y0, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u2, vTop } });
+            vertices.push_back(Vertex{ { x1, y1, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u2, vBottom } });
+            vertices.push_back(Vertex{ { x0, y1, 0.0f }, { 0.0f, 0.0f, 1.0f }, { region.u1, vBottom } });
 
             if (draw.atlas != currentAtlas)
             {
@@ -227,6 +314,8 @@ namespace epochnamespace::vulkancontext
 
         if (vertices.empty() || indices.empty())
         {
+            std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
+            diag << "[Vulkan] gui empty draws=" << guiState.guiDraws.size() << "\n";
             guiState.guiDraws.clear();
             return;
         }
@@ -272,6 +361,19 @@ namespace epochnamespace::vulkancontext
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *guiState.guiPipeline);
 
+        vk::Viewport guiViewport{};
+        guiViewport.x = 0.0f;
+        guiViewport.y = static_cast<float>(swapChainExtent.height);
+        guiViewport.width = static_cast<float>(swapChainExtent.width);
+        guiViewport.height = -static_cast<float>(swapChainExtent.height);
+        guiViewport.minDepth = 0.0f;
+        guiViewport.maxDepth = 1.0f;
+        cmd.setViewport(0, guiViewport);
+
+        vk::Rect2D guiScissor{};
+        guiScissor.offset = vk::Offset2D{ 0, 0 };
+        guiScissor.extent = swapChainExtent;
+        cmd.setScissor(0, guiScissor);
         const vk::Buffer vb[] = { *guiState.guiVertexBuffer };
         const vk::DeviceSize offsets[] = { 0 };
         cmd.bindVertexBuffers(0, 1, vb, offsets);
@@ -304,6 +406,8 @@ namespace epochnamespace::vulkancontext
             cmd.drawIndexed(batch.indexCount, 1u, batch.indexOffset, 0, 0);
         }
 
+        std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
+        diag << "[Vulkan] gui submitted draws=" << batches.size() << " vertices=" << vertices.size() << " indices=" << indices.size() << " image=" << imageIndex << "\n";
         guiState.guiDraws.clear();
     }
 
@@ -452,3 +556,10 @@ namespace epochnamespace::vulkancontext
         currentFrame = (currentFrame + 1) % kMaxFramesInFlight;
     }
 } // namespace epochnamespace::vulkancontext
+
+
+
+
+
+
+

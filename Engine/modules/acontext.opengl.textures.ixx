@@ -1,26 +1,33 @@
-/**************************************************************
- *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
- *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
- *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
- *  ██╔══██║██║     ██║╚██╔╝██║ ██║   ██║██║╚██╗██║██║  ██║   *
- *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
- *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
- *                                                            *
- *   This file is part of the Almond Project.                 *
- *   epochengine - Modular C++ Framework                      *
- *                                                            *
- *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
- *                                                            *
- *   Provided "AS IS", without warranty of any kind.          *
- *   Use permitted for Non-Commercial Purposes ONLY,          *
- *   without prior commercial licensing agreement.            *
- *                                                            *
- *   Redistribution Allowed with This Notice and              *
- *   LICENSE file. No obligation to disclose modifications.   *
- *                                                            *
- *   See LICENSE file for full terms.                         *
- *                                                            *
- **************************************************************/
+/************************************************
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 // -----------------------------------------------------------------------------
@@ -32,17 +39,8 @@ module;
 #if defined(ALMOND_USING_OPENGL)
 
 // Make sure GL loaders see any platform defines they need.
-#if defined(_WIN32)
-#  ifndef WIN32_LEAN_AND_MEAN
-#    define WIN32_LEAN_AND_MEAN
-#  endif
-#  ifndef NOMINMAX
-#    define NOMINMAX
-#  endif
-#  include <windows.h>
-#endif
 
-// Prefer GLAD (what you’re already using elsewhere). This provides GLuint,
+// Prefer GLAD (what youâ€™re already using elsewhere). This provides GLuint,
 // GLenum and all gl* function prototypes.
 #if defined(__has_include)
 #  if __has_include(<glad/glad.h>)
@@ -106,12 +104,12 @@ export namespace epochnamespace::opengltextures
         {
             epochnamespace::openglcontext::PlatformGL::PlatformGLContext ctx{};
 #if defined(_WIN32)
-            ctx.device = state.hdc;
-            ctx.context = state.hglrc;
+            ctx.device = static_cast<decltype(ctx.device)>(state.hdc);
+            ctx.context = static_cast<decltype(ctx.context)>(state.hglrc);
 #elif defined(__linux__)
-            ctx.display = state.display;
+            ctx.display = static_cast<decltype(ctx.display)>(state.display);
             ctx.drawable = state.drawable ? state.drawable : state.window;
-            ctx.context = state.glxContext;
+            ctx.context = static_cast<decltype(ctx.context)>(state.glxContext);
 #endif
             return ctx;
         }
@@ -123,12 +121,12 @@ export namespace epochnamespace::opengltextures
             if (!ctx) return result;
 
 #if defined(_WIN32)
-            result.device = static_cast<HDC>(ctx->native_drawable);
-            result.context = static_cast<HGLRC>(ctx->native_gl_context);
+            result.device = static_cast<decltype(result.device)>(ctx->native_drawable);
+            result.context = static_cast<decltype(result.context)>(ctx->native_gl_context);
 #elif defined(__linux__)
-            result.display = static_cast<Display*>(ctx->native_drawable);
-            result.drawable = static_cast<GLXDrawable>(reinterpret_cast<std::uintptr_t>(ctx->native_window));
-            result.context = static_cast<GLXContext>(ctx->native_gl_context);
+            result.display = static_cast<decltype(result.display)>(ctx->native_drawable);
+            result.drawable = static_cast<decltype(result.drawable)>(reinterpret_cast<std::uintptr_t>(ctx->native_window));
+            result.context = static_cast<decltype(result.context)>(ctx->native_gl_context);
 #endif
             return result;
         }
@@ -419,6 +417,12 @@ export namespace epochnamespace::opengltextures
         float x, float y, float width, float height) noexcept
     {
         // (unchanged from your version)
+        auto log_draw_skip = [](std::string_view reason)
+        {
+            std::ofstream diag("opengl_runtime_diag.txt", std::ios::app);
+            diag << "[OpenGL] draw_skip reason=" << reason << "\n";
+        };
+
         if (!handle.is_valid()) {
             std::cerr << "[DrawSprite] Invalid sprite handle.\n";
             return;
@@ -426,17 +430,20 @@ export namespace epochnamespace::opengltextures
 
         auto& backend = get_opengl_backend();
         epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
-        auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
-        if (!desired.valid()) {
-            desired = detail::to_platform_context(backend.glState);
-        }
-        if (!desired.valid() || !contextGuard.set(desired)) {
-            std::cerr << "[DrawSprite] WARNING: Unable to activate OpenGL context; skipping draw.\n";
-            return;
+        const bool hasCurrentContext = (::glGetString(GL_VERSION) != nullptr);
+        if (!hasCurrentContext) {
+            auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
+            if (!desired.valid()) {
+                desired = detail::to_platform_context(backend.glState);
+            }
+            if (!desired.valid() || !contextGuard.set(desired)) {
+                log_draw_skip("activate_context");
+                return;
+            }
         }
 
         if (!ensure_created_pipeline(backend.glState)) {
-            std::cerr << "[DrawSprite] Missing quad pipeline; skipping draw\n";
+            log_draw_skip("missing_pipeline");
             return;
         }
 
@@ -460,7 +467,7 @@ export namespace epochnamespace::opengltextures
             h = (std::max)(1, core::cli::window_height);
         }
         if (w <= 0 || h <= 0) {
-            std::cerr << "[DrawSprite] ERROR: Unable to resolve window dimensions.\n";
+            log_draw_skip("invalid_dimensions");
             return;
         }
 
@@ -470,20 +477,38 @@ export namespace epochnamespace::opengltextures
         const int atlasIdx = int(handle.atlasIndex);
         const int localIdx = int(handle.localIndex);
 
+#if defined(_WIN32)
+        static thread_local int s_debugDraws = 0;
+        if (s_debugDraws < 20)
+        {
+            auto currentCtx = core::MultiContextManager::GetCurrent();
+            std::ofstream diag("opengl_runtime_diag.txt", std::ios::app);
+            diag << "[OpenGL] draw hwnd=" << static_cast<void*>(currentCtx && currentCtx->windowData ? currentCtx->windowData->hwnd : nullptr)
+                 << " viewport=" << w << "x" << h
+                 << " pos=(" << x << "," << y << ")"
+                 << " size=(" << width << "," << height << ")"
+                 << " atlasIdx=" << atlasIdx
+                 << " localIdx=" << localIdx
+                 << "\n";
+            ++s_debugDraws;
+        }
+#endif
+
+
         if (atlasIdx < 0 || atlasIdx >= int(atlases.size())) {
-            std::cerr << "[DrawSprite] Atlas index out of bounds: " << atlasIdx << '\n';
+            log_draw_skip("atlas_index_oob");
             return;
         }
         const TextureAtlas* atlas = atlases[atlasIdx];
         if (!atlas) {
-            std::cerr << "[DrawSprite] Null atlas pointer at index: " << atlasIdx << '\n';
+            log_draw_skip("null_atlas");
             return;
         }
 
         AtlasRegion region{};
         std::string spriteName;
         if (!atlas->try_get_entry_info(localIdx, region, &spriteName)) {
-            std::cerr << "[DrawSprite] Sprite index out of bounds: " << localIdx << '\n';
+            log_draw_skip("sprite_index_oob");
             return;
         }
 
@@ -494,15 +519,13 @@ export namespace epochnamespace::opengltextures
             std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
             auto it = backend.gpu_atlases.find(atlas);
             if (it == backend.gpu_atlases.end()) {
-                std::cerr << "[DrawSprite] GPU texture not found for atlas '"
-                    << atlas->name << "'\n";
+                log_draw_skip("gpu_texture_missing");
                 return;
             }
             tex = it->second.textureHandle;
         }
         if (!tex) {
-            std::cerr << "[DrawSprite] GPU texture not found for atlas '"
-                << atlas->name << "'\n";
+            log_draw_skip("gpu_texture_missing");
             return;
         }
 
@@ -534,7 +557,7 @@ export namespace epochnamespace::opengltextures
 
         const float u0 = region.u1;
         const float du = region.u2 - region.u1;
-        const float v0 = region.v2;
+        const float v0 = 1.0f - region.v1;
         const float dv = region.v1 - region.v2;
 
         if (pipe.uUVRegionLoc >= 0)
@@ -565,3 +588,5 @@ export namespace epochnamespace::opengltextures
 } // namespace epochnamespace::opengltextures
 
 #endif // ALMOND_USING_OPENGL
+
+

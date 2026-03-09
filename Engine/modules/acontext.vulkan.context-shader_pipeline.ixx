@@ -1,3 +1,33 @@
+/************************************************
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”   *
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   *
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜     Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   *
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜     Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   *
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜     Ã¢â€¢Å¡Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢Å¡Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   *
+ *  Ã¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢Â      Ã¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â  Ã¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢Â  Ã¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢Â   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 // Keep this in the global module fragment so it doesn't leak macros into importers.
@@ -21,6 +51,7 @@ module;
 export module acontext.vulkan.context:shader_pipeline;
 
 import :shared_vk;
+import aengine.cli;
 
 export namespace epochnamespace::vulkancontext
 {
@@ -171,14 +202,21 @@ export namespace epochnamespace::vulkancontext
     {
         namespace fs = std::filesystem;
 
-        const fs::path target = filename;
-        const std::array<fs::path, 6> candidates = {
+                const fs::path target = filename;
+        const fs::path exeDir = epochnamespace::core::cli::exe_path.empty()
+            ? fs::path{}
+            : fs::absolute(epochnamespace::core::cli::exe_path).parent_path();
+        const std::array<fs::path, 10> candidates = {
+            exeDir / target,
+            exeDir / "assets" / "vulkan" / target,
             target,
-            fs::path("epochengine") / target,
-            fs::path("..") / "epochengine" / target,
             fs::path("assets") / "vulkan" / target,
+            fs::path("epochengine") / target,
             fs::path("epochengine") / "assets" / "vulkan" / target,
+            fs::path("..") / "epochengine" / target,
             fs::path("..") / "epochengine" / "assets" / "vulkan" / target,
+            fs::path("..") / ".." / ".." / "x64" / "Debug" / target,
+            fs::path("..") / ".." / ".." / "x64" / "Debug" / "assets" / "vulkan" / target,
         };
 
 #if defined(_DEBUG)
@@ -211,6 +249,14 @@ export namespace epochnamespace::vulkancontext
             // Replace this with epoch::core::log::write(os.str()) if you have it.
             OutputDebugStringA(os.str().c_str());
 #endif
+            if (path.extension() == ".spv" && !readhelpers::looks_like_spirv(buffer))
+            {
+                std::ostringstream badShader;
+                badShader << "[Vulkan] Shader file is not valid SPIR-V: "
+                    << fs::absolute(path).string()
+                    << " head=" << readhelpers::first_bytes_hex(buffer, 16);
+                throw std::runtime_error(badShader.str());
+            }
 
             return buffer;
         }
@@ -284,6 +330,13 @@ export namespace epochnamespace::vulkancontext
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
 
+        const std::array dynamicStates = {
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eScissor
+        };
+        vk::PipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.dynamicStateCount = static_cast<std::uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
@@ -334,6 +387,7 @@ export namespace epochnamespace::vulkancontext
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = *pipelineLayout;
         pipelineInfo.renderPass = *renderPass;
         pipelineInfo.subpass = 0;
@@ -346,8 +400,8 @@ export namespace epochnamespace::vulkancontext
     void Application::createGuiPipeline()
     {
         auto& guiState = gui_state_for_context(bound_context());
-        const auto vertShaderCode = readFile("shaders/vert.spv");
-        const auto fragShaderCode = readFile("shaders/frag.spv");
+        const auto vertShaderCode = readFile("shaders/gui_vert.spv");
+        const auto fragShaderCode = readFile("shaders/gui_frag.spv");
 
         vk::ShaderModuleCreateInfo vInfo{};
         vInfo.codeSize = vertShaderCode.size();
@@ -403,6 +457,13 @@ export namespace epochnamespace::vulkancontext
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
 
+        const std::array dynamicStates = {
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eScissor
+        };
+        vk::PipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.dynamicStateCount = static_cast<std::uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
@@ -451,6 +512,7 @@ export namespace epochnamespace::vulkancontext
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = *pipelineLayout;
         pipelineInfo.renderPass = *renderPass;
         pipelineInfo.subpass = 1;
@@ -461,3 +523,11 @@ export namespace epochnamespace::vulkancontext
         guiState.guiPipeline = std::move(gp.value);
     }
 }
+
+
+
+
+
+
+
+

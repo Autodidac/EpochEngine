@@ -1,4 +1,34 @@
-﻿module;
+/************************************************
+ *  ¦¦¦¦¦¦¦+¦¦¦¦¦¦+  ¦¦¦¦¦¦+  ¦¦¦¦¦¦+¦¦+  ¦¦+   *
+ *  ¦¦+----+¦¦+--¦¦+¦¦+---¦¦+¦¦+----+¦¦¦  ¦¦¦   *
+ *  ¦¦¦¦¦+  ¦¦¦¦¦¦++¦¦¦   ¦¦¦¦¦¦     ¦¦¦¦¦¦¦¦   *
+ *  ¦¦+--+  ¦¦+---+ ¦¦¦   ¦¦¦¦¦¦     ¦¦+--¦¦¦   *
+ *  ¦¦¦¦¦¦¦+¦¦¦     +¦¦¦¦¦¦+++¦¦¦¦¦¦+¦¦¦  ¦¦¦   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
+module;
 
 #include <include/aengine.config.hpp> // for ALMOND_USING Macros
 
@@ -79,6 +109,19 @@ export namespace epochnamespace::core
     }
 
     export using ClearColor = std::array<float, 4>;
+
+    export struct RenderViewport
+    {
+        int x = 0;
+        int y = 0;
+        int width = 0;
+        int height = 0;
+
+        [[nodiscard]] constexpr bool valid() const noexcept
+        {
+            return width > 0 && height > 0;
+        }
+    };
 
     export [[nodiscard]] constexpr ClearColor clear_color_for_context(ContextType type) noexcept
     {
@@ -197,7 +240,6 @@ export namespace epochnamespace::core
                 });
         }
 
-        // Back-compat shim
         void clear_safe(std::shared_ptr<Context>) const noexcept { clear_safe(); }
 
         void present_safe() const noexcept
@@ -220,8 +262,53 @@ export namespace epochnamespace::core
                 });
         }
 
-        int get_width_safe()  const noexcept { return get_width ? get_width() : width; }
-        int get_height_safe() const noexcept { return get_height ? get_height() : height; }
+        int get_width_safe() const noexcept
+        {
+            if (get_width)
+            {
+                const int resolved = get_width();
+                if (resolved > 0)
+                    return resolved;
+            }
+            if (framebufferWidth > 0)
+                return framebufferWidth;
+            return width;
+        }
+
+        int get_height_safe() const noexcept
+        {
+            if (get_height)
+            {
+                const int resolved = get_height();
+                if (resolved > 0)
+                    return resolved;
+            }
+            if (framebufferHeight > 0)
+                return framebufferHeight;
+            return height;
+        }
+        [[nodiscard]] RenderViewport scene_viewport() const noexcept
+        {
+            return RenderViewport{
+                sceneViewportX.load(std::memory_order_relaxed),
+                sceneViewportY.load(std::memory_order_relaxed),
+                sceneViewportWidth.load(std::memory_order_relaxed),
+                sceneViewportHeight.load(std::memory_order_relaxed)
+            };
+        }
+
+        void set_scene_viewport(RenderViewport viewport) noexcept
+        {
+            sceneViewportX.store((std::max)(0, viewport.x), std::memory_order_relaxed);
+            sceneViewportY.store((std::max)(0, viewport.y), std::memory_order_relaxed);
+            sceneViewportWidth.store((std::max)(0, viewport.width), std::memory_order_relaxed);
+            sceneViewportHeight.store((std::max)(0, viewport.height), std::memory_order_relaxed);
+        }
+
+        void clear_scene_viewport() noexcept
+        {
+            set_scene_viewport({});
+        }
 
         bool is_key_held_safe(input::Key k) const noexcept
         {
@@ -238,11 +325,27 @@ export namespace epochnamespace::core
             if (get_mouse_position)
             {
                 get_mouse_position(x, y);
-                return;
+            }
+            else
+            {
+                x = input::mouseX.load(std::memory_order_acquire);
+                y = input::mouseY.load(std::memory_order_acquire);
             }
 
-            x = input::mouseX.load(std::memory_order_acquire);
-            y = input::mouseY.load(std::memory_order_acquire);
+#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+            if (input::are_mouse_coords_global())
+            {
+                if (HWND hwndLocal = get_hwnd(); hwndLocal != nullptr)
+                {
+                    POINT clientPoint{ x, y };
+                    if (::ScreenToClient(hwndLocal, &clientPoint))
+                    {
+                        x = clientPoint.x;
+                        y = clientPoint.y;
+                    }
+                }
+            }
+#endif
         }
 
         bool is_mouse_button_held_safe(input::MouseButton b) const noexcept
@@ -345,6 +448,11 @@ export namespace epochnamespace::core
         int framebufferWidth = 400;
         int framebufferHeight = 300;
 
+        std::atomic<int> sceneViewportX{ 0 };
+        std::atomic<int> sceneViewportY{ 0 };
+        std::atomic<int> sceneViewportWidth{ 0 };
+        std::atomic<int> sceneViewportHeight{ 0 };
+
         // virtual design canvas
         int virtualWidth = 400;
         int virtualHeight = 300;
@@ -399,3 +507,5 @@ export namespace epochnamespace::core
     void AddContextForBackend(core::ContextType type, std::shared_ptr<Context> context);
     bool ProcessAllContexts();
 } // namespace epochnamespace::core
+
+

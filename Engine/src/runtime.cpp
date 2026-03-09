@@ -50,7 +50,7 @@ extern "C"
     }
 #endif
 }
-
+import runtime;
 module runtime;
 
 import aengine.cli;

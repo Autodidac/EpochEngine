@@ -96,6 +96,7 @@ export namespace epochnamespace::gui
 
     export void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void end_window() noexcept;
+    export WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept;
 
     export void set_cursor(Vec2 position) noexcept;
     export void advance_cursor(Vec2 delta) noexcept;
@@ -119,3 +120,6 @@ export namespace epochnamespace::gui
 
     export std::optional<WidgetBounds> last_button_bounds() noexcept;
 }
+
+
+

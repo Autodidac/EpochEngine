@@ -1,26 +1,33 @@
-/**************************************************************
- *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
- *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
- *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
- *  ██╔══██║██║     ██║╚██╔╝██║ ██║   ██║██║╚██╗██║██║  ██║   *
- *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
- *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
- *                                                            *
- *   This file is part of the Almond Project.                 *
- *   epochengine - Modular C++ Framework                      *
- *                                                            *
- *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
- *                                                            *
- *   Provided "AS IS", without warranty of any kind.          *
- *   Use permitted for Non-Commercial Purposes ONLY,          *
- *   without prior commercial licensing agreement.            *
- *                                                            *
- *   Redistribution Allowed with This Notice and              *
- *   LICENSE file. No obligation to disclose modifications.   *
- *                                                            *
- *   See LICENSE file for full terms.                         *
- *                                                            *
- **************************************************************/
+﻿/************************************************
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
  // acontext.opengl.context.ixx
 module;
 
@@ -105,9 +112,12 @@ import acontext.opengl.quad;
 // Standard library
 // ------------------------------------------------------------
 import <algorithm>;
+import <array>;
+import <cmath>;
 import <cstdint>;
 import <format>;
 import <functional>;
+import <fstream>;
 import <iostream>;
 import <mutex>;
 import <stdexcept>;
@@ -462,8 +472,8 @@ export namespace epochnamespace::openglcontext
         ctx->native_drawable = glState.hdc;
         ctx->native_gl_context = glState.hglrc;
 
-        // Keep it current during init; opengl_process will bind per-frame anyway.
-        contextGuard.release();
+        // Keep the context current through init so pipeline creation has
+        // a valid active GL context on this thread.
 
 #elif defined(__linux__)
         (void)parentWindowOpaque;
@@ -584,13 +594,14 @@ export namespace epochnamespace::openglcontext
         ctx->native_drawable = display;
         ctx->native_gl_context = glState.glxContext;
 
-        contextGuard.release();
+        // Keep the context current through init so pipeline creation has
+        // a valid active GL context on this thread.
 #else
         (void)parentWindowOpaque;
         throw std::runtime_error("[OpenGL] Unsupported platform");
 #endif
 
-        if (!epochnamespace::openglquad::ensure_quad_pipeline())
+        if (!epochnamespace::openglquad::ensure_quad_pipeline(glState))
             throw std::runtime_error("[OpenGL] Failed to build/ensure quad pipeline");
 
         atlasmanager::register_backend_uploader(core::ContextType::OpenGL,
@@ -634,6 +645,321 @@ export namespace epochnamespace::openglcontext
 #endif
     }
 
+    namespace detail
+    {
+        using Mat4 = std::array<float, 16>;
+
+        [[nodiscard]] inline std::pair<int, int> parse_gl_version(const char* s) noexcept
+        {
+            if (!s) return { 0, 0 };
+            std::string_view text{ s };
+            const auto firstDigit = text.find_first_of("0123456789");
+            if (firstDigit == std::string_view::npos) return { 0, 0 };
+            text.remove_prefix(firstDigit);
+            const auto dot = text.find('.');
+            if (dot == std::string_view::npos) return { 0, 0 };
+
+            auto to_int = [](std::string_view value) noexcept
+            {
+                int out = 0;
+                for (unsigned char ch : value)
+                {
+                    if (ch < '0' || ch > '9') break;
+                    out = (out * 10) + (ch - '0');
+                }
+                return out;
+            };
+
+            const int major = to_int(text.substr(0, dot));
+            text.remove_prefix(dot + 1);
+            return { major, to_int(text) };
+        }
+
+        inline void destroy_scene_preview_pipeline(epochnamespace::openglstate::OpenGL4State& state) noexcept
+        {
+            if (state.sceneEbo && glIsBuffer(state.sceneEbo)) glDeleteBuffers(1, &state.sceneEbo);
+            if (state.sceneVbo && glIsBuffer(state.sceneVbo)) glDeleteBuffers(1, &state.sceneVbo);
+            if (state.sceneVao && glIsVertexArray(state.sceneVao)) glDeleteVertexArrays(1, &state.sceneVao);
+            if (state.sceneShader && glIsProgram(state.sceneShader)) glDeleteProgram(state.sceneShader);
+
+            state.sceneShader = 0;
+            state.sceneMvpLoc = -1;
+            state.sceneVao = 0;
+            state.sceneVbo = 0;
+            state.sceneEbo = 0;
+        }
+
+        [[nodiscard]] inline GLuint compile_scene_shader(GLenum type, const std::string& source)
+        {
+            GLuint shader = glCreateShader(type);
+            const char* text = source.c_str();
+            glShaderSource(shader, 1, &text, nullptr);
+            glCompileShader(shader);
+
+            GLint compiled = 0;
+            glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+            if (compiled == GL_TRUE)
+                return shader;
+
+            std::string log(4096, '\0');
+            GLsizei used = 0;
+            glGetShaderInfoLog(shader, static_cast<GLsizei>(log.size()), &used, log.data());
+            glDeleteShader(shader);
+            if (used > 0 && static_cast<std::size_t>(used) < log.size()) log.resize(static_cast<std::size_t>(used));
+            throw std::runtime_error("[OpenGL] Scene preview shader compile failed: " + log);
+        }
+
+        [[nodiscard]] inline GLuint link_scene_program(GLuint vertexShader, GLuint fragmentShader)
+        {
+            GLuint program = glCreateProgram();
+            glAttachShader(program, vertexShader);
+            glAttachShader(program, fragmentShader);
+            glBindAttribLocation(program, 0, "aPos");
+            glBindAttribLocation(program, 1, "aColor");
+            if (glBindFragDataLocation)
+                glBindFragDataLocation(program, 0, "outColor");
+            glLinkProgram(program);
+
+            GLint linked = 0;
+            glGetProgramiv(program, GL_LINK_STATUS, &linked);
+            if (linked == GL_TRUE)
+                return program;
+
+            std::string log(4096, '\0');
+            GLsizei used = 0;
+            glGetProgramInfoLog(program, static_cast<GLsizei>(log.size()), &used, log.data());
+            glDeleteProgram(program);
+            if (used > 0 && static_cast<std::size_t>(used) < log.size()) log.resize(static_cast<std::size_t>(used));
+            throw std::runtime_error("[OpenGL] Scene preview program link failed: " + log);
+        }
+
+        [[nodiscard]] inline Mat4 identity_matrix() noexcept
+        {
+            return Mat4{
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f
+            };
+        }
+
+        [[nodiscard]] inline Mat4 multiply(const Mat4& lhs, const Mat4& rhs) noexcept
+        {
+            Mat4 out{};
+            for (int column = 0; column < 4; ++column)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    float sum = 0.0f;
+                    for (int k = 0; k < 4; ++k)
+                        sum += lhs[k * 4 + row] * rhs[column * 4 + k];
+                    out[column * 4 + row] = sum;
+                }
+            }
+            return out;
+        }
+
+        [[nodiscard]] inline Mat4 translation(float x, float y, float z) noexcept
+        {
+            Mat4 out = identity_matrix();
+            out[12] = x;
+            out[13] = y;
+            out[14] = z;
+            return out;
+        }
+
+        [[nodiscard]] inline Mat4 rotation_x(float radians) noexcept
+        {
+            Mat4 out = identity_matrix();
+            const float c = std::cos(radians);
+            const float s = std::sin(radians);
+            out[5] = c;
+            out[6] = s;
+            out[9] = -s;
+            out[10] = c;
+            return out;
+        }
+
+        [[nodiscard]] inline Mat4 rotation_y(float radians) noexcept
+        {
+            Mat4 out = identity_matrix();
+            const float c = std::cos(radians);
+            const float s = std::sin(radians);
+            out[0] = c;
+            out[2] = -s;
+            out[8] = s;
+            out[10] = c;
+            return out;
+        }
+
+        [[nodiscard]] inline Mat4 perspective(float fovRadians, float aspect, float zNear, float zFar) noexcept
+        {
+            Mat4 out{};
+            const float tanHalf = std::tan(fovRadians * 0.5f);
+            out[0] = 1.0f / ((std::max)(0.001f, aspect) * tanHalf);
+            out[5] = 1.0f / tanHalf;
+            out[10] = -(zFar + zNear) / (zFar - zNear);
+            out[11] = -1.0f;
+            out[14] = -(2.0f * zFar * zNear) / (zFar - zNear);
+            return out;
+        }
+
+        inline bool ensure_scene_preview_pipeline(epochnamespace::openglstate::OpenGL4State& state)
+        {
+            if (state.sceneShader && state.sceneVao && state.sceneVbo && state.sceneEbo)
+                return true;
+
+            destroy_scene_preview_pipeline(state);
+
+            GLint major = 0;
+            GLint minor = 0;
+            glGetIntegerv(GL_MAJOR_VERSION, &major);
+            glGetIntegerv(GL_MINOR_VERSION, &minor);
+            if (major == 0 && minor == 0)
+            {
+                const auto parsed = parse_gl_version(reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+                major = parsed.first;
+                minor = parsed.second;
+            }
+
+            std::string vertexSource;
+            std::string fragmentSource;
+            if (major > 3 || (major == 3 && minor >= 3))
+            {
+                vertexSource = R"(#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aColor;
+uniform mat4 uMvp;
+out vec3 vColor;
+void main() {
+    gl_Position = uMvp * vec4(aPos, 1.0);
+    vColor = aColor;
+})";
+                fragmentSource = R"(#version 330 core
+in vec3 vColor;
+out vec4 outColor;
+void main() {
+    outColor = vec4(vColor, 1.0);
+})";
+            }
+            else
+            {
+                vertexSource = R"(#version 120
+attribute vec3 aPos;
+attribute vec3 aColor;
+uniform mat4 uMvp;
+varying vec3 vColor;
+void main() {
+    gl_Position = uMvp * vec4(aPos, 1.0);
+    vColor = aColor;
+})";
+                fragmentSource = R"(#version 120
+varying vec3 vColor;
+void main() {
+    gl_FragColor = vec4(vColor, 1.0);
+})";
+            }
+
+            const GLuint vertexShader = compile_scene_shader(GL_VERTEX_SHADER, vertexSource);
+            GLuint fragmentShader = 0;
+            try
+            {
+                fragmentShader = compile_scene_shader(GL_FRAGMENT_SHADER, fragmentSource);
+                state.sceneShader = link_scene_program(vertexShader, fragmentShader);
+            }
+            catch (...)
+            {
+                if (vertexShader) glDeleteShader(vertexShader);
+                if (fragmentShader) glDeleteShader(fragmentShader);
+                destroy_scene_preview_pipeline(state);
+                throw;
+            }
+
+            glDeleteShader(vertexShader);
+            glDeleteShader(fragmentShader);
+
+            constexpr float vertices[] = {
+                -1.0f, -1.0f, -1.0f, 0.95f, 0.35f, 0.20f,
+                 1.0f, -1.0f, -1.0f, 0.95f, 0.35f, 0.20f,
+                 1.0f,  1.0f, -1.0f, 0.95f, 0.35f, 0.20f,
+                -1.0f,  1.0f, -1.0f, 0.95f, 0.35f, 0.20f,
+                -1.0f, -1.0f,  1.0f, 0.15f, 0.75f, 0.95f,
+                 1.0f, -1.0f,  1.0f, 0.15f, 0.75f, 0.95f,
+                 1.0f,  1.0f,  1.0f, 0.15f, 0.75f, 0.95f,
+                -1.0f,  1.0f,  1.0f, 0.15f, 0.75f, 0.95f
+            };
+
+            constexpr unsigned int indices[] = {
+                4, 5, 6, 6, 7, 4,
+                0, 3, 2, 2, 1, 0,
+                0, 4, 7, 7, 3, 0,
+                1, 2, 6, 6, 5, 1,
+                3, 7, 6, 6, 2, 3,
+                0, 1, 5, 5, 4, 0
+            };
+
+            glGenVertexArrays(1, &state.sceneVao);
+            glGenBuffers(1, &state.sceneVbo);
+            glGenBuffers(1, &state.sceneEbo);
+
+            glBindVertexArray(state.sceneVao);
+            glBindBuffer(GL_ARRAY_BUFFER, state.sceneVbo);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.sceneEbo);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * static_cast<GLsizei>(sizeof(float)), reinterpret_cast<void*>(0));
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * static_cast<GLsizei>(sizeof(float)), reinterpret_cast<void*>(3 * sizeof(float)));
+            glBindVertexArray(0);
+
+            state.sceneMvpLoc = glGetUniformLocation(state.sceneShader, "uMvp");
+            return state.sceneShader != 0 && state.sceneMvpLoc >= 0;
+        }
+
+        inline void render_scene_preview(
+            epochnamespace::openglstate::OpenGL4State& state,
+            int framebufferWidth,
+            int framebufferHeight,
+            int viewportX,
+            int viewportY,
+            int viewportWidth,
+            int viewportHeight)
+        {
+            if (!ensure_scene_preview_pipeline(state))
+                return;
+
+            static const auto startTime = std::chrono::steady_clock::now();
+            const float timeSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime).count();
+            const int glViewportY = (std::max)(0, framebufferHeight - (viewportY + viewportHeight));
+            const float aspect = viewportHeight > 0
+                ? (viewportWidth / static_cast<float>(viewportHeight))
+                : 1.0f;
+
+            const Mat4 model = multiply(rotation_y(timeSeconds * 0.85f), rotation_x(timeSeconds * 0.55f));
+            const Mat4 view = translation(0.0f, 0.0f, -4.0f);
+            const Mat4 projection = perspective(0.95f, aspect, 0.1f, 32.0f);
+            const Mat4 mvp = multiply(projection, multiply(view, model));
+
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(viewportX, glViewportY, viewportWidth, viewportHeight);
+            glViewport(viewportX, glViewportY, viewportWidth, viewportHeight);
+            glClearColor(0.06f, 0.08f, 0.11f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            glUseProgram(state.sceneShader);
+            glUniformMatrix4fv(state.sceneMvpLoc, 1, GL_FALSE, mvp.data());
+            glBindVertexArray(state.sceneVao);
+            glEnable(GL_DEPTH_TEST);
+            glDisable(GL_BLEND);
+            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, nullptr);
+            glBindVertexArray(0);
+            glUseProgram(0);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_SCISSOR_TEST);
+            glViewport(0, 0, framebufferWidth, framebufferHeight);
+        }
+    }
     inline bool opengl_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue)
     {
         if (!ctx) return false;
@@ -685,9 +1011,8 @@ export namespace epochnamespace::openglcontext
 
         glViewport(0, 0, fbW, fbH);
 
-        if (!epochnamespace::openglquad::ensure_quad_pipeline())
+        if (!epochnamespace::openglquad::ensure_quad_pipeline(glState))
         {
-            queue.drain();
             PlatformGL::swap_buffers(guard.target());
             return true;
         }
@@ -701,7 +1026,19 @@ export namespace epochnamespace::openglcontext
             static_cast<std::int64_t>(fbH),
             telemetry::RendererTelemetryTags{ core::ContextType::OpenGL, windowId, "height" });
 
-        opengl_clear();
+        const auto sceneViewport = ctx->scene_viewport();
+        if (sceneViewport.valid())
+        {
+            const int viewportX = (std::max)(0, (std::min)(sceneViewport.x, fbW - 1));
+            const int viewportY = (std::max)(0, (std::min)(sceneViewport.y, fbH - 1));
+            const int viewportWidth = (std::max)(1, (std::min)(sceneViewport.width, fbW - viewportX));
+            const int viewportHeight = (std::max)(1, (std::min)(sceneViewport.height, fbH - viewportY));
+            detail::render_scene_preview(glState, fbW, fbH, viewportX, viewportY, viewportWidth, viewportHeight);
+        }
+        else
+        {
+            opengl_clear();
+        }
         const std::size_t depth = queue.depth();
         telemetry::emit_gauge(
             "renderer.command_queue.depth",
@@ -715,7 +1052,32 @@ export namespace epochnamespace::openglcontext
                 ~ScopedCurrentContext() { core::MultiContextManager::SetCurrent(std::move(previous)); }
             } scoped{ previousContext };
 
-            queue.drain();
+            const bool drained = queue.drain();
+
+#if defined(_WIN32)
+            static thread_local int s_debugFrames = 0;
+            if (s_debugFrames < 8)
+            {
+                unsigned char pixel[4]{ 0, 0, 0, 0 };
+                const int sampleX = (std::max)(0, fbW / 2);
+                const int sampleY = (std::max)(0, fbH / 2);
+                glReadPixels(sampleX, sampleY, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+                std::ofstream diag("opengl_runtime_diag.txt", std::ios::app);
+                diag
+                    << "[OpenGL] frame hwnd=" << static_cast<void*>(ctx->windowData ? ctx->windowData->hwnd : nullptr)
+                    << " hglrc=" << static_cast<void*>(guard.target().context)
+                    << " fb=" << fbW << "x" << fbH
+                    << " queueDepth=" << depth
+                    << " drained=" << drained
+                    << " centerPixel=("
+                    << static_cast<int>(pixel[0]) << ","
+                    << static_cast<int>(pixel[1]) << ","
+                    << static_cast<int>(pixel[2]) << ","
+                    << static_cast<int>(pixel[3]) << ")"
+                    << "\n";
+                ++s_debugFrames;
+            }
+#endif
         }
 
         PlatformGL::swap_buffers(guard.target());
@@ -729,9 +1091,19 @@ export namespace epochnamespace::openglcontext
     {
         auto& backend = opengltextures::get_opengl_backend();
         auto& glState = backend.glState;
-        (void)ctx;
 
 #if defined(_WIN32)
+        {
+            PlatformGL::ScopedContext cleanupGuard;
+            auto cleanupContext = ctx ? detail::context_to_platform_context(ctx.get()) : PlatformGL::PlatformGLContext{};
+            if (!cleanupContext.valid())
+                cleanupContext = detail::state_to_platform_context(glState);
+            if (cleanupContext.valid() && cleanupGuard.set(cleanupContext))
+            {
+                detail::destroy_scene_preview_pipeline(glState);
+                opengltextures::clear_gpu_atlases();
+            }
+        }
         PlatformGL::clear_current();
 
         if (glState.hglrc) { ::wglDeleteContext(glState.hglrc); glState.hglrc = nullptr; }
@@ -742,6 +1114,17 @@ export namespace epochnamespace::openglcontext
         glState.parent = nullptr;
 
 #elif defined(__linux__)
+        {
+            PlatformGL::ScopedContext cleanupGuard;
+            auto cleanupContext = ctx ? detail::context_to_platform_context(ctx.get()) : PlatformGL::PlatformGLContext{};
+            if (!cleanupContext.valid())
+                cleanupContext = detail::state_to_platform_context(glState);
+            if (cleanupContext.valid() && cleanupGuard.set(cleanupContext))
+            {
+                detail::destroy_scene_preview_pipeline(glState);
+                opengltextures::clear_gpu_atlases();
+            }
+        }
         PlatformGL::clear_current();
         if (glState.display && glState.glxContext) glXDestroyContext(glState.display, glState.glxContext);
         if (glState.display && glState.window) XDestroyWindow(glState.display, glState.window);
@@ -759,3 +1142,13 @@ export namespace epochnamespace::openglcontext
 
 #endif // ALMOND_USING_OPENGL
 } // namespace epochnamespace::openglcontext
+
+
+
+
+
+
+
+
+
+

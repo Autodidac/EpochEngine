@@ -106,6 +106,23 @@ namespace
     };
     std::vector<PendingWindowCleanup> g_pendingCleanups;
     constexpr std::string_view kLogSys = "Context.Multiplexer.Win";
+    // Some Windows SDK setups don't expose WGL_ARB_create_context declarations here.
+    // Provide local fallbacks so this TU can request modern core contexts without extra headers.
+#if !defined(WGL_CONTEXT_MAJOR_VERSION_ARB)
+    constexpr int WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091;
+#endif
+#if !defined(WGL_CONTEXT_MINOR_VERSION_ARB)
+    constexpr int WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092;
+#endif
+#if !defined(WGL_CONTEXT_PROFILE_MASK_ARB)
+    constexpr int WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126;
+#endif
+#if !defined(WGL_CONTEXT_CORE_PROFILE_BIT_ARB)
+    constexpr int WGL_CONTEXT_CORE_PROFILE_BIT_ARB = 0x00000001;
+#endif
+#if !defined(PFNWGLCREATECONTEXTATTRIBSARBPROC)
+    using PFNWGLCREATECONTEXTATTRIBSARBPROC = HGLRC(WINAPI*)(HDC, HGLRC, const int*);
+#endif
 
    // [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
 
@@ -378,6 +395,9 @@ namespace epochnamespace::core
 
     void MultiContextManager::SetupPixelFormat(HDC hdc)
     {
+        if (!hdc) return;
+        if (::GetPixelFormat(hdc) != 0)
+            return;
         PIXELFORMATDESCRIPTOR pfd{};
         pfd.nSize = sizeof(pfd);
         pfd.nVersion = 1;
@@ -392,21 +412,63 @@ namespace epochnamespace::core
             throw std::runtime_error("Failed to set pixel format");
     }
 
-    HGLRC MultiContextManager::CreateSharedGLContext(HDC hdc)
+        HGLRC MultiContextManager::CreateSharedGLContext(HDC hdc)
     {
         SetupPixelFormat(hdc);
-        HGLRC ctx = ::wglCreateContext(hdc);
-        if (!ctx) throw std::runtime_error("Failed to create OpenGL context");
-
-        if (sharedContext && !::wglShareLists(sharedContext, ctx))
+        HGLRC tempCtx = ::wglCreateContext(hdc);
+        if (!tempCtx) throw std::runtime_error("Failed to create temporary OpenGL context");
+        if (!::wglMakeCurrent(hdc, tempCtx))
         {
-            ::wglDeleteContext(ctx);
-            throw std::runtime_error("Failed to share GL context");
+            ::wglDeleteContext(tempCtx);
+            throw std::runtime_error("Failed to activate temporary OpenGL context");
         }
 
-        return ctx;
-    }
+        HGLRC finalCtx = nullptr;
+        auto* createAttribs = reinterpret_cast<PFNWGLCREATECONTEXTATTRIBSARBPROC>(
+            ::wglGetProcAddress("wglCreateContextAttribsARB"));
 
+        if (createAttribs)
+        {
+            int attribs46[] = {
+                WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
+                WGL_CONTEXT_MINOR_VERSION_ARB, 6,
+                WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+                0
+            };
+            finalCtx = createAttribs(hdc, sharedContext, attribs46);
+
+            if (!finalCtx)
+            {
+                int attribs41[] = {
+                    WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
+                    WGL_CONTEXT_MINOR_VERSION_ARB, 1,
+                    WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+                    0
+                };
+                finalCtx = createAttribs(hdc, sharedContext, attribs41);
+            }
+        }
+
+        if (!finalCtx)
+        {
+            finalCtx = tempCtx;
+            tempCtx = nullptr;
+
+            if (sharedContext && !::wglShareLists(sharedContext, finalCtx))
+            {
+                ::wglMakeCurrent(nullptr, nullptr);
+                ::wglDeleteContext(finalCtx);
+                throw std::runtime_error("Failed to share OpenGL context");
+            }
+        }
+
+        ::wglMakeCurrent(nullptr, nullptr);
+
+        if (tempCtx)
+            ::wglDeleteContext(tempCtx);
+
+        return finalCtx;
+    }
     int MultiContextManager::get_title_bar_thickness(const HWND window_handle)
     {
         RECT wr{}, cr{};
@@ -502,8 +564,7 @@ namespace epochnamespace::core
             if (!dummy) return false;
 
             HDC dummyDC = ::GetDC(dummy);
-            SetupPixelFormat(dummyDC);
-            sharedContext = ::wglCreateContext(dummyDC);
+            sharedContext = CreateSharedGLContext(dummyDC);
             if (!sharedContext)
             {
                 ::ReleaseDC(dummy, dummyDC);
@@ -549,7 +610,7 @@ namespace epochnamespace::core
                         L"AlmondChild",
                         windowTitle.c_str(),
                         (parent
-                            ? (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS)
+                            ? (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
                             : (WS_OVERLAPPEDWINDOW | WS_VISIBLE)),
                         0, 0, 1280, 1277,
                         parent,
@@ -566,11 +627,7 @@ namespace epochnamespace::core
                     bool usesSharedContext = false;
 
 #if defined(ALMOND_USING_OPENGL)
-                    if (type == ContextType::OpenGL
-#if defined(ALMOND_USING_RAYLIB)
-                        || type == ContextType::RayLib
-#endif
-                        )
+                    if (type == ContextType::OpenGL)
                     {
                         glrc = CreateSharedGLContext(hdc);
                         usesSharedContext = (glrc != nullptr);
@@ -578,9 +635,9 @@ namespace epochnamespace::core
 #if defined(ALMOND_USING_VULKAN)
                     else if (type == ContextType::Vulkan)
                     {
-                        // Vulkan GUI overlay uses OpenGL via a shared HGLRC when available.
-                        glrc = CreateSharedGLContext(hdc);
-                        usesSharedContext = (glrc != nullptr);
+                        // Keep Vulkan windows free of WGL state to avoid WSI surface conflicts.
+                        glrc = nullptr;
+                        usesSharedContext = false;
                     }
 #endif
 #endif
@@ -701,32 +758,11 @@ namespace epochnamespace::core
                     {
 #if defined(ALMOND_USING_OPENGL)
                     case ContextType::OpenGL:
-                        if (ctx->hdc && ctx->hglrc)
-                        {
-                            if (!::wglMakeCurrent(ctx->hdc, ctx->hglrc))
-                            {
-                                epochnamespace::logger::get(kLogSys).logf(
-                                    epochnamespace::logger::LogLevel::ALMOND_ERROR,
-                                    std::source_location::current(),
-                                    "wglMakeCurrent failed for hwnd={}",
-                                    static_cast<void*>(hwnd));
-                            }
-                            else
-                            {
-                                epochnamespace::logger::get(kLogSys).logf(
-                                    epochnamespace::logger::LogLevel::WARN,
-                                    std::source_location::current(),
-                                    "Running OpenGL init for hwnd={}",
-                                    static_cast<void*>(hwnd));
-                                epochnamespace::openglcontext::opengl_initialize(
-                                    ctx,
-                                    hwnd,
-                                    ctx->width,
-                                    ctx->height,
-                                    w ? w->onResize : nullptr);
-                                ::wglMakeCurrent(nullptr, nullptr);
-                            }
-                        }
+                        epochnamespace::logger::get(kLogSys).logf(
+                            epochnamespace::logger::LogLevel::WARN,
+                            std::source_location::current(),
+                            "Deferring OpenGL init to render thread. host={}",
+                            static_cast<void*>(hwnd));
                         break;
 #endif
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
@@ -832,11 +868,7 @@ namespace epochnamespace::core
         if (!hdc) hdc = ::GetDC(hwnd);
 
 #if defined(ALMOND_USING_OPENGL)
-        if ((type == ContextType::OpenGL
-#if defined(ALMOND_USING_RAYLIB)
-            || type == ContextType::RayLib
-#endif
-            ) && !glContext)
+        if (type == ContextType::OpenGL && !glContext)
         {
             glContext = CreateSharedGLContext(hdc);
             static bool gladInitialized = false;
@@ -848,10 +880,11 @@ namespace epochnamespace::core
             }
         }
 #if defined(ALMOND_USING_VULKAN)
-        if (type == ContextType::Vulkan && !glContext)
+        if (type == ContextType::Vulkan)
         {
-            glContext = CreateSharedGLContext(hdc);
-            usesSharedContext = (glContext != nullptr);
+            // Keep docked Vulkan windows free of WGL state too.
+            glContext = nullptr;
+            usesSharedContext = false;
         }
 #endif
 #endif
@@ -1292,7 +1325,7 @@ namespace epochnamespace::core
                     });
             }
 
-            if (ctx->process) keepRunning = ctx->process_safe(ctx, win.commandQueue);
+                                    if (ctx->process) keepRunning = ctx->process_safe(ctx, win.commandQueue);
             else win.commandQueue.drain();
 
             if (!keepRunning)
@@ -1560,10 +1593,7 @@ namespace epochnamespace::core
         case WM_PAINT:
         {
             PAINTSTRUCT ps{};
-            HDC hdc = ::BeginPaint(hwnd, &ps);
-#if defined(_DEBUG)
-            ::FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
-#endif
+            ::BeginPaint(hwnd, &ps);
             ::EndPaint(hwnd, &ps);
             return 0;
         }
@@ -1587,5 +1617,12 @@ namespace epochnamespace::core
 }
 
 #endif // _WIN32
+
+
+
+
+
+
+
 
 

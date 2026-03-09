@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <include/aengine.config.hpp>
 
 // ============================================================================
@@ -37,8 +37,19 @@
 #    define VULKAN_HPP_NO_EXCEPTIONS 1
 #  endif
 
+// In no-exception mode, do not break into debugger on non-success results.
+// Callers in this codebase explicitly check vk::Result values.
+#  ifndef VULKAN_HPP_ASSERT_ON_RESULT
+#    define VULKAN_HPP_ASSERT_ON_RESULT(...) ((void)0)
+#  endif
+
 #  ifndef ALMOND_VULKAN_CUSTOM_LOADER
 #    define ALMOND_VULKAN_CUSTOM_LOADER 1
 #  endif
 
 #endif // ALMOND_USING_VULKAN
+
+
+
+
+
