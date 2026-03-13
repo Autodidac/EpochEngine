@@ -1,27 +1,33 @@
-/**************************************************************
- *   ¶¶¶¶¶+ ¶¶+     ¶¶¶+   ¶¶¶+   ¶¶¶+   ¶¶+    ¶¶+¶¶¶¶¶¶+    *
- *  ¶¶+--¶¶+¶¶¶     ¶¶¶¶+ ¶¶¶¶¶ ¶¶+---¶¶+¶¶¶¶+  ¶¶¶¶¶+--¶¶+   *
- *  ¶¶¶¶¶¶¶¶¶¶¶     ¶¶+¶¶¶¶+¶¶¶ ¶¶¶   ¶¶¶¶¶+¶¶+ ¶¶¶¶¶¶  ¶¶¶   *
- *  ¶¶+--¶¶¶¶¶¶     ¶¶¶+¶¶++¶¶¶ ¶¶¶   ¶¶¶¶¶¶+¶¶+¶¶¶¶¶¶  ¶¶¶   *
- *  ¶¶¶  ¶¶¶¶¶¶¶¶¶¶+¶¶¶ +-+ ¶¶¶ +¶¶¶¶¶¶++¶¶¶ +¶¶¶¶¶¶¶¶¶¶¶++   *
- *  +-+  +-++------++-+     +-+  +-----+ +-+  +---++-----+    *
- *                                                            *
- *   This file is part of the Almond Project.                 *
- *   epochengine - Modular C++ Framework                      *
- *                                                            *
- *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
- *                                                            *
- *   Provided "AS IS", without warranty of any kind.          *
- *   Use permitted for Non-Commercial Purposes ONLY,          *
- *   without prior commercial licensing agreement.            *
- *                                                            *
- *   Redistribution Allowed with This Notice and              *
- *   LICENSE file. No obligation to disclose modifications.   *
- *                                                            *
- *   See LICENSE file for full terms.                         *
- *                                                            *
- **************************************************************/
- //
+Ôªø/************************************************
+ *  ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó  ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó  ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó‚ñà‚ñà‚ïó  ‚ñà‚ñà‚ïó   *
+ *  ‚ñà‚ñà‚ïî‚ïê‚ïê‚ïê‚ïê‚ïù‚ñà‚ñà‚ïî‚ïê‚ïê‚ñà‚ñà‚ïó‚ñà‚ñà‚ïî‚ïê‚ïê‚ïê‚ñà‚ñà‚ïó‚ñà‚ñà‚ïî‚ïê‚ïê‚ïê‚ïê‚ïù‚ñà‚ñà‚ïë  ‚ñà‚ñà‚ïë   *
+ *  ‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó  ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïî‚ïù‚ñà‚ñà‚ïë   ‚ñà‚ñà‚ïë‚ñà‚ñà‚ïë     ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïë   *
+ *  ‚ñà‚ñà‚ïî‚ïê‚ïê‚ïù  ‚ñà‚ñà‚ïî‚ïê‚ïê‚ïê‚ïù ‚ñà‚ñà‚ïë   ‚ñà‚ñà‚ïë‚ñà‚ñà‚ïë     ‚ñà‚ñà‚ïî‚ïê‚ïê‚ñà‚ñà‚ïë   *
+ *  ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó‚ñà‚ñà‚ïë     ‚ïö‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïî‚ïù‚ïö‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ïó‚ñà‚ñà‚ïë  ‚ñà‚ñà‚ïë   *
+ *  ‚ïö‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïù‚ïö‚ïê‚ïù      ‚ïö‚ïê‚ïê‚ïê‚ïê‚ïê‚ïù  ‚ïö‚ïê‚ïê‚ïê‚ïê‚ïê‚ïù‚ïö‚ïê‚ïù  ‚ïö‚ïê‚ïù   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
  // aengine.context.multiplexer.win.cpp  (TU implementation; NOT a module partition)
  //
 
