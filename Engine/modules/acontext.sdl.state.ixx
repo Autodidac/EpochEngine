@@ -33,6 +33,7 @@ module;
 //#include "aengine.hpp" // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
 
 export module acontext.sdl.state;
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1) && (ALMOND_USING_SDL == 1)
 
 import aengine.platform;
 
@@ -154,3 +155,4 @@ namespace epochnamespace::sdlcontext::state
     }
 }
 
+#endif

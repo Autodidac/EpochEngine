@@ -733,7 +733,7 @@ namespace epochnamespace
             .position = chat_pos,
             .size = chat_size,
             .lines = chat.lines,
-            .max_visible_lines = 200,
+            .max_visible_lines = 180,
             .input = &chat.input,
             .max_input_chars = 1024,
             .multiline_input = false,

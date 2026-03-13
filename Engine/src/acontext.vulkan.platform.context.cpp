@@ -42,7 +42,7 @@ module;
 #   include <windows.h>
 #endif
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 #   include <glad/glad.h>
 #endif
 
@@ -96,7 +96,7 @@ import aengine.core.context;
 import aengine.input;
 import :shared_vk;
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 import acontext.opengl.platform;
 #endif
 
@@ -290,7 +290,7 @@ namespace epochnamespace::vulkancontext
         {
             std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
             const auto* guiState = find_gui_state(ctx.get());
-            diag << "[Vulkan] process hwnd=" << static_cast<void*>(ctx && ctx->windowData ? ctx->windowData->hwnd : nullptr)
+            diag << "[ Vulkan ] - process hwnd=" << static_cast<void*>(ctx && ctx->windowData ? ctx->windowData->hwnd : nullptr)
                  << " fb=" << get_framebuffer_width() << "x" << get_framebuffer_height()
                  << " queuedGui=" << (guiState ? guiState->guiDraws.size() : 0)
                  << " queueDepth=" << queue.depth()

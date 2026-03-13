@@ -38,7 +38,7 @@ module;
 
 #include <include/aengine.config.hpp>
 
-#if defined(_WIN32) && defined(ALMOND_USING_RAYLIB)
+#if defined(_WIN32) && defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -53,7 +53,7 @@ module;
 
 export module acontext.raylib.context.win;
 
-#if defined(_WIN32) && defined(ALMOND_USING_RAYLIB)
+#if defined(_WIN32) && defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
 
 export namespace epochnamespace::raylibcontext::win
 {

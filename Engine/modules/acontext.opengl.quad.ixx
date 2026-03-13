@@ -35,7 +35,7 @@ module;
 
 #include <include/aengine.config.hpp>
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 #   include <glad/glad.h>
 #endif
 
@@ -51,7 +51,7 @@ import <string>;
 import <string_view>;
 import <utility>;
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 
 export namespace epochnamespace::openglquad
 {
@@ -346,7 +346,7 @@ void main() {
         }
         catch (const std::exception& e)
         {
-            std::cerr << "[OpenGL] Pipeline build failed: " << e.what() << "\n";
+            std::cerr << "[ OpenGL ] - Pipeline build failed: " << e.what() << "\n";
             destroy_quad_pipeline(s);
             return false;
         }

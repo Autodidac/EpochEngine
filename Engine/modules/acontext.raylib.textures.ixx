@@ -66,7 +66,7 @@ import atexture;
 import acontext.raylib.api;
 import acontext.raylib.state;
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
 
 export namespace epochnamespace::raylibtextures
 {
@@ -167,7 +167,7 @@ export namespace epochnamespace::raylibtextures
         std::ofstream out(filename, std::ios::binary);
         if (!out)
         {
-            std::cerr << "[Dump] Failed to open: " << filename << "\n";
+            std::cerr << "[ Image Dump ] - Failed to open: " << filename << "\n";
             return;
         }
 
@@ -181,7 +181,7 @@ export namespace epochnamespace::raylibtextures
             out.put(static_cast<char>(px[i + 2]));
         }
 
-        std::cerr << "[Dump] Wrote: " << filename << "\n";
+        std::cerr << "[ Image Dump ] - Wrote: " << filename << "\n";
     }
 
     [[nodiscard]]
@@ -285,7 +285,7 @@ export namespace epochnamespace::raylibtextures
         if (newTex.id == 0)
         {
             // Raylib already printed warnings; add one line of ours.
-            std::cerr << "[Raylib] Upload failed for atlas '" << atlas.name
+            std::cerr << "[ RayLib ] - Upload failed for atlas '" << atlas.name
                 << "' (version " << atlas.version << ")\n";
             {
                 std::scoped_lock lock(backend.gpuMutex);
@@ -333,7 +333,7 @@ export namespace epochnamespace::raylibtextures
                 gpu.width = static_cast<u32>(atlas.width);
                 gpu.height = static_cast<u32>(atlas.height);
 
-                std::cerr << "[Raylib] Uploaded atlas '" << atlas.name
+                std::cerr << "[ RayLib ] - Uploaded atlas '" << atlas.name
                     << "' (tex id " << gpu.texture.id
                     << ", version " << gpu.version << ")\n";
             }

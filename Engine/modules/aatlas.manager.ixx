@@ -140,7 +140,7 @@ export namespace epochnamespace::atlasmanager
         for (const auto& [name, up] : atlas_map)
         {
             const auto& atlas = *up;
-            std::cerr << "[update_atlas_vector] Atlas '" << name << "' index: " << atlas.index << "\n";
+            std::cerr << "[ update_atlas_vector ] - Atlas '" << name << "' index: " << atlas.index << "\n";
             if (atlas.index > maxIndex)
                 maxIndex = atlas.index;
         }
@@ -155,7 +155,7 @@ export namespace epochnamespace::atlasmanager
         {
             const auto* atlas = up.get();
             atlas_vector[static_cast<std::size_t>(atlas->index)] = atlas;
-            std::cerr << "[update_atlas_vector] atlas_vector[" << atlas->index
+            std::cerr << "[ update_atlas_vector ] - atlas_vector[" << atlas->index
                 << "] assigned for '" << name << "'\n";
         }
     }

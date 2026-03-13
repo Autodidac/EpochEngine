@@ -37,7 +37,7 @@ module;
 #include <cstdint>
 
 export module acontext.raylib.api;
-
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1) && (ALMOND_USING_RAYLIB == 1)
 export namespace epochnamespace::raylib_api
 {
     // ------------------------------------------------------------
@@ -205,3 +205,4 @@ export namespace epochnamespace::raylib_api
         float rotation,
         Color tint);
 } // namespace epochnamespace::raylib_api
+#endif

@@ -79,7 +79,7 @@ import aengine.telemetry;
 
 namespace epochnamespace::anativecontext
 {
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
 
     // These stay module-internal; nobody else should poke them directly.
     inline TexturePtr       cubeTexture{};
@@ -169,7 +169,7 @@ export namespace epochnamespace::anativecontext
     {
         if (!ctx)
         {
-            std::cerr << "[SoftRenderer] Invalid context\n";
+            std::cerr << "[ SoftRenderer ] - Invalid context\n";
             return false;
         }
 
@@ -205,7 +205,7 @@ export namespace epochnamespace::anativecontext
 
         if (!resolvedParent)
         {
-            std::cerr << "[SoftRenderer] No parent HWND available. Pass parentWnd from multiplexer.\n";
+            std::cerr << "[ SoftRenderer ] - No parent HWND available. Pass parentWnd from multiplexer.\n";
             return false;
         }
 
@@ -221,11 +221,11 @@ export namespace epochnamespace::anativecontext
         sr.bmi.bmiHeader.biBitCount = 32;
         sr.bmi.bmiHeader.biCompression = BI_RGB;
 
-        std::cout << "[SoftRenderer] Initialized. HWND=" << sr.hwnd
+        std::cout << "[ SoftRenderer ] - Initialized. HWND=" << sr.hwnd
             << " (" << sr.width << "x" << sr.height << ")\n";
 #else
         (void)parentWnd;
-        std::cout << "[SoftRenderer] Initialized (non-Win32) "
+        std::cout << "[ SoftRenderer ] - Initialized (non-Win32) "
             << sr.width << "x" << sr.height << "\n";
 #endif
 
@@ -524,7 +524,7 @@ export namespace epochnamespace::anativecontext
 
         sr = {}; // reset remaining fields
 
-        std::cout << "[SoftRenderer] Cleanup complete\n";
+        std::cout << "[ SoftRenderer ] - Cleanup complete\n";
     }
 
     int get_width() { return s_softrendererstate.width; }
@@ -534,7 +534,7 @@ export namespace epochnamespace::anativecontext
     // If you build without ALMOND_USING_SOFTWARE_RENDERER, keep linkable stubs.
     bool softrenderer_initialize(std::shared_ptr<core::Context>, void*, unsigned, unsigned, std::function<void(int, int)>)
     {
-        std::cerr << "[SoftRenderer] Not built (ALMOND_USING_SOFTWARE_RENDERER not defined)\n";
+        std::cerr << "[ SoftRenderer ] - Not built (ALMOND_USING_SOFTWARE_RENDERER not defined)\n";
         return false;
     }
     bool softrenderer_process(core::Context&, core::CommandQueue&) { return false; }

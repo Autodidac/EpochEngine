@@ -40,7 +40,7 @@ module;
 
 export module acontext.softrenderer.renderer;
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
 
 import aengine.platform;
 

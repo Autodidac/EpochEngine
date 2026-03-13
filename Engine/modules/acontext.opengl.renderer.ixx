@@ -33,7 +33,7 @@ module;
 // Global module fragment: macros + headers only.
 #include <include/aengine.config.hpp> // for ALMOND_USING Macros
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
     // IMPORTANT:
     // OpenGL symbols must be declared in *this* module unit.
     // Do not rely on other modules/TUs "bringing in" gl* names.
@@ -59,7 +59,7 @@ import acontext.opengl.textures;
 
 import aspritehandle;
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 
 export namespace epochnamespace::openglrenderer
 {
@@ -79,7 +79,7 @@ export namespace epochnamespace::openglrenderer
     {
         auto& glState = renderer_gl_state();
         if (!epochnamespace::openglquad::ensure_quad_pipeline(glState))
-            std::cerr << "[OpenGL] Failed to rebuild quad pipeline\n";
+            std::cerr << "[ OpenGL ] - Failed to rebuild quad pipeline\n";
         return glState;
     }
 

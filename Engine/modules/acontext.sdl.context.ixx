@@ -89,7 +89,7 @@ import <utility>;
 
 export namespace epochnamespace::sdlcontext
 {
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
 
     struct SDLState
     {
@@ -246,7 +246,7 @@ export namespace epochnamespace::sdlcontext
         SDL_PropertiesID props = SDL_CreateProperties();
         if (!props)
         {
-            std::cerr << "[SDL] SDL_CreateProperties failed: " << SDL_GetError() << "\n";
+            std::cerr << "[ SDL3 ] - SDL_CreateProperties failed: " << SDL_GetError() << "\n";
             SDL_Quit();
             return false;
         }
@@ -261,7 +261,7 @@ export namespace epochnamespace::sdlcontext
 
         if (!sdlcontext.window)
         {
-            std::cerr << "[SDL] SDL_CreateWindowWithProperties failed: " << SDL_GetError() << "\n";
+            std::cerr << "[ SDL3 ] - SDL_CreateWindowWithProperties failed: " << SDL_GetError() << "\n";
             SDL_Quit();
             return false;
         }
@@ -271,7 +271,7 @@ export namespace epochnamespace::sdlcontext
             SDL_PropertiesID windowProps = SDL_GetWindowProperties(sdlcontext.window);
             if (!windowProps)
             {
-                std::cerr << "[SDL] SDL_GetWindowProperties failed: " << SDL_GetError() << "\n";
+                std::cerr << "[ SDL3 ] - SDL_GetWindowProperties failed: " << SDL_GetError() << "\n";
                 SDL_DestroyWindow(sdlcontext.window);
                 SDL_Quit();
                 return false;
@@ -282,7 +282,7 @@ export namespace epochnamespace::sdlcontext
 
             if (!sdlcontext.hwnd)
             {
-                std::cerr << "[SDL] Failed to retrieve HWND\n";
+                std::cerr << "[ SDL3 ] - Failed to retrieve HWND\n";
                 SDL_DestroyWindow(sdlcontext.window);
                 SDL_Quit();
                 return false;
@@ -327,11 +327,11 @@ export namespace epochnamespace::sdlcontext
             SDL_Renderer* renderer = SDL_CreateRenderer(sdlcontext.window, name);
             if (renderer)
             {
-                std::cerr << "[SDL] Created renderer with " << label << ".\n";
+                std::cerr << "[ SDL3 ] - Created renderer with " << label << ".\n";
                 return renderer;
             }
 
-            std::cerr << "[SDL] SDL_CreateRenderer (" << label << ") failed: "
+            std::cerr << "[ SDL3 ] - SDL_CreateRenderer (" << label << ") failed: "
                       << SDL_GetError() << "\n";
             return nullptr;
         };
@@ -343,7 +343,7 @@ export namespace epochnamespace::sdlcontext
         }
         if (!sdlcontext.renderer)
         {
-            std::cerr << "[SDL] SDL_CreateRenderer failed after fallbacks: "
+            std::cerr << "[ SDL3 ] - SDL_CreateRenderer failed after fallbacks: "
                       << SDL_GetError() << "\n";
             SDL_DestroyWindow(sdlcontext.window);
             SDL_Quit();
@@ -353,7 +353,7 @@ export namespace epochnamespace::sdlcontext
         const int vsyncResult = SDL_SetRenderVSync(sdlcontext.renderer, 1);
         if (vsyncResult != 0)
         {
-            std::cerr << "[SDL] SDL_SetRenderVSync failed: " << SDL_GetError() << "\n";
+            std::cerr << "[ SDL3 ] - SDL_SetRenderVSync failed: " << SDL_GetError() << "\n";
             if (sdlcontext.parent)
             {
                 sdlcontext.useFrameLimiter = true;

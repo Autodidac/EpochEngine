@@ -75,19 +75,20 @@ import aengine.context.type;
 import aengine.context.window;
 import aengine.telemetry;
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 import acontext.opengl.context;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+
 import acontext.softrenderer.context;
 #endif
 #if defined(ALMOND_USING_SFML)
 import acontext.sfml.context;
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
 import acontext.raylib.context;
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
 import acontext.sdl.context;
 #endif
 
@@ -125,6 +126,7 @@ namespace
 #endif
 
    // [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
+    [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
 
 #if ALMOND_SINGLE_PARENT
     struct SubCtx { HWND originalParent{}; };
@@ -138,7 +140,6 @@ namespace
         Undock = 1,
     };
 
-    [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
 
     LRESULT CALLBACK DockableProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR dw)
     {
@@ -211,7 +212,7 @@ namespace
 
     inline void cleanup_window_resources(std::unique_ptr<epochnamespace::core::WindowData>& window) noexcept
     {
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
         if (window && window->glContext)
         {
             ::wglMakeCurrent(nullptr, nullptr);
@@ -233,7 +234,7 @@ namespace
 
 namespace epochnamespace::core
 {
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
     // Raylib embeds a real GLFW-created HWND. Re-parenting must be performed on the
     // thread that owns the host HWND, otherwise Win32 can deadlock via cross-thread
     // synchronous messages during SetParent/SetWindowPos.
@@ -547,7 +548,7 @@ namespace epochnamespace::core
             parent = nullptr;
         }
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
         // ---------------- Shared dummy GL context (for wglShareLists + glad bootstrap) ----------------
         {
             HWND dummy = ::CreateWindowExW(
@@ -626,7 +627,7 @@ namespace epochnamespace::core
                     HGLRC glrc = nullptr;
                     bool usesSharedContext = false;
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
                     if (type == ContextType::OpenGL)
                     {
                         glrc = CreateSharedGLContext(hdc);
@@ -756,7 +757,7 @@ namespace epochnamespace::core
                     // Raylib/SDL create their own HWND/GL context internally -> MUST init on the render thread.
                     switch (type)
                     {
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
                     case ContextType::OpenGL:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -765,7 +766,8 @@ namespace epochnamespace::core
                             static_cast<void*>(hwnd));
                         break;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+
                     case ContextType::Software:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -780,7 +782,7 @@ namespace epochnamespace::core
                             w ? w->onResize : nullptr);
                         break;
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
                     case ContextType::RayLib:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -789,7 +791,7 @@ namespace epochnamespace::core
                             static_cast<void*>(hwnd));
                         break;
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
                     case ContextType::SDL:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -823,19 +825,20 @@ namespace epochnamespace::core
                 }
             };
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
         make_backend_windows(ContextType::RayLib, RayLibWinCount);
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
         make_backend_windows(ContextType::SDL, SDLWinCount);
 #endif
 #if defined(ALMOND_USING_VULKAN)
         make_backend_windows(ContextType::Vulkan, VulkanWinCount);
 #endif
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
         make_backend_windows(ContextType::OpenGL, OpenGLWinCount);
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+
         make_backend_windows(ContextType::Software, SoftwareWinCount);
 #endif
         // (void)SFMLWinCount; // place holder
@@ -867,7 +870,7 @@ namespace epochnamespace::core
 
         if (!hdc) hdc = ::GetDC(hwnd);
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
         if (type == ContextType::OpenGL && !glContext)
         {
             glContext = CreateSharedGLContext(hdc);
@@ -1219,7 +1222,7 @@ namespace epochnamespace::core
 
         // Raylib/SDL must be created+initialized on the SAME thread that will render them.
 		// they are passed the HWND from outside, but they create their own internal windowing context.
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
         if (ctx->type == ContextType::SDL)
         {
             epochnamespace::logger::get(kLogSys).logf(
@@ -1256,7 +1259,7 @@ namespace epochnamespace::core
             if (!ok) { win.running = false; return; }
         }
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
         if (ctx->type == ContextType::RayLib)
         {
             epochnamespace::logger::get(kLogSys).logf(
@@ -1285,11 +1288,11 @@ namespace epochnamespace::core
 #if defined(ALMOND_USING_SFML)
             (ctx->type == ContextType::SFML) ||
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
             (ctx->type == ContextType::RayLib) ||
 #endif
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
             (ctx->type == ContextType::SDL) ||
 #endif
             false;

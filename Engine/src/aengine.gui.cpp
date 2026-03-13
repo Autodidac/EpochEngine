@@ -1283,7 +1283,19 @@ namespace epochnamespace::gui
         ensure_resources();
 
         const float availableWidth = (std::max)(0.0f, options.size.x - 2.0f * kContentPadding);
-        const float logHeight = (std::max)(0.0f, options.size.y - 3.0f * kContentPadding - base_line_height(kFontScale));
+
+        const float titleHeight = line_advance_amount(kTitleScale);
+        const float titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
+
+        const float fieldHeight = options.input
+            ? (base_line_height(kFontScale) + 2.0f * kBoxInnerPadding)
+            : 0.0f;
+
+        const float contentTopY = g_frame.cursor.y;
+        const float contentBottomY = options.position.y + options.size.y - kContentPadding;
+        const float reservedBottom = options.input ? (fieldHeight + kContentPadding) : 0.0f;
+
+        const float logHeight = (std::max)(0.0f, contentBottomY - contentTopY - reservedBottom);
         const Vec2 logPos = g_frame.cursor;
 
         if (availableWidth > 0.0f && logHeight > 0.0f)

@@ -36,7 +36,7 @@ export module acontext.sdl.renderer;
 
 //import aengine.config;
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
 import std;
 import <iostream>;
 import <stdexcept>;

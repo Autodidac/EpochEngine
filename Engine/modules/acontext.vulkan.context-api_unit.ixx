@@ -110,7 +110,7 @@ export namespace epochnamespace::vulkancontext
         std::function<void(int, int)> onResize)
     {
         if (!ctx)
-            throw std::runtime_error("[Vulkan] vulkan_initialize requires non-null Context");
+            throw std::runtime_error("[ Vulkan ] - vulkan_initialize requires non-null Context");
 
         void* nativeWindow = parentWindowOpaque;
 
@@ -149,7 +149,7 @@ export namespace epochnamespace::vulkancontext
         app.initVulkan();
 
         //vulkan_initialize
-		std::cout << "[Vulkan] Initialized successfully.\n";
+		std::cout << "[ Vulkan ] - Initialized successfully.\n";
 
         ctx->draw_sprite = &vulkan_draw_sprite;
 
@@ -166,7 +166,7 @@ export namespace epochnamespace::vulkancontext
 
         {
             std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
-            diag << "[Vulkan] api_process hwnd=" << static_cast<void*>(ctx->windowData ? ctx->windowData->hwnd : nullptr)
+            diag << "[ Vulkan ] - api_process hwnd=" << static_cast<void*>(ctx->windowData ? ctx->windowData->hwnd : nullptr)
                  << " queueDepth=" << queue.depth()
                  << "\n";
         }

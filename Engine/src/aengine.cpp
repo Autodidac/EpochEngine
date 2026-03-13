@@ -105,19 +105,19 @@ import a2048like;
 import asandsim;
 import acellularsim;
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 import acontext.opengl.context;
 #endif
 #if defined(ALMOND_USING_SOFTWARE_RENDERER)
 import acontext.softrenderer.context;
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
 import acontext.sdl.context;
 #endif
 #if defined(ALMOND_USING_SFML)
 import acontext.sfml.context;
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
 import acontext.raylib.context;
 import acontext.raylib.state;
 #endif
@@ -169,7 +169,7 @@ namespace epochnamespace::core
         if (total_requested > 0)
             return cfg;
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
         cfg.opengl_count = 1;
 #elif defined(ALMOND_USING_VULKAN)
         cfg.vulkan_count = 1;
@@ -312,7 +312,7 @@ namespace epochnamespace::core
                 }
 
                 bool raylib_close_from_window = false;
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
                 {
                     const auto& raylib_state = epochnamespace::raylibstate::s_raylibstate;
                     raylib_close_from_window = raylib_state.running && !raylib_state.renderingActive;
@@ -502,7 +502,7 @@ namespace epochnamespace::core
 #if !defined(ALMOND_SINGLE_PARENT)
                 if (!any_context_alive)
                 {
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
                     if (raylib_close_from_window && active_context_count > 1)
                     {
                         running = true;
@@ -535,7 +535,7 @@ namespace epochnamespace::core
 
                         switch (type)
                         {
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
                         case epochnamespace::core::ContextType::OpenGL:
                             epochnamespace::openglcontext::opengl_cleanup(ctx);
                             break;
@@ -545,7 +545,7 @@ namespace epochnamespace::core
                             // epochnamespace::anativecontext::softrenderer_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
                         case epochnamespace::core::ContextType::SDL:
                             //  epochnamespace::sdlcontext::sdl_cleanup(ctx);
                             break;
@@ -555,7 +555,7 @@ namespace epochnamespace::core
                             epochnamespace::sfmlcontext::sfml_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
                         case epochnamespace::core::ContextType::RayLib:
                             epochnamespace::raylibcontext::raylib_cleanup(ctx);
                             break;
@@ -675,7 +675,7 @@ namespace epochnamespace::core
                 }
 
                 bool raylib_close_from_window = false;
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
                 {
                     const auto& raylib_state = epochnamespace::raylibstate::s_raylibstate;
                     raylib_close_from_window = raylib_state.running && !raylib_state.renderingActive;
@@ -866,7 +866,7 @@ namespace epochnamespace::core
 #if !defined(ALMOND_SINGLE_PARENT)
                 if (!any_context_alive)
                 {
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
                     if (raylib_close_from_window && active_context_count > 1)
                     {
                         running = true;
@@ -902,7 +902,7 @@ namespace epochnamespace::core
 
                         switch (type)
                         {
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
                         case epochnamespace::core::ContextType::OpenGL:
                             epochnamespace::openglcontext::opengl_cleanup(ctx);
                             break;
@@ -912,7 +912,7 @@ namespace epochnamespace::core
                            // epochnamespace::anativecontext::softrenderer_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
                         case epochnamespace::core::ContextType::SDL:
                           //  epochnamespace::sdlcontext::sdl_cleanup(ctx);
                             break;
@@ -922,7 +922,7 @@ namespace epochnamespace::core
                             epochnamespace::sfmlcontext::sfml_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
                         case epochnamespace::core::ContextType::RayLib:
                             epochnamespace::raylibcontext::raylib_cleanup(ctx);
                             break;

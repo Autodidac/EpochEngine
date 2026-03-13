@@ -217,7 +217,7 @@ export namespace epochnamespace::vulkancontext
         validationLayersEnabled = epochnamespace::vulkanrenderer::vulkan_config.enable_validation_layers;
         if (validationLayersEnabled && !checkValidationLayerSupport())
         {
-            std::cerr << "[Vulkan] Validation layers requested but not available; "
+            std::cerr << "[ Vulkan ] - Validation layers requested but not available; "
                          "continuing with validation disabled.\n";
             validationLayersEnabled = false;
         }

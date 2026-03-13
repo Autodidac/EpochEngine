@@ -40,6 +40,7 @@ module;
 #include <include/aengine.config.hpp> // for ALMOND_USING_RAYLIB
 
 export module acontext.raylib.input;
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1) && (ALMOND_USING_RAYLIB == 1)
 
 import <atomic>;
 import <shared_mutex>;
@@ -47,7 +48,6 @@ import <shared_mutex>;
 import acontext.raylib.api;
 import aengine.input;
 
-#if defined(ALMOND_USING_RAYLIB)
 
 namespace epochnamespace::raylibcontext
 {

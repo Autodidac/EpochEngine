@@ -30,7 +30,7 @@
  ***********************************************/
  // acontext.opengl.context.ixx
 module;
-
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1) 
 // NOTE: Keep your engine config include if it sets global compile flags.
 // Do NOT rely on it for Win32 type definitions in a module global fragment.
 #include "../include/aengine.config.hpp"
@@ -83,9 +83,9 @@ module;
 #endif
 
 #include <chrono>
-
+#endif
 export module acontext.opengl.context;
-
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 // ------------------------------------------------------------
 // Core engine modules
 // ------------------------------------------------------------
@@ -166,7 +166,7 @@ export namespace epochnamespace::openglcontext
             {
                 const DWORD err = ::GetLastError();
                 if (err != ERROR_CLASS_ALREADY_EXISTS)
-                    throw std::runtime_error(std::format("[OpenGL] RegisterClassExW failed (err={})", err));
+                    throw std::runtime_error(std::format("[ OpenGL ] - RegisterClassExW failed (err={})", err));
             }
 
             s_registered = true;
@@ -290,7 +290,7 @@ export namespace epochnamespace::openglcontext
         std::function<void(int, int)> onResize = nullptr)
     {
         if (!ctx)
-            throw std::runtime_error("[OpenGL] opengl_initialize requires non-null Context");
+            throw std::runtime_error("[ OpenGL ] - opengl_initialize requires non-null Context");
 
         auto& backend = epochnamespace::opengltextures::get_opengl_backend();
         auto& glState = backend.glState;
@@ -319,7 +319,7 @@ export namespace epochnamespace::openglcontext
             parentHwnd = ctx->hwnd;
 
         if (!parentHwnd)
-            throw std::runtime_error("[OpenGL] No parent HWND available");
+            throw std::runtime_error("[ OpenGL ] - No parent HWND available");
 
         bool usingExternalContext = false;
 
@@ -358,12 +358,12 @@ export namespace epochnamespace::openglcontext
                     nullptr);
 
                 if (!glState.hwnd)
-                    throw std::runtime_error("[OpenGL] CreateWindowExW failed for child GL window");
+                    throw std::runtime_error("[ OpenGL ] - CreateWindowExW failed for child GL window");
             }
 
             glState.hdc = ::GetDC(glState.hwnd);
             if (!glState.hdc)
-                throw std::runtime_error("[OpenGL] GetDC failed");
+                throw std::runtime_error("[ OpenGL ] - GetDC failed");
 
             // SetPixelFormat is one-time per HDC.
             if (::GetPixelFormat(glState.hdc) == 0)
@@ -377,18 +377,18 @@ export namespace epochnamespace::openglcontext
                 };
 
                 int pf = ::ChoosePixelFormat(glState.hdc, &pfd);
-                if (!pf) throw std::runtime_error("[OpenGL] ChoosePixelFormat failed");
+                if (!pf) throw std::runtime_error("[ OpenGL ] - ChoosePixelFormat failed");
                 if (!::SetPixelFormat(glState.hdc, pf, &pfd))
-                    throw std::runtime_error("[OpenGL] SetPixelFormat failed");
+                    throw std::runtime_error("[ OpenGL ] - SetPixelFormat failed");
             }
 
             // ---- WGL bootstrap: temp context stays current while loading + creating ----
             HGLRC tmp = ::wglCreateContext(glState.hdc);
-            if (!tmp) throw std::runtime_error("[OpenGL] wglCreateContext(temp) failed");
+            if (!tmp) throw std::runtime_error("[ OpenGL ] - wglCreateContext(temp) failed");
             if (::wglMakeCurrent(glState.hdc, tmp) != TRUE)
             {
                 ::wglDeleteContext(tmp);
-                throw std::runtime_error("[OpenGL] wglMakeCurrent(temp) failed");
+                throw std::runtime_error("[ OpenGL ] - wglMakeCurrent(temp) failed");
             }
 
             // Load wglCreateContextAttribsARB safely (filter WGL sentinel pointers).
@@ -436,7 +436,7 @@ export namespace epochnamespace::openglcontext
                 {
                     ::wglDeleteContext(glState.hglrc);
                     glState.hglrc = nullptr;
-                    throw std::runtime_error("[OpenGL] wglMakeCurrent(final) failed");
+                    throw std::runtime_error("[ OpenGL ] - wglMakeCurrent(final) failed");
                 }
             }
             else
@@ -454,19 +454,19 @@ export namespace epochnamespace::openglcontext
 
         PlatformGL::ScopedContext contextGuard{ finalCtx };
         if (!contextGuard.ok())
-            throw std::runtime_error("[OpenGL] PlatformGL::make_current(final) failed");
+            throw std::runtime_error("[ OpenGL ] - PlatformGL::make_current(final) failed");
 
         // Load GL entry points with the single authoritative loader.
         if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(PlatformGL::get_proc_address)))
-            throw std::runtime_error("[OpenGL] gladLoadGLLoader failed");
+            throw std::runtime_error("[ OpenGL ] - gladLoadGLLoader failed");
 
         const auto* versionBytes = ::glGetString(GL_VERSION);
         if (!versionBytes)
-            throw std::runtime_error("[OpenGL] glGetString(GL_VERSION) returned null");
+            throw std::runtime_error("[ OpenGL ] - glGetString(GL_VERSION) returned null");
 
         const std::string_view version{ reinterpret_cast<const char*>(versionBytes) };
         if (version.empty())
-            throw std::runtime_error("[OpenGL] GL_VERSION string is empty");
+            throw std::runtime_error("[ OpenGL ] - GL_VERSION string is empty");
 
         ctx->native_window = glState.hwnd;
         ctx->native_drawable = glState.hdc;
@@ -480,7 +480,7 @@ export namespace epochnamespace::openglcontext
 
         Display* display = glState.display ? glState.display : XOpenDisplay(nullptr);
         if (!display)
-            throw std::runtime_error("[OpenGL] XOpenDisplay failed");
+            throw std::runtime_error("[ OpenGL ] - XOpenDisplay failed");
         glState.display = display;
 
         const int screen = DefaultScreen(display);
@@ -502,14 +502,14 @@ export namespace epochnamespace::openglcontext
 
         GLXFBConfig* configs = glXChooseFBConfig(display, screen, visualAttribs, &fbCount);
         if (!configs || fbCount == 0)
-            throw std::runtime_error("[OpenGL] glXChooseFBConfig failed");
+            throw std::runtime_error("[ OpenGL ] - glXChooseFBConfig failed");
 
         glState.fbConfig = configs[0];
         XFree(configs);
 
         XVisualInfo* vi = glXGetVisualFromFBConfig(display, glState.fbConfig);
         if (!vi)
-            throw std::runtime_error("[OpenGL] glXGetVisualFromFBConfig failed");
+            throw std::runtime_error("[ OpenGL ] - glXGetVisualFromFBConfig failed");
 
         if (!glState.colormap)
         {
@@ -517,7 +517,7 @@ export namespace epochnamespace::openglcontext
             if (!glState.colormap)
             {
                 XFree(vi);
-                throw std::runtime_error("[OpenGL] XCreateColormap failed");
+                throw std::runtime_error("[ OpenGL ] - XCreateColormap failed");
             }
         }
 
@@ -535,7 +535,7 @@ export namespace epochnamespace::openglcontext
             if (!glState.window)
             {
                 XFree(vi);
-                throw std::runtime_error("[OpenGL] XCreateWindow failed");
+                throw std::runtime_error("[ OpenGL ] - XCreateWindow failed");
             }
 
             XStoreName(display, glState.window, "Almond OpenGL");
@@ -567,7 +567,7 @@ export namespace epochnamespace::openglcontext
                 glState.glxContext = glXCreateNewContext(display, glState.fbConfig, GLX_RGBA_TYPE, nullptr, True);
 
             if (!glState.glxContext)
-                throw std::runtime_error("[OpenGL] Failed to create GLX context");
+                throw std::runtime_error("[ OpenGL ] - Failed to create GLX context");
         }
 
         PlatformGL::PlatformGLContext finalCtx{};
@@ -577,18 +577,18 @@ export namespace epochnamespace::openglcontext
 
         PlatformGL::ScopedContext contextGuard{ finalCtx };
         if (!contextGuard.ok())
-            throw std::runtime_error("[OpenGL] glXMakeCurrent failed");
+            throw std::runtime_error("[ OpenGL ] - glXMakeCurrent failed");
 
         if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(PlatformGL::get_proc_address)))
-            throw std::runtime_error("[OpenGL] gladLoadGLLoader failed");
+            throw std::runtime_error("[ OpenGL ] - gladLoadGLLoader failed");
 
         const auto* versionBytes = ::glGetString(GL_VERSION);
         if (!versionBytes)
-            throw std::runtime_error("[OpenGL] glGetString(GL_VERSION) returned null");
+            throw std::runtime_error("[ OpenGL ] - glGetString(GL_VERSION) returned null");
 
         const std::string_view version{ reinterpret_cast<const char*>(versionBytes) };
         if (version.empty())
-            throw std::runtime_error("[OpenGL] GL_VERSION string is empty");
+            throw std::runtime_error("[ OpenGL ] - GL_VERSION string is empty");
 
         ctx->native_window = reinterpret_cast<void*>(static_cast<std::uintptr_t>(glState.window));
         ctx->native_drawable = display;
@@ -598,11 +598,11 @@ export namespace epochnamespace::openglcontext
         // a valid active GL context on this thread.
 #else
         (void)parentWindowOpaque;
-        throw std::runtime_error("[OpenGL] Unsupported platform");
+        throw std::runtime_error("[ OpenGL ] - Unsupported platform");
 #endif
 
         if (!epochnamespace::openglquad::ensure_quad_pipeline(glState))
-            throw std::runtime_error("[OpenGL] Failed to build/ensure quad pipeline");
+            throw std::runtime_error("[ OpenGL ] - Failed to build/ensure quad pipeline");
 
         atlasmanager::register_backend_uploader(core::ContextType::OpenGL,
             [](const TextureAtlas& atlas) { opengltextures::ensure_uploaded(atlas); });
@@ -706,7 +706,7 @@ export namespace epochnamespace::openglcontext
             glGetShaderInfoLog(shader, static_cast<GLsizei>(log.size()), &used, log.data());
             glDeleteShader(shader);
             if (used > 0 && static_cast<std::size_t>(used) < log.size()) log.resize(static_cast<std::size_t>(used));
-            throw std::runtime_error("[OpenGL] Scene preview shader compile failed: " + log);
+            throw std::runtime_error("[ OpenGL ] - Scene preview shader compile failed: " + log);
         }
 
         [[nodiscard]] inline GLuint link_scene_program(GLuint vertexShader, GLuint fragmentShader)
@@ -730,7 +730,7 @@ export namespace epochnamespace::openglcontext
             glGetProgramInfoLog(program, static_cast<GLsizei>(log.size()), &used, log.data());
             glDeleteProgram(program);
             if (used > 0 && static_cast<std::size_t>(used) < log.size()) log.resize(static_cast<std::size_t>(used));
-            throw std::runtime_error("[OpenGL] Scene preview program link failed: " + log);
+            throw std::runtime_error("[ OpenGL ] - Scene preview program link failed: " + log);
         }
 
         [[nodiscard]] inline Mat4 identity_matrix() noexcept
@@ -1064,7 +1064,7 @@ void main() {
                 glReadPixels(sampleX, sampleY, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
                 std::ofstream diag("opengl_runtime_diag.txt", std::ios::app);
                 diag
-                    << "[OpenGL] frame hwnd=" << static_cast<void*>(ctx->windowData ? ctx->windowData->hwnd : nullptr)
+                    << "[ OpenGL ] - frame hwnd=" << static_cast<void*>(ctx->windowData ? ctx->windowData->hwnd : nullptr)
                     << " hglrc=" << static_cast<void*>(guard.target().context)
                     << " fb=" << fbW << "x" << fbH
                     << " queueDepth=" << depth
@@ -1150,7 +1150,7 @@ void main() {
 } // namespace epochnamespace::openglcontext
 
 
-
+#endif
 
 
 

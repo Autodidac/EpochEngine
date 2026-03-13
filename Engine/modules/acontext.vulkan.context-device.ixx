@@ -59,7 +59,7 @@ namespace epochnamespace::vulkancontext {
         const auto& devices = rv.value;
 
         if (rv.result != vk::Result::eSuccess || devices.empty())
-            throw std::runtime_error("[Vulkan] Failed to find GPUs with Vulkan support.");
+            throw std::runtime_error("[ Vulkan ] - Failed to find GPUs with Vulkan support.");
 
         for (const auto& dev : devices)
         {
@@ -67,7 +67,7 @@ namespace epochnamespace::vulkancontext {
                 return dev;
         }
 
-        throw std::runtime_error("[Vulkan] Failed to find a suitable GPU.");
+        throw std::runtime_error("[ Vulkan ] - Failed to find a suitable GPU.");
     }
 
     inline bool Application::checkDeviceExtensionSupport(vk::PhysicalDevice device)
@@ -180,7 +180,7 @@ namespace epochnamespace::vulkancontext {
 
         auto [dRes, d] = physicalDevice.createDeviceUnique(createInfo);
         if (dRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to create logical device.");
+            throw std::runtime_error("[ Vulkan ] - Failed to create logical device.");
 
         device = std::move(d);
 
@@ -193,7 +193,7 @@ namespace epochnamespace::vulkancontext {
     void Application::createCommandPool()
     {
         if (!queueFamilyIndices.graphicsFamily.has_value())
-            throw std::runtime_error("[Vulkan] Graphics family index not set.");
+            throw std::runtime_error("[ Vulkan ] - Graphics family index not set.");
 
         vk::CommandPoolCreateInfo poolInfo{};
         poolInfo.sType = vk::StructureType::eCommandPoolCreateInfo;
@@ -203,7 +203,7 @@ namespace epochnamespace::vulkancontext {
 
         auto [res, pool] = device->createCommandPoolUnique(poolInfo);
         if (res != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to create command pool.");
+            throw std::runtime_error("[ Vulkan ] - Failed to create command pool.");
 
         commandPool = std::move(pool);
     }

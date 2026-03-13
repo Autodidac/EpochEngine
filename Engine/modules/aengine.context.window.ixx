@@ -51,7 +51,7 @@ module;
 
 #include <glad/glad.h>
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
 #   include <SDL3/SDL.h>
 #   include <SDL3/SDL_version.h>
 #endif
@@ -102,7 +102,7 @@ export namespace epochnamespace::core
 #   endif
 #endif
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
         SDL_Window* sdl_window = nullptr;
         SDL_GLContext sdl_glrc = nullptr;
 #endif
@@ -208,7 +208,7 @@ export namespace epochnamespace::core
 #endif
         }
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
         static SDL_Window* getSDLWindow() noexcept { return s_instance ? s_instance->sdl_window : nullptr; }
 #endif
 

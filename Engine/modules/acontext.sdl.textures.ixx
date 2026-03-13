@@ -43,7 +43,7 @@ export module acontext.sdl.textures;
 import aengine.platform;
 //import aengine.config;
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
 
 import aatlas.manager;
 import aatlas.texture;
@@ -147,7 +147,7 @@ export namespace epochnamespace::sdltextures
         const std::string filename = make_dump_name(atlasIdx, atlas.name);
         std::ofstream out(filename, std::ios::binary);
         if (!out) {
-            std::cerr << "[Dump] Failed to open: " << filename << "\n";
+            std::cerr << "[ Image Dump ] - Failed to open: " << filename << "\n";
             return;
         }
 
@@ -161,14 +161,14 @@ export namespace epochnamespace::sdltextures
             out.put(static_cast<char>(atlas.pixel_data[i + 2]));
         }
 
-        std::cerr << "[Dump] Wrote: " << filename << "\n";
+        std::cerr << "[ Image Dump ] - Wrote: " << filename << "\n";
     }
 
 
     inline void upload_atlas_to_gpu(const TextureAtlas& atlas)
     {
         if (!sdl_renderer)
-            throw std::runtime_error("[SDL] Renderer not set!");
+            throw std::runtime_error("[ SDL3 ] - Renderer not set!");
 
 
         if (atlas.pixel_data.empty()) {
@@ -195,14 +195,14 @@ export namespace epochnamespace::sdltextures
             atlas.width * 4              // int pitch
         );
 
-        if (!surface) throw std::runtime_error("[SDL] Failed: SDL_CreateSurfaceFrom");
+        if (!surface) throw std::runtime_error("[ SDL3 ] - Failed: SDL_CreateSurfaceFrom");
 
         gpu.textureHandle = SDL_CreateTextureFromSurface(sdl_renderer, surface);
 
         SDL_DestroySurface(surface);
 
         if (!gpu.textureHandle)
-            throw std::runtime_error("[SDL] Failed: SDL_CreateTextureFromSurface");
+            throw std::runtime_error("[ SDL3 ] - Failed: SDL_CreateTextureFromSurface");
 
         gpu.width = atlas.width;
         gpu.height = atlas.height;
@@ -210,7 +210,7 @@ export namespace epochnamespace::sdltextures
 
         dump_atlas(atlas, atlas.index);
 
-        std::cerr << "[SDL] Uploaded atlas '" << atlas.name << "'\n";
+        std::cerr << "[ SDL3 ] - Uploaded atlas '" << atlas.name << "'\n";
     }
 
     inline void ensure_uploaded(const TextureAtlas& atlas)

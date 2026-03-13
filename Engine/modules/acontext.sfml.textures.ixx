@@ -145,7 +145,7 @@ export namespace epochnamespace::sfmlcontext
         std::ofstream out(filename, std::ios::binary);
         if (!out)
         {
-            std::cerr << "[Dump] Failed to open: " << filename << "\n";
+            std::cerr << "[ Image Dump ] - Failed to open: " << filename << "\n";
             return;
         }
 
@@ -156,7 +156,7 @@ export namespace epochnamespace::sfmlcontext
             out.put(static_cast<char>(atlas.pixel_data[i + 1]));
             out.put(static_cast<char>(atlas.pixel_data[i + 2]));
         }
-        std::cerr << "[Dump] Wrote: " << filename << "\n";
+        std::cerr << "[ Image Dump ] - Wrote: " << filename << "\n";
     }
 
     inline void upload_atlas_to_gpu(const TextureAtlas& atlas)
@@ -170,7 +170,7 @@ export namespace epochnamespace::sfmlcontext
 
         if (gpu.version == atlas.version && gpu.texture.getSize().x > 0)
         {
-            std::cerr << "[SFML] SKIPPING upload for '" << atlas.name
+            std::cerr << "[ SFML ] - SKIPPING upload for '" << atlas.name
                 << "' version = " << atlas.version << "\n";
             return;
         }
@@ -185,7 +185,7 @@ export namespace epochnamespace::sfmlcontext
 
         if (!gpu.texture.loadFromImage(image))
         {
-            throw std::runtime_error("[SFML] Failed to load GPU texture from pixel_data for atlas: " + atlas.name);
+            throw std::runtime_error("[ SFML ] - Failed to load GPU texture from pixel_data for atlas: " + atlas.name);
         }
 
         gpu.width = atlas.width;
@@ -194,7 +194,7 @@ export namespace epochnamespace::sfmlcontext
 
         dump_atlas(atlas, atlas.index);
 
-        std::cerr << "[SFML] Uploaded atlas '" << atlas.name
+        std::cerr << "[ SFML ] - Uploaded atlas '" << atlas.name
             << "' (" << gpu.width << "x" << gpu.height << ")\n";
     }
 
@@ -303,10 +303,7 @@ export namespace epochnamespace::sfmlcontext
         }
 
         if (!state::s_sfmlstate.window.sfml_window || !state::s_sfmlstate.window.sfml_window->isOpen())
-        {
-            std::cerr << "[SFML_DrawSprite] Render window is not open.\n";
             return;
-        }
 
         sf::RenderStates renderStates{};
         state::s_sfmlstate.window.sfml_window->draw(sprite, renderStates);

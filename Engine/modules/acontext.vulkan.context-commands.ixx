@@ -83,21 +83,21 @@ namespace epochnamespace::vulkancontext
 
         auto [allocRes, bufs] = device->allocateCommandBuffersUnique(allocInfo);
         if (allocRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] allocateCommandBuffersUnique failed.");
+            throw std::runtime_error("[ Vulkan ] - allocateCommandBuffersUnique failed.");
         commandBuffers = std::move(bufs);
     }
 
     void Application::recordCommandBuffer(std::uint32_t imageIndex)
     {
         if (imageIndex >= commandBuffers.size())
-            throw std::runtime_error("[Vulkan] recordCommandBuffer image index out of range.");
+            throw std::runtime_error("[ Vulkan ] - recordCommandBuffer image index out of range.");
 
         vk::CommandBuffer cmd = *commandBuffers[imageIndex];
         (void)cmd.reset();
 
         vk::CommandBufferBeginInfo beginInfo{};
         if (cmd.begin(beginInfo) != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] CommandBuffer::begin failed.");
+            throw std::runtime_error("[ Vulkan ] - CommandBuffer::begin failed.");
 #if ALMOND_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
         const auto sceneClearColor = epochnamespace::core::clear_color_for_context(
@@ -195,7 +195,7 @@ namespace epochnamespace::vulkancontext
         // You MUST have this set when you create/fill the index buffer.
         const std::uint32_t safeIndexCount = indexCount;
         if (safeIndexCount == 0)
-            throw std::runtime_error("[Vulkan] indexCount is 0. Set Application::indexCount when creating the index buffer.");
+            throw std::runtime_error("[ Vulkan ] - indexCount is 0. Set Application::indexCount when creating the index buffer.");
 
         cmd.drawIndexed(
             safeIndexCount,
@@ -217,7 +217,7 @@ namespace epochnamespace::vulkancontext
         cmd.endRenderPass();
 
         if (cmd.end() != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] CommandBuffer::end failed.");
+            throw std::runtime_error("[ Vulkan ] - CommandBuffer::end failed.");
     }
 
     void Application::enqueue_gui_draw(
@@ -319,7 +319,7 @@ namespace epochnamespace::vulkancontext
         if (vertices.empty() || indices.empty())
         {
             std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
-            diag << "[Vulkan] gui empty draws=" << guiState.guiDraws.size() << "\n";
+            diag << "[ Vulkan ] - gui empty draws=" << guiState.guiDraws.size() << "\n";
             guiState.guiDraws.clear();
             return;
         }
@@ -349,7 +349,7 @@ namespace epochnamespace::vulkancontext
             const vk::DeviceSize vertexBytes = sizeof(Vertex) * vertexCount;
             auto [mapRes, mapped] = device->mapMemory(*guiState.guiVertexBufferMemory, 0, vertexBytes);
             if (mapRes != vk::Result::eSuccess || !mapped)
-                throw std::runtime_error("[Vulkan] Failed to map GUI vertex buffer.");
+                throw std::runtime_error("[ Vulkan ] - Failed to map GUI vertex buffer.");
             std::memcpy(mapped, vertices.data(), static_cast<std::size_t>(vertexBytes));
             device->unmapMemory(*guiState.guiVertexBufferMemory);
         }
@@ -358,7 +358,7 @@ namespace epochnamespace::vulkancontext
             const vk::DeviceSize indexBytes = sizeof(std::uint32_t) * indexCount;
             auto [mapRes, mapped] = device->mapMemory(*guiState.guiIndexBufferMemory, 0, indexBytes);
             if (mapRes != vk::Result::eSuccess || !mapped)
-                throw std::runtime_error("[Vulkan] Failed to map GUI index buffer.");
+                throw std::runtime_error("[ Vulkan ] - Failed to map GUI index buffer.");
             std::memcpy(mapped, indices.data(), static_cast<std::size_t>(indexBytes));
             device->unmapMemory(*guiState.guiIndexBufferMemory);
         }
@@ -411,7 +411,7 @@ namespace epochnamespace::vulkancontext
         }
 
         std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
-        diag << "[Vulkan] gui submitted draws=" << batches.size() << " vertices=" << vertices.size() << " indices=" << indices.size() << " image=" << imageIndex << "\n";
+        diag << "[ Vulkan ] - gui submitted draws=" << batches.size() << " vertices=" << vertices.size() << " indices=" << indices.size() << " image=" << imageIndex << "\n";
         guiState.guiDraws.clear();
     }
 
@@ -430,19 +430,19 @@ namespace epochnamespace::vulkancontext
             {
                 auto [r, sem] = device->createSemaphoreUnique(semInfo);
                 if (r != vk::Result::eSuccess)
-                    throw std::runtime_error("[Vulkan] createSemaphoreUnique(imageAvailable) failed.");
+                    throw std::runtime_error("[ Vulkan ] - createSemaphoreUnique(imageAvailable) failed.");
                 imageAvailableSemaphores[i] = std::move(sem);
             }
             {
                 auto [r, sem] = device->createSemaphoreUnique(semInfo);
                 if (r != vk::Result::eSuccess)
-                    throw std::runtime_error("[Vulkan] createSemaphoreUnique(renderFinished) failed.");
+                    throw std::runtime_error("[ Vulkan ] - createSemaphoreUnique(renderFinished) failed.");
                 renderFinishedSemaphores[i] = std::move(sem);
             }
             {
                 auto [r, f] = device->createFenceUnique(fenceInfo);
                 if (r != vk::Result::eSuccess)
-                    throw std::runtime_error("[Vulkan] createFenceUnique failed.");
+                    throw std::runtime_error("[ Vulkan ] - createFenceUnique failed.");
                 inFlightFences[i] = std::move(f);
             }
         }
@@ -458,7 +458,7 @@ namespace epochnamespace::vulkancontext
             vk::Fence f = *inFlightFences[currentFrame];
             const vk::Result r = device->waitForFences(1, &f, VK_TRUE, timeout);
             if (r != vk::Result::eSuccess)
-                throw std::runtime_error("[Vulkan] waitForFences failed.");
+                throw std::runtime_error("[ Vulkan ] - waitForFences failed.");
         }
 
         if (consume_framebuffer_resize_intent())
@@ -493,7 +493,7 @@ namespace epochnamespace::vulkancontext
             return;
         }
         if (acquireRes != vk::Result::eSuccess && acquireRes != vk::Result::eSuboptimalKHR)
-            throw std::runtime_error("[Vulkan] Failed to acquire swap chain image.");
+            throw std::runtime_error("[ Vulkan ] - Failed to acquire swap chain image.");
 
 
         // Reset fence for this frame.
@@ -501,7 +501,7 @@ namespace epochnamespace::vulkancontext
             vk::Fence f = *inFlightFences[currentFrame];
             const vk::Result r = device->resetFences(1, &f);
             if (r != vk::Result::eSuccess)
-                throw std::runtime_error("[Vulkan] resetFences failed.");
+                throw std::runtime_error("[ Vulkan ] - resetFences failed.");
         }
 
         updateUniformBuffer(imageIndex, cam);
@@ -525,7 +525,7 @@ namespace epochnamespace::vulkancontext
         {
             const vk::Result r = graphicsQueue.submit(1, &submitInfo, *inFlightFences[currentFrame]);
             if (r != vk::Result::eSuccess)
-                throw std::runtime_error("[Vulkan] graphicsQueue.submit failed.");
+                throw std::runtime_error("[ Vulkan ] - graphicsQueue.submit failed.");
         }
 
         const vk::SwapchainKHR scs[] = { *swapChain };
@@ -554,7 +554,7 @@ namespace epochnamespace::vulkancontext
         }
         else if (presentRes != vk::Result::eSuccess)
         {
-            throw std::runtime_error("[Vulkan] presentKHR failed.");
+            throw std::runtime_error("[ Vulkan ] - presentKHR failed.");
         }
 
         currentFrame = (currentFrame + 1) % kMaxFramesInFlight;

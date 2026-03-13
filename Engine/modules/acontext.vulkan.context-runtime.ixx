@@ -84,7 +84,7 @@ export namespace epochnamespace::vulkancontext
             Application& bind(const std::shared_ptr<core::Context>& ctx)
             {
                 if (!ctx)
-                    throw std::runtime_error("[Vulkan] ApplicationRegistry::bind requires non-null Context");
+                    throw std::runtime_error("[ Vulkan ] - ApplicationRegistry::bind requires non-null Context");
 
                 std::unique_lock lock{ mutex_ };
                 auto& slot = apps_[ctx.get()];
@@ -165,14 +165,14 @@ export namespace epochnamespace::vulkancontext
 //    {
 //#if defined(ALMOND_VULKAN_STANDALONE)
 //        if (!glfwInit())
-//            throw std::runtime_error("[Vulkan] Failed to initialize GLFW.");
+//            throw std::runtime_error("[ Vulkan ] - Failed to initialize GLFW.");
 //
 //        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 //        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 //
 //        window = glfwCreateWindow(framebufferWidth, framebufferHeight, "Almond Vulkan", nullptr, nullptr);
 //        if (!window)
-//            throw std::runtime_error("[Vulkan] Failed to create GLFW window.");
+//            throw std::runtime_error("[ Vulkan ] - Failed to create GLFW window.");
 //
 //        glfwSetWindowUserPointer(window, this);
 //        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
@@ -181,7 +181,7 @@ export namespace epochnamespace::vulkancontext
 //#else
 //        window = nullptr;
 //        if (!nativeWindowHandle)
-//            throw std::runtime_error("[Vulkan] Requires a native window handle.");
+//            throw std::runtime_error("[ Vulkan ] - Requires a native window handle.");
 //#endif
 //    }
 //

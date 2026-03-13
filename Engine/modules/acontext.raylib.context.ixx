@@ -77,7 +77,7 @@ import <thread>;
 import <utility>;
 
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
 
 namespace epochnamespace::raylibcontext
 {

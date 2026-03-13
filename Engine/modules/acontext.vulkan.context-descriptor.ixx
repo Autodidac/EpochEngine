@@ -75,7 +75,7 @@ namespace epochnamespace::vulkancontext
 
         auto [r, pool] = device->createDescriptorPoolUnique(poolInfo);
         if (r != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to create descriptor pool.");
+            throw std::runtime_error("[ Vulkan ] - Failed to create descriptor pool.");
 
         descriptorPool = std::move(pool);
     }
@@ -93,7 +93,7 @@ namespace epochnamespace::vulkancontext
 
         auto [r, sets] = device->allocateDescriptorSetsUnique(allocInfo);
         if (r != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to allocate descriptor sets.");
+            throw std::runtime_error("[ Vulkan ] - Failed to allocate descriptor sets.");
 
         descriptorSets = std::move(sets);
 
@@ -158,7 +158,7 @@ namespace epochnamespace::vulkancontext
 
             auto [mapRes, ptr] = device->mapMemory(*uniformBuffersMemory[i], 0, bufferSize);
             if (mapRes != vk::Result::eSuccess || ptr == nullptr)
-                throw std::runtime_error("[Vulkan] Failed to map uniform buffer memory.");
+                throw std::runtime_error("[ Vulkan ] - Failed to map uniform buffer memory.");
 
             uniformBuffersMapped[i] = ptr;
         }
@@ -188,7 +188,7 @@ namespace epochnamespace::vulkancontext
 
             auto [mapRes, ptr] = device->mapMemory(*guiState.guiUniformBuffersMemory[i], 0, bufferSize);
             if (mapRes != vk::Result::eSuccess || ptr == nullptr)
-                throw std::runtime_error("[Vulkan] Failed to map GUI uniform buffer memory.");
+                throw std::runtime_error("[ Vulkan ] - Failed to map GUI uniform buffer memory.");
 
             guiState.guiUniformBuffersMapped[i] = ptr;
         }

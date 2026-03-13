@@ -317,7 +317,7 @@ namespace epochnamespace::vulkancontext
 
         auto [mapRes, mapped] = device->mapMemory(*stagingMemory, 0, imageSize);
         if (mapRes != vk::Result::eSuccess || !mapped)
-            throw std::runtime_error("[Vulkan] Failed to map GUI atlas staging buffer.");
+            throw std::runtime_error("[ Vulkan ] - Failed to map GUI atlas staging buffer.");
 
         std::memcpy(mapped, atlas.pixel_data.data(), static_cast<std::size_t>(imageSize));
         device->unmapMemory(*stagingMemory);
@@ -337,7 +337,7 @@ namespace epochnamespace::vulkancontext
 
         auto [imgRes, img] = device->createImageUnique(imageInfo);
         if (imgRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to create GUI atlas image.");
+            throw std::runtime_error("[ Vulkan ] - Failed to create GUI atlas image.");
 
         entry.image = std::move(img);
 
@@ -350,13 +350,13 @@ namespace epochnamespace::vulkancontext
 
         auto [memRes, mem] = device->allocateMemoryUnique(allocInfo);
         if (memRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to allocate GUI atlas memory.");
+            throw std::runtime_error("[ Vulkan ] - Failed to allocate GUI atlas memory.");
 
         entry.memory = std::move(mem);
 
         const vk::Result bindRes = device->bindImageMemory(*entry.image, *entry.memory, 0);
         if (bindRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to bind GUI atlas memory.");
+            throw std::runtime_error("[ Vulkan ] - Failed to bind GUI atlas memory.");
 
         transitionImageLayout(
             *entry.image,
@@ -401,7 +401,7 @@ namespace epochnamespace::vulkancontext
 
         auto [sRes, sampler] = device->createSamplerUnique(samplerInfo);
         if (sRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to create GUI atlas sampler.");
+            throw std::runtime_error("[ Vulkan ] - Failed to create GUI atlas sampler.");
 
         entry.sampler = std::move(sampler);
 
@@ -424,7 +424,7 @@ namespace epochnamespace::vulkancontext
 
         auto [poolRes, pool] = device->createDescriptorPoolUnique(poolInfo);
         if (poolRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to create GUI atlas descriptor pool.");
+            throw std::runtime_error("[ Vulkan ] - Failed to create GUI atlas descriptor pool.");
 
         entry.descriptorPool = std::move(pool);
 
@@ -437,7 +437,7 @@ namespace epochnamespace::vulkancontext
 
         auto [setRes, sets] = device->allocateDescriptorSetsUnique(descriptorAllocInfo);
         if (setRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] Failed to allocate GUI atlas descriptor sets.");
+            throw std::runtime_error("[ Vulkan ] - Failed to allocate GUI atlas descriptor sets.");
 
         entry.descriptorSets = std::move(sets);
 

@@ -204,7 +204,7 @@ export namespace epochnamespace::sfmlcontext
 
         if (!sfmlcontext.window || !sfmlcontext.window->isOpen())
         {
-            std::cerr << "[SFML] Failed to create SFML window\n";
+            std::cerr << "[ SFML ] - Failed to create SFML window\n";
             return false;
         }
 
@@ -249,14 +249,14 @@ export namespace epochnamespace::sfmlcontext
         // Ensure the SFML context is current *on this thread* before capturing HGLRC.
         if (!sfmlcontext.window->setActive(true))
         {
-            std::cerr << "[SFML] Failed to activate SFML window for context capture\n";
+            std::cerr << "[ SFML ] - Failed to activate SFML window for context capture\n";
             return false;
         }
 
         sfmlcontext.glContext = wglGetCurrentContext();
         if (!sfmlcontext.glContext)
         {
-            std::cerr << "[SFML] Failed to get OpenGL context\n";
+            std::cerr << "[ SFML ] - Failed to get OpenGL context\n";
             sfmlcontext.window->setActive(false);
             return false;
         }
@@ -460,7 +460,7 @@ export namespace epochnamespace::sfmlcontext
         // Let SFML own activation. Do NOT call wglMakeCurrent manually.
         if (!sfmlcontext.window->setActive(true))
         {
-            std::cerr << "[SFMLRender] Failed to activate SFML window\n";
+            std::cerr << "[ SFMLRender ] - Failed to activate SFML window\n";
             sfmlcontext.running = false;
             state::s_sfmlstate.running = false;
             return false;

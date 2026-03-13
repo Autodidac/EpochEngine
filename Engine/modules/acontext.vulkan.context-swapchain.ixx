@@ -70,17 +70,17 @@ namespace epochnamespace::vulkancontext
     {
         auto capabilitiesResult = dev.getSurfaceCapabilitiesKHR(*surface);
         if (capabilitiesResult.result != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] getSurfaceCapabilitiesKHR failed.");
+            throw std::runtime_error("[ Vulkan ] - getSurfaceCapabilitiesKHR failed.");
         vk::SurfaceCapabilitiesKHR capabilities = capabilitiesResult.value;
 
         auto formatsResult = dev.getSurfaceFormatsKHR(*surface);
         if (formatsResult.result != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] getSurfaceFormatsKHR failed.");
+            throw std::runtime_error("[ Vulkan ] - getSurfaceFormatsKHR failed.");
         auto formats = std::move(formatsResult.value);
 
         auto presentModesResult = dev.getSurfacePresentModesKHR(*surface);
         if (presentModesResult.result != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] getSurfacePresentModesKHR failed.");
+            throw std::runtime_error("[ Vulkan ] - getSurfacePresentModesKHR failed.");
         auto presentModes = std::move(presentModesResult.value);
 
         return SwapChainSupportDetails{
@@ -137,29 +137,29 @@ namespace epochnamespace::vulkancontext
     void Application::createSwapChain()
     {
         if (!device)
-            throw std::runtime_error("[Vulkan] createSwapChain called without a logical device.");
+            throw std::runtime_error("[ Vulkan ] - createSwapChain called without a logical device.");
         if (!surface)
-            throw std::runtime_error("[Vulkan] createSwapChain called without a surface.");
+            throw std::runtime_error("[ Vulkan ] - createSwapChain called without a surface.");
         if (!physicalDevice)
-            throw std::runtime_error("[Vulkan] createSwapChain called without a physical device.");
+            throw std::runtime_error("[ Vulkan ] - createSwapChain called without a physical device.");
         if (!queueFamilyIndices.isComplete())
-            throw std::runtime_error("[Vulkan] createSwapChain called with incomplete queue family indices.");
+            throw std::runtime_error("[ Vulkan ] - createSwapChain called with incomplete queue family indices.");
 
         SwapChainSupportDetails details = querySwapChainSupport(physicalDevice);
 
         if (details.formats.empty())
             throw RecoverableSwapChainError(
-                "[Vulkan] Swapchain surface formats unavailable; will retry swapchain creation later.");
+                "[ Vulkan ] - Swapchain surface formats unavailable; will retry swapchain creation later.");
         if (details.presentModes.empty())
             throw RecoverableSwapChainError(
-                "[Vulkan] Swapchain present modes unavailable; will retry swapchain creation later.");
+                "[ Vulkan ] - Swapchain present modes unavailable; will retry swapchain creation later.");
 
         const vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(details.formats);
         const vk::PresentModeKHR presentMode = chooseSwapPresentMode(details.presentModes);
         const vk::Extent2D extent = chooseSwapExtent(details.capabilities);
 
         if (extent.width == 0 || extent.height == 0)
-            throw RecoverableSwapChainError("[Vulkan] Swapchain extent is zero; waiting for a valid framebuffer size.");
+            throw RecoverableSwapChainError("[ Vulkan ] - Swapchain extent is zero; waiting for a valid framebuffer size.");
 
         std::uint32_t imageCount = details.capabilities.minImageCount + 1;
         if (details.capabilities.maxImageCount > 0 && imageCount > details.capabilities.maxImageCount)
@@ -206,11 +206,11 @@ namespace epochnamespace::vulkancontext
             scResult == vk::Result::eErrorSurfaceLostKHR ||
             scResult == vk::Result::eErrorInitializationFailed)
         {
-            throw RecoverableSwapChainError("[Vulkan] Swapchain creation returned a recoverable result; will retry.");
+            throw RecoverableSwapChainError("[ Vulkan ] - Swapchain creation returned a recoverable result; will retry.");
         }
 
         if (scResult != vk::Result::eSuccess || !rawSwapchain)
-            throw std::runtime_error("[Vulkan] createSwapchainKHR failed. VkResult=" + std::to_string(static_cast<int>(scResult)));
+            throw std::runtime_error("[ Vulkan ] - createSwapchainKHR failed. VkResult=" + std::to_string(static_cast<int>(scResult)));
 
         swapChain = vk::UniqueSwapchainKHR(
             rawSwapchain,
@@ -222,12 +222,12 @@ namespace epochnamespace::vulkancontext
         std::uint32_t imageCountOut = 0;
         vk::Result imagesResult = device->getSwapchainImagesKHR(*swapChain, &imageCountOut, nullptr);
         if (imagesResult != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] getSwapchainImagesKHR(count) failed. VkResult=" + std::to_string(static_cast<int>(imagesResult)));
+            throw std::runtime_error("[ Vulkan ] - getSwapchainImagesKHR(count) failed. VkResult=" + std::to_string(static_cast<int>(imagesResult)));
 
         std::vector<vk::Image> images(imageCountOut);
         imagesResult = device->getSwapchainImagesKHR(*swapChain, &imageCountOut, images.data());
         if (imagesResult != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] getSwapchainImagesKHR(data) failed. VkResult=" + std::to_string(static_cast<int>(imagesResult)));
+            throw std::runtime_error("[ Vulkan ] - getSwapchainImagesKHR(data) failed. VkResult=" + std::to_string(static_cast<int>(imagesResult)));
 
         images.resize(imageCountOut);
         swapChainImages = std::move(images);
@@ -249,7 +249,7 @@ namespace epochnamespace::vulkancontext
 
         auto ivResult = device->createImageViewUnique(viewInfo);
         if (ivResult.result != vk::Result::eSuccess || !ivResult.value)
-            throw std::runtime_error("[Vulkan] createImageViewUnique failed.");
+            throw std::runtime_error("[ Vulkan ] - createImageViewUnique failed.");
         return std::move(ivResult.value);
     }
 
@@ -301,7 +301,7 @@ namespace epochnamespace::vulkancontext
     {
         assert_thread_affinity();
         if (!device)
-            throw std::runtime_error("[Vulkan] recreateSwapChain called without a device.");
+            throw std::runtime_error("[ Vulkan ] - recreateSwapChain called without a device.");
 
         const int framebufferWidth = get_framebuffer_width();
         const int framebufferHeight = get_framebuffer_height();

@@ -140,7 +140,7 @@ export namespace epochnamespace::vulkancontext
 
         auto rp = device->createRenderPassUnique(renderPassInfo);
         if (rp.result != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] createRenderPassUnique failed.");
+            throw std::runtime_error("[ Vulkan ] - createRenderPassUnique failed.");
         renderPass = std::move(rp.value);
     }
 
@@ -166,7 +166,7 @@ export namespace epochnamespace::vulkancontext
 
         auto r = device->createDescriptorSetLayoutUnique(layoutInfo);
         if (r.result != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] createDescriptorSetLayoutUnique failed.");
+            throw std::runtime_error("[ Vulkan ] - createDescriptorSetLayoutUnique failed.");
         descriptorSetLayout = std::move(r.value);
     }
 
@@ -245,9 +245,9 @@ export namespace epochnamespace::vulkancontext
             // Emit a high-signal message and keep going.
             // Use your engine logger if you have one; otherwise throw-message works.
             std::ostringstream os;
-            os << "[Vulkan][ShaderIO] opened: " << fs::absolute(path).string() << "\n";
-            os << "[Vulkan][ShaderIO] cwd: " << (cwd.empty() ? "<unknown>" : cwd.string()) << "\n";
-            os << "[Vulkan][ShaderIO] bytes: " << buffer.size()
+            os << "[ Vulkan ] -[ShaderIO] opened: " << fs::absolute(path).string() << "\n";
+            os << "[ Vulkan ] -[ShaderIO] cwd: " << (cwd.empty() ? "<unknown>" : cwd.string()) << "\n";
+            os << "[ Vulkan ] -[ShaderIO] bytes: " << buffer.size()
                 << " spirv=" << (readhelpers::looks_like_spirv(buffer) ? "yes" : "NO")
                 << " head=" << readhelpers::first_bytes_hex(buffer, 16) << "\n";
             // Replace this with epoch::core::log::write(os.str()) if you have it.
@@ -256,7 +256,7 @@ export namespace epochnamespace::vulkancontext
             if (path.extension() == ".spv" && !readhelpers::looks_like_spirv(buffer))
             {
                 std::ostringstream badShader;
-                badShader << "[Vulkan] Shader file is not valid SPIR-V: "
+                badShader << "[ Vulkan ] - Shader file is not valid SPIR-V: "
                     << fs::absolute(path).string()
                     << " head=" << readhelpers::first_bytes_hex(buffer, 16);
                 throw std::runtime_error(badShader.str());
@@ -266,7 +266,7 @@ export namespace epochnamespace::vulkancontext
         }
 
         std::ostringstream message;
-        message << "[Vulkan] Failed to open file: " << filename << "\n"
+        message << "[ Vulkan ] - Failed to open file: " << filename << "\n"
             << "Tried paths:";
         for (const auto& path : candidates)
             message << "\n  - " << fs::absolute(path).string();
@@ -291,9 +291,9 @@ export namespace epochnamespace::vulkancontext
         fInfo.pCode = reinterpret_cast<const std::uint32_t*>(fragShaderCode.data());
 
         auto vMod = device->createShaderModuleUnique(vInfo);
-        if (vMod.result != vk::Result::eSuccess) throw std::runtime_error("[Vulkan] createShaderModuleUnique(vert) failed.");
+        if (vMod.result != vk::Result::eSuccess) throw std::runtime_error("[ Vulkan ] - createShaderModuleUnique(vert) failed.");
         auto fMod = device->createShaderModuleUnique(fInfo);
-        if (fMod.result != vk::Result::eSuccess) throw std::runtime_error("[Vulkan] createShaderModuleUnique(frag) failed.");
+        if (fMod.result != vk::Result::eSuccess) throw std::runtime_error("[ Vulkan ] - createShaderModuleUnique(frag) failed.");
 
         vk::PipelineShaderStageCreateInfo shaderStages[2]{};
         shaderStages[0].stage = vk::ShaderStageFlagBits::eVertex;
@@ -378,7 +378,7 @@ export namespace epochnamespace::vulkancontext
         pipelineLayoutInfo.pSetLayouts = &*descriptorSetLayout;
 
         auto pl = device->createPipelineLayoutUnique(pipelineLayoutInfo);
-        if (pl.result != vk::Result::eSuccess) throw std::runtime_error("[Vulkan] createPipelineLayoutUnique failed.");
+        if (pl.result != vk::Result::eSuccess) throw std::runtime_error("[ Vulkan ] - createPipelineLayoutUnique failed.");
         pipelineLayout = std::move(pl.value);
 
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
@@ -397,7 +397,7 @@ export namespace epochnamespace::vulkancontext
         pipelineInfo.subpass = 0;
 
         auto gp = device->createGraphicsPipelineUnique(vk::PipelineCache{}, pipelineInfo);
-        if (gp.result != vk::Result::eSuccess) throw std::runtime_error("[Vulkan] createGraphicsPipelineUnique failed.");
+        if (gp.result != vk::Result::eSuccess) throw std::runtime_error("[ Vulkan ] - createGraphicsPipelineUnique failed.");
         graphicsPipeline = std::move(gp.value);
     }
 
@@ -417,10 +417,10 @@ export namespace epochnamespace::vulkancontext
 
         auto vMod = device->createShaderModuleUnique(vInfo);
         if (vMod.result != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] createShaderModuleUnique(vert) failed.");
+            throw std::runtime_error("[ Vulkan ] - createShaderModuleUnique(vert) failed.");
         auto fMod = device->createShaderModuleUnique(fInfo);
         if (fMod.result != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] createShaderModuleUnique(frag) failed.");
+            throw std::runtime_error("[ Vulkan ] - createShaderModuleUnique(frag) failed.");
 
         vk::PipelineShaderStageCreateInfo shaderStages[2]{};
         shaderStages[0].stage = vk::ShaderStageFlagBits::eVertex;
@@ -523,7 +523,7 @@ export namespace epochnamespace::vulkancontext
 
         auto gp = device->createGraphicsPipelineUnique(vk::PipelineCache{}, pipelineInfo);
         if (gp.result != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] createGuiPipeline failed.");
+            throw std::runtime_error("[ Vulkan ] - createGuiPipeline failed.");
         guiState.guiPipeline = std::move(gp.value);
     }
 }

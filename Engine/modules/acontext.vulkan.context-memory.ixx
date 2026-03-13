@@ -65,7 +65,7 @@ namespace epochnamespace::vulkancontext
                 return i;
         }
 
-        throw std::runtime_error("[Vulkan] Failed to find suitable memory type.");
+        throw std::runtime_error("[ Vulkan ] - Failed to find suitable memory type.");
     }
 
     std::pair<vk::UniqueBuffer, vk::UniqueDeviceMemory> Application::createBuffer(
@@ -84,7 +84,7 @@ namespace epochnamespace::vulkancontext
 
         auto [bRes, b] = device->createBufferUnique(bufferInfo);
         if (bRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] createBufferUnique failed.");
+            throw std::runtime_error("[ Vulkan ] - createBufferUnique failed.");
 
         // Memory
         const vk::MemoryRequirements memReq = device->getBufferMemoryRequirements(*b);
@@ -95,7 +95,7 @@ namespace epochnamespace::vulkancontext
 
         auto [mRes, m] = device->allocateMemoryUnique(allocInfo);
         if (mRes != vk::Result::eSuccess)
-            throw std::runtime_error("[Vulkan] allocateMemoryUnique failed for buffer.");
+            throw std::runtime_error("[ Vulkan ] - allocateMemoryUnique failed for buffer.");
 
         (void)device->bindBufferMemory(*b, *m, 0);
 
@@ -105,7 +105,7 @@ namespace epochnamespace::vulkancontext
     vk::UniqueCommandBuffer Application::beginSingleTimeCommands()
     {
         if (!commandPool)
-            throw std::runtime_error("[Vulkan] beginSingleTimeCommands: commandPool is null.");
+            throw std::runtime_error("[ Vulkan ] - beginSingleTimeCommands: commandPool is null.");
 
         vk::CommandBufferAllocateInfo allocInfo{};
         allocInfo.commandPool = *commandPool;
@@ -114,7 +114,7 @@ namespace epochnamespace::vulkancontext
 
         auto [aRes, bufs] = device->allocateCommandBuffersUnique(allocInfo);
         if (aRes != vk::Result::eSuccess || bufs.empty())
-            throw std::runtime_error("[Vulkan] allocateCommandBuffersUnique failed.");
+            throw std::runtime_error("[ Vulkan ] - allocateCommandBuffersUnique failed.");
 
         vk::UniqueCommandBuffer cmd = std::move(bufs[0]);
 
@@ -149,7 +149,7 @@ namespace epochnamespace::vulkancontext
 
     void Application::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size)
     {
-        std::cout << "[Vulkan] Copying " << size << " bytes.";
+        std::cout << "[ Vulkan ] - Copying " << size << " bytes.";
 
         vk::UniqueCommandBuffer cmd = beginSingleTimeCommands();
 

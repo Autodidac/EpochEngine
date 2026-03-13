@@ -36,7 +36,7 @@ module;
 
 #include "../include/aengine.config.hpp"
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 
 // Make sure GL loaders see any platform defines they need.
 
@@ -76,7 +76,7 @@ import <vector>;
 
 import aengine.platform;
 
-#ifdef ALMOND_USING_OPENGL
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1) && (ALMOND_USING_OPENGL == 1)
 
 import aengine.cli;
 import aengine.core.context;
@@ -230,7 +230,7 @@ export namespace epochnamespace::opengltextures
             out.put(atlas.pixel_data[i + 1]);
             out.put(atlas.pixel_data[i + 2]);
         }
-        std::cerr << "[Dump] Wrote: " << filename << "\n";
+        std::cerr << "[ Image Dump ] - Wrote: " << filename << "\n";
     }
 
     inline void upload_atlas_to_gpu(const TextureAtlas& atlas)
@@ -268,7 +268,7 @@ export namespace epochnamespace::opengltextures
         if (!gpu.textureHandle) {
             glGenTextures(1, &gpu.textureHandle);
             if (!gpu.textureHandle) {
-                std::cerr << "[OpenGL] Failed to generate texture for atlas: "
+                std::cerr << "[ OpenGL ] - Failed to generate texture for atlas: "
                     << atlas.name << "\n";
                 return;
             }
@@ -308,7 +308,7 @@ export namespace epochnamespace::opengltextures
 
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        std::cerr << "[OpenGL] Uploaded atlas '" << atlas.name
+        std::cerr << "[ OpenGL ] - Uploaded atlas '" << atlas.name
             << "' (tex id " << gpu.textureHandle << ")\n";
     }
 
@@ -420,7 +420,7 @@ export namespace epochnamespace::opengltextures
         auto log_draw_skip = [](std::string_view reason)
         {
             std::ofstream diag("opengl_runtime_diag.txt", std::ios::app);
-            diag << "[OpenGL] draw_skip reason=" << reason << "\n";
+            diag << "[ OpenGL ] - draw_skip reason=" << reason << "\n";
         };
 
         if (!handle.is_valid()) {
@@ -483,7 +483,7 @@ export namespace epochnamespace::opengltextures
         {
             auto currentCtx = core::MultiContextManager::GetCurrent();
             std::ofstream diag("opengl_runtime_diag.txt", std::ios::app);
-            diag << "[OpenGL] draw hwnd=" << static_cast<void*>(currentCtx && currentCtx->windowData ? currentCtx->windowData->hwnd : nullptr)
+            diag << "[ OpenGL ] - draw hwnd=" << static_cast<void*>(currentCtx && currentCtx->windowData ? currentCtx->windowData->hwnd : nullptr)
                  << " viewport=" << w << "x" << h
                  << " pos=(" << x << "," << y << ")"
                  << " size=(" << width << "," << height << ")"

@@ -112,7 +112,7 @@ export namespace epochnamespace::diagnostics {
         snapshot.single_parent_topology = false;
 #endif
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
         snapshot.using_sdl = true;
 #else
         snapshot.using_sdl = false;
@@ -124,7 +124,7 @@ export namespace epochnamespace::diagnostics {
         snapshot.using_sfml = false;
 #endif
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
         snapshot.using_raylib = true;
 #else
         snapshot.using_raylib = false;
@@ -136,7 +136,7 @@ export namespace epochnamespace::diagnostics {
         snapshot.using_software_renderer = false;
 #endif
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
         snapshot.using_opengl = true;
 #else
         snapshot.using_opengl = false;

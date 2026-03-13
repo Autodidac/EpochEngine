@@ -46,7 +46,8 @@ import aatlas.texture;                 // TextureAtlas
 
 export namespace epochnamespace::anativecontext
 {
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+
 
     export int clamp_int(int v, int lo, int hi) noexcept
     {

@@ -67,20 +67,20 @@ import "acustomrenderer.hpp";
 import "acustomtextures.hpp";
 #endif
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 import acontext.opengl.context;
 import acontext.opengl.textures;
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
 import acontext.sdl.context;
 import acontext.sdl.textures;
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
 import acontext.raylib.context;
 import acontext.raylib.renderer;
 import acontext.raylib.state;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
 import acontext.softrenderer.context;
 #endif
 #if defined(ALMOND_USING_NOOP_HEADLESS)
@@ -130,7 +130,7 @@ namespace
         return nullptr;
     }
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
     void opengl_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -255,7 +255,7 @@ namespace
     }
 #endif
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
     void softrenderer_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -373,7 +373,7 @@ namespace
     }
 #endif
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
     void sdl_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -440,7 +440,7 @@ namespace
 #endif
 
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
     bool raylib_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
         epochnamespace::core::CommandQueue& queue)
     {
@@ -556,7 +556,7 @@ namespace epochnamespace::core
         if (s_initialized) return;
         s_initialized = true;
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::OpenGL;
@@ -615,7 +615,7 @@ namespace epochnamespace::core
 
 
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::RayLib;
@@ -719,7 +719,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::SDL;
@@ -747,7 +747,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::Software;

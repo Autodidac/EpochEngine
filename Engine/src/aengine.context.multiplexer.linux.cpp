@@ -33,7 +33,7 @@
 #include <GL/glxext.h>
 
 // If you use GLAD on Linux, include it here (raylib/sdl/opengl paths share it)
-#if defined(ALMOND_USING_OPENGL) || defined(ALMOND_USING_RAYLIB) || defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1) || defined(ALMOND_USING_RAYLIB) || defined(ALMOND_USING_SDL)
 #   include <glad/glad.h>
 #endif
 
@@ -478,7 +478,7 @@ namespace epochnamespace::core
 
                     SetupResizeCallback(*window);
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
                     if (type == ContextType::OpenGL)
                     {
                         const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
@@ -557,7 +557,7 @@ namespace epochnamespace::core
                     }
 #endif
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
                     if (type == ContextType::SDL)
                     {
                         const int width = (std::max)(1, window->width);
@@ -597,7 +597,7 @@ namespace epochnamespace::core
                     }
 #endif
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
                     if (type == ContextType::RayLib)
                     {
                         const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
@@ -896,7 +896,7 @@ namespace epochnamespace::core
 
         SetupResizeCallback(*winPtr);
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
         if (type == ContextType::OpenGL)
         {
             const unsigned width = static_cast<unsigned>((std::max)(1, winPtr->width));
@@ -956,7 +956,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
         if (type == ContextType::SDL)
         {
             const int width = (std::max)(1, winPtr->width);
@@ -997,7 +997,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
         if (type == ContextType::RayLib)
         {
             const unsigned width = static_cast<unsigned>((std::max)(1, winPtr->width));
@@ -1354,7 +1354,7 @@ namespace epochnamespace::core
         {
             glXMakeCurrent(localDisplay, xwin, glxCtx);
 
-#if defined(ALMOND_USING_OPENGL) || defined(ALMOND_USING_RAYLIB) || defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1) || defined(ALMOND_USING_RAYLIB) || defined(ALMOND_USING_SDL)
             static std::atomic<bool> gladInitialized{ false };
             if (!gladInitialized.load(std::memory_order_acquire))
             {
@@ -1419,10 +1419,10 @@ namespace epochnamespace::core
 #if defined(ALMOND_USING_SFML)
             (ctx->type == ContextType::SFML) ||
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
             (ctx->type == ContextType::RayLib) ||
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
             (ctx->type == ContextType::SDL) ||
 #endif
             false;

@@ -52,7 +52,7 @@ import aengine.input;       // epochnamespace::input
 //import aengine.config; // epochnamespace::input
 
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
 
 export namespace epochnamespace::anativecontext
 {
@@ -89,7 +89,7 @@ export namespace epochnamespace::anativecontext
         // Map atlas → texture for caching
         std::unordered_map<const TextureAtlas*, TexturePtr> textures;
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
 
         // Renderer state (framebuffer, dimensions, etc.)
         epochnamespace::anativecontext::SoftRendState srState;

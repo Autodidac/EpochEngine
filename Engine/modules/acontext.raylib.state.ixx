@@ -32,7 +32,7 @@ module;
 
 #include <include/aengine.config.hpp>
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
 #if defined(_WIN32)
 #   ifdef ALMOND_USING_WINMAIN
 #       include <include/aframework.hpp>
@@ -54,7 +54,7 @@ import <functional>;
 import <thread>;
 
 
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
 
 export namespace epochnamespace::raylibstate
 {

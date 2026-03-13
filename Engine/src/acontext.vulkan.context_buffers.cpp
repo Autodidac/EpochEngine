@@ -29,7 +29,7 @@ namespace epochnamespace::vulkancontext
     {
         const auto vertices = cube_vertices();
         if (vertices.empty())
-            throw std::runtime_error("[Vulkan] No vertex data available.");
+            throw std::runtime_error("[ Vulkan ] - No vertex data available.");
 
         const vk::DeviceSize bufferSize =
             static_cast<vk::DeviceSize>(sizeof(vertices[0]) * vertices.size());
@@ -66,7 +66,7 @@ namespace epochnamespace::vulkancontext
     {
         const auto indices = cube_indices();
         if (indices.empty())
-            throw std::runtime_error("[Vulkan] No index data available.");
+            throw std::runtime_error("[ Vulkan ] - No index data available.");
 
         const vk::DeviceSize bufferSize =
             static_cast<vk::DeviceSize>(sizeof(indices[0]) * indices.size());

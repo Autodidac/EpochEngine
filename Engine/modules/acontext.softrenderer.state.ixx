@@ -36,7 +36,7 @@ module;
 
 #include <include/aengine.config.hpp> // for ALMOND_USING Macros   // may bring in <windows.h>, etc.
 //#include "arobusttime.hpp"     // time::Timer, time::createTimer(...)
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
 #   if defined(_WIN32)
 #       ifdef ALMOND_USING_WINMAIN
 #         include "aframework.hpp"
@@ -59,7 +59,7 @@ import <vector>;
 //import aengine.platform;  
 import aengine.core.time;
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
 
 export namespace epochnamespace::anativecontext
 {

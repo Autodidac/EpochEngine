@@ -33,7 +33,8 @@ module;
 // Global module fragment: macros + native headers only.
 #include <include/aengine.config.hpp> // for ALMOND_USING Macros
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+
 
 #if defined(_WIN32)
 
@@ -77,7 +78,7 @@ import <ranges>;
 import <utility>;
 import <algorithm>;
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 
 export namespace epochnamespace::openglcontext::PlatformGL
 {
