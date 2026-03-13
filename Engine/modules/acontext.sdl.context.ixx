@@ -208,6 +208,9 @@ export namespace epochnamespace::sdlcontext
         sdlcontext.parent = dockParent;
 #endif
 
+        auto& sharedState = state::get_sdl_state();
+        sharedState.renderFaulted = false;
+
         refresh_dimensions(ctx);
 
         std::weak_ptr<core::Context> weakCtx = ctx;
@@ -365,6 +368,7 @@ export namespace epochnamespace::sdlcontext
         init_renderer(sdlcontext.renderer);
         sdltextures::sdl_renderer = sdlcontext.renderer;
 
+
         refresh_dimensions(ctx);
 
 #if defined(_WIN32)
@@ -442,7 +446,7 @@ export namespace epochnamespace::sdlcontext
             windowId = 0u;
 #endif
 
-        almond::diagnostics::FrameTiming frameTimer{ backendType, windowId, "SDL" };
+        diagnostics::FrameTiming frameTimer{ backendType, windowId, "SDL" };
 
         SDL_Event sdl_event{};
         while (SDL_PollEvent(&sdl_event))
@@ -458,6 +462,7 @@ export namespace epochnamespace::sdlcontext
                 sdlcontext.onResize(sdl_event.window.data1, sdl_event.window.data2);
         }
 
+        auto& sharedState = state::get_sdl_state();
         refresh_dimensions(ctx);
 
         telemetry::emit_gauge(
@@ -470,26 +475,26 @@ export namespace epochnamespace::sdlcontext
             static_cast<std::int64_t>(sdlcontext.framebufferHeight),
             telemetry::RendererTelemetryTags{ backendType, windowId, "height" });
 
-#if ALMOND_USE_CLEAR_COLOR
-        const auto color = core::clear_color_for_context(core::ContextType::SDL);
-        SDL_SetRenderDrawColor(
-            sdl_renderer.renderer,
-            static_cast<std::uint8_t>(color[0] * 255.0f),
-            static_cast<std::uint8_t>(color[1] * 255.0f),
-            static_cast<std::uint8_t>(color[2] * 255.0f),
-            static_cast<std::uint8_t>(color[3] * 255.0f));
-        SDL_RenderClear(sdl_renderer.renderer);
-#endif
-
         const std::size_t depth = queue.depth();
         telemetry::emit_gauge(
             "renderer.command_queue.depth",
             static_cast<std::int64_t>(depth),
             telemetry::RendererTelemetryTags{ backendType, windowId });
 
-        queue.drain();
+        if (sharedState.renderFaulted || !sdl_renderer.renderer)
+        {
+            queue.clear();
+        }
+        else
+        {
+            queue.drain();
 
-        SDL_RenderPresent(sdl_renderer.renderer);
+            if (!SDL_RenderPresent(sdl_renderer.renderer))
+            {
+                check_sdl_error("SDL_RenderPresent");
+                sharedState.renderFaulted = true;
+            }
+        }
 
         if (sdlcontext.parent && sdlcontext.useFrameLimiter)
         {
@@ -504,6 +509,9 @@ export namespace epochnamespace::sdlcontext
             sdlcontext.lastFrameTime = clock::now();
         }
 
+        frameTimer.finish();
+
+        return true;
         frameTimer.finish();
 
         return true;
@@ -638,3 +646,5 @@ export namespace epochnamespace::sdlcontext
 
 #endif // ALMOND_USING_SDL
 } // namespace epochnamespace::sdlcontext
+
+

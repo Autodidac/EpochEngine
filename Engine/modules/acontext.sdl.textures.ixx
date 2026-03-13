@@ -1,10 +1,10 @@
-ï»¿/************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+/************************************************
+ *  ¦¦¦¦¦¦¦+¦¦¦¦¦¦+  ¦¦¦¦¦¦+  ¦¦¦¦¦¦+¦¦+  ¦¦+   *
+ *  ¦¦+----+¦¦+--¦¦+¦¦+---¦¦+¦¦+----+¦¦¦  ¦¦¦   *
+ *  ¦¦¦¦¦+  ¦¦¦¦¦¦++¦¦¦   ¦¦¦¦¦¦     ¦¦¦¦¦¦¦¦   *
+ *  ¦¦+--+  ¦¦+---+ ¦¦¦   ¦¦¦¦¦¦     ¦¦+--¦¦¦   *
+ *  ¦¦¦¦¦¦¦+¦¦¦     +¦¦¦¦¦¦+++¦¦¦¦¦¦+¦¦¦  ¦¦¦   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -272,8 +272,13 @@ export namespace epochnamespace::sdltextures
             return;
         }
 
-        const int w = sdlcontext::state::get_sdl_state().window.width;
-        const int h = sdlcontext::state::get_sdl_state().window.height;
+        auto& sharedState = sdlcontext::state::get_sdl_state();
+        if (sharedState.renderFaulted || !sdl_renderer) {
+            return;
+        }
+
+        const int w = sharedState.window.width;
+        const int h = sharedState.window.height;
         if (w == 0 || h == 0) {
             std::cerr << "[SDL_DrawSprite] ERROR: Window dimensions are zero.\n";
             return;
@@ -384,14 +389,15 @@ export namespace epochnamespace::sdltextures
         //    << ", width=" << width << ", height=" << height << "\n";
 
         //std::cout << "Atlas size: " << atlas->width << "x" << atlas->height << "\n";
-        //std::cout << "Region: x=" << entry.region.x << " y=" << entry.region.y
-        //    << " w=" << entry.region.width << " h=" << entry.region.height << "\n";
-        //std::cout << "Dest: x=" << dstRect.x << " y=" << dstRect.y
-        //    << " w=" << dstRect.w << " h=" << dstRect.h << "\n";
-
-        SDL_RenderTexture(sdl_renderer, texture, &srcRect, &dstRect);
+        if (!SDL_RenderTexture(sdl_renderer, texture, &srcRect, &dstRect))
+        {
+            sdlcontext::check_sdl_error("SDL_RenderTexture");
+            sharedState.renderFaulted = true;
+        }
 
         sdlcontext::check_sdl_error("SDL_RenderTexture");
     }
 } // namespace epochnamespace::sdltextures
 #endif // ALMOND_USING_SDL
+
+

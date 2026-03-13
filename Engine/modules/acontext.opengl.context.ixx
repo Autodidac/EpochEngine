@@ -1,10 +1,10 @@
-﻿/************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -971,7 +971,7 @@ void main() {
             ? reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd)
             : 0;
 
-        almond::diagnostics::FrameTiming frameTimer{ core::ContextType::OpenGL, windowId, "OpenGL" };
+        diagnostics::FrameTiming frameTimer{ core::ContextType::OpenGL, windowId, "OpenGL" };
 
         PlatformGL::ScopedContext guard;
         auto desired = detail::context_to_platform_context(ctx.get());
@@ -1098,7 +1098,13 @@ void main() {
             auto cleanupContext = ctx ? detail::context_to_platform_context(ctx.get()) : PlatformGL::PlatformGLContext{};
             if (!cleanupContext.valid())
                 cleanupContext = detail::state_to_platform_context(glState);
-            if (cleanupContext.valid() && cleanupGuard.set(cleanupContext))
+
+            bool canActivateCleanup = cleanupContext.valid();
+            HWND cleanupHwnd = ctx && ctx->windowData && ctx->windowData->hwnd ? ctx->windowData->hwnd : glState.hwnd;
+            if (cleanupHwnd && (::IsWindow(cleanupHwnd) == FALSE))
+                canActivateCleanup = false;
+
+            if (canActivateCleanup && cleanupGuard.set(cleanupContext))
             {
                 detail::destroy_scene_preview_pipeline(glState);
                 opengltextures::clear_gpu_atlases();
@@ -1142,6 +1148,7 @@ void main() {
 
 #endif // ALMOND_USING_OPENGL
 } // namespace epochnamespace::openglcontext
+
 
 
 

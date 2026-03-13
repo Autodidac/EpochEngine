@@ -57,8 +57,6 @@
               "${workspaceFolder}/**",
               "../vcpkg/installed/x64-linux/include",
               "/home/dude/Documents/repos/vcpkg/installed/x64-linux/include",
-              "/home/dude/Documents/repos/AlmondShell/build/vcpkg_installed/x64-linux/include/",
-              "/home/dude/Documents/repos/AlmondShell/build/vcpkg_installed/x64-linux/share/",
               "${workspaceFolder}/bin/GCC-Release/vcpkg_installed/x64-linux/include",
               "${workspaceFolder}/bin/GCC-Debug/vcpkg_installed/x64-linux/include",
               "${workspaceFolder}/bin/Clang-Release/vcpkg_installed/x64-linux/include",

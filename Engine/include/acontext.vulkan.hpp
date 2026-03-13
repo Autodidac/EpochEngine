@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <include/aengine.config.hpp>
 
 // ============================================================================
@@ -28,7 +28,7 @@
 #    define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #  else
 #    if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC != 1
-#      error "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC must be 1 for Almond custom-loader mode."
+#      error "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC must be 1 for Epoch custom-loader mode."
 #    endif
 #  endif
 
@@ -48,8 +48,3 @@
 #  endif
 
 #endif // ALMOND_USING_VULKAN
-
-
-
-
-

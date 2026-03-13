@@ -424,7 +424,7 @@ export namespace epochnamespace::anativecontext
             ? reinterpret_cast<std::uintptr_t>(ctx.windowData->hwnd)
             : 0;
 
-        almond::diagnostics::FrameTiming frameTimer{ ctx.type, windowId, "Software" };
+        diagnostics::FrameTiming frameTimer{ ctx.type, windowId, "Software" };
 #if ALMOND_USE_CLEAR_COLOR        // Clear
         const auto clearColor = core::clear_color_for_context(core::ContextType::Software);
         const auto clearR = static_cast<std::uint8_t>(

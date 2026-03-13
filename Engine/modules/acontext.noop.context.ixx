@@ -31,7 +31,7 @@ export namespace epochnamespace::noopcontext
 
     inline bool noop_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue)
     {
-        almond::diagnostics::FrameTiming frameTimer{ core::ContextType::Noop, 0, "Noop" };
+        diagnostics::FrameTiming frameTimer{ core::ContextType::Noop, 0, "Noop" };
 
         if (ctx)
         {

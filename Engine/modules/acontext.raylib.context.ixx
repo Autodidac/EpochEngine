@@ -463,7 +463,7 @@ namespace epochnamespace::raylibcontext
                 ? reinterpret_cast<std::uintptr_t>(st.owner_ctx->windowData->hwnd)
                 : 0);
 
-        almond::diagnostics::FrameTiming frameTimer{
+        diagnostics::FrameTiming frameTimer{
             epochnamespace::core::ContextType::RayLib,
             windowId,
             "Raylib"

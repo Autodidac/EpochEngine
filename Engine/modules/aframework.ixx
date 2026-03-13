@@ -1,4 +1,4 @@
-module; // global module fragment — REQUIRED for Win32 headers
+module; // global module fragment â€” REQUIRED for Win32 headers
 
 #if defined(_WIN32)
 
@@ -62,6 +62,6 @@ export namespace epochnamespace::platform::win32
 // Non-Windows hard stop (intentional)
 // ------------------------------------------------------------
 
-static_assert(false, "almond.platform.win32 imported on non-Windows platform");
+static_assert(false, "epoch.platform.win32 imported on non-Windows platform");
 
 #endif

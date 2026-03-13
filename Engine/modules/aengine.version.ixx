@@ -1,4 +1,4 @@
-﻿module;
+module;
 
 export module aengine.version;
 
@@ -9,19 +9,11 @@ import <string_view>;
 
 export namespace epochnamespace
 {
-    // ─────────────────────────────────────────────
-    // Version constants (compile-time safe)
-    // ─────────────────────────────────────────────
-
     export constexpr int major = 0;
-    export constexpr int minor = 81;
-    export constexpr int revision = 23;
+    export constexpr int minor = 82;
+    export constexpr int revision = 0;
 
-    export constexpr std::string_view kEngineName = "Epoch engine";
-
-    // ─────────────────────────────────────────────
-    // Accessors
-    // ─────────────────────────────────────────────
+    export constexpr std::string_view kEngineName = "Epoch";
 
     export constexpr int GetMajor() noexcept
     {
@@ -48,10 +40,6 @@ export namespace epochnamespace
         return kEngineName.data();
     }
 
-    // ─────────────────────────────────────────────
-    // Version formatting
-    // ─────────────────────────────────────────────
-
     export const char* GetEngineVersion() noexcept
     {
         thread_local std::array<char, 32> buffer{};
@@ -72,5 +60,4 @@ export namespace epochnamespace
     }
 }
 
-// Legacy alias (kept intentionally)
 export namespace epochengine = epochnamespace;

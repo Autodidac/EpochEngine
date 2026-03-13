@@ -12,20 +12,20 @@ export namespace epochnamespace::core {
 
     // Thread-safe, reusable, header-only function wrapper
     template <typename Signature>
-    struct AlmondAtomicFunction {
+    struct EpochAtomicFunction {
         using Func = std::function<Signature>;
         std::atomic<std::shared_ptr<Func>> ptr{ nullptr };
 
-        AlmondAtomicFunction() noexcept = default;
+        EpochAtomicFunction() noexcept = default;
 
         // Construct/assign from any callable (lambda, free function, std::function)
         template<typename F>
-        AlmondAtomicFunction(F&& f) noexcept {
+        EpochAtomicFunction(F&& f) noexcept {
             store(std::forward<F>(f));
         }
 
         template<typename F>
-        AlmondAtomicFunction& operator=(F&& f) noexcept {
+        EpochAtomicFunction& operator=(F&& f) noexcept {
             store(std::forward<F>(f));
             return *this;
         }

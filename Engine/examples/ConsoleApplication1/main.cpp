@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,7 +6,7 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
+ *   This file is part of the Epoch Project.                 *
  *   epochengine - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
@@ -102,7 +102,7 @@ inline auto sanity() {
     /*
     std::string scriptName = "editor_launcher";
 
-    if (!almond::load_or_reload_script(scriptName, scheduler)) {
+    if (!epochnamespace::scripting::load_or_reload_script(scriptName, scheduler)) {
         std::cerr << "[Engine] Initial script load failed.\n";
     }
 
@@ -113,7 +113,7 @@ inline auto sanity() {
         auto now = std::filesystem::last_write_time("src/scripts/" + scriptName + ".ascript.cpp");
         if (now != lastCheck) {
             std::cout << "\n[Engine] Detected change in script source, recompiling...\n";
-            almond::load_or_reload_script(scriptName, scheduler);
+            epochnamespace::scripting::load_or_reload_script(scriptName, scheduler);
             lastCheck = now;
         }
 

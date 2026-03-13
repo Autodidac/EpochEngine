@@ -1,4 +1,4 @@
-﻿//// acontext.vulkan.platform.context.cpp
+//// acontext.vulkan.platform.context.cpp
 //
 // This file MUST be a module implementation unit for `acontext.vulkan.context`
 // because it defines `epochnamespace::vulkancontext::Application` methods.
@@ -21,6 +21,10 @@ module;
 // ---- One-TU-only implementations / storage ---------------------------------
 #ifndef STB_IMAGE_IMPLEMENTATION
 #   define STB_IMAGE_IMPLEMENTATION
+#endif
+
+#ifndef ALMOND_USING_VULKAN
+#   define ALMOND_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
@@ -484,6 +488,7 @@ namespace epochnamespace::vulkancontext
     }
 
 } // namespace epochnamespace::vulkancontext
+
 
 
 

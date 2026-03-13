@@ -8,6 +8,10 @@
 
 module;
 
+#ifndef ALMOND_USING_VULKAN
+#   define ALMOND_USING_VULKAN 1
+#endif
+
 #include <include/acontext.vulkan.hpp>
 #include <vulkan/vulkan.hpp>
 
@@ -485,3 +489,4 @@ namespace epochnamespace::vulkantextures
         (void)atlas;
     }
 }
+

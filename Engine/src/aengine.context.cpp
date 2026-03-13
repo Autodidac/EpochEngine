@@ -488,15 +488,15 @@ namespace epochnamespace::core
     namespace
     {
         inline void copy_atomic_function(
-            AlmondAtomicFunction<std::uint32_t(TextureAtlas&, std::string, const ImageData&)>& dst,
-            const AlmondAtomicFunction<std::uint32_t(TextureAtlas&, std::string, const ImageData&)>& src)
+            EpochAtomicFunction<std::uint32_t(TextureAtlas&, std::string, const ImageData&)>& dst,
+            const EpochAtomicFunction<std::uint32_t(TextureAtlas&, std::string, const ImageData&)>& src)
         {
             dst.ptr.store(src.ptr.load(std::memory_order_acquire), std::memory_order_release);
         }
 
         inline void copy_atomic_function(
-            AlmondAtomicFunction<std::uint32_t(const TextureAtlas&)>& dst,
-            const AlmondAtomicFunction<std::uint32_t(const TextureAtlas&)>& src)
+            EpochAtomicFunction<std::uint32_t(const TextureAtlas&)>& dst,
+            const EpochAtomicFunction<std::uint32_t(const TextureAtlas&)>& src)
         {
             dst.ptr.store(src.ptr.load(std::memory_order_acquire), std::memory_order_release);
         }

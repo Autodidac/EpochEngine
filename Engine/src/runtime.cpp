@@ -1,6 +1,4 @@
-module;
-
-#include "../include/app_api.h"
+﻿#include "../include/app_api.h"
 #include "../include/epoch.api_types.hpp"
 
 #include <algorithm>
@@ -51,7 +49,6 @@ extern "C"
 #endif
 }
 import runtime;
-module runtime;
 
 import aengine.cli;
 

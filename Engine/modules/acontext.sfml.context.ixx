@@ -1,10 +1,10 @@
 ﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  ¦¦¦¦¦¦¦+¦¦¦¦¦¦+  ¦¦¦¦¦¦+  ¦¦¦¦¦¦+¦¦+  ¦¦+   *
+ *  ¦¦+----+¦¦+--¦¦+¦¦+---¦¦+¦¦+----+¦¦¦  ¦¦¦   *
+ *  ¦¦¦¦¦+  ¦¦¦¦¦¦++¦¦¦   ¦¦¦¦¦¦     ¦¦¦¦¦¦¦¦   *
+ *  ¦¦+--+  ¦¦+---+ ¦¦¦   ¦¦¦¦¦¦     ¦¦+--¦¦¦   *
+ *  ¦¦¦¦¦¦¦+¦¦¦     +¦¦¦¦¦¦+++¦¦¦¦¦¦+¦¦¦  ¦¦¦   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -146,12 +146,11 @@ export namespace epochnamespace::sfmlcontext
         sfmlcontext.height = clampedHeight;
 
 #if defined(_WIN32)
-        const bool attachToHostWindow =
-            parentWnd && ctx && ctx->windowData && ctx->windowData->hwnd == parentWnd;
-        sfmlcontext.parent = attachToHostWindow ? nullptr : parentWnd;
+        HWND hostWnd = parentWnd;
+        HWND dockParent = hostWnd ? ::GetParent(hostWnd) : nullptr;
+        sfmlcontext.parent = dockParent ? dockParent : hostWnd;
 #else
         (void)parentWnd;
-        const bool attachToHostWindow = false;
 #endif
 
         std::weak_ptr<core::Context> weakCtx = ctx;
@@ -197,13 +196,7 @@ export namespace epochnamespace::sfmlcontext
         if (windowTitle.empty())
             windowTitle = "SFML Window";
 
-        if (attachToHostWindow)
-        {
-            sfmlcontext.window = std::make_unique<sf::RenderWindow>(
-                static_cast<sf::WindowHandle>(parentWnd), settings);
-        }
-        else
-        {
+                {
             sf::VideoMode mode(sfmlcontext.width, sfmlcontext.height, 32u);
             sfmlcontext.window = std::make_unique<sf::RenderWindow>(
                 mode, windowTitle, sf::Style::Default, settings);
@@ -236,12 +229,17 @@ export namespace epochnamespace::sfmlcontext
         sfmlcontext.hdc = GetDC(sfmlcontext.hwnd);
 
 #if !defined(ALMOND_MAIN_HEADLESS)
-        if (ctx)
+                if (ctx)
+        {
             ctx->hwnd = sfmlcontext.hwnd;
+            ctx->native_window = sfmlcontext.hwnd;
+        }
 
         if (ctx && ctx->windowData)
         {
             ctx->windowData->hwnd = sfmlcontext.hwnd;
+            ctx->windowData->host_hwnd = hostWnd;
+            ctx->windowData->hwndChild = sfmlcontext.hwnd;
             ctx->windowData->set_size(
                 static_cast<int>(sfmlcontext.width),
                 static_cast<int>(sfmlcontext.height));
@@ -266,19 +264,20 @@ export namespace epochnamespace::sfmlcontext
         // Detach for now; render thread will reactivate per-frame.
         sfmlcontext.window->setActive(false);
 
-        if (sfmlcontext.parent)
+                if (sfmlcontext.parent)
         {
             SetParent(sfmlcontext.hwnd, sfmlcontext.parent);
 
             LONG_PTR style = GetWindowLongPtr(sfmlcontext.hwnd, GWL_STYLE);
             style &= ~WS_OVERLAPPEDWINDOW;
-            style |= WS_CHILD | WS_VISIBLE;
+            style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             SetWindowLongPtr(sfmlcontext.hwnd, GWL_STYLE, style);
 
             epochnamespace::core::MakeDockable(sfmlcontext.hwnd, sfmlcontext.parent);
 
             RECT client{};
-            GetClientRect(sfmlcontext.parent, &client);
+            HWND sizeSource = hostWnd ? hostWnd : sfmlcontext.parent;
+            GetClientRect(sizeSource, &client);
             const int width = static_cast<int>((std::max)(static_cast<LONG>(1), client.right - client.left));
             const int height = static_cast<int>((std::max)(static_cast<LONG>(1), client.bottom - client.top));
 
@@ -287,7 +286,10 @@ export namespace epochnamespace::sfmlcontext
 
             SetWindowPos(
                 sfmlcontext.hwnd, nullptr, 0, 0, width, height,
-                SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+            if (hostWnd && hostWnd != sfmlcontext.hwnd && ::IsWindow(hostWnd) != FALSE)
+                ShowWindow(hostWnd, SW_HIDE);
 
             if (sfmlcontext.onResize)
                 sfmlcontext.onResize(width, height);
@@ -344,7 +346,7 @@ export namespace epochnamespace::sfmlcontext
             windowId = 0u;
 #endif
 
-        almond::diagnostics::FrameTiming frameTimer{ backendType, windowId, "SFML" };
+        diagnostics::FrameTiming frameTimer{ backendType, windowId, "SFML" };
 
         // If the HWND is already dead (e.g., external teardown), bail before any GL calls.
 #if defined(_WIN32)
@@ -489,18 +491,16 @@ export namespace epochnamespace::sfmlcontext
         // valid SFML context. If the window is already closed/destroyed, skip deletion.
         if (sfmlcontext.window && sfmlcontext.window->isOpen())
         {
-            if (sfmlcontext.window->setActive(true))
+            bool canTouchGl = true;
+#if defined(_WIN32)
+            canTouchGl = sfmlcontext.hwnd && (::IsWindow(sfmlcontext.hwnd) != FALSE);
+#endif
+            if (canTouchGl && sfmlcontext.window->setActive(true))
             {
                 clear_gpu_atlases();
                 sfmlcontext.window->setActive(false);
             }
-            else
-            {
-                std::cerr << "[SFML] WARNING: could not activate context during cleanup; skipping GPU atlas delete\n";
-            }
 
-            // Close after deleting textures (while context is still valid).
-            sfmlcontext.window->setActive(true);
             sfmlcontext.window->close();
             sfmlcontext.window.reset();
         }
@@ -529,3 +529,5 @@ export namespace epochnamespace::sfmlcontext
 
 #endif // ALMOND_USING_SFML
 } // namespace epochnamespace::sfmlcontext
+
+

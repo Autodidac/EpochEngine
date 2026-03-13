@@ -1,10 +1,10 @@
-ï»¿/************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+/************************************************
+ *  ¦¦¦¦¦¦¦+¦¦¦¦¦¦+  ¦¦¦¦¦¦+  ¦¦¦¦¦¦+¦¦+  ¦¦+   *
+ *  ¦¦+----+¦¦+--¦¦+¦¦+---¦¦+¦¦+----+¦¦¦  ¦¦¦   *
+ *  ¦¦¦¦¦+  ¦¦¦¦¦¦++¦¦¦   ¦¦¦¦¦¦     ¦¦¦¦¦¦¦¦   *
+ *  ¦¦+--+  ¦¦+---+ ¦¦¦   ¦¦¦¦¦¦     ¦¦+--¦¦¦   *
+ *  ¦¦¦¦¦¦¦+¦¦¦     +¦¦¦¦¦¦+++¦¦¦¦¦¦+¦¦¦  ¦¦¦   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -29,6 +29,10 @@
  *                                              *
  ***********************************************/
 module;
+
+#ifndef ALMOND_USING_VULKAN
+#   define ALMOND_USING_VULKAN 1
+#endif
 
 export module acontext.vulkan.context;
 
@@ -171,7 +175,7 @@ export namespace epochnamespace::vulkancontext
             ? reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd)
             : reinterpret_cast<std::uintptr_t>(ctx->native_window);
 
-        almond::diagnostics::FrameTiming frameTimer{ core::ContextType::Vulkan, windowId, "Vulkan" };
+        diagnostics::FrameTiming frameTimer{ core::ContextType::Vulkan, windowId, "Vulkan" };
 
         auto* app = try_get_vulkan_app(ctx.get());
         if (!app)
@@ -235,4 +239,5 @@ export namespace epochnamespace::vulkancontext
             atlasmanager::unregister_backend_uploader(core::ContextType::Vulkan);
     }
 }
+
 

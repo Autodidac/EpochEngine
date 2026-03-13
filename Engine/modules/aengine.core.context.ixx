@@ -482,8 +482,8 @@ export namespace epochnamespace::core
         std::function<bool(input::MouseButton)> is_mouse_button_down;
 
         // High-level callbacks
-        core::AlmondAtomicFunction<std::uint32_t(TextureAtlas&, std::string, const ImageData&)> add_texture;
-        core::AlmondAtomicFunction<std::uint32_t(const TextureAtlas&)>                         add_atlas;
+        core::EpochAtomicFunction<std::uint32_t(TextureAtlas&, std::string, const ImageData&)> add_texture;
+        core::EpochAtomicFunction<std::uint32_t(const TextureAtlas&)>                         add_atlas;
         std::function<void(int, int)>                                                          onResize;
     };
 

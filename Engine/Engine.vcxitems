@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -6,16 +6,16 @@
     <ItemsProjectGuid>{b2f62625-abdc-43c1-9ac0-379c96b52a74}</ItemsProjectGuid>
   </PropertyGroup>
   <PropertyGroup>
-    <AlmondUseRaylib Condition="'$(AlmondUseRaylib)'==''">true</AlmondUseRaylib>
-    <AlmondUseSfml Condition="'$(AlmondUseSfml)'==''">true</AlmondUseSfml>
+    <EpochUseRaylib Condition="'$(EpochUseRaylib)'==''">true</EpochUseRaylib>
+    <EpochUseSfml Condition="'$(EpochUseSfml)'==''">true</EpochUseSfml>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies Condition="'$(AlmondUseRaylib)'=='true'">%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(AlmondUseSfml)'=='true'">%(AdditionalDependencies);sfml-graphics.lib;sfml-window.lib;sfml-system.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(EpochUseRaylib)'=='true'">%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(EpochUseSfml)'=='true'">%(AdditionalDependencies);sfml-graphics.lib;sfml-window.lib;sfml-system.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -147,7 +147,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimage.loader.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimage.writer.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.state.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\almondshell.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epochengine.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\amatch3like.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aminesweeperlike.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\amipmapatlas.ixx" />

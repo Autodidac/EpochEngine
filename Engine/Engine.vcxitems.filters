@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -154,6 +154,9 @@
     <Filter Include="Header Files\ai">
       <UniqueIdentifier>{a0192b66-e6b7-44c3-8805-79830528079d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Headers Shared">
+      <UniqueIdentifier>{af3b92cc-68fd-46b6-a5f7-6c6712deeca5}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\pch.h">
@@ -177,9 +180,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\_epoch.stl_types.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\app_api.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.api_types.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -200,6 +200,9 @@
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_types.hpp">
       <Filter>Header Files\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\app_api.h">
+      <Filter>Headers Shared</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -662,7 +665,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.diagnostics.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\almondshell.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epochengine.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-buffers.ixx">

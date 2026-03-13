@@ -31,7 +31,7 @@ import <vector>;
 
 
 
-export namespace almond::diagnostics {
+export namespace epochnamespace::diagnostics {
     using epochnamespace::core::ContextType;
 
     struct FrameTiming
@@ -294,4 +294,4 @@ export namespace almond::diagnostics {
                 << " Update aengineconfig.hpp before launching.\n";
         }
     }
-} // namespace almond::diagnostics
+} // namespace epochnamespace::diagnostics

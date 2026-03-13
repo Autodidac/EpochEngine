@@ -1,6 +1,6 @@
 {
-  "name": "almond-engine",
-  "version-string": "0.1.0",
+  "name": "epoch-engine",
+  "version-string": "0.82.0",
   "builtin-baseline": "74ec888e385d189b42d6b398d0bbaa6f1b1d3b0e",
   "dependencies": [
     "asio",

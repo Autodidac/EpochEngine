@@ -475,7 +475,7 @@ namespace epoch::ai
         BotReply out{};
 
         const std::string sys =
-            "You are AlmondBot.\n"
+            "You are EpochBot.\n"
             "Rules:\n"
             " - Reply with correct English grammar.\n"
             " - Capitalize the first letter of the response.\n"

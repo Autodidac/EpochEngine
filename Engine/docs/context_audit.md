@@ -1,26 +1,25 @@
-# Context Module Audit
+# Context Audit
 
-The following table summarises the current state of every file whose name includes "context".  "Earmark" indicates whether the file should be queued for removal in a future cleanup pass.
+This is the current high-level status of the context and renderer stack.
 
-| Path | Status | Notes | Earmark |
-| --- | --- | --- | --- |
-| `modules/aengine.core.context.ixx` | Active | Core context abstraction referenced throughout the engine. | No |
-| `modules/aengine.context.control.ixx` | Active | Provides command helpers for draw operations; required by the multiplexer. | No |
-| `modules/aengine.context.multiplexer.ixx` | Active | Coordinates backend switching; heavily used by `src modules/aengine.context.multiplexer.win.cppm`. | No |
-| `src modules/aengine.context.multiplexer.win.cppm` | Active | Implements multiplexer runtime; necessary for desktop builds. | No |
-| `modules/acontext.opengl.renderer.ixx` | Legacy Stub | Mostly commented-out scaffolding with alternate renderer hooks; not referenced at runtime. | Maybe |
-| `modules/acontext.opengl.state.ixx` | Active | Shares renderer state structs across backends; used by Raylib helpers. | No |
-| `modules/aengine.context.type.ixx` | Active | Enumerations for backend selection; consumed by virtually every renderer. | No |
-| `modules/aengine.context.window.ixx` | Active | Wraps native window handles; needed by all backends. | No |
-| `modules/acontext.opengl.context.ixx` | Active | Fully implemented OpenGL backend. | No |
-| `modules/asfmlcontext.ixx` | Active | Used by the SFML backend wiring in `src/acontext.cpp`. | No |
-| `modules/acontext.sdl.context.ixx` | Active | Required for the SDL backend and renderer integration. | No |
-| `modules/acontext.softrenderer.context.ixx` | Active | Powers the software renderer; still under development but exercised by tooling. | No |
-| `modules/acontext.noop.context.ixx` | Minimal Stub | Only compiled for headless builds; harmless placeholder for tests. | No |
-| `modules/acontext.raylib.context.ixx` | Active | Primary Raylib backend implementation. | No |
-| `modules/acontext.raylib.input.ixx` | Active | Required to translate Raylib input to engine enums. | No |
-| `modules/acontext.raylib.state.ixx` | Active | Shared Raylib state container; consumed by renderer and context glue. | No |
-| `modules/acontext.sdl.renderer.ixx` | Partial | SDL renderer wrapper is wired in but lacks texture batching; revisit once SDL backend stabilises. | No |
-| `src/acontext.cpp` | Active | Registers every backend and owns the dispatch table. | No |
+| Surface | Status | Notes |
+| --- | --- | --- |
+| `aengine.core.context` | Active | Shared context abstraction used everywhere. |
+| `aengine.context.*` multiplexer/window/control/type | Active | Core windowing and command-routing layer. |
+| `acontext.opengl.*` | Active | Primary GPU renderer path. |
+| `acontext.sdl.*` | Active | Important desktop backend, still worth continued stabilization. |
+| `acontext.raylib.*` | Active | Active and feature-rich, especially for docked-window workflows. |
+| `acontext.sfml.*` | Active | Supported, but generally more delicate due to GL/context behavior. |
+| `acontext.softrenderer.*` | Active | Fallback/debug path. |
+| `acontext.noop.context` | Minimal | Headless placeholder. |
+| `acontext.vulkan.*` | Experimental | Under active migration, not a stable default backend. |
+| `acontext.opengl.renderer.ixx` | Review candidate | Looks more archival than central; keep under review. |
+| `Engine/legacy/` context stack | Archived | Historical compatibility/reference code, not the preferred active path. |
 
-Continue reviewing entries marked "Maybe" before performing destructive changes; the prior "Yes" candidates have been excised from the tree.
+## Practical guidance
+
+- Prefer module-backed active context surfaces under `Engine/modules/` and
+  `Engine/src/`.
+- Use `Engine/legacy/` for migration help or archaeology, not for new runtime work.
+- Treat Vulkan and a few minor archival helpers as incomplete until their paths
+  are explicitly finished and tested.

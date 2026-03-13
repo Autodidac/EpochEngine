@@ -1,16 +1,16 @@
 module;
 
-// anet.hpp — Hybrid transport shim for Almond / Epoch Engine
+// anet.hpp â€” Hybrid transport shim for the Epoch engine
 //
-// • Default: SteamNetworkingSockets (relay, P2P, NAT punch, QUIC)
-// • Fallback: Asio (UDP) (LAN, dedicated, headless servers)
+// â€¢ Default: SteamNetworkingSockets (relay, P2P, NAT punch, QUIC)
+// â€¢ Fallback: Asio (UDP) (LAN, dedicated, headless servers)
 //
 // Define ALMOND_WITH_STEAM before including if Steam SDK is available.
 // Link steam_api64.lib (+ tier0.lib, vstdlib.lib) on Windows builds.
 //
 // Build-time deps:
-//   • <asio.hpp> (header-only ≥1.30.2)
-//   • Steam SDK 1.53a (or GameNetworkingSockets ≥v1.4.0)
+//   â€¢ <asio.hpp> (header-only â‰¥1.30.2)
+//   â€¢ Steam SDK 1.53a (or GameNetworkingSockets â‰¥v1.4.0)
 //
 // Runtime: call epochnamespace::net::init(); once, epochnamespace::net::poll(); each frame.
 

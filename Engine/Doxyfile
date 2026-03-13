@@ -1,5 +1,5 @@
-# Doxyfile for AlmondShell API documentation
-PROJECT_NAME           = "AlmondShell API"
+# Doxyfile for Epoch API documentation
+PROJECT_NAME           = "Epoch API"
 OUTPUT_DIRECTORY       = docs/api
 GENERATE_HTML          = YES
 HTML_OUTPUT            = html
