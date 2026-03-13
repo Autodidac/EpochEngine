@@ -74,7 +74,7 @@ compiling during the remaining migration work.
 
 ## Current snapshot
 
-- Version: `v0.82.0`
+- Version: `v0.82.001`
 - Changelog: `Changes/changelog.txt`
 - Roadmap: `Changes/roadmap.txt`
 
