@@ -333,7 +333,7 @@ namespace
     }
 #endif
 
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
     void sfml_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -600,7 +600,8 @@ namespace epochnamespace::core
             AddContextForBackend(ContextType::OpenGL, std::move(ctx));
         }
 #endif
-#if defined(ALMOND_USING_SFML)
+
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::SFML;
@@ -708,7 +709,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_VULKAN)
+#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::Vulkan;

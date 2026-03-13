@@ -54,7 +54,7 @@ module;
 #endif
 
 
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
 #define SFML_STATIC
 #include <SFML/Graphics.hpp>
 #endif
@@ -71,7 +71,7 @@ import <functional>;
 
 export namespace epochnamespace::sfmlcontext::state
 {
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
     struct SFML3State
     {
         SFML3State()

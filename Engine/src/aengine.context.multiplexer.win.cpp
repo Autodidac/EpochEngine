@@ -88,7 +88,7 @@ import acontext.opengl.context;
 
 import acontext.softrenderer.context;
 #endif
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
 import acontext.sfml.context;
 #endif
 #if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
@@ -639,7 +639,7 @@ namespace epochnamespace::core
                         glrc = CreateSharedGLContext(hdc);
                         usesSharedContext = (glrc != nullptr);
                     }
-#if defined(ALMOND_USING_VULKAN)
+#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
                     else if (type == ContextType::Vulkan)
                     {
                         // Keep Vulkan windows free of WGL state to avoid WSI surface conflicts.
@@ -806,7 +806,7 @@ namespace epochnamespace::core
                             static_cast<void*>(hwnd));
                         break;
 #endif
-#if defined(ALMOND_USING_VULKAN)
+#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
                     case ContextType::Vulkan:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -815,7 +815,7 @@ namespace epochnamespace::core
                             static_cast<void*>(hwnd));
                         break;
 #endif
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
                     case ContextType::SFML:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -837,7 +837,7 @@ namespace epochnamespace::core
 #if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
         make_backend_windows(ContextType::SDL, SDLWinCount);
 #endif
-#if defined(ALMOND_USING_VULKAN)
+#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
         make_backend_windows(ContextType::Vulkan, VulkanWinCount);
 #endif
 #if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
@@ -848,7 +848,7 @@ namespace epochnamespace::core
         make_backend_windows(ContextType::Software, SoftwareWinCount);
 #endif
         // (void)SFMLWinCount; // place holder
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
         make_backend_windows(ContextType::SFML, SFMLWinCount);
 #endif
 
@@ -888,7 +888,7 @@ namespace epochnamespace::core
                 ::wglMakeCurrent(nullptr, nullptr);
             }
         }
-#if defined(ALMOND_USING_VULKAN)
+#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
         if (type == ContextType::Vulkan)
         {
             // Keep docked Vulkan windows free of WGL state too.
@@ -1245,7 +1245,7 @@ namespace epochnamespace::core
                 win.titleNarrow);
         }
 #endif
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
         if (ctx->type == ContextType::SFML)
         {
             epochnamespace::logger::get(kLogSys).logf(
@@ -1291,7 +1291,7 @@ namespace epochnamespace::core
 
 		// skipGenericInit for backends that do their own init above
         const bool skipGenericInit =
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
             (ctx->type == ContextType::SFML) ||
 #endif
 #if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
@@ -1417,7 +1417,7 @@ namespace epochnamespace::core
             // Instead, post a request to each child so it can undock itself on its owning thread.
             for (HWND child : children)
             {
-#if ALMOND_SINGLE_PARENT
+#if defined(ALMOND_SINGLE_PARENT) && (ALMOND_SINGLE_PARENT == 1)
                 ::PostMessageW(child, WM_ALMOND_DOCKCMD, static_cast<WPARAM>(DockCmd::Undock), 0);
 #endif
                 ::PostMessageW(child, WM_CLOSE, 0, 0);

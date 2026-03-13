@@ -34,7 +34,7 @@ module;
 
 export module acontext.sfml.renderer;
 
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
 
 export namespace epochnamespace::sfmlcontext
 {

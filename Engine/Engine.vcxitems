@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -59,7 +59,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>
-    <None Include="$(MSBuildThisFileDirectory)modules\.gitkeep" />
     <None Include="$(MSBuildThisFileDirectory)src\WinResource.aps" />
     <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
@@ -187,9 +186,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aspriteregistry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atetrislike.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atexture.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypes.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypesposix.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atypeswin32.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.system.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.internal_private.ixx" />

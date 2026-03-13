@@ -1,10 +1,10 @@
 ﻿/************************************************
- *  ¦¦¦¦¦¦¦+¦¦¦¦¦¦+  ¦¦¦¦¦¦+  ¦¦¦¦¦¦+¦¦+  ¦¦+   *
- *  ¦¦+----+¦¦+--¦¦+¦¦+---¦¦+¦¦+----+¦¦¦  ¦¦¦   *
- *  ¦¦¦¦¦+  ¦¦¦¦¦¦++¦¦¦   ¦¦¦¦¦¦     ¦¦¦¦¦¦¦¦   *
- *  ¦¦+--+  ¦¦+---+ ¦¦¦   ¦¦¦¦¦¦     ¦¦+--¦¦¦   *
- *  ¦¦¦¦¦¦¦+¦¦¦     +¦¦¦¦¦¦+++¦¦¦¦¦¦+¦¦¦  ¦¦¦   *
- *  +------++-+      +-----+  +-----++-+  +-+   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -28,6 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+
  // acontext.sfml.context.ixx
 module;
 
@@ -87,7 +88,7 @@ import <utility>;
 
 export namespace epochnamespace::sfmlcontext
 {
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
 
     // SFML NOTE:
     // - SFML's default RenderTarget path uses legacy/fixed-function OpenGL calls.

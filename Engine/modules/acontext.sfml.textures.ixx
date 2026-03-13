@@ -33,7 +33,7 @@ module;
 #include <include/aengine.config.hpp>
 
 
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
 #define SFML_STATIC
 #include <SFML/Graphics.hpp>
 #endif
@@ -42,7 +42,7 @@ export module acontext.sfml.textures;
 
 import aengine.platform;
 
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
 
 import aatlas.manager;
 import aatlas.texture;

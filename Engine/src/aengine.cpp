@@ -114,13 +114,13 @@ import acellularsim;
 #if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
 import acontext.opengl.context;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
 import acontext.softrenderer.context;
 #endif
 #if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
 import acontext.sdl.context;
 #endif
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
 import acontext.sfml.context;
 #endif
 #if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
@@ -177,13 +177,13 @@ namespace epochnamespace::core
 
 #if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
         cfg.opengl_count = 1;
-#elif defined(ALMOND_USING_VULKAN)
+#elif defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
         cfg.vulkan_count = 1;
-#elif defined(ALMOND_USING_SDL)
+#elif defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
         cfg.sdl_count = 1;
-#elif defined(ALMOND_USING_RAYLIB)
+#elif defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
         cfg.raylib_count = 1;
-#elif defined(ALMOND_USING_SFML)
+#elif defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
         cfg.sfml_count = 1;
 #else
         cfg.software_count = 1;
@@ -306,7 +306,7 @@ namespace epochnamespace::core
                 mgr.CleanupFinishedWindows();
 
                 auto snapshot = collect_backend_contexts();
-#if !defined(ALMOND_SINGLE_PARENT)
+#if !defined(ALMOND_SINGLE_PARENT) || (ALMOND_SINGLE_PARENT == 0)
                 bool any_context_alive = false;
                 std::size_t active_context_count = 0;
                 for (auto& [_, contexts] : snapshot)
@@ -482,7 +482,7 @@ namespace epochnamespace::core
                             return ctx_running;
                         };
 
-#if defined(ALMOND_SINGLE_PARENT)
+#if !defined(ALMOND_SINGLE_PARENT) && (ALMOND_SINGLE_PARENT == 1)
                     if (!contexts.empty())
                     {
                         auto master = contexts.front();
@@ -505,7 +505,7 @@ namespace epochnamespace::core
 #endif
                     if (!running) break;
                 }
-#if !defined(ALMOND_SINGLE_PARENT)
+#if !defined(ALMOND_SINGLE_PARENT) || (ALMOND_SINGLE_PARENT == 0)
                 if (!any_context_alive)
                 {
 #if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
@@ -546,7 +546,7 @@ namespace epochnamespace::core
                             epochnamespace::openglcontext::opengl_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
                         case epochnamespace::core::ContextType::Software:
                             // epochnamespace::anativecontext::softrenderer_cleanup(ctx);
                             break;
@@ -556,7 +556,7 @@ namespace epochnamespace::core
                             //  epochnamespace::sdlcontext::sdl_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
                         case epochnamespace::core::ContextType::SFML:
                             epochnamespace::sfmlcontext::sfml_cleanup(ctx);
                             break;
@@ -669,7 +669,7 @@ namespace epochnamespace::core
                 mgr.CleanupFinishedWindows();
 
                 auto snapshot = collect_backend_contexts();
-#if !defined(ALMOND_SINGLE_PARENT)
+#if !defined(ALMOND_SINGLE_PARENT) || (ALMOND_SINGLE_PARENT == 0)
                 bool any_context_alive = false;
                 std::size_t active_context_count = 0;
                 for (auto& [_, contexts] : snapshot)
@@ -846,7 +846,7 @@ namespace epochnamespace::core
                             return ctx_running;
                         };
 
-#if defined(ALMOND_SINGLE_PARENT)
+#if defined(ALMOND_SINGLE_PARENT) && (ALMOND_SINGLE_PARENT == 1)
                     if (!contexts.empty())
                     {
                         auto master = contexts.front();
@@ -869,7 +869,7 @@ namespace epochnamespace::core
 #endif
                     if (!running) break;
                 }
-#if !defined(ALMOND_SINGLE_PARENT)
+#if !defined(ALMOND_SINGLE_PARENT) || (ALMOND_SINGLE_PARENT == 0)
                 if (!any_context_alive)
                 {
 #if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
@@ -913,7 +913,7 @@ namespace epochnamespace::core
                             epochnamespace::openglcontext::opengl_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
                         case epochnamespace::core::ContextType::Software:
                            // epochnamespace::anativecontext::softrenderer_cleanup(ctx);
                             break;
@@ -923,7 +923,7 @@ namespace epochnamespace::core
                           //  epochnamespace::sdlcontext::sdl_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SFML)
+#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
                         case epochnamespace::core::ContextType::SFML:
                             epochnamespace::sfmlcontext::sfml_cleanup(ctx);
                             break;
