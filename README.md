@@ -2,42 +2,170 @@
 
 # Epoch
 
-**Epoch** is a C++23, modules-first runtime engine focused on multi-context
+**Epoch** is a **C++23 modules-first runtime engine** focused on multi-context
 rendering, atlas-driven UI, hot-reloadable scripting, and a desktop-first
-workflow that still preserves compatibility surfaces for older integrations.
+workflow for editor and game runtime development.
 
-## What Epoch provides
+The project emphasizes **modern C++ architecture, high subsystem density, and
+clean modular boundaries** rather than raw code volume.
 
-- Multi-context window and render orchestration across OpenGL, SDL3, Raylib,
-  SFML, software, and noop/headless paths.
-- C++23 module-first engine code under `Engine/modules/` with supporting source
-  in `Engine/src/`.
-- Atlas-driven rendering and GUI plumbing shared across active backends.
-- A scripting and task-graph pipeline intended for hot-reload and tooling
-  scenarios.
-- A legacy compatibility archive now kept under `Engine/legacy/` instead of a
-  separate top-level tree.
+The current engine snapshot is organized around a dense modular runtime,
+multi-backend context orchestration, and a compatibility archive under
+`Engine/legacy/`.
 
-## Repository layout
+---
 
-- `Engine/` - active engine code, examples, build scripts, docs, and the legacy archive.
-- `Changes/` - changelog, roadmap, and release notes.
-- `Images/` - repository artwork and readme assets.
-- `Tools/` - helper notes for local tooling setup.
+# Design goals
 
-## Documentation map
+Epoch focuses on a few core principles:
 
-- Start with `Engine/docs/README.md`.
-- Build guidance lives in `Engine/docs/build_presets.md`,
-  `Engine/docs/build_scripts.md`, and `Engine/docs/tools_list.md`.
-- Runtime and configuration guidance lives in `Engine/docs/runtime_operations.md`
-  and `Engine/docs/aengineconfig_flags.md`.
-- Architecture and backend status live in `Engine/docs/engine_analysis.md`,
-  `Engine/docs/context_audit.md`, and
-  `Engine/docs/menu_overlay_backend_audit.md`.
-- Legacy migration/reference material lives in `Engine/docs/legacy_archive.md`.
+### Modules-first architecture
+Engine subsystems are implemented as **C++23 modules** under:
 
-## Quick start
+```
+Engine/modules/
+```
+
+with implementation code in:
+
+```
+Engine/src/
+```
+
+### Multi-context rendering runtime
+Rendering backends can run concurrently across multiple window contexts.
+
+### Atlas-driven UI and rendering pipelines
+GUI, sprites, and asset rendering share atlas systems across backends.
+
+### Hot-reloadable scripting
+Runtime scripts compile to dynamic modules and reload during execution.
+
+### Desktop-first workflow
+The runtime emphasizes desktop development tooling and debugging workflows.
+
+---
+
+# What Epoch currently provides
+
+- Multi-context window and render orchestration across:
+
+  - OpenGL
+  - Vulkan
+  - SDL3
+  - Raylib
+  - SFML
+  - Software renderer
+  - Noop / headless paths
+
+- ECS-style entity and system layers
+- Atlas management for textures and GUI
+- Editor runtime systems and scene tools
+- Runtime scripting compiler and task-graph pipeline
+- Diagnostics, telemetry, and update systems
+
+A legacy compatibility archive is preserved under:
+
+```
+Engine/legacy/
+```
+
+so older integration surfaces remain available while the modern module
+architecture evolves.
+
+---
+
+# Architectural scale
+
+Epoch is intentionally **compact but structurally dense**.
+
+Current snapshot (core engine only):
+
+| Metric | Value |
+|------|------|
+| Code files | ~219 |
+| C++ modules | ~165 |
+| Headers | ~18 |
+| Implementation units | ~36 |
+
+Compared to other engines:
+
+| Engine | Approx size | Scope |
+|------|------|------|
+| Epoch (current snapshot) | ~219 files | modular runtime engine |
+| Hazel | ~400–600 files | learning / indie engine |
+| Godot | 8000+ files | full production engine |
+| Unreal Engine | 25k+ files | AAA production engine |
+
+Epoch therefore sits in the **early real-engine stage**: beyond prototype size,
+but intentionally smaller than large production engines.
+
+The project prioritizes **clean subsystem boundaries and modular architecture**
+over raw code volume.
+
+---
+
+# Repository layout
+
+```
+Engine/
+```
+
+Active engine code, examples, build scripts, documentation, and the legacy
+archive.
+
+```
+Changes/
+```
+
+Changelog, roadmap, and release notes.
+
+```
+Images/
+```
+
+Repository artwork and README assets.
+
+```
+Tools/
+```
+
+Helper notes and scripts for local tooling setup.
+
+---
+
+# Documentation map
+
+Start here:
+
+```
+Engine/docs/README.md
+```
+
+Build documentation:
+
+- `Engine/docs/build_presets.md`
+- `Engine/docs/build_scripts.md`
+- `Engine/docs/tools_list.md`
+
+Runtime and configuration:
+
+- `Engine/docs/runtime_operations.md`
+- `Engine/docs/aengineconfig_flags.md`
+
+Architecture and backend status:
+
+- `Engine/docs/engine_analysis.md`
+- `Engine/docs/context_audit.md`
+- `Engine/docs/menu_overlay_backend_audit.md`
+
+Legacy migration reference:
+
+- `Engine/docs/legacy_archive.md`
+
+---
+
+# Quick start
 
 From the repository root:
 
@@ -63,21 +191,53 @@ cd Engine
 ./run.sh gcc Release
 ```
 
-The public runtime/binary name is `epoch`.
+The public runtime/binary name is:
 
-## Compatibility note
+```
+epoch
+```
 
-Public branding, docs, and release metadata now use **Epoch** consistently.
-Public build/config knobs prefer `EPOCH_*` names, while a deeper compatibility
-layer still preserves older aliases internally so existing integrations keep
-compiling during the remaining migration work.
+---
 
-## Current snapshot
+# Compatibility note
 
-- Version: `v0.82.001`
-- Changelog: `Changes/changelog.txt`
-- Roadmap: `Changes/roadmap.txt`
+Public branding, documentation, and release metadata now consistently use
+**Epoch** across the active engine tree.
 
-## License
+Build and configuration flags prefer the `EPOCH_*` naming scheme.
 
-`LicenseRef-MIT-NoSell` - see `LICENSE` for full terms.
+A compatibility archive still preserves older code and migration surfaces under
+`Engine/legacy/`, while the active runtime stays centered in `Engine/modules/`
+and `Engine/src/`.
+
+---
+
+# Current snapshot
+
+Version:
+
+```
+v0.82.2
+```
+
+Changelog:
+
+```
+Changes/changelog.txt
+```
+
+Roadmap:
+
+```
+Changes/roadmap.txt
+```
+
+---
+
+# License
+
+```
+LicenseRef-MIT-NoSell
+```
+
+See `LICENSE` for full terms.

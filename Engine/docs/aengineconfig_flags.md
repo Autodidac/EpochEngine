@@ -2,7 +2,7 @@
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
-macros still retain `ALMOND_*` names internally so older integrations keep
+macros still retain `EPOCH_*` names internally so older integrations keep
 building during the migration.
 
 ## Preferred configure options
@@ -71,5 +71,5 @@ building during the migration.
 
 ## Current release note
 
-- `v0.82.0` aligns the public docs and configure layer with Epoch naming while
+- `v0.82.2` aligns the public docs and configure layer with Epoch naming while
   keeping the lower-level compatibility macros available under the hood.

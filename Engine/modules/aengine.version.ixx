@@ -42,7 +42,7 @@ export namespace epochnamespace
 {
     export constexpr int major = 0;
     export constexpr int minor = 82;
-    export constexpr int revision = 0;
+    export constexpr int revision = 2;
 
     export constexpr std::string_view kEngineName = "Epoch";
 

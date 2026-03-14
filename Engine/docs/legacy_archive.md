@@ -1,8 +1,8 @@
 # Legacy Archive
 
-The old standalone `legacy/` tree has been moved into `Engine/legacy/` so the
-active runtime and the compatibility/archive material now live under one engine
-root.
+The archived compatibility tree now lives under `Engine/legacy/` as an
+archaeology and migration snapshot alongside the active engine code in
+`Engine/modules/` and `Engine/src/`.
 
 ## What lives here
 
