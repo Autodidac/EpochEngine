@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -37,8 +37,8 @@ module;
 #include <stdexcept>
 #include <vector>
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
@@ -196,21 +196,33 @@ namespace epochnamespace::vulkancontext
 
     void Application::updateUniformBuffer(std::uint32_t currentImage, const vulkancamera::State& camera)
     {
-        static auto startTime = std::chrono::high_resolution_clock::now();
+        [[maybe_unused]] static auto startTime = std::chrono::high_resolution_clock::now();
 
-        const auto now = std::chrono::high_resolution_clock::now();
-        const float time = std::chrono::duration<float>(now - startTime).count();
+        [[maybe_unused]] const auto now = std::chrono::high_resolution_clock::now();
+        [[maybe_unused]] const float time = std::chrono::duration<float>(now - startTime).count();
 
-        // No mystery member like `cubeRotation` Ã¢â‚¬â€ just rotate at a constant rate.
-        constexpr float kRadPerSec = 0.7f;
-
+        // No mystery member like `cubeRotation` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â just rotate at a constant rate.
         UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), kRadPerSec * time, glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = vulkancamera::getViewMatrix(camera);
+        const auto* ctx = bound_context();
+        const bool editorPreview =
+            ctx && ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor;
+
+        ubo.model = glm::mat4(1.0f);
+        if (editorPreview)
+        {
+            ubo.view = glm::lookAt(
+                glm::vec3(9.0f, 7.0f, 9.0f),
+                glm::vec3(0.0f, 0.0f, 0.0f),
+                glm::vec3(0.0f, 1.0f, 0.0f));
+        }
+        else
+        {
+            ubo.view = vulkancamera::getViewMatrix(camera);
+        }
 
         std::uint32_t sceneWidth = swapChainExtent.width;
         std::uint32_t sceneHeight = swapChainExtent.height;
-        if (const auto* ctx = bound_context())
+        if (ctx)
         {
             const auto sceneViewport = ctx->scene_viewport();
             if (sceneViewport.valid())
@@ -224,7 +236,11 @@ namespace epochnamespace::vulkancontext
             ? (sceneWidth / static_cast<float>(sceneHeight))
             : 1.0f;
 
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
+        glm::mat4 proj = glm::perspective(
+            editorPreview ? 0.90f : glm::radians(45.0f),
+            aspect,
+            0.1f,
+            editorPreview ? 64.0f : 10.0f);
         proj[1][1] *= -1.0f; // Vulkan clip space
 
         ubo.proj = proj;
@@ -253,8 +269,3 @@ namespace epochnamespace::vulkancontext
         std::memcpy(guiState->guiUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 } // namespace epochnamespace::vulkancontext
-
-
-
-
-

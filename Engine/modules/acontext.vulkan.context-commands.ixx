@@ -100,14 +100,8 @@ namespace epochnamespace::vulkancontext
             throw std::runtime_error("[ Vulkan ] - CommandBuffer::begin failed.");
 #if EPOCH_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
-        const auto sceneClearColor = epochnamespace::core::clear_color_for_context(
-            epochnamespace::core::ContextType::Vulkan);
-        const std::array<float, 4> frameClearColor{
-            sceneClearColor[0],
-            sceneClearColor[1],
-            sceneClearColor[2],
-            sceneClearColor[3]
-        };
+        constexpr std::array<float, 4> frameClearColor{ 0.06f, 0.08f, 0.11f, 1.0f };
+        const std::array<float, 4> sceneClearColor = frameClearColor;
         clearValues[0].setColor(vk::ClearColorValue{ frameClearColor });
         clearValues[1].setDepthStencil(vk::ClearDepthStencilValue{ 1.0f, 0 });
 #endif
@@ -182,8 +176,7 @@ namespace epochnamespace::vulkancontext
             vk::ClearAttachment sceneAttachment{};
             sceneAttachment.aspectMask = vk::ImageAspectFlagBits::eColor;
             sceneAttachment.colorAttachment = 0;
-            sceneAttachment.clearValue.setColor(
-                vk::ClearColorValue{ std::array<float, 4>{ sceneClearColor[0], sceneClearColor[1], sceneClearColor[2], sceneClearColor[3] } });
+            sceneAttachment.clearValue.setColor(vk::ClearColorValue{ sceneClearColor });
 
             vk::ClearRect sceneRect{};
             sceneRect.rect.offset = vk::Offset2D{ viewportX, viewportY };
@@ -197,7 +190,8 @@ namespace epochnamespace::vulkancontext
         }
 #endif
 
-        (void)indexCount;
+        if (indexCount > 0)
+            cmd.drawIndexed(indexCount, 1, 0, 0, 0);
 
         cmd.nextSubpass(vk::SubpassContents::eInline);
 

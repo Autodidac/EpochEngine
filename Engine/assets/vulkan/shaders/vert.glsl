@@ -12,9 +12,12 @@ layout(binding = 0) uniform UBO {
 
 layout(location = 0) out vec2 fragUV;
 layout(location = 1) out vec3 fragNormal;
+layout(location = 2) out vec2 fragPlanePos;
 
 void main() {
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPos, 1.0);
+    vec4 worldPos = ubo.model * vec4(inPos, 1.0);
+    gl_Position = ubo.proj * ubo.view * worldPos;
     fragUV = inUV;
     fragNormal = inNormal;
+    fragPlanePos = worldPos.xz;
 }

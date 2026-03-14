@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while compatibility code has been
 consolidated under `Engine/legacy/`.
 
-Current public version: `v0.82.3`
+Current public version: `v0.82.4`
 
 ## Architecture highlights
 
@@ -32,8 +32,8 @@ Current public version: `v0.82.3`
 ## Current cautions
 
 - Vulkan is present but should still be treated as a migration/integration path,
-  not the default renderer, even though the editor palette and GUI presentation
-  have been brought closer to the OpenGL baseline.
+  not the default renderer, even though the editor palette, editor grid preview,
+  and GUI presentation have been brought closer to the OpenGL baseline.
 - A few minor archival and compatibility surfaces still exist and should be
   changed carefully.
 - Backend fixes are usually safest when applied locally to the affected backend

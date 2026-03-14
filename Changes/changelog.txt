@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.4]
+- Restored the Vulkan editor scene pass so the backend renders the grid preview instead of only clearing the scene viewport.
+- Matched the Vulkan editor preview framing and palette more closely to the OpenGL editor view, including calmer scene/background behavior during mixed-backend runs.
+- Hardened the SFML close path so GPU atlas cleanup happens while the context is still valid and mixed-context shutdown stays quiet.
+
 ## [v0.82.3]
 - Aligned the Vulkan preview palette with the OpenGL editor palette so the active backends present the same core scene colors.
 - Stabilized Vulkan GUI presentation by keeping the last valid GUI batch during producer gaps and matching GUI atlas sampling behavior more closely to OpenGL.

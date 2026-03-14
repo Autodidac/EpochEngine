@@ -331,13 +331,28 @@ namespace epochnamespace::vulkancontext
         }
         if (auto* guiState = find_gui_state(ctx.get()))
             guiState->guiDraws.clear();
-        queue.drain();
+        constexpr int kMaxDrainPasses = 4;
+        int drainPasses = 0;
+        do
+        {
+            const bool drained = queue.drain();
+            ++drainPasses;
+            if (!drained || queue.depth() == 0 || drainPasses >= kMaxDrainPasses)
+                break;
+        } while (true);
+        const bool queueSettled = queue.depth() == 0;
 
         if (auto* guiState = find_gui_state(ctx.get()))
         {
-            if (guiState->guiDraws.empty())
+            const bool hasLastFrame = !guiState->lastGuiDraws.empty();
+            const bool suspiciouslyPartial =
+                hasLastFrame
+                && (!queueSettled
+                    || (guiState->guiDraws.size() * 3u) < (guiState->lastGuiDraws.size() * 2u));
+
+            if (guiState->guiDraws.empty() || suspiciouslyPartial)
             {
-                if (!guiState->lastGuiDraws.empty())
+                if (hasLastFrame)
                     guiState->guiDraws = guiState->lastGuiDraws;
             }
             else
@@ -353,6 +368,8 @@ namespace epochnamespace::vulkancontext
                  << " fb=" << get_framebuffer_width() << "x" << get_framebuffer_height()
                  << " queuedGui=" << (guiState ? guiState->guiDraws.size() : 0)
                  << " queueDepth=" << queue.depth()
+                 << " drainPasses=" << drainPasses
+                 << " queueSettled=" << (queueSettled ? 1 : 0)
                  << "\n";
         }
 

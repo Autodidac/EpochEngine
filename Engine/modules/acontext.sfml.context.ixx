@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -88,7 +88,7 @@ import <utility>;
 
 export namespace epochnamespace::sfmlcontext
 {
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 
     // SFML NOTE:
     // - SFML's default RenderTarget path uses legacy/fixed-function OpenGL calls.
@@ -109,6 +109,7 @@ export namespace epochnamespace::sfmlcontext
         unsigned int width = 400;
         unsigned int height = 300;
         bool running = false;
+        bool gpuAtlasesReleased = false;
         std::function<void(int, int)> onResize{};
     };
 
@@ -126,6 +127,15 @@ export namespace epochnamespace::sfmlcontext
 
         ctx->framebufferWidth = ctx->width;
         ctx->framebufferHeight = ctx->height;
+    }
+
+    inline void release_sfml_gpu_atlases_active() noexcept
+    {
+        if (sfmlcontext.gpuAtlasesReleased)
+            return;
+
+        clear_gpu_atlases();
+        sfmlcontext.gpuAtlasesReleased = true;
     }
 
     inline bool sfml_initialize(
@@ -229,7 +239,7 @@ export namespace epochnamespace::sfmlcontext
         sfmlcontext.hwnd = static_cast<HWND>(sfmlcontext.window->getSystemHandle());
         sfmlcontext.hdc = GetDC(sfmlcontext.hwnd);
 
-#if !defined(ALMOND_MAIN_HEADLESS)
+#if !defined(EPOCH_MAIN_HEADLESS)
                 if (ctx)
         {
             ctx->hwnd = sfmlcontext.hwnd;
@@ -295,7 +305,7 @@ export namespace epochnamespace::sfmlcontext
             if (sfmlcontext.onResize)
                 sfmlcontext.onResize(width, height);
 
-#if !defined(ALMOND_MAIN_HEADLESS)
+#if !defined(EPOCH_MAIN_HEADLESS)
             if (ctx && ctx->windowData)
                 ctx->windowData->set_size(width, height);
 #endif
@@ -310,6 +320,7 @@ export namespace epochnamespace::sfmlcontext
 
         state::s_sfmlstate.running = true;
         sfmlcontext.running = true;
+        sfmlcontext.gpuAtlasesReleased = false;
 
         atlasmanager::register_backend_uploader(
             core::ContextType::SFML,
@@ -362,6 +373,14 @@ export namespace epochnamespace::sfmlcontext
         // Let SFML own activation. Do NOT call wglMakeCurrent manually.
         if (!sfmlcontext.window->setActive(true))
         {
+#if defined(_WIN32)
+            if (!(sfmlcontext.hwnd && ::IsWindow(sfmlcontext.hwnd) != FALSE))
+            {
+                sfmlcontext.running = false;
+                state::s_sfmlstate.running = false;
+                return false;
+            }
+#endif
             std::cerr << "[SFMLRender] Failed to activate SFML window\n";
             sfmlcontext.running = false;
             state::s_sfmlstate.running = false;
@@ -404,8 +423,10 @@ export namespace epochnamespace::sfmlcontext
         {
             if (event.type == sf::Event::Closed)
             {
+                release_sfml_gpu_atlases_active();
                 sfmlcontext.window->close();
                 sfmlcontext.running = false;
+                state::s_sfmlstate.running = false;
                 state::s_sfmlstate.mark_should_close(true);
             }
             else if (event.type == sf::Event::Resized)
@@ -440,7 +461,7 @@ export namespace epochnamespace::sfmlcontext
             "renderer.framebuffer.size",
             static_cast<std::int64_t>(framebufferHeight),
             telemetry::RendererTelemetryTags{ backendType, windowId, "height" });
-#if ALMOND_USE_CLEAR_COLOR
+#if EPOCH_USE_CLEAR_COLOR
         const auto clearColor = core::clear_color_for_context(core::ContextType::SFML);
         const auto r = static_cast<sf::Uint8>(clearColor[0] * 255.0f);
         const auto g = static_cast<sf::Uint8>(clearColor[1] * 255.0f);
@@ -458,12 +479,9 @@ export namespace epochnamespace::sfmlcontext
 #endif
         queue.drain();
 
-        // Let SFML own activation. Do NOT call wglMakeCurrent manually.
-        if (!sfmlcontext.window->setActive(true))
+        if (!sfmlcontext.running || !sfmlcontext.window->isOpen())
         {
-            std::cerr << "[ SFMLRender ] - Failed to activate SFML window\n";
-            sfmlcontext.running = false;
-            state::s_sfmlstate.running = false;
+            (void)sfmlcontext.window->setActive(false);
             return false;
         }
 
@@ -487,29 +505,22 @@ export namespace epochnamespace::sfmlcontext
         state::s_sfmlstate.running = false;
         sfmlcontext.running = false;
 
-        // CRITICAL:
-        // clear_gpu_atlases() calls glDeleteTextures. That MUST only happen with an active,
-        // valid SFML context. If the window is already closed/destroyed, skip deletion.
         if (sfmlcontext.window && sfmlcontext.window->isOpen())
         {
             bool canTouchGl = true;
 #if defined(_WIN32)
             canTouchGl = sfmlcontext.hwnd && (::IsWindow(sfmlcontext.hwnd) != FALSE);
 #endif
-            if (canTouchGl && sfmlcontext.window->setActive(true))
+            if (canTouchGl && !sfmlcontext.gpuAtlasesReleased && sfmlcontext.window->setActive(true))
             {
-                clear_gpu_atlases();
+                release_sfml_gpu_atlases_active();
                 sfmlcontext.window->setActive(false);
             }
 
             sfmlcontext.window->close();
-            sfmlcontext.window.reset();
         }
-        else
-        {
-            // Window already gone -> don't touch GL.
-            sfmlcontext.window.reset();
-        }
+        sfmlcontext.window.reset();
+        sfmlcontext.gpuAtlasesReleased = false;
 
 #if defined(_WIN32)
         if (sfmlcontext.hdc && sfmlcontext.hwnd)
@@ -528,7 +539,5 @@ export namespace epochnamespace::sfmlcontext
         return sfmlcontext.running;
     }
 
-#endif // ALMOND_USING_SFML
+#endif // EPOCH_USING_SFML
 } // namespace epochnamespace::sfmlcontext
-
-

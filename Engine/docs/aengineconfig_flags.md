@@ -72,5 +72,5 @@ building during the migration.
 
 ## Current release note
 
-- `v0.82.3` keeps the public docs/configure layer aligned with Epoch naming and
-  notes the latest Vulkan preview stabilization work.
+- `v0.82.4` keeps the public docs/configure layer aligned with Epoch naming and
+  notes the restored Vulkan editor grid pass plus the quieter mixed-backend shutdown work.
