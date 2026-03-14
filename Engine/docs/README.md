@@ -3,6 +3,14 @@
 Use this index to jump to the current docs set for the active engine tree under
 `Engine/`.
 
+## Core entry paths
+
+- `../CMakePresets.json` - CMake preset definitions for Windows, Linux, and macOS.
+- `../.vscode/` - VS Code tasks, launch settings, and kit configuration.
+- `../../Engine.sln` - Visual Studio / MSBuild entry point for the MSVC workflow.
+- `../../x64/Debug/` - primary local MSVC runtime output folder.
+- `../../x64/Release/` - release runtime output folder.
+
 ## Start here
 
 - `build_presets.md` - CMake preset names and baseline commands.

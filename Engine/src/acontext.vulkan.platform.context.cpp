@@ -361,6 +361,7 @@ namespace epochnamespace::vulkancontext
             }
         }
 
+#if EPOCH_VULKAN_RUNTIME_DIAGNOSTICS
         {
             std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
             const auto* guiState = find_gui_state(ctx.get());
@@ -372,6 +373,7 @@ namespace epochnamespace::vulkancontext
                  << " queueSettled=" << (queueSettled ? 1 : 0)
                  << "\n";
         }
+#endif
 
         try
         {

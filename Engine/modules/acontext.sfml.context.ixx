@@ -76,8 +76,10 @@ import acontext.sfml.textures;
 import aengine.diagnostics;
 import aengine.core.logger;
 import aengine.telemetry;
+import epoch.render.preview_grid;
 
 import <algorithm>;
+import <cmath>;
 import <cstdint>;
 import <functional>;
 import <iostream>;
@@ -136,6 +138,115 @@ export namespace epochnamespace::sfmlcontext
 
         clear_gpu_atlases();
         sfmlcontext.gpuAtlasesReleased = true;
+    }
+
+    namespace detail
+    {
+        [[nodiscard]] inline sf::Color to_sfml_color(
+            const epochnamespace::previewgrid::Vec3& color) noexcept
+        {
+            const auto clamp_channel = [](float value) noexcept -> sf::Uint8
+            {
+                const float scaled = (std::clamp)(value, 0.0f, 1.0f) * 255.0f;
+                return static_cast<sf::Uint8>(scaled);
+            };
+
+            return sf::Color(
+                clamp_channel(color.x),
+                clamp_channel(color.y),
+                clamp_channel(color.z));
+        }
+
+        [[nodiscard]] inline bool project_preview_vertex(
+            const epochnamespace::previewgrid::Mat4& mvp,
+            const epochnamespace::previewgrid::Vec3& position,
+            const core::RenderViewport& viewport,
+            sf::Vector2f& out) noexcept
+        {
+            const auto clip = epochnamespace::previewgrid::transform_point(mvp, position);
+            if (clip.w <= 1.0e-4f)
+                return false;
+
+            const float invW = 1.0f / clip.w;
+            const float ndcX = clip.x * invW;
+            const float ndcY = clip.y * invW;
+
+            if (!std::isfinite(ndcX) || !std::isfinite(ndcY))
+                return false;
+
+            out.x = static_cast<float>(viewport.x)
+                + ((ndcX * 0.5f) + 0.5f) * static_cast<float>(viewport.width);
+            out.y = static_cast<float>(viewport.y)
+                + ((-ndcY * 0.5f) + 0.5f) * static_cast<float>(viewport.height);
+            return true;
+        }
+
+        inline void render_scene_preview(const std::shared_ptr<core::Context>& ctx)
+        {
+            if (!ctx || !sfmlcontext.window)
+                return;
+
+            const auto viewport = ctx->scene_viewport();
+            if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
+                return;
+
+            const auto clearColor = epochnamespace::previewgrid::kClearColor;
+            sf::RectangleShape background{};
+            background.setPosition(sf::Vector2f(
+                static_cast<float>(viewport.x),
+                static_cast<float>(viewport.y)));
+            background.setSize(sf::Vector2f(
+                static_cast<float>(viewport.width),
+                static_cast<float>(viewport.height)));
+            background.setFillColor(sf::Color(
+                static_cast<sf::Uint8>(clearColor[0] * 255.0f),
+                static_cast<sf::Uint8>(clearColor[1] * 255.0f),
+                static_cast<sf::Uint8>(clearColor[2] * 255.0f),
+                static_cast<sf::Uint8>(clearColor[3] * 255.0f)));
+            sf::RenderStates renderStates{};
+            sfmlcontext.window->draw(background, renderStates);
+
+            const auto camera = epochnamespace::previewgrid::kCamera;
+            const float aspect = viewport.height > 0
+                ? (viewport.width / static_cast<float>(viewport.height))
+                : 1.0f;
+            const auto proj = epochnamespace::previewgrid::perspective(
+                camera.fovRadians,
+                aspect,
+                camera.nearPlane,
+                camera.farPlane);
+            const auto view = epochnamespace::previewgrid::look_at(
+                camera.eye,
+                camera.target,
+                camera.up);
+            const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
+
+            const auto vertices = epochnamespace::previewgrid::grid_vertices();
+            const auto indices = epochnamespace::previewgrid::grid_indices();
+            sf::VertexArray lines(sf::PrimitiveType::Lines);
+
+            for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+            {
+                const auto firstIndex = static_cast<std::size_t>(indices[i]);
+                const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
+                if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
+                    continue;
+
+                sf::Vector2f a{};
+                sf::Vector2f b{};
+                if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, a)
+                    || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, b))
+                {
+                    continue;
+                }
+
+                lines.append(sf::Vertex(a, to_sfml_color(vertices[firstIndex].color)));
+                lines.append(sf::Vertex(b, to_sfml_color(vertices[secondIndex].color)));
+            }
+
+            if (lines.getVertexCount() > 0)
+                sfmlcontext.window->draw(lines, renderStates);
+        }
     }
 
     inline bool sfml_initialize(
@@ -395,15 +506,14 @@ export namespace epochnamespace::sfmlcontext
         const bool hasVulkanDraws =
             (renderFlags & static_cast<std::uint8_t>(core::RenderPath::Vulkan)) != 0u;
         const bool hasQueuedCommands = queue.depth() > 0;
+        const bool useSharedScenePreview =
+            ctx
+            && ctx->scene_viewport().valid()
+            && ctx->scene_preview_mode() == core::ScenePreviewMode::Editor;
         const bool useOpenGLPath =
-            hasOpenGLDraws || (hasQueuedCommands && !hasSfmlDraws && !hasVulkanDraws);
-        const bool shouldResetSfmlState = hasSfmlDraws;
-
-#if !defined(NDEBUG)
-        epochnamespace::logger::info(
-            "SFML",
-            useOpenGLPath ? "Frame render path: OpenGL" : "Frame render path: SFML");
-#endif
+            !useSharedScenePreview
+            && (hasOpenGLDraws || (hasQueuedCommands && !hasSfmlDraws && !hasVulkanDraws));
+        const bool shouldResetSfmlState = hasSfmlDraws || useSharedScenePreview;
 
         if (shouldResetSfmlState)
         {
@@ -462,7 +572,9 @@ export namespace epochnamespace::sfmlcontext
             static_cast<std::int64_t>(framebufferHeight),
             telemetry::RendererTelemetryTags{ backendType, windowId, "height" });
 #if EPOCH_USE_CLEAR_COLOR
-        const auto clearColor = core::clear_color_for_context(core::ContextType::SFML);
+        const auto clearColor = useSharedScenePreview
+            ? epochnamespace::previewgrid::kClearColor
+            : core::clear_color_for_context(core::ContextType::SFML);
         const auto r = static_cast<sf::Uint8>(clearColor[0] * 255.0f);
         const auto g = static_cast<sf::Uint8>(clearColor[1] * 255.0f);
         const auto b = static_cast<sf::Uint8>(clearColor[2] * 255.0f);
@@ -477,6 +589,10 @@ export namespace epochnamespace::sfmlcontext
             sfmlcontext.window->clear(sf::Color(r, g, b));
         }
 #endif
+
+        if (useSharedScenePreview)
+            detail::render_scene_preview(ctx);
+
         queue.drain();
 
         if (!sfmlcontext.running || !sfmlcontext.window->isOpen())

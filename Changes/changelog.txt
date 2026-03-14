@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.82.5]
+- Removed the unconditional per-frame Vulkan runtime diagnostic trace from normal runs and left it behind an explicit debug macro.
+- Throttled slow-frame renderer warnings so startup no longer floods `Renderer.log` while the backend grid spins up.
+- Removed the hot-loop SFML "frame render path" logging that was bloating `SFML.log` during startup.
+- Refreshed the README and docs so the active build surfaces now cover Visual Studio, MSBuild, CMake presets, VS Code, shell scripts, and binary-folder launch paths.
+
 ## [v0.82.4]
 - Restored the Vulkan editor scene pass so the backend renders the grid preview instead of only clearing the scene viewport.
 - Matched the Vulkan editor preview framing and palette more closely to the OpenGL editor view, including calmer scene/background behavior during mixed-backend runs.

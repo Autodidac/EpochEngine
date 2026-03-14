@@ -31,6 +31,15 @@ building during the migration.
 | --- | --- | --- |
 | `EPOCH_SINGLE_PARENT` | `1` | Keep backend panes docked under one parent host window. |
 
+## Diagnostics and runtime tracing
+
+| Macro | Default | Purpose |
+| --- | --- | --- |
+| `EPOCH_ENABLE_RENDERER_SLOW_FRAME_LOGS` | On | Emit slow-frame warnings through the renderer logger. |
+| `EPOCH_SLOW_FRAME_LOG_STARTUP_GRACE_MS` | `5000` | Suppress slow-frame warnings during early startup. |
+| `EPOCH_SLOW_FRAME_LOG_THROTTLE_MS` | `5000` | Limit repeated slow-frame warnings per backend/window. |
+| `EPOCH_VULKAN_RUNTIME_DIAGNOSTICS` | Off | Enable the ad hoc Vulkan runtime trace file used for deep troubleshooting. |
+
 ## Backend support snapshot
 
 | Area | Macro | Default | Current status |
@@ -40,7 +49,7 @@ building during the migration.
 | Context | `EPOCH_USING_SFML` | On | Active, but more fragile than SDL/Raylib/OpenGL |
 | Renderer | `EPOCH_USING_OPENGL` | On | Active primary GPU path |
 | Renderer | `EPOCH_USING_SOFTWARE_RENDERER` | On | Active fallback/validation path |
-| Renderer | `EPOCH_USING_VULKAN` | Off | Experimental / incomplete |
+| Renderer | `EPOCH_USING_VULKAN` | On | Experimental / active preview path |
 | Renderer | `EPOCH_USING_DIRECTX` | Off | Reserved / not implemented |
 | Headless | `EPOCH_USING_NOOP_HEADLESS` | Off | Minimal placeholder path |
 
@@ -72,5 +81,6 @@ building during the migration.
 
 ## Current release note
 
-- `v0.82.4` keeps the public docs/configure layer aligned with Epoch naming and
-  notes the restored Vulkan editor grid pass plus the quieter mixed-backend shutdown work.
+- `v0.82.5` keeps runtime diagnostics quieter during startup by removing the
+  unconditional Vulkan frame trace, throttling slow-frame warnings, and
+  eliminating per-frame SFML log spam from the hot render path.

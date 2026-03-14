@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while compatibility code has been
 consolidated under `Engine/legacy/`.
 
-Current public version: `v0.82.4`
+Current public version: `v0.82.5`
 
 ## Architecture highlights
 
@@ -28,6 +28,8 @@ Current public version: `v0.82.4`
 - Broad backend coverage for desktop experimentation and tooling.
 - Good separation between active code and archived compatibility material after
   moving the legacy tree under `Engine/`.
+- Startup and shutdown behavior are getting more disciplined as backend-local
+  diagnostics and hot-path logging are trimmed back out of the render loop.
 
 ## Current cautions
 

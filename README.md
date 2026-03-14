@@ -2,188 +2,191 @@
 
 # Epoch
 
-**Epoch** is a **C++23 modules-first runtime engine** focused on multi-context
-rendering, atlas-driven UI, hot-reloadable scripting, and a desktop-first
-workflow for editor and game runtime development.
+**Epoch** is a **C++23 modules-first runtime engine** built around multi-context
+desktop rendering, atlas-driven UI, hot-reloadable scripting, and an editor +
+runtime workflow that can host multiple backends at once.
 
-The project emphasizes **modern C++ architecture, high subsystem density, and
-clean modular boundaries** rather than raw code volume.
+The active engine lives in:
 
-The current engine snapshot is organized around a dense modular runtime,
-multi-backend context orchestration, and a compatibility archive under
-`Engine/legacy/`.
-
----
-
-# Design goals
-
-Epoch focuses on a few core principles:
-
-### Modules-first architecture
-Engine subsystems are implemented as **C++23 modules** under:
-
-```
+```text
 Engine/modules/
-```
-
-with implementation code in:
-
-```
 Engine/src/
 ```
 
-### Multi-context rendering runtime
-Rendering backends can run concurrently across multiple window contexts.
+with prebuilt MSVC runtime binaries commonly landing in:
 
-### Atlas-driven UI and rendering pipelines
-GUI, sprites, and asset rendering share atlas systems across backends.
+```text
+x64/Debug/
+x64/Release/
+```
 
-### Hot-reloadable scripting
-Runtime scripts compile to dynamic modules and reload during execution.
-
-### Desktop-first workflow
-The runtime emphasizes desktop development tooling and debugging workflows.
+Those binary folders also carry runtime assets, so launching from the binary
+directory is the safest default for local testing.
 
 ---
 
-# What Epoch currently provides
+# What Epoch provides
 
-- Multi-context window and render orchestration across:
-
-  - OpenGL
-  - Vulkan
-  - SDL3
-  - Raylib
-  - SFML
-  - Software renderer
-  - Noop / headless paths
-
-- ECS-style entity and system layers
-- Atlas management for textures and GUI
-- Editor runtime systems and scene tools
-- Runtime scripting compiler and task-graph pipeline
-- Diagnostics, telemetry, and update systems
-
-A legacy compatibility archive is preserved under:
-
-```
-Engine/legacy/
-```
-
-so older integration surfaces remain available while the modern module
-architecture evolves.
-
----
-
-# Architectural scale
-
-Epoch is intentionally **compact but structurally dense**.
-
-Current snapshot (core engine only):
-
-| Metric | Value |
-|------|------|
-| Code files | ~219 |
-| C++ modules | ~165 |
-| Headers | ~18 |
-| Implementation units | ~36 |
-
-Compared to other engines:
-
-| Engine | Approx size | Scope |
-|------|------|------|
-| Epoch (current snapshot) | ~219 files | modular runtime engine |
-| Hazel | ~400–600 files | learning / indie engine |
-| Godot | 8000+ files | full production engine |
-| Unreal Engine | 25k+ files | AAA production engine |
-
-Epoch therefore sits in the **early real-engine stage**: beyond prototype size,
-but intentionally smaller than large production engines.
-
-The project prioritizes **clean subsystem boundaries and modular architecture**
-over raw code volume.
+- Concurrent backend contexts across OpenGL, Vulkan, SDL3, Raylib, SFML,
+  software, and noop/headless paths
+- Atlas-driven GUI and sprite pipelines shared across the runtime
+- Editor-facing scene preview paths and backend fallback behavior
+- ECS-style runtime systems, scene plumbing, and gameplay modules
+- Hot-reloadable scripting and file-watch driven iteration
+- Diagnostics, telemetry, updater, and task-graph support
 
 ---
 
 # Repository layout
 
-```
+```text
 Engine/
 ```
 
-Active engine code, examples, build scripts, documentation, and the legacy
-archive.
+Engine code, build configuration, examples, docs, assets, and editor/runtime
+systems.
 
+```text
+x64/
 ```
+
+MSVC runtime outputs and colocated runtime assets for local launches.
+
+```text
 Changes/
 ```
 
-Changelog, roadmap, and release notes.
+Active changelog, roadmap, and current release notes.
 
-```
+```text
 Images/
 ```
 
 Repository artwork and README assets.
 
-```
+```text
 Tools/
 ```
 
-Helper notes and scripts for local tooling setup.
+Local helper scripts and tooling notes.
 
 ---
 
-# Documentation map
+# Build systems
 
-Start here:
+## Visual Studio 2022
 
+Open the solution at:
+
+```text
+Engine.sln
 ```
-Engine/docs/README.md
+
+Typical configuration:
+
+- `Debug | x64`
+- `Release | x64`
+
+Primary engine project surfaces:
+
+- `Engine/Engine.vcxitems`
+- `Engine/examples/StaticLib1/StaticLib1.vcxproj`
+- `Engine/examples/ConsoleApplication1/ConsoleApplication1.vcxproj`
+
+## MSBuild
+
+From the repository root in Developer PowerShell:
+
+```powershell
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" Engine.sln /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m:1
 ```
 
-Build documentation:
+To build the example app only:
 
-- `Engine/docs/build_presets.md`
-- `Engine/docs/build_scripts.md`
-- `Engine/docs/tools_list.md`
+```powershell
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" Engine.sln /t:ConsoleApplication1 /p:Configuration=Debug /p:Platform=x64 /m:1
+```
 
-Runtime and configuration:
+## CMake Presets
 
-- `Engine/docs/runtime_operations.md`
-- `Engine/docs/aengineconfig_flags.md`
+Presets live at:
 
-Architecture and backend status:
+```text
+Engine/CMakePresets.json
+```
 
-- `Engine/docs/engine_analysis.md`
-- `Engine/docs/context_audit.md`
-- `Engine/docs/menu_overlay_backend_audit.md`
-
-Legacy migration reference:
-
-- `Engine/docs/legacy_archive.md`
-
----
-
-# Quick start
-
-From the repository root:
+Windows MSVC:
 
 ```powershell
 Set-Location Engine
-cmake --preset x64-release
-cmake --build --preset x64-release
+cmake --preset x64-debug
+cmake --build --preset x64-debug
 ```
 
-On Linux or macOS:
+Windows Clang:
+
+```powershell
+Set-Location Engine
+cmake --preset clang-x64-debug
+cmake --build --preset clang-x64-debug
+```
+
+Windows GCC / MinGW:
+
+```powershell
+Set-Location Engine
+cmake --preset gcc-x64-debug
+cmake --build --preset gcc-x64-debug
+```
+
+Linux:
 
 ```bash
 cd Engine
-cmake --preset Ninja-Release
-cmake --build --preset Ninja-Release
+cmake --preset Ninja-Debug
+cmake --build --preset Ninja-Debug
 ```
 
-Script-driven builds are also available:
+macOS:
+
+```bash
+cd Engine
+cmake --preset macos-debug
+cmake --build --preset macos-debug
+```
+
+## VS Code
+
+VS Code workspace configuration lives in:
+
+```text
+Engine/.vscode/
+```
+
+Key files:
+
+- `Engine/.vscode/tasks.json`
+- `Engine/.vscode/launch.json`
+- `Engine/.vscode/settings.json`
+- `Engine/.vscode/c_cpp_properties.json`
+- `Engine/.vscode/cmake-kits.json`
+
+Recommended flow:
+
+1. Open `Engine/` in VS Code.
+2. Select a CMake preset or task matching your compiler.
+3. Build through the bundled tasks or the CMake Tools extension.
+
+## Shell scripts
+
+Scripted build helpers live in:
+
+```text
+Engine/build.sh
+Engine/run.sh
+```
+
+Examples:
 
 ```bash
 cd Engine
@@ -191,24 +194,50 @@ cd Engine
 ./run.sh gcc Release
 ```
 
-The public runtime/binary name is:
+---
 
+# Running the MSVC binaries
+
+Launch from the binary directory so the colocated assets resolve cleanly:
+
+```powershell
+Set-Location x64/Debug
+.\ConsoleApplication1.exe
 ```
-epoch
+
+Release build:
+
+```powershell
+Set-Location x64/Release
+.\ConsoleApplication1.exe
 ```
+
+Relevant runtime asset roots:
+
+- `x64/Debug/assets/`
+- `x64/Release/assets/`
+- `Engine/assets/`
 
 ---
 
-# Compatibility note
+# Documentation map
 
-Public branding, documentation, and release metadata now consistently use
-**Epoch** across the active engine tree.
+Documentation index:
 
-Build and configuration flags prefer the `EPOCH_*` naming scheme.
+```text
+Engine/docs/README.md
+```
 
-A compatibility archive still preserves older code and migration surfaces under
-`Engine/legacy/`, while the active runtime stays centered in `Engine/modules/`
-and `Engine/src/`.
+Useful entry points:
+
+- `Engine/docs/build_presets.md`
+- `Engine/docs/build_scripts.md`
+- `Engine/docs/tools_list.md`
+- `Engine/docs/runtime_operations.md`
+- `Engine/docs/aengineconfig_flags.md`
+- `Engine/docs/engine_analysis.md`
+- `Engine/docs/context_audit.md`
+- `Engine/docs/menu_overlay_backend_audit.md`
 
 ---
 
@@ -216,19 +245,19 @@ and `Engine/src/`.
 
 Version:
 
-```
-v0.82.4
+```text
+v0.82.5
 ```
 
 Changelog:
 
-```
+```text
 Changes/changelog.txt
 ```
 
 Roadmap:
 
-```
+```text
 Changes/roadmap.txt
 ```
 
@@ -236,7 +265,7 @@ Changes/roadmap.txt
 
 # License
 
-```
+```text
 LicenseRef-MIT-NoSell
 ```
 

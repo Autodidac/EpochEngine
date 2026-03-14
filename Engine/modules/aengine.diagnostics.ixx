@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -60,6 +60,48 @@ import <vector>;
 export namespace epochnamespace::diagnostics {
     using epochnamespace::core::ContextType;
 
+    namespace detail
+    {
+        [[nodiscard]] inline std::uint64_t slow_frame_key(ContextType type, std::uintptr_t windowId) noexcept
+        {
+            return (static_cast<std::uint64_t>(type) << 56u) ^ static_cast<std::uint64_t>(windowId);
+        }
+
+        [[nodiscard]] inline bool should_emit_slow_frame_warning(
+            ContextType type,
+            std::uintptr_t windowId,
+            std::chrono::steady_clock::time_point now) noexcept
+        {
+#if !EPOCH_ENABLE_RENDERER_SLOW_FRAME_LOGS
+            (void)type;
+            (void)windowId;
+            (void)now;
+            return false;
+#else
+            static const auto processStart = std::chrono::steady_clock::now();
+            if (now - processStart < std::chrono::milliseconds(EPOCH_SLOW_FRAME_LOG_STARTUP_GRACE_MS))
+                return false;
+
+            static std::mutex s_mutex;
+            static std::unordered_map<std::uint64_t, std::chrono::steady_clock::time_point> s_lastWarnAt;
+
+            const auto key = slow_frame_key(type, windowId);
+            const auto minInterval = std::chrono::milliseconds(EPOCH_SLOW_FRAME_LOG_THROTTLE_MS);
+
+            std::scoped_lock lock(s_mutex);
+            auto& lastWarnAt = s_lastWarnAt[key];
+            if (lastWarnAt.time_since_epoch().count() != 0
+                && (now - lastWarnAt) < minInterval)
+            {
+                return false;
+            }
+
+            lastWarnAt = now;
+            return true;
+#endif
+        }
+    }
+
     struct FrameTiming
     {
         using Clock = std::chrono::steady_clock;
@@ -98,7 +140,8 @@ export namespace epochnamespace::diagnostics {
                 lastMs,
                 epochnamespace::telemetry::RendererTelemetryTags{ backendType, windowId });
 
-            if (lastMs > slowFrameMs)
+            if (lastMs > slowFrameMs
+                && detail::should_emit_slow_frame_warning(backendType, windowId, end))
             {
                 const std::string_view backend = backendName.empty() ? "Unknown" : backendName;
                 epochnamespace::logger::warn(
@@ -132,49 +175,49 @@ export namespace epochnamespace::diagnostics {
     {
         EngineConfigurationSnapshot snapshot{};
 
-#if defined(ALMOND_SINGLE_PARENT) && (ALMOND_SINGLE_PARENT != 0)
+#if defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT != 0)
         snapshot.single_parent_topology = true;
 #else
         snapshot.single_parent_topology = false;
 #endif
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         snapshot.using_sdl = true;
 #else
         snapshot.using_sdl = false;
 #endif
 
-#if defined(ALMOND_USING_SFML)
+#if defined(EPOCH_USING_SFML)
         snapshot.using_sfml = true;
 #else
         snapshot.using_sfml = false;
 #endif
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         snapshot.using_raylib = true;
 #else
         snapshot.using_raylib = false;
 #endif
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER)
         snapshot.using_software_renderer = true;
 #else
         snapshot.using_software_renderer = false;
 #endif
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         snapshot.using_opengl = true;
 #else
         snapshot.using_opengl = false;
 #endif
 
-#if defined(ALMOND_USING_VULKAN)
+#if defined(EPOCH_USING_VULKAN)
         snapshot.using_vulkan = true;
 #else
         snapshot.using_vulkan = false;
 #endif
 
-#if defined(ALMOND_USING_DIRECTX)
+#if defined(EPOCH_USING_DIRECTX)
         snapshot.using_directx = true;
 #else
         snapshot.using_directx = false;
