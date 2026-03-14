@@ -81,6 +81,6 @@ building during the migration.
 
 ## Current release note
 
-- `v0.82.5` keeps runtime diagnostics quieter during startup by removing the
-  unconditional Vulkan frame trace, throttling slow-frame warnings, and
-  eliminating per-frame SFML log spam from the hot render path.
+- `v0.82.6` keeps the editor preview path aligned across more backends by
+  giving SDL and Software the shared scene grid, while the parented Raylib path
+  now keeps the original WGL context/DC pairing captured at initialization.

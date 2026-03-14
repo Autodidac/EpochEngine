@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.6]
+- Added the shared editor preview grid to the SDL and Software backends so they present the same scene-view framing as the existing GPU preview paths.
+- Stopped the parented Raylib backend from replacing the original WGL device context after initialization, which stabilizes mixed-context startup.
+- Refreshed the active README and current docs to advertise the v0.82.6 backend parity/stability pass without rewriting historical release files.
+
 ## [v0.82.5]
 - Removed the unconditional per-frame Vulkan runtime diagnostic trace from normal runs and left it behind an explicit debug macro.
 - Throttled slow-frame renderer warnings so startup no longer floods `Renderer.log` while the backend grid spins up.

@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while compatibility code has been
 consolidated under `Engine/legacy/`.
 
-Current public version: `v0.82.5`
+Current public version: `v0.82.6`
 
 ## Architecture highlights
 
@@ -30,6 +30,9 @@ Current public version: `v0.82.5`
   moving the legacy tree under `Engine/`.
 - Startup and shutdown behavior are getting more disciplined as backend-local
   diagnostics and hot-path logging are trimmed back out of the render loop.
+- SDL and Software now share the same editor preview-grid geometry/palette path
+  as the GPU editor previews, which tightens backend parity for scene-view
+  smoke tests.
 
 ## Current cautions
 
@@ -40,6 +43,9 @@ Current public version: `v0.82.5`
   changed carefully.
 - Backend fixes are usually safest when applied locally to the affected backend
   instead of globally in the multiplexer.
+- Raylib parent/docking work should continue to respect GLFW/raylib ownership of
+  the native GL context instead of swapping in fresh Win32 DC handles after
+  initialization.
 
 ## Recommended priorities
 

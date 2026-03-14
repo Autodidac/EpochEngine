@@ -157,6 +157,12 @@
     <Filter Include="Headers Shared">
       <UniqueIdentifier>{af3b92cc-68fd-46b6-a5f7-6c6712deeca5}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Module Files\ixx\core\context\backends\wasm">
+      <UniqueIdentifier>{455fc2e8-5801-4987-a20c-5b0bcbec252c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module Files\ixx\core\context\backends\android">
+      <UniqueIdentifier>{bc2651df-2a35-47a7-a063-1724928131b6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\pch.h">
@@ -744,6 +750,9 @@
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.window.ixx">
+      <Filter>Module Files\ixx\epoch</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.preview_grid.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.bindings.ixx">

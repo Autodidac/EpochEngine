@@ -232,6 +232,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.capabilities.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.window.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.preview_grid.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.bindings.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.device.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.device.null.ixx" />

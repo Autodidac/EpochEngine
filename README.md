@@ -246,8 +246,17 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.5
+v0.82.6
 ```
+
+Highlights:
+
+- SDL and Software now share the same editor preview grid path as the active
+  scene viewport instead of falling back to the placeholder card.
+- Parented Raylib startup no longer swaps the captured WGL device context after
+  initialization, which keeps mixed-context launches more stable.
+- The current local launch/test baseline is still `x64/Debug` or `x64/Release`
+  so colocated runtime assets resolve exactly as the binaries expect.
 
 Changelog:
 

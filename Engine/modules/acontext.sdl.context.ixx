@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -42,7 +42,7 @@ module;
 // SDL wants this defined BEFORE including SDL headers.
 #define SDL_MAIN_HANDLED
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -54,10 +54,10 @@ module;
 #  include <windows.h>   // HWND, RECT, LONG_PTR, SetParent, GetWindowLongPtr, etc.
 #endif
 
-#include <chrono> 
+#include <chrono>
 #include <thread>
 
-#include <SDL3/SDL.h>    // keep in GMF because it’s a C header with macros
+#include <SDL3/SDL.h>    // keep in GMF because itâ€™s a C header with macros
 
 export module acontext.sdl.context;
 
@@ -74,10 +74,12 @@ import acontext.sdl.textures;
 import aengine.context.multiplexer;   // MakeDockable(...)
 import aengine.diagnostics;
 import aengine.telemetry;
+import epoch.render.preview_grid;
 
 // Std
 import <algorithm>;
 //import <chrono>;  // as include for intellisense stability, this can probably be changed in the future
+import <cmath>;
 import <cstdint>;
 import <functional>;
 import <iostream>;
@@ -89,7 +91,7 @@ import <utility>;
 
 export namespace epochnamespace::sdlcontext
 {
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 
     struct SDLState
     {
@@ -179,6 +181,119 @@ export namespace epochnamespace::sdlcontext
         auto& sharedState = state::get_sdl_state();
         sharedState.window.sdl_window = sdlcontext.window;
         sharedState.set_dimensions(sdlcontext.width, sdlcontext.height);
+    }
+
+    namespace detail
+    {
+        [[nodiscard]] inline Uint8 to_sdl_channel(float value) noexcept
+        {
+            const float scaled = (std::clamp)(value, 0.0f, 1.0f) * 255.0f;
+            return static_cast<Uint8>(scaled);
+        }
+
+        [[nodiscard]] inline bool project_preview_vertex(
+            const epochnamespace::previewgrid::Mat4& mvp,
+            const epochnamespace::previewgrid::Vec3& position,
+            const core::RenderViewport& viewport,
+            float& outX,
+            float& outY) noexcept
+        {
+            const auto clip = epochnamespace::previewgrid::transform_point(mvp, position);
+            if (clip.w <= 1.0e-4f)
+                return false;
+
+            const float invW = 1.0f / clip.w;
+            const float ndcX = clip.x * invW;
+            const float ndcY = clip.y * invW;
+            if (!std::isfinite(ndcX) || !std::isfinite(ndcY))
+                return false;
+
+            outX = static_cast<float>(viewport.x)
+                + ((ndcX * 0.5f) + 0.5f) * static_cast<float>(viewport.width);
+            outY = static_cast<float>(viewport.y)
+                + ((-ndcY * 0.5f) + 0.5f) * static_cast<float>(viewport.height);
+            return true;
+        }
+
+        inline void render_scene_preview(const std::shared_ptr<core::Context>& ctx)
+        {
+            if (!ctx || !sdl_renderer.renderer)
+                return;
+
+            const auto viewport = ctx->scene_viewport();
+            if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
+                return;
+
+            SDL_Rect clipRect{ viewport.x, viewport.y, viewport.width, viewport.height };
+            (void)SDL_SetRenderClipRect(sdl_renderer.renderer, &clipRect);
+
+            const auto clearColor = epochnamespace::previewgrid::kClearColor;
+            const SDL_FRect background{
+                static_cast<float>(viewport.x),
+                static_cast<float>(viewport.y),
+                static_cast<float>(viewport.width),
+                static_cast<float>(viewport.height)
+            };
+
+            (void)SDL_SetRenderDrawColor(
+                sdl_renderer.renderer,
+                to_sdl_channel(clearColor[0]),
+                to_sdl_channel(clearColor[1]),
+                to_sdl_channel(clearColor[2]),
+                to_sdl_channel(clearColor[3]));
+            (void)SDL_RenderFillRect(sdl_renderer.renderer, &background);
+
+            const auto camera = epochnamespace::previewgrid::kCamera;
+            const float aspect = viewport.height > 0
+                ? (viewport.width / static_cast<float>(viewport.height))
+                : 1.0f;
+            const auto proj = epochnamespace::previewgrid::perspective(
+                camera.fovRadians,
+                aspect,
+                camera.nearPlane,
+                camera.farPlane);
+            const auto view = epochnamespace::previewgrid::look_at(
+                camera.eye,
+                camera.target,
+                camera.up);
+            const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
+            const auto vertices = epochnamespace::previewgrid::grid_vertices();
+            const auto indices = epochnamespace::previewgrid::grid_indices();
+
+            for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+            {
+                const auto firstIndex = static_cast<std::size_t>(indices[i]);
+                const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
+                if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
+                    continue;
+
+                float ax = 0.0f;
+                float ay = 0.0f;
+                float bx = 0.0f;
+                float by = 0.0f;
+                if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, ax, ay)
+                    || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, bx, by))
+                {
+                    continue;
+                }
+
+                const auto color = vertices[firstIndex].color;
+                (void)SDL_SetRenderDrawColor(
+                    sdl_renderer.renderer,
+                    to_sdl_channel(color.x),
+                    to_sdl_channel(color.y),
+                    to_sdl_channel(color.z),
+                    255u);
+                if (!SDL_RenderLine(sdl_renderer.renderer, ax, ay, bx, by))
+                {
+                    check_sdl_error("SDL_RenderLine");
+                    state::get_sdl_state().renderFaulted = true;
+                    break;
+                }
+            }
+
+            (void)SDL_SetRenderClipRect(sdl_renderer.renderer, nullptr);
+        }
     }
 
     inline bool sdl_initialize(std::shared_ptr<core::Context> ctx,
@@ -465,6 +580,23 @@ export namespace epochnamespace::sdlcontext
         auto& sharedState = state::get_sdl_state();
         refresh_dimensions(ctx);
 
+        const bool closeRequested =
+            sharedState.shouldClose
+            || sharedState.window.get_should_close()
+            || (ctx && ctx->windowData && ctx->windowData->get_should_close())
+            || !sdlcontext.running
+            || !sdlcontext.window;
+
+        if (closeRequested)
+        {
+            sharedState.mark_should_close(true);
+            sharedState.running = false;
+            sdlcontext.running = false;
+            queue.clear();
+            frameTimer.finish();
+            return false;
+        }
+
         telemetry::emit_gauge(
             "renderer.framebuffer.size",
             static_cast<std::int64_t>(sdlcontext.framebufferWidth),
@@ -483,17 +615,38 @@ export namespace epochnamespace::sdlcontext
 
         if (sharedState.renderFaulted || !sdl_renderer.renderer)
         {
+            sharedState.mark_should_close(true);
+            sharedState.running = false;
+            sdlcontext.running = false;
             queue.clear();
+            frameTimer.finish();
+            return false;
         }
-        else
-        {
-            queue.drain();
 
-            if (!SDL_RenderPresent(sdl_renderer.renderer))
-            {
-                check_sdl_error("SDL_RenderPresent");
-                sharedState.renderFaulted = true;
-            }
+        detail::render_scene_preview(ctx);
+
+        queue.drain();
+
+        if (sharedState.renderFaulted)
+        {
+            sharedState.mark_should_close(true);
+            sharedState.running = false;
+            sdlcontext.running = false;
+            queue.clear();
+            frameTimer.finish();
+            return false;
+        }
+
+        if (!SDL_RenderPresent(sdl_renderer.renderer))
+        {
+            check_sdl_error("SDL_RenderPresent");
+            sharedState.renderFaulted = true;
+            sharedState.mark_should_close(true);
+            sharedState.running = false;
+            sdlcontext.running = false;
+            queue.clear();
+            frameTimer.finish();
+            return false;
         }
 
         if (sdlcontext.parent && sdlcontext.useFrameLimiter)
@@ -512,23 +665,10 @@ export namespace epochnamespace::sdlcontext
         frameTimer.finish();
 
         return true;
-        frameTimer.finish();
-
-        return true;
     }
 
     inline void sdl_clear()
     {
-#if  ALMOND_USE_CLEAR_COLOR
-        const auto color = core::clear_color_for_context(core::ContextType::SDL);
-        SDL_SetRenderDrawColor(
-            sdl_renderer.renderer,
-            static_cast<std::uint8_t>(color[0] * 255.0f),
-            static_cast<std::uint8_t>(color[1] * 255.0f),
-            static_cast<std::uint8_t>(color[2] * 255.0f),
-            static_cast<std::uint8_t>(color[3] * 255.0f));
-        SDL_RenderClear(sdl_renderer.renderer);
-#endif
     }
 
     inline void sdl_present()
@@ -644,7 +784,5 @@ export namespace epochnamespace::sdlcontext
         return sdlcontext.running;
     }
 
-#endif // ALMOND_USING_SDL
+#endif // EPOCH_USING_SDL
 } // namespace epochnamespace::sdlcontext
-
-

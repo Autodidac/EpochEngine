@@ -1,10 +1,10 @@
-/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+﻿/************************************************
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -74,7 +74,7 @@ namespace epochnamespace::gui
     constexpr float       kFontScale = 1.0f;
     constexpr float       kTitleScale = 1.1f;
     constexpr float       kLineSpacingFactor = 0.15f;
-    constexpr float       kLetterSpacingFactor = 1.0f;
+    constexpr float       kLetterSpacingFactor = 0.0f;
     constexpr float       kBoxInnerPadding = 6.0f;
     constexpr float       kTitleBarPadding = 6.0f;
     constexpr float       kCaretBlinkPeriod = 1.0f;
@@ -84,7 +84,7 @@ namespace epochnamespace::gui
 
     namespace
     {
-                        [[nodiscard]] static core::RenderPath render_path_for_context(const core::Context* ctx) noexcept
+        [[nodiscard]] static core::RenderPath render_path_for_context(const core::Context* ctx) noexcept
         {
             if (!ctx)
                 return core::RenderPath::Unknown;
@@ -99,6 +99,24 @@ namespace epochnamespace::gui
                 return core::RenderPath::Vulkan;
             default:
                 return core::RenderPath::Unknown;
+            }
+        }
+
+        [[nodiscard]] static bool backend_owns_scene_viewport(const core::Context* ctx) noexcept
+        {
+            if (!ctx)
+                return false;
+
+            switch (ctx->type)
+            {
+            case core::ContextType::OpenGL:
+            case core::ContextType::Vulkan:
+            case core::ContextType::SFML:
+            case core::ContextType::SDL:
+            case core::ContextType::Software:
+                return true;
+            default:
+                return false;
             }
         }
 
@@ -166,8 +184,19 @@ namespace epochnamespace::gui
             bool fontAtlasUploaded = false;
         };
 
+        struct QueuedSpriteDraw
+        {
+            SpriteHandle handle{};
+            float x = 0.0f;
+            float y = 0.0f;
+            float w = 0.0f;
+            float h = 0.0f;
+        };
+
         static std::unordered_map<const void*, UploadState, PtrHash> g_uploadedContexts{};
         static std::mutex g_uploadMutex{};
+        static std::unordered_map<const void*, std::shared_ptr<std::vector<QueuedSpriteDraw>>, PtrHash> g_deferredDrawBatches{};
+        static std::mutex g_deferredBatchMutex{};
 
         struct FrameState
         {
@@ -192,11 +221,19 @@ namespace epochnamespace::gui
             bool caretVisible = true;
 
             std::vector<InputEvent> events{};
+            std::vector<QueuedSpriteDraw> queuedDraws{};
         };
 
         static thread_local FrameState g_frame{};
         static thread_local std::vector<InputEvent> g_pendingEvents{};
         static thread_local const void* g_activeWidget = nullptr;
+
+        [[nodiscard]] static bool uses_deferred_gui_batch(const core::Context* ctx) noexcept
+        {
+            return ctx
+                && (ctx->type == core::ContextType::Software
+                    || ctx->type == core::ContextType::RayLib);
+        }
 
         [[nodiscard]] static std::vector<std::uint8_t> make_solid_pixels(
             std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a,
@@ -258,7 +295,7 @@ namespace epochnamespace::gui
                     char* envBuf = nullptr;
                     size_t len = 0;
 
-                    if (_dupenv_s(&envBuf, &len, "ALMOND_GUI_FONT_PATH") == 0 && envBuf)
+                    if (_dupenv_s(&envBuf, &len, "EPOCH_GUI_FONT_PATH") == 0 && envBuf)
                     {
                         std::filesystem::path envPath{ envBuf };
                         free(envBuf);
@@ -266,7 +303,7 @@ namespace epochnamespace::gui
                     }
                     return {};
 #else
-                    if (const char* envValue = std::getenv("ALMOND_GUI_FONT_PATH"))
+                    if (const char* envValue = std::getenv("EPOCH_GUI_FONT_PATH"))
                         return std::filesystem::path{ envValue };
                     return {};
 #endif
@@ -353,7 +390,7 @@ namespace epochnamespace::gui
             {
                 std::cerr << "[agui] Unable to locate GUI font '" << kDefaultFontFile << "'\n";
                 std::cerr << "[agui] Place '" << kDefaultFontFile
-                    << "' in 'assets/fonts' (relative to the working directory) or set ALMOND_GUI_FONT_PATH.\n";
+                    << "' in 'assets/fonts' (relative to the working directory) or set EPOCH_GUI_FONT_PATH.\n";
                 return;
             }
 
@@ -499,19 +536,13 @@ namespace epochnamespace::gui
 
             if (ctx->windowData && g_frame.ctxShared)
             {
-                auto ctxShared = g_frame.ctxShared;
-                const core::RenderPath renderPath = render_path_for_context(ctx);
-
-                ctx->windowData->commandQueue.enqueue([ctxShared, handle, x, y, w, h]()
-                    {
-                        if (!ctxShared)
-                            return;
-
-                        auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
-                        std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
-                        ctxShared->draw_sprite_safe(handle, span, x, y, w, h);
-                    }, renderPath);
-
+                g_frame.queuedDraws.push_back(QueuedSpriteDraw{
+                    .handle = handle,
+                    .x = x,
+                    .y = y,
+                    .w = w,
+                    .h = h
+                    });
                 return;
             }
 
@@ -849,6 +880,73 @@ namespace epochnamespace::gui
             g_frame.insideWindow = false;
             g_frame.lastButtonBounds.reset();
         }
+
+        static void forget_upload_state(const void* ctxKey) noexcept
+        {
+            if (!ctxKey)
+                return;
+
+            std::scoped_lock lock(g_uploadMutex);
+            g_uploadedContexts.erase(ctxKey);
+        }
+
+        static void flush_queued_draws() noexcept
+        {
+            auto ctxShared = g_frame.ctxShared;
+            Context* ctx = g_frame.ctx;
+            if (!ctxShared || !ctx)
+            {
+                g_frame.queuedDraws.clear();
+                return;
+            }
+
+            if (uses_deferred_gui_batch(ctx))
+            {
+                std::scoped_lock lock(g_deferredBatchMutex);
+                if (g_frame.queuedDraws.empty())
+                {
+                    g_deferredDrawBatches.erase(ctx);
+                    return;
+                }
+
+                auto draws = std::make_shared<std::vector<QueuedSpriteDraw>>();
+                draws->swap(g_frame.queuedDraws);
+                const std::size_t reserveCount = (std::max)(draws->size(), std::size_t{ 4096 });
+                g_frame.queuedDraws.reserve(reserveCount);
+                g_deferredDrawBatches[ctx] = std::move(draws);
+                return;
+            }
+
+            if (g_frame.queuedDraws.empty())
+                return;
+
+            if (!ctx->windowData)
+            {
+                auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+                std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
+                for (const auto& draw : g_frame.queuedDraws)
+                    ctxShared->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
+                g_frame.queuedDraws.clear();
+                return;
+            }
+
+            const core::RenderPath renderPath = render_path_for_context(ctx);
+            auto draws = std::make_shared<std::vector<QueuedSpriteDraw>>();
+            draws->swap(g_frame.queuedDraws);
+            const std::size_t reserveCount = (std::max)(draws->size(), std::size_t{ 4096 });
+            g_frame.queuedDraws.reserve(reserveCount);
+
+            ctx->windowData->commandQueue.enqueue([ctxShared, draws]()
+                {
+                    if (!ctxShared || !draws || draws->empty())
+                        return;
+
+                    auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+                    std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
+                    for (const auto& draw : *draws)
+                        ctxShared->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
+                }, renderPath);
+        }
     } // namespace
 
     // -----------------------------
@@ -871,6 +969,37 @@ namespace epochnamespace::gui
     void push_input(const InputEvent& e) noexcept
     {
         g_pendingEvents.push_back(e);
+    }
+
+    void cleanup_context(const core::Context* ctx) noexcept
+    {
+        forget_upload_state(ctx);
+        std::scoped_lock lock(g_deferredBatchMutex);
+        g_deferredDrawBatches.erase(ctx);
+    }
+
+    bool render_deferred_batch(const std::shared_ptr<core::Context>& ctx) noexcept
+    {
+        if (!ctx || !uses_deferred_gui_batch(ctx.get()))
+            return false;
+
+        std::shared_ptr<std::vector<QueuedSpriteDraw>> draws;
+        {
+            std::scoped_lock lock(g_deferredBatchMutex);
+            const auto it = g_deferredDrawBatches.find(ctx.get());
+            if (it == g_deferredDrawBatches.end())
+                return false;
+            draws = it->second;
+        }
+
+        if (!draws || draws->empty())
+            return false;
+
+        auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+        std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
+        for (const auto& draw : *draws)
+            ctx->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
+        return true;
     }
 
     void begin_frame(const std::shared_ptr<core::Context>& ctx, float dt, Vec2 mouse_pos, bool mouse_down) noexcept
@@ -919,12 +1048,14 @@ namespace epochnamespace::gui
         g_frame.mousePos = currentMousePos;
         g_frame.justPressed = (!prevMouseDown && currentMouseDown);
         g_frame.justReleased = (prevMouseDown && !currentMouseDown);
+        g_frame.queuedDraws.clear();
 
         reset_frame();
     }
 
     void end_frame() noexcept
     {
+        flush_queued_draws();
         g_frame.ctxShared.reset();
         g_frame.ctx = nullptr;
         g_frame.insideWindow = false;
@@ -985,8 +1116,7 @@ namespace epochnamespace::gui
         const float contentWidth = (std::max)(0.0f, width - border * 2.0f);
 
         const core::RenderPath renderPath = render_path_for_context(g_frame.ctx);
-        const bool needsViewportFallback = renderPath != core::RenderPath::OpenGL
-            && renderPath != core::RenderPath::Vulkan;
+        const bool needsViewportFallback = !backend_owns_scene_viewport(g_frame.ctx);
 
         if (needsViewportFallback && contentWidth > 0.0f && contentHeight > 0.0f)
         {

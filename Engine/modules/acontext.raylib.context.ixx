@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,7 +30,7 @@
  ***********************************************/
 module;
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -77,7 +77,7 @@ import <thread>;
 import <utility>;
 
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 namespace epochnamespace::raylibcontext
 {
@@ -182,37 +182,40 @@ namespace epochnamespace::raylibcontext
                     dockParent = hostParent;
             }
 
-            st.parent = dockParent;
+            st.parent = dockParent ? dockParent : parent;
             st.hwnd = raylibHwnd;
 
-            bool attachedToDock = false;
-            if (dockParent && dockParent != raylibHwnd)
+            if (st.parent && st.parent != raylibHwnd)
             {
-                if (::GetParent(raylibHwnd) != dockParent)
+                if (::GetParent(raylibHwnd) != st.parent)
                 {
-                    ::SetParent(raylibHwnd, dockParent);
+                    ::SetParent(raylibHwnd, st.parent);
                 }
-                attachedToDock = true;
 
                 LONG_PTR style = ::GetWindowLongPtrW(raylibHwnd, GWL_STYLE);
                 style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
                 style |= (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
                 ::SetWindowLongPtrW(raylibHwnd, GWL_STYLE, style);
+
+                RECT client{};
+                const HWND sizeSource = parent ? parent : st.parent;
+                ::GetClientRect(sizeSource, &client);
+                const int width = (std::max)(1, static_cast<int>(client.right - client.left));
+                const int height = (std::max)(1, static_cast<int>(client.bottom - client.top));
+                st.width = static_cast<unsigned>(width);
+                st.height = static_cast<unsigned>(height);
                 ::SetWindowPos(raylibHwnd,
                     nullptr,
                     0,
                     0,
-                    static_cast<int>(st.width),
-                    static_cast<int>(st.height),
+                    width,
+                    height,
                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-                epochnamespace::core::MakeDockable(raylibHwnd, dockParent);
+                epochnamespace::core::MakeDockable(raylibHwnd, st.parent);
 
-                if (attachedToDock && parent && parent != dockParent)
-                {
+                if (parent && parent != raylibHwnd && ::IsWindow(parent) != FALSE)
                     ::ShowWindow(parent, SW_HIDE);
-                    ::DestroyWindow(parent);
-                }
             }
 
             if (ctx)
@@ -225,6 +228,7 @@ namespace epochnamespace::raylibcontext
                     ctx->windowData->hwnd = raylibHwnd;
                     ctx->windowData->host_hwnd = previousHost ? previousHost : parent;
                     ctx->windowData->hwndChild = raylibHwnd;
+                    ctx->windowData->set_size(static_cast<int>(st.width), static_cast<int>(st.height));
                 }
             }
         }
@@ -339,21 +343,15 @@ namespace epochnamespace::raylibcontext
             title_storage().c_str());
 
 #if defined(_WIN32)
-        // Raylib creates its own OpenGL context. Capture it now so we bind the right dc/rc later.
+        // Raylib creates its own OpenGL context. Capture it now so we bind the right rc later.
         st.hdc = detail::current_dc();
         st.hglrc = detail::current_context();
-        if (!st.hdc || !st.hglrc)
+        if (!st.hglrc)
         {
             logger::warn("Raylib", "Failed to capture Raylib OpenGL context after initialization.");
             st.running = false;
             st.cleanupIssued = false;
             return false;
-        }
-        if (ctx && ctx->windowData)
-        {
-            ctx->windowData->hdc = st.hdc;
-            ctx->windowData->glContext = st.hglrc;
-            ctx->windowData->usesSharedContext = false;
         }
 #if defined(_DEBUG)
         logger::info(
@@ -382,6 +380,21 @@ namespace epochnamespace::raylibcontext
         {
             logger::warn("Raylib", "Failed to acquire Raylib window handle for docking.");
         }
+        if (!st.hdc)
+        {
+            logger::warn("Raylib", "Failed to capture Raylib window DC after initialization.");
+            st.running = false;
+            st.cleanupIssued = false;
+            return false;
+        }
+
+        if (ctx && ctx->windowData)
+        {
+            ctx->windowData->hdc = st.hdc;
+            ctx->windowData->glContext = st.hglrc;
+            ctx->windowData->usesSharedContext = false;
+        }
+
 #endif
 
         epochnamespace::raylib_api::set_target_fps(0);
@@ -395,10 +408,6 @@ namespace epochnamespace::raylibcontext
                 state.height = static_cast<unsigned>(clampedH);
 
                 //   (void)raylib_make_current();
-#if defined(_WIN32)
-                detail::debug_expect_raylib_current(state, "raylib_resize");
-#endif
-
                 if (state.userResize)
                     state.userResize(clampedW, clampedH);
             };
@@ -472,6 +481,14 @@ namespace epochnamespace::raylibcontext
 #if defined(_WIN32)
         if (!raylib_make_current())
         {
+            const bool windowClosing =
+                (st.owner_ctx && st.owner_ctx->windowData && st.owner_ctx->windowData->get_should_close())
+                || !st.renderingActive;
+            if (windowClosing)
+            {
+                st.running = false;
+                return;
+            }
             logger::warn(
                 "Raylib",
                 "Failed to make raylib context current during process; shutting down.");
@@ -557,7 +574,7 @@ namespace epochnamespace::raylibcontext
 
         detail::ensure_frame_started(st);
 
-#if ALMOND_USE_CLEAR_COLOR
+#if EPOCH_USE_CLEAR_COLOR
         const auto clearColor = core::clear_color_for_context(core::ContextType::RayLib);
         epochnamespace::raylib_api::clear_background(
             epochnamespace::raylib_api::Color{
@@ -704,4 +721,4 @@ namespace epochnamespace::raylibcontext
     }
 }
 
-#endif // ALMOND_USING_RAYLIB
+#endif // EPOCH_USING_RAYLIB
