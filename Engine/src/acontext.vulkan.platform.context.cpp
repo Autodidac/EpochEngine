@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -53,8 +53,8 @@ module;
 #   define STB_IMAGE_IMPLEMENTATION
 #endif
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
@@ -72,11 +72,11 @@ module;
 #   include <windows.h>
 #endif
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 #   include <glad/glad.h>
 #endif
 
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
 #   ifndef GLFW_INCLUDE_VULKAN
 #       define GLFW_INCLUDE_VULKAN
 #   endif
@@ -123,10 +123,11 @@ import :commands;
 
 import aengine.context.commandqueue;
 import aengine.core.context;
+import aengine.core.logger;
 import aengine.input;
 import :shared_vk;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import acontext.opengl.platform;
 #endif
 
@@ -136,6 +137,8 @@ import acontext.opengl.platform;
 // -----------------------------------------------------------------------------
 namespace epochnamespace::vulkancontext
 {
+    constexpr std::string_view kPlatformLogSys = "Context.Vulkan.Platform";
+
     void Application::run()
     {
         epochnamespace::core::CommandQueue queue;
@@ -143,10 +146,14 @@ namespace epochnamespace::vulkancontext
         initVulkan();
 
 #ifdef _DEBUG
-        std::cout << "Vertex struct size: " << sizeof(Vertex) << "\n";
-        std::cout << "Position offset: " << offsetof(Vertex, pos) << "\n";
-        std::cout << "Normal offset: " << offsetof(Vertex, normal) << "\n";
-        std::cout << "TexCoord offset: " << offsetof(Vertex, texCoord) << "\n";
+        logger::get(kPlatformLogSys).logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "Vertex layout size={} pos={} normal={} uv={}",
+            sizeof(Vertex),
+            offsetof(Vertex, pos),
+            offsetof(Vertex, normal),
+            offsetof(Vertex, texCoord));
 #endif
 
         while (process(nullptr, queue)) {}
@@ -156,7 +163,10 @@ namespace epochnamespace::vulkancontext
     void Application::initVulkan()
     {
 #ifdef _DEBUG
-        std::cout << "initVulkan() called\n";
+            logger::get(kPlatformLogSys).log(
+            logger::LogLevel::INFO,
+            "initVulkan() called",
+            std::source_location::current());
 #endif
         createInstance();
         createSurface();
@@ -199,7 +209,7 @@ namespace epochnamespace::vulkancontext
     {
         bind_render_thread();
         assert_thread_affinity();
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
         if (!glfwInit())
             throw std::runtime_error("Failed to initialize GLFW");
 
@@ -226,13 +236,16 @@ namespace epochnamespace::vulkancontext
         VULKAN_HPP_DEFAULT_DISPATCHER.init();
 
 #ifdef _DEBUG
-        std::cout << "Window configured\n";
+        logger::get(kPlatformLogSys).log(
+            logger::LogLevel::INFO,
+            "Window configured",
+            std::source_location::current());
 #endif
     }
 
     void Application::framebufferResizeCallback(GLFWwindow* window_, int width, int height)
     {
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
         auto* app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window_));
         if (!app)
             return;
@@ -266,7 +279,7 @@ namespace epochnamespace::vulkancontext
         const float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
         lastTime = currentTime;
 
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
         if (window)
         {
             glfwPollEvents();
@@ -293,7 +306,7 @@ namespace epochnamespace::vulkancontext
 
             framebufferMinimized = ctx->framebufferWidth == 0 || ctx->framebufferHeight == 0;
         }
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
         else if (window)
         {
             int fbWidth = 0;
@@ -308,7 +321,10 @@ namespace epochnamespace::vulkancontext
         if (framebufferMinimized)
         {
             if (auto* guiState = find_gui_state(ctx.get()))
+            {
                 guiState->guiDraws.clear();
+                guiState->lastGuiDraws.clear();
+            }
             queue.drain();
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             return true;
@@ -316,6 +332,19 @@ namespace epochnamespace::vulkancontext
         if (auto* guiState = find_gui_state(ctx.get()))
             guiState->guiDraws.clear();
         queue.drain();
+
+        if (auto* guiState = find_gui_state(ctx.get()))
+        {
+            if (guiState->guiDraws.empty())
+            {
+                if (!guiState->lastGuiDraws.empty())
+                    guiState->guiDraws = guiState->lastGuiDraws;
+            }
+            else
+            {
+                guiState->lastGuiDraws = guiState->guiDraws;
+            }
+        }
 
         {
             std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
@@ -327,7 +356,28 @@ namespace epochnamespace::vulkancontext
                  << "\n";
         }
 
-        drawFrame();
+        try
+        {
+            drawFrame();
+        }
+        catch (const std::runtime_error& ex)
+        {
+            const std::string_view message{ ex.what() ? ex.what() : "" };
+            const bool windowClosing = ctx
+                && ctx->windowData
+                && ctx->windowData->get_should_close();
+            const bool surfaceGone =
+                message.find("getSurfaceCapabilitiesKHR failed") != std::string_view::npos
+                || message.find("getSurfaceFormatsKHR failed") != std::string_view::npos
+                || message.find("getSurfacePresentModesKHR failed") != std::string_view::npos
+                || message.find("presentKHR failed") != std::string_view::npos;
+            if (windowClosing || surfaceGone)
+            {
+                request_render_stop();
+                return false;
+            }
+            throw;
+        }
         return true;
     }
 
@@ -375,6 +425,8 @@ namespace epochnamespace::vulkancontext
         guiState.guiUniformBuffersMemory.clear();
         guiState.guiUniformBuffersMapped.clear();
         guiState.guiAtlases.clear();
+        guiState.guiDraws.clear();
+        guiState.lastGuiDraws.clear();
     }
 
     void Application::set_framebuffer_size(int width, int height)
@@ -507,7 +559,7 @@ namespace epochnamespace::vulkancontext
 
         instance.reset();
 
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
         if (window)
         {
             glfwDestroyWindow(window);
@@ -518,10 +570,3 @@ namespace epochnamespace::vulkancontext
     }
 
 } // namespace epochnamespace::vulkancontext
-
-
-
-
-
-
-

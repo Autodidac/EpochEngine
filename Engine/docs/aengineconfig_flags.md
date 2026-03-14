@@ -55,8 +55,9 @@ building during the migration.
 
 ## Combinations to treat as experimental
 
-- Vulkan-enabled builds: the codebase contains active Vulkan work, but the
-  end-to-end runtime path is still not a stable default.
+- Vulkan-enabled builds: the codebase contains active Vulkan work, and the
+  preview path now tracks the OpenGL editor palette more closely, but it is
+  still not the stable default renderer.
 - DirectX-enabled builds: reserved scaffolding only.
 - Renderer-less builds: disabling both OpenGL and software rendering leaves the
   atlas/texture path without a supported submission backend.
@@ -71,5 +72,5 @@ building during the migration.
 
 ## Current release note
 
-- `v0.82.2` aligns the public docs and configure layer with Epoch naming while
-  keeping the lower-level compatibility macros available under the hood.
+- `v0.82.3` keeps the public docs/configure layer aligned with Epoch naming and
+  notes the latest Vulkan preview stabilization work.

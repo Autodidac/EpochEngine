@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,9 +30,9 @@
  ***********************************************/
 module;
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
-#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
 // Preprocessor hygiene MUST come before windows.h
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN
@@ -123,14 +123,19 @@ export namespace epochnamespace::core
         }
     };
 
+    export enum class ScenePreviewMode : std::uint8_t
+    {
+        None = 0,
+        Editor = 1
+    };
+
     export [[nodiscard]] constexpr ClearColor clear_color_for_context(ContextType type) noexcept
     {
-        // Palette: Vulkan = cyan, OpenGL = blue, Raylib = deep red, SDL = amber,
-        // SFML = blue, Software = violet.
+        // Palette: match OpenGL/Vulkan for consistent editor and GUI visuals.
         switch (type)
         {
         case ContextType::Vulkan:
-            return { 0.0f, 1.0f, 1.0f, 1.0f };
+            return { 0.0f, 0.0f, 1.0f, 1.0f };
         case ContextType::OpenGL:
             return { 0.0f, 0.0f, 1.0f, 1.0f };
         case ContextType::RayLib:
@@ -310,6 +315,16 @@ export namespace epochnamespace::core
             set_scene_viewport({});
         }
 
+        [[nodiscard]] ScenePreviewMode scene_preview_mode() const noexcept
+        {
+            return static_cast<ScenePreviewMode>(scenePreviewMode.load(std::memory_order_relaxed));
+        }
+
+        void set_scene_preview_mode(ScenePreviewMode mode) noexcept
+        {
+            scenePreviewMode.store(static_cast<std::uint8_t>(mode), std::memory_order_relaxed);
+        }
+
         bool is_key_held_safe(input::Key k) const noexcept
         {
             return is_key_held ? is_key_held(k) : false;
@@ -332,7 +347,7 @@ export namespace epochnamespace::core
                 y = input::mouseY.load(std::memory_order_acquire);
             }
 
-#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
             if (input::are_mouse_coords_global())
             {
                 if (HWND hwndLocal = get_hwnd(); hwndLocal != nullptr)
@@ -421,7 +436,7 @@ export namespace epochnamespace::core
             return add_model ? add_model(name, path) : -1;
         }
 
-#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
         HWND  get_hwnd()  const noexcept { return hwnd; }
         HDC   get_hdc()   const noexcept { return hdc; }
         HGLRC get_hglrc() const noexcept { return hglrc; }
@@ -434,7 +449,7 @@ export namespace epochnamespace::core
         void* native_drawable = nullptr;
         void* native_gl_context = nullptr;
 
-#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
         HWND  hwnd = nullptr;
         HDC   hdc = nullptr;
         HGLRC hglrc = nullptr;
@@ -452,6 +467,7 @@ export namespace epochnamespace::core
         std::atomic<int> sceneViewportY{ 0 };
         std::atomic<int> sceneViewportWidth{ 0 };
         std::atomic<int> sceneViewportHeight{ 0 };
+        std::atomic<std::uint8_t> scenePreviewMode{ static_cast<std::uint8_t>(ScenePreviewMode::None) };
 
         // virtual design canvas
         int virtualWidth = 400;
@@ -507,5 +523,3 @@ export namespace epochnamespace::core
     void AddContextForBackend(core::ContextType type, std::shared_ptr<Context> context);
     bool ProcessAllContexts();
 } // namespace epochnamespace::core
-
-

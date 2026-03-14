@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -36,13 +36,13 @@
 
 module;
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
 
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
 #   ifndef GLFW_INCLUDE_VULKAN
 #       define GLFW_INCLUDE_VULKAN
 #   endif
@@ -56,7 +56,7 @@ module;
 
 export module acontext.vulkan.context:shared_vk;
 
-#if !defined(ALMOND_VULKAN_STANDALONE)
+#if !defined(EPOCH_VULKAN_STANDALONE)
 struct GLFWwindow; // engine-owned window integration: don't drag GLFW into the BMI
 #endif
 
@@ -388,6 +388,7 @@ namespace epochnamespace::vulkancontext
             std::vector<void*> guiUniformBuffersMapped;
             vk::UniquePipeline guiPipeline;
             std::vector<GuiDrawCommand> guiDraws{};
+            std::vector<GuiDrawCommand> lastGuiDraws{};
         };
 
         std::unordered_map<const epochnamespace::core::Context*, GuiContextState> guiContexts{};
@@ -401,4 +402,3 @@ namespace epochnamespace::vulkancontext
     export bool release_vulkan_app(const epochnamespace::core::Context* ctx) noexcept;
     export bool has_vulkan_apps() noexcept;
 }
-

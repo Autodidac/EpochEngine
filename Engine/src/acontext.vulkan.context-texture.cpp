@@ -1,10 +1,10 @@
 ﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
+ *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
+ *  Â¦Â¦+--+  Â¦Â¦+---+ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦+--Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦     +Â¦Â¦Â¦Â¦Â¦Â¦+++Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -37,8 +37,8 @@
 
 module;
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
@@ -90,7 +90,7 @@ namespace epochnamespace::vulkancontext
             const std::source_location& loc = std::source_location::current())
         {
             epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR, msg, loc);
+                epochnamespace::logger::LogLevel::Error, msg, loc);
         }
 
         std::filesystem::path resolve_texture_path(const std::source_location& loc)
@@ -412,9 +412,9 @@ namespace epochnamespace::vulkancontext
 
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.flags = {};
-        samplerInfo.magFilter = vk::Filter::eLinear;
-        samplerInfo.minFilter = vk::Filter::eLinear;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+        samplerInfo.magFilter = vk::Filter::eNearest;
+        samplerInfo.minFilter = vk::Filter::eNearest;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
         samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
         samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;

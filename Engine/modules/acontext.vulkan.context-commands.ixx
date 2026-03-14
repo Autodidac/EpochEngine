@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -36,8 +36,8 @@
 
 module;
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
@@ -98,11 +98,16 @@ namespace epochnamespace::vulkancontext
         vk::CommandBufferBeginInfo beginInfo{};
         if (cmd.begin(beginInfo) != vk::Result::eSuccess)
             throw std::runtime_error("[ Vulkan ] - CommandBuffer::begin failed.");
-#if ALMOND_USE_CLEAR_COLOR_VULKAN
+#if EPOCH_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
         const auto sceneClearColor = epochnamespace::core::clear_color_for_context(
             epochnamespace::core::ContextType::Vulkan);
-        constexpr std::array<float, 4> frameClearColor{ 0.11f, 0.12f, 0.14f, 1.0f };
+        const std::array<float, 4> frameClearColor{
+            sceneClearColor[0],
+            sceneClearColor[1],
+            sceneClearColor[2],
+            sceneClearColor[3]
+        };
         clearValues[0].setColor(vk::ClearColorValue{ frameClearColor });
         clearValues[1].setDepthStencil(vk::ClearDepthStencilValue{ 1.0f, 0 });
 #endif
@@ -110,7 +115,7 @@ namespace epochnamespace::vulkancontext
         renderPassInfo.renderPass = *renderPass;
         renderPassInfo.framebuffer = *framebuffers[imageIndex];
         renderPassInfo.renderArea = vk::Rect2D{ vk::Offset2D{0, 0}, swapChainExtent };
-#if ALMOND_USE_CLEAR_COLOR_VULKAN
+#if EPOCH_USE_CLEAR_COLOR_VULKAN
         renderPassInfo.clearValueCount = static_cast<std::uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
 #endif
@@ -171,7 +176,7 @@ namespace epochnamespace::vulkancontext
         };
         cmd.setScissor(0, scissor);
 
-#if ALMOND_USE_CLEAR_COLOR_VULKAN
+#if EPOCH_USE_CLEAR_COLOR_VULKAN
         if (hasSceneViewport)
         {
             vk::ClearAttachment sceneAttachment{};
@@ -192,19 +197,7 @@ namespace epochnamespace::vulkancontext
         }
 #endif
 
-        // You MUST have this set when you create/fill the index buffer.
-        const std::uint32_t safeIndexCount = indexCount;
-        if (safeIndexCount == 0)
-            throw std::runtime_error("[ Vulkan ] - indexCount is 0. Set Application::indexCount when creating the index buffer.");
-
-        cmd.drawIndexed(
-            safeIndexCount,
-            1u,
-            0u,
-            0,
-            0u,
-            VULKAN_HPP_DEFAULT_DISPATCHER
-        );
+        (void)indexCount;
 
         cmd.nextSubpass(vk::SubpassContents::eInline);
 
@@ -318,8 +311,6 @@ namespace epochnamespace::vulkancontext
 
         if (vertices.empty() || indices.empty())
         {
-            std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
-            diag << "[ Vulkan ] - gui empty draws=" << guiState.guiDraws.size() << "\n";
             guiState.guiDraws.clear();
             return;
         }
@@ -410,8 +401,6 @@ namespace epochnamespace::vulkancontext
             cmd.drawIndexed(batch.indexCount, 1u, batch.indexOffset, 0, 0);
         }
 
-        std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
-        diag << "[ Vulkan ] - gui submitted draws=" << batches.size() << " vertices=" << vertices.size() << " indices=" << indices.size() << " image=" << imageIndex << "\n";
         guiState.guiDraws.clear();
     }
 
@@ -560,11 +549,3 @@ namespace epochnamespace::vulkancontext
         currentFrame = (currentFrame + 1) % kMaxFramesInFlight;
     }
 } // namespace epochnamespace::vulkancontext
-
-
-
-
-
-
-
-

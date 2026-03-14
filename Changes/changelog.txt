@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.3]
+- Aligned the Vulkan preview palette with the OpenGL editor palette so the active backends present the same core scene colors.
+- Stabilized Vulkan GUI presentation by keeping the last valid GUI batch during producer gaps and matching GUI atlas sampling behavior more closely to OpenGL.
+- Refreshed the active release surfaces and notes to advertise the v0.82.3 Vulkan preview update without rewriting historical release files.
+
 ## [v0.82.0]
 - Rebranded the public documentation and release metadata from the previous public name to Epoch.
 - Synchronized engine version helpers and the legacy compatibility version header to v0.82.0.
