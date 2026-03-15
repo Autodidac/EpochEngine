@@ -111,6 +111,7 @@ namespace epochnamespace::gui
             {
             case core::ContextType::OpenGL:
             case core::ContextType::Vulkan:
+            case core::ContextType::RayLib:
             case core::ContextType::SFML:
             case core::ContextType::SDL:
             case core::ContextType::Software:
@@ -193,9 +194,15 @@ namespace epochnamespace::gui
             float h = 0.0f;
         };
 
+        struct DeferredDrawBatch
+        {
+            std::shared_ptr<std::vector<QueuedSpriteDraw>> draws{};
+            std::uint64_t generation = 0;
+        };
+
         static std::unordered_map<const void*, UploadState, PtrHash> g_uploadedContexts{};
         static std::mutex g_uploadMutex{};
-        static std::unordered_map<const void*, std::shared_ptr<std::vector<QueuedSpriteDraw>>, PtrHash> g_deferredDrawBatches{};
+        static std::unordered_map<const void*, DeferredDrawBatch, PtrHash> g_deferredDrawBatches{};
         static std::mutex g_deferredBatchMutex{};
 
         struct FrameState
@@ -233,6 +240,37 @@ namespace epochnamespace::gui
             return ctx
                 && (ctx->type == core::ContextType::Software
                     || ctx->type == core::ContextType::RayLib);
+        }
+
+        [[nodiscard]] static bool same_queued_draw(
+            const QueuedSpriteDraw& lhs,
+            const QueuedSpriteDraw& rhs) noexcept
+        {
+            const auto same_pixel_x = static_cast<int>(std::floor(lhs.x)) == static_cast<int>(std::floor(rhs.x));
+            const auto same_pixel_y = static_cast<int>(std::floor(lhs.y)) == static_cast<int>(std::floor(rhs.y));
+            const auto same_pixel_w = static_cast<int>(std::lround(lhs.w)) == static_cast<int>(std::lround(rhs.w));
+            const auto same_pixel_h = static_cast<int>(std::lround(lhs.h)) == static_cast<int>(std::lround(rhs.h));
+            return lhs.handle == rhs.handle
+                && same_pixel_x
+                && same_pixel_y
+                && same_pixel_w
+                && same_pixel_h;
+        }
+
+        [[nodiscard]] static bool same_queued_draws(
+            const std::vector<QueuedSpriteDraw>& lhs,
+            const std::vector<QueuedSpriteDraw>& rhs) noexcept
+        {
+            if (lhs.size() != rhs.size())
+                return false;
+
+            for (std::size_t i = 0; i < lhs.size(); ++i)
+            {
+                if (!same_queued_draw(lhs[i], rhs[i]))
+                    return false;
+            }
+
+            return true;
         }
 
         [[nodiscard]] static std::vector<std::uint8_t> make_solid_pixels(
@@ -903,9 +941,14 @@ namespace epochnamespace::gui
             if (uses_deferred_gui_batch(ctx))
             {
                 std::scoped_lock lock(g_deferredBatchMutex);
+                auto& batch = g_deferredDrawBatches[ctx];
                 if (g_frame.queuedDraws.empty())
                 {
-                    g_deferredDrawBatches.erase(ctx);
+                    if (batch.draws && !batch.draws->empty())
+                    {
+                        batch.draws = std::make_shared<std::vector<QueuedSpriteDraw>>();
+                        ++batch.generation;
+                    }
                     return;
                 }
 
@@ -913,7 +956,11 @@ namespace epochnamespace::gui
                 draws->swap(g_frame.queuedDraws);
                 const std::size_t reserveCount = (std::max)(draws->size(), std::size_t{ 4096 });
                 g_frame.queuedDraws.reserve(reserveCount);
-                g_deferredDrawBatches[ctx] = std::move(draws);
+                if (!batch.draws || !same_queued_draws(*batch.draws, *draws))
+                {
+                    batch.draws = std::move(draws);
+                    ++batch.generation;
+                }
                 return;
             }
 
@@ -978,6 +1025,19 @@ namespace epochnamespace::gui
         g_deferredDrawBatches.erase(ctx);
     }
 
+    std::uint64_t deferred_batch_generation(const core::Context* ctx) noexcept
+    {
+        if (!ctx || !uses_deferred_gui_batch(ctx))
+            return 0;
+
+        std::scoped_lock lock(g_deferredBatchMutex);
+        const auto it = g_deferredDrawBatches.find(ctx);
+        if (it == g_deferredDrawBatches.end())
+            return 0;
+
+        return it->second.generation;
+    }
+
     bool render_deferred_batch(const std::shared_ptr<core::Context>& ctx) noexcept
     {
         if (!ctx || !uses_deferred_gui_batch(ctx.get()))
@@ -989,7 +1049,7 @@ namespace epochnamespace::gui
             const auto it = g_deferredDrawBatches.find(ctx.get());
             if (it == g_deferredDrawBatches.end())
                 return false;
-            draws = it->second;
+            draws = it->second.draws;
         }
 
         if (!draws || draws->empty())

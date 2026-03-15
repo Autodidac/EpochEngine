@@ -1,10 +1,10 @@
 ﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
+ *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
+ *  Â¦Â¦+--+  Â¦Â¦+---+ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦+--Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦     +Â¦Â¦Â¦Â¦Â¦Â¦+++Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -31,7 +31,7 @@
  // aengine.context.cpp  (TU implementation; NOT a module interface)
  //
 
-#include <include/aengine.config.hpp> // macros only — must NOT include windows
+#include <include/aengine.config.hpp> // macros only â€” must NOT include windows
 
 import <algorithm>;
 import <cstdint>;
@@ -55,6 +55,7 @@ import aengine.input;
 import aengine.context.type;
 import aengine.core.context;
 import aengine.core.logger;
+import aengine.gui;
 //import aengine.context.window;
 import aengine.context.multiplexer;
 
@@ -62,44 +63,44 @@ import aatlas.manager;
 import aatlas.texture;
 import aimage.loader;
 
-#ifdef ALMOND_USING_VULKAN
+#ifdef EPOCH_USING_VULKAN
 import acontext.vulkan.context;
 //import acontext.vulkan.context:renderer;
 //import acontext.vulkan.context:texture;
 #endif
 
-#ifdef ALMOND_USING_DIRECTX
+#ifdef EPOCH_USING_DIRECTX
 import "adirectxcontext.hpp";
 import "adirectxrenderer.hpp";
 import "adirectxtextures.hpp";
 #endif
-#ifdef ALMOND_USING_SFML
+#ifdef EPOCH_USING_SFML
 import acontext.sfml.context;
 import acontext.sfml.textures;
 #endif
-#ifdef ALMOND_USING_CUSTOM
+#ifdef EPOCH_USING_CUSTOM
 import "acustomcontext.hpp";
 import "acustomrenderer.hpp";
 import "acustomtextures.hpp";
 #endif
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import acontext.opengl.context;
 import acontext.opengl.textures;
 #endif
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import acontext.sdl.context;
 import acontext.sdl.textures;
 #endif
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 import acontext.raylib.context;
 import acontext.raylib.renderer;
 import acontext.raylib.state;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 import acontext.softrenderer.context;
 #endif
-#if defined(ALMOND_USING_NOOP_HEADLESS)
+#if defined(EPOCH_USING_NOOP_HEADLESS)
 import acontext.noop.context;
 #endif
 
@@ -146,7 +147,7 @@ namespace
         return nullptr;
     }
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
     void opengl_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -165,7 +166,7 @@ namespace
         catch (const std::exception& e) {
             ctx->init_failed = true;
             epochnamespace::logger::get(kLogOpenGL).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
@@ -173,7 +174,7 @@ namespace
         catch (...) {
             ctx->init_failed = true;
             epochnamespace::logger::get(kLogOpenGL).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -188,7 +189,7 @@ namespace
         catch (const std::exception& e) {
             ctx->init_failed = true;
             epochnamespace::logger::get(kLogOpenGL).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
@@ -196,7 +197,7 @@ namespace
         catch (...) {
             ctx->init_failed = true;
             epochnamespace::logger::get(kLogOpenGL).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
@@ -210,7 +211,7 @@ namespace
     }
 #endif
 
-#if defined(ALMOND_USING_VULKAN)
+#if defined(EPOCH_USING_VULKAN)
     void vulkan_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -228,7 +229,7 @@ namespace
         catch (const std::exception& e) {
             ctx->init_failed = true;
             epochnamespace::logger::get(kLogVulkan).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
@@ -236,7 +237,7 @@ namespace
         catch (...) {
             ctx->init_failed = true;
             epochnamespace::logger::get(kLogVulkan).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -250,14 +251,14 @@ namespace
         try { epochnamespace::vulkancontext::vulkan_cleanup(ctx); }
         catch (const std::exception& e) {
             epochnamespace::logger::get(kLogVulkan).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
         }
         catch (...) {
             epochnamespace::logger::get(kLogVulkan).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
@@ -271,7 +272,7 @@ namespace
     }
 #endif
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
     void softrenderer_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -288,14 +289,14 @@ namespace
         }
         catch (const std::exception& e) {
             epochnamespace::logger::get(kLogSoftRenderer).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
         }
         catch (...) {
             epochnamespace::logger::get(kLogSoftRenderer).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -312,14 +313,14 @@ namespace
         }
         catch (const std::exception& e) {
             epochnamespace::logger::get(kLogSoftRenderer).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
         }
         catch (...) {
             epochnamespace::logger::get(kLogSoftRenderer).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
@@ -333,7 +334,7 @@ namespace
     }
 #endif
 
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
     void sfml_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -360,14 +361,14 @@ namespace
         }
         catch (const std::exception& e) {
             epochnamespace::logger::get(kLogSfml).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
         }
         catch (...) {
             epochnamespace::logger::get(kLogSfml).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -389,7 +390,7 @@ namespace
     }
 #endif
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
     void sdl_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -410,14 +411,14 @@ namespace
         }
         catch (const std::exception& e) {
             epochnamespace::logger::get(kLogSdl).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
         }
         catch (...) {
             epochnamespace::logger::get(kLogSdl).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -434,14 +435,14 @@ namespace
         }
         catch (const std::exception& e) {
             epochnamespace::logger::get(kLogSdl).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
         }
         catch (...) {
             epochnamespace::logger::get(kLogSdl).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
@@ -456,21 +457,23 @@ namespace
 #endif
 
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
     bool raylib_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
         epochnamespace::core::CommandQueue& queue)
     {
         if (!ctx) return false;
 
         epochnamespace::raylibcontext::raylib_process();
+        if (!epochnamespace::raylibstate::s_raylibstate.running)
+            return false;
 
         epochnamespace::atlasmanager::process_pending_uploads(epochnamespace::core::ContextType::RayLib);
 
-        const bool ran_commands = queue.drain();
-        if (!ran_commands)
-        {
-            epochnamespace::raylibcontext::raylib_idle_frame();
-        }
+        epochnamespace::raylibcontext::raylib_clear(0.0f, 0.0f, 0.0f, 1.0f);
+        epochnamespace::raylibcontext::raylib_render_scene_preview(ctx);
+        (void)queue.drain();
+        (void)epochnamespace::gui::render_deferred_batch(ctx);
+        epochnamespace::raylibcontext::raylib_present();
 
         return epochnamespace::raylibstate::s_raylibstate.running;
     }
@@ -497,8 +500,23 @@ namespace epochnamespace::core
     {
         if (!process) return false;
         try { return process(std::move(ctx), queue); }
-        catch (const std::exception& e) { std::cerr << "[Context] Exception in process: " << e.what() << "\n"; return false; }
-        catch (...) { std::cerr << "[Context] Unknown exception in process\n"; return false; }
+        catch (const std::exception& e)
+        {
+            logger::get("Context").logf(
+                logger::LogLevel::Error,
+                std::source_location::current(),
+                "Exception in process: {}",
+                e.what());
+            return false;
+        }
+        catch (...)
+        {
+            logger::get("Context").log(
+                logger::LogLevel::Error,
+                "Unknown exception in process",
+                std::source_location::current());
+            return false;
+        }
     }
 
     namespace
@@ -572,7 +590,7 @@ namespace epochnamespace::core
         if (s_initialized) return;
         s_initialized = true;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::OpenGL;
@@ -601,7 +619,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::SFML;
@@ -632,7 +650,7 @@ namespace epochnamespace::core
 
 
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::RayLib;
@@ -656,14 +674,14 @@ namespace epochnamespace::core
                 }
                 catch (const std::exception& e) {
                     epochnamespace::logger::get(kLogRaylib).logf(
-                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                        epochnamespace::logger::LogLevel::Error,
                         std::source_location::current(),
                         "init exception: {}",
                         e.what());
                 }
                 catch (...) {
                     epochnamespace::logger::get(kLogRaylib).log(
-                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                        epochnamespace::logger::LogLevel::Error,
                         "init unknown exception",
                         std::source_location::current());
                 }
@@ -676,22 +694,24 @@ namespace epochnamespace::core
                 try { epochnamespace::raylibcontext::raylib_cleanup(current); }
                 catch (const std::exception& e) {
                     epochnamespace::logger::get(kLogRaylib).logf(
-                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                        epochnamespace::logger::LogLevel::Error,
                         std::source_location::current(),
                         "cleanup exception: {}",
                         e.what());
                 }
                 catch (...) {
                     epochnamespace::logger::get(kLogRaylib).log(
-                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                        epochnamespace::logger::LogLevel::Error,
                         "cleanup unknown exception",
                         std::source_location::current());
                 }
                 };
 
             ctx->process = raylib_process_adapter;
-            ctx->clear = []() { epochnamespace::raylibcontext::raylib_clear(0.0f, 0.0f, 0.0f, 1.0f); };
-            ctx->present = epochnamespace::raylibcontext::raylib_present;
+            // Raylib owns frame ordering inside its process adapter so deferred GUI and scene
+            // preview render before the backend presents.
+            ctx->clear = nullptr;
+            ctx->present = nullptr;
             ctx->get_width = epochnamespace::raylibcontext::raylib_get_width;
             ctx->get_height = epochnamespace::raylibcontext::raylib_get_height;
 
@@ -709,7 +729,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::Vulkan;
@@ -736,7 +756,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::SDL;
@@ -764,7 +784,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::Software;
@@ -788,7 +808,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_NOOP_HEADLESS)
+#if defined(EPOCH_USING_NOOP_HEADLESS)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::Noop;
@@ -853,3 +873,4 @@ namespace epochnamespace::core
         return anyRunning;
     }
 } // namespace epochnamespace::core
+

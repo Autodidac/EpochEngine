@@ -196,6 +196,10 @@ namespace epochnamespace::raylib_api
     void clear_background(Color c) { ::ClearBackground(to_rl(c)); }
     void begin_texture_mode(const RenderTexture2D& target) { ::BeginTextureMode(to_rl(target)); }
     void end_texture_mode() { ::EndTextureMode(); }
+    void begin_scissor_mode(int x, int y, int width, int height) { ::BeginScissorMode(x, y, width, height); }
+    void end_scissor_mode() { ::EndScissorMode(); }
+    void draw_rectangle_rec(const Rectangle& rec, Color color) { ::DrawRectangleRec(to_rl(rec), to_rl(color)); }
+    void draw_line_v(Vector2 start, Vector2 end, Color color) { ::DrawLineV(to_rl(start), to_rl(end), to_rl(color)); }
 
     void set_target_fps(int fps) { ::SetTargetFPS(fps); }
     void set_window_title(const char* title) { ::SetWindowTitle(title); }

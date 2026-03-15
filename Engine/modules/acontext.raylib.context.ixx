@@ -57,11 +57,11 @@ import aengine.core.logger;
 import aengine.context.multiplexer;
 import aengine.diagnostics;
 import aatlas.manager;
+import epoch.render.preview_grid;
 
 import acontext.raylib.state;
 import acontext.raylib.textures;
 import acontext.raylib.renderer;
-import acontext.raylib.input;
 import acontext.raylib.api;
 
 import <algorithm>;
@@ -231,6 +231,11 @@ namespace epochnamespace::raylibcontext
                     ctx->windowData->set_size(static_cast<int>(st.width), static_cast<int>(st.height));
                 }
             }
+
+            // The multiplexer laid out the placeholder host before Raylib replaced it with a GLFW child.
+            // Ask the parent to reflow once the tracked HWND now points at the real render window.
+            if (st.parent && ::IsWindow(st.parent) != FALSE)
+                ::PostMessageW(st.parent, WM_SIZE, 0, MAKELPARAM(st.width, st.height));
         }
 
     }
@@ -238,6 +243,46 @@ namespace epochnamespace::raylibcontext
 
     namespace detail
     {
+        [[nodiscard]] inline epochnamespace::raylib_api::Color to_raylib_color(
+            const epochnamespace::previewgrid::Vec3& color) noexcept
+        {
+            const auto clamp_channel = [](float value) noexcept -> std::uint8_t
+            {
+                const float scaled = (std::clamp)(value, 0.0f, 1.0f) * 255.0f;
+                return static_cast<std::uint8_t>(scaled);
+            };
+
+            return epochnamespace::raylib_api::Color{
+                clamp_channel(color.x),
+                clamp_channel(color.y),
+                clamp_channel(color.z),
+                255
+            };
+        }
+
+        [[nodiscard]] inline bool project_preview_vertex(
+            const epochnamespace::previewgrid::Mat4& mvp,
+            const epochnamespace::previewgrid::Vec3& position,
+            const core::RenderViewport& viewport,
+            epochnamespace::raylib_api::Vector2& out) noexcept
+        {
+            const auto clip = epochnamespace::previewgrid::transform_point(mvp, position);
+            if (clip.w <= 1.0e-4f)
+                return false;
+
+            const float invW = 1.0f / clip.w;
+            const float ndcX = clip.x * invW;
+            const float ndcY = clip.y * invW;
+            if (!std::isfinite(ndcX) || !std::isfinite(ndcY))
+                return false;
+
+            out.x = static_cast<float>(viewport.x)
+                + ((ndcX * 0.5f) + 0.5f) * static_cast<float>(viewport.width);
+            out.y = static_cast<float>(viewport.y)
+                + ((-ndcY * 0.5f) + 0.5f) * static_cast<float>(viewport.height);
+            return true;
+        }
+
         inline void raylib_stop_rendering_backend(epochnamespace::raylibstate::RaylibState& st)
         {
             if (!st.renderingActive)
@@ -275,6 +320,78 @@ namespace epochnamespace::raylibcontext
             st.frameActive = true;
             st.frameInTextureMode = false;
         }
+
+        inline void render_scene_preview(const std::shared_ptr<core::Context>& ctx)
+        {
+            if (!ctx)
+                return;
+
+            const auto viewport = ctx->scene_viewport();
+            if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
+                return;
+
+            const auto clearColor = epochnamespace::previewgrid::kClearColor;
+            epochnamespace::raylib_api::begin_scissor_mode(
+                viewport.x,
+                viewport.y,
+                viewport.width,
+                viewport.height);
+
+            epochnamespace::raylib_api::draw_rectangle_rec(
+                epochnamespace::raylib_api::Rectangle{
+                    static_cast<float>(viewport.x),
+                    static_cast<float>(viewport.y),
+                    static_cast<float>(viewport.width),
+                    static_cast<float>(viewport.height)
+                },
+                epochnamespace::raylib_api::Color{
+                    static_cast<std::uint8_t>((std::clamp)(clearColor[0], 0.0f, 1.0f) * 255.0f),
+                    static_cast<std::uint8_t>((std::clamp)(clearColor[1], 0.0f, 1.0f) * 255.0f),
+                    static_cast<std::uint8_t>((std::clamp)(clearColor[2], 0.0f, 1.0f) * 255.0f),
+                    static_cast<std::uint8_t>((std::clamp)(clearColor[3], 0.0f, 1.0f) * 255.0f)
+                });
+
+            const auto camera = epochnamespace::previewgrid::kCamera;
+            const float aspect = viewport.height > 0
+                ? (viewport.width / static_cast<float>(viewport.height))
+                : 1.0f;
+            const auto proj = epochnamespace::previewgrid::perspective(
+                camera.fovRadians,
+                aspect,
+                camera.nearPlane,
+                camera.farPlane);
+            const auto view = epochnamespace::previewgrid::look_at(
+                camera.eye,
+                camera.target,
+                camera.up);
+            const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
+            const auto vertices = epochnamespace::previewgrid::grid_vertices();
+            const auto indices = epochnamespace::previewgrid::grid_indices();
+
+            for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+            {
+                const auto firstIndex = static_cast<std::size_t>(indices[i]);
+                const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
+                if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
+                    continue;
+
+                epochnamespace::raylib_api::Vector2 a{};
+                epochnamespace::raylib_api::Vector2 b{};
+                if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, a)
+                    || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, b))
+                {
+                    continue;
+                }
+
+                epochnamespace::raylib_api::draw_line_v(
+                    a,
+                    b,
+                    to_raylib_color(vertices[firstIndex].color));
+            }
+
+            epochnamespace::raylib_api::end_scissor_mode();
+        }
+
     }
 
     export inline bool raylib_initialize(
@@ -429,6 +546,9 @@ namespace epochnamespace::raylibcontext
         st.running = true;
         st.renderingActive = true;
         st.cleanupIssued = false;
+        st.cleanupRequested = false;
+        st.currentFailureStreak = 0;
+        st.currentFailureWarned = false;
 
         epochnamespace::atlasmanager::register_backend_uploader(
             epochnamespace::core::ContextType::RayLib,
@@ -489,12 +609,26 @@ namespace epochnamespace::raylibcontext
                 st.running = false;
                 return;
             }
-            logger::warn(
-                "Raylib",
-                "Failed to make raylib context current during process; shutting down.");
-            st.running = false;
+
+            ++st.currentFailureStreak;
+            if (!st.currentFailureWarned)
+            {
+                logger::warn(
+                    "Raylib",
+                    "Failed to make raylib context current during process; skipping frame.");
+                st.currentFailureWarned = true;
+            }
+            if (st.currentFailureStreak >= 8)
+            {
+                logger::warn(
+                    "Raylib",
+                    "Raylib context could not be recovered after repeated attempts; shutting down.");
+                st.running = false;
+            }
             return;
         }
+        st.currentFailureStreak = 0;
+        st.currentFailureWarned = false;
 #endif
 
         if (epochnamespace::raylib_api::window_should_close())
@@ -584,6 +718,21 @@ namespace epochnamespace::raylibcontext
                 static_cast<unsigned char>(std::clamp(clearColor[3], 0.0f, 1.0f) * 255.0f)
             });
 #endif
+    }
+
+    export inline void raylib_render_scene_preview(const std::shared_ptr<core::Context>& ctx)
+    {
+        auto& st = epochnamespace::raylibstate::s_raylibstate;
+        if (!st.running || !st.renderingActive)
+            return;
+
+#if defined(_WIN32)
+        if (!raylib_make_current())
+            return;
+#endif
+
+        detail::ensure_frame_started(st);
+        detail::render_scene_preview(ctx);
     }
 
     export inline void raylib_present()
