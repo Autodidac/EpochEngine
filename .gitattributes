@@ -2,6 +2,23 @@
 *.c linguist-language=C
 *.cpp linguist-language=C++
 *.hpp linguist-language=C++
+*.ipp linguist-language=C++
+*.inl linguist-language=C++
 *.ixx linguist-language=C++
 *.cppm linguist-language=C++
 *.css linguist-language=C++
+
+CMakeLists.txt linguist-language=CMake
+*.cmake linguist-language=CMake
+
+*.sh linguist-language=Shell
+*.ps1 linguist-language=PowerShell
+*.bat linguist-language=Batchfile
+*.cmd linguist-language=Batchfile
+
+*.vcxproj linguist-language=XML
+*.vcxitems linguist-language=XML
+*.filters linguist-language=XML
+*.props linguist-language=XML
+*.targets linguist-language=XML
+*.natvis linguist-language=XML
