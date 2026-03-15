@@ -207,7 +207,7 @@ namespace epochnamespace::vulkancontext
         const auto* ctx = bound_context();
         const bool editorPreview =
             ctx && ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor;
-        const auto previewCamera = epochnamespace::previewgrid::kCamera;
+        const auto previewCamera = epochnamespace::previewgrid::camera_for(ctx);
 
         ubo.model = glm::mat4(1.0f);
         if (editorPreview)

@@ -351,7 +351,7 @@ namespace epochnamespace::raylibcontext
                     static_cast<std::uint8_t>((std::clamp)(clearColor[3], 0.0f, 1.0f) * 255.0f)
                 });
 
-            const auto camera = epochnamespace::previewgrid::kCamera;
+            const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;

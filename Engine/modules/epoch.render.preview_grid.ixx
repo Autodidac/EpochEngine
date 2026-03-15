@@ -7,7 +7,12 @@ import <array>;
 import <cmath>;
 import <cstddef>;
 import <cstdint>;
+import <functional>;
+import <mutex>;
+import <shared_mutex>;
 import <span>;
+import <string_view>;
+import <unordered_map>;
 import <vector>;
 
 export namespace epochnamespace::previewgrid
@@ -38,14 +43,40 @@ export namespace epochnamespace::previewgrid
     };
 
     export inline constexpr std::array<float, 4> kClearColor{
-        0.06f, 0.08f, 0.11f, 1.0f
+        0.31f, 0.36f, 0.42f, 1.0f
     };
 
     export inline constexpr Camera kCamera{};
 
+    export enum class CameraMode : std::uint8_t
+    {
+        Editor = 0,
+        FPS = 1
+    };
+
+    export [[nodiscard]] inline std::string_view camera_mode_name(CameraMode mode) noexcept
+    {
+        switch (mode)
+        {
+        case CameraMode::FPS: return "FPS";
+        case CameraMode::Editor:
+        default: return "Editor";
+        }
+    }
+
     export [[nodiscard]] inline Vec3 subtract(Vec3 lhs, Vec3 rhs) noexcept
     {
         return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z };
+    }
+
+    export [[nodiscard]] inline Vec3 add(Vec3 lhs, Vec3 rhs) noexcept
+    {
+        return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z };
+    }
+
+    export [[nodiscard]] inline Vec3 scale(Vec3 value, float factor) noexcept
+    {
+        return { value.x * factor, value.y * factor, value.z * factor };
     }
 
     export [[nodiscard]] inline float dot(Vec3 lhs, Vec3 rhs) noexcept
@@ -159,6 +190,103 @@ export namespace epochnamespace::previewgrid
 
     namespace detail
     {
+        struct PtrHash
+        {
+            std::size_t operator()(const void* p) const noexcept
+            {
+                return std::hash<const void*>{}(p);
+            }
+        };
+
+        struct CameraRigState
+        {
+            CameraMode mode{ CameraMode::Editor };
+            Vec3 focus{ 0.0f, 0.75f, 0.0f };
+            Vec3 position{ 0.0f, 1.8f, 6.0f };
+            float yawDegrees = -135.0f;
+            float pitchDegrees = -28.0f;
+            float distance = 13.5f;
+        };
+
+        inline std::unordered_map<const void*, CameraRigState, PtrHash> g_cameraRigs{};
+        inline std::shared_mutex g_cameraRigMutex{};
+
+        [[nodiscard]] inline CameraRigState make_editor_rig() noexcept
+        {
+            return CameraRigState{
+                .mode = CameraMode::Editor,
+                .focus{ 0.0f, 0.75f, 0.0f },
+                .position{ 0.0f, 1.8f, 6.0f },
+                .yawDegrees = -135.0f,
+                .pitchDegrees = -28.0f,
+                .distance = 13.5f
+            };
+        }
+
+        [[nodiscard]] inline CameraRigState make_fps_rig() noexcept
+        {
+            return CameraRigState{
+                .mode = CameraMode::FPS,
+                .focus{ 0.0f, 0.75f, 0.0f },
+                .position{ 0.0f, 1.8f, 6.0f },
+                .yawDegrees = -90.0f,
+                .pitchDegrees = -8.0f,
+                .distance = 0.0f
+            };
+        }
+
+        [[nodiscard]] inline CameraRigState make_default_rig(CameraMode mode) noexcept
+        {
+            return mode == CameraMode::FPS ? make_fps_rig() : make_editor_rig();
+        }
+
+        [[nodiscard]] inline Vec3 forward_from_angles(float yawDegrees, float pitchDegrees) noexcept
+        {
+            constexpr float kPi = 3.14159265358979323846f;
+            const float yawRadians = yawDegrees * (kPi / 180.0f);
+            const float pitchRadians = pitchDegrees * (kPi / 180.0f);
+            return normalize(Vec3{
+                std::cos(pitchRadians) * std::cos(yawRadians),
+                std::sin(pitchRadians),
+                std::cos(pitchRadians) * std::sin(yawRadians)
+            });
+        }
+
+        [[nodiscard]] inline Camera camera_from_rig(const CameraRigState& rig) noexcept
+        {
+            const Vec3 worldUp{ 0.0f, 1.0f, 0.0f };
+            const Vec3 forward = forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
+
+            if (rig.mode == CameraMode::FPS)
+            {
+                const Vec3 target = add(rig.position, forward);
+                return Camera{
+                    .eye = rig.position,
+                    .target = target,
+                    .up = worldUp,
+                    .fovRadians = 1.05f,
+                    .nearPlane = 0.1f,
+                    .farPlane = 96.0f
+                };
+            }
+
+            const Vec3 eye = subtract(rig.focus, scale(forward, rig.distance));
+            return Camera{
+                .eye = eye,
+                .target = rig.focus,
+                .up = worldUp,
+                .fovRadians = 0.90f,
+                .nearPlane = 0.1f,
+                .farPlane = 96.0f
+            };
+        }
+
+        [[nodiscard]] inline CameraRigState& ensure_rig(const void* ctxKey)
+        {
+            auto [it, inserted] = g_cameraRigs.try_emplace(ctxKey, make_default_rig(CameraMode::Editor));
+            return it->second;
+        }
+
         struct Geometry
         {
             std::vector<Vertex> vertices{};
@@ -191,6 +319,36 @@ export namespace epochnamespace::previewgrid
                     out.indices.push_back(second);
                 };
 
+                auto push_box = [&](Vec3 center, Vec3 halfExtent, Vec3 color)
+                {
+                    const std::array<Vec3, 8> corners{{
+                        { center.x - halfExtent.x, center.y - halfExtent.y, center.z - halfExtent.z },
+                        { center.x + halfExtent.x, center.y - halfExtent.y, center.z - halfExtent.z },
+                        { center.x + halfExtent.x, center.y - halfExtent.y, center.z + halfExtent.z },
+                        { center.x - halfExtent.x, center.y - halfExtent.y, center.z + halfExtent.z },
+                        { center.x - halfExtent.x, center.y + halfExtent.y, center.z - halfExtent.z },
+                        { center.x + halfExtent.x, center.y + halfExtent.y, center.z - halfExtent.z },
+                        { center.x + halfExtent.x, center.y + halfExtent.y, center.z + halfExtent.z },
+                        { center.x - halfExtent.x, center.y + halfExtent.y, center.z + halfExtent.z }
+                    }};
+
+                    constexpr std::array<std::array<int, 2>, 12> edges{{
+                        { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+                        { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+                        { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+                    }};
+
+                    for (const auto& edge : edges)
+                    {
+                        const auto& a = corners[static_cast<std::size_t>(edge[0])];
+                        const auto& b = corners[static_cast<std::size_t>(edge[1])];
+                        push_line(
+                            a.x, a.y, a.z,
+                            b.x, b.y, b.z,
+                            color.x, color.y, color.z);
+                    }
+                };
+
                 constexpr int kHalfExtent = 12;
                 for (int line = -kHalfExtent; line <= kHalfExtent; ++line)
                 {
@@ -211,11 +369,129 @@ export namespace epochnamespace::previewgrid
                 push_line(0.0f, 0.02f, 0.0f, 3.5f, 0.02f, 0.0f, 0.95f, 0.30f, 0.28f);
                 push_line(0.0f, 0.02f, 0.0f, 0.0f, 3.5f, 0.0f, 0.28f, 0.92f, 0.40f);
                 push_line(0.0f, 0.02f, 0.0f, 0.0f, 0.02f, 3.5f, 0.33f, 0.58f, 0.98f);
+
+                push_box({ 0.0f, 0.55f, 0.0f }, { 0.55f, 0.55f, 0.55f }, { 0.88f, 0.90f, 0.95f });
+                push_box({ 3.0f, 0.45f, -1.6f }, { 1.25f, 0.45f, 1.0f }, { 0.76f, 0.82f, 0.95f });
+                push_box({ -2.6f, 1.05f, 2.1f }, { 0.55f, 1.05f, 0.55f }, { 0.95f, 0.80f, 0.58f });
                 return out;
             }();
 
             return geometry;
         }
+    }
+
+    export [[nodiscard]] inline CameraMode camera_mode_for(const void* ctxKey) noexcept
+    {
+        if (!ctxKey)
+            return CameraMode::Editor;
+
+        std::shared_lock lock(detail::g_cameraRigMutex);
+        const auto it = detail::g_cameraRigs.find(ctxKey);
+        return it != detail::g_cameraRigs.end() ? it->second.mode : CameraMode::Editor;
+    }
+
+    export inline void set_camera_mode(const void* ctxKey, CameraMode mode) noexcept
+    {
+        if (!ctxKey)
+            return;
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        detail::g_cameraRigs[ctxKey] = detail::make_default_rig(mode);
+    }
+
+    export inline void reset_camera(const void* ctxKey) noexcept
+    {
+        if (!ctxKey)
+            return;
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        auto& rig = detail::ensure_rig(ctxKey);
+        rig = detail::make_default_rig(rig.mode);
+    }
+
+    export inline void cleanup_context(const void* ctxKey) noexcept
+    {
+        if (!ctxKey)
+            return;
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        detail::g_cameraRigs.erase(ctxKey);
+    }
+
+    export [[nodiscard]] inline Camera camera_for(const void* ctxKey) noexcept
+    {
+        if (!ctxKey)
+            return kCamera;
+
+        std::shared_lock lock(detail::g_cameraRigMutex);
+        const auto it = detail::g_cameraRigs.find(ctxKey);
+        if (it == detail::g_cameraRigs.end())
+            return detail::camera_from_rig(detail::make_default_rig(CameraMode::Editor));
+        return detail::camera_from_rig(it->second);
+    }
+
+    export inline void step_camera(
+        const void* ctxKey,
+        float deltaTime,
+        float moveForward,
+        float moveRight,
+        float moveUp,
+        float yawInput,
+        float pitchInput) noexcept
+    {
+        if (!ctxKey)
+            return;
+
+        const float dt = (std::clamp)(deltaTime, 0.0f, 0.05f);
+        if (dt <= 0.0f)
+            return;
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        auto& rig = detail::ensure_rig(ctxKey);
+
+        const float lookSpeed = rig.mode == CameraMode::FPS ? 105.0f : 92.0f;
+        rig.yawDegrees += yawInput * lookSpeed * dt;
+        rig.pitchDegrees = (std::clamp)(rig.pitchDegrees + pitchInput * lookSpeed * dt, -80.0f, 80.0f);
+
+        const Vec3 worldUp{ 0.0f, 1.0f, 0.0f };
+        const Vec3 forward = detail::forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
+        Vec3 flatForward = normalize({ forward.x, 0.0f, forward.z });
+        if (dot(flatForward, flatForward) <= 1.0e-6f)
+            flatForward = { 0.0f, 0.0f, -1.0f };
+        const Vec3 right = normalize(cross(flatForward, worldUp));
+
+        if (rig.mode == CameraMode::FPS)
+        {
+            constexpr float kMoveSpeed = 6.5f;
+            constexpr float kVerticalSpeed = 4.5f;
+            rig.position = add(rig.position, scale(flatForward, moveForward * kMoveSpeed * dt));
+            rig.position = add(rig.position, scale(right, moveRight * kMoveSpeed * dt));
+            rig.position = add(rig.position, scale(worldUp, moveUp * kVerticalSpeed * dt));
+            return;
+        }
+
+        constexpr float kPanSpeed = 5.0f;
+        constexpr float kDollySpeed = 8.5f;
+        rig.focus = add(rig.focus, scale(right, moveRight * kPanSpeed * dt));
+        rig.focus = add(rig.focus, scale(worldUp, moveUp * kPanSpeed * dt));
+        rig.distance = (std::clamp)(rig.distance - moveForward * kDollySpeed * dt, 2.5f, 48.0f);
+    }
+
+    export inline void look_camera(
+        const void* ctxKey,
+        float yawDeltaDegrees,
+        float pitchDeltaDegrees) noexcept
+    {
+        if (!ctxKey)
+            return;
+
+        if (yawDeltaDegrees == 0.0f && pitchDeltaDegrees == 0.0f)
+            return;
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        auto& rig = detail::ensure_rig(ctxKey);
+        rig.yawDegrees += yawDeltaDegrees;
+        rig.pitchDegrees = (std::clamp)(rig.pitchDegrees + pitchDeltaDegrees, -80.0f, 80.0f);
     }
 
     export [[nodiscard]] inline std::span<const Vertex> grid_vertices() noexcept

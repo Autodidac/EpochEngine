@@ -96,6 +96,7 @@ import aengine.core.time;
 import aengine.gui;
 import aengine.gui.menu;
 import aeditor;
+import epoch.render.preview_grid;
 
 import ascene;
 
@@ -418,7 +419,7 @@ namespace epochnamespace::core
                                 };
 
                                 const bool mouse_left_down =
-                                    epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
+                                    ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseLeft);
                                 const bool up_pressed =
                                     epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Up);
                                 const bool down_pressed =
@@ -768,7 +769,7 @@ namespace epochnamespace::core
                                 };
 
                                 const bool mouse_left_down =
-                                    epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
+                                    ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseLeft);
                                 const bool up_pressed =
                                     epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Up);
                                 const bool down_pressed =
@@ -984,13 +985,21 @@ namespace epochnamespace::core
 
         struct ContextSession
         {
-            SessionMode mode{ SessionMode::Editor };
-            SessionMode return_mode{ SessionMode::Editor };
+            SessionMode mode{ SessionMode::Menu };
+            SessionMode return_mode{ SessionMode::Menu };
             epochnamespace::menu::MenuOverlay menu{};
             std::unique_ptr<epochnamespace::scene::Scene> active_scene{};
             timing::Clock::time_point last_frame{};
             bool has_last_frame{ false };
         };
+
+        struct PreviewLookState
+        {
+            gui::Vec2 last_mouse{};
+            bool looking = false;
+        };
+
+        thread_local std::unordered_map<Context*, PreviewLookState> g_preview_look_states{};
 
         using ContextGroup = std::pair<
             epochnamespace::core::ContextType,
@@ -1114,10 +1123,12 @@ namespace epochnamespace::core
 
         void reset_to_menu(ContextSession& session, const std::shared_ptr<Context>& ctx)
         {
+            epochnamespace::editor_reset_transient_ui(ctx.get());
             session.menu.cleanup();
             ensure_menu_initialized(session, ctx);
             session.mode = SessionMode::Menu;
             session.return_mode = SessionMode::Menu;
+            g_preview_look_states.erase(ctx.get());
         }
 
         void cleanup_backend_context_shared(epochnamespace::core::ContextType type,
@@ -1244,6 +1255,36 @@ namespace epochnamespace::core
 #endif
 #endif
 
+                auto switch_all_sessions_to_editor = [&](std::string_view project_id)
+                {
+                    for (auto& [_, contexts] : snapshot)
+                    {
+                        for (auto& targetCtx : contexts)
+                        {
+                            if (!targetCtx)
+                                continue;
+
+                            auto [targetIt, insertedForEditor] = sessions.try_emplace(targetCtx.get());
+                            auto& targetSession = targetIt->second;
+                            if (insertedForEditor)
+                                targetSession.menu.set_max_columns(epochnamespace::core::cli::menu_columns);
+
+                            unload_active_scene(targetSession);
+                            targetSession.menu.cleanup();
+                            targetSession.mode = SessionMode::Editor;
+                            targetSession.return_mode = SessionMode::Menu;
+
+                            if (!project_id.empty())
+                                epochnamespace::editor_load_project(targetCtx, project_id);
+                            else
+                                epochnamespace::editor_reset_transient_ui(targetCtx.get());
+
+                            targetCtx->clear_scene_viewport();
+                            targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                        }
+                    }
+                };
+
                 for (auto& [type, contexts] : snapshot)
                 {
                     bool backend_has_live_context = false;
@@ -1331,12 +1372,73 @@ namespace epochnamespace::core
                             };
 
                             const bool mouse_left_down =
-                                epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
+                                ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseLeft);
+                            const bool mouse_right_down =
+                                ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseRight);
 
                             ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
                             ctx->clear_safe();
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             const auto editor_frame = epochnamespace::editor_run(ctx);
+
+                            const auto viewport = editor_frame.scene_viewport;
+                            const bool mouse_in_scene =
+                                mouse_pos.x >= viewport.position.x
+                                && mouse_pos.y >= viewport.position.y
+                                && mouse_pos.x < (viewport.position.x + viewport.size.x)
+                                && mouse_pos.y < (viewport.position.y + viewport.size.y);
+
+                            if (ctx->scene_preview_mode() == core::ScenePreviewMode::Editor
+                                && viewport.size.x > 1.0f
+                                && viewport.size.y > 1.0f
+                                && mouse_in_scene)
+                            {
+                                auto& look_state = g_preview_look_states[ctx.get()];
+                                const float forwardInput =
+                                    (ctx->is_key_held_safe(epochnamespace::input::Key::W) ? 1.0f : 0.0f)
+                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::S) ? 1.0f : 0.0f);
+                                const float rightInput =
+                                    (ctx->is_key_held_safe(epochnamespace::input::Key::D) ? 1.0f : 0.0f)
+                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::A) ? 1.0f : 0.0f);
+                                const float upInput =
+                                    (ctx->is_key_held_safe(epochnamespace::input::Key::E) ? 1.0f : 0.0f)
+                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::Q) ? 1.0f : 0.0f);
+                                const float yawInput =
+                                    (ctx->is_key_held_safe(epochnamespace::input::Key::Right) ? 1.0f : 0.0f)
+                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::Left) ? 1.0f : 0.0f);
+                                const float pitchInput =
+                                    (ctx->is_key_held_safe(epochnamespace::input::Key::Up) ? 1.0f : 0.0f)
+                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::Down) ? 1.0f : 0.0f);
+
+                                if (mouse_right_down && look_state.looking)
+                                {
+                                    const float mouseDeltaX = mouse_pos.x - look_state.last_mouse.x;
+                                    const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
+                                    constexpr float kMouseSensitivity = 0.20f;
+                                    epochnamespace::previewgrid::look_camera(
+                                        ctx.get(),
+                                        mouseDeltaX * kMouseSensitivity,
+                                        -mouseDeltaY * kMouseSensitivity);
+                                }
+
+                                epochnamespace::previewgrid::step_camera(
+                                    ctx.get(),
+                                    dt,
+                                    forwardInput,
+                                    rightInput,
+                                    upInput,
+                                    yawInput,
+                                    pitchInput);
+
+                                look_state.last_mouse = mouse_pos;
+                                look_state.looking = mouse_right_down;
+                            }
+                            else
+                            {
+                                auto& look_state = g_preview_look_states[ctx.get()];
+                                look_state.last_mouse = mouse_pos;
+                                look_state.looking = false;
+                            }
 
                             switch (editor_frame.command)
                             {
@@ -1347,6 +1449,21 @@ namespace epochnamespace::core
                             case epochnamespace::EditorCommand::RunGame:
                                 begin_scene(editor_frame.command_argument, SessionMode::Editor);
                                 break;
+                            case epochnamespace::EditorCommand::RunScript:
+                            {
+                                const bool ok = epochnamespace::editor_run_script(
+                                    ctx.get(),
+                                    editor_frame.command_argument.empty()
+                                    ? std::string_view{ "rotate_all_entities" }
+                                    : std::string_view{ editor_frame.command_argument });
+                                logger::get(kEditorLog).logf(
+                                    ok ? logger::LogLevel::INFO : logger::LogLevel::Error,
+                                    std::source_location::current(),
+                                    "Editor script '{}' {}.",
+                                    editor_frame.command_argument.empty() ? "rotate_all_entities" : editor_frame.command_argument,
+                                    ok ? "completed" : "failed");
+                                break;
+                            }
                             case epochnamespace::EditorCommand::UpdateApplication:
                             {
                                 logger::get(kEditorLog).log(
@@ -1397,7 +1514,7 @@ namespace epochnamespace::core
                             };
 
                             const bool mouse_left_down =
-                                epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
+                                ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseLeft);
                             const bool up_pressed =
                                 epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Up);
                             const bool down_pressed =
@@ -1436,14 +1553,11 @@ namespace epochnamespace::core
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)
                                 {
-                                    session.mode = SessionMode::Editor;
-                                    ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                                    switch_all_sessions_to_editor({});
                                 }
                                 else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
                                 {
-                                    epochnamespace::editor_load_project(ctx, project_id);
-                                    session.mode = SessionMode::Editor;
-                                    ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                                    switch_all_sessions_to_editor(project_id);
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::Settings)
                                 {
@@ -1524,6 +1638,7 @@ namespace epochnamespace::core
                             session.menu.cleanup();
                             epochnamespace::gui::cleanup_context(ctx.get());
                             epochnamespace::cleanup_chat_context(ctx.get());
+                            g_preview_look_states.erase(ctx.get());
                             sessions.erase(ctx.get());
                         }
                         else
@@ -1549,6 +1664,7 @@ namespace epochnamespace::core
                 unload_active_scene(session);
                 session.menu.cleanup();
             }
+            g_preview_look_states.clear();
 
             auto snapshot2 = collect_backend_contexts_shared();
             for (auto& [type, contexts] : snapshot2)
@@ -1566,9 +1682,7 @@ namespace epochnamespace::core
         template <typename PumpFunc>
         int RunEngineMainLoopCommon(MultiContextManager& mgr, PumpFunc&& pump_events)
         {
-            const auto startup_mode = epochnamespace::core::cli::run_menu_loop
-                ? SessionMode::Menu
-                : SessionMode::Editor;
+            const auto startup_mode = SessionMode::Menu;
             return RunContextSessionLoop(mgr, std::forward<PumpFunc>(pump_events), startup_mode);
         }
 
@@ -1804,7 +1918,7 @@ namespace epochnamespace::core
                     return true;
                 };
 
-            const int result = engine::RunContextSessionLoop(mgr, pump, engine::SessionMode::Editor);
+            const int result = engine::RunContextSessionLoop(mgr, pump, engine::SessionMode::Menu);
             if (result != 0)
                 logger::get(engine::kEditorLog).logf(
                     logger::LogLevel::Error,
@@ -1860,7 +1974,7 @@ namespace epochnamespace::core
                     return epochnamespace::platform::pump_events();
                 };
 
-            const int result = engine::RunContextSessionLoop(mgr, pump, engine::SessionMode::Editor);
+            const int result = engine::RunContextSessionLoop(mgr, pump, engine::SessionMode::Menu);
             if (result != 0)
                 logger::get(engine::kEditorLog).logf(
                     logger::LogLevel::Error,

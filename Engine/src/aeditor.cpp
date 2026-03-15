@@ -36,6 +36,8 @@
  **************************************************************/
 module;
 
+#include <include/epoch.script_api.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -55,7 +57,9 @@ module aeditor;
 import aengine.gui;
 import aengine.core.context;
 import aengine.input;
+import ascripting.system;
 import epoch.ai;
+import epoch.render.preview_grid;
 
 namespace epochnamespace
 {
@@ -168,6 +172,7 @@ namespace epochnamespace
             TopMenu openMenu{ TopMenu::None };
             std::string projectName{ "Sandbox" };
             std::string projectPath{ "Projects/Sandbox/scene.epoch" };
+            std::string activeScript{ "rotate_all_entities" };
             std::string activeWorld{ "PersistentLevel" };
             std::vector<EditorEntity> entities{};
             std::size_t selectedEntity{ 0 };
@@ -333,6 +338,57 @@ namespace epochnamespace
             }
         }
 
+        std::size_t rotate_script_target_entities(EditorState& state, float deltaDegrees)
+        {
+            std::size_t rotated = 0;
+            for (auto& entity : state.entities)
+            {
+                if (entity.editorOnly || entity.type == "Level" || entity.type == "Camera")
+                    continue;
+
+                entity.rotation[1] += deltaDegrees;
+                if (entity.rotation[1] > 180.0f)
+                    entity.rotation[1] -= 360.0f;
+                if (entity.rotation[1] < -180.0f)
+                    entity.rotation[1] += 360.0f;
+                ++rotated;
+            }
+            return rotated;
+        }
+
+        void script_log_callback(void* userData, const char* message)
+        {
+            const auto* ctx = static_cast<const core::Context*>(userData);
+            if (!ctx)
+                return;
+
+            auto& storage = editor_storage();
+            std::scoped_lock lock(storage.mutex);
+            const auto it = storage.states.find(ctx);
+            if (it == storage.states.end())
+                return;
+
+            push_editor_log(it->second, std::string("[script] ") + (message ? message : "(null)"));
+        }
+
+        void script_rotate_all_entities_yaw_callback(void* userData, float deltaDegrees)
+        {
+            const auto* ctx = static_cast<const core::Context*>(userData);
+            if (!ctx)
+                return;
+
+            auto& storage = editor_storage();
+            std::scoped_lock lock(storage.mutex);
+            const auto it = storage.states.find(ctx);
+            if (it == storage.states.end())
+                return;
+
+            const std::size_t rotated = rotate_script_target_entities(it->second, deltaDegrees);
+            push_editor_log(
+                it->second,
+                std::format("[script] Rotated {} scene entities by {:.1f} degrees.", rotated, deltaDegrees));
+        }
+
         [[nodiscard]] std::string renderer_name(const std::shared_ptr<core::Context>& ctx)
         {
             if (!ctx)
@@ -365,6 +421,14 @@ namespace epochnamespace
             }
         }
 
+        [[nodiscard]] std::string preview_camera_name(const std::shared_ptr<core::Context>& ctx)
+        {
+            if (!ctx)
+                return "Editor";
+            return std::string(epochnamespace::previewgrid::camera_mode_name(
+                epochnamespace::previewgrid::camera_mode_for(ctx.get())));
+        }
+
         AiChat& chat_state_for(const std::shared_ptr<core::Context>& ctx)
         {
             auto& storage = chat_storage();
@@ -389,6 +453,8 @@ namespace epochnamespace
             {
                 it->second.initialized = true;
                 set_project(it->second, "sandbox", false);
+                if (ctx)
+                    epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
                 push_editor_log(it->second, "[info] Use File > Launcher for projects and games.");
                 push_editor_log(it->second, "[info] Scene viewport is owned by the active backend.");
@@ -407,6 +473,7 @@ namespace epochnamespace
         std::scoped_lock lock(chatStorage.mutex, editorStorage.mutex);
         chatStorage.chats.erase(ctx);
         editorStorage.states.erase(ctx);
+        epochnamespace::previewgrid::cleanup_context(ctx);
     }
 
     void shutdown_chat_system()
@@ -432,6 +499,58 @@ namespace epochnamespace
 
         auto& editor = editor_state_for(ctx);
         set_project(editor, project_id, true);
+        epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
+        epochnamespace::previewgrid::reset_camera(ctx.get());
+    }
+
+    void editor_reset_transient_ui(const core::Context* ctx)
+    {
+        if (!ctx)
+            return;
+
+        auto& storage = editor_storage();
+        std::scoped_lock lock(storage.mutex);
+        const auto it = storage.states.find(ctx);
+        if (it == storage.states.end())
+            return;
+
+        it->second.openMenu = TopMenu::None;
+        it->second.showAboutModal = false;
+        it->second.showUpdateConfirmModal = false;
+        it->second.previewMode = core::ScenePreviewMode::Editor;
+        epochnamespace::previewgrid::set_camera_mode(ctx, epochnamespace::previewgrid::CameraMode::Editor);
+        epochnamespace::previewgrid::reset_camera(ctx);
+    }
+
+    bool editor_run_script(const core::Context* ctx, std::string_view script_name)
+    {
+        if (!ctx)
+            return false;
+
+        scripting::ScriptLoadReport report;
+        EpochScriptHost host{
+            .user_data = const_cast<core::Context*>(ctx),
+            .log = &script_log_callback,
+            .rotate_all_entities_yaw = &script_rotate_all_entities_yaw_callback
+        };
+
+        const bool ok = scripting::load_or_reload_script(std::string(script_name), &host, &report);
+
+        auto& storage = editor_storage();
+        std::scoped_lock lock(storage.mutex);
+        const auto it = storage.states.find(ctx);
+        if (it != storage.states.end())
+        {
+            for (const auto& message : report.messages())
+                push_editor_log(it->second, message);
+            push_editor_log(
+                it->second,
+                ok
+                ? std::string("[script] Run completed successfully.")
+                : std::string("[script] Run failed."));
+        }
+
+        return ok;
     }
 
     EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx)
@@ -508,8 +627,17 @@ namespace epochnamespace
         }
 
         gui::set_cursor({ toolbar_x + 18.0f, toolbar_button_y + 5.0f });
+        if (gui::button("Run", { 96.0f, toolbar_button_h }))
+        {
+            emit_command(EditorCommand::RunScript, editor.activeScript);
+            push_editor_log(editor, std::string("[script] Run requested for '") + editor.activeScript + "'.");
+        }
+        toolbar_x += 112.0f;
+        gui::set_cursor({ toolbar_x + 18.0f, toolbar_button_y + 5.0f });
         gui::label(std::string("Project: ") + editor.projectName + "  |  Renderer: "
-            + renderer_name(ctx) + "  |  Preview: " + std::string(preview_mode_name(editor.previewMode)));
+            + renderer_name(ctx) + "  |  Preview: " + std::string(preview_mode_name(editor.previewMode))
+            + "  |  Camera: " + preview_camera_name(ctx)
+            + "  |  Script: " + editor.activeScript);
         gui::set_cursor({ 14.0f, toolbar_pos.y + 64.0f });
         gui::label("Launcher owns projects and games. Editor menus now focus on file, scene, commands, and help.");
 
@@ -543,6 +671,106 @@ namespace epochnamespace
             gui::end_window();
         };
 
+        gui::begin_window("World Outliner", outliner_pos, outliner_size);
+        gui::label(std::string("Scene: ") + editor.activeWorld);
+        gui::label(std::string("Project Root: ") + editor.projectPath);
+        gui::label(std::string("Entities: ") + std::to_string(editor.entities.size()));
+        for (std::size_t i = 0; i < editor.entities.size(); ++i)
+        {
+            const auto& entity = editor.entities[i];
+            std::string label = (i == editor.selectedEntity ? "> " : "") + entity.name + " [" + entity.type + "]";
+            if (!entity.visible)
+                label += " (hidden)";
+            if (gui::button(label, { (std::max)(120.0f, outliner_size.x - 18.0f), 28.0f }))
+            {
+                editor.selectedEntity = i;
+                push_editor_log(editor, std::string("[select] ") + entity.name);
+            }
+        }
+        gui::end_window();
+
+        gui::begin_window("Details", details_pos, details_size);
+        const std::size_t selectedIndex = editor.entities.empty()
+            ? 0u
+            : (std::min)(editor.selectedEntity, editor.entities.size() - 1u);
+        if (!editor.entities.empty())
+        {
+            const auto& entity = editor.entities[selectedIndex];
+            gui::label(std::string("Selected: ") + entity.name);
+            gui::label(std::string("Type: ") + entity.type);
+            gui::label(std::string("Category: ") + entity.category);
+            gui::label(std::string("Position: ") + vec3_text(entity.position));
+            gui::label(std::string("Rotation: ") + vec3_text(entity.rotation));
+            gui::label(std::string("Scale: ") + vec3_text(entity.scale));
+            gui::label(std::string("Visible: ") + (entity.visible ? "true" : "false"));
+            gui::label(std::string("EditorOnly: ") + (entity.editorOnly ? "true" : "false"));
+        }
+        else
+        {
+            gui::label("Selected: <none>");
+        }
+        gui::label(std::string("Viewport Target: ") + renderer_name(ctx));
+        gui::label(std::string("Helpers Visible: ") + (editor.helpersVisible ? "true" : "false"));
+        gui::label(std::string("Preview Mode: ") + std::string(preview_mode_name(editor.previewMode)));
+        gui::label(std::string("Preview Camera: ") + preview_camera_name(ctx));
+        gui::label(std::string("Editor Script: ") + editor.activeScript);
+        gui::end_window();
+
+        result.scene_viewport = gui::scene_viewport("Scene View", viewport_pos, viewport_size);
+        ctx->set_scene_preview_mode(editor.previewMode);
+        ctx->set_scene_viewport(core::RenderViewport{
+            static_cast<int>((std::max)(0.0f, result.scene_viewport.position.x)),
+            static_cast<int>((std::max)(0.0f, result.scene_viewport.position.y)),
+            static_cast<int>((std::max)(0.0f, result.scene_viewport.size.x)),
+            static_cast<int>((std::max)(0.0f, result.scene_viewport.size.y))
+        });
+
+        const float split = 0.55f;
+        const float left_bottom_w = w * split;
+        const gui::Vec2 log_pos{ 0.0f, bottom_pos.y };
+        const gui::Vec2 log_size{ left_bottom_w, bottom_h };
+        const gui::Vec2 chat_pos{ left_bottom_w, bottom_pos.y };
+        const gui::Vec2 chat_size{ (std::max)(0.0f, w - left_bottom_w), bottom_h };
+
+        gui::begin_window("Output Log", log_pos, log_size);
+        gui::label(std::string("[info] Scene viewport: ")
+            + std::to_string(static_cast<int>(result.scene_viewport.size.x))
+            + "x"
+            + std::to_string(static_cast<int>(result.scene_viewport.size.y)));
+        gui::label(std::string("[info] Active renderer: ") + renderer_name(ctx));
+        gui::label(std::string("[info] Preview mode: ") + std::string(preview_mode_name(editor.previewMode)));
+        gui::label(std::string("[info] Camera mode: ") + preview_camera_name(ctx));
+        gui::label(std::string("[info] Active script: ") + editor.activeScript);
+        for (const auto& line : editor.logLines)
+            gui::label(line);
+        gui::end_window();
+
+        auto& chat = chat_state_for(ctx);
+        chat.pump();
+
+        gui::ConsoleWindowOptions opts{
+            .title = "AI Chat",
+            .position = chat_pos,
+            .size = chat_size,
+            .lines = chat.lines,
+            .max_visible_lines = 180,
+            .input = &chat.input,
+            .max_input_chars = 1024,
+            .multiline_input = false,
+            .show_send_button = true,
+            .send_button_enabled = !chat.pending.has_value(),
+            .send_button_width = 88.0f,
+            .send_button_label = chat.pending ? "Send > (busy)" : "Send >",
+        };
+
+        gui::ConsoleWindowResult r = gui::console_window(opts);
+        if (r.input.submitted || r.send_clicked)
+        {
+            std::string text = std::move(chat.input);
+            chat.input.clear();
+            chat.submit(std::move(text));
+        }
+
         open_dropdown("File", TopMenu::File, { 220.0f, 144.0f }, [&](gui::Vec2 pos)
         {
             menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
@@ -566,13 +794,14 @@ namespace epochnamespace
             });
             menu_item("Reset Camera", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
                 handle_scene_tool(editor, "reset_camera");
+                epochnamespace::previewgrid::reset_camera(ctx.get());
             });
             menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
                 handle_scene_tool(editor, "toggle_helpers");
             });
         });
 
-        open_dropdown("Scene", TopMenu::Scene, { 220.0f, 110.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Scene", TopMenu::Scene, { 220.0f, 212.0f }, [&](gui::Vec2 pos)
         {
             menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
                 editor.previewMode = core::ScenePreviewMode::Editor;
@@ -582,15 +811,31 @@ namespace epochnamespace
                 editor.previewMode = core::ScenePreviewMode::None;
                 push_editor_log(editor, "[scene] Preview mode set to None.");
             });
+            menu_item("Camera: Editor", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
+                push_editor_log(editor, "[scene] Camera mode set to Editor.");
+            });
+            menu_item("Camera: FPS", { pos.x + 12.0f, pos.y + 116.0f }, 192.0f, [&]() {
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::FPS);
+                push_editor_log(editor, "[scene] Camera mode set to FPS.");
+            });
+            menu_item("Reset Preview Camera", { pos.x + 12.0f, pos.y + 150.0f }, 192.0f, [&]() {
+                epochnamespace::previewgrid::reset_camera(ctx.get());
+                push_editor_log(editor, "[scene] Preview camera reset.");
+            });
         });
 
-        open_dropdown("Command", TopMenu::Command, { 260.0f, 110.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Command", TopMenu::Command, { 260.0f, 144.0f }, [&](gui::Vec2 pos)
         {
-            menu_item("Update Engine...", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
+            menu_item("Run Script", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
+                emit_command(EditorCommand::RunScript, editor.activeScript);
+                push_editor_log(editor, std::string("[command] Script run requested for '") + editor.activeScript + "'.");
+            });
+            menu_item("Update Engine...", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
                 editor.showUpdateConfirmModal = true;
                 push_editor_log(editor, "[command] Update requested. Awaiting confirmation.");
             });
-            menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
+            menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
                 emit_command(EditorCommand::OpenLauncher);
                 push_editor_log(editor, "[command] Launcher requested.");
             });
@@ -654,102 +899,6 @@ namespace epochnamespace
             if (gui::button("Close", { 120.0f, 30.0f }))
                 editor.showAboutModal = false;
             gui::end_window();
-        }
-
-        gui::begin_window("World Outliner", outliner_pos, outliner_size);
-        gui::label(std::string("Scene: ") + editor.activeWorld);
-        gui::label(std::string("Project Root: ") + editor.projectPath);
-        gui::label(std::string("Entities: ") + std::to_string(editor.entities.size()));
-        for (std::size_t i = 0; i < editor.entities.size(); ++i)
-        {
-            const auto& entity = editor.entities[i];
-            std::string label = (i == editor.selectedEntity ? "> " : "") + entity.name + " [" + entity.type + "]";
-            if (!entity.visible)
-                label += " (hidden)";
-            if (gui::button(label, { (std::max)(120.0f, outliner_size.x - 18.0f), 28.0f }))
-            {
-                editor.selectedEntity = i;
-                push_editor_log(editor, std::string("[select] ") + entity.name);
-            }
-        }
-        gui::end_window();
-
-        gui::begin_window("Details", details_pos, details_size);
-        const std::size_t selectedIndex = editor.entities.empty()
-            ? 0u
-            : (std::min)(editor.selectedEntity, editor.entities.size() - 1u);
-        if (!editor.entities.empty())
-        {
-            const auto& entity = editor.entities[selectedIndex];
-            gui::label(std::string("Selected: ") + entity.name);
-            gui::label(std::string("Type: ") + entity.type);
-            gui::label(std::string("Category: ") + entity.category);
-            gui::label(std::string("Position: ") + vec3_text(entity.position));
-            gui::label(std::string("Rotation: ") + vec3_text(entity.rotation));
-            gui::label(std::string("Scale: ") + vec3_text(entity.scale));
-            gui::label(std::string("Visible: ") + (entity.visible ? "true" : "false"));
-            gui::label(std::string("EditorOnly: ") + (entity.editorOnly ? "true" : "false"));
-        }
-        else
-        {
-            gui::label("Selected: <none>");
-        }
-        gui::label(std::string("Viewport Target: ") + renderer_name(ctx));
-        gui::label(std::string("Helpers Visible: ") + (editor.helpersVisible ? "true" : "false"));
-        gui::label(std::string("Preview Mode: ") + std::string(preview_mode_name(editor.previewMode)));
-        gui::end_window();
-
-        result.scene_viewport = gui::scene_viewport("Scene View", viewport_pos, viewport_size);
-        ctx->set_scene_preview_mode(editor.previewMode);
-        ctx->set_scene_viewport(core::RenderViewport{
-            static_cast<int>((std::max)(0.0f, result.scene_viewport.position.x)),
-            static_cast<int>((std::max)(0.0f, result.scene_viewport.position.y)),
-            static_cast<int>((std::max)(0.0f, result.scene_viewport.size.x)),
-            static_cast<int>((std::max)(0.0f, result.scene_viewport.size.y))
-        });
-
-        const float split = 0.55f;
-        const float left_bottom_w = w * split;
-        const gui::Vec2 log_pos{ 0.0f, bottom_pos.y };
-        const gui::Vec2 log_size{ left_bottom_w, bottom_h };
-        const gui::Vec2 chat_pos{ left_bottom_w, bottom_pos.y };
-        const gui::Vec2 chat_size{ (std::max)(0.0f, w - left_bottom_w), bottom_h };
-
-        gui::begin_window("Output Log", log_pos, log_size);
-        gui::label(std::string("[info] Scene viewport: ")
-            + std::to_string(static_cast<int>(result.scene_viewport.size.x))
-            + "x"
-            + std::to_string(static_cast<int>(result.scene_viewport.size.y)));
-        gui::label(std::string("[info] Active renderer: ") + renderer_name(ctx));
-        gui::label(std::string("[info] Preview mode: ") + std::string(preview_mode_name(editor.previewMode)));
-        for (const auto& line : editor.logLines)
-            gui::label(line);
-        gui::end_window();
-
-        auto& chat = chat_state_for(ctx);
-        chat.pump();
-
-        gui::ConsoleWindowOptions opts{
-            .title = "AI Chat",
-            .position = chat_pos,
-            .size = chat_size,
-            .lines = chat.lines,
-            .max_visible_lines = 180,
-            .input = &chat.input,
-            .max_input_chars = 1024,
-            .multiline_input = false,
-            .show_send_button = true,
-            .send_button_enabled = !chat.pending.has_value(),
-            .send_button_width = 88.0f,
-            .send_button_label = chat.pending ? "Send > (busy)" : "Send >",
-        };
-
-        gui::ConsoleWindowResult r = gui::console_window(opts);
-        if (r.input.submitted || r.send_clicked)
-        {
-            std::string text = std::move(chat.input);
-            chat.input.clear();
-            chat.submit(std::move(text));
         }
 
         return result;

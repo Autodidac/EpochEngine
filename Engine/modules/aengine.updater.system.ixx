@@ -40,12 +40,93 @@ import <vector>;
 import <array>;
 import <fstream>;
 import <string>;
+import <iterator>;
 
 import aengine.updater.tools;
 import aengine.updater.config;
 
 export namespace epochnamespace::updater
 {
+    namespace detail
+    {
+        [[nodiscard]] inline std::string strip_utf8_bom(std::string text)
+        {
+            if (text.size() >= 3
+                && static_cast<unsigned char>(text[0]) == 0xEF
+                && static_cast<unsigned char>(text[1]) == 0xBB
+                && static_cast<unsigned char>(text[2]) == 0xBF)
+            {
+                text.erase(0, 3);
+            }
+            return text;
+        }
+
+        [[nodiscard]] inline std::string trim_ascii(std::string text)
+        {
+            text = strip_utf8_bom(std::move(text));
+
+            const auto is_trim = [](unsigned char c) noexcept
+            {
+                return c <= 0x20 || c == 0x7F;
+            };
+
+            while (!text.empty() && is_trim(static_cast<unsigned char>(text.front())))
+                text.erase(text.begin());
+
+            while (!text.empty() && is_trim(static_cast<unsigned char>(text.back())))
+                text.pop_back();
+
+            return text;
+        }
+
+        [[nodiscard]] inline std::string read_text_file(const std::filesystem::path& path)
+        {
+            std::ifstream in(path, std::ios::binary);
+            if (!in)
+                return {};
+
+            return std::string(
+                (std::istreambuf_iterator<char>(in)),
+                std::istreambuf_iterator<char>());
+        }
+
+        [[nodiscard]] inline std::string extract_version_string(std::string text)
+        {
+            text = trim_ascii(std::move(text));
+            if (text.empty())
+                return {};
+
+            {
+                static const std::regex kSemver(
+                    R"((\d+)\s*\.\s*(\d+)\s*\.\s*(\d+))",
+                    std::regex::optimize);
+                std::smatch match;
+                if (std::regex_search(text, match, kSemver))
+                    return match[1].str() + "." + match[2].str() + "." + match[3].str();
+            }
+
+            const auto parse_named_component = [&](const char* name) -> std::string
+            {
+                const std::regex componentRegex(
+                    std::string{ R"(\b)" } + name + R"(\s*=\s*(\d+))",
+                    std::regex::optimize);
+                std::smatch match;
+                if (!std::regex_search(text, match, componentRegex))
+                    return {};
+                return match[1].str();
+            };
+
+            const std::string major = parse_named_component("major");
+            const std::string minor = parse_named_component("minor");
+            const std::string revision = parse_named_component("revision");
+
+            if (!major.empty() && !minor.empty() && !revision.empty())
+                return major + "." + minor + "." + revision;
+
+            return {};
+        }
+    }
+
     // ─────────────────────────────────────────────
     // Results / channels
     // ─────────────────────────────────────────────
@@ -139,17 +220,30 @@ export namespace epochnamespace::updater
         if (!epochnamespace::updater::download_file(url, tmp))
             return false;
 
-        std::ifstream in(tmp);
-        std::string latest;
-        std::getline(in, latest);
-        in.close();
+        const std::string downloaded = detail::read_text_file(tmp);
         std::filesystem::remove(tmp);
 
-        std::cout << "[INFO] Local  : "
-            << epochnamespace::updater::PROJECT_VERSION << '\n';
-        std::cout << "[INFO] Remote : " << latest << '\n';
+        const std::string localVersion =
+            detail::extract_version_string(epochnamespace::updater::PROJECT_VERSION);
+        const std::string remoteVersion =
+            detail::extract_version_string(downloaded);
 
-        return latest != epochnamespace::updater::PROJECT_VERSION;
+        if (remoteVersion.empty())
+        {
+            std::cerr << "[ERROR] Could not parse remote version payload.\n";
+            return false;
+        }
+
+        const std::string normalizedLocal =
+            localVersion.empty()
+            ? detail::trim_ascii(epochnamespace::updater::PROJECT_VERSION)
+            : localVersion;
+
+        std::cout << "[INFO] Local  : "
+            << normalizedLocal << '\n';
+        std::cout << "[INFO] Remote : " << remoteVersion << '\n';
+
+        return remoteVersion != normalizedLocal;
     }
 
     // ─────────────────────────────────────────────

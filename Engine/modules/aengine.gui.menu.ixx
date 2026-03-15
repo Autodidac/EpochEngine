@@ -379,7 +379,7 @@ export namespace epochnamespace::menu
                 leftPressed,
                 rightPressed,
                 enterPressed,
-                "Main Menu",
+                "",
                 { 0.f, 0.f },
                 { 0.f, 0.f },
                 false);
@@ -448,12 +448,13 @@ export namespace epochnamespace::menu
                 layoutHeight + pad * 2 + kHeaderOffsetY
             };
 
-            const gui::Vec2 framePosition = (clampToWindow && windowSize.x > 0.f && windowSize.y > 0.f)
-                ? windowPosition
-                : chromePosition;
+            const gui::Vec2 framePosition = windowPosition;
             const gui::Vec2 frameSize = (clampToWindow && windowSize.x > 0.f && windowSize.y > 0.f)
                 ? windowSize
-                : chromeSize;
+                : gui::Vec2{
+                    static_cast<float>(currentWidth),
+                    static_cast<float>(currentHeight)
+                };
 
             auto position_for_index = [&](int idx) {
                 auto base = cachedPositions[idx];

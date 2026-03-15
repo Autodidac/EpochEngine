@@ -243,7 +243,7 @@ export namespace epochnamespace::sdlcontext
                 to_sdl_channel(clearColor[3]));
             (void)SDL_RenderFillRect(sdl_renderer.renderer, &background);
 
-            const auto camera = epochnamespace::previewgrid::kCamera;
+            const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;

@@ -249,7 +249,7 @@ export namespace epochnamespace::sfmlcontext
             sf::RenderStates renderStates{};
             sfmlcontext.window->draw(background, renderStates);
 
-            const auto camera = epochnamespace::previewgrid::kCamera;
+            const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;

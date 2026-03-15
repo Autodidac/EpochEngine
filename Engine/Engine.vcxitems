@@ -30,6 +30,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.api_types.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.common.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.script_api.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\main.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\_epoch.stl_types.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_bot.hpp" />
@@ -54,6 +55,12 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>
     <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\vert.spv">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\rotate_all_entities.ascript.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>

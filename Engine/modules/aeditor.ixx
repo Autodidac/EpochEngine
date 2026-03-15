@@ -44,6 +44,7 @@ export namespace epochnamespace
         OpenLauncher,
         OpenProject,
         Settings,
+        RunScript,
         RunGame,
         UpdateApplication,
         Exit
@@ -58,6 +59,8 @@ export namespace epochnamespace
 
     EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx);
     void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id);
+    void editor_reset_transient_ui(const core::Context* ctx);
+    bool editor_run_script(const core::Context* ctx, std::string_view script_name);
 
     void cleanup_chat_context(const core::Context* ctx);
     void shutdown_chat_system();

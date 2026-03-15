@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while compatibility code has been
 consolidated under `Engine/legacy/`.
 
-Current public version: `v0.82.14`
+Current public version: `v0.82.15`
 
 ## Architecture highlights
 
@@ -19,7 +19,9 @@ Current public version: `v0.82.14`
 - **Launcher/editor split**: project and game entry now live in the launcher,
   while the editor uses a more traditional desktop-style menu flow.
 - **Task graph + scripting**: reload and background work are funneled through
-  task scheduling rather than ad hoc threaded entry points.
+  task scheduling rather than ad hoc threaded entry points, and editor-triggered
+  compiled scripts now run through an explicit host API instead of a loose
+  filewatch-first loop.
 - **Compatibility archive**: older header/source snapshots are preserved in
   `Engine/legacy/` for migration and archaeology, not as the preferred
   implementation surface.

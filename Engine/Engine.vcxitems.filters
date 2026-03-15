@@ -195,6 +195,9 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.script_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\main.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -228,6 +231,9 @@
     </None>
     <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\vert.spv">
       <Filter>Module Files\ixx\core\context\backends\vulkan\shaders</Filter>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\rotate_all_entities.ascript.cpp">
+      <Filter>Source Files\external scripts</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

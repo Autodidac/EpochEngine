@@ -204,6 +204,8 @@ namespace epochnamespace::gui
         static std::mutex g_uploadMutex{};
         static std::unordered_map<const void*, DeferredDrawBatch, PtrHash> g_deferredDrawBatches{};
         static std::mutex g_deferredBatchMutex{};
+        static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextMouseDownStates{};
+        static thread_local std::unordered_map<const void*, const void*, PtrHash> g_contextActiveWidgets{};
 
         struct FrameState
         {
@@ -233,7 +235,6 @@ namespace epochnamespace::gui
 
         static thread_local FrameState g_frame{};
         static thread_local std::vector<InputEvent> g_pendingEvents{};
-        static thread_local const void* g_activeWidget = nullptr;
 
         [[nodiscard]] static bool uses_deferred_gui_batch(const core::Context* ctx) noexcept
         {
@@ -1023,6 +1024,8 @@ namespace epochnamespace::gui
         forget_upload_state(ctx);
         std::scoped_lock lock(g_deferredBatchMutex);
         g_deferredDrawBatches.erase(ctx);
+        g_contextMouseDownStates.erase(ctx);
+        g_contextActiveWidgets.erase(ctx);
     }
 
     std::uint64_t deferred_batch_generation(const core::Context* ctx) noexcept
@@ -1081,7 +1084,12 @@ namespace epochnamespace::gui
 
         g_frame.caretVisible = (g_frame.caretTimer < (kCaretBlinkPeriod * 0.5f));
 
-        const bool prevMouseDown = g_frame.mouseDown;
+        bool prevMouseDown = g_frame.mouseDown;
+        if (rawCtx)
+        {
+            if (const auto it = g_contextMouseDownStates.find(rawCtx); it != g_contextMouseDownStates.end())
+                prevMouseDown = it->second;
+        }
         bool currentMouseDown = mouse_down;
         Vec2 currentMousePos = mouse_pos;
 
@@ -1110,6 +1118,9 @@ namespace epochnamespace::gui
         g_frame.justReleased = (prevMouseDown && !currentMouseDown);
         g_frame.queuedDraws.clear();
 
+        if (rawCtx)
+            g_contextMouseDownStates[rawCtx] = currentMouseDown;
+
         reset_frame();
     }
 
@@ -1137,12 +1148,16 @@ namespace epochnamespace::gui
 
         draw_sprite(g_resources.windowBackground, position.x, position.y, size.x, size.y);
 
-        const float titleHeight = line_advance_amount(kTitleScale);
-        const float titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
-        const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
-
-        draw_sprite(g_resources.titleBar, position.x, position.y, size.x, titleBarHeight);
-        draw_text_line(title, position.x + kContentPadding, titleTextY, kTitleScale);
+        const bool hasTitleBar = !title.empty();
+        float titleBarHeight = 0.0f;
+        if (hasTitleBar)
+        {
+            const float titleHeight = line_advance_amount(kTitleScale);
+            titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
+            const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
+            draw_sprite(g_resources.titleBar, position.x, position.y, size.x, titleBarHeight);
+            draw_text_line(title, position.x + kContentPadding, titleTextY, kTitleScale);
+        }
 
         set_cursor({ position.x + kContentPadding, position.y + titleBarHeight + kContentPadding });
     }
@@ -1319,25 +1334,30 @@ namespace epochnamespace::gui
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
         const void* id = static_cast<const void*>(&text);
+        const void* ctxKey = static_cast<const void*>(g_frame.ctx);
+        const void* activeWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
 
         if (g_frame.justPressed)
         {
             if (hovered)
             {
-                g_activeWidget = id;
+                activeWidget = id;
                 g_frame.caretTimer = 0.0f;
                 g_frame.caretVisible = true;
             }
-            else if (g_activeWidget == id)
+            else if (activeWidget == id)
             {
-                g_activeWidget = nullptr;
+                activeWidget = nullptr;
             }
         }
 
-        if (g_frame.justReleased && !hovered && g_activeWidget == id)
-            g_activeWidget = nullptr;
+        if (g_frame.justReleased && !hovered && activeWidget == id)
+            activeWidget = nullptr;
 
-        const bool active = (g_activeWidget == id);
+        if (ctxKey)
+            g_contextActiveWidgets[ctxKey] = activeWidget;
+
+        const bool active = (activeWidget == id);
         result.active = active;
 
         const SpriteHandle background = active ? g_resources.textFieldActive : g_resources.textField;
@@ -1389,7 +1409,9 @@ namespace epochnamespace::gui
                     }
                     else if (evt.key == 27) // ESC
                     {
-                        g_activeWidget = nullptr;
+                        activeWidget = nullptr;
+                        if (ctxKey)
+                            g_contextActiveWidgets[ctxKey] = nullptr;
                         result.active = false;
                     }
                     else if (evt.key == 13) // ENTER

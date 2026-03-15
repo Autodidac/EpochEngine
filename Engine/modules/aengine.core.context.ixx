@@ -131,7 +131,6 @@ export namespace epochnamespace::core
 
     export [[nodiscard]] constexpr ClearColor clear_color_for_context(ContextType type) noexcept
     {
-        // Palette: keep the editor/backends on the same darker Vulkan-style base.
         switch (type)
         {
         case ContextType::Vulkan:
@@ -332,6 +331,19 @@ export namespace epochnamespace::core
 
         void get_mouse_position_safe(int& x, int& y) const noexcept
         {
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            if (HWND hwndLocal = get_hwnd(); hwndLocal != nullptr)
+            {
+                POINT cursor{};
+                if (::GetCursorPos(&cursor) && ::ScreenToClient(hwndLocal, &cursor))
+                {
+                    x = cursor.x;
+                    y = cursor.y;
+                    return;
+                }
+            }
+#endif
+
             if (get_mouse_position)
             {
                 get_mouse_position(x, y);
@@ -360,12 +372,36 @@ export namespace epochnamespace::core
 
         bool is_mouse_button_held_safe(input::MouseButton b) const noexcept
         {
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            if (get_hwnd() != nullptr)
+            {
+                const int vk =
+                    (b == input::MouseButton::MouseLeft) ? VK_LBUTTON :
+                    (b == input::MouseButton::MouseRight) ? VK_RBUTTON :
+                    (b == input::MouseButton::MouseMiddle) ? VK_MBUTTON :
+                    0;
+                if (vk != 0)
+                    return (::GetAsyncKeyState(vk) & 0x8000) != 0;
+            }
+#endif
             return is_mouse_button_held ? is_mouse_button_held(b)
                 : input::is_mouse_button_held(b);
         }
 
         bool is_mouse_button_down_safe(input::MouseButton b) const noexcept
         {
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            if (get_hwnd() != nullptr)
+            {
+                const int vk =
+                    (b == input::MouseButton::MouseLeft) ? VK_LBUTTON :
+                    (b == input::MouseButton::MouseRight) ? VK_RBUTTON :
+                    (b == input::MouseButton::MouseMiddle) ? VK_MBUTTON :
+                    0;
+                if (vk != 0)
+                    return (::GetAsyncKeyState(vk) & 0x8000) != 0;
+            }
+#endif
             return is_mouse_button_down ? is_mouse_button_down(b)
                 : input::is_mouse_button_down(b);
         }

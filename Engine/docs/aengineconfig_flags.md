@@ -88,7 +88,7 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.14` refreshes the public Epoch positioning and README map so the
-  documented engine surface now calls out the internal bootstrap model,
-  cross-platform/editor-agnostic build freedom, launcher/editor workflow,
-  telemetry, updater, scripting, and module-first architecture more directly.
+- `v0.82.15` refreshes the active scripting/runtime story: editor scripts now
+  run through an engine-owned compiled script host path, shared preview cameras
+  expose reusable editor/FPS rigs with mouse-look, and updater version checks
+  parse both plain text and the full version module cleanly.

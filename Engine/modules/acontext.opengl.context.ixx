@@ -852,6 +852,7 @@ void main() {
         }
 
         inline void render_scene_preview(
+            const core::Context* ctx,
             epochnamespace::openglstate::OpenGL4State& state,
             core::ScenePreviewMode previewMode,
             int framebufferWidth,
@@ -872,7 +873,7 @@ void main() {
 
             if (previewMode == core::ScenePreviewMode::Editor && ensure_scene_preview_pipeline(state))
             {
-                const auto camera = epochnamespace::previewgrid::kCamera;
+                const auto camera = epochnamespace::previewgrid::camera_for(ctx);
                 const float aspect = viewportHeight > 0
                     ? (viewportWidth / static_cast<float>(viewportHeight))
                     : 1.0f;
@@ -988,6 +989,7 @@ void main() {
             const int viewportWidth = (std::max)(1, (std::min)(sceneViewport.width, fbW - viewportX));
             const int viewportHeight = (std::max)(1, (std::min)(sceneViewport.height, fbH - viewportY));
             detail::render_scene_preview(
+                ctx.get(),
                 glState,
                 ctx->scene_preview_mode(),
                 fbW,

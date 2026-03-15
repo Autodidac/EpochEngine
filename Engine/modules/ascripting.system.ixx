@@ -30,6 +30,8 @@
  ***********************************************/
 module;
 
+#include <include/epoch.script_api.h>
+
 #ifdef _WIN32
 #include <Windows.h>
 #else
@@ -39,6 +41,7 @@ module;
 export module ascripting.system;
 
 import aengine.scripting.compiler;
+import aengine.cli;
 import aengine.systems;
 import aengine.taskgraph.dotsystem;
 
@@ -49,6 +52,7 @@ import <filesystem>;
 import <iostream>;
 import <mutex>;
 import <string>;
+import <system_error>;
 import <thread>;
 import <utility>;
 import <vector>;
@@ -210,17 +214,53 @@ export namespace epochnamespace::scripting
     inline void* lastLib = nullptr;
 #endif
 
-    using run_script_fn = void(*)(ScriptScheduler&);
+    using run_script_fn = void(*)(EpochScriptHost*);
 
-    inline Task do_load_script(const std::string& scriptName, ScriptScheduler& scheduler, ScriptLoadReport& report)
+    namespace detail
+    {
+        [[nodiscard]] inline std::filesystem::path resolve_scripts_root()
+        {
+            namespace fs = std::filesystem;
+            std::error_code ec;
+
+            const fs::path cwd = fs::current_path(ec);
+            const fs::path exeDir = epochnamespace::core::cli::exe_path.empty()
+                ? cwd
+                : fs::absolute(epochnamespace::core::cli::exe_path, ec).parent_path();
+
+            const std::vector<fs::path> candidates{
+                cwd / "src" / "scripts",
+                cwd / "Engine" / "src" / "scripts",
+                exeDir / "src" / "scripts",
+                exeDir / "Engine" / "src" / "scripts",
+                exeDir / ".." / ".." / "Engine" / "src" / "scripts",
+                exeDir / ".." / ".." / ".." / "Engine" / "src" / "scripts"
+            };
+
+            for (const auto& candidate : candidates)
+            {
+                if (candidate.empty())
+                    continue;
+
+                const fs::path absolute = fs::absolute(candidate, ec).lexically_normal();
+                if (fs::exists(absolute))
+                    return absolute;
+            }
+
+            return fs::absolute(exeDir / ".." / ".." / "Engine" / "src" / "scripts", ec).lexically_normal();
+        }
+    }
+
+    inline Task do_load_script(const std::string& scriptName, ScriptScheduler& scheduler, EpochScriptHost* host, ScriptLoadReport& report)
     {
         try
         {
-            const std::filesystem::path sourcePath = std::filesystem::path("src/scripts") / (scriptName + ".ascript.cpp");
+            const std::filesystem::path scriptsRoot = detail::resolve_scripts_root();
+            const std::filesystem::path sourcePath = scriptsRoot / (scriptName + ".ascript.cpp");
 #ifdef _WIN32
-            const std::filesystem::path dllPath = std::filesystem::path("src/scripts") / (scriptName + ".dll");
+            const std::filesystem::path dllPath = scriptsRoot / (scriptName + ".dll");
 #else
-            const std::filesystem::path dllPath = std::filesystem::path("src/scripts") / ("lib" + scriptName + ".so");
+            const std::filesystem::path dllPath = scriptsRoot / ("lib" + scriptName + ".so");
 #endif
 
             report.scheduled.store(true, std::memory_order_relaxed);
@@ -301,7 +341,7 @@ export namespace epochnamespace::scripting
             }
 
             report.log_info("Executing run_script for '" + scriptName + "'.");
-            entry(scheduler);
+            entry(host);
             report.executed.store(true, std::memory_order_relaxed);
 #endif
         }
@@ -330,7 +370,7 @@ export namespace epochnamespace::scripting
         co_return;
     }
 
-    export bool load_or_reload_script(const std::string& scriptName, ScriptScheduler& scheduler, ScriptLoadReport* reportPtr = nullptr)
+    export bool load_or_reload_script(const std::string& scriptName, ScriptScheduler& scheduler, EpochScriptHost* host, ScriptLoadReport* reportPtr = nullptr)
     {
         ScriptLoadReport fallbackReport;
         ScriptLoadReport& report = reportPtr ? *reportPtr : fallbackReport;
@@ -338,7 +378,7 @@ export namespace epochnamespace::scripting
 
         try
         {
-            Task t = do_load_script(scriptName, scheduler, report);
+            Task t = do_load_script(scriptName, scheduler, host, report);
 
             auto node = std::make_unique<taskgraph::Node>(std::move(t));
             node->Label = "script:" + scriptName;
@@ -359,6 +399,20 @@ export namespace epochnamespace::scripting
         }
     }
 
+    export bool load_or_reload_script(const std::string& scriptName, ScriptScheduler& scheduler, ScriptLoadReport* reportPtr = nullptr)
+    {
+        return load_or_reload_script(scriptName, scheduler, nullptr, reportPtr);
+    }
+
+    export bool load_or_reload_script(const std::string& scriptName, EpochScriptHost* host, ScriptLoadReport* reportPtr = nullptr)
+    {
+        const std::size_t workerCount = (std::max)(std::size_t{ 1 }, std::thread::hardware_concurrency() > 0
+            ? static_cast<std::size_t>(std::thread::hardware_concurrency())
+            : std::size_t{ 4 });
+        taskgraph::TaskGraph scheduler(workerCount);
+        return load_or_reload_script(scriptName, scheduler, host, reportPtr);
+    }
+
     export TaskGraphStressReport run_taskgraph_reload_stress_test(const TaskGraphStressConfig& config)
     {
         TaskGraphStressReport summary;
@@ -377,7 +431,7 @@ export namespace epochnamespace::scripting
             auto& report = reloadReports.back();
             report.reset();
 
-            Task reloadTask = do_load_script(config.scriptName, scheduler, report);
+            Task reloadTask = do_load_script(config.scriptName, scheduler, nullptr, report);
             auto reloadNode = std::make_unique<taskgraph::Node>(std::move(reloadTask));
             reloadNode->Label = "stress-reload:" + config.scriptName + "#" + std::to_string(iteration);
             scheduler.AddNode(std::move(reloadNode));

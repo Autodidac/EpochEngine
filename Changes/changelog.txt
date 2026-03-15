@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.15]
+- Replaced the old filewatch-oriented editor scripting flow with an engine-owned `Run` path that compiles and executes scripts against a stable host API, and swapped the default editor script to `rotate_all_entities`.
+- Added reusable shared preview cameras with `Editor` and `FPS` modes, keyboard movement, and right-mouse look so the multicontext editor scene is no longer stuck on a fixed preview angle.
+- Hardened updater version parsing so remote checks can consume either plain semver text or the full `aengine.version.ixx` module without printing BOM/comment garbage, then refreshed the active README/docs/version surfaces to v0.82.15.
+
 ## [v0.82.14]
 - Rewrote the active README opening and feature map so Epoch is described more accurately as a world-class, modules-first, AI-enabled engine instead of a minimal runtime summary.
 - Expanded the public feature list to call out internalized engine bootstrap, entry-point flexibility, multi-context orchestration, cross-platform build/editor freedom, module-first architecture, task-graph scripting reload, telemetry, and updater plumbing.

@@ -5,8 +5,8 @@
 **Epoch Engine** is a **world-class, modules-first, AI-enabled C++23 game
 engine** built for serious real-time tooling: internal engine bootstrap,
 multi-context rendering, launcher + editor workflow, atlas-driven UI,
-hot-reloadable scripting, and a runtime that can drive multiple backends at
-once without giving up engine-level control.
+engine-owned compiled scripting, and a runtime that can drive multiple
+backends at once without giving up engine-level control.
 
 The active engine lives in:
 
@@ -45,8 +45,9 @@ directory is the safest default for local testing.
   than copied independently into each backend.
 - ECS-style systems, scene plumbing, gameplay modules, and engine-owned runtime
   state.
-- Hot-reloadable scripting, file-watch-driven iteration, and task-graph-backed
-  asynchronous work scheduling.
+- Engine-owned compiled scripting with editor-triggered run actions, a host API
+  for runtime/editor callbacks, and task-graph-backed asynchronous work
+  scheduling.
 - Diagnostics, renderer telemetry, runtime logging, and updater plumbing as
   first-class engine systems.
 - Cross-platform build freedom: Visual Studio, MSBuild, CMake presets, VS Code,
@@ -260,11 +261,18 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.14
+v0.82.15
 ```
 
 Highlights:
 
+- The editor now owns a real `Run` action for compiled engine scripts, with a
+  host-facing script API and a default `rotate_all_entities` script in the
+  active source tree.
+- Shared preview cameras now support reusable `Editor` and `FPS` modes with
+  keyboard motion and right-mouse look instead of the old fixed preview view.
+- The updater now parses either plain version text or the full version module
+  cleanly, so remote checks stop printing raw file banners or BOM garbage.
 - The launcher now owns projects, games, and tool entry points instead of
   overloading the editor command surface.
 - The editor now behaves more like a real desktop tool, with `File`, `Edit`,

@@ -308,7 +308,7 @@ export namespace epochnamespace::anativecontext
                 viewport.height,
                 pack_color(clearColor[0], clearColor[1], clearColor[2], clearColor[3]));
 
-            const auto camera = epochnamespace::previewgrid::kCamera;
+            const auto camera = epochnamespace::previewgrid::camera_for(&ctx);
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;
