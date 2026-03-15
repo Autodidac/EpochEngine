@@ -261,11 +261,14 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.15
+v0.82.16
 ```
 
 Highlights:
 
+- The editor script compiler no longer launches `clang++` through a fragile
+  shell string on Windows, so spaces in the LLVM install path stop breaking the
+  `Run` action.
 - The editor now owns a real `Run` action for compiled engine scripts, with a
   host-facing script API and a default `rotate_all_entities` script in the
   active source tree.

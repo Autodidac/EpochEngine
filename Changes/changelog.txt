@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.82.16]
+- Fixed the Windows editor script compiler path so it launches `clang++` directly instead of routing through a fragile shell command string that broke on `Program Files` paths.
+- Kept the script source itself ASCII-clean and re-verified the rebuilt debug app launch from `x64/Debug` after the compiler-path fix.
+
 ## [v0.82.15]
 - Replaced the old filewatch-oriented editor scripting flow with an engine-owned `Run` path that compiles and executes scripts against a stable host API, and swapped the default editor script to `rotate_all_entities`.
 - Added reusable shared preview cameras with `Editor` and `FPS` modes, keyboard movement, and right-mouse look so the multicontext editor scene is no longer stuck on a fixed preview angle.

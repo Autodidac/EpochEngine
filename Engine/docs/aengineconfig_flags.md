@@ -88,7 +88,6 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.15` refreshes the active scripting/runtime story: editor scripts now
-  run through an engine-owned compiled script host path, shared preview cameras
-  expose reusable editor/FPS rigs with mouse-look, and updater version checks
-  parse both plain text and the full version module cleanly.
+- `v0.82.16` hardens the Windows script compiler path so editor-run scripts can
+  launch `clang++` correctly even when the compiler lives under `Program Files`
+  or another spaced install path.
