@@ -1,4 +1,4 @@
-<img align="left" src="Images/567.png" width="100px"/>
+<img align="left" src="Images/567.png" width="90px"/>
 
 # Epoch
 
