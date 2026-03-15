@@ -88,7 +88,7 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.13` aligns the active backend clear/base color with the darker Vulkan
-  palette, moves SFML ahead of Vulkan in the default parented dock order, and
-  fixes the SFML shared scene preview so it stays clipped to the scene view
-  instead of drawing through GUI space.
+- `v0.82.14` refreshes the public Epoch positioning and README map so the
+  documented engine surface now calls out the internal bootstrap model,
+  cross-platform/editor-agnostic build freedom, launcher/editor workflow,
+  telemetry, updater, scripting, and module-first architecture more directly.

@@ -2,11 +2,11 @@
 
 # Epoch - Creative Software And Game Engine
 
-**Epoch Engine** is **The Worlds-first (64bit modules-first C++23) AI-enabled game engine**
-
-built for serious real-time tooling: multi-context rendering, a launcher +
-editor workflow, atlas-driven UI, hot-reloadable scripting, and a runtime that
-can drive multiple backends at once without giving up engine-level control.
+**Epoch Engine** is a **world-class, modules-first, AI-enabled C++23 game
+engine** built for serious real-time tooling: internal engine bootstrap,
+multi-context rendering, launcher + editor workflow, atlas-driven UI,
+hot-reloadable scripting, and a runtime that can drive multiple backends at
+once without giving up engine-level control.
 
 The active engine lives in:
 
@@ -30,15 +30,30 @@ directory is the safest default for local testing.
 
 # What Epoch provides
 
-- Concurrent backend contexts across OpenGL, Vulkan, SDL3, Raylib, SFML,
-  software, and noop/headless paths
-- A launcher-first workflow that routes projects into the editor and games into
-  scene/runtime mode
-- Atlas-driven GUI and sprite pipelines shared across the runtime
-- Editor-facing scene preview paths and backend fallback behavior
-- ECS-style runtime systems, scene plumbing, and gameplay modules
-- Hot-reloadable scripting and file-watch driven iteration
-- Diagnostics, telemetry, updater, and task-graph support
+- Internalized engine bootstrap and entry-point flexibility. Epoch can own the
+  desktop startup path itself or be embedded with handled/headless entry
+  configurations through the active `EPOCH_*` runtime macros. See
+  [configuration flags](Engine/docs/aengineconfig_flags.md) and
+  [runtime operations](Engine/docs/runtime_operations.md).
+- Multi-context, multi-backend runtime orchestration across OpenGL, Vulkan,
+  SDL3, Raylib, SFML, software, and noop/headless paths.
+- Launcher-first workflow that routes projects into the editor and games into
+  scene/runtime mode, instead of treating the editor as a loose debug shell.
+- Desktop-style editor workflow with scene preview control, command surfaces,
+  and backend-aware fallback behavior.
+- Atlas-driven GUI, sprite, and text pipelines shared across the runtime rather
+  than copied independently into each backend.
+- ECS-style systems, scene plumbing, gameplay modules, and engine-owned runtime
+  state.
+- Hot-reloadable scripting, file-watch-driven iteration, and task-graph-backed
+  asynchronous work scheduling.
+- Diagnostics, renderer telemetry, runtime logging, and updater plumbing as
+  first-class engine systems.
+- Cross-platform build freedom: Visual Studio, MSBuild, CMake presets, VS Code,
+  shell-script workflows, and multiple compiler families across Windows, Linux,
+  and macOS.
+- Module-first public engine surface centered around active C++23 modules and
+  the exported [epochengine module](Engine/modules/epochengine.ixx).
 
 ---
 
@@ -94,9 +109,9 @@ Typical configuration:
 
 Primary engine project surfaces:
 
-- `Engine/Engine.vcxitems`
-- `Engine/examples/StaticLib1/StaticLib1.vcxproj`
-- `Engine/examples/ConsoleApplication1/ConsoleApplication1.vcxproj`
+- [Engine/Engine.vcxitems](Engine/Engine.vcxitems)
+- [Engine/examples/StaticLib1/StaticLib1.vcxproj](Engine/examples/StaticLib1/StaticLib1.vcxproj)
+- [Engine/examples/ConsoleApplication1/ConsoleApplication1.vcxproj](Engine/examples/ConsoleApplication1/ConsoleApplication1.vcxproj)
 
 ## MSBuild
 
@@ -114,11 +129,7 @@ To build the example app only:
 
 ## CMake Presets
 
-Presets live at:
-
-```text
-Engine/CMakePresets.json
-```
+Presets live at [Engine/CMakePresets.json](Engine/CMakePresets.json).
 
 Windows MSVC:
 
@@ -170,11 +181,11 @@ Engine/.vscode/
 
 Key files:
 
-- `Engine/.vscode/tasks.json`
-- `Engine/.vscode/launch.json`
-- `Engine/.vscode/settings.json`
-- `Engine/.vscode/c_cpp_properties.json`
-- `Engine/.vscode/cmake-kits.json`
+- [Engine/.vscode/tasks.json](Engine/.vscode/tasks.json)
+- [Engine/.vscode/launch.json](Engine/.vscode/launch.json)
+- [Engine/.vscode/settings.json](Engine/.vscode/settings.json)
+- [Engine/.vscode/c_cpp_properties.json](Engine/.vscode/c_cpp_properties.json)
+- [Engine/.vscode/cmake-kits.json](Engine/.vscode/cmake-kits.json)
 
 Recommended flow:
 
@@ -184,12 +195,12 @@ Recommended flow:
 
 ## Shell scripts
 
-Scripted build helpers live in:
+Scripted build helpers:
 
-```text
-Engine/build.sh
-Engine/run.sh
-```
+- [Engine/build.sh](Engine/build.sh)
+- [Engine/run.sh](Engine/run.sh)
+- [Engine/install.sh](Engine/install.sh)
+- [Engine/clean.sh](Engine/clean.sh)
 
 Examples:
 
@@ -227,22 +238,20 @@ Relevant runtime asset roots:
 
 # Documentation map
 
-Documentation index:
-
-```text
-Engine/docs/README.md
-```
+Documentation index: [Engine/docs/README.md](Engine/docs/README.md)
 
 Useful entry points:
 
-- `Engine/docs/build_presets.md`
-- `Engine/docs/build_scripts.md`
-- `Engine/docs/tools_list.md`
-- `Engine/docs/runtime_operations.md`
-- `Engine/docs/aengineconfig_flags.md`
-- `Engine/docs/engine_analysis.md`
-- `Engine/docs/context_audit.md`
-- `Engine/docs/menu_overlay_backend_audit.md`
+- [Engine/docs/build_presets.md](Engine/docs/build_presets.md)
+- [Engine/docs/build_scripts.md](Engine/docs/build_scripts.md)
+- [Engine/docs/tools_list.md](Engine/docs/tools_list.md)
+- [Engine/docs/runtime_operations.md](Engine/docs/runtime_operations.md)
+- [Engine/docs/aengineconfig_flags.md](Engine/docs/aengineconfig_flags.md)
+- [Engine/docs/engine_analysis.md](Engine/docs/engine_analysis.md)
+- [Engine/docs/context_audit.md](Engine/docs/context_audit.md)
+- [Engine/docs/menu_overlay_backend_audit.md](Engine/docs/menu_overlay_backend_audit.md)
+- [Engine/docs/renderer_regression_plan.md](Engine/docs/renderer_regression_plan.md)
+- [Engine/docs/wsl_vcpkg_setup.md](Engine/docs/wsl_vcpkg_setup.md)
 
 ---
 
@@ -251,7 +260,7 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.13
+v0.82.14
 ```
 
 Highlights:
@@ -273,15 +282,11 @@ Highlights:
 
 Changelog:
 
-```text
-Changes/changelog.txt
-```
+[Changes/changelog.txt](Changes/changelog.txt)
 
 Roadmap:
 
-```text
-Changes/roadmap.txt
-```
+[Changes/roadmap.txt](Changes/roadmap.txt)
 
 ---
 
@@ -291,4 +296,4 @@ Changes/roadmap.txt
 LicenseRef-MIT-NoSell
 ```
 
-See `LICENSE` for full terms.
+See [LICENSE](LICENSE) for full terms.

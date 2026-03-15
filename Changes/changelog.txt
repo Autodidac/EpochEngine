@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.14]
+- Rewrote the active README opening and feature map so Epoch is described more accurately as a world-class, modules-first, AI-enabled engine instead of a minimal runtime summary.
+- Expanded the public feature list to call out internalized engine bootstrap, entry-point flexibility, multi-context orchestration, cross-platform build/editor freedom, module-first architecture, task-graph scripting reload, telemetry, and updater plumbing.
+- Added direct markdown links from the README to the active docs, build surfaces, scripts, and project files, then refreshed the active version metadata to v0.82.14.
+
 ## [v0.82.13]
 - Aligned the active backend base clear color to the darker Vulkan-style palette so mixed-context launches feel more like one engine instead of six unrelated demos.
 - Moved SFML ahead of Vulkan in the default parented dock order and fixed the SFML shared scene preview so its grid/3D view stays clipped to the scene viewport instead of bleeding through GUI space.
