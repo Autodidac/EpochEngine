@@ -41,9 +41,11 @@ export namespace epochnamespace
     export enum class EditorCommand : unsigned char
     {
         None = 0,
+        OpenLauncher,
         OpenProject,
         Settings,
         RunGame,
+        UpdateApplication,
         Exit
     };
 
@@ -55,6 +57,7 @@ export namespace epochnamespace
     };
 
     EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx);
+    void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id);
 
     void cleanup_chat_context(const core::Context* ctx);
     void shutdown_chat_system();

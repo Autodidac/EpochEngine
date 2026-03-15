@@ -77,9 +77,13 @@ export namespace epochnamespace::menu
     inline constexpr std::string_view kLogSys = "Epoch.Menu";
 
     enum class Choice {
+        OpenEditor,
+        ProjectSandbox,
+        ProjectPlatformer,
+        ProjectPuzzle,
         Snake, Tetris, Pacman, Frogger, Sokoban,
         Minesweep, Puzzle, Bejeweled, Fourty,
-        Sandsim, Cellular, Settings, Exit
+        Sandsim, Cellular, Settings, About, Exit
     };
 
     enum class EditorCommandChoice {
@@ -91,20 +95,31 @@ export namespace epochnamespace::menu
 
     struct ChoiceDescriptor {
         Choice      choice;
-        std::string label;
+        std::string_view label;
         gui::Vec2   size;
     };
 
     struct EditorCommandDescriptor {
         EditorCommandChoice choice;
-        std::string label;
+        std::string_view label;
         gui::Vec2 size;
     };
 
     struct MenuOverlay
     {
+        enum class LauncherPanel : unsigned char
+        {
+            Projects = 0,
+            Games,
+            Tools
+        };
+
         std::vector<ChoiceDescriptor> descriptors;
         std::size_t selection = 0;
+        LauncherPanel activePanel = LauncherPanel::Projects;
+        std::size_t projectSelection = 0;
+        std::size_t gameSelection = 0;
+        std::size_t toolSelection = 0;
 
         bool prevUp = false, prevDown = false, prevLeft = false,
             prevRight = false, prevEnter = false;
@@ -128,37 +143,94 @@ export namespace epochnamespace::menu
         float layoutWidth = 0.0f;
         float layoutHeight = 0.0f;
 
-        void initialize_game_choices()
+        static constexpr std::array kProjectChoices = {
+            ChoiceDescriptor{ Choice::ProjectSandbox, "Sandbox Project", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::ProjectPlatformer, "Platformer Demo", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::ProjectPuzzle, "Puzzle Lab", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 256.0f, 96.0f } }
+        };
+
+        static constexpr std::array kGameChoices = {
+            ChoiceDescriptor{ Choice::Snake, "Snake", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Tetris, "Tetris", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Pacman, "Pacman", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Frogger, "Frogger", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Sokoban, "Sokoban", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Minesweep, "Minesweeper", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Puzzle, "Sliding Puzzle", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Bejeweled, "Bejeweled", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Fourty, "2048", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Sandsim, "Sand Sim", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Cellular, "Cellular", { 256.0f, 96.0f } }
+        };
+
+        static constexpr std::array kToolChoices = {
+            ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Settings, "Settings", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::About, "About Epoch", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Exit, "Quit", { 256.0f, 96.0f } }
+        };
+
+        std::size_t& selection_for_panel(LauncherPanel panel) noexcept
         {
-            if (initialized) return;
+            switch (panel)
+            {
+            case LauncherPanel::Projects: return projectSelection;
+            case LauncherPanel::Games: return gameSelection;
+            case LauncherPanel::Tools: return toolSelection;
+            default: return projectSelection;
+            }
+        }
 
-            set_max_columns(core::cli::menu_columns);
+        static constexpr std::string_view panel_title(LauncherPanel panel) noexcept
+        {
+            switch (panel)
+            {
+            case LauncherPanel::Projects: return "Projects";
+            case LauncherPanel::Games: return "Games";
+            case LauncherPanel::Tools: return "Tools";
+            default: return "Projects";
+            }
+        }
 
-            selection = 0;
-            prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
+        static constexpr std::string_view panel_hint(LauncherPanel panel) noexcept
+        {
+            switch (panel)
+            {
+            case LauncherPanel::Projects: return "Choose a project and jump into the editor.";
+            case LauncherPanel::Games: return "Launch playable scenes from the shared launcher.";
+            case LauncherPanel::Tools: return "Open the editor, inspect info, or end the session.";
+            default: return "";
+            }
+        }
 
-            constexpr gui::Vec2 DefaultButtonSize{ 256.0f, 96.0f };
+        void activate_panel(LauncherPanel panel)
+        {
+            activePanel = panel;
+            descriptors.clear();
 
-            descriptors = {
-                { Choice::Snake,      "Snake",      DefaultButtonSize },
-                { Choice::Tetris,    "Tetris",     DefaultButtonSize },
-                { Choice::Pacman,    "Pacman",     DefaultButtonSize },
-                { Choice::Frogger,   "Frogger",    DefaultButtonSize },
-                { Choice::Sokoban,   "Sokoban",    DefaultButtonSize },
-                { Choice::Minesweep, "Minesweep",  DefaultButtonSize },
-                { Choice::Puzzle,    "Puzzle",     DefaultButtonSize },
-                { Choice::Bejeweled, "Bejeweled",  DefaultButtonSize },
-                { Choice::Fourty,    "2048",       DefaultButtonSize },
-                { Choice::Sandsim,   "Sand Sim",   DefaultButtonSize },
-                { Choice::Cellular,  "Cellular",   DefaultButtonSize }
+            const auto append = [&](const auto& source)
+            {
+                descriptors.reserve(source.size());
+                for (const auto& item : source)
+                    descriptors.push_back(item);
             };
 
-            initialized = true;
-            logger::get(kLogSys).logf(
-                logger::LogLevel::INFO,
-                std::source_location::current(),
-                "Initialized {} game entries",
-                descriptors.size());
+            switch (activePanel)
+            {
+            case LauncherPanel::Projects: append(kProjectChoices); break;
+            case LauncherPanel::Games: append(kGameChoices); break;
+            case LauncherPanel::Tools: append(kToolChoices); break;
+            }
+
+            selection = selection_for_panel(activePanel);
+            if (!descriptors.empty())
+                selection = (std::min)(selection, descriptors.size() - 1);
+            else
+                selection = 0;
+
+            cachedWidth = -1;
+            cachedHeight = -1;
         }
 
         // ----------------------------------------------------
@@ -267,26 +339,13 @@ export namespace epochnamespace::menu
 
             set_max_columns(core::cli::menu_columns);
 
+            activePanel = LauncherPanel::Projects;
+            projectSelection = 0;
+            gameSelection = 0;
+            toolSelection = 0;
             selection = 0;
             prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
-
-            constexpr gui::Vec2 DefaultButtonSize{ 256.0f, 96.0f };
-
-            descriptors = {
-                { Choice::Snake,      "Snake",      DefaultButtonSize },
-                { Choice::Tetris,    "Tetris",     DefaultButtonSize },
-                { Choice::Pacman,    "Pacman",     DefaultButtonSize },
-				{ Choice::Frogger,   "Frogger",    DefaultButtonSize },
-                { Choice::Sokoban,   "Sokoban",    DefaultButtonSize },
-                { Choice::Minesweep, "Minesweep",  DefaultButtonSize },
-                { Choice::Puzzle,    "Puzzle",     DefaultButtonSize },
-                { Choice::Bejeweled, "Bejeweled",  DefaultButtonSize },
-                { Choice::Fourty,    "2048",       DefaultButtonSize },
-                { Choice::Sandsim,   "Sand Sim",   DefaultButtonSize },
-                { Choice::Cellular,  "Cellular",   DefaultButtonSize },
-                { Choice::Settings,  "Settings",   DefaultButtonSize },
-                { Choice::Exit,      "Quit",       DefaultButtonSize }
-            };
+            activate_panel(activePanel);
 
             const int w = ctx ? ctx->get_width_safe() : cachedWidth;
             const int h = ctx ? ctx->get_height_safe() : cachedHeight;
@@ -341,6 +400,7 @@ export namespace epochnamespace::menu
             bool clampToWindow)
         {
             if (!initialized) return std::nullopt;
+            constexpr float kHeaderOffsetY = 112.0f;
 
             std::ignore = win;
             std::ignore = dt;
@@ -353,7 +413,7 @@ export namespace epochnamespace::menu
             if (currentHeight <= 0) currentHeight = 1;
 
             if (currentWidth != cachedWidth || currentHeight != cachedHeight)
-                recompute_layout(ctx, currentWidth, currentHeight);
+                recompute_layout(ctx, currentWidth, (std::max)(1, currentHeight - static_cast<int>(kHeaderOffsetY)));
 
             int mx = 0, my = 0;
             ctx->get_mouse_position_safe(mx, my);
@@ -362,16 +422,44 @@ export namespace epochnamespace::menu
             if (totalItems == 0 || cachedPositions.size() != size_t(totalItems))
                 return std::nullopt;
 
+            if (upPressed && !prevUp)
+            {
+                const auto next = static_cast<int>(activePanel) == 0 ? 2 : static_cast<int>(activePanel) - 1;
+                activate_panel(static_cast<LauncherPanel>(next));
+            }
+            if (downPressed && !prevDown)
+            {
+                const auto next = (static_cast<int>(activePanel) + 1) % 3;
+                activate_panel(static_cast<LauncherPanel>(next));
+            }
+
             if (selection >= size_t(totalItems))
                 selection = size_t(totalItems - 1);
 
            // const bool flipVertical = ctx && ctx ->type == core::ContextType::OpenGL;
 
+            const float pad = LayoutSpacing * 0.5f;
+            const gui::Vec2 chromePosition{
+                windowPosition.x + layoutOriginX - pad,
+                windowPosition.y + layoutOriginY - pad - kHeaderOffsetY * 0.5f
+            };
+            const gui::Vec2 chromeSize{
+                (std::max)(layoutWidth + pad * 2, 432.0f),
+                layoutHeight + pad * 2 + kHeaderOffsetY
+            };
+
+            const gui::Vec2 framePosition = (clampToWindow && windowSize.x > 0.f && windowSize.y > 0.f)
+                ? windowPosition
+                : chromePosition;
+            const gui::Vec2 frameSize = (clampToWindow && windowSize.x > 0.f && windowSize.y > 0.f)
+                ? windowSize
+                : chromeSize;
+
             auto position_for_index = [&](int idx) {
                 auto base = cachedPositions[idx];
                 return std::pair<int, int>{
-                    base.first + static_cast<int>(std::round(windowPosition.x)),
-                    base.second + static_cast<int>(std::round(windowPosition.y))
+                    base.first + static_cast<int>(std::round(framePosition.x)),
+                    base.second + static_cast<int>(std::round(framePosition.y + kHeaderOffsetY))
                 };
                 };
 
@@ -386,56 +474,53 @@ export namespace epochnamespace::menu
                 }
             }
 
-            const int cols = (std::max)(1, columns);
-            const int rowsLocal = (std::max)(1, rows);
-
             if (leftPressed && !prevLeft)  selection = (selection == 0) ? totalItems - 1 : selection - 1;
             if (rightPressed && !prevRight) selection = (selection + 1) % totalItems;
-            if (upPressed && !prevUp)    selection = (selection < cols) ? selection + (rowsLocal - 1) * cols : selection - cols;
-            if (downPressed && !prevDown)  selection = (selection + cols >= totalItems) ? selection % cols : selection + cols;
             if (!upPressed && !downPressed && !leftPressed && !rightPressed && hover >= 0)
                 selection = hover;
 
             prevUp = upPressed; prevDown = downPressed;
             prevLeft = leftPressed; prevRight = rightPressed;
 
-            const float pad = LayoutSpacing * 0.5f;
-            const gui::Vec2 chromePosition{
-                windowPosition.x + layoutOriginX - pad,
-                windowPosition.y + layoutOriginY - pad
-            };
-            const gui::Vec2 chromeSize{
-                layoutWidth + pad * 2,
-                layoutHeight + pad * 2
+            gui::begin_window(title, framePosition, frameSize);
+
+            constexpr float panelButtonWidth = 128.0f;
+            constexpr float panelButtonHeight = 30.0f;
+            constexpr float panelGap = 8.0f;
+            float panelX = framePosition.x + 16.0f;
+            const float panelY = framePosition.y + 14.0f;
+
+            const auto draw_panel_button = [&](LauncherPanel panel)
+            {
+                gui::set_cursor({ panelX, panelY });
+                std::string label = std::string(panel_title(panel));
+                if (activePanel == panel)
+                    label = "> " + label;
+                if (gui::button(label, { panelButtonWidth, panelButtonHeight }))
+                    activate_panel(panel);
+                panelX += panelButtonWidth + panelGap;
             };
 
-            if (clampToWindow && windowSize.x > 0.f && windowSize.y > 0.f)
-            {
-                gui::begin_window(
-                    title,
-                    windowPosition,
-                    windowSize
-                );
-            }
-            else
-            {
-                gui::begin_window(
-                    title,
-                    chromePosition,
-                    chromeSize
-                );
-            }
+            draw_panel_button(LauncherPanel::Projects);
+            draw_panel_button(LauncherPanel::Games);
+            draw_panel_button(LauncherPanel::Tools);
+
+            gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 52.0f });
+            gui::label(std::string("Launcher: ") + std::string(panel_title(activePanel)));
+            gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 72.0f });
+            gui::label(panel_hint(activePanel));
 
             std::optional<Choice> chosen{};
             for (int i = 0; i < totalItems; ++i) {
                 const auto pos = position_for_index(i);
                 gui::set_cursor({ float(pos.first), float(pos.second) });
 
-                std::string label = descriptors[i].label;
+                std::string label{ descriptors[i].label };
                 if (size_t(i) == selection) label = "> " + label + " <";
 
                 if (gui::button(label, descriptors[i].size)) {
                     selection = size_t(i);
+                    selection_for_panel(activePanel) = selection;
                     chosen = descriptors[i].choice;
                 }
             }
@@ -443,7 +528,11 @@ export namespace epochnamespace::menu
             gui::end_window();
 
             if (chosen) return chosen;
-            if (enterPressed && !prevEnter) return Choice(selection);
+            if (enterPressed && !prevEnter)
+            {
+                selection_for_panel(activePanel) = selection;
+                return descriptors[selection].choice;
+            }
 
             prevEnter = enterPressed;
             return std::nullopt;
@@ -461,6 +550,10 @@ export namespace epochnamespace::menu
             rows = 0;
             layoutOriginX = layoutOriginY = 0.f;
             layoutWidth = layoutHeight = 0.f;
+            activePanel = LauncherPanel::Projects;
+            projectSelection = 0;
+            gameSelection = 0;
+            toolSelection = 0;
             selection = 0;
             prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
             initialized = false;
@@ -622,7 +715,7 @@ export namespace epochnamespace::menu
                         selection = static_cast<std::size_t>(i);
                 }
 
-                std::string label = d.label;
+                std::string label{ d.label };
                 if (static_cast<int>(selection) == i)
                     label = "> " + label + " <";
 

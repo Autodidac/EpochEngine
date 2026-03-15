@@ -2,9 +2,10 @@
 
 # Epoch
 
-**Epoch** is a **C++23 modules-first runtime engine** built around multi-context
-desktop rendering, atlas-driven UI, hot-reloadable scripting, and an editor +
-runtime workflow that can host multiple backends at once.
+**Epoch** is a **world-class C++23 modules-first, AI-enabled game engine**
+built for serious real-time tooling: multi-context rendering, a launcher +
+editor workflow, atlas-driven UI, hot-reloadable scripting, and a runtime that
+can drive multiple backends at once without giving up engine-level control.
 
 The active engine lives in:
 
@@ -29,6 +30,8 @@ directory is the safest default for local testing.
 
 - Concurrent backend contexts across OpenGL, Vulkan, SDL3, Raylib, SFML,
   software, and noop/headless paths
+- A launcher-first workflow that routes projects into the editor and games into
+  scene/runtime mode
 - Atlas-driven GUI and sprite pipelines shared across the runtime
 - Editor-facing scene preview paths and backend fallback behavior
 - ECS-style runtime systems, scene plumbing, and gameplay modules
@@ -246,22 +249,19 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.11
+v0.82.12
 ```
 
 Highlights:
 
-- Closing the parent host window now shuts down only panes that are still
-  docked under `EpochParent`; undocked SDL, Raylib, and SFML panes survive as
-  independent top-level windows until they are closed themselves.
-- Once a pane is redocked, it returns to normal parent-owned shutdown behavior,
-  so the host window can manage it again on the next close.
-- The final surviving undocked pane now cleanly ends the process when it closes,
-  even if that backend window is owned by a render thread instead of the main
-  UI thread.
-- Backend confirmation logs are available again through the `EPOCH_ENABLE_*`
-  confirmation macros so bring-up and shutdown visibility can be tuned without
-  restoring hot-loop log spam.
+- The launcher now owns projects, games, and tool entry points instead of
+  overloading the editor command surface.
+- The editor now behaves more like a real desktop tool, with `File`, `Edit`,
+  `Scene`, `Command`, and `Help` menus across the top bar.
+- Scene preview switching now lets the editor move between `Editor` and `None`
+  preview modes without leaving the current session.
+- The in-app update action is now confirmation-gated before it can replace
+  binaries and restart the session.
 - The current local launch/test baseline is still `x64/Debug` or `x64/Release`
   so colocated runtime assets resolve exactly as the binaries expect.
 

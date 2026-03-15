@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.12]
+- Split the old mixed editor/menu flow into a launcher-first workflow where projects and games are chosen from the launcher and the editor focuses on desktop-style file, edit, scene, command, and help menus.
+- Added scene preview switching in the editor between `Editor` and `None`, and gated the in-app update action behind an explicit confirmation modal because it can replace binaries and restart the session.
+- Rebuilt `ConsoleApplication1` in `Debug|x64`, launched the real binary from `x64/Debug`, and refreshed the active README/docs to match the new launcher/editor workflow.
+
 ## [v0.82.11]
 - Fixed parent-host shutdown ownership so only panes still docked under `EpochParent` close with the host, while undocked SDL, Raylib, and SFML panes survive as independent top-level windows.
 - Fixed the last-window shutdown path so the process now exits when the final surviving undocked pane closes, even when that backend window is owned by a render thread.

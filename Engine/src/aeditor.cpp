@@ -63,18 +63,14 @@ namespace epochnamespace
     {
         using namespace std::chrono_literals;
 
-        enum class CommandPanel : unsigned char
+        enum class TopMenu : unsigned char
         {
-            Projects,
-            Games,
-            Scene
-        };
-
-        struct CommandChip
-        {
-            std::string_view label{};
-            std::string_view argument{};
-            float width{};
+            None = 0,
+            File,
+            Edit,
+            Scene,
+            Command,
+            Help
         };
 
         [[nodiscard]] static bool is_ws_only(std::string_view s) noexcept
@@ -169,7 +165,7 @@ namespace epochnamespace
         struct EditorState
         {
             bool initialized{ false };
-            CommandPanel activePanel{ CommandPanel::Projects };
+            TopMenu openMenu{ TopMenu::None };
             std::string projectName{ "Sandbox" };
             std::string projectPath{ "Projects/Sandbox/scene.epoch" };
             std::string activeWorld{ "PersistentLevel" };
@@ -177,9 +173,9 @@ namespace epochnamespace
             std::size_t selectedEntity{ 0 };
             std::vector<std::string> logLines{};
             bool helpersVisible{ true };
-            std::size_t projectCommandSelection{ 0 };
-            std::size_t gameCommandSelection{ 0 };
-            std::size_t sceneCommandSelection{ 0 };
+            core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
+            bool showAboutModal{ false };
+            bool showUpdateConfirmModal{ false };
         };
 
         struct ContextPtrHash
@@ -359,25 +355,13 @@ namespace epochnamespace
             return std::format("({:.1f}, {:.1f}, {:.1f})", value[0], value[1], value[2]);
         }
 
-        [[nodiscard]] std::string_view panel_name(CommandPanel panel) noexcept
+        [[nodiscard]] std::string_view preview_mode_name(core::ScenePreviewMode mode) noexcept
         {
-            switch (panel)
+            switch (mode)
             {
-            case CommandPanel::Projects: return "Projects";
-            case CommandPanel::Games: return "Play";
-            case CommandPanel::Scene: return "Scene";
-            default: return "Projects";
-            }
-        }
-
-        [[nodiscard]] std::string_view panel_hint(CommandPanel panel) noexcept
-        {
-            switch (panel)
-            {
-            case CommandPanel::Projects: return "Switch projects from the editor without opening a separate overlay.";
-            case CommandPanel::Games: return "Launch playable scenes directly from the editor command row.";
-            case CommandPanel::Scene: return "Quick scene tools for the fake viewport and editor helpers.";
-            default: return "";
+            case core::ScenePreviewMode::Editor: return "Editor";
+            case core::ScenePreviewMode::None: return "None";
+            default: return "Editor";
             }
         }
 
@@ -404,10 +388,9 @@ namespace epochnamespace
             if (inserted)
             {
                 it->second.initialized = true;
-                it->second.activePanel = CommandPanel::Projects;
                 set_project(it->second, "sandbox", false);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
-                push_editor_log(it->second, "[info] Command menu lives in the editor toolbar now.");
+                push_editor_log(it->second, "[info] Use File > Launcher for projects and games.");
                 push_editor_log(it->second, "[info] Scene viewport is owned by the active backend.");
             }
             return it->second;
@@ -442,6 +425,15 @@ namespace epochnamespace
         }
     }
 
+    void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id)
+    {
+        if (!ctx)
+            return;
+
+        auto& editor = editor_state_for(ctx);
+        set_project(editor, project_id, true);
+    }
+
     EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx)
     {
         EditorFrameResult result{};
@@ -453,7 +445,7 @@ namespace epochnamespace
         const float w = static_cast<float>(ctx->get_width_safe());
         const float h = static_cast<float>(ctx->get_height_safe());
 
-        const float toolbar_h = 176.0f;
+        const float toolbar_h = 88.0f;
         const float bottom_h = (std::max)(220.0f, h * 0.24f);
         const float left_w = (std::max)(280.0f, w * 0.2f);
         const float right_w = (std::max)(320.0f, w * 0.22f);
@@ -482,228 +474,187 @@ namespace epochnamespace
             result.command_argument.assign(argument.begin(), argument.end());
         };
 
-        const bool up_pressed = epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Up);
-        const bool down_pressed = epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Down);
-        const bool left_pressed = epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Left);
-        const bool right_pressed = epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Right);
-        const bool enter_pressed = epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Enter);
-        const bool tab_pressed = epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Tab);
-
         gui::begin_window("Epoch Editor", toolbar_pos, toolbar_size);
-        const float toolbar_button_y = toolbar_pos.y + 38.0f;
+        const float toolbar_button_y = toolbar_pos.y + 30.0f;
         const float toolbar_button_h = 28.0f;
         float toolbar_x = toolbar_pos.x + 8.0f;
 
-        auto panel_button = [&](std::string_view label, float width, CommandPanel panel)
+        struct TopMenuButton
         {
-            std::string buttonLabel = editor.activePanel == panel
-                ? std::string("> ") + std::string(label)
-                : std::string(label);
+            TopMenu menu{};
+            std::string_view label{};
+            float width{};
+            float x{};
+        };
+
+        std::array<TopMenuButton, 5> topMenus{{
+            { TopMenu::File, "File", 84.0f, 0.0f },
+            { TopMenu::Edit, "Edit", 84.0f, 0.0f },
+            { TopMenu::Scene, "Scene", 96.0f, 0.0f },
+            { TopMenu::Command, "Command", 126.0f, 0.0f },
+            { TopMenu::Help, "Help", 88.0f, 0.0f }
+        }};
+
+        for (auto& item : topMenus)
+        {
+            item.x = toolbar_x;
             gui::set_cursor({ toolbar_x, toolbar_button_y });
-            if (gui::button(buttonLabel, { width, toolbar_button_h }))
-                editor.activePanel = panel;
-            toolbar_x += width + 8.0f;
-        };
-
-        auto action_button = [&](std::string_view label, float width, EditorCommand command)
-        {
-            gui::set_cursor({ toolbar_x, toolbar_button_y });
-            if (gui::button(label, { width, toolbar_button_h }))
-            {
-                emit_command(command);
-                push_editor_log(editor, std::string("[cmd] ") + std::string(label));
-            }
-            toolbar_x += width + 8.0f;
-        };
-
-        panel_button("Projects", 126.0f, CommandPanel::Projects);
-        panel_button("Play", 96.0f, CommandPanel::Games);
-        panel_button("Scene", 104.0f, CommandPanel::Scene);
-        action_button("Settings", 116.0f, EditorCommand::Settings);
-        action_button("Exit", 88.0f, EditorCommand::Exit);
-
-        gui::set_cursor({ toolbar_x + 16.0f, toolbar_button_y + 5.0f });
-        const std::string projectLabel = std::string("Project: ") + editor.projectName + "  |  Renderer: " + renderer_name(ctx);
-        gui::label(projectLabel);
-
-        gui::set_cursor({ 14.0f, toolbar_pos.y + 84.0f });
-        gui::label(std::string("Command Menu: ") + std::string(panel_name(editor.activePanel)));
-        gui::set_cursor({ 14.0f, toolbar_pos.y + 104.0f });
-        gui::label(std::string(panel_hint(editor.activePanel)));
-
-        float chip_x = 14.0f;
-        float chip_y = toolbar_pos.y + 128.0f;
-        constexpr float chip_h = 28.0f;
-        constexpr float chip_gap = 8.0f;
-
-        auto draw_chip = [&](std::string_view label, float width, auto&& on_click)
-        {
-            if (chip_x + width > w - 14.0f)
-            {
-                chip_x = 14.0f;
-                chip_y += chip_h + chip_gap;
-            }
-
-            gui::set_cursor({ chip_x, chip_y });
-            if (gui::button(label, { width, chip_h }))
-                on_click();
-            chip_x += width + chip_gap;
-        };
-
-        static constexpr std::array projectChips = {
-            CommandChip{ "Sandbox", "sandbox", 112.0f },
-            CommandChip{ "Platformer", "platformer", 124.0f },
-            CommandChip{ "Puzzle Lab", "puzzle", 122.0f }
-        };
-
-        static constexpr std::array gameChips = {
-            CommandChip{ "Snake", "snake", 96.0f },
-            CommandChip{ "Tetris", "tetris", 96.0f },
-            CommandChip{ "Pacman", "pacman", 96.0f },
-            CommandChip{ "Frogger", "frogger", 104.0f },
-            CommandChip{ "Sokoban", "sokoban", 104.0f },
-            CommandChip{ "Minesweeper", "minesweep", 128.0f },
-            CommandChip{ "Sliding Puzzle", "puzzle", 132.0f },
-            CommandChip{ "Bejeweled", "bejeweled", 120.0f },
-            CommandChip{ "2048", "fourty", 88.0f },
-            CommandChip{ "Sand Sim", "sandsim", 110.0f },
-            CommandChip{ "Cellular", "cellular", 108.0f }
-        };
-
-        static constexpr std::array sceneChips = {
-            CommandChip{ "Focus Selection", "focus_selection", 156.0f },
-            CommandChip{ "Reset Camera", "reset_camera", 128.0f },
-            CommandChip{ "Toggle Helpers", "toggle_helpers", 142.0f }
-        };
-
-        auto command_selection = [&]() -> std::size_t&
-        {
-            switch (editor.activePanel)
-            {
-            case CommandPanel::Projects: return editor.projectCommandSelection;
-            case CommandPanel::Games: return editor.gameCommandSelection;
-            case CommandPanel::Scene: return editor.sceneCommandSelection;
-            default: return editor.projectCommandSelection;
-            }
-        };
-
-        auto command_count = [&]() -> std::size_t
-        {
-            switch (editor.activePanel)
-            {
-            case CommandPanel::Projects: return projectChips.size();
-            case CommandPanel::Games: return gameChips.size();
-            case CommandPanel::Scene: return sceneChips.size();
-            default: return 0u;
-            }
-        };
-
-        auto cycle_panel = [&]()
-        {
-            switch (editor.activePanel)
-            {
-            case CommandPanel::Projects: editor.activePanel = CommandPanel::Games; break;
-            case CommandPanel::Games: editor.activePanel = CommandPanel::Scene; break;
-            case CommandPanel::Scene: editor.activePanel = CommandPanel::Projects; break;
-            }
-        };
-
-        auto trigger_command_chip = [&](std::size_t index)
-        {
-            if (editor.activePanel == CommandPanel::Projects)
-            {
-                const auto& chip = projectChips[index % projectChips.size()];
-                set_project(editor, chip.argument, true);
-                emit_command(EditorCommand::OpenProject, chip.argument);
-                return;
-            }
-
-            if (editor.activePanel == CommandPanel::Games)
-            {
-                const auto& chip = gameChips[index % gameChips.size()];
-                push_editor_log(editor, std::string("[play] Launch request: ") + std::string(chip.label));
-                emit_command(EditorCommand::RunGame, chip.argument);
-                return;
-            }
-
-            const auto& chip = sceneChips[index % sceneChips.size()];
-            handle_scene_tool(editor, chip.argument);
-        };
-
-        if (tab_pressed)
-            cycle_panel();
-
-        if (!editor.entities.empty())
-        {
-            if (up_pressed)
-            {
-                editor.selectedEntity = editor.selectedEntity == 0
-                    ? editor.entities.size() - 1u
-                    : editor.selectedEntity - 1u;
-            }
-            if (down_pressed)
-            {
-                editor.selectedEntity = (editor.selectedEntity + 1u) % editor.entities.size();
-            }
+            const std::string label = editor.openMenu == item.menu
+                ? std::string("[") + std::string(item.label) + "]"
+                : std::string(item.label);
+            if (gui::button(label, { item.width, toolbar_button_h }))
+                editor.openMenu = editor.openMenu == item.menu ? TopMenu::None : item.menu;
+            toolbar_x += item.width + 6.0f;
         }
 
-        const auto availableCommandCount = command_count();
-        if (availableCommandCount > 0)
-        {
-            auto& selection = command_selection();
-            selection = (std::min)(selection, availableCommandCount - 1u);
-            if (left_pressed)
-                selection = selection == 0 ? availableCommandCount - 1u : selection - 1u;
-            if (right_pressed)
-                selection = (selection + 1u) % availableCommandCount;
-            if (enter_pressed)
-                trigger_command_chip(selection);
-        }
-
-        if (editor.activePanel == CommandPanel::Projects)
-        {
-            for (std::size_t i = 0; i < projectChips.size(); ++i)
-            {
-                const auto& chip = projectChips[i];
-                const std::string label = i == editor.projectCommandSelection
-                    ? std::string("> ") + std::string(chip.label)
-                    : std::string(chip.label);
-                draw_chip(label, chip.width, [&]() {
-                    editor.projectCommandSelection = i;
-                    trigger_command_chip(i);
-                });
-            }
-        }
-        else if (editor.activePanel == CommandPanel::Games)
-        {
-            for (std::size_t i = 0; i < gameChips.size(); ++i)
-            {
-                const auto& chip = gameChips[i];
-                const std::string label = i == editor.gameCommandSelection
-                    ? std::string("> ") + std::string(chip.label)
-                    : std::string(chip.label);
-                draw_chip(label, chip.width, [&]() {
-                    editor.gameCommandSelection = i;
-                    trigger_command_chip(i);
-                });
-            }
-        }
-        else
-        {
-            for (std::size_t i = 0; i < sceneChips.size(); ++i)
-            {
-                const auto& chip = sceneChips[i];
-                const std::string label = i == editor.sceneCommandSelection
-                    ? std::string("> ") + std::string(chip.label)
-                    : std::string(chip.label);
-                draw_chip(label, chip.width, [&]() {
-                    editor.sceneCommandSelection = i;
-                    trigger_command_chip(i);
-                });
-            }
-        }
+        gui::set_cursor({ toolbar_x + 18.0f, toolbar_button_y + 5.0f });
+        gui::label(std::string("Project: ") + editor.projectName + "  |  Renderer: "
+            + renderer_name(ctx) + "  |  Preview: " + std::string(preview_mode_name(editor.previewMode)));
+        gui::set_cursor({ 14.0f, toolbar_pos.y + 64.0f });
+        gui::label("Launcher owns projects and games. Editor menus now focus on file, scene, commands, and help.");
 
         gui::end_window();
+
+        auto dropdown_position_for = [&](TopMenu menu) -> gui::Vec2
+        {
+            for (const auto& item : topMenus)
+                if (item.menu == menu)
+                    return { item.x, toolbar_button_y + toolbar_button_h + 6.0f };
+            return { 14.0f, toolbar_button_y + toolbar_button_h + 6.0f };
+        };
+
+        auto menu_item = [&](std::string_view title, gui::Vec2 pos, float width, auto&& on_click)
+        {
+            gui::set_cursor(pos);
+            if (gui::button(title, { width, 28.0f }))
+            {
+                on_click();
+                editor.openMenu = TopMenu::None;
+            }
+        };
+
+        auto open_dropdown = [&](std::string_view title, TopMenu menu, gui::Vec2 size, auto&& body)
+        {
+            if (editor.openMenu != menu)
+                return;
+            const auto pos = dropdown_position_for(menu);
+            gui::begin_window(title, pos, size);
+            body(pos);
+            gui::end_window();
+        };
+
+        open_dropdown("File", TopMenu::File, { 220.0f, 144.0f }, [&](gui::Vec2 pos)
+        {
+            menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
+                emit_command(EditorCommand::OpenLauncher);
+                push_editor_log(editor, "[file] Opening launcher.");
+            });
+            menu_item("Settings", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
+                emit_command(EditorCommand::Settings);
+                push_editor_log(editor, "[file] Settings selected.");
+            });
+            menu_item("Exit", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
+                emit_command(EditorCommand::Exit);
+                push_editor_log(editor, "[file] Exit selected.");
+            });
+        });
+
+        open_dropdown("Edit", TopMenu::Edit, { 220.0f, 144.0f }, [&](gui::Vec2 pos)
+        {
+            menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
+                handle_scene_tool(editor, "focus_selection");
+            });
+            menu_item("Reset Camera", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
+                handle_scene_tool(editor, "reset_camera");
+            });
+            menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
+                handle_scene_tool(editor, "toggle_helpers");
+            });
+        });
+
+        open_dropdown("Scene", TopMenu::Scene, { 220.0f, 110.0f }, [&](gui::Vec2 pos)
+        {
+            menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
+                editor.previewMode = core::ScenePreviewMode::Editor;
+                push_editor_log(editor, "[scene] Preview mode set to Editor.");
+            });
+            menu_item("Preview: None", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
+                editor.previewMode = core::ScenePreviewMode::None;
+                push_editor_log(editor, "[scene] Preview mode set to None.");
+            });
+        });
+
+        open_dropdown("Command", TopMenu::Command, { 260.0f, 110.0f }, [&](gui::Vec2 pos)
+        {
+            menu_item("Update Engine...", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
+                editor.showUpdateConfirmModal = true;
+                push_editor_log(editor, "[command] Update requested. Awaiting confirmation.");
+            });
+            menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
+                emit_command(EditorCommand::OpenLauncher);
+                push_editor_log(editor, "[command] Launcher requested.");
+            });
+        });
+
+        open_dropdown("Help", TopMenu::Help, { 220.0f, 110.0f }, [&](gui::Vec2 pos)
+        {
+            menu_item("About Epoch", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
+                editor.showAboutModal = true;
+            });
+            menu_item("Current Project Info", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
+                push_editor_log(editor, std::string("[help] Active project: ") + editor.projectName);
+            });
+        });
+
+        if (editor.showUpdateConfirmModal)
+        {
+            const gui::Vec2 modalSize{ 460.0f, 180.0f };
+            const gui::Vec2 modalPos{
+                (std::max)(0.0f, (w - modalSize.x) * 0.5f),
+                (std::max)(0.0f, (h - modalSize.y) * 0.5f)
+            };
+            gui::begin_window("Confirm Update", modalPos, modalSize);
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 18.0f });
+            gui::label("Running update can replace binaries and close the current session.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 40.0f });
+            gui::label("Continue only if you are ready to restart Epoch.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 104.0f });
+            if (gui::button("Cancel", { 120.0f, 30.0f }))
+            {
+                editor.showUpdateConfirmModal = false;
+                push_editor_log(editor, "[command] Update canceled.");
+            }
+            gui::set_cursor({ modalPos.x + 156.0f, modalPos.y + 104.0f });
+            if (gui::button("Update Now", { 140.0f, 30.0f }))
+            {
+                editor.showUpdateConfirmModal = false;
+                emit_command(EditorCommand::UpdateApplication);
+                push_editor_log(editor, "[command] Update confirmed.");
+            }
+            gui::end_window();
+        }
+
+        if (editor.showAboutModal)
+        {
+            const gui::Vec2 modalSize{ 420.0f, 168.0f };
+            const gui::Vec2 modalPos{
+                (std::max)(0.0f, (w - modalSize.x) * 0.5f),
+                (std::max)(0.0f, (h - modalSize.y) * 0.5f)
+            };
+            gui::begin_window("About Epoch", modalPos, modalSize);
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 18.0f });
+            gui::label("Epoch Editor");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 42.0f });
+            gui::label("Multi-backend engine/editor shell with launcher-driven projects and games.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 66.0f });
+            gui::label(std::string("Renderer: ") + renderer_name(ctx));
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 90.0f });
+            gui::label(std::string("Project: ") + editor.projectName);
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 118.0f });
+            if (gui::button("Close", { 120.0f, 30.0f }))
+                editor.showAboutModal = false;
+            gui::end_window();
+        }
 
         gui::begin_window("World Outliner", outliner_pos, outliner_size);
         gui::label(std::string("Scene: ") + editor.activeWorld);
@@ -745,9 +696,11 @@ namespace epochnamespace
         }
         gui::label(std::string("Viewport Target: ") + renderer_name(ctx));
         gui::label(std::string("Helpers Visible: ") + (editor.helpersVisible ? "true" : "false"));
+        gui::label(std::string("Preview Mode: ") + std::string(preview_mode_name(editor.previewMode)));
         gui::end_window();
 
         result.scene_viewport = gui::scene_viewport("Scene View", viewport_pos, viewport_size);
+        ctx->set_scene_preview_mode(editor.previewMode);
         ctx->set_scene_viewport(core::RenderViewport{
             static_cast<int>((std::max)(0.0f, result.scene_viewport.position.x)),
             static_cast<int>((std::max)(0.0f, result.scene_viewport.position.y)),
@@ -768,7 +721,7 @@ namespace epochnamespace
             + "x"
             + std::to_string(static_cast<int>(result.scene_viewport.size.y)));
         gui::label(std::string("[info] Active renderer: ") + renderer_name(ctx));
-        gui::label(std::string("[info] Active command menu: ") + std::string(panel_name(editor.activePanel)));
+        gui::label(std::string("[info] Preview mode: ") + std::string(preview_mode_name(editor.previewMode)));
         for (const auto& line : editor.logLines)
             gui::label(line);
         gui::end_window();

@@ -1065,10 +1065,36 @@ namespace epochnamespace::core
             case Choice::Sandsim: return "sandsim";
             case Choice::Cellular: return "cellular";
             case Choice::Settings:
+            case Choice::OpenEditor:
+            case Choice::ProjectSandbox:
+            case Choice::ProjectPlatformer:
+            case Choice::ProjectPuzzle:
+            case Choice::About:
             case Choice::Exit:
             default:
                 return {};
             }
+        }
+
+        [[nodiscard]] std::string_view project_id_from_choice(epochnamespace::menu::Choice choice) noexcept
+        {
+            using Choice = epochnamespace::menu::Choice;
+
+            switch (choice)
+            {
+            case Choice::ProjectSandbox: return "sandbox";
+            case Choice::ProjectPlatformer: return "platformer";
+            case Choice::ProjectPuzzle: return "puzzle";
+            default: return {};
+            }
+        }
+
+        [[nodiscard]] epochnamespace::updater::UpdateChannel default_update_channel()
+        {
+            return epochnamespace::updater::UpdateChannel{
+                .version_url = "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/aengine.version.ixx",
+                .binary_url = "https://github.com/Autodidac/EpochEngine/releases/latest/download/ConsoleApplication1.exe",
+            };
         }
 
         void unload_active_scene(ContextSession& session)
@@ -1314,9 +1340,31 @@ namespace epochnamespace::core
 
                             switch (editor_frame.command)
                             {
+                            case epochnamespace::EditorCommand::OpenLauncher:
+                                reset_to_menu(session, ctx);
+                                ctx_running = true;
+                                break;
                             case epochnamespace::EditorCommand::RunGame:
                                 begin_scene(editor_frame.command_argument, SessionMode::Editor);
                                 break;
+                            case epochnamespace::EditorCommand::UpdateApplication:
+                            {
+                                logger::get(kEditorLog).log(
+                                    logger::LogLevel::INFO,
+                                    "Running confirmed update command.",
+                                    std::source_location::current());
+                                const auto result = epochnamespace::updater::run_update_command(
+                                    default_update_channel(),
+                                    true);
+                                if (!result.update_available)
+                                {
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::INFO,
+                                        "No update available.",
+                                        std::source_location::current());
+                                }
+                                break;
+                            }
                             case epochnamespace::EditorCommand::Exit:
                                 session.mode = SessionMode::Exit;
                                 ctx_running = false;
@@ -1386,7 +1434,32 @@ namespace epochnamespace::core
                                     ctx_running = false;
                                     win->running = false;
                                 }
-                                else if (*choice != epochnamespace::menu::Choice::Settings)
+                                else if (*choice == epochnamespace::menu::Choice::OpenEditor)
+                                {
+                                    session.mode = SessionMode::Editor;
+                                    ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                                }
+                                else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
+                                {
+                                    epochnamespace::editor_load_project(ctx, project_id);
+                                    session.mode = SessionMode::Editor;
+                                    ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                                }
+                                else if (*choice == epochnamespace::menu::Choice::Settings)
+                                {
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::INFO,
+                                        "Launcher settings selected.",
+                                        std::source_location::current());
+                                }
+                                else if (*choice == epochnamespace::menu::Choice::About)
+                                {
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::INFO,
+                                        "Epoch launcher routes projects into the editor and games into scene mode.",
+                                        std::source_location::current());
+                                }
+                                else
                                 {
                                     const auto scene_id = scene_id_from_choice(*choice);
                                     if (!scene_id.empty())
