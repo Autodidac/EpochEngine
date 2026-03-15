@@ -246,14 +246,14 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.7
+v0.82.8
 ```
 
 Highlights:
 
-- Closing the parent host window now propagates shutdown through the docked
-  backend panes and exits the process cleanly instead of leaving the console
-  session alive in the background.
+- Closing the parent host window now shuts down the docked backend panes in
+  place and exits the process cleanly instead of tearing panes out of the dock
+  during shutdown or leaving the console session alive in the background.
 - Backend confirmation logs are available again through the `EPOCH_ENABLE_*`
   confirmation macros so bring-up and shutdown visibility can be tuned without
   restoring hot-loop log spam.

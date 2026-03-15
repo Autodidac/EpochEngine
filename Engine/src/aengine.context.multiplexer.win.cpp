@@ -1453,14 +1453,11 @@ namespace epochnamespace::core
             std::sort(children.begin(), children.end());
             children.erase(std::unique(children.begin(), children.end()), children.end());
 
-            // DO NOT undock/reparent children from this parent thread.
-            // Some children (GLFW/raylib) are owned by other threads; cross-thread SetParent/SetWindowPos can deadlock.
-            // Instead, post a request to each child so it can undock itself on its owning thread.
+            // Parent shutdown should close the live child windows in place.
+            // Undocking here is the wrong behavior: it visibly tears panes out of the
+            // parent host during shutdown and can confuse backend-owned child HWNDs.
             for (HWND child : children)
             {
-#if defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
-                ::PostMessageW(child, WM_EPOCH_DOCKCMD, static_cast<WPARAM>(DockCmd::Undock), 0);
-#endif
                 ::PostMessageW(child, WM_CLOSE, 0, 0);
             }
 

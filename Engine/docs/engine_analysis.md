@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while compatibility code has been
 consolidated under `Engine/legacy/`.
 
-Current public version: `v0.82.7`
+Current public version: `v0.82.8`
 
 ## Architecture highlights
 
@@ -36,6 +36,8 @@ Current public version: `v0.82.7`
 - Parent-window shutdown now behaves more like a real engine host lifecycle:
   docked children are marked for close and the session exits instead of leaving
   a dead console/process behind.
+- The parented docking layout now stays intact during shutdown instead of
+  undocking backend panes as the host window closes.
 
 ## Current cautions
 

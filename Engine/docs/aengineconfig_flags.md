@@ -88,6 +88,6 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.7` hardens parent-window shutdown so docked contexts exit with the
-  host session and restores configurable backend confirmation messages through
-  the new `EPOCH_ENABLE_*CONFIRMATION_LOGS` switches.
+- `v0.82.8` keeps the parented docking layout intact during shutdown by
+  closing docked panes in place, while preserving the configurable backend
+  confirmation messages introduced in the previous pass.

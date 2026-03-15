@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.8]
+- Fixed the parent-window shutdown path so docked backend panes close in place instead of being undocked during host shutdown.
+- Re-verified that the parented multi-context layout stays docked at runtime and the process still exits when the main `EpochParent` host closes.
+- Refreshed the active README and current docs to advertise the v0.82.8 docking/shutdown hotfix without rewriting historical release files.
+
 ## [v0.82.7]
 - Hardened the parent-window close path so all tracked docked contexts receive shutdown and the engine session exits cleanly when the main host closes.
 - Restored backend confirmation logging behind configurable `EPOCH_ENABLE_*CONFIRMATION_LOGS` switches so startup, upload, and teardown confirmations can be enabled without reintroducing per-frame spam.
