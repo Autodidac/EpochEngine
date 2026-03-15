@@ -246,14 +246,17 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.8
+v0.82.9
 ```
 
 Highlights:
 
-- Closing the parent host window now shuts down the docked backend panes in
+- Docked panes now preserve their original host parent across undock/redock,
+  so SDL, Raylib, SFML, OpenGL, and Software can all detach and reattach
+  cleanly in the live parented editor layout.
+- Closing the parent host window still shuts down the docked backend panes in
   place and exits the process cleanly instead of tearing panes out of the dock
-  during shutdown or leaving the console session alive in the background.
+  or leaving the console session alive in the background.
 - Backend confirmation logs are available again through the `EPOCH_ENABLE_*`
   confirmation macros so bring-up and shutdown visibility can be tuned without
   restoring hot-loop log spam.

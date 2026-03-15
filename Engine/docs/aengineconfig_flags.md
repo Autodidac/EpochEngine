@@ -88,6 +88,6 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.8` keeps the parented docking layout intact during shutdown by
-  closing docked panes in place, while preserving the configurable backend
-  confirmation messages introduced in the previous pass.
+- `v0.82.9` restores live undock/redock behavior by preserving each pane's
+  original dock parent and by laying out only the panes that are still docked
+  under the active parent host.

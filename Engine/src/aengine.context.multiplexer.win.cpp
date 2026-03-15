@@ -136,6 +136,7 @@ namespace
 
 #if EPOCH_SINGLE_PARENT
     struct SubCtx { HWND originalParent{}; };
+    constexpr wchar_t kEpochDockParentProp[] = L"EpochDockParent";
 
     // Dock/undock requests must be processed on the window's owning thread.
     // GLFW/raylib windows are owned by the thread that created them (typically the render thread).
@@ -154,6 +155,7 @@ namespace
         switch (msg)
         {
         case WM_NCDESTROY:
+            ::RemovePropW(hwnd, kEpochDockParentProp);
             delete ctx;
             return DefSubclassProc(hwnd, msg, wp, lp);
 
@@ -264,8 +266,14 @@ namespace epochnamespace::core
         (void)parent;
         if (!hwnd) return;
         auto* ctx = new SubCtx{ parent };
+        if (parent)
+            ::SetPropW(hwnd, kEpochDockParentProp, parent);
         if (!::SetWindowSubclass(hwnd, DockableProc, 1, reinterpret_cast<DWORD_PTR>(ctx)))
+        {
+            if (parent)
+                ::RemovePropW(hwnd, kEpochDockParentProp);
             delete ctx;
+        }
 #else
         (void)hwnd;
         (void)parent;
@@ -1169,7 +1177,23 @@ namespace epochnamespace::core
         std::scoped_lock lock(windowsMutex);
         if (windows.empty()) return;
 
-        const int total = static_cast<int>(windows.size());
+        std::vector<WindowData*> dockedWindows;
+        dockedWindows.reserve(windows.size());
+        for (auto& win : windows)
+        {
+            if (!win || !win->hwnd || ::IsWindow(win->hwnd) == FALSE)
+                continue;
+
+            if (::GetParent(win->hwnd) != parent)
+                continue;
+
+            dockedWindows.push_back(win.get());
+        }
+
+        if (dockedWindows.empty())
+            return;
+
+        const int total = static_cast<int>(dockedWindows.size());
         int cols = 1, rows = 1;
         while (cols * rows < total) (cols <= rows ? ++cols : ++rows);
 
@@ -1181,12 +1205,12 @@ namespace epochnamespace::core
         const int cw = clamp_positive(clientW / cols);
         const int ch = clamp_positive(clientH / rows);
 
-        for (size_t i = 0; i < windows.size(); ++i)
+        for (size_t i = 0; i < dockedWindows.size(); ++i)
         {
             const int c = static_cast<int>(i) % cols;
             const int r = static_cast<int>(i) / cols;
 
-            WindowData& win = *windows[i];
+            WindowData& win = *dockedWindows[i];
             ::SetWindowPos(win.hwnd, nullptr, c * cw, r * ch, cw, ch,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
@@ -1500,6 +1524,8 @@ namespace epochnamespace::core
             drag.dragging = true;
             drag.draggedWindow = hwnd;
             drag.originalParent = ::GetParent(hwnd);
+            if (!drag.originalParent)
+                drag.originalParent = static_cast<HWND>(::GetPropW(hwnd, kEpochDockParentProp));
             POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             ::ClientToScreen(hwnd, &pt);
             drag.lastMousePos = pt;
@@ -1620,10 +1646,14 @@ namespace epochnamespace::core
         case WM_LBUTTONUP:
             if (drag.dragging && drag.draggedWindow == hwnd)
             {
+                const HWND originalParent = drag.originalParent;
                 ::ReleaseCapture();
                 drag.dragging = false;
                 drag.draggedWindow = nullptr;
                 drag.originalParent = nullptr;
+
+                if (originalParent && ::IsWindow(originalParent) != FALSE)
+                    ::PostMessageW(originalParent, WM_SIZE, 0, 0);
                 return 0;
             }
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
