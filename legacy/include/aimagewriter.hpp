@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -36,7 +36,7 @@
 #include <algorithm>
 #include <iostream>
 
-namespace almondnamespace
+namespace epochnamespace
 {
     inline bool a_writeBMP(const std::filesystem::path& filepath, const std::vector<uint8_t>& pixels, int width, int height, bool flipVertically)
     {

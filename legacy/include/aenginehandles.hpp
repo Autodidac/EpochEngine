@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -29,7 +29,7 @@
 #include <cstdint>   // uint32_t
 #include <functional> // for std::hash
 
-namespace almondnamespace::assets {
+namespace epochnamespace::assets {
     struct SpriteHandle {
         uint32_t id = 0;
         constexpr explicit operator bool() const noexcept { return id != 0; }
@@ -39,8 +39,8 @@ namespace almondnamespace::assets {
 
 // In global namespace:
 template<>
-struct std::hash<almondnamespace::assets::SpriteHandle> {
-    std::size_t operator()(const almondnamespace::assets::SpriteHandle& h) const noexcept {
+struct std::hash<epochnamespace::assets::SpriteHandle> {
+    std::size_t operator()(const epochnamespace::assets::SpriteHandle& h) const noexcept {
         return std::hash<uint32_t>{}(h.id);
     }
 };

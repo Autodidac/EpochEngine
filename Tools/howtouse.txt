@@ -3,7 +3,7 @@ These Windows-only helpers install the Visual Studio toolchain; they are not use
 1. **Console installer (`install_build_tools.bat`)**
    - Runs unattended to fetch Visual Studio 2022 build tools, CMake, and Ninja, then opens a Developer Command Prompt.
 
-2. **PowerShell wrappers (`almondshell_install_build_tools.ps1` / `almondshell_install_gui.ps1`)**
+2. **PowerShell wrappers (`epoch_install_build_tools.ps1` / `epoch_install_gui.ps1`)**
    - Provide the same automation as the batch file, with optional elevation for GUI installs if the stock console run fails.
 
 3. **After installing**

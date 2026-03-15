@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -36,8 +36,8 @@ module;
 #include <string>
 #include <vector>
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
@@ -210,4 +210,3 @@ namespace epochnamespace::vulkancontext {
     }
 
 } // namespace epochnamespace::vulkancontext
-

@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -26,19 +26,19 @@
 //#include "aplatform.hpp"
 //#include "aengineconfig.hpp"
 //
-// // anet.hpp — Hybrid transport shim for Almond / Epoch Engine
+// // anet.hpp — Hybrid transport shim for Epoch Engine
 // //
 // // • Default: SteamNetworkingSockets (relay, P2P, NAT punch, QUIC)
 // // • Fallback: Asio (UDP) (LAN, dedicated, headless servers)
 // //
-// // Define ALMOND_WITH_STEAM before including if Steam SDK is available.
+// // Define EPOCH_WITH_STEAM before including if Steam SDK is available.
 // // Link steam_api64.lib (+ tier0.lib, vstdlib.lib) on Windows builds.
 // //
 // // Build-time deps:
 // //   • <asio.hpp> (header-only ≥1.30.2)
 // //   • Steam SDK 1.53a (or GameNetworkingSockets ≥v1.4.0)
 // //
-// // Runtime: call almondnamespace::net::init(); once, almondnamespace::net::poll(); each frame.
+// // Runtime: call epochnamespace::net::init(); once, epochnamespace::net::poll(); each frame.
 //
 //#define ASIO_STANDALONE
 //#define ASIO_HAS_CO_AWAIT
@@ -71,12 +71,12 @@
 //#include <cstdint>
 //#include <cstddef>
 //
-//#ifdef ALMOND_WITH_STEAM
+//#ifdef EPOCH_WITH_STEAM
 //#  include <steam/steam_api.h>
 //#  include <steam/steamnetworkingsockets.h>
 //#endif
 //
-//namespace almondnamespace::net {
+//namespace epochnamespace::net {
 //
 //    // Generic views and callback aliases
 //    using bytes_view = std::span<const std::byte>;
@@ -93,7 +93,7 @@
 //        }
 //    };
 //
-//#ifdef ALMOND_WITH_STEAM
+//#ifdef EPOCH_WITH_STEAM
 //    // Steam backend
 //    struct SteamConn {
 //        HSteamNetConnection h = k_HSteamNetConnection_Invalid;
@@ -104,7 +104,7 @@
 //    struct Connection {
 //        std::variant<
 //            UdpConn
-//#ifdef ALMOND_WITH_STEAM
+//#ifdef EPOCH_WITH_STEAM
 //            , SteamConn
 //#endif
 //        > impl;
@@ -113,14 +113,14 @@
 //    // Backend selector
 //    enum class backend {
 //        asio
-//#ifdef ALMOND_WITH_STEAM
+//#ifdef EPOCH_WITH_STEAM
 //        , steam
 //#endif
 //    };
 //
 //    inline backend g_mode = backend::asio;
 //    inline std::unique_ptr<asio::io_context> g_io;
-//#ifdef ALMOND_WITH_STEAM
+//#ifdef EPOCH_WITH_STEAM
 //    inline ISteamNetworkingSockets* g_sn = nullptr;
 //#endif
 //
@@ -129,7 +129,7 @@
 //        // Always create io_context for timers, even if using Steam
 //        g_io = std::make_unique<asio::io_context>();
 //
-//#ifdef ALMOND_WITH_STEAM
+//#ifdef EPOCH_WITH_STEAM
 //        if (SteamAPI_Init()) {
 //            g_mode = backend::steam;
 //            g_sn = SteamNetworkingSockets();
@@ -146,7 +146,7 @@
 //    inline void poll() {
 //        if (g_mode == backend::asio) {
 //            g_io->poll();
-//#ifdef ALMOND_WITH_STEAM
+//#ifdef EPOCH_WITH_STEAM
 //        }
 //        else {
 //            SteamAPI_RunCallbacks();
@@ -173,7 +173,7 @@
 //            u.peer = ep.endpoint();
 //            return c;
 //        }
-//#ifdef ALMOND_WITH_STEAM
+//#ifdef EPOCH_WITH_STEAM
 //        SteamNetworkingIPAddr ipAddr;
 //        if (!ipAddr.ParseString(addr.data())) {
 //            throw std::invalid_argument("Invalid SteamNetworkingIPAddr format");
@@ -194,7 +194,7 @@
 //                        cb(ec);
 //                    });
 //            }
-//#ifdef ALMOND_WITH_STEAM
+//#ifdef EPOCH_WITH_STEAM
 //            else {
 //                EResult r = g_sn->SendMessageToConnection(
 //                    conn.h,
@@ -212,4 +212,4 @@
 //
 //    // async_recv left to caller to wire into their event loop for brevity
 //
-//} // namespace almondnamespace::net
+//} // namespace epochnamespace::net

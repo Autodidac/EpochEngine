@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -37,7 +37,7 @@ module;
 #   include <windows.h>
 #   include <winhttp.h>
 #   pragma comment(lib, "winhttp.lib")
-#elif defined(ALMOND_HAS_CURL)
+#elif defined(EPOCH_HAS_CURL)
 #   include <curl/curl.h>
 #endif
 
@@ -305,7 +305,7 @@ namespace epoch::ai
         }
 #endif
 
-#if !defined(_WIN32) && defined(ALMOND_HAS_CURL)
+#if !defined(_WIN32) && defined(EPOCH_HAS_CURL)
         static std::size_t curl_write_cb(char* ptr, std::size_t size, std::size_t nmemb, void* userdata)
         {
             const std::size_t bytes = size * nmemb;
@@ -455,7 +455,7 @@ namespace epoch::ai
             {
 #if defined(_WIN32)
                 const std::string resp = winhttp_post_json(endpoint_full, body, headers);
-#elif defined(ALMOND_HAS_CURL)
+#elif defined(EPOCH_HAS_CURL)
                 const std::string resp = http_post_json(endpoint_full, body, headers);
 #else
                 (void)endpoint_full;
@@ -570,7 +570,7 @@ namespace epoch::ai
         core::log::info("ai", "Bot shutdown");
     }
 
-    
+
     std::string default_workspace_root()
     {
 #if defined(_WIN32)

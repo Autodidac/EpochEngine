@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -34,11 +34,11 @@ module;
 
 //#include "aplatform.hpp"
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros   // may bring in <windows.h>, etc.
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros   // may bring in <windows.h>, etc.
 //#include "arobusttime.hpp"     // time::Timer, time::createTimer(...)
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 #   if defined(_WIN32)
-#       ifdef ALMOND_USING_WINMAIN
+#       ifdef EPOCH_USING_WINMAIN
 #         include "aframework.hpp"
 #       endif
 #       ifndef WIN32_LEAN_AND_MEAN
@@ -56,16 +56,17 @@ import <functional>;
 import <memory>;
 import <vector>;
 
-//import aengine.platform;  
+//import aengine.platform;
+import aengine.core.context;
 import aengine.core.time;
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
 export namespace epochnamespace::anativecontext
 {
     struct SoftRendState
     {
-#ifdef ALMOND_USING_WINMAIN
+#ifdef EPOCH_USING_WINMAIN
         HWND hwnd{};           // Window handle
         HDC hdc{};             // Device context
         HWND parent{};         // Parent window
@@ -78,6 +79,13 @@ export namespace epochnamespace::anativecontext
         int height{ 300 };
         bool running{ false };
         std::vector<std::uint32_t> framebuffer{};
+        std::vector<std::uint32_t> sceneFramebuffer{};
+        bool frameValid{ false };
+        std::uint64_t lastGuiGeneration{ 0 };
+        epochnamespace::core::RenderViewport lastSceneViewport{};
+        std::uint8_t lastPreviewMode{
+            static_cast<std::uint8_t>(epochnamespace::core::ScenePreviewMode::None)
+        };
 
         struct MouseState
         {
@@ -107,4 +115,4 @@ export namespace epochnamespace::anativecontext
     inline SoftRendState s_softrendererstate{};
 }
 
-#endif // ALMOND_USING_SOFTWARE_RENDERER
+#endif // EPOCH_USING_SOFTWARE_RENDERER

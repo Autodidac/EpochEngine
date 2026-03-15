@@ -144,7 +144,7 @@ cmake "${cmake_args[@]}"
 cmake --build "$BUILD_DIR" --verbose
 
 if cmake -LA -N "$BUILD_DIR" | grep -q "DOXYGEN_FOUND:BOOL=1"; then
-  echo "Generating AlmondShell API documentation..."
+  echo "Generating Epoch API documentation..."
   if cmake --build "$BUILD_DIR" --target docs; then
     echo "API reference available under $(pwd)/docs/api/html/index.html"
   else

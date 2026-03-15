@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -32,7 +32,7 @@
 #include <string>
 #include <vector>
 
-namespace almondnamespace::scripting {
+namespace epochnamespace::scripting {
 
     /// TaskGraph specialization used to run async scripting jobs
     using ScriptScheduler = taskgraph::TaskGraph;
@@ -94,4 +94,4 @@ namespace almondnamespace::scripting {
     /// Returns true if the task was successfully scheduled.
     bool load_or_reload_script(const std::string& name, ScriptScheduler& scheduler, ScriptLoadReport* report = nullptr);
 
-} // namespace almondnamespace::scripting
+} // namespace epochnamespace::scripting

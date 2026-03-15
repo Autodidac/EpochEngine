@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,7 +30,7 @@
  ***********************************************/
 module;
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -66,7 +66,7 @@ import atexture;
 import acontext.raylib.api;
 import acontext.raylib.state;
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 export namespace epochnamespace::raylibtextures
 {
@@ -149,41 +149,6 @@ export namespace epochnamespace::raylibtextures
         catch (...) {}
     }
 
-    inline std::atomic_uint32_t s_dumpSerial{ 0 };
-
-    inline std::string make_dump_name(int atlasIdx, std::string_view tag)
-    {
-        std::filesystem::create_directories("atlas_dump");
-        return std::format("atlas_dump/{}_{}_{}.ppm",
-            tag,
-            atlasIdx,
-            s_dumpSerial.fetch_add(1, std::memory_order_relaxed));
-    }
-
-    inline void dump_atlas_rgb_ppm(const TextureAtlas& atlas, int atlasIdx)
-    {
-        const std::string filename = make_dump_name(atlasIdx, atlas.name);
-
-        std::ofstream out(filename, std::ios::binary);
-        if (!out)
-        {
-            std::cerr << "[ Image Dump ] - Failed to open: " << filename << "\n";
-            return;
-        }
-
-        out << "P6\n" << atlas.width << " " << atlas.height << "\n255\n";
-
-        const auto& px = atlas.pixel_data; // RGBA
-        for (std::size_t i = 0; i + 2 < px.size(); i += 4)
-        {
-            out.put(static_cast<char>(px[i + 0]));
-            out.put(static_cast<char>(px[i + 1]));
-            out.put(static_cast<char>(px[i + 2]));
-        }
-
-        std::cerr << "[ Image Dump ] - Wrote: " << filename << "\n";
-    }
-
     [[nodiscard]]
     inline ImageData ensure_rgba(const ImageData& img)
     {
@@ -233,7 +198,7 @@ export namespace epochnamespace::raylibtextures
     }
 
     // Fast check: only attempt upload when the current context is a raylib context.
-    // This avoids “helpfully” uploading while some other backend (OpenGL/SDL) is current.
+    // This avoids â€œhelpfullyâ€ uploading while some other backend (OpenGL/SDL) is current.
     [[nodiscard]] inline bool is_raylib_backend_current() noexcept
     {
         try
@@ -299,9 +264,6 @@ export namespace epochnamespace::raylibtextures
             return;
         }
 
-        // Optional: dump only when a *new* texture is successfully created.
-        dump_atlas_rgb_ppm(atlas, atlas.index);
-
         // 3) Commit under lock; if someone else updated in the meantime, keep the newest.
         epochnamespace::raylib_api::Texture2D oldTex{};
         bool freeOld = false;
@@ -333,9 +295,6 @@ export namespace epochnamespace::raylibtextures
                 gpu.width = static_cast<u32>(atlas.width);
                 gpu.height = static_cast<u32>(atlas.height);
 
-                std::cerr << "[ RayLib ] - Uploaded atlas '" << atlas.name
-                    << "' (tex id " << gpu.texture.id
-                    << ", version " << gpu.version << ")\n";
             }
         }
 
@@ -428,4 +387,4 @@ export namespace epochnamespace::raylibtextures
     }
 }
 
-#endif // ALMOND_USING_RAYLIB
+#endif // EPOCH_USING_RAYLIB

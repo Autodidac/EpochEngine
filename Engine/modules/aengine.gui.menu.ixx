@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -31,7 +31,7 @@
 
 module; // REQUIRED global module fragment
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros 		// for ALMOND_USING_SDL
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 export module aengine.gui.menu;
 
 // ------------------------------------------------------------
@@ -48,6 +48,7 @@ import aengine.gui;
 import aengine.context.window;
 import aengine.core.context;
 import aengine.context.type;
+import aengine.core.logger;
 
 // ------------------------------------------------------------
 // Standard library
@@ -62,6 +63,7 @@ import <cmath>;
 import <iomanip>;
 import <iostream>;
 import <memory>;
+import <source_location>;
 import <sstream>;
 
 // ============================================================
@@ -72,6 +74,8 @@ namespace gui = epochnamespace::gui;
 
 export namespace epochnamespace::menu
 {
+    inline constexpr std::string_view kLogSys = "Epoch.Menu";
+
     enum class Choice {
         Snake, Tetris, Pacman, Frogger, Sokoban,
         Minesweep, Puzzle, Bejeweled, Fourty,
@@ -150,7 +154,11 @@ export namespace epochnamespace::menu
             };
 
             initialized = true;
-            std::cout << "[Menu] Initialized " << descriptors.size() << " game entries\n";
+            logger::get(kLogSys).logf(
+                logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Initialized {} game entries",
+                descriptors.size());
         }
 
         // ----------------------------------------------------
@@ -285,7 +293,11 @@ export namespace epochnamespace::menu
             recompute_layout(ctx, w, h);
 
             initialized = true;
-            std::cout << "[Menu] Initialized " << descriptors.size() << " entries\n";
+            logger::get(kLogSys).logf(
+                logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Initialized {} entries",
+                descriptors.size());
         }
 
         // ----------------------------------------------------

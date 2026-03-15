@@ -37,7 +37,7 @@ case "$COMPILER" in
     ;;
 esac
 
-EXECUTABLE="${SCRIPT_DIR}/Bin/${COMPILER_NAME}-${BUILD_TYPE}/almondshell"
+EXECUTABLE="${SCRIPT_DIR}/Bin/${COMPILER_NAME}-${BUILD_TYPE}/epoch"
 
 if [[ ! -x "$EXECUTABLE" ]]; then
   echo "Executable not found: $EXECUTABLE" >&2

@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -33,7 +33,7 @@
 #include <string_view>
 #include <algorithm>
 
-namespace almondnamespace::codeinspector {
+namespace epochnamespace::codeinspector {
 
     struct InspectionResult {
         std::filesystem::path filePath;
@@ -91,8 +91,8 @@ namespace almondnamespace::codeinspector {
         return { false, "Missing header guard" };
     }
 
-    inline bool uses_almond_namespace(const std::vector<std::string>& lines) {
-        constexpr std::string_view ns = "namespace almondnamespace";
+    inline bool uses_EPOCH_namespace(const std::vector<std::string>& lines) {
+        constexpr std::string_view ns = "namespace epochnamespace";
         return std::any_of(lines.begin(), lines.end(),
             [&](const std::string& line) { return line.find(ns) != std::string::npos; });
     }
@@ -192,8 +192,8 @@ namespace almondnamespace::codeinspector {
             }
 
             // Namespace check
-            if (!uses_almond_namespace(lines)) {
-                result.issues.emplace_back("Does not use 'almondnamespace' namespace");
+            if (!uses_EPOCH_namespace(lines)) {
+                result.issues.emplace_back("Does not use 'epochnamespace' namespace");
             }
 
             // Trailing whitespace
@@ -217,4 +217,4 @@ namespace almondnamespace::codeinspector {
     }
 
 
-} // namespace almondnamespace::codeinspector
+} // namespace epochnamespace::codeinspector

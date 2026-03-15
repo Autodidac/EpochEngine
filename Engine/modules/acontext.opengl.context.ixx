@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,10 +30,10 @@
  ***********************************************/
  // acontext.opengl.context.ixx
 module;
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1) 
 // NOTE: Keep your engine config include if it sets global compile flags.
 // Do NOT rely on it for Win32 type definitions in a module global fragment.
 #include "../include/aengine.config.hpp"
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 // OS + GL headers in global module fragment.
 #if defined(_WIN32)
@@ -85,7 +85,7 @@ module;
 #include <chrono>
 #endif
 export module acontext.opengl.context;
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 // ------------------------------------------------------------
 // Core engine modules
 // ------------------------------------------------------------
@@ -99,6 +99,7 @@ import aatlas.manager;
 import aengine.core.commandline;
 import aengine.diagnostics;
 import aengine.telemetry;
+import epoch.render.preview_grid;
 
 // ------------------------------------------------------------
 // OpenGL backend modules
@@ -114,6 +115,7 @@ import acontext.opengl.quad;
 import <algorithm>;
 import <array>;
 import <cmath>;
+import <cstddef>;
 import <cstdint>;
 import <format>;
 import <functional>;
@@ -128,7 +130,7 @@ import <vector>;
 
 export namespace epochnamespace::openglcontext
 {
-#if !defined(ALMOND_USING_OPENGL)
+#if !defined(EPOCH_USING_OPENGL)
 
     inline bool opengl_initialize(std::shared_ptr<core::Context>, void* = nullptr,
         unsigned int = 0, unsigned int = 0, std::function<void(int, int)> = nullptr) {
@@ -147,7 +149,7 @@ export namespace epochnamespace::openglcontext
     namespace detail
     {
 #if defined(_WIN32)
-        inline const wchar_t* gl_child_class_name() noexcept { return L"AlmondGLChild"; }
+        inline const wchar_t* gl_child_class_name() noexcept { return L"EpochGLChild"; }
 
         inline void ensure_gl_child_class_registered()
         {
@@ -538,7 +540,7 @@ export namespace epochnamespace::openglcontext
                 throw std::runtime_error("[ OpenGL ] - XCreateWindow failed");
             }
 
-            XStoreName(display, glState.window, "Almond OpenGL");
+            XStoreName(display, glState.window, "Epoch OpenGL");
             XMapWindow(display, glState.window);
             XFlush(display);
         }
@@ -638,7 +640,7 @@ export namespace epochnamespace::openglcontext
 
     inline void opengl_clear()
     {
-#if ALMOND_USE_CLEAR_COLOR
+#if EPOCH_USE_CLEAR_COLOR
         const auto color = core::clear_color_for_context(core::ContextType::OpenGL);
         glClearColor(color[0], color[1], color[2], color[3]);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -647,7 +649,7 @@ export namespace epochnamespace::openglcontext
 
     namespace detail
     {
-        using Mat4 = std::array<float, 16>;
+        using Mat4 = epochnamespace::previewgrid::Mat4;
 
         [[nodiscard]] inline std::pair<int, int> parse_gl_version(const char* s) noexcept
         {
@@ -733,77 +735,6 @@ export namespace epochnamespace::openglcontext
             throw std::runtime_error("[ OpenGL ] - Scene preview program link failed: " + log);
         }
 
-        [[nodiscard]] inline Mat4 identity_matrix() noexcept
-        {
-            return Mat4{
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 1.0f
-            };
-        }
-
-        [[nodiscard]] inline Mat4 multiply(const Mat4& lhs, const Mat4& rhs) noexcept
-        {
-            Mat4 out{};
-            for (int column = 0; column < 4; ++column)
-            {
-                for (int row = 0; row < 4; ++row)
-                {
-                    float sum = 0.0f;
-                    for (int k = 0; k < 4; ++k)
-                        sum += lhs[k * 4 + row] * rhs[column * 4 + k];
-                    out[column * 4 + row] = sum;
-                }
-            }
-            return out;
-        }
-
-        [[nodiscard]] inline Mat4 translation(float x, float y, float z) noexcept
-        {
-            Mat4 out = identity_matrix();
-            out[12] = x;
-            out[13] = y;
-            out[14] = z;
-            return out;
-        }
-
-        [[nodiscard]] inline Mat4 rotation_x(float radians) noexcept
-        {
-            Mat4 out = identity_matrix();
-            const float c = std::cos(radians);
-            const float s = std::sin(radians);
-            out[5] = c;
-            out[6] = s;
-            out[9] = -s;
-            out[10] = c;
-            return out;
-        }
-
-        [[nodiscard]] inline Mat4 rotation_y(float radians) noexcept
-        {
-            Mat4 out = identity_matrix();
-            const float c = std::cos(radians);
-            const float s = std::sin(radians);
-            out[0] = c;
-            out[2] = -s;
-            out[8] = s;
-            out[10] = c;
-            return out;
-        }
-
-        [[nodiscard]] inline Mat4 perspective(float fovRadians, float aspect, float zNear, float zFar) noexcept
-        {
-            Mat4 out{};
-            const float tanHalf = std::tan(fovRadians * 0.5f);
-            out[0] = 1.0f / ((std::max)(0.001f, aspect) * tanHalf);
-            out[5] = 1.0f / tanHalf;
-            out[10] = -(zFar + zNear) / (zFar - zNear);
-            out[11] = -1.0f;
-            out[14] = -(2.0f * zFar * zNear) / (zFar - zNear);
-            return out;
-        }
-
         inline bool ensure_scene_preview_pipeline(epochnamespace::openglstate::OpenGL4State& state)
         {
             if (state.sceneShader && state.sceneVao && state.sceneVbo && state.sceneEbo)
@@ -878,25 +809,8 @@ void main() {
             glDeleteShader(vertexShader);
             glDeleteShader(fragmentShader);
 
-            constexpr float vertices[] = {
-                -1.0f, -1.0f, -1.0f, 0.95f, 0.35f, 0.20f,
-                 1.0f, -1.0f, -1.0f, 0.95f, 0.35f, 0.20f,
-                 1.0f,  1.0f, -1.0f, 0.95f, 0.35f, 0.20f,
-                -1.0f,  1.0f, -1.0f, 0.95f, 0.35f, 0.20f,
-                -1.0f, -1.0f,  1.0f, 0.15f, 0.75f, 0.95f,
-                 1.0f, -1.0f,  1.0f, 0.15f, 0.75f, 0.95f,
-                 1.0f,  1.0f,  1.0f, 0.15f, 0.75f, 0.95f,
-                -1.0f,  1.0f,  1.0f, 0.15f, 0.75f, 0.95f
-            };
-
-            constexpr unsigned int indices[] = {
-                4, 5, 6, 6, 7, 4,
-                0, 3, 2, 2, 1, 0,
-                0, 4, 7, 7, 3, 0,
-                1, 2, 6, 6, 5, 1,
-                3, 7, 6, 6, 2, 3,
-                0, 1, 5, 5, 4, 0
-            };
+            const auto vertices = epochnamespace::previewgrid::grid_vertices();
+            const auto indices = epochnamespace::previewgrid::grid_indices();
 
             glGenVertexArrays(1, &state.sceneVao);
             glGenBuffers(1, &state.sceneVbo);
@@ -904,13 +818,33 @@ void main() {
 
             glBindVertexArray(state.sceneVao);
             glBindBuffer(GL_ARRAY_BUFFER, state.sceneVbo);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                static_cast<GLsizeiptr>(vertices.size() * sizeof(vertices[0])),
+                vertices.data(),
+                GL_STATIC_DRAW);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.sceneEbo);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+            glBufferData(
+                GL_ELEMENT_ARRAY_BUFFER,
+                static_cast<GLsizeiptr>(indices.size() * sizeof(indices[0])),
+                indices.data(),
+                GL_STATIC_DRAW);
             glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * static_cast<GLsizei>(sizeof(float)), reinterpret_cast<void*>(0));
+            glVertexAttribPointer(
+                0,
+                3,
+                GL_FLOAT,
+                GL_FALSE,
+                static_cast<GLsizei>(sizeof(epochnamespace::previewgrid::Vertex)),
+                reinterpret_cast<void*>(offsetof(epochnamespace::previewgrid::Vertex, position)));
             glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * static_cast<GLsizei>(sizeof(float)), reinterpret_cast<void*>(3 * sizeof(float)));
+            glVertexAttribPointer(
+                1,
+                3,
+                GL_FLOAT,
+                GL_FALSE,
+                static_cast<GLsizei>(sizeof(epochnamespace::previewgrid::Vertex)),
+                reinterpret_cast<void*>(offsetof(epochnamespace::previewgrid::Vertex, color)));
             glBindVertexArray(0);
 
             state.sceneMvpLoc = glGetUniformLocation(state.sceneShader, "uMvp");
@@ -919,6 +853,7 @@ void main() {
 
         inline void render_scene_preview(
             epochnamespace::openglstate::OpenGL4State& state,
+            core::ScenePreviewMode previewMode,
             int framebufferWidth,
             int framebufferHeight,
             int viewportX,
@@ -926,37 +861,48 @@ void main() {
             int viewportWidth,
             int viewportHeight)
         {
-            if (!ensure_scene_preview_pipeline(state))
-                return;
-
-            static const auto startTime = std::chrono::steady_clock::now();
-            const float timeSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime).count();
             const int glViewportY = (std::max)(0, framebufferHeight - (viewportY + viewportHeight));
-            const float aspect = viewportHeight > 0
-                ? (viewportWidth / static_cast<float>(viewportHeight))
-                : 1.0f;
-
-            const Mat4 model = multiply(rotation_y(timeSeconds * 0.85f), rotation_x(timeSeconds * 0.55f));
-            const Mat4 view = translation(0.0f, 0.0f, -4.0f);
-            const Mat4 projection = perspective(0.95f, aspect, 0.1f, 32.0f);
-            const Mat4 mvp = multiply(projection, multiply(view, model));
 
             glEnable(GL_SCISSOR_TEST);
             glScissor(viewportX, glViewportY, viewportWidth, viewportHeight);
             glViewport(viewportX, glViewportY, viewportWidth, viewportHeight);
-            glClearColor(0.06f, 0.08f, 0.11f, 1.0f);
+            const auto clearColor = epochnamespace::previewgrid::kClearColor;
+            glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            glUseProgram(state.sceneShader);
-            glUniformMatrix4fv(state.sceneMvpLoc, 1, GL_FALSE, mvp.data());
-            glBindVertexArray(state.sceneVao);
-            glEnable(GL_DEPTH_TEST);
-            glDisable(GL_BLEND);
-            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, nullptr);
-            glBindVertexArray(0);
-            glUseProgram(0);
-            glDisable(GL_DEPTH_TEST);
+            if (previewMode == core::ScenePreviewMode::Editor && ensure_scene_preview_pipeline(state))
+            {
+                const auto camera = epochnamespace::previewgrid::kCamera;
+                const float aspect = viewportHeight > 0
+                    ? (viewportWidth / static_cast<float>(viewportHeight))
+                    : 1.0f;
+                const Mat4 proj = epochnamespace::previewgrid::perspective(
+                    camera.fovRadians,
+                    aspect,
+                    camera.nearPlane,
+                    camera.farPlane);
+                const Mat4 view = epochnamespace::previewgrid::look_at(
+                    camera.eye,
+                    camera.target,
+                    camera.up);
+                const Mat4 mvp = epochnamespace::previewgrid::multiply(proj, view);
+
+                glEnable(GL_DEPTH_TEST);
+                glDepthMask(GL_TRUE);
+                glUseProgram(state.sceneShader);
+                glUniformMatrix4fv(state.sceneMvpLoc, 1, GL_FALSE, mvp.data());
+                glBindVertexArray(state.sceneVao);
+                glDrawElements(
+                    GL_LINES,
+                    static_cast<GLsizei>(epochnamespace::previewgrid::grid_indices().size()),
+                    GL_UNSIGNED_INT,
+                    nullptr);
+                glBindVertexArray(0);
+                glUseProgram(0);
+            }
+
             glDisable(GL_SCISSOR_TEST);
+            glDisable(GL_DEPTH_TEST);
             glViewport(0, 0, framebufferWidth, framebufferHeight);
         }
     }
@@ -970,6 +916,14 @@ void main() {
         const std::uintptr_t windowId = ctx->windowData
             ? reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd)
             : 0;
+
+#if defined(_WIN32)
+        const HWND processHwnd = ctx->windowData && ctx->windowData->hwnd
+            ? ctx->windowData->hwnd
+            : glState.hwnd;
+        if (processHwnd && (::IsWindow(processHwnd) == FALSE))
+            return false;
+#endif
 
         diagnostics::FrameTiming frameTimer{ core::ContextType::OpenGL, windowId, "OpenGL" };
 
@@ -1033,7 +987,15 @@ void main() {
             const int viewportY = (std::max)(0, (std::min)(sceneViewport.y, fbH - 1));
             const int viewportWidth = (std::max)(1, (std::min)(sceneViewport.width, fbW - viewportX));
             const int viewportHeight = (std::max)(1, (std::min)(sceneViewport.height, fbH - viewportY));
-            detail::render_scene_preview(glState, fbW, fbH, viewportX, viewportY, viewportWidth, viewportHeight);
+            detail::render_scene_preview(
+                glState,
+                ctx->scene_preview_mode(),
+                fbW,
+                fbH,
+                viewportX,
+                viewportY,
+                viewportWidth,
+                viewportHeight);
         }
         else
         {
@@ -1054,30 +1016,6 @@ void main() {
 
             const bool drained = queue.drain();
 
-#if defined(_WIN32)
-            static thread_local int s_debugFrames = 0;
-            if (s_debugFrames < 8)
-            {
-                unsigned char pixel[4]{ 0, 0, 0, 0 };
-                const int sampleX = (std::max)(0, fbW / 2);
-                const int sampleY = (std::max)(0, fbH / 2);
-                glReadPixels(sampleX, sampleY, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
-                std::ofstream diag("opengl_runtime_diag.txt", std::ios::app);
-                diag
-                    << "[ OpenGL ] - frame hwnd=" << static_cast<void*>(ctx->windowData ? ctx->windowData->hwnd : nullptr)
-                    << " hglrc=" << static_cast<void*>(guard.target().context)
-                    << " fb=" << fbW << "x" << fbH
-                    << " queueDepth=" << depth
-                    << " drained=" << drained
-                    << " centerPixel=("
-                    << static_cast<int>(pixel[0]) << ","
-                    << static_cast<int>(pixel[1]) << ","
-                    << static_cast<int>(pixel[2]) << ","
-                    << static_cast<int>(pixel[3]) << ")"
-                    << "\n";
-                ++s_debugFrames;
-            }
-#endif
         }
 
         PlatformGL::swap_buffers(guard.target());
@@ -1146,16 +1084,8 @@ void main() {
 #endif
     }
 
-#endif // ALMOND_USING_OPENGL
+#endif // EPOCH_USING_OPENGL
 } // namespace epochnamespace::openglcontext
 
 
 #endif
-
-
-
-
-
-
-
-

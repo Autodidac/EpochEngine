@@ -1,10 +1,10 @@
 ﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
+ *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
+ *  Â¦Â¦+--+  Â¦Â¦+---+ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦+--Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦     +Â¦Â¦Â¦Â¦Â¦Â¦+++Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -35,7 +35,7 @@
  //    We only query windows via MultiContextManager APIs.
  //  - Removed non-constant switch case labels for ContextType::Unknown/Noop
  //    because your ContextType in your current modules is not an enum with those
- //    exact enumerators (or theyâ€™re not visible here). Default handles it.
+ //    exact enumerators (or theyÃ¢â‚¬â„¢re not visible here). Default handles it.
  //
 //#include "pch.h"
 
@@ -90,6 +90,8 @@ import aengine.engine_components;
 import aengine.context.multiplexer;
 import aengine.context.type;
 import aengine.core.context;
+import aengine.core.logger;
+import aengine.core.time;
 
 import aengine.gui;
 import aengine.gui.menu;
@@ -111,19 +113,19 @@ import a2048like;
 import asandsim;
 import acellularsim;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import acontext.opengl.context;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 import acontext.softrenderer.context;
 #endif
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import acontext.sdl.context;
 #endif
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 import acontext.sfml.context;
 #endif
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 import acontext.raylib.context;
 import acontext.raylib.state;
 #endif
@@ -150,7 +152,7 @@ namespace epochnamespace::core
         int vulkan_count = 1;
         int opengl_count = 1;
         int software_count = 1;
-        bool parented = (ALMOND_SINGLE_PARENT == 1);
+        bool parented = (EPOCH_SINGLE_PARENT == 1);
     };
 
     [[nodiscard]] inline LegacyLaunchConfig resolve_legacy_launch_config()
@@ -175,15 +177,15 @@ namespace epochnamespace::core
         if (total_requested > 0)
             return cfg;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         cfg.opengl_count = 1;
-#elif defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
+#elif defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
         cfg.vulkan_count = 1;
-#elif defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#elif defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         cfg.sdl_count = 1;
-#elif defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#elif defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         cfg.raylib_count = 1;
-#elif defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#elif defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
         cfg.sfml_count = 1;
 #else
         cfg.software_count = 1;
@@ -243,6 +245,9 @@ namespace epochnamespace::core
 
     namespace engine
     {
+        constexpr std::string_view kEngineLog = "Engine.Runtime";
+        constexpr std::string_view kEditorLog = "Engine.Editor";
+
         template <typename PumpFunc>
         int RunEditorInterfaceLoop(MultiContextManager& mgr, PumpFunc&& pump_events)
         {
@@ -284,7 +289,7 @@ namespace epochnamespace::core
                     return snapshot;
                 };
 
-            std::unordered_map<Context*, std::chrono::steady_clock::time_point> last_frame_times;
+            std::unordered_map<Context*, timing::Clock::time_point> last_frame_times;
             bool running = true;
             std::uint64_t frame_count = 0;
             const std::uint64_t smoke_max_frames = smoke_frame_budget();
@@ -306,8 +311,8 @@ namespace epochnamespace::core
                 mgr.CleanupFinishedWindows();
 
                 auto snapshot = collect_backend_contexts();
-#if !defined(ALMOND_SINGLE_PARENT) || (ALMOND_SINGLE_PARENT == 0)
                 bool any_context_alive = false;
+#if !defined(EPOCH_SINGLE_PARENT) || (EPOCH_SINGLE_PARENT == 0)
                 std::size_t active_context_count = 0;
                 for (auto& [_, contexts] : snapshot)
                 {
@@ -318,7 +323,7 @@ namespace epochnamespace::core
                 }
 
                 bool raylib_close_from_window = false;
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                 {
                     const auto& raylib_state = epochnamespace::raylibstate::s_raylibstate;
                     raylib_close_from_window = raylib_state.running && !raylib_state.renderingActive;
@@ -339,7 +344,7 @@ namespace epochnamespace::core
 
                             bool ctx_running = win->running;
 
-                            const auto now = std::chrono::steady_clock::now();
+                            const auto now = timing::Clock::now();
                             const auto raw = ctx.get();
 
                             float dt = 0.0f;
@@ -368,7 +373,11 @@ namespace epochnamespace::core
                                     active_scene = make_scene();
                                     active_scene->load();
                                     state = EditorSceneState::Game;
-                                    std::cout << "[Editor] Launching " << label << " scene.\n";
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::INFO,
+                                        std::source_location::current(),
+                                        "Launching {} scene.",
+                                        label);
                                 };
 
                             auto launch_requested_game = [&](std::string_view game_id)
@@ -421,6 +430,7 @@ namespace epochnamespace::core
                                 const bool enter_pressed =
                                     epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Enter);
 
+                                ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
                                 ctx->clear_safe();
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                                 const auto editor_frame = epochnamespace::editor_run(ctx);
@@ -428,10 +438,17 @@ namespace epochnamespace::core
                                 switch (editor_frame.command)
                                 {
                                 case epochnamespace::EditorCommand::OpenProject:
-                                    std::cout << "[Editor] Open Project: " << editor_frame.command_argument << "\n";
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::INFO,
+                                        std::source_location::current(),
+                                        "Open Project: {}",
+                                        editor_frame.command_argument);
                                     break;
                                 case epochnamespace::EditorCommand::Settings:
-                                    std::cout << "[Editor] Settings selected.\n";
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::INFO,
+                                        "Settings selected.",
+                                        std::source_location::current());
                                     break;
                                 case epochnamespace::EditorCommand::RunGame:
                                     launch_requested_game(editor_frame.command_argument);
@@ -451,6 +468,7 @@ namespace epochnamespace::core
                             else if (state == EditorSceneState::Game)
                             {
                                 ctx->clear_scene_viewport();
+                                ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
                                 if (active_scene)
                                 {
                                     ctx_running = active_scene->frame(ctx, win);
@@ -482,7 +500,7 @@ namespace epochnamespace::core
                             return ctx_running;
                         };
 
-#if !defined(ALMOND_SINGLE_PARENT) && (ALMOND_SINGLE_PARENT == 1)
+#if !defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
                     if (!contexts.empty())
                     {
                         auto master = contexts.front();
@@ -505,10 +523,10 @@ namespace epochnamespace::core
 #endif
                     if (!running) break;
                 }
-#if !defined(ALMOND_SINGLE_PARENT) || (ALMOND_SINGLE_PARENT == 0)
+#if !defined(EPOCH_SINGLE_PARENT) || (EPOCH_SINGLE_PARENT == 0)
                 if (!any_context_alive)
                 {
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                     if (raylib_close_from_window && active_context_count > 1)
                     {
                         running = true;
@@ -541,27 +559,27 @@ namespace epochnamespace::core
 
                         switch (type)
                         {
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
                         case epochnamespace::core::ContextType::OpenGL:
                             epochnamespace::openglcontext::opengl_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
                         case epochnamespace::core::ContextType::Software:
                             // epochnamespace::anativecontext::softrenderer_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
                         case epochnamespace::core::ContextType::SDL:
                             //  epochnamespace::sdlcontext::sdl_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
                         case epochnamespace::core::ContextType::SFML:
                             epochnamespace::sfmlcontext::sfml_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                         case epochnamespace::core::ContextType::RayLib:
                             epochnamespace::raylibcontext::raylib_cleanup(ctx);
                             break;
@@ -647,7 +665,7 @@ namespace epochnamespace::core
 
             init_menu();
 
-            std::unordered_map<Context*, std::chrono::steady_clock::time_point> last_frame_times;
+            std::unordered_map<Context*, timing::Clock::time_point> last_frame_times;
             bool running = true;
             std::uint64_t frame_count = 0;
             const std::uint64_t smoke_max_frames = smoke_frame_budget();
@@ -669,7 +687,7 @@ namespace epochnamespace::core
                 mgr.CleanupFinishedWindows();
 
                 auto snapshot = collect_backend_contexts();
-#if !defined(ALMOND_SINGLE_PARENT) || (ALMOND_SINGLE_PARENT == 0)
+#if !defined(EPOCH_SINGLE_PARENT) || (EPOCH_SINGLE_PARENT == 0)
                 bool any_context_alive = false;
                 std::size_t active_context_count = 0;
                 for (auto& [_, contexts] : snapshot)
@@ -681,7 +699,7 @@ namespace epochnamespace::core
                 }
 
                 bool raylib_close_from_window = false;
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                 {
                     const auto& raylib_state = epochnamespace::raylibstate::s_raylibstate;
                     raylib_close_from_window = raylib_state.running && !raylib_state.renderingActive;
@@ -703,7 +721,7 @@ namespace epochnamespace::core
 
                             bool ctx_running = win->running;
 
-                            const auto now = std::chrono::steady_clock::now();
+                            const auto now = timing::Clock::now();
                             const auto raw = ctx.get();
 
                             float dt = 0.0f;
@@ -762,6 +780,8 @@ namespace epochnamespace::core
                                 const bool enter_pressed =
                                     epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Enter);
 
+                                ctx->clear_scene_viewport();
+                                ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
                                 ctx->clear_safe();
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                                 auto choice = menu.update_and_draw(ctx, win, dt, up_pressed, down_pressed, left_pressed, right_pressed, enter_pressed);
@@ -795,7 +815,10 @@ namespace epochnamespace::core
                                     else if (*choice == Choice::Cellular)
                                         begin_scene([] { return std::make_unique<epochnamespace::cellularsim::CellularSimScene>(); }, SceneID::Cellular);
                                     else if (*choice == Choice::Settings)
-                                        std::cout << "[Menu] Settings selected.\n";
+                                        logger::get(kEngineLog).log(
+                                            logger::LogLevel::INFO,
+                                            "Menu settings selected.",
+                                            std::source_location::current());
                                     else if (*choice == Choice::Exit)
                                     {
                                         scene_id = SceneID::Exit;
@@ -805,7 +828,7 @@ namespace epochnamespace::core
                                 break;
                             }
 
-							// cascading case to reset to menu after game exit 
+							// cascading case to reset to menu after game exit
                             case SceneID::Snake:
                             case SceneID::Tetris:
                             case SceneID::Pacman:
@@ -846,7 +869,7 @@ namespace epochnamespace::core
                             return ctx_running;
                         };
 
-#if defined(ALMOND_SINGLE_PARENT) && (ALMOND_SINGLE_PARENT == 1)
+#if defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
                     if (!contexts.empty())
                     {
                         auto master = contexts.front();
@@ -869,10 +892,10 @@ namespace epochnamespace::core
 #endif
                     if (!running) break;
                 }
-#if !defined(ALMOND_SINGLE_PARENT) || (ALMOND_SINGLE_PARENT == 0)
+#if !defined(EPOCH_SINGLE_PARENT) || (EPOCH_SINGLE_PARENT == 0)
                 if (!any_context_alive)
                 {
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                     if (raylib_close_from_window && active_context_count > 1)
                     {
                         running = true;
@@ -908,27 +931,27 @@ namespace epochnamespace::core
 
                         switch (type)
                         {
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
                         case epochnamespace::core::ContextType::OpenGL:
                             epochnamespace::openglcontext::opengl_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
                         case epochnamespace::core::ContextType::Software:
                            // epochnamespace::anativecontext::softrenderer_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
                         case epochnamespace::core::ContextType::SDL:
                           //  epochnamespace::sdlcontext::sdl_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
                         case epochnamespace::core::ContextType::SFML:
                             epochnamespace::sfmlcontext::sfml_cleanup(ctx);
                             break;
 #endif
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                         case epochnamespace::core::ContextType::RayLib:
                             epochnamespace::raylibcontext::raylib_cleanup(ctx);
                             break;
@@ -951,13 +974,493 @@ namespace epochnamespace::core
             return 0;
         }
 
+        enum class SessionMode
+        {
+            Editor,
+            Menu,
+            Scene,
+            Exit
+        };
+
+        struct ContextSession
+        {
+            SessionMode mode{ SessionMode::Editor };
+            SessionMode return_mode{ SessionMode::Editor };
+            epochnamespace::menu::MenuOverlay menu{};
+            std::unique_ptr<epochnamespace::scene::Scene> active_scene{};
+            timing::Clock::time_point last_frame{};
+            bool has_last_frame{ false };
+        };
+
+        using ContextGroup = std::pair<
+            epochnamespace::core::ContextType,
+            std::vector<std::shared_ptr<epochnamespace::core::Context>>
+        >;
+
+        [[nodiscard]] std::vector<ContextGroup> collect_backend_contexts_shared()
+        {
+            std::vector<ContextGroup> snapshot;
+
+            {
+                std::shared_lock lock(epochnamespace::core::g_backendsMutex);
+                snapshot.reserve(epochnamespace::core::g_backends.size());
+
+                for (auto& [type, state] : epochnamespace::core::g_backends)
+                {
+                    std::vector<std::shared_ptr<epochnamespace::core::Context>> contexts;
+                    contexts.reserve(1 + state.duplicates.size());
+
+                    if (state.master) contexts.push_back(state.master);
+                    for (auto& dup : state.duplicates) contexts.push_back(dup);
+
+                    snapshot.emplace_back(type, std::move(contexts));
+                }
+            }
+
+            return snapshot;
+        }
+
+        [[nodiscard]] std::unique_ptr<epochnamespace::scene::Scene> make_scene_from_id(std::string_view scene_id)
+        {
+            if (scene_id == "snake")
+                return std::make_unique<epochnamespace::snakelike::SnakeLikeScene>();
+            if (scene_id == "tetris")
+                return std::make_unique<epochnamespace::tetrislike::TetrisLikeScene>();
+            if (scene_id == "frogger")
+                return std::make_unique<epochnamespace::froggerlike::FroggerLikeScene>();
+            if (scene_id == "pacman")
+                return std::make_unique<epochnamespace::pacmanlike::PacmanLikeScene>();
+            if (scene_id == "sokoban")
+                return std::make_unique<epochnamespace::sokobanlike::SokobanLikeScene>();
+            if (scene_id == "bejeweled" || scene_id == "match3")
+                return std::make_unique<epochnamespace::match3like::Match3LikeScene>();
+            if (scene_id == "puzzle" || scene_id == "sliding")
+                return std::make_unique<epochnamespace::slidinglike::SlidingPuzzleLikeScene>();
+            if (scene_id == "minesweep" || scene_id == "minesweeper")
+                return std::make_unique<epochnamespace::minesweeperlike::MinesweeperLikeScene>();
+            if (scene_id == "fourty" || scene_id == "2048")
+                return std::make_unique<epochnamespace::a2048like::A2048LikeScene>();
+            if (scene_id == "sandsim" || scene_id == "sand")
+                return std::make_unique<epochnamespace::sandsim::SandSimScene>();
+            if (scene_id == "cellular" || scene_id == "cell")
+                return std::make_unique<epochnamespace::cellularsim::CellularSimScene>();
+            return {};
+        }
+
+        [[nodiscard]] std::string_view scene_id_from_choice(epochnamespace::menu::Choice choice) noexcept
+        {
+            using Choice = epochnamespace::menu::Choice;
+
+            switch (choice)
+            {
+            case Choice::Snake: return "snake";
+            case Choice::Tetris: return "tetris";
+            case Choice::Pacman: return "pacman";
+            case Choice::Frogger: return "frogger";
+            case Choice::Sokoban: return "sokoban";
+            case Choice::Minesweep: return "minesweep";
+            case Choice::Puzzle: return "puzzle";
+            case Choice::Bejeweled: return "bejeweled";
+            case Choice::Fourty: return "fourty";
+            case Choice::Sandsim: return "sandsim";
+            case Choice::Cellular: return "cellular";
+            case Choice::Settings:
+            case Choice::Exit:
+            default:
+                return {};
+            }
+        }
+
+        void unload_active_scene(ContextSession& session)
+        {
+            if (session.active_scene)
+            {
+                session.active_scene->unload();
+                session.active_scene.reset();
+            }
+        }
+
+        void ensure_menu_initialized(ContextSession& session, const std::shared_ptr<Context>& ctx)
+        {
+            session.menu.set_max_columns(epochnamespace::core::cli::menu_columns);
+            session.menu.initialize(ctx);
+        }
+
+        void reset_to_menu(ContextSession& session, const std::shared_ptr<Context>& ctx)
+        {
+            session.menu.cleanup();
+            ensure_menu_initialized(session, ctx);
+            session.mode = SessionMode::Menu;
+            session.return_mode = SessionMode::Menu;
+        }
+
+        void cleanup_backend_context_shared(epochnamespace::core::ContextType type,
+            std::shared_ptr<epochnamespace::core::Context> ctx)
+        {
+            if (!ctx) return;
+
+            epochnamespace::gui::cleanup_context(ctx.get());
+            epochnamespace::cleanup_chat_context(ctx.get());
+
+            switch (type)
+            {
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+            case epochnamespace::core::ContextType::OpenGL:
+                epochnamespace::openglcontext::opengl_cleanup(ctx);
+                break;
+#endif
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+            case epochnamespace::core::ContextType::Software:
+                break;
+#endif
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+            case epochnamespace::core::ContextType::SDL:
+                break;
+#endif
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
+            case epochnamespace::core::ContextType::SFML:
+                epochnamespace::sfmlcontext::sfml_cleanup(ctx);
+                break;
+#endif
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+            case epochnamespace::core::ContextType::RayLib:
+                epochnamespace::raylibcontext::raylib_cleanup(ctx);
+                break;
+#endif
+            case epochnamespace::core::ContextType::Noop:
+                break;
+            default:
+                break;
+            }
+        }
+
+        template <typename PumpFunc>
+        int RunContextSessionLoop(MultiContextManager& mgr, PumpFunc&& pump_events, SessionMode startup_mode)
+        {
+            std::unordered_map<Context*, ContextSession> sessions;
+            bool running = true;
+            std::uint64_t frame_count = 0;
+            const std::uint64_t smoke_max_frames = smoke_frame_budget();
+            auto pump = std::forward<PumpFunc>(pump_events);
+
+            while (running)
+            {
+                if (frame_count++ >= smoke_max_frames)
+                {
+                    running = false;
+                    break;
+                }
+                if (!pump())
+                {
+                    running = false;
+                    break;
+                }
+
+                mgr.CleanupFinishedWindows();
+
+                auto snapshot = collect_backend_contexts_shared();
+                bool any_context_alive = false;
+#if !defined(EPOCH_SINGLE_PARENT) || (EPOCH_SINGLE_PARENT == 0)
+                std::size_t active_context_count = 0;
+                for (auto& [_, contexts] : snapshot)
+                {
+                    for (auto& ctx : contexts)
+                    {
+                        if (ctx) ++active_context_count;
+                    }
+                }
+
+                bool raylib_close_from_window = false;
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+                {
+                    const auto& raylib_state = epochnamespace::raylibstate::s_raylibstate;
+                    raylib_close_from_window = raylib_state.running && !raylib_state.renderingActive;
+
+                    if (raylib_close_from_window)
+                        epochnamespace::raylibstate::s_raylibstate.renderingActive = false;
+                }
+#endif
+#endif
+
+                for (auto& [type, contexts] : snapshot)
+                {
+                    bool backend_has_live_context = false;
+
+                    for (auto& ctx : contexts)
+                    {
+                        if (!ctx) continue;
+
+                        auto* win = mgr.findWindowByContext(ctx);
+                        if (!win)
+                        {
+                            auto it = sessions.find(ctx.get());
+                            if (it != sessions.end())
+                            {
+                                unload_active_scene(it->second);
+                                it->second.menu.cleanup();
+                                sessions.erase(it);
+                            }
+                            epochnamespace::gui::cleanup_context(ctx.get());
+                            epochnamespace::cleanup_chat_context(ctx.get());
+                            continue;
+                        }
+
+                        auto [it, inserted] = sessions.try_emplace(ctx.get());
+                        auto& session = it->second;
+
+                        if (inserted)
+                        {
+                            session.mode = startup_mode;
+                            session.return_mode = startup_mode;
+                            session.menu.set_max_columns(epochnamespace::core::cli::menu_columns);
+
+                            if (startup_mode == SessionMode::Menu)
+                                ensure_menu_initialized(session, ctx);
+
+                            if (!epochnamespace::core::cli::scene_name.empty())
+                            {
+                                if (auto direct_scene = make_scene_from_id(epochnamespace::core::cli::scene_name))
+                                {
+                                    session.active_scene = std::move(direct_scene);
+                                    session.active_scene->load();
+                                    session.mode = SessionMode::Scene;
+                                    session.return_mode = SessionMode::Exit;
+                                }
+                            }
+                        }
+
+                        const auto now = timing::Clock::now();
+                        float dt = 0.0f;
+                        if (session.has_last_frame)
+                            dt = std::chrono::duration<float>(now - session.last_frame).count();
+                        session.last_frame = now;
+                        session.has_last_frame = true;
+
+                        bool ctx_running = win->running;
+
+                        auto begin_scene = [&](std::string_view scene_id, SessionMode return_mode)
+                        {
+                            auto next_scene = make_scene_from_id(scene_id);
+                            if (!next_scene)
+                                return false;
+
+                            session.menu.cleanup();
+                            unload_active_scene(session);
+                            session.active_scene = std::move(next_scene);
+                            session.active_scene->load();
+                            session.mode = SessionMode::Scene;
+                            session.return_mode = return_mode;
+                            ctx->clear_scene_viewport();
+                            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+                            return true;
+                        };
+
+                        switch (session.mode)
+                        {
+                        case SessionMode::Editor:
+                        {
+                            int mx = 0;
+                            int my = 0;
+                            ctx->get_mouse_position_safe(mx, my);
+
+                            const gui::Vec2 mouse_pos{
+                                static_cast<float>(mx),
+                                static_cast<float>(my)
+                            };
+
+                            const bool mouse_left_down =
+                                epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
+
+                            ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                            ctx->clear_safe();
+                            gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
+                            const auto editor_frame = epochnamespace::editor_run(ctx);
+
+                            switch (editor_frame.command)
+                            {
+                            case epochnamespace::EditorCommand::RunGame:
+                                begin_scene(editor_frame.command_argument, SessionMode::Editor);
+                                break;
+                            case epochnamespace::EditorCommand::Exit:
+                                session.mode = SessionMode::Exit;
+                                ctx_running = false;
+                                win->running = false;
+                                break;
+                            case epochnamespace::EditorCommand::OpenProject:
+                            case epochnamespace::EditorCommand::Settings:
+                            case epochnamespace::EditorCommand::None:
+                            default:
+                                break;
+                            }
+
+                            gui::end_frame();
+                            if (ctx_running)
+                                ctx->present_safe();
+                            break;
+                        }
+
+                        case SessionMode::Menu:
+                        {
+                            ensure_menu_initialized(session, ctx);
+
+                            int mx = 0;
+                            int my = 0;
+                            ctx->get_mouse_position_safe(mx, my);
+
+                            const gui::Vec2 mouse_pos{
+                                static_cast<float>(mx),
+                                static_cast<float>(my)
+                            };
+
+                            const bool mouse_left_down =
+                                epochnamespace::input::mouseDown.test(epochnamespace::input::MouseButton::MouseLeft);
+                            const bool up_pressed =
+                                epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Up);
+                            const bool down_pressed =
+                                epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Down);
+                            const bool left_pressed =
+                                epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Left);
+                            const bool right_pressed =
+                                epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Right);
+                            const bool enter_pressed =
+                                epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Enter);
+
+                            ctx->clear_scene_viewport();
+                            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+                            ctx->clear_safe();
+                            gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
+                            auto choice = session.menu.update_and_draw(
+                                ctx,
+                                win,
+                                dt,
+                                up_pressed,
+                                down_pressed,
+                                left_pressed,
+                                right_pressed,
+                                enter_pressed);
+                            gui::end_frame();
+                            if (ctx_running)
+                                ctx->present_safe();
+
+                            if (choice)
+                            {
+                                if (*choice == epochnamespace::menu::Choice::Exit)
+                                {
+                                    session.mode = SessionMode::Exit;
+                                    ctx_running = false;
+                                    win->running = false;
+                                }
+                                else if (*choice != epochnamespace::menu::Choice::Settings)
+                                {
+                                    const auto scene_id = scene_id_from_choice(*choice);
+                                    if (!scene_id.empty())
+                                        begin_scene(scene_id, SessionMode::Menu);
+                                }
+                            }
+                            break;
+                        }
+
+                        case SessionMode::Scene:
+                        {
+                            ctx->clear_scene_viewport();
+                            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+                            if (session.active_scene)
+                            {
+                                ctx_running = session.active_scene->frame(ctx, win);
+                                if (!ctx_running)
+                                {
+                                    const bool window_closed = !win->running;
+                                    unload_active_scene(session);
+
+                                    if (window_closed || session.return_mode == SessionMode::Exit)
+                                    {
+                                        session.mode = SessionMode::Exit;
+                                        win->running = false;
+                                    }
+                                    else if (session.return_mode == SessionMode::Menu)
+                                    {
+                                        reset_to_menu(session, ctx);
+                                        ctx_running = true;
+                                    }
+                                    else
+                                    {
+                                        session.mode = SessionMode::Editor;
+                                        ctx_running = true;
+                                    }
+                                }
+                            }
+                            else if (session.return_mode == SessionMode::Menu)
+                            {
+                                reset_to_menu(session, ctx);
+                            }
+                            else
+                            {
+                                session.mode = SessionMode::Editor;
+                            }
+                            break;
+                        }
+
+                        case SessionMode::Exit:
+                        default:
+                            ctx_running = false;
+                            win->running = false;
+                            break;
+                        }
+
+                        if (!ctx_running)
+                        {
+                            ctx->clear_scene_viewport();
+                            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+                            unload_active_scene(session);
+                            session.menu.cleanup();
+                            epochnamespace::gui::cleanup_context(ctx.get());
+                            epochnamespace::cleanup_chat_context(ctx.get());
+                            sessions.erase(ctx.get());
+                        }
+                        else
+                        {
+                            backend_has_live_context = true;
+                        }
+                    }
+
+                    if (backend_has_live_context)
+                        any_context_alive = true;
+                }
+
+                if (!any_context_alive)
+                {
+                    running = false;
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            }
+
+            for (auto& [_, session] : sessions)
+            {
+                unload_active_scene(session);
+                session.menu.cleanup();
+            }
+
+            auto snapshot2 = collect_backend_contexts_shared();
+            for (auto& [type, contexts] : snapshot2)
+            {
+                for (auto& ctx : contexts)
+                    cleanup_backend_context_shared(type, ctx);
+            }
+
+            epochnamespace::shutdown_chat_system();
+            mgr.StopAll();
+
+            return 0;
+        }
+
         template <typename PumpFunc>
         int RunEngineMainLoopCommon(MultiContextManager& mgr, PumpFunc&& pump_events)
         {
-            if (epochnamespace::core::cli::run_menu_loop)
-                return RunMenuAndGamesLoop(mgr, std::forward<PumpFunc>(pump_events));
-
-            return RunEditorInterfaceLoop(mgr, std::forward<PumpFunc>(pump_events));
+            const auto startup_mode = epochnamespace::core::cli::run_menu_loop
+                ? SessionMode::Menu
+                : SessionMode::Editor;
+            return RunContextSessionLoop(mgr, std::forward<PumpFunc>(pump_events), startup_mode);
         }
 
 #if defined(_WIN32)
@@ -1053,7 +1556,10 @@ namespace epochnamespace::core
 
                 if (!ok)
                 {
-                    std::cerr << "[Engine] Failed to initialize contexts!\n";
+                    logger::get(kEngineLog).log(
+                        logger::LogLevel::Error,
+                        "Failed to initialize contexts!",
+                        std::source_location::current());
                     return -1;
                 }
 
@@ -1078,7 +1584,10 @@ namespace epochnamespace::core
             }
             catch (const std::exception& ex)
             {
-                std::cerr << "[Engine] " << ex.what() << '\n';
+                logger::get(kEngineLog).log(
+                    logger::LogLevel::Error,
+                    ex.what(),
+                    std::source_location::current());
                 return -1;
             }
         }
@@ -1091,19 +1600,34 @@ namespace epochnamespace::core
         const HINSTANCE instance = GetModuleHandleW(nullptr);
         const int result = engine::RunEngineMainLoopInternal(instance, SW_SHOWNORMAL);
         if (result != 0)
-            std::cerr << "[Engine] RunEngine terminated with code " << result << "\n";
+            logger::get(engine::kEngineLog).logf(
+                logger::LogLevel::Error,
+                std::source_location::current(),
+                "RunEngine terminated with code {}",
+                result);
 #elif defined(__linux__)
         const int result = RunEngineMainLoopLinux();
         if (result != 0)
-            std::cerr << "[Engine] RunEngine terminated with code " << result << "\n";
+            logger::get(engine::kEngineLog).logf(
+                logger::LogLevel::Error,
+                std::source_location::current(),
+                "RunEngine terminated with code {}",
+                result);
 #else
-        std::cerr << "[Engine] RunEngine is not implemented for this platform yet.\n";
+        logger::get(engine::kEngineLog).log(
+            logger::LogLevel::Error,
+            "RunEngine is not implemented for this platform yet.",
+            std::source_location::current());
 #endif
     }
 
     void StartEngine()
     {
-        std::cout << "epochengine Engine v" << epochnamespace::GetEngineVersion() << '\n';
+        logger::get(engine::kEngineLog).logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "epochengine Engine v{}",
+            epochnamespace::GetEngineVersion());
         RunEngine();
     }
 
@@ -1131,7 +1655,10 @@ namespace epochnamespace::core
 
             if (!ok)
             {
-                std::cerr << "[Editor] Failed to initialize contexts!\n";
+                logger::get(engine::kEditorLog).log(
+                    logger::LogLevel::Error,
+                    "Failed to initialize contexts!",
+                    std::source_location::current());
                 return;
             }
 
@@ -1168,9 +1695,13 @@ namespace epochnamespace::core
                     return true;
                 };
 
-            const int result = engine::RunEditorInterfaceLoop(mgr, pump);
+            const int result = engine::RunContextSessionLoop(mgr, pump, engine::SessionMode::Editor);
             if (result != 0)
-                std::cerr << "[Editor] RunEditorInterface terminated with code " << result << "\n";
+                logger::get(engine::kEditorLog).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "RunEditorInterface terminated with code {}",
+                    result);
         }
         catch (const std::exception& ex)
         {
@@ -1196,7 +1727,10 @@ namespace epochnamespace::core
 
             if (!ok)
             {
-                std::cerr << "[Editor] Failed to initialize contexts!\n";
+                logger::get(engine::kEditorLog).log(
+                    logger::LogLevel::Error,
+                    "Failed to initialize contexts!",
+                    std::source_location::current());
                 return;
             }
 
@@ -1217,16 +1751,26 @@ namespace epochnamespace::core
                     return epochnamespace::platform::pump_events();
                 };
 
-            const int result = engine::RunEditorInterfaceLoop(mgr, pump);
+            const int result = engine::RunContextSessionLoop(mgr, pump, engine::SessionMode::Editor);
             if (result != 0)
-                std::cerr << "[Editor] RunEditorInterface terminated with code " << result << "\n";
+                logger::get(engine::kEditorLog).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "RunEditorInterface terminated with code {}",
+                    result);
         }
         catch (const std::exception& ex)
         {
-            std::cerr << "[Editor] " << ex.what() << '\n';
+            logger::get(engine::kEditorLog).log(
+                logger::LogLevel::Error,
+                ex.what(),
+                std::source_location::current());
         }
 #else
-        std::cerr << "[Editor] RunEditorInterface is not implemented for this platform yet.\n";
+        logger::get(engine::kEditorLog).log(
+            logger::LogLevel::Error,
+            "RunEditorInterface is not implemented for this platform yet.",
+            std::source_location::current());
 #endif
     }
 
@@ -1246,7 +1790,10 @@ namespace epochnamespace::core
 #elif defined(__linux__)
             return engine::RunEngineMainLoopLinux();
 #else
-            std::cerr << "[Engine] Legacy bridge runtime is not implemented for this platform yet.\n";
+            logger::get(engine::kEngineLog).log(
+                logger::LogLevel::Error,
+                "Legacy bridge runtime is not implemented for this platform yet.",
+                std::source_location::current());
             return -1;
 #endif
         }
@@ -1268,7 +1815,7 @@ namespace urls
     const std::string binary_url = github_base + owner + repo + "/releases/latest/download/ConsoleApplication1.exe";
 }
 
-#if defined(_WIN32) && defined(ALMOND_USING_WINMAIN)
+#if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
 int WINAPI wWinMain(
     _In_     HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -1324,7 +1871,7 @@ int WINAPI wWinMain(
 
 int main(int argc, char** argv)
 {
-#if defined(_WIN32) && defined(ALMOND_USING_WINMAIN)
+#if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
     return wWinMain(GetModuleHandleW(nullptr), nullptr, GetCommandLineW(), SW_SHOWNORMAL);
 #else
     try
@@ -1358,22 +1905,14 @@ int main(int argc, char** argv)
     }
     catch (const std::exception& ex)
     {
-        std::cerr << "[Fatal] " << ex.what() << '\n';
+        logger::get(engine::kEngineLog).log(
+            logger::LogLevel::Error,
+            ex.what(),
+            std::source_location::current());
         return -1;
     }
 #endif
 }
 
 #endif // !defined(EPOCH_MAIN_IN_MAIN_CPP)
-
-
-
-
-
-
-
-
-
-
-
 

@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -44,7 +44,7 @@ module;
 #   include <GL/glx.h>
 #endif
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 export module aengine.context.multiplexer;
 
@@ -296,4 +296,3 @@ export namespace epochnamespace::core
 
 #endif
 } // namespace epochnamespace::core
-

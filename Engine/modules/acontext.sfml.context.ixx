@@ -420,6 +420,10 @@ export namespace epochnamespace::sfmlcontext
             if (ctx && ctx->windowData)
                 ctx->windowData->set_size(width, height);
 #endif
+
+            // The grid was computed against the placeholder host before SFML swapped in its child HWND.
+            // Trigger one parent relayout so the tracked render HWND lands in the correct dock slot.
+            PostMessage(sfmlcontext.parent, WM_SIZE, 0, MAKELPARAM(width, height));
         }
 #endif
 

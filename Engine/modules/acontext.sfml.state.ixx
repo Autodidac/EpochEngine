@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -41,7 +41,7 @@ module;
 #endif
 
 #include "../include/aengine.hpp"          // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
-#include "../include/aengine.config.hpp"   // ALMOND_USING_* macros
+#include "../include/aengine.config.hpp"   // EPOCH_USING_* macros
 
 // If some include above already pulled windows.h, nuke the macros anyway.
 #if defined(_WIN32)
@@ -54,7 +54,7 @@ module;
 #endif
 
 
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 #define SFML_STATIC
 #include <SFML/Graphics.hpp>
 #endif
@@ -71,7 +71,7 @@ import <functional>;
 
 export namespace epochnamespace::sfmlcontext::state
 {
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
     struct SFML3State
     {
         SFML3State()
@@ -132,5 +132,5 @@ export namespace epochnamespace::sfmlcontext::state
     };
 
     inline SFML3State s_sfmlstate{};
-#endif // ALMOND_USING_SFML
+#endif // EPOCH_USING_SFML
 }

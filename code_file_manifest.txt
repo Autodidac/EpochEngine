@@ -1,304 +1,508 @@
 # Code File Manifest
-# Format: <path>	<description>
+# Format: <path>`t<description>
 
-AlmondShell/build.sh	Shell script for build.
-AlmondShell/clean.sh	Shell script for clean.
-AlmondShell/examples/ConsoleApplication1/assets/vulkan/shaders/frag.glsl	GLSL shader source for frag.
-AlmondShell/examples/ConsoleApplication1/assets/vulkan/shaders/vert.glsl	GLSL shader source for vert.
-AlmondShell/examples/ConsoleApplication1/main.cpp	Example C/C++ source for main.
-AlmondShell/examples/StaticLib1/StaticLib1.cpp	Example C/C++ source for StaticLib1.
-AlmondShell/examples/StaticLib1/framework.h	Source file (.h) for framework.
-AlmondShell/examples/StaticLib1/pch.cpp	Example C/C++ source for pch.
-AlmondShell/examples/StaticLib1/pch.h	Source file (.h) for pch.
-AlmondShell/include/acontext.vulkan.hpp	C++ header for acontext vulkan.
-AlmondShell/include/aengine.config.hpp	C++ header for aengine config.
-AlmondShell/include/aengine.hpp	C++ header for aengine.
-AlmondShell/include/aframework.hpp	C++ header for aframework.
-AlmondShell/install.sh	Shell script for install.
-AlmondShell/modules/a2048like.ixx	C++20 module interface for a2048like.
-AlmondShell/modules/aapplicationmodule.ixx	C++20 module interface for aapplicationmodule.
-AlmondShell/modules/aatlas.manager.ixx	C++20 module interface for aatlas manager.
-AlmondShell/modules/aatlas.texture.ixx	C++20 module interface for aatlas texture.
-AlmondShell/modules/acellularsim.ixx	C++20 module interface for acellularsim.
-AlmondShell/modules/acontext.noop.context.ixx	C++20 module interface for acontext noop context.
-AlmondShell/modules/acontext.opengl.context.ixx	C++20 module interface for acontext opengl context.
-AlmondShell/modules/acontext.opengl.platform.ixx	C++20 module interface for acontext opengl platform.
-AlmondShell/modules/acontext.opengl.quad.ixx	C++20 module interface for acontext opengl quad.
-AlmondShell/modules/acontext.opengl.renderer.ixx	C++20 module interface for acontext opengl renderer.
-AlmondShell/modules/acontext.opengl.state.ixx	C++20 module interface for acontext opengl state.
-AlmondShell/modules/acontext.opengl.textures.ixx	C++20 module interface for acontext opengl textures.
-AlmondShell/modules/acontext.raylib.api.ixx	C++20 module interface for acontext raylib api.
-AlmondShell/modules/acontext.raylib.context.ixx	C++20 module interface for acontext raylib context.
-AlmondShell/modules/acontext.raylib.context.win.ixx	C++20 module interface for acontext raylib context win.
-AlmondShell/modules/acontext.raylib.input.ixx	C++20 module interface for acontext raylib input.
-AlmondShell/modules/acontext.raylib.renderer.ixx	C++20 module interface for acontext raylib renderer.
-AlmondShell/modules/acontext.raylib.state.ixx	C++20 module interface for acontext raylib state.
-AlmondShell/modules/acontext.raylib.textures.ixx	C++20 module interface for acontext raylib textures.
-AlmondShell/modules/acontext.sdl.context.ixx	C++20 module interface for acontext sdl context.
-AlmondShell/modules/acontext.sdl.renderer.ixx	C++20 module interface for acontext sdl renderer.
-AlmondShell/modules/acontext.sdl.state.ixx	C++20 module interface for acontext sdl state.
-AlmondShell/modules/acontext.sdl.textures.ixx	C++20 module interface for acontext sdl textures.
-AlmondShell/modules/acontext.sfml.context.ixx	C++20 module interface for acontext sfml context.
-AlmondShell/modules/acontext.sfml.renderer.ixx	C++20 module interface for acontext sfml renderer.
-AlmondShell/modules/acontext.sfml.state.ixx	C++20 module interface for acontext sfml state.
-AlmondShell/modules/acontext.sfml.textures.ixx	C++20 module interface for acontext sfml textures.
-AlmondShell/modules/acontext.softrenderer.context.ixx	C++20 module interface for acontext softrenderer context.
-AlmondShell/modules/acontext.softrenderer.quad.ixx	C++20 module interface for acontext softrenderer quad.
-AlmondShell/modules/acontext.softrenderer.renderer.ixx	C++20 module interface for acontext softrenderer renderer.
-AlmondShell/modules/acontext.softrenderer.state.ixx	C++20 module interface for acontext softrenderer state.
-AlmondShell/modules/acontext.softrenderer.textures.ixx	C++20 module interface for acontext softrenderer textures.
-AlmondShell/modules/acontext.vulkan.camera.ixx	C++20 module interface for acontext vulkan camera.
-AlmondShell/modules/acontext.vulkan.context-api.ixx	C++20 module interface for acontext vulkan context api.
-AlmondShell/modules/acontext.vulkan.context-api_unit.ixx	C++20 module interface for acontext vulkan context api unit.
-AlmondShell/modules/acontext.vulkan.context-buffers.ixx	C++20 module interface for acontext vulkan context buffers.
-AlmondShell/modules/acontext.vulkan.context-commands.ixx	C++20 module interface for acontext vulkan context commands.
-AlmondShell/modules/acontext.vulkan.context-depth.ixx	C++20 module interface for acontext vulkan context depth.
-AlmondShell/modules/acontext.vulkan.context-descriptor.ixx	C++20 module interface for acontext vulkan context descriptor.
-AlmondShell/modules/acontext.vulkan.context-device.ixx	C++20 module interface for acontext vulkan context device.
-AlmondShell/modules/acontext.vulkan.context-instance.ixx	C++20 module interface for acontext vulkan context instance.
-AlmondShell/modules/acontext.vulkan.context-memory.ixx	C++20 module interface for acontext vulkan context memory.
-AlmondShell/modules/acontext.vulkan.context-renderer.ixx	C++20 module interface for acontext vulkan context renderer.
-AlmondShell/modules/acontext.vulkan.context-runtime.ixx	C++20 module interface for acontext vulkan context runtime.
-AlmondShell/modules/acontext.vulkan.context-shader_pipeline.ixx	C++20 module interface for acontext vulkan context shader pipeline.
-AlmondShell/modules/acontext.vulkan.context-shared_context.ixx	C++20 module interface for acontext vulkan context shared context.
-AlmondShell/modules/acontext.vulkan.context-shared_vk.ixx	C++20 module interface for acontext vulkan context shared vk.
-AlmondShell/modules/acontext.vulkan.context-swapchain.ixx	C++20 module interface for acontext vulkan context swapchain.
-AlmondShell/modules/acontext.vulkan.context-texture.ixx	C++20 module interface for acontext vulkan context texture.
-AlmondShell/modules/acontext.vulkan.context-window.ixx	C++20 module interface for acontext vulkan context window.
-AlmondShell/modules/acontext.vulkan.context.ixx	C++20 module interface for acontext vulkan context.
-AlmondShell/modules/acontext.vulkan.meshcube.ixx	C++20 module interface for acontext vulkan meshcube.
-AlmondShell/modules/acontext.vulkan.platform.device.ixx	C++20 module interface for acontext vulkan platform device.
-AlmondShell/modules/acontext.vulkan.platform.dispatcher.ixx	C++20 module interface for acontext vulkan platform dispatcher.
-AlmondShell/modules/acontext.vulkan.platform.instance.ixx	C++20 module interface for acontext vulkan platform instance.
-AlmondShell/modules/acontext.vulkan.platform.loader.ixx	C++20 module interface for acontext vulkan platform loader.
-AlmondShell/modules/acontext.vulkan.quad.ixx	C++20 module interface for acontext vulkan quad.
-AlmondShell/modules/acontext.vulkan.triangle.ixx	C++20 module interface for acontext vulkan triangle.
-AlmondShell/modules/aecs.components.ixx	C++20 module interface for aecs components.
-AlmondShell/modules/aecs.entitycomponentmanager.ixx	C++20 module interface for aecs entitycomponentmanager.
-AlmondShell/modules/aecs.entityhistory.ixx	C++20 module interface for aecs entityhistory.
-AlmondShell/modules/aecs.internal_private.ixx	C++20 module interface for aecs internal private.
-AlmondShell/modules/aecs.ixx	C++20 module interface for aecs.
-AlmondShell/modules/aecs.storage.ixx	C++20 module interface for aecs storage.
-AlmondShell/modules/aeditor.ixx	C++20 module interface for aeditor.
-AlmondShell/modules/aenduserapplication.ixx	C++20 module interface for aenduserapplication.
-AlmondShell/modules/aengine.bindings.ixx	C++20 module interface for aengine bindings.
-AlmondShell/modules/aengine.cli.ixx	C++20 module interface for aengine cli.
-AlmondShell/modules/aengine.context.commandqueue.ixx	C++20 module interface for aengine context commandqueue.
-AlmondShell/modules/aengine.context.control.ixx	C++20 module interface for aengine context control.
-AlmondShell/modules/aengine.context.multiplexer.ixx	C++20 module interface for aengine context multiplexer.
-AlmondShell/modules/aengine.context.platform.utils.ixx	C++20 module interface for aengine context platform utils.
-AlmondShell/modules/aengine.context.type.ixx	C++20 module interface for aengine context type.
-AlmondShell/modules/aengine.context.window.ixx	C++20 module interface for aengine context window.
-AlmondShell/modules/aengine.core.commandline.ixx	C++20 module interface for aengine core commandline.
-AlmondShell/modules/aengine.core.context.ixx	C++20 module interface for aengine core context.
-AlmondShell/modules/aengine.core.logger.ixx	C++20 module interface for aengine core logger.
-AlmondShell/modules/aengine.core.time.ixx	C++20 module interface for aengine core time.
-AlmondShell/modules/aengine.core.types.ixx	C++20 module interface for aengine core types.
-AlmondShell/modules/aengine.core.utilities.ixx	C++20 module interface for aengine core utilities.
-AlmondShell/modules/aengine.diagnostics.ixx	C++20 module interface for aengine diagnostics.
-AlmondShell/modules/aengine.engine_components.ixx	C++20 module interface for aengine engine components.
-AlmondShell/modules/aengine.event.movement.ixx	C++20 module interface for aengine event movement.
-AlmondShell/modules/aengine.eventsystem.ixx	C++20 module interface for aengine eventsystem.
-AlmondShell/modules/aengine.gui.ixx	C++20 module interface for aengine gui.
-AlmondShell/modules/aengine.gui.menu.ixx	C++20 module interface for aengine gui menu.
-AlmondShell/modules/aengine.handles.ixx	C++20 module interface for aengine handles.
-AlmondShell/modules/aengine.input.ixx	C++20 module interface for aengine input.
-AlmondShell/modules/aengine.platform.ixx	C++20 module interface for aengine platform.
-AlmondShell/modules/aengine.saveload.system.ixx	C++20 module interface for aengine saveload system.
-AlmondShell/modules/aengine.scripting.compiler.ixx	C++20 module interface for aengine scripting compiler.
-AlmondShell/modules/aengine.systems.ixx	C++20 module interface for aengine systems.
-AlmondShell/modules/aengine.taskgraph.dotsystem.ixx	C++20 module interface for aengine taskgraph dotsystem.
-AlmondShell/modules/aengine.telemetry.ixx	C++20 module interface for aengine telemetry.
-AlmondShell/modules/aengine.updater.config.ixx	C++20 module interface for aengine updater config.
-AlmondShell/modules/aengine.updater.ixx	C++20 module interface for aengine updater.
-AlmondShell/modules/aengine.updater.system.ixx	C++20 module interface for aengine updater system.
-AlmondShell/modules/aengine.updater.tools.ixx	C++20 module interface for aengine updater tools.
-AlmondShell/modules/aengine.version.ixx	C++20 module interface for aengine version.
-AlmondShell/modules/aentity.ixx	C++20 module interface for aentity.
-AlmondShell/modules/afont.renderer.ixx	C++20 module interface for afont renderer.
-AlmondShell/modules/aframework.ixx	C++20 module interface for aframework.
-AlmondShell/modules/afroggerlike.ixx	C++20 module interface for afroggerlike.
-AlmondShell/modules/agamecore.ixx	C++20 module interface for agamecore.
-AlmondShell/modules/aimage.loader.ixx	C++20 module interface for aimage loader.
-AlmondShell/modules/aimage.writer.ixx	C++20 module interface for aimage writer.
-AlmondShell/modules/aimageatlaswriter.ixx	C++20 module interface for aimageatlaswriter.
-AlmondShell/modules/almondshell.ixx	C++20 module interface for almondshell.
-AlmondShell/modules/amatch3like.ixx	C++20 module interface for amatch3like.
-AlmondShell/modules/aminesweeperlike.ixx	C++20 module interface for aminesweeperlike.
-AlmondShell/modules/amipmapatlas.ixx	C++20 module interface for amipmapatlas.
-AlmondShell/modules/ampmcboundedqueue.ixx	C++20 module interface for ampmcboundedqueue.
-AlmondShell/modules/anet.ixx	C++20 module interface for anet.
-AlmondShell/modules/aopenglfreetype.ixx	C++20 module interface for aopenglfreetype.
-AlmondShell/modules/aopengltriangle.ixx	C++20 module interface for aopengltriangle.
-AlmondShell/modules/apacmanlike.ixx	C++20 module interface for apacmanlike.
-AlmondShell/modules/aplatformpump.ixx	C++20 module interface for aplatformpump.
-AlmondShell/modules/asandsim.ixx	C++20 module interface for asandsim.
-AlmondShell/modules/ascene.ixx	C++20 module interface for ascene.
-AlmondShell/modules/asceneserializer.ixx	C++20 module interface for asceneserializer.
-AlmondShell/modules/ascenesnapshot.ixx	C++20 module interface for ascenesnapshot.
-AlmondShell/modules/ascripting.system.ixx	C++20 module interface for ascripting system.
-AlmondShell/modules/aslidingpuzzlelike.ixx	C++20 module interface for aslidingpuzzlelike.
-AlmondShell/modules/asnakelike.ixx	C++20 module interface for asnakelike.
-AlmondShell/modules/asokobanlike.ixx	C++20 module interface for asokobanlike.
-AlmondShell/modules/asprite.pool.ixx	C++20 module interface for asprite pool.
-AlmondShell/modules/aspritehandle.ixx	C++20 module interface for aspritehandle.
-AlmondShell/modules/aspriteregistry.ixx	C++20 module interface for aspriteregistry.
-AlmondShell/modules/atetrislike.ixx	C++20 module interface for atetrislike.
-AlmondShell/modules/atexture.ixx	C++20 module interface for atexture.
-AlmondShell/modules/autility.allocator.ixx	C++20 module interface for autility allocator.
-AlmondShell/modules/autility.atomicfunction.ixx	C++20 module interface for autility atomicfunction.
-AlmondShell/modules/autility.codeinspector.ixx	C++20 module interface for autility codeinspector.
-AlmondShell/modules/autility.filewatch.ixx	C++20 module interface for autility filewatch.
-AlmondShell/modules/autility.string.converter.ixx	C++20 module interface for autility string converter.
-AlmondShell/run.sh	Shell script for run.
-AlmondShell/src/WinResource.aps	Visual Studio resource file.
-AlmondShell/src/WinResource.rc	Windows resource script.
-AlmondShell/src/acontext.raylib.bridge.cpp	C/C++ source implementation for acontext raylib bridge.
-AlmondShell/src/acontext.vulkan.context-texture.cpp	C/C++ source implementation for acontext vulkan context texture.
-AlmondShell/src/acontext.vulkan.context_buffers.cpp	C/C++ source implementation for acontext vulkan context buffers.
-AlmondShell/src/acontext.vulkan.dispatch_storage.cpp	C/C++ source implementation for acontext vulkan dispatch storage.
-AlmondShell/src/acontext.vulkan.platform.context.cpp	C/C++ source implementation for acontext vulkan platform context.
-AlmondShell/src/acontext.vulkan.platform.descriptors.cpp	C/C++ source implementation for acontext vulkan platform descriptors.
-AlmondShell/src/aeditor.cpp	C/C++ source implementation for aeditor.
-AlmondShell/src/aengine.context.cpp	C/C++ source implementation for aengine context.
-AlmondShell/src/aengine.context.multiplexer.linux.cpp	C/C++ source implementation for aengine context multiplexer linux.
-AlmondShell/src/aengine.context.multiplexer.win.cpp	C/C++ source implementation for aengine context multiplexer win.
-AlmondShell/src/aengine.cpp	C/C++ source implementation for aengine.
-AlmondShell/src/aengine.gui.cpp	C/C++ source implementation for aengine gui.
-AlmondShell/src/aengine.scripting.compiler.cpp	C/C++ source implementation for aengine scripting compiler.
-AlmondShell/src/afilewatch.cpp	C/C++ source implementation for afilewatch.
-AlmondShell/src/afont.renderer.cpp	C/C++ source implementation for afont renderer.
-AlmondShell/src/pch.h	Source file (.h) for pch.
-AlmondShell/src/renderer_smoke_harness.cpp	C/C++ source implementation for renderer smoke harness.
-AlmondShell/src/resource.h	Source file (.h) for resource.
-AlmondShell/src/scripts/editor_launcher.ascript.cpp	C/C++ source implementation for editor launcher ascript.
-AlmondShell/src/stb/stb_image.h	Source file (.h) for stb image.
-AlmondShell/src/stb/stb_image_write.h	Source file (.h) for stb image write.
-AlmondShell/src/stb/stb_truetype.h	Source file (.h) for stb truetype.
-AlmondShell/third_party/glad/include/KHR/khrplatform.h	C++ header for khrplatform.
-AlmondShell/third_party/glad/include/glad/glad.h	C++ header for glad.
-AlmondShell/third_party/glad/src/glad.c	C/C++ source implementation for glad.
-Tools/almondshell_install_build_tools.ps1	PowerShell script for almondshell install build tools.
-Tools/almondshell_install_gui.ps1	PowerShell script for almondshell install gui.
-Tools/install_build_tools.bat	Batch script for install build tools.
-legacy/include/a2048like.hpp	Legacy C++ header for a2048like.
-legacy/include/aallocator.hpp	Legacy C++ header for aallocator.
-legacy/include/aapplicationmodule.hpp	Legacy C++ header for aapplicationmodule.
-legacy/include/aatlasmanager.hpp	Legacy C++ header for aatlasmanager.
-legacy/include/aatlastexture.hpp	Legacy C++ header for aatlastexture.
-legacy/include/aatomicfunction.hpp	Legacy C++ header for aatomicfunction.
-legacy/include/abuildsystem.hpp	Legacy C++ header for abuildsystem.
-legacy/include/acellularsim.hpp	Legacy C++ header for acellularsim.
-legacy/include/acodeinspector.hpp	Legacy C++ header for acodeinspector.
-legacy/include/acommandline.hpp	Legacy C++ header for acommandline.
-legacy/include/acommandqueue.hpp	Legacy C++ header for acommandqueue.
-legacy/include/acompiler.hpp	Legacy C++ header for acompiler.
-legacy/include/acontext.hpp	Legacy C++ header for acontext.
-legacy/include/acontextcontrol.hpp	Legacy C++ header for acontextcontrol.
-legacy/include/acontextmultiplexer.hpp	Legacy C++ header for acontextmultiplexer.
-legacy/include/acontextrenderer.hpp	Legacy C++ header for acontextrenderer.
-legacy/include/acontextstate.hpp	Legacy C++ header for acontextstate.
-legacy/include/acontexttype.hpp	Legacy C++ header for acontexttype.
-legacy/include/acontextwindow.hpp	Legacy C++ header for acontextwindow.
-legacy/include/adiagnostics.hpp	Legacy C++ header for adiagnostics.
-legacy/include/aecs.hpp	Legacy C++ header for aecs.
-legacy/include/aeditor.hpp	Legacy C++ header for aeditor.
-legacy/include/aenginebindings.hpp	Legacy C++ header for aenginebindings.
-legacy/include/aenginehandles.hpp	Legacy C++ header for aenginehandles.
-legacy/include/aenginesystems.hpp	Legacy C++ header for aenginesystems.
-legacy/include/aentity.hpp	Legacy C++ header for aentity.
-legacy/include/aentitycomponentmanager.hpp	Legacy C++ header for aentitycomponentmanager.
-legacy/include/aentitycomponents.hpp	Legacy C++ header for aentitycomponents.
-legacy/include/aentityhistory.hpp	Legacy C++ header for aentityhistory.
-legacy/include/aeventsystem.hpp	Legacy C++ header for aeventsystem.
-legacy/include/afilewatch.hpp	Legacy C++ header for afilewatch.
-legacy/include/afontrenderer.hpp	Legacy C++ header for afontrenderer.
-legacy/include/afroggerlike.hpp	Legacy C++ header for afroggerlike.
-legacy/include/agamecore.hpp	Legacy C++ header for agamecore.
-legacy/include/agui.hpp	Legacy C++ header for agui.
-legacy/include/aguimenu.hpp	Legacy C++ header for aguimenu.
-legacy/include/aimageatlaswriter.hpp	Legacy C++ header for aimageatlaswriter.
-legacy/include/aimageloader.hpp	Legacy C++ header for aimageloader.
-legacy/include/aimagewriter.hpp	Legacy C++ header for aimagewriter.
-legacy/include/ainput.hpp	Legacy C++ header for ainput.
-legacy/include/almondengine.hpp	Legacy C++ header for almondengine.
-legacy/include/almondshell.hpp	Legacy C++ header for almondshell.
-legacy/include/alogger.hpp	Legacy C++ header for alogger.
-legacy/include/amatch3like.hpp	Legacy C++ header for amatch3like.
-legacy/include/aminesweeperlike.hpp	Legacy C++ header for aminesweeperlike.
-legacy/include/amipmapatlas.hpp	Legacy C++ header for amipmapatlas.
-legacy/include/amovementevent.hpp	Legacy C++ header for amovementevent.
-legacy/include/ampmcboundedqueue.hpp	Legacy C++ header for ampmcboundedqueue.
-legacy/include/anet.hpp	Legacy C++ header for anet.
-legacy/include/anoheapguard.hpp	Legacy C++ header for anoheapguard.
-legacy/include/anoopcontext.hpp	Legacy C++ header for anoopcontext.
-legacy/include/aopenglcontext.hpp	Legacy C++ header for aopenglcontext.
-legacy/include/aopenglfreetype.hpp	Legacy C++ header for aopenglfreetype.
-legacy/include/aopenglplatform.hpp	Legacy C++ header for aopenglplatform.
-legacy/include/aopenglquad.hpp	Legacy C++ header for aopenglquad.
-legacy/include/aopenglrenderer.hpp	Legacy C++ header for aopenglrenderer.
-legacy/include/aopenglstate.hpp	Legacy C++ header for aopenglstate.
-legacy/include/aopengltextures.hpp	Legacy C++ header for aopengltextures.
-legacy/include/aopengltriangle.hpp	Legacy C++ header for aopengltriangle.
-legacy/include/apacmanlike.hpp	Legacy C++ header for apacmanlike.
-legacy/include/aplatform.hpp	Legacy C++ header for aplatform.
-legacy/include/aplatformpump.hpp	Legacy C++ header for aplatformpump.
-legacy/include/araylibcontext.hpp	Legacy C++ header for araylibcontext.
-legacy/include/araylibcontextinput.hpp	Legacy C++ header for araylibcontextinput.
-legacy/include/araylibrenderer.hpp	Legacy C++ header for araylibrenderer.
-legacy/include/araylibstate.hpp	Legacy C++ header for araylibstate.
-legacy/include/araylibtextures.hpp	Legacy C++ header for araylibtextures.
-legacy/include/arobusttime.hpp	Legacy C++ header for arobusttime.
-legacy/include/asandsim.hpp	Legacy C++ header for asandsim.
-legacy/include/asaveloadsystem.hpp	Legacy C++ header for asaveloadsystem.
-legacy/include/ascene.hpp	Legacy C++ header for ascene.
-legacy/include/asceneserializer.hpp	Legacy C++ header for asceneserializer.
-legacy/include/ascenesnapshot.hpp	Legacy C++ header for ascenesnapshot.
-legacy/include/ascriptingsystem.hpp	Legacy C++ header for ascriptingsystem.
-legacy/include/asdlcontext.hpp	Legacy C++ header for asdlcontext.
-legacy/include/asdlcontextrenderer.hpp	Legacy C++ header for asdlcontextrenderer.
-legacy/include/asdlstate.hpp	Legacy C++ header for asdlstate.
-legacy/include/asdltextures.hpp	Legacy C++ header for asdltextures.
-legacy/include/asfmlcontext.hpp	Legacy C++ header for asfmlcontext.
-legacy/include/asfmlrenderer.hpp	Legacy C++ header for asfmlrenderer.
-legacy/include/asfmlstate.hpp	Legacy C++ header for asfmlstate.
-legacy/include/asfmltextures.hpp	Legacy C++ header for asfmltextures.
-legacy/include/aslidingpuzzlelike.hpp	Legacy C++ header for aslidingpuzzlelike.
-legacy/include/asnakelike.hpp	Legacy C++ header for asnakelike.
-legacy/include/asoftrenderer_context.hpp	Legacy C++ header for asoftrenderer context.
-legacy/include/asoftrenderer_quad.hpp	Legacy C++ header for asoftrenderer quad.
-legacy/include/asoftrenderer_renderer.hpp	Legacy C++ header for asoftrenderer renderer.
-legacy/include/asoftrenderer_state.hpp	Legacy C++ header for asoftrenderer state.
-legacy/include/asoftrenderer_textures.hpp	Legacy C++ header for asoftrenderer textures.
-legacy/include/asokobanlike.hpp	Legacy C++ header for asokobanlike.
-legacy/include/aspritehandle.hpp	Legacy C++ header for aspritehandle.
-legacy/include/aspritepool.hpp	Legacy C++ header for aspritepool.
-legacy/include/aspriteregistry.hpp	Legacy C++ header for aspriteregistry.
-legacy/include/astringconverter.hpp	Legacy C++ header for astringconverter.
-legacy/include/ataskgraphwithdot.hpp	Legacy C++ header for ataskgraphwithdot.
-legacy/include/atetrislike.hpp	Legacy C++ header for atetrislike.
-legacy/include/atexture.hpp	Legacy C++ header for atexture.
-legacy/include/atypes.hpp	Legacy C++ header for atypes.
-legacy/include/atypesposix.hpp	Legacy C++ header for atypesposix.
-legacy/include/atypeswin32.hpp	Legacy C++ header for atypeswin32.
-legacy/include/aupdateconfig.hpp	Legacy C++ header for aupdateconfig.
-legacy/include/autilities.hpp	Legacy C++ header for autilities.
-legacy/include/aversion.hpp	Legacy C++ header for aversion.
-legacy/include/avulkanglfwsetup.hpp	Legacy C++ header for avulkanglfwsetup.
-legacy/include/avulkanquad.hpp	Legacy C++ header for avulkanquad.
-legacy/include/avulkanrenderer.hpp	Legacy C++ header for avulkanrenderer.
-legacy/include/avulkanshaderpipeline.hpp	Legacy C++ header for avulkanshaderpipeline.
-legacy/include/avulkanswapchain.hpp	Legacy C++ header for avulkanswapchain.
-legacy/include/avulkantexture.hpp	Legacy C++ header for avulkantexture.
-legacy/include/avulkantriangle.hpp	Legacy C++ header for avulkantriangle.
-legacy/include/awindowdata.hpp	Legacy C++ header for awindowdata.
-legacy/src/acompiler.cpp	Legacy C/C++ source implementation for acompiler.
-legacy/src/acontext.cpp	Legacy C/C++ source implementation for acontext.
-legacy/src/acontextmultiplexer_linux.cpp	Legacy C/C++ source implementation for acontextmultiplexer linux.
-legacy/src/aeditor.cpp	Legacy C/C++ source implementation for aeditor.
-legacy/src/afilewatch.cpp	Legacy C/C++ source implementation for afilewatch.
-legacy/src/afontrenderer.cpp	Legacy C/C++ source implementation for afontrenderer.
-legacy/src/agui.cpp	Legacy C/C++ source implementation for agui.
-legacy/src/amodelloader.hpp	Source file (.hpp) for amodelloader.
-legacy/src/aopenglplatform_linux.cpp	Legacy C/C++ source implementation for aopenglplatform linux.
-legacy/src/ascriptingsystem.cpp	Legacy C/C++ source implementation for ascriptingsystem.
+.gitattributes	Git attributes.
+.gitignore	Git ignore rules.
+Changes/changelog.txt	Text documentation.
+Changes/release_notes_v0.62.1.md	Markdown documentation.
+Changes/release_notes_v0.62.7.md	Markdown documentation.
+Changes/release_notes_v0.70.0.md	Markdown documentation.
+Changes/release_notes_v0.70.4.md	Markdown documentation.
+Changes/release_notes_v0.71.0.md	Markdown documentation.
+Changes/release_notes_v0.72.5.md	Markdown documentation.
+Changes/release_notes_v0.72.6.md	Markdown documentation.
+Changes/release_notes_v0.72.7.md	Markdown documentation.
+Changes/release_notes_v0.72.8.md	Markdown documentation.
+Changes/release_notes_v0.72.9.md	Markdown documentation.
+Changes/release_notes_v0.81.23.md	Markdown documentation.
+Changes/release_notes_v0.82.001.md	Markdown documentation.
+Changes/roadmap.txt	Text documentation.
+code_file_manifest.txt	Text documentation.
+cpp.md	Markdown documentation.
+Engine.sln	Visual Studio solution.
+Engine/.vscode/c_cpp_properties.json	JSON metadata.
+Engine/.vscode/cmake-kits.json	JSON metadata.
+Engine/.vscode/launch.json	JSON metadata.
+Engine/.vscode/settings.json	JSON metadata.
+Engine/.vscode/tasks.json	JSON metadata.
+Engine/assets/vulkan/shaders/frag.glsl	GLSL shader source.
+Engine/assets/vulkan/shaders/frag.spv	SPIR-V shader binary.
+Engine/assets/vulkan/shaders/gui_frag.glsl	GLSL shader source.
+Engine/assets/vulkan/shaders/gui_frag.spv	SPIR-V shader binary.
+Engine/assets/vulkan/shaders/gui_vert.glsl	GLSL shader source.
+Engine/assets/vulkan/shaders/gui_vert.spv	SPIR-V shader binary.
+Engine/assets/vulkan/shaders/vert.glsl	GLSL shader source.
+Engine/assets/vulkan/shaders/vert.spv	SPIR-V shader binary.
+Engine/assets/vulkan/texture.jpg	Project file.
+Engine/assets/vulkan/texture.ppm	PPM image asset.
+Engine/build.sh	Shell script.
+Engine/clean.sh	Shell script.
+Engine/CMakeLists.txt	Text documentation.
+Engine/CMakePresets.json	JSON metadata.
+Engine/docs/aengineconfig_flags.md	Markdown documentation.
+Engine/docs/build_presets.md	Markdown documentation.
+Engine/docs/build_scripts.md	Markdown documentation.
+Engine/docs/context_audit.md	Markdown documentation.
+Engine/docs/engine_analysis.md	Markdown documentation.
+Engine/docs/file_structure.txt	Text documentation.
+Engine/docs/filelist.txt	Text documentation.
+Engine/docs/legacy linuxdoc.txt	Text documentation.
+Engine/docs/legacy_archive.md	Markdown documentation.
+Engine/docs/menu_overlay_backend_audit.md	Markdown documentation.
+Engine/docs/README.md	Markdown documentation.
+Engine/docs/renderer_regression_plan.md	Markdown documentation.
+Engine/docs/runtime_operations.md	Markdown documentation.
+Engine/docs/tools_list.md	Markdown documentation.
+Engine/docs/wsl_vcpkg_setup.md	Markdown documentation.
+Engine/Doxyfile	Doxygen configuration.
+Engine/Engine.vcxitems	MSVC shared items project.
+Engine/Engine.vcxitems.filters	MSVC filters file.
+Engine/Engine.vcxitems.user	Local project settings.
+Engine/examples/ConsoleApplication1/assets/defaults/epoch.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/defaults/default.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/defaults/epoch.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/defaults/yellow.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/fonts/OFL.txt	Text documentation.
+Engine/examples/ConsoleApplication1/assets/fonts/Roboto-Regular.ttf	Project file.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/1024.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/128.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/16.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/2.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/2048.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/256.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/32.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/4.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/512.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/6.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/64.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/8.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/a2048like/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/acellularsim/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/acellularsim/cell_alive.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/acellularsim/cell_dead.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/afroggerlike/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/afroggerlike/car.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/afroggerlike/frog.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/afroggerlike/log.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/afroggerlike/water.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/afroggerlike/watrer.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/amatch3like/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/amatch3like/gem0.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/amatch3like/gem1.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/amatch3like/gem2.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/amatch3like/gem3.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/amatch3like/gem4.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/amatch3like/gem5.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/apacmanlike/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/apacmanlike/ghost.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/apacmanlike/pacman.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/apacmanlike/pellet.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/apacmanlike/wall.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asandsim/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asandsim/sand.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asandsim/stone.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asandsim/water.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/aslidingpuzzlelike/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/aslidingpuzzlelike/empty.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/aslidingpuzzlelike/tile.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asnakelike/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asnakelike/body.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asnakelike/food.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asnakelike/head.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asnakelike/tongue_down.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asnakelike/tongue_left.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asnakelike/tongue_right.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asnakelike/tongue_up.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asokobanlike/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asokobanlike/box.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asokobanlike/floor.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asokobanlike/goal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asokobanlike/player.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/asokobanlike/wall.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/atestimage.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/atetrislike/atestimage.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/atetrislike/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/atetrislike/tetrino.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/0.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/1.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/2.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/3.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/4.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/5.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/6.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/7.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/8.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/bg.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/covered.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/games/minesweeperlike/mine.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/2048buttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/2048buttonNormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/cellularbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/cellularbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/match3buttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/match3buttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/menubuttonatlas.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/menubuttonatlas.tga	Project file.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/menubuttons.tga	Project file.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/minesweeperbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/minesweeperbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/pacmanbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/pacmanbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/quitbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/quitbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/README.md	Markdown documentation.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/sandbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/sandbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/settingsbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/settingsbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/slidingpuzzlebuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/slidingpuzzlebuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/snakebuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/snakebuttonNormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/sokobanbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/sokobanbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/tetrisbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/legacy_menu_atlas/tetrisbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/2048buttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/2048buttonNormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/cellularbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/cellularbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/match3buttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/match3buttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/menubuttonatlas.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/menubuttonatlas.tga	Project file.
+Engine/examples/ConsoleApplication1/assets/menu/menubuttons.tga	Project file.
+Engine/examples/ConsoleApplication1/assets/menu/minesweeperbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/minesweeperbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/pacmanbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/pacmanbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/quitbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/quitbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/sandbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/sandbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/settingsbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/settingsbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/slidingpuzzlebuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/slidingpuzzlebuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/snakebuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/snakebuttonNormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/sokobanbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/sokobanbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/tetrisbuttonhover.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/menu/tetrisbuttonnormal.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/not used/default.bmp	Project file.
+Engine/examples/ConsoleApplication1/assets/not used/default_button.png	PNG image asset.
+Engine/examples/ConsoleApplication1/assets/not used/exit_button.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/not used/exit_highlight_button.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/not used/highlight_button.png	PNG image asset.
+Engine/examples/ConsoleApplication1/assets/not used/snake_button.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/not used/snake_highlight_button.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/assets/not used/snakegamebutton.png	PNG image asset.
+Engine/examples/ConsoleApplication1/assets/not used/snakegamebuttonhovered.png	PNG image asset.
+Engine/examples/ConsoleApplication1/assets/vulkan/shaders/frag.glsl	GLSL shader source.
+Engine/examples/ConsoleApplication1/assets/vulkan/shaders/frag.spv	SPIR-V shader binary.
+Engine/examples/ConsoleApplication1/assets/vulkan/shaders/gui_frag.glsl	GLSL shader source.
+Engine/examples/ConsoleApplication1/assets/vulkan/shaders/gui_frag.spv	SPIR-V shader binary.
+Engine/examples/ConsoleApplication1/assets/vulkan/shaders/gui_vert.glsl	GLSL shader source.
+Engine/examples/ConsoleApplication1/assets/vulkan/shaders/gui_vert.spv	SPIR-V shader binary.
+Engine/examples/ConsoleApplication1/assets/vulkan/shaders/vert.glsl	GLSL shader source.
+Engine/examples/ConsoleApplication1/assets/vulkan/shaders/vert.spv	SPIR-V shader binary.
+Engine/examples/ConsoleApplication1/assets/vulkan/texture.jpg	Project file.
+Engine/examples/ConsoleApplication1/assets/vulkan/texture.ppm	PPM image asset.
+Engine/examples/ConsoleApplication1/ConsoleApplication1.vcxproj	MSVC project file.
+Engine/examples/ConsoleApplication1/ConsoleApplication1.vcxproj.filters	MSVC filters file.
+Engine/examples/ConsoleApplication1/ConsoleApplication1.vcxproj.user	Local project settings.
+Engine/examples/ConsoleApplication1/main.cpp	C/C++ source implementation.
+Engine/examples/ConsoleApplication1/opengl_runtime_diag.txt	Text documentation.
+Engine/examples/ConsoleApplication1/vulkan_runtime_diag.txt	Text documentation.
+Engine/examples/StaticLib1/framework.h	C/C++ header.
+Engine/examples/StaticLib1/pch.cpp	C/C++ source implementation.
+Engine/examples/StaticLib1/pch.h	C/C++ header.
+Engine/examples/StaticLib1/StaticLib1.cpp	C/C++ source implementation.
+Engine/examples/StaticLib1/StaticLib1.vcxproj	MSVC project file.
+Engine/examples/StaticLib1/StaticLib1.vcxproj.filters	MSVC filters file.
+Engine/examples/StaticLib1/StaticLib1.vcxproj.user	Local project settings.
+Engine/include/_epoch.stl_types.hpp	C++ header.
+Engine/include/acontext.vulkan.hpp	C++ header.
+Engine/include/aengine.config.hpp	C++ header.
+Engine/include/aengine.hpp	C++ header.
+Engine/include/aframework.hpp	C++ header.
+Engine/include/app_api.h	C/C++ header.
+Engine/include/epoch.api_types.hpp	C++ header.
+Engine/include/epoch.common.hpp	C++ header.
+Engine/include/epoch.config.hpp	C++ header.
+Engine/include/main.h	C/C++ header.
+Engine/install.sh	Shell script.
+Engine/modules/a2048like.ixx	C++20 module interface.
+Engine/modules/aapplicationmodule.ixx	C++20 module interface.
+Engine/modules/aatlas.manager.ixx	C++20 module interface.
+Engine/modules/aatlas.texture.ixx	C++20 module interface.
+Engine/modules/acellularsim.ixx	C++20 module interface.
+Engine/modules/acontext.noop.context.ixx	C++20 module interface.
+Engine/modules/acontext.opengl.context.ixx	C++20 module interface.
+Engine/modules/acontext.opengl.platform.ixx	C++20 module interface.
+Engine/modules/acontext.opengl.quad.ixx	C++20 module interface.
+Engine/modules/acontext.opengl.renderer.ixx	C++20 module interface.
+Engine/modules/acontext.opengl.state.ixx	C++20 module interface.
+Engine/modules/acontext.opengl.textures.ixx	C++20 module interface.
+Engine/modules/acontext.raylib.api.ixx	C++20 module interface.
+Engine/modules/acontext.raylib.context.ixx	C++20 module interface.
+Engine/modules/acontext.raylib.context.win.ixx	C++20 module interface.
+Engine/modules/acontext.raylib.input.ixx	C++20 module interface.
+Engine/modules/acontext.raylib.renderer.ixx	C++20 module interface.
+Engine/modules/acontext.raylib.state.ixx	C++20 module interface.
+Engine/modules/acontext.raylib.textures.ixx	C++20 module interface.
+Engine/modules/acontext.sdl.context.ixx	C++20 module interface.
+Engine/modules/acontext.sdl.renderer.ixx	C++20 module interface.
+Engine/modules/acontext.sdl.state.ixx	C++20 module interface.
+Engine/modules/acontext.sdl.textures.ixx	C++20 module interface.
+Engine/modules/acontext.sfml.context.ixx	C++20 module interface.
+Engine/modules/acontext.sfml.renderer.ixx	C++20 module interface.
+Engine/modules/acontext.sfml.state.ixx	C++20 module interface.
+Engine/modules/acontext.sfml.textures.ixx	C++20 module interface.
+Engine/modules/acontext.softrenderer.context.ixx	C++20 module interface.
+Engine/modules/acontext.softrenderer.quad.ixx	C++20 module interface.
+Engine/modules/acontext.softrenderer.renderer.ixx	C++20 module interface.
+Engine/modules/acontext.softrenderer.state.ixx	C++20 module interface.
+Engine/modules/acontext.softrenderer.textures.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.camera.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-api.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-api_unit.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-buffers.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-commands.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-depth.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-descriptor.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-device.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-instance.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-memory.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-renderer.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-runtime.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-shader_pipeline.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-shared_context.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-shared_vk.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-swapchain.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-texture.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.context-window.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.meshcube.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.platform.device.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.platform.dispatcher.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.platform.instance.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.platform.loader.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.quad.ixx	C++20 module interface.
+Engine/modules/acontext.vulkan.triangle.ixx	C++20 module interface.
+Engine/modules/aecs.components.ixx	C++20 module interface.
+Engine/modules/aecs.entitycomponentmanager.ixx	C++20 module interface.
+Engine/modules/aecs.entityhistory.ixx	C++20 module interface.
+Engine/modules/aecs.internal_private.ixx	C++20 module interface.
+Engine/modules/aecs.ixx	C++20 module interface.
+Engine/modules/aecs.storage.ixx	C++20 module interface.
+Engine/modules/aeditor.ixx	C++20 module interface.
+Engine/modules/aenduserapplication.ixx	C++20 module interface.
+Engine/modules/aengine.bindings.ixx	C++20 module interface.
+Engine/modules/aengine.cli.ixx	C++20 module interface.
+Engine/modules/aengine.context.commandqueue.ixx	C++20 module interface.
+Engine/modules/aengine.context.control.ixx	C++20 module interface.
+Engine/modules/aengine.context.multiplexer.ixx	C++20 module interface.
+Engine/modules/aengine.context.platform.utils.ixx	C++20 module interface.
+Engine/modules/aengine.context.type.ixx	C++20 module interface.
+Engine/modules/aengine.context.window.ixx	C++20 module interface.
+Engine/modules/aengine.core.commandline.ixx	C++20 module interface.
+Engine/modules/aengine.core.context.ixx	C++20 module interface.
+Engine/modules/aengine.core.logger.ixx	C++20 module interface.
+Engine/modules/aengine.core.time.ixx	C++20 module interface.
+Engine/modules/aengine.core.types.ixx	C++20 module interface.
+Engine/modules/aengine.core.utilities.ixx	C++20 module interface.
+Engine/modules/aengine.diagnostics.ixx	C++20 module interface.
+Engine/modules/aengine.engine_components.ixx	C++20 module interface.
+Engine/modules/aengine.event.movement.ixx	C++20 module interface.
+Engine/modules/aengine.eventsystem.ixx	C++20 module interface.
+Engine/modules/aengine.gui.ixx	C++20 module interface.
+Engine/modules/aengine.gui.menu.ixx	C++20 module interface.
+Engine/modules/aengine.handles.ixx	C++20 module interface.
+Engine/modules/aengine.input.ixx	C++20 module interface.
+Engine/modules/aengine.platform.ixx	C++20 module interface.
+Engine/modules/aengine.saveload.system.ixx	C++20 module interface.
+Engine/modules/aengine.scripting.compiler.ixx	C++20 module interface.
+Engine/modules/aengine.systems.ixx	C++20 module interface.
+Engine/modules/aengine.taskgraph.dotsystem.ixx	C++20 module interface.
+Engine/modules/aengine.telemetry.ixx	C++20 module interface.
+Engine/modules/aengine.updater.config.ixx	C++20 module interface.
+Engine/modules/aengine.updater.ixx	C++20 module interface.
+Engine/modules/aengine.updater.system.ixx	C++20 module interface.
+Engine/modules/aengine.updater.tools.ixx	C++20 module interface.
+Engine/modules/aengine.version.ixx	C++20 module interface.
+Engine/modules/aentity.ixx	C++20 module interface.
+Engine/modules/afont.renderer.ixx	C++20 module interface.
+Engine/modules/aframework.ixx	C++20 module interface.
+Engine/modules/afroggerlike.ixx	C++20 module interface.
+Engine/modules/agamecore.ixx	C++20 module interface.
+Engine/modules/aimage.loader.ixx	C++20 module interface.
+Engine/modules/aimage.writer.ixx	C++20 module interface.
+Engine/modules/aimageatlaswriter.ixx	C++20 module interface.
+Engine/modules/almondshell.ixx	C++20 module interface.
+Engine/modules/amatch3like.ixx	C++20 module interface.
+Engine/modules/aminesweeperlike.ixx	C++20 module interface.
+Engine/modules/amipmapatlas.ixx	C++20 module interface.
+Engine/modules/ampmcboundedqueue.ixx	C++20 module interface.
+Engine/modules/anet.ixx	C++20 module interface.
+Engine/modules/aopenglfreetype.ixx	C++20 module interface.
+Engine/modules/aopengltriangle.ixx	C++20 module interface.
+Engine/modules/apacmanlike.ixx	C++20 module interface.
+Engine/modules/aplatformpump.ixx	C++20 module interface.
+Engine/modules/asandsim.ixx	C++20 module interface.
+Engine/modules/ascene.ixx	C++20 module interface.
+Engine/modules/asceneserializer.ixx	C++20 module interface.
+Engine/modules/ascenesnapshot.ixx	C++20 module interface.
+Engine/modules/ascripting.system.ixx	C++20 module interface.
+Engine/modules/aslidingpuzzlelike.ixx	C++20 module interface.
+Engine/modules/asnakelike.ixx	C++20 module interface.
+Engine/modules/asokobanlike.ixx	C++20 module interface.
+Engine/modules/asprite.pool.ixx	C++20 module interface.
+Engine/modules/aspritehandle.ixx	C++20 module interface.
+Engine/modules/aspriteregistry.ixx	C++20 module interface.
+Engine/modules/atetrislike.ixx	C++20 module interface.
+Engine/modules/atexture.ixx	C++20 module interface.
+Engine/modules/autility.allocator.ixx	C++20 module interface.
+Engine/modules/autility.atomicfunction.ixx	C++20 module interface.
+Engine/modules/autility.codeinspector.ixx	C++20 module interface.
+Engine/modules/autility.filewatch.ixx	C++20 module interface.
+Engine/modules/autility.string.converter.ixx	C++20 module interface.
+Engine/modules/core.assert.ixx	C++20 module interface.
+Engine/modules/core.env.ixx	C++20 module interface.
+Engine/modules/core.error.ixx	C++20 module interface.
+Engine/modules/core.format.ixx	C++20 module interface.
+Engine/modules/core.id.ixx	C++20 module interface.
+Engine/modules/core.log.ixx	C++20 module interface.
+Engine/modules/core.math.ixx	C++20 module interface.
+Engine/modules/core.path.ixx	C++20 module interface.
+Engine/modules/core.string.ixx	C++20 module interface.
+Engine/modules/core.time.ixx	C++20 module interface.
+Engine/modules/epoch.ai.ixx	C++20 module interface.
+Engine/modules/epoch.assets.streaming.ixx	C++20 module interface.
+Engine/modules/epoch.ecs.ixx	C++20 module interface.
+Engine/modules/epoch.engine.ixx	C++20 module interface.
+Engine/modules/epoch.events.ixx	C++20 module interface.
+Engine/modules/epoch.perf.select.ixx	C++20 module interface.
+Engine/modules/epoch.perf.tier.ixx	C++20 module interface.
+Engine/modules/epoch.platform.budgets.ixx	C++20 module interface.
+Engine/modules/epoch.platform.capabilities.ixx	C++20 module interface.
+Engine/modules/epoch.platform.context.ixx	C++20 module interface.
+Engine/modules/epoch.platform.window.ixx	C++20 module interface.
+Engine/modules/epoch.render.preview_grid.ixx	C++20 module interface.
+Engine/modules/epoch.render.bindings.ixx	C++20 module interface.
+Engine/modules/epoch.render.device.ixx	C++20 module interface.
+Engine/modules/epoch.render.device.null.ixx	C++20 module interface.
+Engine/modules/epoch.render.graph.ixx	C++20 module interface.
+Engine/modules/epoch.render.streaming.feedback.ixx	C++20 module interface.
+Engine/modules/epoch.render.visibility.ixx	C++20 module interface.
+Engine/modules/epoch.systems.ixx	C++20 module interface.
+Engine/modules/epochengine.ixx	C++20 module interface.
+Engine/modules/runtime.ixx	C++20 module interface.
+Engine/run.sh	Shell script.
+Engine/src/acontext.raylib.bridge.cpp	C/C++ source implementation.
+Engine/src/acontext.vulkan.context_buffers.cpp	C/C++ source implementation.
+Engine/src/acontext.vulkan.context-texture.cpp	C/C++ source implementation.
+Engine/src/acontext.vulkan.dispatch_storage.cpp	C/C++ source implementation.
+Engine/src/acontext.vulkan.platform.context.cpp	C/C++ source implementation.
+Engine/src/acontext.vulkan.platform.descriptors.cpp	C/C++ source implementation.
+Engine/src/aeditor.cpp	C/C++ source implementation.
+Engine/src/aeditor.scene.cpp	C/C++ source implementation.
+Engine/src/aengine.context.cpp	C/C++ source implementation.
+Engine/src/aengine.context.multiplexer.linux.cpp	C/C++ source implementation.
+Engine/src/aengine.context.multiplexer.win.cpp	C/C++ source implementation.
+Engine/src/aengine.cpp	C/C++ source implementation.
+Engine/src/aengine.gui.cpp	C/C++ source implementation.
+Engine/src/aengine.scripting.compiler.cpp	C/C++ source implementation.
+Engine/src/afilewatch.cpp	C/C++ source implementation.
+Engine/src/afont.renderer.cpp	C/C++ source implementation.
+Engine/src/ai/ai_bot.hpp	C++ header.
+Engine/src/ai/ai_service.hpp	C++ header.
+Engine/src/ai/ai_types.hpp	C++ header.
+Engine/src/core.assert.cpp	C/C++ source implementation.
+Engine/src/core.env.cpp	C/C++ source implementation.
+Engine/src/core.error.cpp	C/C++ source implementation.
+Engine/src/core.id.cpp	C/C++ source implementation.
+Engine/src/core.log.cpp	C/C++ source implementation.
+Engine/src/core.math.cpp	C/C++ source implementation.
+Engine/src/core.path.cpp	C/C++ source implementation.
+Engine/src/core.string.cpp	C/C++ source implementation.
+Engine/src/core.time.cpp	C/C++ source implementation.
+Engine/src/epoch.ai.cpp	C/C++ source implementation.
+Engine/src/epoch.engine.cpp	C/C++ source implementation.
+Engine/src/epoch.headers.cpp	C/C++ source implementation.
+Engine/src/epoch.platform.context.cpp	C/C++ source implementation.
+Engine/src/epoch.platform.window.cpp	C/C++ source implementation.
+Engine/src/epoch.render.graph.cpp	C/C++ source implementation.
+Engine/src/epoch.systems.cpp	C/C++ source implementation.
+Engine/src/icon.ico	Icon asset.
+Engine/src/main.cpp	C/C++ source implementation.
+Engine/src/pch.h	C/C++ header.
+Engine/src/renderer_smoke_harness.cpp	C/C++ source implementation.
+Engine/src/resource.h	C/C++ header.
+Engine/src/runtime.cpp	C/C++ source implementation.
+Engine/src/scripts/editor_launcher.ascript.cpp	C/C++ source implementation.
+Engine/src/scripts/editor_launcher.exp	Project file.
+Engine/src/stb/stb_image.h	C/C++ header.
+Engine/src/stb/stb_image_write.h	C/C++ header.
+Engine/src/stb/stb_truetype.h	C/C++ header.
+Engine/src/WinResource.aps	Visual Studio resource file.
+Engine/src/WinResource.rc	Windows resource script.
+Engine/third_party/glad/include/glad/glad.h	C/C++ header.
+Engine/third_party/glad/include/KHR/khrplatform.h	C/C++ header.
+Engine/third_party/glad/LICENSE	Project file.
+Engine/third_party/glad/src/glad.c	C source implementation.
+Engine/unix/images/ArchOptions.gif	Project file.
+Engine/unix/images/ChangeRemote.gif	Project file.
+Engine/unix/images/debuggerexport.png	PNG image asset.
+Engine/unix/images/firstconnection.png	PNG image asset.
+Engine/unix/images/linker.png	PNG image asset.
+Engine/unix/images/ManageConnections.gif	Project file.
+Engine/unix/images/OutputTypes.gif	Project file.
+Engine/unix/images/postbuild.png	PNG image asset.
+Engine/unix/readme.html	Project file.
+Engine/unix/stylesheet.css	Project file.
+Engine/vcpkg.json	JSON metadata.
+Images/567.jpg	Project file.
+Images/appsetting.jpg	Project file.
+legacy/include/aallocator.hpp	C++ header.
+legacy/include/aapplicationmodule.hpp	C++ header.
+legacy/include/abuildsystem.hpp	C++ header.
+legacy/include/acodeinspector.hpp	C++ header.
+legacy/include/acompiler.hpp	C++ header.
+legacy/include/aenginebindings.hpp	C++ header.
+legacy/include/aenginehandles.hpp	C++ header.
+legacy/include/aentity.hpp	C++ header.
+legacy/include/afilewatch.hpp	C++ header.
+legacy/include/agamecore.hpp	C++ header.
+legacy/include/aimagewriter.hpp	C++ header.
+legacy/include/amipmapatlas.hpp	C++ header.
+legacy/include/amovementevent.hpp	C++ header.
+legacy/include/ampmcboundedqueue.hpp	C++ header.
+legacy/include/anet.hpp	C++ header.
+legacy/include/anoopcontext.hpp	C++ header.
+legacy/include/aplatform.hpp	C++ header.
+legacy/include/aplatformpump.hpp	C++ header.
+legacy/include/arobusttime.hpp	C++ header.
+legacy/include/asaveloadsystem.hpp	C++ header.
+legacy/include/ascene.hpp	C++ header.
+legacy/include/asceneserializer.hpp	C++ header.
+legacy/include/ascenesnapshot.hpp	C++ header.
+legacy/include/ascriptingsystem.hpp	C++ header.
+legacy/include/astringconverter.hpp	C++ header.
+legacy/include/ataskgraphwithdot.hpp	C++ header.
+legacy/include/autilities.hpp	C++ header.
+legacy/src/acompiler.cpp	C/C++ source implementation.
+legacy/src/acontextmultiplexer_linux.cpp	C/C++ source implementation.
+legacy/src/afilewatch.cpp	C/C++ source implementation.
+legacy/src/amodelloader.hpp	C++ header.
+legacy/src/aopenglplatform_linux.cpp	C/C++ source implementation.
+legacy/src/ascriptingsystem.cpp	C/C++ source implementation.
+LICENSE	Project file.
+README.md	Markdown documentation.
+Tools/epoch_install_build_tools.ps1	PowerShell script.
+Tools/epoch_install_gui.ps1	PowerShell script.
+Tools/howtouse.txt	Text documentation.
+Tools/install_build_tools.bat	Batch script.
+zip_snapshot.bat	Batch script.

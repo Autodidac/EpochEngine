@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -39,8 +39,8 @@ module;
 #   endif
 #endif
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
@@ -50,7 +50,7 @@ module;
 
 export module acontext.vulkan.platform.device;
 
-#if ALMOND_VULKAN_CUSTOM_LOADER
+#if EPOCH_VULKAN_CUSTOM_LOADER
 import acontext.vulkan.platform.dispatcher;
 
 export namespace epochnamespace::vulkancontext::platform
@@ -83,4 +83,3 @@ export namespace epochnamespace::vulkancontext::platform
     // Custom loader disabled: no device entry points are exported.
 }
 #endif
-

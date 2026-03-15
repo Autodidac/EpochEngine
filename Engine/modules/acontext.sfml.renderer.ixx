@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -34,7 +34,7 @@ module;
 
 export module acontext.sfml.renderer;
 
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 
 export namespace epochnamespace::sfmlcontext
 {

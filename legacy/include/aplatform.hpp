@@ -1,13 +1,13 @@
 /**************************************************************
- *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
- *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
- *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
- *  ██╔══██║██║     ██║╚██╔╝██║ ██║   ██║██║╚██╗██║██║  ██║   *
- *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
- *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
+ *   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•—     â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ•—    â–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—    *
+ *  â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â–ˆâ–ˆâ–ˆâ–ˆâ•”â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â–ˆâ–ˆâ•— â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘ â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘ â•šâ•â• â–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘ â•šâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•   *
+ *  â•šâ•â•  â•šâ•â•â•šâ•â•â•â•â•â•â•â•šâ•â•     â•šâ•â•  â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•â•â•šâ•â•â•â•â•â•    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -30,9 +30,9 @@
 // Force the project to use the traditional header-based includes instead of
 // attempting to import modules guarded by __cpp_modules feature detection.
 // This keeps builds consistent across toolchains that do not ship the
-// module interfaces referenced in other AlmondShell headers.
-#ifndef ALMOND_FORCE_LEGACY_HEADERS
-#define ALMOND_FORCE_LEGACY_HEADERS 1
+// module interfaces referenced in other Epoch headers.
+#ifndef EPOCH_FORCE_LEGACY_HEADERS
+#define EPOCH_FORCE_LEGACY_HEADERS 1
 #endif
 
 // Use classic headers instead of importing the C++ standard library module.
@@ -47,12 +47,12 @@
 //#include <ctime>
 
 // Maintain compatibility with legacy code that referenced the old
-// `almondshell` namespace name while the project now uses
-// `almondnamespace`. Use a namespace alias instead of a macro so tools
+// `Epoch` namespace name while the project now uses
+// `epochnamespace`. Use a namespace alias instead of a macro so tools
 // and modules see the real namespace and avoid accidental token
 // replacement that can break builds.
-namespace almondnamespace { }
-namespace almondshell = almondnamespace;
+namespace epochnamespace { }
+namespace Epoch = epochnamespace;
 
 // API Visibility Macros
 #ifdef _WIN32
@@ -83,17 +83,17 @@ namespace almondshell = almondnamespace;
 #endif
 
 #ifdef _WIN32
-#ifndef ALMOND_MAIN_HEADLESS
+#ifndef EPOCH_MAIN_HEADLESS
 #include <shellscalingapi.h>  // For GetDpiForMonitor
 #pragma comment(lib, "Shcore.lib")
 #include <CommCtrl.h>
 #pragma comment(lib, "comctl32.lib")
-#endif // !ALMOND_MAIN_HEADLESS
+#endif // !EPOCH_MAIN_HEADLESS
 
 // <ctime> (via <time.h>) on MSVC defines a macro named `time` that collides with
-// our `almondnamespace::time` namespace. Undefine it after the Windows headers so
+// our `epochnamespace::time` namespace. Undefine it after the Windows headers so
 // nested namespace usage stays intact.
 #ifdef time
 #undef time
-#endif // !ALMOND_MAIN_HEADLESS
+#endif // !EPOCH_MAIN_HEADLESS
 #endif

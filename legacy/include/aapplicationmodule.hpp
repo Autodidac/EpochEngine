@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -26,7 +26,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace almondnamespace {
+namespace epochnamespace {
     // ─── Contract ────────────────────────────────────────────────────────────────
     struct application_module {
         void (*init)    () noexcept = nullptr;
@@ -49,15 +49,15 @@ namespace almondnamespace {
         }
     };
 
-} // namespace almondnamespace
+} // namespace epochnamespace
 
 // ─── Sugar: declare an application module in one shot ───────────────────────
-#define ALMOND_APPLICATION_MODULE(NAME)                                      \
+#define EPOCH_APPLICATION_MODULE(NAME)                                      \
     static void NAME##_init    () noexcept;                                  \
     static void NAME##_update  (float) noexcept;                             \
     static void NAME##_shutdown() noexcept;                                  \
-    static almondnamespace::application_module NAME##_desc {                 \
+    static epochnamespace::application_module NAME##_desc {                 \
         &NAME##_init, &NAME##_update, &NAME##_shutdown                       \
     };                                                                       \
-    static almondnamespace::_module_registrar NAME##_auto { &NAME##_desc };  \
-    static void NAME##_init() noexcept                                       
+    static epochnamespace::_module_registrar NAME##_auto { &NAME##_desc };  \
+    static void NAME##_init() noexcept

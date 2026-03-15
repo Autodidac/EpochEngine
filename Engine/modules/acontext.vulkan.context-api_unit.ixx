@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -31,8 +31,8 @@
 
 module;
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 export module acontext.vulkan.context;
@@ -42,6 +42,7 @@ import :shared_vk; // brings in per-context Application registry helpers
 import :texture;
 
 import aengine.core.context;
+import aengine.core.logger;
 import aengine.diagnostics;
 import aengine.telemetry;
 import aatlas.manager;
@@ -57,11 +58,14 @@ import <fstream>;
 import <stdexcept>;
 import <utility>;
 import <memory>;
+import <source_location>;
 import <iostream>;
 import <span>;
 
 export namespace epochnamespace::vulkancontext
 {
+    inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
+
     void vulkan_draw_sprite(
         SpriteHandle sprite,
         std::span<const TextureAtlas* const> atlases,
@@ -115,7 +119,7 @@ export namespace epochnamespace::vulkancontext
 
         void* nativeWindow = parentWindowOpaque;
 
-#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
         if (ctx->windowData && ctx->windowData->hwnd)
             nativeWindow = ctx->windowData->hwnd;
         else if (ctx->get_hwnd())
@@ -149,8 +153,10 @@ export namespace epochnamespace::vulkancontext
         app.initWindow();
         app.initVulkan();
 
-        //vulkan_initialize
-		std::cout << "[ Vulkan ] - Initialized successfully.\n";
+        logger::get(kLogSys).log(
+            logger::LogLevel::INFO,
+            "Initialized successfully.",
+            std::source_location::current());
 
         ctx->draw_sprite = &vulkan_draw_sprite;
 
@@ -164,13 +170,6 @@ export namespace epochnamespace::vulkancontext
     {
         if (!ctx)
             return false;
-
-        {
-            std::ofstream diag("vulkan_runtime_diag.txt", std::ios::app);
-            diag << "[ Vulkan ] - api_process hwnd=" << static_cast<void*>(ctx->windowData ? ctx->windowData->hwnd : nullptr)
-                 << " queueDepth=" << queue.depth()
-                 << "\n";
-        }
 
         const std::uintptr_t windowId = ctx->windowData
             ? reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd)
@@ -240,5 +239,3 @@ export namespace epochnamespace::vulkancontext
             atlasmanager::unregister_backend_uploader(core::ContextType::Vulkan);
     }
 }
-
-

@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -21,12 +21,12 @@
  *   See LICENSE file for full terms.                         *
  *                                                            *
  **************************************************************/
-// almond_allocator.hpp ‑ functional, header‑only C++20
+// EPOCH_allocator.hpp ‑ functional, header‑only C++20
 // -----------------------------------------------------
 //  ▸ linear_arena  : bump‑pointer scratch allocator
 //  ▸ block_pool    : fixed‑block freelist allocator
 //
-//  All interfaces are free functions in almondnamespace::mem.
+//  All interfaces are free functions in epochnamespace::mem.
 //  Plug into std containers via <memory_resource>.
 #pragma once
 
@@ -37,7 +37,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace almondnamespace::mem {
+namespace epochnamespace::mem {
 
     // ─────────────────────────────────────────────────────────────────────────────
     // helpers

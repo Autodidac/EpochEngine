@@ -57,6 +57,8 @@ ninja.zip
 *.idb
 *.log
 *.tlog
+Tools/epoch_install.log
+Tools/epoch_install.log
 Engine/examples/ConsoleApplication1/atlas_dump/
 
 Engine/bin/

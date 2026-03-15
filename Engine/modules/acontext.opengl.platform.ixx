@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -31,9 +31,9 @@
 module;
 
 // Global module fragment: macros + native headers only.
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 
 #if defined(_WIN32)
@@ -68,7 +68,7 @@ module;
 
 #endif
 
-#endif // ALMOND_USING_OPENGL
+#endif // EPOCH_USING_OPENGL
 
 export module acontext.opengl.platform;
 
@@ -78,7 +78,7 @@ import <ranges>;
 import <utility>;
 import <algorithm>;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 export namespace epochnamespace::openglcontext::PlatformGL
 {
@@ -299,4 +299,4 @@ export namespace epochnamespace::openglcontext::PlatformGL
     };
 }
 
-#endif // ALMOND_USING_OPENGL
+#endif // EPOCH_USING_OPENGL

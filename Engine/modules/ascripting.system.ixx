@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -201,7 +201,7 @@ export namespace epochnamespace::scripting
     // Keep this inside the module with a single definition across TUs.
     // In a module interface, inline variables are the safe pattern.
 #ifdef _WIN32
-#ifndef ALMOND_MAIN_HEADLESS
+#ifndef EPOCH_MAIN_HEADLESS
     inline HMODULE lastLib = nullptr;
 #else
     inline void* lastLib = nullptr;
@@ -237,7 +237,7 @@ export namespace epochnamespace::scripting
             if (lastLib)
             {
 #ifdef _WIN32
-#ifndef ALMOND_MAIN_HEADLESS
+#ifndef EPOCH_MAIN_HEADLESS
                 FreeLibrary(lastLib);
 #endif
 #else
@@ -266,7 +266,7 @@ export namespace epochnamespace::scripting
             }
 
 #ifdef _WIN32
-#ifndef ALMOND_MAIN_HEADLESS
+#ifndef EPOCH_MAIN_HEADLESS
             lastLib = LoadLibraryA(dllPath.string().c_str());
             if (!lastLib)
             {
@@ -291,7 +291,7 @@ export namespace epochnamespace::scripting
 
             report.dllLoaded.store(true, std::memory_order_relaxed);
 
-#ifndef ALMOND_MAIN_HEADLESS
+#ifndef EPOCH_MAIN_HEADLESS
             if (!entry)
             {
                 const std::string message = "[script] Missing run_script symbol in: " + dllPath.string();

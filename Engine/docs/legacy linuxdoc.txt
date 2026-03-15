@@ -40,7 +40,7 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=path/to/vcpkg/scripts/buildsystems/vc
 
 ### ✅ **Step 4: Prep module-capable compilers**
 
-AlmondShell's build requires a Modules TS-capable compiler so BMI files are emitted correctly:
+Epoch's build requires a Modules TS-capable compiler so BMI files are emitted correctly:
 
 - **clang 17+** – Tested with `-fmodules-ts` enabled.
 - **GCC 14+** – Tested with `-fmodules-ts` enabled.
@@ -105,11 +105,11 @@ cmake -B build -S .
 cmake --build build
 ```
 
-When configuring AlmondShell directly, prefer the Ninja generator and enable module scanning so CMake emits BMI rules:
+When configuring Epoch directly, prefer the Ninja generator and enable module scanning so CMake emits BMI rules:
 
 ```bash
 rm -rf build
-cmake -S AlmondShell -B build -G Ninja -DCMAKE_CXX_STANDARD=23 -DCMAKE_CXX_SCAN_FOR_MODULES=ON
+cmake -S Epoch -B build -G Ninja -DCMAKE_CXX_STANDARD=23 -DCMAKE_CXX_SCAN_FOR_MODULES=ON
 cmake --build build
 ```
 

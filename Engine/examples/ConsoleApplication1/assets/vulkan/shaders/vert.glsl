@@ -10,11 +10,10 @@ layout(binding = 0) uniform UBO {
     mat4 proj;
 } ubo;
 
-layout(location = 0) out vec2 fragUV;
-layout(location = 1) out vec3 fragNormal;
+layout(location = 0) out vec3 fragColor;
 
 void main() {
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPos, 1.0);
-    fragUV = inUV;
-    fragNormal = inNormal;
+    vec4 worldPos = ubo.model * vec4(inPos, 1.0);
+    gl_Position = ubo.proj * ubo.view * worldPos;
+    fragColor = inNormal;
 }

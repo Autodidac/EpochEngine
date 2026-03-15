@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -29,15 +29,15 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include <fstream> // Add this include to resolve incomplete type "std::ifstream" error  
-#include <sstream> // Add this include for std::istringstream  
-#include <algorithm> // Add this include for std::replace  
+#include <fstream> // Add this include to resolve incomplete type "std::ifstream" error
+#include <sstream> // Add this include for std::istringstream
+#include <algorithm> // Add this include for std::replace
 #include <unordered_map>
 
-namespace almondnamespace {
+namespace epochnamespace {
 
     // Pure CPU-side mesh data (no GL types)
-    struct MeshData 
+    struct MeshData
     {
         std::vector<float> positions;  // x,y,z triples
         std::vector<float> normals;    // x,y,z triples
@@ -67,7 +67,7 @@ namespace almondnamespace {
     private:
         std::unordered_map<std::string, std::unique_ptr<ModelData>> m_cache;
 
-        void loadOBJ(const std::string& filepath, ModelData& model) 
+        void loadOBJ(const std::string& filepath, ModelData& model)
         {
             // Simple CPU-only OBJ parse: fill MeshData.positions, normals, uvs, indices
             std::ifstream file(filepath);
@@ -137,9 +137,9 @@ namespace almondnamespace {
     }
 
     // Register model API on Context (CPU-only signatures)
-    inline void register_model_api(std::shared_ptr<almondnamespace::core::Context> ctx) {
+    inline void register_model_api(std::shared_ptr<epochnamespace::core::Context> ctx) {
         ctx->add_model = &add_model_thunk;
         // drawing and GL integration lives in aopenglcontext.hpp
     }
 
-} // namespace almondnamespace
+} // namespace epochnamespace

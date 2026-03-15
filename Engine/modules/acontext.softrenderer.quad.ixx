@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -32,7 +32,7 @@
 
 module;
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 export module acontext.softrenderer.quad;
 
@@ -46,7 +46,7 @@ import aatlas.texture;                 // TextureAtlas
 
 export namespace epochnamespace::anativecontext
 {
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
 
     export int clamp_int(int v, int lo, int hi) noexcept
@@ -155,5 +155,5 @@ export namespace epochnamespace::anativecontext
         draw_textured_quad(backend, *tex, 0, 0, backend.srState.width, backend.srState.height);
     }
 
-#endif // ALMOND_USING_SOFTWARE_RENDERER
+#endif // EPOCH_USING_SOFTWARE_RENDERER
 } // namespace epochnamespace::anativecontext

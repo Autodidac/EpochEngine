@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -34,7 +34,7 @@
 //#elif defined(__linux__)
 //    #include <X11/Xlib.h>      // ensure you link -lX11
 //#if defined(__linux__)
-//namespace almondnamespace::core
+//namespace epochnamespace::core
 //{
 //    void HandleX11Configure(::Window window, int width, int height);
 //}
@@ -47,11 +47,11 @@
 //    #error "Unsupported platform for pump_events"
 //#endif
 //
-//namespace almondnamespace::platform
+//namespace epochnamespace::platform
 //{
 //    bool pump_events_impl();
 //
-//#ifndef ALMOND_PLATFORM_PUMP_DECLARE_ONLY
+//#ifndef EPOCH_PLATFORM_PUMP_DECLARE_ONLY
 //    inline bool pump_events()  // Returns false if the user closed the window / requested quit
 //    {
 //        return pump_events_impl();
@@ -63,8 +63,8 @@
 //    inline bool pump_events_impl()  // Returns false if the user closed the window / requested quit
 //    {
 //#if defined(_WIN32)
-//#ifndef ALMOND_MAIN_HEADLESS
-//#ifndef ALMOND_USING_RAYLIB
+//#ifndef EPOCH_MAIN_HEADLESS
+//#ifndef EPOCH_USING_RAYLIB
 //
 //        MSG msg;
 //        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -75,12 +75,12 @@
 //        }
 //
 //        // 🔑 After dispatching, update global input states
-//     //   almondnamespace::input::poll_input();
+//     //   epochnamespace::input::poll_input();
 //
 //        return true;
 //
-//#endif // !ALMOND_USING_RAYLIB
-//#endif // !ALMOND_MAIN_HEADLESS
+//#endif // !EPOCH_USING_RAYLIB
+//#endif // !EPOCH_MAIN_HEADLESS
 //
 //#elif defined(__APPLE__) && defined(__MACH__)
 //        @autoreleasepool{
@@ -95,28 +95,28 @@
 //            }
 //        }
 //
-//        almondnamespace::input::poll_input(); // macOS stub version
+//        epochnamespace::input::poll_input(); // macOS stub version
 //
 //        return true;
-//    
+//
 //#elif defined(__linux__)
-//        //namespace almondnamespace::platform {
+//        //namespace epochnamespace::platform {
 //            extern Display* global_display;
 //            extern ::Window global_window;
 //        //}
 //
-//        //using almondnamespace::platform::global_display;
-//        //using almondnamespace::platform::global_window;
+//        //using epochnamespace::platform::global_display;
+//        //using epochnamespace::platform::global_window;
 //
-//        namespace core = almondnamespace::core;
+//        namespace core = epochnamespace::core;
 //
 //        if (global_display)
 //        {
-//            almondnamespace::input::poll_input(global_display, global_window);
+//            epochnamespace::input::poll_input(global_display, global_window);
 //        }
 //        else
 //        {
-//            almondnamespace::input::poll_input(nullptr, 0);
+//            epochnamespace::input::poll_input(nullptr, 0);
 //        }
 //
 //        bool keepRunning = true;
@@ -134,29 +134,29 @@
 //            case KeyPress:
 //            {
 //                KeySym sym = XLookupKeysym(&ev.xkey, 0);
-//                auto key = almondnamespace::input::map_keysym_to_key(sym);
-//                almondnamespace::input::handle_key_event(key, true);
+//                auto key = epochnamespace::input::map_keysym_to_key(sym);
+//                epochnamespace::input::handle_key_event(key, true);
 //                break;
 //            }
 //            case KeyRelease:
 //            {
 //                KeySym sym = XLookupKeysym(&ev.xkey, 0);
-//                auto key = almondnamespace::input::map_keysym_to_key(sym);
-//                almondnamespace::input::handle_key_event(key, false);
+//                auto key = epochnamespace::input::map_keysym_to_key(sym);
+//                epochnamespace::input::handle_key_event(key, false);
 //                break;
 //            }
 //
 //            case ButtonPress:
 //            {
-//                almondnamespace::input::handle_mouse_motion(ev.xbutton.x, ev.xbutton.y, false);
+//                epochnamespace::input::handle_mouse_motion(ev.xbutton.x, ev.xbutton.y, false);
 //
 //                switch (ev.xbutton.button)
 //                {
 //                case Button4:
-//                    almondnamespace::input::handle_mouse_wheel(1);
+//                    epochnamespace::input::handle_mouse_wheel(1);
 //                    break;
 //                case Button5:
-//                    almondnamespace::input::handle_mouse_wheel(-1);
+//                    epochnamespace::input::handle_mouse_wheel(-1);
 //                    break;
 //#ifdef Button6
 //                case Button6:
@@ -167,8 +167,8 @@
 //                    break; // Horizontal scroll not yet surfaced
 //                default:
 //                {
-//                    auto btn = almondnamespace::input::map_button_to_mousebutton(ev.xbutton.button);
-//                    almondnamespace::input::handle_mouse_button_event(btn, true);
+//                    auto btn = epochnamespace::input::map_button_to_mousebutton(ev.xbutton.button);
+//                    epochnamespace::input::handle_mouse_button_event(btn, true);
 //                    break;
 //                }
 //                }
@@ -176,26 +176,26 @@
 //            }
 //            case ButtonRelease:
 //            {
-//                almondnamespace::input::handle_mouse_motion(ev.xbutton.x, ev.xbutton.y, false);
+//                epochnamespace::input::handle_mouse_motion(ev.xbutton.x, ev.xbutton.y, false);
 //
-//                auto btn = almondnamespace::input::map_button_to_mousebutton(ev.xbutton.button);
-//                almondnamespace::input::handle_mouse_button_event(btn, false);
+//                auto btn = epochnamespace::input::map_button_to_mousebutton(ev.xbutton.button);
+//                epochnamespace::input::handle_mouse_button_event(btn, false);
 //                break;
 //            }
 //
 //            case MotionNotify:
-//                almondnamespace::input::handle_mouse_motion(ev.xmotion.x, ev.xmotion.y, false);
+//                epochnamespace::input::handle_mouse_motion(ev.xmotion.x, ev.xmotion.y, false);
 //                break;
 //
 //            case EnterNotify:
 //                global_window = ev.xcrossing.window;
-//                almondnamespace::input::handle_mouse_motion(ev.xcrossing.x, ev.xcrossing.y, false);
+//                epochnamespace::input::handle_mouse_motion(ev.xcrossing.x, ev.xcrossing.y, false);
 //                break;
 //
 //            case LeaveNotify:
 //                if (global_window == ev.xcrossing.window)
 //                {
-//                    almondnamespace::input::handle_mouse_motion(-1, -1, false);
+//                    epochnamespace::input::handle_mouse_motion(-1, -1, false);
 //                }
 //                break;
 //
@@ -239,7 +239,7 @@
 //        while (ALooper_pollAll(0, nullptr, &events, (void**)&source) >= 0) {
 //            if (source) source->process(global_android_app, source);
 //        }
-//        // TODO: integrate Android key/touch input → almondnamespace::input
+//        // TODO: integrate Android key/touch input → epochnamespace::input
 //        return !global_android_app->destroyRequested;
 //
 //#elif defined(__EMSCRIPTEN__)
@@ -250,4 +250,4 @@
 //        return true;  // Fallback
 //    }
 //
-//} // namespace almondnamespace::platform
+//} // namespace epochnamespace::platform

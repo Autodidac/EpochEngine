@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -23,16 +23,16 @@
  **************************************************************/
 #pragma once
 
-#include "aplatform.hpp"   // must always come first  
+#include "aplatform.hpp"   // must always come first
 
 import ascene;
 
 #include <chrono>
 #include <memory>
 
-namespace almondnamespace 
+namespace epochnamespace
 {
-    struct SceneSnapshot 
+    struct SceneSnapshot
     {
         float timeStamp = 0;
         std::unique_ptr<Scene> currentState;
@@ -49,4 +49,4 @@ namespace almondnamespace
         SceneSnapshot(SceneSnapshot&&) noexcept = default;
         SceneSnapshot& operator=(SceneSnapshot&&) noexcept = default;
     };
-} // namespace almond
+} // namespace epoch

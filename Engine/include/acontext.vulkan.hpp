@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -45,7 +45,7 @@
 //     Define it in exactly ONE TU (see src/acontext.vulkan.platform.context.cpp).
 // ============================================================================
 
-#if defined(ALMOND_USING_VULKAN)
+#if defined(EPOCH_USING_VULKAN)
 
 #  if defined(_WIN32)
 #    ifndef VK_USE_PLATFORM_WIN32_KHR
@@ -73,8 +73,8 @@
 #    define VULKAN_HPP_ASSERT_ON_RESULT(...) ((void)0)
 #  endif
 
-#  ifndef ALMOND_VULKAN_CUSTOM_LOADER
-#    define ALMOND_VULKAN_CUSTOM_LOADER 1
+#  ifndef EPOCH_VULKAN_CUSTOM_LOADER
+#    define EPOCH_VULKAN_CUSTOM_LOADER 1
 #  endif
 
-#endif // ALMOND_USING_VULKAN
+#endif // EPOCH_USING_VULKAN

@@ -1,10 +1,10 @@
 ﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
+ *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
+ *  Â¦Â¦+--+  Â¦Â¦+---+ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦+--Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦     +Â¦Â¦Â¦Â¦Â¦Â¦+++Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -34,7 +34,7 @@
 #include <include/aengine.config.hpp>
 
 #if defined(_WIN32)
-#   ifdef ALMOND_USING_WINMAIN
+#   ifdef EPOCH_USING_WINMAIN
 #       include <include/aframework.hpp>
 #   endif
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -81,20 +81,20 @@ import aengine.context.type;
 import aengine.context.window;
 import aengine.telemetry;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import acontext.opengl.context;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
 import acontext.softrenderer.context;
 #endif
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 import acontext.sfml.context;
 #endif
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 import acontext.raylib.context;
 #endif
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import acontext.sdl.context;
 #endif
 
@@ -134,13 +134,13 @@ namespace
    // [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
     [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
 
-#if ALMOND_SINGLE_PARENT
+#if EPOCH_SINGLE_PARENT
     struct SubCtx { HWND originalParent{}; };
 
     // Dock/undock requests must be processed on the window's owning thread.
     // GLFW/raylib windows are owned by the thread that created them (typically the render thread).
     // Cross-thread SetParent/SetWindowLongPtr/SetWindowPos can deadlock.
-    constexpr UINT WM_ALMOND_DOCKCMD = WM_APP + 0x4A11;
+    constexpr UINT WM_EPOCH_DOCKCMD = WM_APP + 0x4A11;
     enum class DockCmd : WPARAM
     {
         Undock = 1,
@@ -157,7 +157,7 @@ namespace
             delete ctx;
             return DefSubclassProc(hwnd, msg, wp, lp);
 
-        case WM_ALMOND_DOCKCMD:
+        case WM_EPOCH_DOCKCMD:
         {
             if (static_cast<DockCmd>(wp) == DockCmd::Undock)
             {
@@ -209,7 +209,14 @@ namespace
         case WM_LBUTTONDOWN:
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
-            return epochnamespace::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
+        {
+            const bool dragModifierHeld = (::GetKeyState(VK_MENU) & 0x8000) != 0;
+            const auto& dragState = epochnamespace::core::Drag();
+            const bool continueDrag = dragState.dragging && dragState.draggedWindow == hwnd;
+            if (dragModifierHeld || continueDrag)
+                return epochnamespace::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        }
         }
 
         return DefSubclassProc(hwnd, msg, wp, lp);
@@ -218,7 +225,7 @@ namespace
 
     inline void cleanup_window_resources(std::unique_ptr<epochnamespace::core::WindowData>& window) noexcept
     {
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         if (window && window->glContext)
         {
             ::wglMakeCurrent(nullptr, nullptr);
@@ -240,7 +247,7 @@ namespace
 
 namespace epochnamespace::core
 {
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
     // Raylib embeds a real GLFW-created HWND. Re-parenting must be performed on the
     // thread that owns the host HWND, otherwise Win32 can deadlock via cross-thread
     // synchronous messages during SetParent/SetWindowPos.
@@ -253,7 +260,7 @@ namespace epochnamespace::core
 
     void MakeDockable(HWND hwnd, HWND parent)
     {
-#if ALMOND_SINGLE_PARENT
+#if EPOCH_SINGLE_PARENT
         (void)parent;
         if (!hwnd) return;
         auto* ctx = new SubCtx{ parent };
@@ -511,8 +518,8 @@ namespace epochnamespace::core
         running.store(true, std::memory_order_release);
         s_activeInstance = this;
 
-        RegisterParentClass(hInst, L"AlmondParent");
-        RegisterChildClass(hInst, L"AlmondChild");
+        RegisterParentClass(hInst, L"EpochParent");
+        RegisterChildClass(hInst, L"EpochChild");
 
         epochnamespace::core::InitializeAllContexts();
 
@@ -534,8 +541,8 @@ namespace epochnamespace::core
 
             parent = ::CreateWindowExW(
                 0,
-                L"AlmondParent",
-                L"Almond Docking",
+                L"EpochParent",
+                L"Epoch Docking",
                 style,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
@@ -554,12 +561,12 @@ namespace epochnamespace::core
             parent = nullptr;
         }
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         // ---------------- Shared dummy GL context (for wglShareLists + glad bootstrap) ----------------
         {
             HWND dummy = ::CreateWindowExW(
                 WS_EX_TOOLWINDOW,
-                L"AlmondChild",
+                L"EpochChild",
                 L"Dummy",
                 WS_POPUP,
                 0, 0, 1, 1,
@@ -614,7 +621,7 @@ namespace epochnamespace::core
 
                     HWND hwnd = ::CreateWindowExW(
                         0,
-                        L"AlmondChild",
+                        L"EpochChild",
                         windowTitle.c_str(),
                         (parent
                             ? (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
@@ -633,13 +640,13 @@ namespace epochnamespace::core
                     HGLRC glrc = nullptr;
                     bool usesSharedContext = false;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
                     if (type == ContextType::OpenGL)
                     {
                         glrc = CreateSharedGLContext(hdc);
                         usesSharedContext = (glrc != nullptr);
                     }
-#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
                     else if (type == ContextType::Vulkan)
                     {
                         // Keep Vulkan windows free of WGL state to avoid WSI surface conflicts.
@@ -677,7 +684,7 @@ namespace epochnamespace::core
                     if (it == g_backends.end() || !it->second.master)
                     {
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Missing prototype context for backend type {}",
                             static_cast<int>(type));
@@ -763,7 +770,7 @@ namespace epochnamespace::core
                     // Raylib/SDL create their own HWND/GL context internally -> MUST init on the render thread.
                     switch (type)
                     {
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
                     case ContextType::OpenGL:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -772,7 +779,7 @@ namespace epochnamespace::core
                             static_cast<void*>(hwnd));
                         break;
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
                     case ContextType::Software:
                         epochnamespace::logger::get(kLogSys).logf(
@@ -788,7 +795,7 @@ namespace epochnamespace::core
                             w ? w->onResize : nullptr);
                         break;
 #endif
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                     case ContextType::RayLib:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -797,7 +804,7 @@ namespace epochnamespace::core
                             static_cast<void*>(hwnd));
                         break;
 #endif
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
                     case ContextType::SDL:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -806,7 +813,7 @@ namespace epochnamespace::core
                             static_cast<void*>(hwnd));
                         break;
 #endif
-#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
                     case ContextType::Vulkan:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -815,7 +822,7 @@ namespace epochnamespace::core
                             static_cast<void*>(hwnd));
                         break;
 #endif
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
                     case ContextType::SFML:
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::WARN,
@@ -831,24 +838,24 @@ namespace epochnamespace::core
                 }
             };
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         make_backend_windows(ContextType::RayLib, RayLibWinCount);
 #endif
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         make_backend_windows(ContextType::SDL, SDLWinCount);
 #endif
-#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
         make_backend_windows(ContextType::Vulkan, VulkanWinCount);
 #endif
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         make_backend_windows(ContextType::OpenGL, OpenGLWinCount);
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
         make_backend_windows(ContextType::Software, SoftwareWinCount);
 #endif
         // (void)SFMLWinCount; // place holder
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
         make_backend_windows(ContextType::SFML, SFMLWinCount);
 #endif
 
@@ -876,7 +883,7 @@ namespace epochnamespace::core
 
         if (!hdc) hdc = ::GetDC(hwnd);
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         if (type == ContextType::OpenGL && !glContext)
         {
             glContext = CreateSharedGLContext(hdc);
@@ -888,7 +895,7 @@ namespace epochnamespace::core
                 ::wglMakeCurrent(nullptr, nullptr);
             }
         }
-#if defined(ALMOND_USING_VULKAN) && (ALMOND_USING_VULKAN == 1)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
         if (type == ContextType::Vulkan)
         {
             // Keep docked Vulkan windows free of WGL state too.
@@ -1228,7 +1235,7 @@ namespace epochnamespace::core
 
         // Raylib/SDL must be created+initialized on the SAME thread that will render them.
 		// they are passed the HWND from outside, but they create their own internal windowing context.
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         if (ctx->type == ContextType::SDL)
         {
             epochnamespace::logger::get(kLogSys).logf(
@@ -1245,7 +1252,7 @@ namespace epochnamespace::core
                 win.titleNarrow);
         }
 #endif
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
         if (ctx->type == ContextType::SFML)
         {
             epochnamespace::logger::get(kLogSys).logf(
@@ -1265,7 +1272,7 @@ namespace epochnamespace::core
             if (!ok) { win.running = false; return; }
         }
 #endif
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         if (ctx->type == ContextType::RayLib)
         {
             epochnamespace::logger::get(kLogSys).logf(
@@ -1291,14 +1298,14 @@ namespace epochnamespace::core
 
 		// skipGenericInit for backends that do their own init above
         const bool skipGenericInit =
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
             (ctx->type == ContextType::SFML) ||
 #endif
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
             (ctx->type == ContextType::RayLib) ||
 #endif
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
             (ctx->type == ContextType::SDL) ||
 #endif
             false;
@@ -1312,7 +1319,7 @@ namespace epochnamespace::core
         if (ctx->init_failed)
         {
             epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "Backend init failed for {}. Keeping window alive with no-op process.",
                 ctx->backendName);
@@ -1346,7 +1353,10 @@ namespace epochnamespace::core
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
         }
 
-        win.commandQueue.drain();
+        if (win.running && !win.get_should_close())
+            win.commandQueue.drain();
+        else
+            win.commandQueue.clear();
 
         if (ctx->cleanup) ctx->cleanup_safe();
     }
@@ -1417,8 +1427,8 @@ namespace epochnamespace::core
             // Instead, post a request to each child so it can undock itself on its owning thread.
             for (HWND child : children)
             {
-#if defined(ALMOND_SINGLE_PARENT) && (ALMOND_SINGLE_PARENT == 1)
-                ::PostMessageW(child, WM_ALMOND_DOCKCMD, static_cast<WPARAM>(DockCmd::Undock), 0);
+#if defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
+                ::PostMessageW(child, WM_EPOCH_DOCKCMD, static_cast<WPARAM>(DockCmd::Undock), 0);
 #endif
                 ::PostMessageW(child, WM_CLOSE, 0, 0);
             }
@@ -1459,6 +1469,9 @@ namespace epochnamespace::core
         {
         case WM_LBUTTONDOWN:
         {
+            if ((::GetKeyState(VK_MENU) & 0x8000) == 0)
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
             ::SetCapture(hwnd);
             drag.dragging = true;
             drag.draggedWindow = hwnd;
@@ -1587,8 +1600,9 @@ namespace epochnamespace::core
                 drag.dragging = false;
                 drag.draggedWindow = nullptr;
                 drag.originalParent = nullptr;
+                return 0;
             }
-            return 0;
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
         case WM_DROPFILES:
             if (HWND p = ::GetParent(hwnd))
@@ -1626,12 +1640,4 @@ namespace epochnamespace::core
 }
 
 #endif // _WIN32
-
-
-
-
-
-
-
-
 

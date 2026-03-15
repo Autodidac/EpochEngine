@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -40,8 +40,8 @@ module;
 #include <iostream>
 #include <stdexcept>
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
@@ -51,9 +51,13 @@ module;
 export module acontext.vulkan.context:memory;
 
 import :shared_vk;
+import aengine.core.logger;
+import <source_location>;
 
 namespace epochnamespace::vulkancontext
 {
+    inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
+
     std::uint32_t Application::findMemoryType(std::uint32_t typeFilter, vk::MemoryPropertyFlags properties)
     {
         const vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
@@ -150,7 +154,11 @@ namespace epochnamespace::vulkancontext
 
     void Application::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size)
     {
-        std::cout << "[ Vulkan ] - Copying " << size << " bytes.";
+        logger::get(kLogSys).logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "Copying {} bytes.",
+            size);
 
         vk::UniqueCommandBuffer cmd = beginSingleTimeCommands();
 
@@ -163,4 +171,3 @@ namespace epochnamespace::vulkancontext
         endSingleTimeCommands(cmd);
     }
 } // namespace epochnamespace::vulkancontext
-

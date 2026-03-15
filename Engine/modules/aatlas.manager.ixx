@@ -1,10 +1,10 @@
 ﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½+  ï¿½ï¿½+   *
+ *  ï¿½ï¿½+----+ï¿½ï¿½+--ï¿½ï¿½+ï¿½ï¿½+---ï¿½ï¿½+ï¿½ï¿½+----+ï¿½ï¿½ï¿½  ï¿½ï¿½ï¿½   *
+ *  ï¿½ï¿½ï¿½ï¿½ï¿½+  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½++ï¿½ï¿½ï¿½   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½     ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½   *
+ *  ï¿½ï¿½+--+  ï¿½ï¿½+---+ ï¿½ï¿½ï¿½   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½     ï¿½ï¿½+--ï¿½ï¿½ï¿½   *
+ *  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½     +ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+++ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½  ï¿½ï¿½ï¿½   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -38,6 +38,7 @@ import aatlas.texture;
 import aspriteregistry;
 import aspritehandle;
 import aengine.context.type;
+import aengine.core.logger;
 
 import <atomic>;
 import <cstdint>;
@@ -49,6 +50,7 @@ import <mutex>;
 import <optional>;
 import <queue>;
 import <shared_mutex>;
+import <source_location>;
 import <string>;
 import <tuple>;
 import <unordered_map>;
@@ -57,6 +59,8 @@ import <vector>;
 
 export namespace epochnamespace::atlasmanager
 {
+    inline constexpr std::string_view kLogSys = "Epoch.Atlas";
+
     using epochnamespace::spritepool::SpriteHandle;
     using epochnamespace::spritepool::allocate;
 
@@ -93,14 +97,22 @@ export namespace epochnamespace::atlasmanager
                 SpriteHandle handle = allocate();
                 if (!handle.is_valid())
                 {
-                    std::cerr << "[AtlasRegistrar] Failed to allocate handle for '" << name << "'\n";
+                    logger::get(kLogSys).logf(
+                        logger::LogLevel::Error,
+                        std::source_location::current(),
+                        "Failed to allocate handle for '{}'",
+                        name);
                     return false;
                 }
 
                 auto added = atlas.add_slice_entry(name, x, y, w, h);
                 if (!added)
                 {
-                    std::cerr << "[AtlasRegistrar] Failed to slice '" << name << "' from atlas\n";
+                    logger::get(kLogSys).logf(
+                        logger::LogLevel::Error,
+                        std::source_location::current(),
+                        "Failed to slice '{}' from atlas",
+                        name);
                     return false;
                 }
 
@@ -131,7 +143,11 @@ export namespace epochnamespace::atlasmanager
             auto addedOpt = sharedAtlas.add_entry(name, tex);
             if (!addedOpt)
             {
-                std::cerr << "[AtlasRegistrar] Failed to add '" << name << "' to atlas\n";
+                logger::get(kLogSys).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Failed to add '{}' to atlas",
+                    name);
                 return std::nullopt;
             }
 
@@ -140,7 +156,11 @@ export namespace epochnamespace::atlasmanager
             auto allocated = allocate();
             if (!allocated.is_valid())
             {
-                std::cerr << "[AtlasRegistrar] Failed to allocate spritepool handle for '" << name << "'\n";
+                logger::get(kLogSys).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Failed to allocate sprite handle for '{}'",
+                    name);
                 return std::nullopt;
             }
 
@@ -170,7 +190,12 @@ export namespace epochnamespace::atlasmanager
         for (const auto& [name, up] : atlas_map)
         {
             const auto& atlas = *up;
-            std::cerr << "[ update_atlas_vector ] - Atlas '" << name << "' index: " << atlas.index << "\n";
+            logger::get(kLogSys).logf(
+                logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Atlas '{}' index={}",
+                name,
+                atlas.index);
             if (atlas.index > maxIndex)
                 maxIndex = atlas.index;
         }
@@ -185,8 +210,12 @@ export namespace epochnamespace::atlasmanager
         {
             const auto* atlas = up.get();
             atlas_vector[static_cast<std::size_t>(atlas->index)] = atlas;
-            std::cerr << "[ update_atlas_vector ] - atlas_vector[" << atlas->index
-                << "] assigned for '" << name << "'\n";
+            logger::get(kLogSys).logf(
+                logger::LogLevel::INFO,
+                std::source_location::current(),
+                "atlas_vector[{}] assigned for '{}'",
+                atlas->index,
+                name);
         }
     }
 
@@ -248,14 +277,22 @@ export namespace epochnamespace::atlasmanager
 
             if (atlas_map.contains(config.name))
             {
-                std::cerr << "[create_atlas] Atlas already exists: " << config.name << "\n";
+                logger::get(kLogSys).logf(
+                    logger::LogLevel::WARN,
+                    std::source_location::current(),
+                    "Atlas already exists: {}",
+                    config.name);
                 return false;
             }
 
             auto up = std::make_unique<TextureAtlas>();
             if (!up->init(copy))
             {
-                std::cerr << "[create_atlas] Failed to initialize atlas '" << config.name << "'\n";
+                logger::get(kLogSys).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Failed to initialize atlas '{}'",
+                    config.name);
                 return false;
             }
 
@@ -384,13 +421,20 @@ export namespace epochnamespace::atlasmanager
             }
             catch (const std::exception& e)
             {
-                std::cerr << "[AtlasManager] Texture upload failed for '" << task.atlas->name
-                    << "': " << e.what() << "\n";
+                logger::get(kLogSys).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Texture upload failed for '{}': {}",
+                    task.atlas->name,
+                    e.what());
             }
             catch (...)
             {
-                std::cerr << "[AtlasManager] Texture upload failed for '" << task.atlas->name
-                    << "' (unknown error)\n";
+                logger::get(kLogSys).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Texture upload failed for '{}' (unknown error)",
+                    task.atlas->name);
             }
         }
 
@@ -420,3 +464,4 @@ export namespace epochnamespace::atlasmanager
             process_pending_uploads(*detail::activeBackend);
     }
 } // namespace epochnamespace::atlasmanager
+

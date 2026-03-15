@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -37,10 +37,10 @@
 
 module;
 
-#include <include/aengine.config.hpp> // for ALMOND_USING_RAYLIB
+#include <include/aengine.config.hpp> // for EPOCH_USING_RAYLIB
 
 export module acontext.raylib.input;
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 import <atomic>;
 import <shared_mutex>;
@@ -165,4 +165,4 @@ namespace epochnamespace::raylibcontext
     }
 }
 
-#endif // ALMOND_USING_RAYLIB
+#endif // EPOCH_USING_RAYLIB

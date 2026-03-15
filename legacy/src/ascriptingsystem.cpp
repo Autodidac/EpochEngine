@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -36,7 +36,7 @@
 #include <iostream>
 
 #ifdef _WIN32
-#ifndef ALMOND_MAIN_HEADLESS
+#ifndef EPOCH_MAIN_HEADLESS
 //    #include <Windows.h>
 static HMODULE lastLib = nullptr;
 #else
@@ -48,8 +48,8 @@ static void* lastLib = nullptr;
 static void* lastLib = nullptr;
 #endif
 
-using namespace almondnamespace;
-using namespace almondnamespace::scripting;
+using namespace epochnamespace;
+using namespace epochnamespace::scripting;
 using namespace std::literals;
 
 namespace fs = std::filesystem;
@@ -58,7 +58,7 @@ using run_script_fn = void(*)(ScriptScheduler&);
 // —————————————————————————————————————————————————————————————————
 // Coroutine Task: Compile and Load Script DLL
 // —————————————————————————————————————————————————————————————————
-static almondnamespace::Task do_load_script(const std::string& scriptName, ScriptScheduler& scheduler, ScriptLoadReport& report) {
+static epochnamespace::Task do_load_script(const std::string& scriptName, ScriptScheduler& scheduler, ScriptLoadReport& report) {
     try {
         const fs::path sourcePath = fs::path("src/scripts") / (scriptName + ".ascript.cpp");
         const fs::path dllPath = fs::path("src/scripts") / (scriptName + ".dll");
@@ -75,7 +75,7 @@ static almondnamespace::Task do_load_script(const std::string& scriptName, Scrip
 
         if (lastLib) {
 #ifdef _WIN32
-#ifndef ALMOND_MAIN_HEADLESS
+#ifndef EPOCH_MAIN_HEADLESS
             FreeLibrary(lastLib);
 #endif
 #else
@@ -102,7 +102,7 @@ static almondnamespace::Task do_load_script(const std::string& scriptName, Scrip
         }
 
 #ifdef _WIN32
-#ifndef ALMOND_MAIN_HEADLESS
+#ifndef EPOCH_MAIN_HEADLESS
         lastLib = LoadLibraryA(dllPath.string().c_str());
         if (!lastLib) {
             const std::string message = "[script] LoadLibrary failed: " + dllPath.string();
@@ -127,7 +127,7 @@ static almondnamespace::Task do_load_script(const std::string& scriptName, Scrip
 
         report.dllLoaded.store(true, std::memory_order_relaxed);
 
-#ifndef ALMOND_MAIN_HEADLESS
+#ifndef EPOCH_MAIN_HEADLESS
         if (!entry) {
             const std::string message = "[script] Missing run_script symbol in: " + dllPath.string();
             std::cerr << message << "\n";
@@ -156,13 +156,13 @@ static almondnamespace::Task do_load_script(const std::string& scriptName, Scrip
 // —————————————————————————————————————————————————————————————————
 // External entry point (engine-facing)
 // —————————————————————————————————————————————————————————————————
-bool almondnamespace::scripting::load_or_reload_script(const std::string& scriptName, ScriptScheduler& scheduler, ScriptLoadReport* reportPtr) {
+bool epochnamespace::scripting::load_or_reload_script(const std::string& scriptName, ScriptScheduler& scheduler, ScriptLoadReport* reportPtr) {
     ScriptLoadReport fallbackReport;
     ScriptLoadReport& report = reportPtr ? *reportPtr : fallbackReport;
     report.reset();
 
     try {
-        almondnamespace::Task t = do_load_script(scriptName, scheduler, report);
+        epochnamespace::Task t = do_load_script(scriptName, scheduler, report);
         auto node = std::make_unique<taskgraph::Node>(std::move(t));
         node->Label = "script:" + scriptName;
         scheduler.AddNode(std::move(node));

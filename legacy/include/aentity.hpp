@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -30,18 +30,18 @@
 //#include "aentitycomponents.hpp"    // Position, History, LoggerComponent
 //#include "aeventsystem.hpp"         // push_event
 //#include "alogger.hpp"
-//import almond.core.timing;
+//import epoch.core.timing;
 //
 //import aecs;                        // reg_ex<…>
 //
 //#include <string_view>
 //#include <format>
 //
-//namespace almondnamespace::ecs
+//namespace epochnamespace::ecs
 //{
 //    // ─── spawn_entity ──────────────────────────────────────────────────
 //    template<typename... Cs>
-//    inline Entity spawn_entity(reg_ex<Cs...>& R, std::string_view logfile, almondnamespace::LogLevel lvl, almondnamespace::timing::Timer& clock)
+//    inline Entity spawn_entity(reg_ex<Cs...>& R, std::string_view logfile, epochnamespace::LogLevel lvl, epochnamespace::timing::Timer& clock)
 //    {
 //        Entity e = create_entity(R);
 //
@@ -50,7 +50,7 @@
 //        add_component<LoggerComponent>(R, e, { std::string(logfile),lvl,&clock });
 //
 //        // logging
-//        if (R.log && R.clk) R.log->log(std::format("[ECS] Entity {} spawned at {}", e, almondnamespace::timing::getCurrentTimeString()));
+//        if (R.log && R.clk) R.log->log(std::format("[ECS] Entity {} spawned at {}", e, epochnamespace::timing::getCurrentTimeString()));
 //
 //        events::push_event({ events::EventType::Custom,
 //                             {{"action","spawn"},
@@ -70,7 +70,7 @@
 //        pos.y += dy;
 //
 //        auto& lc = get_component<LoggerComponent>(R, e);
-//        almondnamespace::Logger logger{ lc.file, *lc.clock, lc.level };
+//        epochnamespace::Logger logger{ lc.file, *lc.clock, lc.level };
 //        std::string ts = lc.clock->getCurrentTimeString();
 //        logger.log(std::format("[ECS] Entity {} moved to ({:.2f},{:.2f}) at {}", e, pos.x, pos.y, ts));
 //
@@ -95,7 +95,7 @@
 //        pos.x = px; pos.y = py;
 //
 //        auto& lc = get_component<LoggerComponent>(R, e);
-//        almondnamespace::Logger logger{ lc.file, *lc.clock, lc.level };
+//        epochnamespace::Logger logger{ lc.file, *lc.clock, lc.level };
 //        std::string ts = lc.clock->getCurrentTimeString();
 //        logger.log(std::format("[ECS] Entity {} rewound to ({:.2f},{:.2f}) at {}", e, pos.x, pos.y, ts));
 //
@@ -107,4 +107,4 @@
 //                              {"time",ts}}, pos.x,pos.y });
 //        return true;
 //    }
-//} // namespace almondnamespace::ecs
+//} // namespace epochnamespace::ecs

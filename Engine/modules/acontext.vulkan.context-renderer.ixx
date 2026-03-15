@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -31,15 +31,15 @@
 
 module;
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/aengine.config.hpp>
 
 export module acontext.vulkan.context:renderer;
 
-#if defined(ALMOND_USING_VULKAN)
+#if defined(EPOCH_USING_VULKAN)
 
 import <cstdint>;
 
@@ -75,4 +75,3 @@ export namespace epochnamespace::vulkanrenderer
 }
 
 #endif
-

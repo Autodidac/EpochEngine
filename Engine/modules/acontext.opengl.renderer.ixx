@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -31,9 +31,9 @@
 module;
 
 // Global module fragment: macros + headers only.
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
     // IMPORTANT:
     // OpenGL symbols must be declared in *this* module unit.
     // Do not rely on other modules/TUs "bringing in" gl* names.
@@ -59,7 +59,7 @@ import acontext.opengl.textures;
 
 import aspritehandle;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 export namespace epochnamespace::openglrenderer
 {
@@ -187,7 +187,7 @@ export namespace epochnamespace::openglrenderer
 
     inline void begin_frame()
     {
-#if ALMOND_USE_CLEAR_COLOR
+#if EPOCH_USE_CLEAR_COLOR
         const auto color = core::clear_color_for_context(core::ContextType::OpenGL);
         glClearColor(color[0], color[1], color[2], color[3]);
         glViewport(0, 0, core::cli::window_width, core::cli::window_height);
@@ -201,4 +201,4 @@ export namespace epochnamespace::openglrenderer
     }
 }
 
-#endif // ALMOND_USING_OPENGL
+#endif // EPOCH_USING_OPENGL

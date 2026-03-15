@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -31,13 +31,13 @@
 
 module;
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros 		// for ALMOND_USING_SDL
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 
 export module acontext.sdl.renderer;
 
 //import aengine.config;
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import std;
 import <iostream>;
 import <stdexcept>;
@@ -109,4 +109,3 @@ export namespace epochnamespace::sdlcontext
 }
 
 #endif
-

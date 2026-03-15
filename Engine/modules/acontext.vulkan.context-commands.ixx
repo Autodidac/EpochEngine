@@ -49,6 +49,7 @@ export module acontext.vulkan.context:commands;
 import :shared_vk;
 import aengine.core.context;
 import aatlas.texture;
+import epoch.render.preview_grid;
 
 import <algorithm>;
 import <array>;
@@ -100,7 +101,7 @@ namespace epochnamespace::vulkancontext
             throw std::runtime_error("[ Vulkan ] - CommandBuffer::begin failed.");
 #if EPOCH_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
-        constexpr std::array<float, 4> frameClearColor{ 0.06f, 0.08f, 0.11f, 1.0f };
+        const auto frameClearColor = epochnamespace::previewgrid::kClearColor;
         const std::array<float, 4> sceneClearColor = frameClearColor;
         clearValues[0].setColor(vk::ClearColorValue{ frameClearColor });
         clearValues[1].setDepthStencil(vk::ClearDepthStencilValue{ 1.0f, 0 });

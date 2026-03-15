@@ -43,36 +43,68 @@ module;
 export module acontext.vulkan.context:meshcube;
 
 import :shared_vk;
+import epoch.render.preview_grid;
 
 import <array>;
 import <cstdint>;
 import <span>;
+import <vector>;
 
 namespace epochnamespace::vulkancontext
 {
     using Vertex = Application::Vertex;
 
     // Keep data local to this partition (NOT exported as symbols)
-    constinit inline std::array<Vertex, 4> kCubeVertices = { {
-        {{-12.0f, 0.0f, -12.0f}, {0, 1, 0}, {0, 0}},
-        {{ 12.0f, 0.0f, -12.0f}, {0, 1, 0}, {12, 0}},
-        {{ 12.0f, 0.0f,  12.0f}, {0, 1, 0}, {12, 12}},
-        {{-12.0f, 0.0f,  12.0f}, {0, 1, 0}, {0, 12}},
-    } };
+    [[nodiscard]] inline const std::vector<Vertex>& kCubeVertices() noexcept
+    {
+        static const std::vector<Vertex> vertices = []()
+        {
+            std::vector<Vertex> out{};
+            const auto source = epochnamespace::previewgrid::grid_vertices();
+            out.reserve(source.size());
 
-    static constexpr std::array<std::uint16_t, 6> kCubeIndices = { {
-        0, 1, 2,
-        0, 2, 3
-    } };
+            for (const auto& vertex : source)
+            {
+                out.push_back(Vertex{
+                    { vertex.position.x, vertex.position.y, vertex.position.z },
+                    { vertex.color.x, vertex.color.y, vertex.color.z },
+                    { 0.0f, 0.0f }
+                });
+            }
+
+            return out;
+        }();
+
+        return vertices;
+    }
+
+    [[nodiscard]] inline const std::vector<std::uint16_t>& kCubeIndices() noexcept
+    {
+        static const std::vector<std::uint16_t> indices = []()
+        {
+            std::vector<std::uint16_t> out{};
+            const auto source = epochnamespace::previewgrid::grid_indices();
+            out.reserve(source.size());
+
+            for (const auto index : source)
+                out.push_back(static_cast<std::uint16_t>(index));
+
+            return out;
+        }();
+
+        return indices;
+    }
 
     // Exported accessors (cheap, BMI-safe)
     export std::span<const Vertex> cube_vertices() noexcept
     {
-        return { kCubeVertices.data(), kCubeVertices.size() };
+        const auto& vertices = kCubeVertices();
+        return { vertices.data(), vertices.size() };
     }
 
     export std::span<const std::uint16_t> cube_indices() noexcept
     {
-        return { kCubeIndices.data(), kCubeIndices.size() };
+        const auto& indices = kCubeIndices();
+        return { indices.data(), indices.size() };
     }
 }

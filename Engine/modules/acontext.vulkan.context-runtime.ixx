@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,13 +30,13 @@
  ***********************************************/
 module;
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
 
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
 #   include <GLFW/glfw3.h>
 #endif
 // Include Vulkan-Hpp after config.
@@ -163,14 +163,14 @@ export namespace epochnamespace::vulkancontext
 //
 //    void Application::initWindow()
 //    {
-//#if defined(ALMOND_VULKAN_STANDALONE)
+//#if defined(EPOCH_VULKAN_STANDALONE)
 //        if (!glfwInit())
 //            throw std::runtime_error("[ Vulkan ] - Failed to initialize GLFW.");
 //
 //        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 //        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 //
-//        window = glfwCreateWindow(framebufferWidth, framebufferHeight, "Almond Vulkan", nullptr, nullptr);
+//        window = glfwCreateWindow(framebufferWidth, framebufferHeight, "Epoch Vulkan", nullptr, nullptr);
 //        if (!window)
 //            throw std::runtime_error("[ Vulkan ] - Failed to create GLFW window.");
 //
@@ -227,7 +227,7 @@ export namespace epochnamespace::vulkancontext
 //        const float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
 //        lastTime = currentTime;
 //
-//#if defined(ALMOND_VULKAN_STANDALONE)
+//#if defined(EPOCH_VULKAN_STANDALONE)
 //        if (window)
 //        {
 //            glfwPollEvents();
@@ -316,7 +316,7 @@ export namespace epochnamespace::vulkancontext
 //
 //        instance.reset();
 //
-//#if defined(ALMOND_VULKAN_STANDALONE)
+//#if defined(EPOCH_VULKAN_STANDALONE)
 //        if (window)
 //        {
 //            glfwDestroyWindow(window);
@@ -344,5 +344,3 @@ export namespace epochnamespace::vulkancontext
 //        nativeWindowHandle = nativeWindow;
 //    }
 }
-
-

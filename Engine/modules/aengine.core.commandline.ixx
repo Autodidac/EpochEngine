@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -120,7 +120,7 @@ export namespace epochnamespace::core::cli
 
         [[nodiscard]] constexpr bool default_parented_mode() noexcept
         {
-#if defined(ALMOND_SINGLE_PARENT) && (ALMOND_SINGLE_PARENT == 1)
+#if defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
             return true;
 #else
             return false;

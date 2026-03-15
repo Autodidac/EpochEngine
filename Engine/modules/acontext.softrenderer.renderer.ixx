@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -36,11 +36,11 @@
 module;
 
 //#include "aplatform.hpp"
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 export module acontext.softrenderer.renderer;
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER) && (ALMOND_USING_SOFTWARE_RENDERER == 1)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
 import aengine.platform;
 
@@ -334,4 +334,4 @@ export namespace epochnamespace::anativecontext
 #else
 // If the backend is disabled, still provide the module (empty) so imports don't explode.
 export namespace epochnamespace::anativecontext {}
-#endif // ALMOND_USING_SOFTWARE_RENDERER
+#endif // EPOCH_USING_SOFTWARE_RENDERER

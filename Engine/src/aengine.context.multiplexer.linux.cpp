@@ -1,10 +1,10 @@
 ﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
+ *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
+ *  Â¦Â¦+--+  Â¦Â¦+---+ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦+--Â¦Â¦Â¦   *
+ *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦     +Â¦Â¦Â¦Â¦Â¦Â¦+++Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦  Â¦Â¦Â¦   *
+ *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -34,8 +34,8 @@
 
 #if defined(__linux__)
 
-// Feature flags (defines ALMOND_USING_*)
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros
+// Feature flags (defines EPOCH_USING_*)
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 // X11 / GLX headers must be includes (not module imports)
 #include <X11/Xatom.h>
@@ -44,7 +44,7 @@
 #include <GL/glxext.h>
 
 // If you use GLAD on Linux, include it here (raylib/sdl/opengl paths share it)
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1) || defined(ALMOND_USING_RAYLIB) || defined(ALMOND_USING_SDL)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) || defined(EPOCH_USING_RAYLIB) || defined(EPOCH_USING_SDL)
 #   include <glad/glad.h>
 #endif
 
@@ -83,22 +83,22 @@ import aengine.telemetry;
 import autility.string.converter;     // epochnamespace::text::narrow_utf8
 
 // ---- backends (only referenced when enabled) ----
-#   if defined(ALMOND_USING_OPENGL)
+#   if defined(EPOCH_USING_OPENGL)
 import acontext.opengl.context;       // epochnamespace::openglcontext::opengl_initialize
 #   endif
-#   if defined(ALMOND_USING_OPENGL) || defined(ALMOND_USING_RAYLIB) || defined(ALMOND_USING_SDL)
+#   if defined(EPOCH_USING_OPENGL) || defined(EPOCH_USING_RAYLIB) || defined(EPOCH_USING_SDL)
 import acontext.opengl.platform;      // epochnamespace::openglcontext::PlatformGL::get_proc_address
 #   endif
-#   if defined(ALMOND_USING_RAYLIB)
+#   if defined(EPOCH_USING_RAYLIB)
 import acontext.raylib.context;       // epochnamespace::raylibcontext::raylib_initialize
 #   endif
-#   if defined(ALMOND_USING_SDL)
+#   if defined(EPOCH_USING_SDL)
 import acontext.sdl.context;          // epochnamespace::sdlcontext::sdl_initialize
 #   endif
-#   if defined(ALMOND_USING_SFML)
+#   if defined(EPOCH_USING_SFML)
 import acontext.sfml.context;         // epochnamespace::sfmlcontext::sfml_initialize
 #   endif
-#   if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#   if defined(EPOCH_USING_SOFTWARE_RENDERER)
 import acontext.softrenderer.context; // epochnamespace::anativecontext::softrenderer_initialize
 #   endif
 
@@ -256,7 +256,7 @@ namespace epochnamespace::core
         if (!g_xlibInitialized)
         {
             epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "XInitThreads failed; aborting X11 initialization",
                 std::source_location::current());
             return false;
@@ -269,7 +269,7 @@ namespace epochnamespace::core
         if (!display)
         {
             epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "Failed to open X display",
                 std::source_location::current());
             return false;
@@ -297,7 +297,7 @@ namespace epochnamespace::core
         if (!configs || fbCount == 0)
         {
             epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "glXChooseFBConfig failed",
                 std::source_location::current());
             if (configs) XFree(configs);
@@ -315,7 +315,7 @@ namespace epochnamespace::core
         else
         {
             epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "glXGetVisualFromFBConfig failed",
                 std::source_location::current());
             return false;
@@ -325,7 +325,7 @@ namespace epochnamespace::core
         if (!colormap)
         {
             epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 "Failed to create X colormap",
                 std::source_location::current());
             return false;
@@ -429,7 +429,7 @@ namespace epochnamespace::core
                     if (it == g_backends.end() || !it->second.master)
                     {
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Missing prototype context for backend type {}",
                             static_cast<int>(type));
@@ -489,7 +489,7 @@ namespace epochnamespace::core
 
                     SetupResizeCallback(*window);
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
                     if (type == ContextType::OpenGL)
                     {
                         const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
@@ -505,7 +505,7 @@ namespace epochnamespace::core
                                 if (!target)
                                 {
                                     epochnamespace::logger::get(kLogSys).log(
-                                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                        epochnamespace::logger::LogLevel::Error,
                                         "OpenGL context unavailable during thread initialization",
                                         std::source_location::current());
                                     return false;
@@ -517,7 +517,7 @@ namespace epochnamespace::core
                                         target, nullptr, width, height, std::move(resize)))
                                     {
                                         epochnamespace::logger::get(kLogSys).logf(
-                                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                            epochnamespace::logger::LogLevel::Error,
                                             std::source_location::current(),
                                             "Failed to initialize OpenGL context for hwnd={}",
                                             target->hwnd);
@@ -527,7 +527,7 @@ namespace epochnamespace::core
                                 catch (const std::exception& e)
                                 {
                                     epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                        epochnamespace::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Exception during OpenGL initialization for hwnd={}: {}",
                                         target->hwnd,
@@ -537,7 +537,7 @@ namespace epochnamespace::core
                                 catch (...)
                                 {
                                     epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                        epochnamespace::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Unknown exception during OpenGL initialization for hwnd={}",
                                         target->hwnd);
@@ -549,7 +549,7 @@ namespace epochnamespace::core
                     }
 #endif
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER)
                     if (type == ContextType::Software)
                     {
                         const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
@@ -559,7 +559,7 @@ namespace epochnamespace::core
                             ctx, nullptr, width, height, window->onResize))
                         {
                             epochnamespace::logger::get(kLogSys).logf(
-                                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                epochnamespace::logger::LogLevel::Error,
                                 std::source_location::current(),
                                 "Failed to initialize Software renderer for hwnd={}",
                                 ctx->hwnd);
@@ -568,7 +568,7 @@ namespace epochnamespace::core
                     }
 #endif
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
                     if (type == ContextType::SDL)
                     {
                         const int width = (std::max)(1, window->width);
@@ -586,7 +586,7 @@ namespace epochnamespace::core
                                 if (!target)
                                 {
                                     epochnamespace::logger::get(kLogSys).log(
-                                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                        epochnamespace::logger::LogLevel::Error,
                                         "SDL context unavailable during thread initialization",
                                         std::source_location::current());
                                     return false;
@@ -596,7 +596,7 @@ namespace epochnamespace::core
                                     target, nullptr, width, height, std::move(resize), title))
                                 {
                                     epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                        epochnamespace::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Failed to initialize SDL context for hwnd={}",
                                         target->hwnd);
@@ -608,7 +608,7 @@ namespace epochnamespace::core
                     }
 #endif
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                     if (type == ContextType::RayLib)
                     {
                         const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
@@ -626,7 +626,7 @@ namespace epochnamespace::core
                                 if (!target)
                                 {
                                     epochnamespace::logger::get(kLogSys).log(
-                                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                        epochnamespace::logger::LogLevel::Error,
                                         "RayLib context unavailable during thread initialization",
                                         std::source_location::current());
                                     return false;
@@ -636,7 +636,7 @@ namespace epochnamespace::core
                                     target, nullptr, width, height, std::move(resize), title))
                                 {
                                     epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                        epochnamespace::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Failed to initialize RayLib context for hwnd={}",
                                         target->hwnd);
@@ -648,7 +648,7 @@ namespace epochnamespace::core
                     }
 #endif
 
-#if defined(ALMOND_USING_SFML)
+#if defined(EPOCH_USING_SFML)
                     if (type == ContextType::SFML)
                     {
                         const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
@@ -666,7 +666,7 @@ namespace epochnamespace::core
                                 if (!target)
                                 {
                                     epochnamespace::logger::get(kLogSys).log(
-                                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                        epochnamespace::logger::LogLevel::Error,
                                         "SFML context unavailable during thread initialization",
                                         std::source_location::current());
                                     return false;
@@ -676,7 +676,7 @@ namespace epochnamespace::core
                                     target, nullptr, width, height, std::move(resize), title))
                                 {
                                     epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                        epochnamespace::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Failed to initialize SFML context for hwnd={}",
                                         target->hwnd);
@@ -907,7 +907,7 @@ namespace epochnamespace::core
 
         SetupResizeCallback(*winPtr);
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         if (type == ContextType::OpenGL)
         {
             const unsigned width = static_cast<unsigned>((std::max)(1, winPtr->width));
@@ -923,7 +923,7 @@ namespace epochnamespace::core
                     if (!target)
                     {
                         epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             "OpenGL context unavailable during thread initialization",
                             std::source_location::current());
                         return false;
@@ -935,7 +935,7 @@ namespace epochnamespace::core
                             target, nullptr, width, height, std::move(resize)))
                         {
                             epochnamespace::logger::get(kLogSys).logf(
-                                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                                epochnamespace::logger::LogLevel::Error,
                                 std::source_location::current(),
                                 "Failed to initialize OpenGL context for hwnd={}",
                                 target->hwnd);
@@ -945,7 +945,7 @@ namespace epochnamespace::core
                     catch (const std::exception& e)
                     {
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Exception during OpenGL initialization for hwnd={}: {}",
                             target->hwnd,
@@ -955,7 +955,7 @@ namespace epochnamespace::core
                     catch (...)
                     {
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Unknown exception during OpenGL initialization for hwnd={}",
                             target->hwnd);
@@ -967,7 +967,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         if (type == ContextType::SDL)
         {
             const int width = (std::max)(1, winPtr->width);
@@ -986,7 +986,7 @@ namespace epochnamespace::core
                     if (!target)
                     {
                         epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             "SDL context unavailable during thread initialization",
                             std::source_location::current());
                         return false;
@@ -996,7 +996,7 @@ namespace epochnamespace::core
                         target, nullptr, width, height, std::move(resize), title))
                     {
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Failed to initialize SDL context for hwnd={}",
                             target->hwnd);
@@ -1008,7 +1008,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         if (type == ContextType::RayLib)
         {
             const unsigned width = static_cast<unsigned>((std::max)(1, winPtr->width));
@@ -1027,7 +1027,7 @@ namespace epochnamespace::core
                     if (!target)
                     {
                         epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             "RayLib context unavailable during thread initialization",
                             std::source_location::current());
                         return false;
@@ -1037,7 +1037,7 @@ namespace epochnamespace::core
                         target, nullptr, width, height, std::move(resize), title))
                     {
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Failed to initialize RayLib context for hwnd={}",
                             target->hwnd);
@@ -1049,7 +1049,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(ALMOND_USING_SFML)
+#if defined(EPOCH_USING_SFML)
         if (type == ContextType::SFML)
         {
             const unsigned width = static_cast<unsigned>((std::max)(1, winPtr->width));
@@ -1068,7 +1068,7 @@ namespace epochnamespace::core
                     if (!target)
                     {
                         epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             "SFML context unavailable during thread initialization",
                             std::source_location::current());
                         return false;
@@ -1078,7 +1078,7 @@ namespace epochnamespace::core
                         target, nullptr, width, height, std::move(resize), title))
                     {
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                            epochnamespace::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Failed to initialize SFML context for hwnd={}",
                             target->hwnd);
@@ -1365,7 +1365,7 @@ namespace epochnamespace::core
         {
             glXMakeCurrent(localDisplay, xwin, glxCtx);
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1) || defined(ALMOND_USING_RAYLIB) || defined(ALMOND_USING_SDL)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) || defined(EPOCH_USING_RAYLIB) || defined(EPOCH_USING_SDL)
             static std::atomic<bool> gladInitialized{ false };
             if (!gladInitialized.load(std::memory_order_acquire))
             {
@@ -1378,7 +1378,7 @@ namespace epochnamespace::core
                 if (!contextGuard.ok())
                 {
                     epochnamespace::logger::get(kLogSys).log(
-                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                        epochnamespace::logger::LogLevel::Error,
                         "PlatformGL::make_current(final) failed on Linux",
                         std::source_location::current());
                 }
@@ -1390,7 +1390,7 @@ namespace epochnamespace::core
                 else
                 {
                     epochnamespace::logger::get(kLogSys).log(
-                        epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                        epochnamespace::logger::LogLevel::Error,
                         "Failed to load OpenGL functions via GLAD on Linux",
                         std::source_location::current());
                 }
@@ -1427,13 +1427,13 @@ namespace epochnamespace::core
         }
 
         const bool skipGenericInit =
-#if defined(ALMOND_USING_SFML)
+#if defined(EPOCH_USING_SFML)
             (ctx->type == ContextType::SFML) ||
 #endif
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
             (ctx->type == ContextType::RayLib) ||
 #endif
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
             (ctx->type == ContextType::SDL) ||
 #endif
             false;
@@ -1452,7 +1452,7 @@ namespace epochnamespace::core
         if (ctx->init_failed)
         {
             epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::ALMOND_ERROR,
+                epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
                 "Backend init failed for {}. Keeping window alive with no-op process.",
                 ctx->backendName);
@@ -1566,6 +1566,4 @@ namespace epochnamespace::platform
 } // namespace epochnamespace::platform
 
 #endif // __linux__
-
-
 

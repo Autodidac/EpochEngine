@@ -39,6 +39,7 @@ module;
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <format>
 #include <future>
 #include <mutex>
@@ -85,6 +86,7 @@ namespace epochnamespace
 
         struct AiChat
         {
+            static constexpr std::size_t kMaxLines = 200;
             std::vector<std::string> lines{};
             std::string input{};
             std::optional<std::future<std::string>> pending{};
@@ -92,6 +94,7 @@ namespace epochnamespace
             AiChat()
             {
                 lines.emplace_back("bot> Ready. Endpoint: http://localhost:1234");
+                trim_lines();
             }
 
             AiChat(const AiChat&) = delete;
@@ -109,10 +112,12 @@ namespace epochnamespace
                     std::string reply = pending->get();
                     if (reply.empty()) reply = "(empty reply)";
                     lines.emplace_back("bot> " + reply);
+                    trim_lines();
                 }
                 catch (const std::exception& e)
                 {
                     lines.emplace_back(std::string("bot> (error) ") + e.what());
+                    trim_lines();
                 }
 
                 pending.reset();
@@ -125,14 +130,27 @@ namespace epochnamespace
                 if (pending)
                 {
                     lines.emplace_back("bot> (busy)");
+                    trim_lines();
                     return;
                 }
 
                 lines.emplace_back("you> " + text);
+                trim_lines();
 
                 pending.emplace(std::async(std::launch::async, [t = std::move(text)]() mutable {
                     return epoch::ai::send_to_bot(t);
                 }));
+            }
+
+        private:
+            void trim_lines()
+            {
+                if (lines.size() > kMaxLines)
+                {
+                    lines.erase(
+                        lines.begin(),
+                        lines.begin() + static_cast<std::ptrdiff_t>(lines.size() - kMaxLines));
+                }
             }
         };
 

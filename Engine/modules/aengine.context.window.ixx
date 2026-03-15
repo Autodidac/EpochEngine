@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -41,22 +41,22 @@ module;
 #endif
 
 #include "../include/aengine.hpp"                 // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
-#include "../include/aengine.config.hpp"          // ALMOND_USING_* macros (fix path; do not use <include/...>)
+#include "../include/aengine.config.hpp"          // EPOCH_USING_* macros (fix path; do not use <include/...>)
 
 #if defined(_WIN32)
-#   ifdef ALMOND_USING_WINMAIN
+#   ifdef EPOCH_USING_WINMAIN
 #       include "aframework.hpp"
 #   endif
 #endif
 
 #include <glad/glad.h>
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 #   include <SDL3/SDL.h>
 #   include <SDL3/SDL_version.h>
 #endif
 
-#if defined(ALMOND_USING_SFML)
+#if defined(EPOCH_USING_SFML)
 #define SFML_STATIC
 #include <SFML/Graphics.hpp>
 #endif
@@ -91,7 +91,7 @@ export namespace epochnamespace::core
     export struct WindowData final
     {
 #if defined(_WIN32)
-#   if !defined(ALMOND_MAIN_HEADLESS)
+#   if !defined(EPOCH_MAIN_HEADLESS)
         HWND  hwnd = nullptr;
         HWND  hwndChild = nullptr;
         HWND  host_hwnd = nullptr;
@@ -102,12 +102,12 @@ export namespace epochnamespace::core
 #   endif
 #endif
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         SDL_Window* sdl_window = nullptr;
         SDL_GLContext sdl_glrc = nullptr;
 #endif
 
-#if defined(ALMOND_USING_SFML)
+#if defined(EPOCH_USING_SFML)
         sf::RenderWindow* sfml_window = nullptr;
         sf::Context       sfml_context{};
 #endif
@@ -145,7 +145,7 @@ export namespace epochnamespace::core
 
         WindowData() = default;
 
-#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
         WindowData(HWND inHwnd, HDC inHdc, HGLRC inGlrc, bool inUsesShared, core::ContextType inType)
             : hwnd(inHwnd)
             , hdc(inHdc)
@@ -165,7 +165,7 @@ export namespace epochnamespace::core
         static void set_global_instance(WindowData* instance) noexcept { s_instance = instance; }
         static WindowData* get_global_instance() noexcept { return s_instance; }
 
-#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
         void setParentHandle(HWND v) noexcept { hwnd = v; }
         void setChildHandle(HWND v) noexcept { hwndChild = v; }
 
@@ -176,7 +176,7 @@ export namespace epochnamespace::core
 #if defined(_WIN32)
         static HWND getWindowHandle() noexcept
         {
-#   if defined(ALMOND_MAIN_HEADLESS)
+#   if defined(EPOCH_MAIN_HEADLESS)
             return nullptr;
 #   else
             return s_instance ? s_instance->hwnd : nullptr;
@@ -185,7 +185,7 @@ export namespace epochnamespace::core
 
         static HWND getChildHandleStatic() noexcept
         {
-#   if defined(ALMOND_MAIN_HEADLESS)
+#   if defined(EPOCH_MAIN_HEADLESS)
             return nullptr;
 #   else
             return s_instance ? s_instance->hwndChild : nullptr;
@@ -208,11 +208,11 @@ export namespace epochnamespace::core
 #endif
         }
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         static SDL_Window* getSDLWindow() noexcept { return s_instance ? s_instance->sdl_window : nullptr; }
 #endif
 
-#if defined(ALMOND_USING_SFML)
+#if defined(EPOCH_USING_SFML)
         sf::RenderWindow* getSFMLWindow()
         {
             if (!s_instance) throw std::runtime_error("WindowData is null!");

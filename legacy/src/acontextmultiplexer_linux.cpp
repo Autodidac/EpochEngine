@@ -7,17 +7,17 @@
 //#include "acontext.hpp"
 #include "astringconverter.hpp"
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(EPOCH_USING_OPENGL)
 #include "aopenglcontext.hpp"
 #include "aopenglplatform.hpp"
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(EPOCH_USING_RAYLIB)
 #include "araylibcontext.hpp"
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(EPOCH_USING_SDL)
 #include "asdlcontext.hpp"
 #endif
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER)
 #include "asoftrenderer_context.hpp"
 #endif
 
@@ -33,16 +33,16 @@
 #include <shared_mutex>
 #include <stdexcept>
 
-namespace almondnamespace::platform
+namespace epochnamespace::platform
 {
     Display* global_display = nullptr;
     ::Window global_window = 0;
 }
 
-namespace almondnamespace::core
+namespace epochnamespace::core
 {
-    using almondnamespace::platform::global_display;
-    using almondnamespace::platform::global_window;
+    using epochnamespace::platform::global_display;
+    using epochnamespace::platform::global_window;
 
     MultiContextManager* GetActiveMultiContextManager() noexcept
     {
@@ -258,7 +258,7 @@ namespace almondnamespace::core
             for (int i = 0; i < count; ++i)
             {
                 const std::wstring titleWide = BuildWindowTitle(type, i);
-                const std::string titleNarrow = almondnamespace::text::narrow_utf8(titleWide);
+                const std::string titleNarrow = epochnamespace::text::narrow_utf8(titleWide);
 
                 XSetWindowAttributes swa{};
                 swa.colormap = colormap;
@@ -398,7 +398,7 @@ namespace almondnamespace::core
 
                 SetupResizeCallback(*window);
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(EPOCH_USING_OPENGL)
                 if (type == ContextType::OpenGL)
                 {
                     const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
@@ -419,7 +419,7 @@ namespace almondnamespace::core
 
                         try
                         {
-                            if (!almondnamespace::openglcontext::opengl_initialize(
+                            if (!epochnamespace::openglcontext::opengl_initialize(
                                     target,
                                     nullptr,
                                     width,
@@ -449,12 +449,12 @@ namespace almondnamespace::core
                 }
 #endif
 
-#if defined(ALMOND_USING_SOFTWARE_RENDERER)
+#if defined(EPOCH_USING_SOFTWARE_RENDERER)
                 if (type == ContextType::Software)
                 {
                     const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
                     const unsigned height = static_cast<unsigned>((std::max)(1, window->height));
-                    if (!almondnamespace::anativecontext::softrenderer_initialize(
+                    if (!epochnamespace::anativecontext::softrenderer_initialize(
                             ctx,
                             nullptr,
                             width,
@@ -467,7 +467,7 @@ namespace almondnamespace::core
                     }
                 }
 #endif
-#if defined(ALMOND_USING_SDL)
+#if defined(EPOCH_USING_SDL)
                 if (type == ContextType::SDL)
                 {
                     const int width = (std::max)(1, window->width);
@@ -488,7 +488,7 @@ namespace almondnamespace::core
                             return false;
                         }
 
-                        if (!almondnamespace::sdlcontext::sdl_initialize(
+                        if (!epochnamespace::sdlcontext::sdl_initialize(
                                 target,
                                 nullptr,
                                 width,
@@ -505,7 +505,7 @@ namespace almondnamespace::core
                     };
                 }
 #endif
-#if defined(ALMOND_USING_RAYLIB)
+#if defined(EPOCH_USING_RAYLIB)
                 if (type == ContextType::RayLib)
                 {
                     const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
@@ -526,7 +526,7 @@ namespace almondnamespace::core
                             return false;
                         }
 
-                        if (!almondnamespace::raylibcontext::raylib_initialize(
+                        if (!epochnamespace::raylibcontext::raylib_initialize(
                                 target,
                                 nullptr,
                                 width,
@@ -808,7 +808,7 @@ namespace almondnamespace::core
 
         SetupResizeCallback(*winPtr);
 
-#if defined(ALMOND_USING_OPENGL)
+#if defined(EPOCH_USING_OPENGL)
         if (type == ContextType::OpenGL)
         {
             const unsigned width = static_cast<unsigned>((std::max)(1, winPtr->width));
@@ -829,7 +829,7 @@ namespace almondnamespace::core
 
                 try
                 {
-                    if (!almondnamespace::openglcontext::opengl_initialize(
+                    if (!epochnamespace::openglcontext::opengl_initialize(
                             target,
                             nullptr,
                             width,
@@ -1124,14 +1124,14 @@ namespace almondnamespace::core
         {
             glXMakeCurrent(localDisplay, window, glxCtx);
 
-#if defined(ALMOND_USING_OPENGL) || defined(ALMOND_USING_RAYLIB) || defined(ALMOND_USING_SDL)
+#if defined(EPOCH_USING_OPENGL) || defined(EPOCH_USING_RAYLIB) || defined(EPOCH_USING_SDL)
             static std::atomic<bool> gladInitialized{ false };
             if (!gladInitialized.load(std::memory_order_acquire))
             {
                 auto loadProc = [](const char* name) -> void*
                 {
-#if defined(ALMOND_USING_OPENGL)
-                    return almondnamespace::openglcontext::PlatformGL::get_proc_address(name);
+#if defined(EPOCH_USING_OPENGL)
+                    return epochnamespace::openglcontext::PlatformGL::get_proc_address(name);
 #else
                     return reinterpret_cast<void*>(
                         glXGetProcAddressARB(reinterpret_cast<const GLubyte*>(name)));
@@ -1215,6 +1215,6 @@ namespace almondnamespace::core
         }
     }
 
-} // namespace almondnamespace::core
+} // namespace epochnamespace::core
 
 #endif // defined(__linux__)

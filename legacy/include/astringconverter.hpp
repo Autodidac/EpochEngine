@@ -6,7 +6,7 @@
 
 #include <string>
 
-namespace almondnamespace::text
+namespace epochnamespace::text
 {
 #if defined(_WIN32)
     // UTF-16 (wchar_t) -> UTF-8
@@ -58,4 +58,4 @@ namespace almondnamespace::text
         return conv.from_bytes(utf8);
     }
 #endif
-} // namespace almondnamespace::text
+} // namespace epochnamespace::text

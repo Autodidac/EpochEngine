@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -46,14 +46,14 @@ import aengine.diagnostics;
 
 namespace epochnamespace::noopcontext
 {
-#if defined(ALMOND_USING_NOOP_HEADLESS)
+#if defined(EPOCH_USING_NOOP_HEADLESS)
     inline std::atomic_bool running{ false };
 #endif
 }
 
 export namespace epochnamespace::noopcontext
 {
-#if defined(ALMOND_USING_NOOP_HEADLESS)
+#if defined(EPOCH_USING_NOOP_HEADLESS)
     inline void noop_initialize()
     {
         running.store(true, std::memory_order_release);

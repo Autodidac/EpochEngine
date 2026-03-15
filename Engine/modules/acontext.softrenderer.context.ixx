@@ -169,9 +169,10 @@ export namespace epochnamespace::anativecontext
 
             for (int py = y0; py < y1; ++py)
             {
-                const std::size_t rowOffset = static_cast<std::size_t>(py) * static_cast<std::size_t>(sr.width);
-                for (int px = x0; px < x1; ++px)
-                    sr.framebuffer[rowOffset + static_cast<std::size_t>(px)] = color;
+                auto* rowBegin = sr.framebuffer.data()
+                    + static_cast<std::size_t>(py) * static_cast<std::size_t>(sr.width)
+                    + static_cast<std::size_t>(x0);
+                std::fill_n(rowBegin, static_cast<std::size_t>(x1 - x0), color);
             }
         }
 
@@ -211,6 +212,62 @@ export namespace epochnamespace::anativecontext
                     y0 += sy;
                 }
             }
+        }
+
+        [[nodiscard]] inline bool try_get_uniform_region_color(
+            const TextureAtlas& atlas,
+            const AtlasRegion& region,
+            std::uint32_t& outColor) noexcept
+        {
+            if (region.width == 0 || region.height == 0 || atlas.pixel_data.empty())
+                return false;
+
+            const auto read_rgba = [&](std::uint32_t x, std::uint32_t y, std::uint8_t& r, std::uint8_t& g, std::uint8_t& b, std::uint8_t& a) noexcept -> bool
+            {
+                if (x >= atlas.width || y >= atlas.height)
+                    return false;
+
+                const std::size_t index =
+                    (static_cast<std::size_t>(y) * static_cast<std::size_t>(atlas.width) + static_cast<std::size_t>(x)) * 4u;
+                if (index + 3u >= atlas.pixel_data.size())
+                    return false;
+
+                r = atlas.pixel_data[index + 0u];
+                g = atlas.pixel_data[index + 1u];
+                b = atlas.pixel_data[index + 2u];
+                a = atlas.pixel_data[index + 3u];
+                return true;
+            };
+
+            std::uint8_t baseR = 0;
+            std::uint8_t baseG = 0;
+            std::uint8_t baseB = 0;
+            std::uint8_t baseA = 0;
+            if (!read_rgba(region.x, region.y, baseR, baseG, baseB, baseA))
+                return false;
+
+            for (std::uint32_t y = 0; y < region.height; ++y)
+            {
+                for (std::uint32_t x = 0; x < region.width; ++x)
+                {
+                    std::uint8_t r = 0;
+                    std::uint8_t g = 0;
+                    std::uint8_t b = 0;
+                    std::uint8_t a = 0;
+                    if (!read_rgba(region.x + x, region.y + y, r, g, b, a))
+                        return false;
+
+                    if (r != baseR || g != baseG || b != baseB || a != baseA)
+                        return false;
+                }
+            }
+
+            outColor =
+                (static_cast<std::uint32_t>(baseA) << 24)
+                | (static_cast<std::uint32_t>(baseR) << 16)
+                | (static_cast<std::uint32_t>(baseG) << 8)
+                | static_cast<std::uint32_t>(baseB);
+            return true;
         }
 
         [[nodiscard]] inline bool project_preview_vertex(
@@ -294,6 +351,16 @@ export namespace epochnamespace::anativecontext
                     pack_color(color.x, color.y, color.z));
             }
         }
+
+        [[nodiscard]] inline bool same_viewport(
+            const core::RenderViewport& lhs,
+            const core::RenderViewport& rhs) noexcept
+        {
+            return lhs.x == rhs.x
+                && lhs.y == rhs.y
+                && lhs.width == rhs.width
+                && lhs.height == rhs.height;
+        }
     }
 
     void softrenderer_resize(int width, int height)
@@ -305,6 +372,10 @@ export namespace epochnamespace::anativecontext
         sr.framebuffer.assign(
             std::size_t(sr.width) * std::size_t(sr.height),
             0xFF000000u);
+        sr.sceneFramebuffer.assign(
+            std::size_t(sr.width) * std::size_t(sr.height),
+            0xFF000000u);
+        sr.frameValid = false;
 
 #if defined(_WIN32)
         sr.bmi.bmiHeader.biWidth = sr.width;
@@ -334,6 +405,10 @@ export namespace epochnamespace::anativecontext
         sr.width = static_cast<int>(w);
         sr.height = static_cast<int>(h);
         sr.running = true;
+        sr.frameValid = false;
+        sr.lastGuiGeneration = 0;
+        sr.lastSceneViewport = {};
+        sr.lastPreviewMode = static_cast<std::uint8_t>(core::ScenePreviewMode::None);
 
         ctx->get_width = get_width;
         ctx->get_height = get_height;
@@ -353,6 +428,7 @@ export namespace epochnamespace::anativecontext
 
         // Allocate framebuffer
         sr.framebuffer.assign(std::size_t(w) * std::size_t(h), 0xFF000000u);
+        sr.sceneFramebuffer.assign(std::size_t(w) * std::size_t(h), 0xFF000000u);
 
 #if defined(_WIN32)
         // Prefer explicit parentWnd from multiplexer; fall back to accessor if it exists.
@@ -512,6 +588,14 @@ export namespace epochnamespace::anativecontext
         if (clipX0 >= clipX1 || clipY0 >= clipY1)
             return;
 
+        std::uint32_t uniformColor = 0;
+        if (detail::try_get_uniform_region_color(*atlas, region, uniformColor)
+            && ((uniformColor >> 24) & 0xFFu) == 0xFFu)
+        {
+            detail::fill_rect(destX, destY, destW, destH, uniformColor);
+            return;
+        }
+
         const int srcW = static_cast<int>((std::max)(1u, region.width));
         const int srcH = static_cast<int>((std::max)(1u, region.height));
 
@@ -582,57 +666,80 @@ export namespace epochnamespace::anativecontext
             : 0;
 
         diagnostics::FrameTiming frameTimer{ ctx.type, windowId, "Software" };
-#if EPOCH_USE_CLEAR_COLOR        // Clear
-        const auto clearColor = core::clear_color_for_context(core::ContextType::Software);
-        const auto clearR = static_cast<std::uint8_t>(
-            std::clamp(clearColor[0], 0.0f, 1.0f) * 255.0f);
-        const auto clearG = static_cast<std::uint8_t>(
-            std::clamp(clearColor[1], 0.0f, 1.0f) * 255.0f);
-        const auto clearB = static_cast<std::uint8_t>(
-            std::clamp(clearColor[2], 0.0f, 1.0f) * 255.0f);
-        const auto clearA = static_cast<std::uint8_t>(
-            std::clamp(clearColor[3], 0.0f, 1.0f) * 255.0f);
-        const std::uint32_t packedColor =
-            (std::uint32_t(clearA) << 24)
-            | (std::uint32_t(clearR) << 16)
-            | (std::uint32_t(clearG) << 8)
-            | std::uint32_t(clearB);
-        std::fill(sr.framebuffer.begin(), sr.framebuffer.end(), packedColor);
+        const auto viewport = ctx.scene_viewport();
+        const auto previewMode = ctx.scene_preview_mode();
+        const std::uint64_t guiGeneration = epochnamespace::gui::deferred_batch_generation(&ctx);
+        const bool hasPendingCommands = queue.depth() != 0;
+        const bool sceneDirty =
+            !sr.frameValid
+            || hasPendingCommands
+            || !detail::same_viewport(viewport, sr.lastSceneViewport)
+            || static_cast<std::uint8_t>(previewMode) != sr.lastPreviewMode;
+        const bool guiDirty =
+            !sr.frameValid
+            || guiGeneration != sr.lastGuiGeneration;
 
-        telemetry::emit_gauge(
-            "renderer.framebuffer.size",
-            static_cast<std::int64_t>(sr.width),
-            telemetry::RendererTelemetryTags{ ctx.type, windowId, "width" });
-        telemetry::emit_gauge(
-            "renderer.framebuffer.size",
-            static_cast<std::int64_t>(sr.height),
-            telemetry::RendererTelemetryTags{ ctx.type, windowId, "height" });
-        telemetry::emit_gauge(
-            "renderer.framebuffer.size",
-            static_cast<std::int64_t>(sr.framebuffer.size()),
-            telemetry::RendererTelemetryTags{ ctx.type, windowId, "buffer_length" });
+        if (sceneDirty)
+        {
+#if EPOCH_USE_CLEAR_COLOR        // Clear
+            const auto clearColor = core::clear_color_for_context(core::ContextType::Software);
+            const auto clearR = static_cast<std::uint8_t>(
+                std::clamp(clearColor[0], 0.0f, 1.0f) * 255.0f);
+            const auto clearG = static_cast<std::uint8_t>(
+                std::clamp(clearColor[1], 0.0f, 1.0f) * 255.0f);
+            const auto clearB = static_cast<std::uint8_t>(
+                std::clamp(clearColor[2], 0.0f, 1.0f) * 255.0f);
+            const auto clearA = static_cast<std::uint8_t>(
+                std::clamp(clearColor[3], 0.0f, 1.0f) * 255.0f);
+            const std::uint32_t packedColor =
+                (std::uint32_t(clearA) << 24)
+                | (std::uint32_t(clearR) << 16)
+                | (std::uint32_t(clearG) << 8)
+                | std::uint32_t(clearB);
+            std::fill(sr.framebuffer.begin(), sr.framebuffer.end(), packedColor);
+
+            telemetry::emit_gauge(
+                "renderer.framebuffer.size",
+                static_cast<std::int64_t>(sr.width),
+                telemetry::RendererTelemetryTags{ ctx.type, windowId, "width" });
+            telemetry::emit_gauge(
+                "renderer.framebuffer.size",
+                static_cast<std::int64_t>(sr.height),
+                telemetry::RendererTelemetryTags{ ctx.type, windowId, "height" });
+            telemetry::emit_gauge(
+                "renderer.framebuffer.size",
+                static_cast<std::int64_t>(sr.framebuffer.size()),
+                telemetry::RendererTelemetryTags{ ctx.type, windowId, "buffer_length" });
 
 #endif
-        // debug fullscreen atlas blit
-        // Optional draw (disabled in your header)
-        //softrenderer_draw_quad(sr);
+            // debug fullscreen atlas blit
+            // Optional draw (disabled in your header)
+            //softrenderer_draw_quad(sr);
 
-        detail::render_scene_preview(ctx);
+            detail::render_scene_preview(ctx);
 
-        // Drain commands
-        {
-            std::size_t depth = 0;
-            {
-                depth = queue.depth();
-            }
             telemetry::emit_gauge(
                 "renderer.command_queue.depth",
-                static_cast<std::int64_t>(depth),
+                static_cast<std::int64_t>(queue.depth()),
                 telemetry::RendererTelemetryTags{ ctx.type, windowId });
+            queue.drain();
+            sr.sceneFramebuffer = sr.framebuffer;
         }
-        queue.drain();
-        if (ctx.windowData && ctx.windowData->context)
-            ::epochnamespace::gui::render_deferred_batch(ctx.windowData->context);
+
+        const bool needsPresent = sceneDirty || guiDirty;
+        if (needsPresent)
+        {
+            if (!sceneDirty && sr.sceneFramebuffer.size() == sr.framebuffer.size())
+                sr.framebuffer = sr.sceneFramebuffer;
+
+            if (ctx.windowData && ctx.windowData->context)
+                ::epochnamespace::gui::render_deferred_batch(ctx.windowData->context);
+
+            sr.lastGuiGeneration = guiGeneration;
+            sr.lastSceneViewport = viewport;
+            sr.lastPreviewMode = static_cast<std::uint8_t>(previewMode);
+            sr.frameValid = true;
+        }
 
 #if defined(_WIN32)
         // Present
@@ -646,23 +753,26 @@ export namespace epochnamespace::anativecontext
             tempDC = (hdc != nullptr);
         }
 
-                if (hdc)
+        if (hdc && needsPresent)
         {
-            StretchDIBits(
+            SetDIBitsToDevice(
                 hdc,
-                0, 0, sr.width, sr.height,
-                0, 0, sr.width, sr.height,
+                0, 0,
+                static_cast<DWORD>(sr.width),
+                static_cast<DWORD>(sr.height),
+                0, 0,
+                0,
+                static_cast<UINT>(sr.height),
                 sr.framebuffer.data(),
                 &sr.bmi,
-                DIB_RGB_COLORS,
-                SRCCOPY);
-            GdiFlush();
-
-            if (sr.hwnd)
-                RedrawWindow(sr.hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
+                DIB_RGB_COLORS);
 
             if (tempDC && sr.hwnd)
                 ReleaseDC(sr.hwnd, hdc);
+        }
+        else if (tempDC && sr.hwnd)
+        {
+            ReleaseDC(sr.hwnd, hdc);
         }
 #endif
 
@@ -675,7 +785,12 @@ export namespace epochnamespace::anativecontext
         auto& sr = s_softrendererstate;
 
         sr.framebuffer.clear();
+        sr.sceneFramebuffer.clear();
         cubeTexture.reset();
+        sr.frameValid = false;
+        sr.lastGuiGeneration = 0;
+        sr.lastSceneViewport = {};
+        sr.lastPreviewMode = static_cast<std::uint8_t>(core::ScenePreviewMode::None);
 
         // DO NOT DestroyWindow here. This backend does not own the window.
         sr.hwnd = nullptr;

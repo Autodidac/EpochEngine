@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -36,7 +36,7 @@ module;
 
 #include <include/aengine.config.hpp>
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 #   include <glad/glad.h>
 #endif
 
@@ -52,7 +52,7 @@ import <string>;
 import <string_view>;
 import <utility>;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 export namespace epochnamespace::openglquad
 {
@@ -438,6 +438,4 @@ void main() {
 } // namespace epochnamespace::openglquad
 
 
-#endif // ALMOND_USING_OPENGL
-
-
+#endif // EPOCH_USING_OPENGL

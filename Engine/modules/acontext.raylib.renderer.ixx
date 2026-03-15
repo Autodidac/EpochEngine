@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -44,7 +44,7 @@ import aatlas.texture;
 import aspritehandle;
 import acontext.raylib.api;
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 namespace epochnamespace::raylibrenderer
 {
@@ -164,4 +164,4 @@ namespace epochnamespace::raylibrenderer
     }
 }
 
-#endif // ALMOND_USING_RAYLIB
+#endif // EPOCH_USING_RAYLIB

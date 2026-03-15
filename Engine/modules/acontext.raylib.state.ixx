@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -32,9 +32,9 @@ module;
 
 #include <include/aengine.config.hpp>
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 #if defined(_WIN32)
-#   ifdef ALMOND_USING_WINMAIN
+#   ifdef EPOCH_USING_WINMAIN
 #       include <include/aframework.hpp>
 #   endif
 #endif
@@ -54,7 +54,7 @@ import <functional>;
 import <thread>;
 
 
-#if defined(ALMOND_USING_RAYLIB) && (ALMOND_USING_RAYLIB == 1)
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 export namespace epochnamespace::raylibstate
 {
@@ -113,6 +113,8 @@ export namespace epochnamespace::raylibstate
         bool renderingActive = false;
         bool cleanupIssued = false;
         bool cleanupRequested = false;
+        unsigned currentFailureStreak = 0;
+        bool currentFailureWarned = false;
 
         // Timers (unchanged, preserved)
         timing::Timer pollTimer = timing::createTimer(1.0);
@@ -134,4 +136,4 @@ export namespace epochnamespace::raylibstate
     }
 }
 
-#endif // ALMOND_USING_RAYLIB
+#endif // EPOCH_USING_RAYLIB

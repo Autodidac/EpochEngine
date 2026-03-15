@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -31,8 +31,8 @@
 
 module;
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
@@ -149,9 +149,9 @@ namespace epochnamespace::vulkancontext
     {
         vk::SamplerCreateInfo samplerInfo{};
         samplerInfo.flags = {};
-        samplerInfo.magFilter = vk::Filter::eLinear;
-        samplerInfo.minFilter = vk::Filter::eLinear;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+        samplerInfo.magFilter = vk::Filter::eNearest;
+        samplerInfo.minFilter = vk::Filter::eNearest;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
         samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
         samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
         samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
@@ -172,4 +172,3 @@ namespace epochnamespace::vulkancontext
         textureSampler = std::move(samp);
     }
 } // namespace epochnamespace::vulkancontext
-

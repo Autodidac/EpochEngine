@@ -117,6 +117,9 @@ export namespace epochnamespace::gui
     };
 
     export void push_input(const InputEvent& e) noexcept;
+    export void cleanup_context(const core::Context* ctx) noexcept;
+    export bool render_deferred_batch(const std::shared_ptr<core::Context>& ctx) noexcept;
+    export std::uint64_t deferred_batch_generation(const core::Context* ctx) noexcept;
 
     export void begin_frame(const std::shared_ptr<core::Context>& ctx,
         float dt,

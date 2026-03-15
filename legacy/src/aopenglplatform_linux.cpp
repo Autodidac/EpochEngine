@@ -1,10 +1,10 @@
 //#include "aopenglplatform.hpp"
 
-#if defined(ALMOND_USING_OPENGL) && defined(__linux__)
+#if defined(EPOCH_USING_OPENGL) && defined(__linux__)
 
 #include <dlfcn.h>
 
-namespace almondnamespace::openglcontext::PlatformGL
+namespace epochnamespace::openglcontext::PlatformGL
 {
     PlatformGLContext get_current() noexcept
     {
@@ -62,4 +62,4 @@ namespace almondnamespace::openglcontext::PlatformGL
     }
 }
 
-#endif // ALMOND_USING_OPENGL && __linux__
+#endif // EPOCH_USING_OPENGL && __linux__

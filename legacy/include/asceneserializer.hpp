@@ -1,12 +1,12 @@
 // asceneerialize.hpp
 #pragma once
 
-import ascene;   // almondnamespace::Scene
-#include "ascenesnapshot.hpp" // almondnamespace::SceneSnapshot
+import ascene;   // epochnamespace::Scene
+#include "ascenesnapshot.hpp" // epochnamespace::SceneSnapshot
 #include <ostream>
 #include <istream>
 
-namespace almondnamespace {
+namespace epochnamespace {
 
     // Write one snapshot to binary stream
     inline void serializeSnapshot(const SceneSnapshot& snap, std::ostream& os) {
@@ -53,4 +53,4 @@ namespace almondnamespace {
         return SceneSnapshot(ts, std::move(scene));
     }
 
-} // namespace almondnamespace
+} // namespace epochnamespace

@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -307,7 +307,7 @@ export namespace epochnamespace::input
 // ============================================================
 // Win32 WndProc hook (module-visible, header-only → module)
 // ============================================================
-#if defined(_WIN32) && !defined(ALMOND_MAIN_HEADLESS)
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
 
 export inline LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
 {

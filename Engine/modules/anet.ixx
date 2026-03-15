@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,17 +30,17 @@
  ***********************************************/
 module;
 
-// anet.hpp â€” Hybrid transport shim for the Epoch engine
+// anet.hpp Ã¢â‚¬â€ Hybrid transport shim for the Epoch engine
 //
-// â€¢ Default: SteamNetworkingSockets (relay, P2P, NAT punch, QUIC)
-// â€¢ Fallback: Asio (UDP) (LAN, dedicated, headless servers)
+// Ã¢â‚¬Â¢ Default: SteamNetworkingSockets (relay, P2P, NAT punch, QUIC)
+// Ã¢â‚¬Â¢ Fallback: Asio (UDP) (LAN, dedicated, headless servers)
 //
-// Define ALMOND_WITH_STEAM before including if Steam SDK is available.
+// Define EPOCH_WITH_STEAM before including if Steam SDK is available.
 // Link steam_api64.lib (+ tier0.lib, vstdlib.lib) on Windows builds.
 //
 // Build-time deps:
-//   â€¢ <asio.hpp> (header-only â‰¥1.30.2)
-//   â€¢ Steam SDK 1.53a (or GameNetworkingSockets â‰¥v1.4.0)
+//   Ã¢â‚¬Â¢ <asio.hpp> (header-only Ã¢â€°Â¥1.30.2)
+//   Ã¢â‚¬Â¢ Steam SDK 1.53a (or GameNetworkingSockets Ã¢â€°Â¥v1.4.0)
 //
 // Runtime: call epochnamespace::net::init(); once, epochnamespace::net::poll(); each frame.
 
@@ -53,13 +53,13 @@ module;
 
 #include <asio.hpp>
 
-#ifdef ALMOND_WITH_STEAM
+#ifdef EPOCH_WITH_STEAM
 #include <steam/steam_api.h>
 #include <steam/steamnetworkingsockets.h>
 #endif
 
 
-#include <include/aengine.config.hpp> // for ALMOND_USING Macros 		// for ALMOND_USING_SDL
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 
 export module anet;
 
@@ -96,7 +96,7 @@ export namespace epochnamespace::net {
         }
     };
 
-#ifdef ALMOND_WITH_STEAM
+#ifdef EPOCH_WITH_STEAM
     // Steam backend
     struct SteamConn {
         HSteamNetConnection h = k_HSteamNetConnection_Invalid;
@@ -107,7 +107,7 @@ export namespace epochnamespace::net {
     struct Connection {
         std::variant<
             UdpConn
-#ifdef ALMOND_WITH_STEAM
+#ifdef EPOCH_WITH_STEAM
             , SteamConn
 #endif
         > impl;
@@ -116,14 +116,14 @@ export namespace epochnamespace::net {
     // Backend selector
     enum class backend {
         asio
-#ifdef ALMOND_WITH_STEAM
+#ifdef EPOCH_WITH_STEAM
         , steam
 #endif
     };
 
     inline backend g_mode = backend::asio;
     inline std::unique_ptr<asio::io_context> g_io;
-#ifdef ALMOND_WITH_STEAM
+#ifdef EPOCH_WITH_STEAM
     inline ISteamNetworkingSockets* g_sn = nullptr;
 #endif
 
@@ -132,7 +132,7 @@ export namespace epochnamespace::net {
         // Always create io_context for timers, even if using Steam
         g_io = std::make_unique<asio::io_context>();
 
-#ifdef ALMOND_WITH_STEAM
+#ifdef EPOCH_WITH_STEAM
         if (SteamAPI_Init()) {
             g_mode = backend::steam;
             g_sn = SteamNetworkingSockets();
@@ -149,7 +149,7 @@ export namespace epochnamespace::net {
     inline void poll() {
         if (g_mode == backend::asio) {
             g_io->poll();
-#ifdef ALMOND_WITH_STEAM
+#ifdef EPOCH_WITH_STEAM
         }
         else {
             SteamAPI_RunCallbacks();
@@ -176,7 +176,7 @@ export namespace epochnamespace::net {
             u.peer = ep.endpoint();
             return c;
         }
-#ifdef ALMOND_WITH_STEAM
+#ifdef EPOCH_WITH_STEAM
         SteamNetworkingIPAddr ipAddr;
         if (!ipAddr.ParseString(addr.data())) {
             throw std::invalid_argument("Invalid SteamNetworkingIPAddr format");
@@ -197,7 +197,7 @@ export namespace epochnamespace::net {
                         cb(ec);
                     });
             }
-#ifdef ALMOND_WITH_STEAM
+#ifdef EPOCH_WITH_STEAM
             else {
                 EResult r = g_sn->SendMessageToConnection(
                     conn.h,

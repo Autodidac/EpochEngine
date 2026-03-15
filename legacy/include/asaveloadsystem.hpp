@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -31,7 +31,7 @@
 //#include <fstream>
 //#include <sstream>
 //
-//namespace almondnamespace {
+//namespace epochnamespace {
 //
 //    namespace detail {
 //        [[nodiscard]] inline std::string encode_utf8_char(char32_t codepoint) {
@@ -95,33 +95,33 @@
 //
 //    class SaveSystem {
 //    public:
-//        static void SaveGame(const std::string& filename, const std::vector<almondnamespace::events::Event>& events) {
-//           std::ofstream ofs(filename, std::ios::binary);  
-//           if (!ofs) {  
-//               std::cerr << "Error opening file for saving!" << std::endl;  
-//               return;  
-//           }  
+//        static void SaveGame(const std::string& filename, const std::vector<epochnamespace::events::Event>& events) {
+//           std::ofstream ofs(filename, std::ios::binary);
+//           if (!ofs) {
+//               std::cerr << "Error opening file for saving!" << std::endl;
+//               return;
+//           }
 //
-//           std::string data;  
-//           for (const auto& event : events) {  
-//               data += event_type_to_string(event.type) + ":";  
-//               for (const auto& pair : event.data) {  
-//                   data += pair.first + "=" + pair.second + ";";  
-//               }  
-//               data += "x=" + std::to_string(event.x) + ";";  
-//               data += "y=" + std::to_string(event.y) + ";";  
-//               data += "key=" + std::to_string(event.key) + ";";  
+//           std::string data;
+//           for (const auto& event : events) {
+//               data += event_type_to_string(event.type) + ":";
+//               for (const auto& pair : event.data) {
+//                   data += pair.first + "=" + pair.second + ";";
+//               }
+//               data += "x=" + std::to_string(event.x) + ";";
+//               data += "y=" + std::to_string(event.y) + ";";
+//               data += "key=" + std::to_string(event.key) + ";";
 //
 //               data += "text=" + detail::encode_utf8_char(event.text) + ";";
 //               data += "\n";
 //           }
 //
-//           std::string compressedData = CompressData(data);  
-//           ofs.write(compressedData.c_str(), compressedData.size());  
-//           ofs.close();  
+//           std::string compressedData = CompressData(data);
+//           ofs.write(compressedData.c_str(), compressedData.size());
+//           ofs.close();
 //        }
 //
-//        static void LoadGame(const std::string& filename, std::vector<almondnamespace::events::Event>& events) {
+//        static void LoadGame(const std::string& filename, std::vector<epochnamespace::events::Event>& events) {
 //            std::ifstream ifs(filename, std::ios::binary);
 //            if (!ifs) {
 //                std::cerr << "Error opening file for loading!" << std::endl;
@@ -142,7 +142,7 @@
 //                    continue;
 //                }
 //
-//                event.type = almondnamespace::events::event_type_from(line.substr(0, typeEnd));
+//                event.type = epochnamespace::events::event_type_from(line.substr(0, typeEnd));
 //                std::string details = line.substr(typeEnd + 1);
 //
 //                size_t semicolonPos;
@@ -201,4 +201,4 @@
 //        }
 //    };
 //
-//}  // namespace almond
+//}  // namespace epoch

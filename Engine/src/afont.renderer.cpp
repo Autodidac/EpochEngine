@@ -391,8 +391,8 @@ namespace epochnamespace::font
 
                 BakedGlyph baked{};
                 baked.glyph.size_px = {
-                    static_cast<float>(packed.x1 - packed.x0),
-                    static_cast<float>(packed.y1 - packed.y0)
+                    packed.xoff2 - packed.xoff,
+                    packed.yoff2 - packed.yoff
                 };
                 baked.glyph.offset_px = { packed.xoff, packed.yoff };
                 baked.glyph.advance = packed.xadvance;

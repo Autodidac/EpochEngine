@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -33,7 +33,7 @@ module;
 #include <include/aengine.config.hpp>
 
 
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 #define SFML_STATIC
 #include <SFML/Graphics.hpp>
 #endif
@@ -42,7 +42,7 @@ export module acontext.sfml.textures;
 
 import aengine.platform;
 
-#if defined(ALMOND_USING_SFML) && (ALMOND_USING_SFML == 1)
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 
 import aatlas.manager;
 import aatlas.texture;
@@ -97,8 +97,6 @@ export namespace epochnamespace::sfmlcontext
     inline std::unordered_map<const TextureAtlas*, AtlasGPU, TextureAtlasPtrHash, TextureAtlasPtrEqual> sfml_gpu_atlases;
 
     inline std::atomic_uint8_t s_generation{ 1 };
-    inline std::atomic_uint32_t s_dumpSerial{ 0 };
-
     [[nodiscard]]
     inline Handle make_handle(int atlasIdx, int localIdx) noexcept
     {
@@ -133,32 +131,6 @@ export namespace epochnamespace::sfmlcontext
         return { std::move(rgba), img.width, img.height, 4 };
     }
 
-    inline std::string make_dump_name(int atlasIdx, std::string_view tag)
-    {
-        std::filesystem::create_directories("atlases");
-        return std::format("atlases/{}_{}_{}.ppm", tag, atlasIdx, s_dumpSerial.fetch_add(1, std::memory_order_relaxed));
-    }
-
-    inline void dump_atlas(const TextureAtlas& atlas, int atlasIdx)
-    {
-        const std::string filename = make_dump_name(atlasIdx, atlas.name);
-        std::ofstream out(filename, std::ios::binary);
-        if (!out)
-        {
-            std::cerr << "[ Image Dump ] - Failed to open: " << filename << "\n";
-            return;
-        }
-
-        out << "P6\n" << atlas.width << " " << atlas.height << "\n255\n";
-        for (size_t i = 0; i < atlas.pixel_data.size(); i += 4)
-        {
-            out.put(static_cast<char>(atlas.pixel_data[i]));
-            out.put(static_cast<char>(atlas.pixel_data[i + 1]));
-            out.put(static_cast<char>(atlas.pixel_data[i + 2]));
-        }
-        std::cerr << "[ Image Dump ] - Wrote: " << filename << "\n";
-    }
-
     inline void upload_atlas_to_gpu(const TextureAtlas& atlas)
     {
         if (atlas.pixel_data.empty())
@@ -170,8 +142,6 @@ export namespace epochnamespace::sfmlcontext
 
         if (gpu.version == atlas.version && gpu.texture.getSize().x > 0)
         {
-            std::cerr << "[ SFML ] - SKIPPING upload for '" << atlas.name
-                << "' version = " << atlas.version << "\n";
             return;
         }
 
@@ -192,10 +162,6 @@ export namespace epochnamespace::sfmlcontext
         gpu.height = atlas.height;
         gpu.version = atlas.version;
 
-        dump_atlas(atlas, atlas.index);
-
-        std::cerr << "[ SFML ] - Uploaded atlas '" << atlas.name
-            << "' (" << gpu.width << "x" << gpu.height << ")\n";
     }
 
     inline void ensure_uploaded(const TextureAtlas& atlas)
@@ -310,4 +276,4 @@ export namespace epochnamespace::sfmlcontext
     }
 } // namespace epochnamespace::sfmlcontext
 
-#endif // ALMOND_USING_SFML
+#endif // EPOCH_USING_SFML

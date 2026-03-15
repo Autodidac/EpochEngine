@@ -1,4 +1,4 @@
-﻿/**************************************************************
+/**************************************************************
  *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗    *
  *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗   *
  *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║   *
@@ -6,8 +6,8 @@
  *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝   *
  *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝    *
  *                                                            *
- *   This file is part of the Almond Project.                 *
- *   AlmondShell - Modular C++ Framework                      *
+ *   This file is part of the Epoch Project.                 *
+ *   Epoch - Modular C++ Framework                      *
  *                                                            *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell           *
  *                                                            *
@@ -25,7 +25,7 @@
 #pragma once
 
 #include "ampmcboundedqueue.hpp"
-#include "aenginesystems.hpp" // Reuse almondnamespace::Task
+#include "aenginesystems.hpp" // Reuse epochnamespace::Task
 
 #include <atomic>
 #include <coroutine>
@@ -39,9 +39,9 @@
 #include <semaphore>
 #include <algorithm>
 
-namespace almondnamespace 
+namespace epochnamespace
 {
-    namespace taskgraph 
+    namespace taskgraph
     {
         struct Node {
             Task Task_;
@@ -182,4 +182,4 @@ namespace almondnamespace
         };
 
     } // namespace taskgraph
-} // namespace almondnamespace
+} // namespace epochnamespace

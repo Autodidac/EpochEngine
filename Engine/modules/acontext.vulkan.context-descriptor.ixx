@@ -54,6 +54,7 @@ import :shared_context;
 import <algorithm>;
 import :shared_vk;
 import acontext.vulkan.camera;
+import epoch.render.preview_grid;
 
 namespace epochnamespace::vulkancontext
 {
@@ -206,14 +207,15 @@ namespace epochnamespace::vulkancontext
         const auto* ctx = bound_context();
         const bool editorPreview =
             ctx && ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor;
+        const auto previewCamera = epochnamespace::previewgrid::kCamera;
 
         ubo.model = glm::mat4(1.0f);
         if (editorPreview)
         {
             ubo.view = glm::lookAt(
-                glm::vec3(9.0f, 7.0f, 9.0f),
-                glm::vec3(0.0f, 0.0f, 0.0f),
-                glm::vec3(0.0f, 1.0f, 0.0f));
+                glm::vec3(previewCamera.eye.x, previewCamera.eye.y, previewCamera.eye.z),
+                glm::vec3(previewCamera.target.x, previewCamera.target.y, previewCamera.target.z),
+                glm::vec3(previewCamera.up.x, previewCamera.up.y, previewCamera.up.z));
         }
         else
         {
@@ -237,10 +239,10 @@ namespace epochnamespace::vulkancontext
             : 1.0f;
 
         glm::mat4 proj = glm::perspective(
-            editorPreview ? 0.90f : glm::radians(45.0f),
+            editorPreview ? previewCamera.fovRadians : glm::radians(45.0f),
             aspect,
             0.1f,
-            editorPreview ? 64.0f : 10.0f);
+            editorPreview ? previewCamera.farPlane : 10.0f);
         proj[1][1] *= -1.0f; // Vulkan clip space
 
         ubo.proj = proj;

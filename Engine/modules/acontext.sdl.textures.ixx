@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -44,7 +44,7 @@ export module acontext.sdl.textures;
 import aengine.platform;
 //import aengine.config;
 
-#if defined(ALMOND_USING_SDL) && (ALMOND_USING_SDL == 1)
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 
 import aatlas.manager;
 import aatlas.texture;
@@ -83,8 +83,6 @@ export namespace epochnamespace::sdltextures
     };
 
     inline std::atomic_uint8_t s_generation{ 1 };
-    inline std::atomic_uint32_t s_dumpSerial{ 0 };
-
     inline SDL_Renderer* sdl_renderer = nullptr; // Must be set by your engine
 
     struct TextureAtlasPtrHash
@@ -135,37 +133,6 @@ export namespace epochnamespace::sdltextures
         return { std::move(rgba), img.width, img.height, 4 };
     }
 
-    inline std::string make_dump_name(int atlasIdx, std::string_view tag)
-    {
-        // Ensure `atlases/` folder exists
-        std::filesystem::create_directories("atlases");
-        // Format filename: atlases/<tag>_<atlasIdx>_<serial>.ppm
-        return std::format("atlases/{}_{}_{}.ppm", tag, atlasIdx, s_dumpSerial.fetch_add(1, std::memory_order_relaxed));
-    }
-
-    inline void dump_atlas(const TextureAtlas& atlas, int atlasIdx)
-    {
-        const std::string filename = make_dump_name(atlasIdx, atlas.name);
-        std::ofstream out(filename, std::ios::binary);
-        if (!out) {
-            std::cerr << "[ Image Dump ] - Failed to open: " << filename << "\n";
-            return;
-        }
-
-        // Write P6 header
-        out << "P6\n" << atlas.width << " " << atlas.height << "\n255\n";
-
-        // Dump RGB only (skip A)
-        for (size_t i = 0; i < atlas.pixel_data.size(); i += 4) {
-            out.put(static_cast<char>(atlas.pixel_data[i]));
-            out.put(static_cast<char>(atlas.pixel_data[i + 1]));
-            out.put(static_cast<char>(atlas.pixel_data[i + 2]));
-        }
-
-        std::cerr << "[ Image Dump ] - Wrote: " << filename << "\n";
-    }
-
-
     inline void upload_atlas_to_gpu(const TextureAtlas& atlas)
     {
         if (!sdl_renderer)
@@ -179,7 +146,6 @@ export namespace epochnamespace::sdltextures
         auto& gpu = sdl_gpu_atlases[&atlas];
 
         if (gpu.version == atlas.version && gpu.textureHandle != nullptr) {
-            std::cerr << "[UploadAtlas] SKIPPING for '" << atlas.name << "'\n";
             return;
         }
 
@@ -209,9 +175,6 @@ export namespace epochnamespace::sdltextures
         gpu.height = atlas.height;
         gpu.version = atlas.version;
 
-        dump_atlas(atlas, atlas.index);
-
-        std::cerr << "[ SDL3 ] - Uploaded atlas '" << atlas.name << "'\n";
     }
 
     inline void ensure_uploaded(const TextureAtlas& atlas)
@@ -274,7 +237,11 @@ export namespace epochnamespace::sdltextures
         }
 
         auto& sharedState = sdlcontext::state::get_sdl_state();
-        if (sharedState.renderFaulted || !sdl_renderer) {
+        if (sharedState.renderFaulted
+            || sharedState.shouldClose
+            || sharedState.window.get_should_close()
+            || !sharedState.running
+            || !sdl_renderer) {
             return;
         }
 
@@ -394,11 +361,8 @@ export namespace epochnamespace::sdltextures
         {
             sdlcontext::check_sdl_error("SDL_RenderTexture");
             sharedState.renderFaulted = true;
+            return;
         }
-
-        sdlcontext::check_sdl_error("SDL_RenderTexture");
     }
 } // namespace epochnamespace::sdltextures
-#endif // ALMOND_USING_SDL
-
-
+#endif // EPOCH_USING_SDL

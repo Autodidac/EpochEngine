@@ -14,6 +14,6 @@ if "%~1"=="" goto afterargs
 :afterargs
 
 REM Call PowerShell with safe argument forwarding
-powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%almondshell_install_build_tools.ps1" %PSARGS%
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%epoch_install_build_tools.ps1" %PSARGS%
 
 endlocal

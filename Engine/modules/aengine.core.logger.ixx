@@ -1,10 +1,10 @@
-/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+﻿/************************************************
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -53,13 +53,13 @@ import aengine.core.time;
 export namespace epochnamespace::logger
 {
     // ---------------------------------------------------------------------
-    // Levels (keep legacy names compiling)
+    // Levels
     // ---------------------------------------------------------------------
     enum class LogLevel : int
     {
         INFO = 0,
         WARN = 1,
-        ALMOND_ERROR = 2,
+        Error = 2,
         OFF = 3
     };
 
@@ -86,7 +86,7 @@ export namespace epochnamespace::logger
             {
             case LogLevel::INFO:         return "INFO";
             case LogLevel::WARN:         return "WARN";
-            case LogLevel::ALMOND_ERROR: return "ERROR";
+            case LogLevel::Error:        return "ERROR";
             case LogLevel::OFF:          return "OFF";
             }
             return "UNKNOWN";
@@ -352,7 +352,7 @@ export namespace epochnamespace::logger
     inline void error(std::string_view sys, std::string_view msg,
         std::source_location loc = std::source_location::current())
     {
-        hub().system(sys).log(LogLevel::ALMOND_ERROR, msg, loc);
+        hub().system(sys).log(LogLevel::Error, msg, loc);
     }
 
     // ---------------------------------------------------------------------
@@ -382,7 +382,7 @@ export namespace epochnamespace::logger
         std::format_string<Args...> fmt,
         Args&&... args)
     {
-        hub().system(sys).logf(LogLevel::ALMOND_ERROR, loc, fmt, std::forward<Args>(args)...);
+        hub().system(sys).logf(LogLevel::Error, loc, fmt, std::forward<Args>(args)...);
     }
 
     // ---------------------------------------------------------------------
@@ -430,3 +430,4 @@ export namespace epochnamespace::logger
     };
 
 } // namespace epochnamespace::logger
+

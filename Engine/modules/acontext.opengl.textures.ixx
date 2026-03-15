@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -37,11 +37,11 @@ module;
 
 #include "../include/aengine.config.hpp"
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 // Make sure GL loaders see any platform defines they need.
 
-// Prefer GLAD (what youâ€™re already using elsewhere). This provides GLuint,
+// Prefer GLAD (what youÃ¢â‚¬â„¢re already using elsewhere). This provides GLuint,
 // GLenum and all gl* function prototypes.
 #if defined(__has_include)
 #  if __has_include(<glad/glad.h>)
@@ -58,7 +58,7 @@ module;
 #  include <glad/glad.h>
 #endif
 
-#endif // ALMOND_USING_OPENGL
+#endif // EPOCH_USING_OPENGL
 
 export module acontext.opengl.textures;
 
@@ -77,7 +77,7 @@ import <vector>;
 
 import aengine.platform;
 
-#if defined(ALMOND_USING_OPENGL) && (ALMOND_USING_OPENGL == 1) && (ALMOND_USING_OPENGL == 1)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) && (EPOCH_USING_OPENGL == 1)
 
 import aengine.cli;
 import aengine.core.context;
@@ -181,8 +181,6 @@ export namespace epochnamespace::opengltextures
     using Handle = uint32_t;
 
     inline std::atomic_uint8_t  s_generation{ 1 };
-    inline std::atomic_uint32_t s_dumpSerial{ 0 };
-
     [[nodiscard]] inline Handle make_handle(int atlasIdx, int localIdx) noexcept {
         return (Handle(s_generation.load(std::memory_order_relaxed)) << 24)
             | ((atlasIdx & 0xFFF) << 12)
@@ -214,24 +212,6 @@ export namespace epochnamespace::opengltextures
         }
 
         return { std::move(rgba), img.width, img.height, 4 };
-    }
-
-    inline std::string make_dump_name(int atlasIdx, std::string_view tag) {
-        std::filesystem::create_directories("atlas_dump");
-        return std::format("atlas_dump/{}_{}_{}.ppm", tag, atlasIdx,
-            s_dumpSerial.fetch_add(1, std::memory_order_relaxed));
-    }
-
-    inline void dump_atlas(const TextureAtlas& atlas, int atlasIdx) {
-        std::string filename = make_dump_name(atlasIdx, atlas.name);
-        std::ofstream out(filename, std::ios::binary);
-        out << "P6\n" << atlas.width << " " << atlas.height << "\n255\n";
-        for (size_t i = 0; i < atlas.pixel_data.size(); i += 4) {
-            out.put(atlas.pixel_data[i]);
-            out.put(atlas.pixel_data[i + 1]);
-            out.put(atlas.pixel_data[i + 2]);
-        }
-        std::cerr << "[ Image Dump ] - Wrote: " << filename << "\n";
     }
 
     inline void upload_atlas_to_gpu(const TextureAtlas& atlas)
@@ -276,8 +256,6 @@ export namespace epochnamespace::opengltextures
         }
 
         if (gpu.version == atlas.version) {
-            std::cerr << "[UploadAtlas] SKIPPING upload for '" << atlas.name
-                << "' version = " << atlas.version << "\n";
             return;
         }
 
@@ -309,8 +287,6 @@ export namespace epochnamespace::opengltextures
 
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        std::cerr << "[ OpenGL ] - Uploaded atlas '" << atlas.name
-            << "' (tex id " << gpu.textureHandle << ")\n";
     }
 
     inline void ensure_uploaded(const TextureAtlas& atlas)
@@ -418,11 +394,7 @@ export namespace epochnamespace::opengltextures
         float x, float y, float width, float height) noexcept
     {
         // (unchanged from your version)
-        auto log_draw_skip = [](std::string_view reason)
-        {
-            std::ofstream diag("opengl_runtime_diag.txt", std::ios::app);
-            diag << "[ OpenGL ] - draw_skip reason=" << reason << "\n";
-        };
+        auto log_draw_skip = [](std::string_view) {};
 
         if (!handle.is_valid()) {
             std::cerr << "[DrawSprite] Invalid sprite handle.\n";
@@ -477,24 +449,6 @@ export namespace epochnamespace::opengltextures
 
         const int atlasIdx = int(handle.atlasIndex);
         const int localIdx = int(handle.localIndex);
-
-#if defined(_WIN32)
-        static thread_local int s_debugDraws = 0;
-        if (s_debugDraws < 20)
-        {
-            auto currentCtx = core::MultiContextManager::GetCurrent();
-            std::ofstream diag("opengl_runtime_diag.txt", std::ios::app);
-            diag << "[ OpenGL ] - draw hwnd=" << static_cast<void*>(currentCtx && currentCtx->windowData ? currentCtx->windowData->hwnd : nullptr)
-                 << " viewport=" << w << "x" << h
-                 << " pos=(" << x << "," << y << ")"
-                 << " size=(" << width << "," << height << ")"
-                 << " atlasIdx=" << atlasIdx
-                 << " localIdx=" << localIdx
-                 << "\n";
-            ++s_debugDraws;
-        }
-#endif
-
 
         if (atlasIdx < 0 || atlasIdx >= int(atlases.size())) {
             log_draw_skip("atlas_index_oob");
@@ -588,6 +542,4 @@ export namespace epochnamespace::opengltextures
 
 } // namespace epochnamespace::opengltextures
 
-#endif // ALMOND_USING_OPENGL
-
-
+#endif // EPOCH_USING_OPENGL

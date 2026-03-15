@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -31,8 +31,8 @@
 
 module;
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 
@@ -56,7 +56,7 @@ export namespace epochnamespace::vulkancontext {
     //    epochnamespace::vulkancamera::State cam; // Use the correct Camera type
     //};
 
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
     export void Application::mouseCallback(GLFWwindow* window, double xpos, double ypos) {
         auto* app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
         if (app) {
@@ -97,4 +97,3 @@ export namespace epochnamespace::vulkancontext {
     }
 
 } // namespace epochnamespace::vulkancontext
-

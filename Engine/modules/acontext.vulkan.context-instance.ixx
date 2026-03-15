@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -39,13 +39,13 @@
 
 module;
 
-#ifndef ALMOND_USING_VULKAN
-#   define ALMOND_USING_VULKAN 1
+#ifndef EPOCH_USING_VULKAN
+#   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
 
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
 #   include <GLFW/glfw3.h>
 #endif
 
@@ -70,13 +70,20 @@ export module acontext.vulkan.context:instance;
 import :shared_context;
 import :shared_vk;
 import :renderer;
+import aengine.core.logger;
 
 import <algorithm>;
 import <cstdint>;
 import <cstring>;
 import <iostream>;
+import <source_location>;
 import <stdexcept>;
 import <vector>;
+
+namespace epochnamespace::vulkancontext
+{
+    inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
+}
 
 namespace epochnamespace::vulkancontext::detail
 {
@@ -193,7 +200,7 @@ export namespace epochnamespace::vulkancontext
     {
         std::vector<const char*> extensions;
 
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
         std::uint32_t glfwCount = 0;
         const char** glfwExt = glfwGetRequiredInstanceExtensions(&glfwCount);
         if (!glfwExt)
@@ -218,8 +225,10 @@ export namespace epochnamespace::vulkancontext
         validationLayersEnabled = epochnamespace::vulkanrenderer::vulkan_config.enable_validation_layers;
         if (validationLayersEnabled && !checkValidationLayerSupport())
         {
-            std::cerr << "[ Vulkan ] - Validation layers requested but not available; "
-                         "continuing with validation disabled.\n";
+            logger::get(kLogSys).log(
+                logger::LogLevel::WARN,
+                "Validation layers requested but not available; continuing with validation disabled.",
+                std::source_location::current());
             validationLayersEnabled = false;
         }
 
@@ -260,7 +269,7 @@ export namespace epochnamespace::vulkancontext
 
     void Application::createSurface()
     {
-#if defined(ALMOND_VULKAN_STANDALONE)
+#if defined(EPOCH_VULKAN_STANDALONE)
         VkSurfaceKHR rawSurface{};
         if (glfwCreateWindowSurface(instance.get(), window, nullptr, &rawSurface) != VK_SUCCESS)
             throw std::runtime_error("Failed to create GLFW window surface.");
@@ -290,4 +299,3 @@ export namespace epochnamespace::vulkancontext
     }
 
 } // namespace epochnamespace::vulkancontext
-
