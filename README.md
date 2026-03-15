@@ -2,7 +2,7 @@
 
 # Epoch - Creative Software And Game Engine
 
-**Epoch Engine** is a 64bit **Worlds-first (modules-first C++23) AI-enabled game engine**
+**Epoch Engine** is **The Worlds-first (64bit modules-first C++23) AI-enabled game engine**
 
 built for serious real-time tooling: multi-context rendering, a launcher +
 editor workflow, atlas-driven UI, hot-reloadable scripting, and a runtime that
