@@ -249,7 +249,7 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.12
+v0.82.13
 ```
 
 Highlights:
@@ -258,6 +258,10 @@ Highlights:
   overloading the editor command surface.
 - The editor now behaves more like a real desktop tool, with `File`, `Edit`,
   `Scene`, `Command`, and `Help` menus across the top bar.
+- The shared scene/base color now tracks the darker Vulkan palette across the
+  active backends instead of diverging by renderer.
+- SFML now docks ahead of Vulkan in the parent grid, and its shared preview is
+  clipped back into the scene viewport instead of bleeding into the GUI.
 - Scene preview switching now lets the editor move between `Editor` and `None`
   preview modes without leaving the current session.
 - The in-app update action is now confirmation-gated before it can replace

@@ -88,7 +88,7 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.12` introduces the launcher/editor split: projects and game entry
-  points live in the launcher, while the editor now presents a desktop-style
-  top menu for file, edit, scene, command, and help actions. The update action
-  is confirmation-gated before it can run.
+- `v0.82.13` aligns the active backend clear/base color with the darker Vulkan
+  palette, moves SFML ahead of Vulkan in the default parented dock order, and
+  fixes the SFML shared scene preview so it stays clipped to the scene view
+  instead of drawing through GUI space.

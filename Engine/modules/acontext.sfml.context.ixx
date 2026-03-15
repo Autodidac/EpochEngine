@@ -211,11 +211,33 @@ export namespace epochnamespace::sfmlcontext
             if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
                 return;
 
+            const auto windowSize = sfmlcontext.window->getSize();
+            if (windowSize.x == 0u || windowSize.y == 0u)
+                return;
+
+            const float invWidth = 1.0f / static_cast<float>(windowSize.x);
+            const float invHeight = 1.0f / static_cast<float>(windowSize.y);
+            const float viewportLeft = (std::clamp)(viewport.x * invWidth, 0.0f, 1.0f);
+            const float viewportTop = (std::clamp)(viewport.y * invHeight, 0.0f, 1.0f);
+            const float viewportWidth = (std::clamp)(viewport.width * invWidth, 0.0f, 1.0f - viewportLeft);
+            const float viewportHeight = (std::clamp)(viewport.height * invHeight, 0.0f, 1.0f - viewportTop);
+
+            const auto previousView = sfmlcontext.window->getView();
+            sf::View previewView{ sf::FloatRect(
+                0.0f,
+                0.0f,
+                static_cast<float>(viewport.width),
+                static_cast<float>(viewport.height)) };
+            previewView.setViewport(sf::FloatRect(
+                viewportLeft,
+                viewportTop,
+                viewportWidth,
+                viewportHeight));
+            sfmlcontext.window->setView(previewView);
+
             const auto clearColor = epochnamespace::previewgrid::kClearColor;
             sf::RectangleShape background{};
-            background.setPosition(sf::Vector2f(
-                static_cast<float>(viewport.x),
-                static_cast<float>(viewport.y)));
+            background.setPosition(sf::Vector2f(0.0f, 0.0f));
             background.setSize(sf::Vector2f(
                 static_cast<float>(viewport.width),
                 static_cast<float>(viewport.height)));
@@ -261,12 +283,19 @@ export namespace epochnamespace::sfmlcontext
                     continue;
                 }
 
+                a.x -= static_cast<float>(viewport.x);
+                a.y -= static_cast<float>(viewport.y);
+                b.x -= static_cast<float>(viewport.x);
+                b.y -= static_cast<float>(viewport.y);
+
                 lines.append(sf::Vertex(a, to_sfml_color(vertices[firstIndex].color)));
                 lines.append(sf::Vertex(b, to_sfml_color(vertices[secondIndex].color)));
             }
 
             if (lines.getVertexCount() > 0)
                 sfmlcontext.window->draw(lines, renderStates);
+
+            sfmlcontext.window->setView(previousView);
         }
     }
 

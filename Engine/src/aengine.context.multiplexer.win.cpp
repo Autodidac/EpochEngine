@@ -872,6 +872,9 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         make_backend_windows(ContextType::SDL, SDLWinCount);
 #endif
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
+        make_backend_windows(ContextType::SFML, SFMLWinCount);
+#endif
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
         make_backend_windows(ContextType::Vulkan, VulkanWinCount);
 #endif
@@ -882,11 +885,6 @@ namespace epochnamespace::core
 
         make_backend_windows(ContextType::Software, SoftwareWinCount);
 #endif
-        // (void)SFMLWinCount; // place holder
-#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-        make_backend_windows(ContextType::SFML, SFMLWinCount);
-#endif
-
         ArrangeDockedWindowsGrid();
         StartRenderThreads();
 
@@ -1219,6 +1217,29 @@ namespace epochnamespace::core
 
         if (dockedWindows.empty())
             return;
+
+        const auto dock_order = [](const WindowData* win) noexcept
+        {
+            const auto type = (win && win->context) ? win->context->type : ContextType::None;
+            switch (type)
+            {
+            case ContextType::RayLib: return 0;
+            case ContextType::SDL: return 1;
+            case ContextType::SFML: return 2;
+            case ContextType::Vulkan: return 3;
+            case ContextType::OpenGL: return 4;
+            case ContextType::Software: return 5;
+            default: return 99;
+            }
+        };
+
+        std::stable_sort(
+            dockedWindows.begin(),
+            dockedWindows.end(),
+            [&](const WindowData* lhs, const WindowData* rhs)
+            {
+                return dock_order(lhs) < dock_order(rhs);
+            });
 
         const int total = static_cast<int>(dockedWindows.size());
         int cols = 1, rows = 1;

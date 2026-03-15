@@ -131,21 +131,16 @@ export namespace epochnamespace::core
 
     export [[nodiscard]] constexpr ClearColor clear_color_for_context(ContextType type) noexcept
     {
-        // Palette: match OpenGL/Vulkan for consistent editor and GUI visuals.
+        // Palette: keep the editor/backends on the same darker Vulkan-style base.
         switch (type)
         {
         case ContextType::Vulkan:
-            return { 0.0f, 0.0f, 1.0f, 1.0f };
         case ContextType::OpenGL:
-            return { 0.0f, 0.0f, 1.0f, 1.0f };
         case ContextType::RayLib:
-            return { 0.6f, 0.0f, 0.0f, 1.0f };
         case ContextType::SDL:
-            return { 1.0f, 0.75f, 0.0f, 1.0f };
         case ContextType::SFML:
-            return { 0.0f, 0.0f, 1.0f, 1.0f };
         case ContextType::Software:
-            return { 0.5f, 0.0f, 1.0f, 1.0f };
+            return { 0.06f, 0.08f, 0.11f, 1.0f };
         default:
             return { 0.0f, 0.0f, 0.0f, 1.0f };
         }
