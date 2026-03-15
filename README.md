@@ -246,15 +246,17 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.6
+v0.82.7
 ```
 
 Highlights:
 
-- SDL and Software now share the same editor preview grid path as the active
-  scene viewport instead of falling back to the placeholder card.
-- Parented Raylib startup no longer swaps the captured WGL device context after
-  initialization, which keeps mixed-context launches more stable.
+- Closing the parent host window now propagates shutdown through the docked
+  backend panes and exits the process cleanly instead of leaving the console
+  session alive in the background.
+- Backend confirmation logs are available again through the `EPOCH_ENABLE_*`
+  confirmation macros so bring-up and shutdown visibility can be tuned without
+  restoring hot-loop log spam.
 - The current local launch/test baseline is still `x64/Debug` or `x64/Release`
   so colocated runtime assets resolve exactly as the binaries expect.
 

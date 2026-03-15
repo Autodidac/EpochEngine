@@ -454,12 +454,16 @@ export namespace epochnamespace::anativecontext
         sr.bmi.bmiHeader.biBitCount = 32;
         sr.bmi.bmiHeader.biCompression = BI_RGB;
 
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS
         std::cout << "[ SoftRenderer ] - Initialized. HWND=" << sr.hwnd
             << " (" << sr.width << "x" << sr.height << ")\n";
+#endif
 #else
         (void)parentWnd;
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS
         std::cout << "[ SoftRenderer ] - Initialized (non-Win32) "
             << sr.width << "x" << sr.height << "\n";
+#endif
 #endif
 
         // Demo texture (kept from your header)
@@ -799,7 +803,9 @@ export namespace epochnamespace::anativecontext
 
         sr = {}; // reset remaining fields
 
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS
         std::cout << "[ SoftRenderer ] - Cleanup complete\n";
+#endif
     }
 
     int get_width() { return s_softrendererstate.width; }

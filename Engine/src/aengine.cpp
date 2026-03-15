@@ -1156,6 +1156,12 @@ namespace epochnamespace::core
                     break;
                 }
 
+                if (!mgr.IsRunning())
+                {
+                    running = false;
+                    break;
+                }
+
                 mgr.CleanupFinishedWindows();
 
                 auto snapshot = collect_backend_contexts_shared();

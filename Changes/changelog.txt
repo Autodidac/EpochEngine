@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.7]
+- Hardened the parent-window close path so all tracked docked contexts receive shutdown and the engine session exits cleanly when the main host closes.
+- Restored backend confirmation logging behind configurable `EPOCH_ENABLE_*CONFIRMATION_LOGS` switches so startup, upload, and teardown confirmations can be enabled without reintroducing per-frame spam.
+- Refreshed the active README and current docs to advertise the v0.82.7 shutdown and diagnostics pass while keeping historical release files intact.
+
 ## [v0.82.6]
 - Added the shared editor preview grid to the SDL and Software backends so they present the same scene-view framing as the existing GPU preview paths.
 - Stopped the parented Raylib backend from replacing the original WGL device context after initialization, which stabilizes mixed-context startup.

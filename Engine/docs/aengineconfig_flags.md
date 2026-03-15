@@ -38,7 +38,14 @@ building during the migration.
 | `EPOCH_ENABLE_RENDERER_SLOW_FRAME_LOGS` | On | Emit slow-frame warnings through the renderer logger. |
 | `EPOCH_SLOW_FRAME_LOG_STARTUP_GRACE_MS` | `5000` | Suppress slow-frame warnings during early startup. |
 | `EPOCH_SLOW_FRAME_LOG_THROTTLE_MS` | `5000` | Limit repeated slow-frame warnings per backend/window. |
+| `EPOCH_ENABLE_BACKEND_CONFIRMATION_LOGS` | On | Master switch for one-shot backend confirmation messages. |
+| `EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS` | Follows master | Gate backend context bring-up and shutdown confirmations. |
+| `EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS` | Follows master | Gate backend atlas/texture upload confirmations. |
 | `EPOCH_VULKAN_RUNTIME_DIAGNOSTICS` | Off | Enable the ad hoc Vulkan runtime trace file used for deep troubleshooting. |
+
+Backend-specific confirmation switches for OpenGL, SFML, SDL, Raylib, software,
+and Vulkan inherit from the master backend confirmation macro unless you
+override them locally in `aengine.config.hpp`.
 
 ## Backend support snapshot
 
@@ -81,6 +88,6 @@ building during the migration.
 
 ## Current release note
 
-- `v0.82.6` keeps the editor preview path aligned across more backends by
-  giving SDL and Software the shared scene grid, while the parented Raylib path
-  now keeps the original WGL context/DC pairing captured at initialization.
+- `v0.82.7` hardens parent-window shutdown so docked contexts exit with the
+  host session and restores configurable backend confirmation messages through
+  the new `EPOCH_ENABLE_*CONFIRMATION_LOGS` switches.

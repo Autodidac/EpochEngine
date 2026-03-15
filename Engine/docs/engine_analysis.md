@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while compatibility code has been
 consolidated under `Engine/legacy/`.
 
-Current public version: `v0.82.6`
+Current public version: `v0.82.7`
 
 ## Architecture highlights
 
@@ -33,6 +33,9 @@ Current public version: `v0.82.6`
 - SDL and Software now share the same editor preview-grid geometry/palette path
   as the GPU editor previews, which tightens backend parity for scene-view
   smoke tests.
+- Parent-window shutdown now behaves more like a real engine host lifecycle:
+  docked children are marked for close and the session exits instead of leaving
+  a dead console/process behind.
 
 ## Current cautions
 

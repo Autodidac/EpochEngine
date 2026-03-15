@@ -285,6 +285,12 @@ export namespace epochnamespace::opengltextures
 
         gpu.version = atlas.version;
 
+#if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_OPENGL_CONFIRMATION_LOGS
+        std::cout << "[ OpenGL ] - Uploaded atlas '" << atlas.name
+            << "' (tex id " << gpu.textureHandle
+            << ", version " << gpu.version << ")\n";
+#endif
+
         glBindTexture(GL_TEXTURE_2D, 0);
 
     }

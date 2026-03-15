@@ -75,8 +75,13 @@ namespace epochnamespace::vulkancontext
         inline void log_info(std::string_view msg,
             const std::source_location& loc = std::source_location::current())
         {
+#if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_VULKAN_CONFIRMATION_LOGS
             epochnamespace::logger::get(kLogSys).log(
                 epochnamespace::logger::LogLevel::INFO, msg, loc);
+#else
+            (void)msg;
+            (void)loc;
+#endif
         }
 
         inline void log_warn(std::string_view msg,
@@ -503,6 +508,17 @@ namespace epochnamespace::vulkancontext
         entry.version = atlas.version;
         entry.width = atlas.width;
         entry.height = atlas.height;
+
+#if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_VULKAN_CONFIRMATION_LOGS
+        log_info(
+            std::format(
+                "uploaded gui atlas '{}' ({}x{}, version={})",
+                atlas.name,
+                entry.width,
+                entry.height,
+                entry.version),
+            std::source_location::current());
+#endif
     }
 } // namespace epochnamespace::vulkancontext
 

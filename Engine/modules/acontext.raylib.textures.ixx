@@ -267,6 +267,8 @@ export namespace epochnamespace::raylibtextures
         // 3) Commit under lock; if someone else updated in the meantime, keep the newest.
         epochnamespace::raylib_api::Texture2D oldTex{};
         bool freeOld = false;
+        bool committedUpload = false;
+        unsigned int committedTextureId = 0;
 
         {
             std::scoped_lock lock(backend.gpuMutex);
@@ -294,6 +296,8 @@ export namespace epochnamespace::raylibtextures
                 gpu.version = atlas.version;
                 gpu.width = static_cast<u32>(atlas.width);
                 gpu.height = static_cast<u32>(atlas.height);
+                committedUpload = true;
+                committedTextureId = gpu.texture.id;
 
             }
         }
@@ -301,6 +305,15 @@ export namespace epochnamespace::raylibtextures
         // 4) Free old texture(s) unlocked.
         if (freeOld && oldTex.id != 0)
             epochnamespace::raylib_api::unload_texture(oldTex);
+
+#if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
+        if (committedUpload)
+        {
+            std::cout << "[ Raylib ] - Uploaded atlas '" << atlas.name
+                << "' (tex id " << committedTextureId
+                << ", version " << atlas.version << ")\n";
+        }
+#endif
     }
 
     export inline const epochnamespace::raylib_api::Texture2D* try_get_texture(const TextureAtlas& atlas) noexcept

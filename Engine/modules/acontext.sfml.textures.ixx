@@ -162,6 +162,12 @@ export namespace epochnamespace::sfmlcontext
         gpu.height = atlas.height;
         gpu.version = atlas.version;
 
+#if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_SFML_CONFIRMATION_LOGS
+        std::cout << "[ SFML ] - Uploaded atlas '" << atlas.name
+            << "' (" << gpu.width << "x" << gpu.height
+            << ", version " << gpu.version << ")\n";
+#endif
+
     }
 
     inline void ensure_uploaded(const TextureAtlas& atlas)

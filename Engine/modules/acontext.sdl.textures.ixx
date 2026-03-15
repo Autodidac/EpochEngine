@@ -175,6 +175,12 @@ export namespace epochnamespace::sdltextures
         gpu.height = atlas.height;
         gpu.version = atlas.version;
 
+#if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_SDL_CONFIRMATION_LOGS
+        std::cout << "[ SDL3 ] - Uploaded atlas '" << atlas.name
+            << "' (" << gpu.width << "x" << gpu.height
+            << ", version " << gpu.version << ")\n";
+#endif
+
     }
 
     inline void ensure_uploaded(const TextureAtlas& atlas)

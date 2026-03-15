@@ -470,7 +470,7 @@ namespace epochnamespace::raylibcontext
             st.cleanupIssued = false;
             return false;
         }
-#if defined(_DEBUG)
+#if defined(_DEBUG) && EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
         logger::info(
             "Raylib",
             std::format(
@@ -554,6 +554,16 @@ namespace epochnamespace::raylibcontext
             epochnamespace::core::ContextType::RayLib,
             epochnamespace::raylibtextures::ensure_uploaded);
 
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
+        logger::info(
+            "Raylib",
+            std::format(
+                "Initialized. hwnd={:p} size={}x{}",
+                static_cast<const void*>(st.hwnd),
+                st.width,
+                st.height));
+#endif
+
         return true;
     }
 
@@ -601,9 +611,13 @@ namespace epochnamespace::raylibcontext
 #if defined(_WIN32)
         if (!raylib_make_current())
         {
+            const bool windowHandleInvalid = st.hwnd && (::IsWindow(st.hwnd) == FALSE);
+            const bool raylibRequestedClose = epochnamespace::raylib_api::window_should_close();
             const bool windowClosing =
                 (st.owner_ctx && st.owner_ctx->windowData && st.owner_ctx->windowData->get_should_close())
-                || !st.renderingActive;
+                || !st.renderingActive
+                || windowHandleInvalid
+                || raylibRequestedClose;
             if (windowClosing)
             {
                 st.running = false;

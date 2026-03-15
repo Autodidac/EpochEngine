@@ -142,6 +142,27 @@ export namespace epochnamespace::sfmlcontext
 
     namespace detail
     {
+        [[nodiscard]] inline bool can_touch_window_gl() noexcept
+        {
+            if (!sfmlcontext.window || !sfmlcontext.window->isOpen())
+                return false;
+
+#if defined(_WIN32)
+            if (sfmlcontext.hwnd && (::IsWindow(sfmlcontext.hwnd) == FALSE))
+                return false;
+#endif
+
+            return true;
+        }
+
+        inline void deactivate_if_possible() noexcept
+        {
+            if (!can_touch_window_gl())
+                return;
+
+            (void)sfmlcontext.window->setActive(false);
+        }
+
         [[nodiscard]] inline sf::Color to_sfml_color(
             const epochnamespace::previewgrid::Vec3& color) noexcept
         {
@@ -437,6 +458,16 @@ export namespace epochnamespace::sfmlcontext
         sfmlcontext.running = true;
         sfmlcontext.gpuAtlasesReleased = false;
 
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SFML_CONFIRMATION_LOGS
+#if defined(_WIN32)
+        std::cout << "[ SFML ] - Initialized. HWND=" << sfmlcontext.hwnd
+            << " (" << sfmlcontext.width << "x" << sfmlcontext.height << ")\n";
+#else
+        std::cout << "[ SFML ] - Initialized (" << sfmlcontext.width
+            << "x" << sfmlcontext.height << ")\n";
+#endif
+#endif
+
         atlasmanager::register_backend_uploader(
             core::ContextType::SFML,
             [](const TextureAtlas& atlas)
@@ -553,7 +584,7 @@ export namespace epochnamespace::sfmlcontext
 
         if (!sfmlcontext.running || !sfmlcontext.window->isOpen())
         {
-            (void)sfmlcontext.window->setActive(false);
+            detail::deactivate_if_possible();
             return false;
         }
 
@@ -601,7 +632,7 @@ export namespace epochnamespace::sfmlcontext
 
         if (!sfmlcontext.running || !sfmlcontext.window->isOpen())
         {
-            (void)sfmlcontext.window->setActive(false);
+            detail::deactivate_if_possible();
             return false;
         }
 
@@ -609,7 +640,7 @@ export namespace epochnamespace::sfmlcontext
 
         frameTimer.finish();
 
-        (void)sfmlcontext.window->setActive(false);
+        detail::deactivate_if_possible();
         return sfmlcontext.running;
     }
 
@@ -634,7 +665,7 @@ export namespace epochnamespace::sfmlcontext
             if (canTouchGl && !sfmlcontext.gpuAtlasesReleased && sfmlcontext.window->setActive(true))
             {
                 release_sfml_gpu_atlases_active();
-                sfmlcontext.window->setActive(false);
+                detail::deactivate_if_possible();
             }
 
             sfmlcontext.window->close();

@@ -1201,7 +1201,13 @@ namespace epochnamespace::core
         {
             std::scoped_lock lock(windowsMutex);
             for (auto& w : windows)
-                if (w) w->running = false;
+            {
+                if (!w)
+                    continue;
+
+                w->running = false;
+                w->set_should_close(true);
+            }
         }
 
         for (auto& [hwnd, th] : g_threads)
@@ -1417,10 +1423,35 @@ namespace epochnamespace::core
                 children.reserve(mgr->windows.size());
                 for (const auto& win : mgr->windows)
                 {
-                    if (win && win->hwnd && ::GetParent(win->hwnd) == hwnd)
+                    if (!win)
+                        continue;
+
+                    win->running = false;
+                    win->set_should_close(true);
+
+                    if (win->context && win->context->windowData == win.get())
+                        win->context->windowData->set_should_close(true);
+
+                    if (win->hwndChild
+                        && win->hwndChild != hwnd
+                        && ::IsWindow(win->hwndChild) != FALSE)
+                    {
+                        children.push_back(win->hwndChild);
+                    }
+
+                    if (win->hwnd
+                        && win->hwnd != hwnd
+                        && ::IsWindow(win->hwnd) != FALSE)
+                    {
                         children.push_back(win->hwnd);
+                    }
                 }
             }
+
+            mgr->StopRunning();
+
+            std::sort(children.begin(), children.end());
+            children.erase(std::unique(children.begin(), children.end()), children.end());
 
             // DO NOT undock/reparent children from this parent thread.
             // Some children (GLFW/raylib) are owned by other threads; cross-thread SetParent/SetWindowPos can deadlock.
@@ -1441,12 +1472,8 @@ namespace epochnamespace::core
         case WM_DESTROY:
             if (hwnd == mgr->GetParentWindow())
             {
-                bool hasWindows = false;
-                {
-                    std::scoped_lock lock(mgr->windowsMutex);
-                    hasWindows = !mgr->windows.empty();
-                }
-                if (!hasWindows) ::PostQuitMessage(0);
+                mgr->StopRunning();
+                ::PostQuitMessage(0);
             }
             return 0;
         }

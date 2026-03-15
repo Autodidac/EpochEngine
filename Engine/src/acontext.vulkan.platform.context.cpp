@@ -162,7 +162,7 @@ namespace epochnamespace::vulkancontext
 
     void Application::initVulkan()
     {
-#ifdef _DEBUG
+#if defined(_DEBUG) && EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_VULKAN_CONFIRMATION_LOGS
             logger::get(kPlatformLogSys).log(
             logger::LogLevel::INFO,
             "initVulkan() called",
@@ -235,7 +235,7 @@ namespace epochnamespace::vulkancontext
         // in THIS TU, this init call is valid and links cleanly.
         VULKAN_HPP_DEFAULT_DISPATCHER.init();
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_VULKAN_CONFIRMATION_LOGS
         logger::get(kPlatformLogSys).log(
             logger::LogLevel::INFO,
             "Window configured",
