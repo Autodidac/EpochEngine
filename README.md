@@ -11,9 +11,9 @@ can drive multiple backends at once without giving up engine-level control.
 The active engine lives in:
 
 ```text
-Engine/modules/
 Engine/src/
 Engine/include/
+Engine/modules/
 ```
 
 with prebuilt MSVC runtime binaries commonly landing in:
