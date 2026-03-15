@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while compatibility code has been
 consolidated under `Engine/legacy/`.
 
-Current public version: `v0.82.10`
+Current public version: `v0.82.11`
 
 ## Architecture highlights
 
@@ -44,6 +44,11 @@ Current public version: `v0.82.10`
 - Manual pane management is now usable again without modifier keys: a dedicated
   drag strip provides left-drag docking while leaving the rest of the pane free
   for normal backend/editor interaction.
+- Parent-close ownership now behaves like a real multi-window host lifecycle:
+  undocked promoted backend windows can outlive the parent host, but once they
+  are redocked they return to normal parent-owned shutdown behavior.
+- The last surviving undocked pane now shuts the process down cleanly when it
+  closes, even if that backend window is owned by a render thread.
 
 ## Current cautions
 

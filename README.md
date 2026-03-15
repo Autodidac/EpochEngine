@@ -246,17 +246,19 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.10
+v0.82.11
 ```
 
 Highlights:
 
-- Docked panes now support real manual left-drag docking again through a small
-  pane drag strip, while still preserving their original host parent across
-  undock/redock for SDL, Raylib, SFML, OpenGL, and Software.
-- Closing the parent host window still shuts down the docked backend panes in
-  place and exits the process cleanly instead of tearing panes out of the dock
-  or leaving the console session alive in the background.
+- Closing the parent host window now shuts down only panes that are still
+  docked under `EpochParent`; undocked SDL, Raylib, and SFML panes survive as
+  independent top-level windows until they are closed themselves.
+- Once a pane is redocked, it returns to normal parent-owned shutdown behavior,
+  so the host window can manage it again on the next close.
+- The final surviving undocked pane now cleanly ends the process when it closes,
+  even if that backend window is owned by a render thread instead of the main
+  UI thread.
 - Backend confirmation logs are available again through the `EPOCH_ENABLE_*`
   confirmation macros so bring-up and shutdown visibility can be tuned without
   restoring hot-loop log spam.

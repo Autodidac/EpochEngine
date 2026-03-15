@@ -88,5 +88,6 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.10` restores real manual left-drag docking through a pane drag strip
-  while keeping the parented layout/redock fixes from `v0.82.9`.
+- `v0.82.11` keeps parent-close ownership aligned with the live backend window:
+  panes still docked under `EpochParent` close with the host, undocked panes
+  survive, and redocked panes become parent-owned again.

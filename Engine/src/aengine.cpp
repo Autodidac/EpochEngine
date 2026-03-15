@@ -1164,6 +1164,36 @@ namespace epochnamespace::core
 
                 mgr.CleanupFinishedWindows();
 
+#if defined(_WIN32)
+                bool has_live_native_window = false;
+                for (const auto& win : mgr.GetWindows())
+                {
+                    if (!win)
+                        continue;
+
+                    HWND liveWindow = nullptr;
+                    if (win->hwnd && ::IsWindow(win->hwnd) != FALSE)
+                        liveWindow = win->hwnd;
+                    else if (win->hwndChild && ::IsWindow(win->hwndChild) != FALSE)
+                        liveWindow = win->hwndChild;
+                    else if (win->host_hwnd && ::IsWindow(win->host_hwnd) != FALSE)
+                        liveWindow = win->host_hwnd;
+
+                    if (liveWindow)
+                    {
+                        has_live_native_window = true;
+                        break;
+                    }
+                }
+
+                if (!has_live_native_window)
+                {
+                    mgr.StopRunning();
+                    running = false;
+                    break;
+                }
+#endif
+
                 auto snapshot = collect_backend_contexts_shared();
                 bool any_context_alive = false;
 #if !defined(EPOCH_SINGLE_PARENT) || (EPOCH_SINGLE_PARENT == 0)

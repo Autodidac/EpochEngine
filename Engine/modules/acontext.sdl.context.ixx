@@ -573,6 +573,13 @@ export namespace epochnamespace::sdlcontext
                 return false;
             }
 
+            if (sdl_event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
+            {
+                sdlcontext.running = false;
+                state::get_sdl_state().mark_should_close(true);
+                return false;
+            }
+
             if (sdl_event.type == SDL_EVENT_WINDOW_RESIZED && sdlcontext.onResize)
                 sdlcontext.onResize(sdl_event.window.data1, sdl_event.window.data2);
         }

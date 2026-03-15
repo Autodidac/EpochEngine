@@ -165,6 +165,7 @@ export namespace epochnamespace::core
         std::vector<std::unique_ptr<WindowData>> windows;
         std::atomic<bool> running{ false };
         mutable std::recursive_mutex windowsMutex;
+        DWORD uiThreadId = 0;
 
         HGLRC sharedContext = nullptr;
         HWND  parent = nullptr;

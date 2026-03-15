@@ -542,6 +542,7 @@ namespace epochnamespace::core
         const int totalRequested = RayLibWinCount + SDLWinCount + SFMLWinCount + VulkanWinCount + OpenGLWinCount + SoftwareWinCount;
         if (totalRequested <= 0) return false;
 
+        uiThreadId = ::GetCurrentThreadId();
         running.store(true, std::memory_order_release);
         s_activeInstance = this;
 
@@ -1163,7 +1164,14 @@ namespace epochnamespace::core
         CleanupFinishedWindows();
 
         if (should_quit)
-            ::PostQuitMessage(0);
+        {
+            running.store(false, std::memory_order_release);
+
+            if (uiThreadId != 0 && uiThreadId != ::GetCurrentThreadId())
+                ::PostThreadMessageW(uiThreadId, WM_QUIT, 0, 0);
+            else
+                ::PostQuitMessage(0);
+        }
     }
 
     void MultiContextManager::CleanupFinishedWindows()
@@ -1461,6 +1469,14 @@ namespace epochnamespace::core
         case WM_CLOSE:
         {
             std::vector<HWND> children;
+            const auto is_docked_child = [hwnd](HWND candidate) noexcept
+            {
+                return candidate
+                    && candidate != hwnd
+                    && ::IsWindow(candidate) != FALSE
+                    && ::GetParent(candidate) == hwnd;
+            };
+
             {
                 std::scoped_lock lock(mgr->windowsMutex);
                 children.reserve(mgr->windows.size());
@@ -1469,29 +1485,32 @@ namespace epochnamespace::core
                     if (!win)
                         continue;
 
+                    HWND closeTarget = nullptr;
+                    if (::IsWindow(win->hwnd) != FALSE)
+                    {
+                        closeTarget = win->hwnd;
+                    }
+                    else if (::IsWindow(win->hwndChild) != FALSE)
+                    {
+                        closeTarget = win->hwndChild;
+                    }
+                    else if (::IsWindow(win->host_hwnd) != FALSE)
+                    {
+                        closeTarget = win->host_hwnd;
+                    }
+
+                    if (!is_docked_child(closeTarget))
+                        continue;
+
                     win->running = false;
                     win->set_should_close(true);
 
                     if (win->context && win->context->windowData == win.get())
                         win->context->windowData->set_should_close(true);
 
-                    if (win->hwndChild
-                        && win->hwndChild != hwnd
-                        && ::IsWindow(win->hwndChild) != FALSE)
-                    {
-                        children.push_back(win->hwndChild);
-                    }
-
-                    if (win->hwnd
-                        && win->hwnd != hwnd
-                        && ::IsWindow(win->hwnd) != FALSE)
-                    {
-                        children.push_back(win->hwnd);
-                    }
+                    children.push_back(closeTarget);
                 }
             }
-
-            mgr->StopRunning();
 
             std::sort(children.begin(), children.end());
             children.erase(std::unique(children.begin(), children.end()), children.end());
@@ -1510,11 +1529,6 @@ namespace epochnamespace::core
         }
 
         case WM_DESTROY:
-            if (hwnd == mgr->GetParentWindow())
-            {
-                mgr->StopRunning();
-                ::PostQuitMessage(0);
-            }
             return 0;
         }
 

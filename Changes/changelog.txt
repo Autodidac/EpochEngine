@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.11]
+- Fixed parent-host shutdown ownership so only panes still docked under `EpochParent` close with the host, while undocked SDL, Raylib, and SFML panes survive as independent top-level windows.
+- Fixed the last-window shutdown path so the process now exits when the final surviving undocked pane closes, even when that backend window is owned by a render thread.
+- Re-verified live undock/redock and parent-close behavior on SDL, Raylib, and SFML, then refreshed the active README and current docs for the current engine tree.
+
 ## [v0.82.10]
 - Restored real manual dock/undock interaction without the temporary `Alt` requirement by using a dedicated pane drag strip instead of hijacking the whole content surface.
 - Re-verified live left-drag undock/redock behavior across SDL, Raylib, SFML, OpenGL, and Software, and confirmed the parent host still closes the full session cleanly afterward.
