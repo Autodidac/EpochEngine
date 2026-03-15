@@ -246,14 +246,14 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.9
+v0.82.10
 ```
 
 Highlights:
 
-- Docked panes now preserve their original host parent across undock/redock,
-  so SDL, Raylib, SFML, OpenGL, and Software can all detach and reattach
-  cleanly in the live parented editor layout.
+- Docked panes now support real manual left-drag docking again through a small
+  pane drag strip, while still preserving their original host parent across
+  undock/redock for SDL, Raylib, SFML, OpenGL, and Software.
 - Closing the parent host window still shuts down the docked backend panes in
   place and exits the process cleanly instead of tearing panes out of the dock
   or leaving the console session alive in the background.

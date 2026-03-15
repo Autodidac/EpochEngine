@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while compatibility code has been
 consolidated under `Engine/legacy/`.
 
-Current public version: `v0.82.9`
+Current public version: `v0.82.10`
 
 ## Architecture highlights
 
@@ -41,6 +41,9 @@ Current public version: `v0.82.9`
 - Live pane management is back in a better place too: undocked windows keep the
   information they need to redock cleanly, and only still-docked panes are
   considered part of the parent grid layout.
+- Manual pane management is now usable again without modifier keys: a dedicated
+  drag strip provides left-drag docking while leaving the rest of the pane free
+  for normal backend/editor interaction.
 
 ## Current cautions
 

@@ -137,6 +137,25 @@ namespace
 #if EPOCH_SINGLE_PARENT
     struct SubCtx { HWND originalParent{}; };
     constexpr wchar_t kEpochDockParentProp[] = L"EpochDockParent";
+    constexpr int kDockDragStripHeight = 28;
+
+    [[nodiscard]] inline bool is_dock_drag_hotspot(HWND hwnd, LPARAM lp) noexcept
+    {
+        if (!hwnd)
+            return false;
+
+        RECT clientRect{};
+        if (!::GetClientRect(hwnd, &clientRect))
+            return false;
+
+        const int width = clamp_positive(static_cast<int>(clientRect.right - clientRect.left));
+        const int height = clamp_positive(static_cast<int>(clientRect.bottom - clientRect.top));
+        const int hotspotHeight = (std::min)(kDockDragStripHeight, height);
+
+        const int x = GET_X_LPARAM(lp);
+        const int y = GET_Y_LPARAM(lp);
+        return x >= 0 && x < width && y >= 0 && y < hotspotHeight;
+    }
 
     // Dock/undock requests must be processed on the window's owning thread.
     // GLFW/raylib windows are owned by the thread that created them (typically the render thread).
@@ -212,10 +231,10 @@ namespace
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
         {
-            const bool dragModifierHeld = (::GetKeyState(VK_MENU) & 0x8000) != 0;
             const auto& dragState = epochnamespace::core::Drag();
             const bool continueDrag = dragState.dragging && dragState.draggedWindow == hwnd;
-            if (dragModifierHeld || continueDrag)
+            const bool dragStart = (msg == WM_LBUTTONDOWN) && is_dock_drag_hotspot(hwnd, lp);
+            if (dragStart || continueDrag)
                 return epochnamespace::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
         }
@@ -1517,7 +1536,7 @@ namespace epochnamespace::core
         {
         case WM_LBUTTONDOWN:
         {
-            if ((::GetKeyState(VK_MENU) & 0x8000) == 0)
+            if (!is_dock_drag_hotspot(hwnd, lParam))
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
             ::SetCapture(hwnd);

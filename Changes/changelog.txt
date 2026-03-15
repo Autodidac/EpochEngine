@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.10]
+- Restored real manual dock/undock interaction without the temporary `Alt` requirement by using a dedicated pane drag strip instead of hijacking the whole content surface.
+- Re-verified live left-drag undock/redock behavior across SDL, Raylib, SFML, OpenGL, and Software, and confirmed the parent host still closes the full session cleanly afterward.
+- Refreshed the active README and current docs to advertise the v0.82.10 manual docking interaction repair.
+
 ## [v0.82.9]
 - Restored live undock/redock behavior by preserving each pane's original dock parent across future drags instead of forgetting it once a pane becomes top-level.
 - Changed the docking grid arranger to lay out only panes that are currently parented under the live `EpochParent`, so undocked windows stop stealing grid slots or snapping back unexpectedly.

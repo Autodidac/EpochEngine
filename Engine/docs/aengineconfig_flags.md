@@ -88,6 +88,5 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.9` restores live undock/redock behavior by preserving each pane's
-  original dock parent and by laying out only the panes that are still docked
-  under the active parent host.
+- `v0.82.10` restores real manual left-drag docking through a pane drag strip
+  while keeping the parented layout/redock fixes from `v0.82.9`.
