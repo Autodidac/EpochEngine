@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.30
+v0.82.31
 ```
 
 Highlights:
 
+- `0.82.31` is the post-release bump after the `0.82.30` updater rebuild
+  release, so the live repo stays ahead of the packaged runtime again.
 - `0.82.30` restores the source-update path so it now downloads the latest
   source snapshot, restores manifest dependencies, rebuilds the runtime, and
   replaces the running binary instead of stopping at an extracted source tree.
