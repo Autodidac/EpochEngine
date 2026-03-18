@@ -1100,13 +1100,9 @@ namespace epochnamespace::core
 
         [[nodiscard]] epochnamespace::updater::UpdateChannel default_update_channel()
         {
-            const std::string binary_name =
-                epochnamespace::core::cli::exe_path.empty()
-                ? "ConsoleApplication1.exe"
-                : epochnamespace::core::cli::exe_path.filename().string();
             return epochnamespace::updater::UpdateChannel{
                 .version_url = "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/aengine.version.ixx",
-                .binary_url = "https://github.com/Autodidac/EpochEngine/releases/latest/download/" + binary_name,
+                .binary_url = "https://github.com/Autodidac/EpochEngine/releases/latest/download/main.zip",
             };
         }
 
@@ -2045,11 +2041,8 @@ namespace urls
     const std::string repo = "EpochEngine";
     const std::string branch = "main/";
 
-    const std::string version_url = github_raw_base + owner + repo + "/" + branch + "/modules/aengine.version.ixx";
-    const std::string binary_url = github_base + owner + repo + "/releases/latest/download/"
-        + (epochnamespace::core::cli::exe_path.empty()
-            ? std::string{ "ConsoleApplication1.exe" }
-            : epochnamespace::core::cli::exe_path.filename().string());
+    const std::string version_url = github_raw_base + owner + repo + "/" + branch + "/Engine/modules/aengine.version.ixx";
+    const std::string binary_url = github_base + owner + repo + "/releases/latest/download/main.zip";
 }
 
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)

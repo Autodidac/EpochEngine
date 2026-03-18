@@ -39,11 +39,34 @@ import <string>;
 import <string_view>;
 import <thread>;
 import <chrono>;
+import <source_location>;
 
 import aengine.updater.config;
+import aengine.core.logger;
 
 export namespace epochnamespace::updater
 {
+    namespace detail
+    {
+        constexpr std::string_view kUpdaterLog = "Updater";
+
+        inline void log_info(const std::string& message)
+        {
+            logger::get(kUpdaterLog).log(
+                logger::LogLevel::INFO,
+                message,
+                std::source_location::current());
+        }
+
+        inline void log_error(const std::string& message)
+        {
+            logger::get(kUpdaterLog).log(
+                logger::LogLevel::Error,
+                message,
+                std::source_location::current());
+        }
+    }
+
     // ─────────────────────────────────────────────
     // Download file
     // ─────────────────────────────────────────────
@@ -51,8 +74,7 @@ export namespace epochnamespace::updater
         const std::string& url,
         const std::string& output_path)
     {
-        std::cout << "[INFO] Downloading: "
-            << url << " -> " << output_path << '\n';
+        detail::log_info("[INFO] Downloading: " + url + " -> " + output_path);
 
 #if defined(_WIN32)
         const std::string command =
@@ -71,8 +93,7 @@ export namespace epochnamespace::updater
 
         if (result != 0 || !check || check.tellg() <= 1)
         {
-            std::cerr << "[ERROR] Download failed: "
-                << output_path << '\n';
+            detail::log_error("[ERROR] Download failed: " + output_path);
             std::remove(output_path.c_str());
             return false;
         }
@@ -122,15 +143,17 @@ export namespace epochnamespace::updater
         const std::string& archive,
         const std::string& destination = ".")
     {
+#if defined(_WIN32)
+        const std::string cmd =
+            "powershell -NoProfile -Command \""
+            "$dest='" + destination + "'; "
+            "if(Test-Path $dest){Remove-Item $dest -Recurse -Force}; "
+            "New-Item -ItemType Directory -Path $dest -Force | Out-Null; "
+            "Expand-Archive -Path '" + archive + "' -DestinationPath $dest -Force\"";
+#else
         if (!setup_7zip())
             return false;
 
-#if defined(_WIN32)
-        const std::string cmd =
-            "\"\"" + SEVEN_ZIP_LOCAL_BINARY()
-            + "\" x \"" + archive
-            + "\" -o\"" + destination + "\" -y\"";
-#else
         const std::string cmd =
             "7z x \"" + archive
             + "\" -o\"" + destination + "\" -y";

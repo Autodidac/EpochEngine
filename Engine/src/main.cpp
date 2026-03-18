@@ -50,16 +50,12 @@ namespace
 
     [[nodiscard]] std::string make_version_url()
     {
-        return std::string(kGithubRawBase) + kOwner + kRepo + "/" + kBranch + "/modules/aengine.version.ixx";
+        return std::string(kGithubRawBase) + kOwner + kRepo + "/" + kBranch + "/Engine/modules/aengine.version.ixx";
     }
 
     [[nodiscard]] std::string make_binary_url()
     {
-        const std::string binary_name =
-            epochnamespace::core::cli::exe_path.empty()
-            ? "ConsoleApplication1.exe"
-            : epochnamespace::core::cli::exe_path.filename().string();
-        return std::string(kGithubBase) + kOwner + kRepo + "/releases/latest/download/" + binary_name;
+        return std::string(kGithubBase) + kOwner + kRepo + "/releases/latest/download/main.zip";
     }
 }
 

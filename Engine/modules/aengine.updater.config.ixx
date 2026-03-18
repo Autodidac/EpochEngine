@@ -111,17 +111,17 @@ export namespace epochnamespace::updater
     {
         return GITHUB_RAW_BASE()
             + OWNER + "/" + REPO + "/" + BRANCH
-            + "/modules/aengine.version.ixx";
+            + "/Engine/modules/aengine.version.ixx";
     }
 
     export inline std::string PROJECT_VERSION_HEADER_URL()
     {
         // fallback to legacy aversion module path
         auto url = PROJECT_VERSION_URL();
-        constexpr std::string_view needle = "/modules/aengine.version.ixx";
+        constexpr std::string_view needle = "/Engine/modules/aengine.version.ixx";
 
         if (const auto pos = url.rfind(needle); pos != std::string::npos)
-            url.replace(pos, needle.size(), "/Modules/aversion.ixx");
+            url.replace(pos, needle.size(), "/Engine/Modules/aversion.ixx");
 
         return url;
     }
@@ -137,7 +137,7 @@ export namespace epochnamespace::updater
     {
         return GITHUB_BASE()
             + OWNER + "/" + REPO
-            + "/releases/latest/download/update.exe";
+            + "/releases/latest/download/main.zip";
     }
 
     // ─────────────────────────────────────────

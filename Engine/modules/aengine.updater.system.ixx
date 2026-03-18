@@ -41,15 +41,36 @@ import <array>;
 import <fstream>;
 import <string>;
 import <iterator>;
+import <source_location>;
+import <cctype>;
 
 import aengine.cli;
 import aengine.updater.tools;
 import aengine.updater.config;
+import aengine.core.logger;
 
 export namespace epochnamespace::updater
 {
-    namespace detail
+    namespace system_detail
     {
+        constexpr std::string_view kUpdaterLog = "Updater";
+
+        inline void log_info(const std::string& message)
+        {
+            logger::get(kUpdaterLog).log(
+                logger::LogLevel::INFO,
+                message,
+                std::source_location::current());
+        }
+
+        inline void log_error(const std::string& message)
+        {
+            logger::get(kUpdaterLog).log(
+                logger::LogLevel::Error,
+                message,
+                std::source_location::current());
+        }
+
         [[nodiscard]] inline std::string strip_utf8_bom(std::string text)
         {
             if (text.size() >= 3
@@ -147,6 +168,18 @@ export namespace epochnamespace::updater
             const std::filesystem::path stem = target_binary.stem();
             const std::filesystem::path ext = target_binary.extension();
             return parent / (stem.string() + ".update" + ext.string());
+        }
+
+        [[nodiscard]] inline std::filesystem::path replacement_package_path(
+            const std::filesystem::path& target_binary)
+        {
+            return target_binary.parent_path() / "main.update.zip";
+        }
+
+        [[nodiscard]] inline std::filesystem::path replacement_extract_dir(
+            const std::filesystem::path& target_binary)
+        {
+            return target_binary.parent_path() / "__epoch_update";
         }
     }
 
@@ -247,6 +280,62 @@ export namespace epochnamespace::updater
 #endif
     }
 
+    bool replace_runtime_from_script(
+        const std::filesystem::path& target_binary,
+        const std::filesystem::path& extracted_runtime_dir,
+        const std::filesystem::path& package_archive)
+    {
+#if defined(_WIN32)
+        const std::filesystem::path target_dir = target_binary.parent_path();
+        const std::filesystem::path script_path =
+            std::filesystem::absolute(epochnamespace::updater::REPLACE_RUNNING_EXE_SCRIPT_NAME());
+        std::ofstream bat(script_path);
+        if (!bat)
+            return false;
+
+        bat <<
+            "@echo off\n"
+            "timeout /t 2 >nul\n"
+            "robocopy \"" << extracted_runtime_dir.string() << "\" \"" << target_dir.string()
+            << "\" /E /NFL /NDL /NJH /NJS /NC /NS >nul\n"
+            "if errorlevel 8 exit /b 1\n"
+            "rmdir /S /Q \"" << extracted_runtime_dir.string() << "\" >nul 2>&1\n"
+            "del /F /Q \"" << package_archive.string() << "\" >nul 2>&1\n"
+            "start \"\" \"" << target_binary.string() << "\"\n";
+        bat.close();
+
+        const std::string command =
+            "cmd.exe /C start \"\" /min \"" + script_path.string() + "\"";
+        if (std::system(command.c_str()) != 0)
+            return false;
+
+        std::exit(0);
+#else
+        const std::filesystem::path target_dir = target_binary.parent_path();
+        const std::filesystem::path script_path =
+            std::filesystem::absolute(epochnamespace::updater::REPLACE_RUNNING_EXE_SCRIPT_NAME());
+        std::ofstream sh(script_path);
+        if (!sh)
+            return false;
+
+        sh <<
+            "#!/bin/sh\n"
+            "sleep 2\n"
+            "cp -R \"" << extracted_runtime_dir.string() << "/.\" \"" << target_dir.string() << "\"\n"
+            "rm -rf \"" << extracted_runtime_dir.string() << "\"\n"
+            "rm -f \"" << package_archive.string() << "\"\n"
+            "\"" << target_binary.string() << "\" &\n";
+        sh.close();
+
+        const std::string command =
+            "chmod +x \"" + script_path.string() + "\" && \"" + script_path.string() + "\" &";
+        if (std::system(command.c_str()) != 0)
+            return false;
+
+        std::exit(0);
+#endif
+    }
+
     bool replace_binary(
         const std::filesystem::path& target_binary,
         const std::filesystem::path& new_binary)
@@ -265,28 +354,27 @@ export namespace epochnamespace::updater
         if (!epochnamespace::updater::download_file(url, tmp))
             return false;
 
-        const std::string downloaded = detail::read_text_file(tmp);
+        const std::string downloaded = system_detail::read_text_file(tmp);
         std::filesystem::remove(tmp);
 
         const std::string localVersion =
-            detail::extract_version_string(epochnamespace::updater::PROJECT_VERSION);
+            system_detail::extract_version_string(epochnamespace::updater::PROJECT_VERSION);
         const std::string remoteVersion =
-            detail::extract_version_string(downloaded);
+            system_detail::extract_version_string(downloaded);
 
         if (remoteVersion.empty())
         {
-            std::cerr << "[ERROR] Could not parse remote version payload.\n";
+            system_detail::log_error("Could not parse remote version payload.");
             return false;
         }
 
         const std::string normalizedLocal =
             localVersion.empty()
-            ? detail::trim_ascii(epochnamespace::updater::PROJECT_VERSION)
+            ? system_detail::trim_ascii(epochnamespace::updater::PROJECT_VERSION)
             : localVersion;
 
-        std::cout << "[INFO] Local  : "
-            << normalizedLocal << '\n';
-        std::cout << "[INFO] Remote : " << remoteVersion << '\n';
+        system_detail::log_info("[INFO] Local  : " + normalizedLocal);
+        system_detail::log_info("[INFO] Remote : " + remoteVersion);
 
         return remoteVersion != normalizedLocal;
     }
@@ -296,8 +384,35 @@ export namespace epochnamespace::updater
     // ─────────────────────────────────────────────
     bool install_from_binary(const std::string& url)
     {
-        const auto target_binary = detail::current_binary_path();
-        const auto bin = detail::replacement_binary_path(target_binary);
+        const auto target_binary = system_detail::current_binary_path();
+        const auto lower_url = [&]()
+        {
+            std::string s = url;
+            for (char& ch : s) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            return s;
+        }();
+
+        if (lower_url.ends_with(".zip"))
+        {
+            const auto archive_path = system_detail::replacement_package_path(target_binary);
+            const auto extract_dir = system_detail::replacement_extract_dir(target_binary);
+
+            std::error_code ec;
+            std::filesystem::remove_all(extract_dir, ec);
+
+            if (!epochnamespace::updater::download_file(url, archive_path.string()))
+                return false;
+
+            if (!epochnamespace::updater::extract_archive(archive_path.string(), extract_dir.string()))
+            {
+                system_detail::log_error("Failed to extract update package.");
+                return false;
+            }
+
+            return replace_runtime_from_script(target_binary, extract_dir, archive_path);
+        }
+
+        const auto bin = system_detail::replacement_binary_path(target_binary);
 
         if (!epochnamespace::updater::download_file(url, bin.string()))
             return false;
