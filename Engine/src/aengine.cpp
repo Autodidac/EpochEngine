@@ -1466,6 +1466,7 @@ namespace epochnamespace::core
                             }
                             case epochnamespace::EditorCommand::UpdateApplication:
                             {
+                                std::cout << "[INFO] Running confirmed update command." << std::endl;
                                 logger::get(kEditorLog).log(
                                     logger::LogLevel::INFO,
                                     "Running confirmed update command.",
@@ -1475,6 +1476,7 @@ namespace epochnamespace::core
                                     true);
                                 if (!result.update_available)
                                 {
+                                    std::cout << "[INFO] No update available." << std::endl;
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
                                         "No update available.",
@@ -1482,6 +1484,7 @@ namespace epochnamespace::core
                                 }
                                 else if (!result.update_performed)
                                 {
+                                    std::cerr << "[ERROR] Update was available but the handoff/install step did not complete." << std::endl;
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::Error,
                                         "Update was available but the handoff/install step did not complete.",

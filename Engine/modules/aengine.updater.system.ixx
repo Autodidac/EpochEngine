@@ -61,6 +61,7 @@ export namespace epochnamespace::updater
                 logger::LogLevel::INFO,
                 message,
                 std::source_location::current());
+            std::cout << message << std::endl;
         }
 
         inline void log_error(const std::string& message)
@@ -69,6 +70,7 @@ export namespace epochnamespace::updater
                 logger::LogLevel::Error,
                 message,
                 std::source_location::current());
+            std::cerr << message << std::endl;
         }
 
         [[nodiscard]] inline std::string strip_utf8_bom(std::string text)
@@ -432,7 +434,10 @@ export namespace epochnamespace::updater
         UpdateCommandResult r{};
 
         if (!check_for_updates(channel.version_url))
+        {
+            system_detail::log_info("[INFO] No packaged update is currently available.");
             return r;
+        }
 
         r.update_available = true;
 

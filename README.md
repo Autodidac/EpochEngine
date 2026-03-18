@@ -262,11 +262,14 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.25
+v0.82.26
 ```
 
 Highlights:
 
+- `0.82.26` restores visible console/update feedback for the GUI-triggered
+  updater path, including explicit status when no newer packaged release is
+  available.
 - `0.82.25` is the post-release bump after the fixed `0.82.24` updater
   package, so the active docs and version surfaces stay ahead of the shipped
   release snapshot.
