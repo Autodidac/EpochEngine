@@ -262,15 +262,15 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.38
+v0.82.39
 ```
 
 Highlights:
 
-- `0.82.38` fixes the updater fallback so a confirmed update rebuilds from
-  source when `main` is newer and no newer packaged runtime exists.
-- `0.82.38` also removes the duplicate source probe and keeps updater status on
-  a single direct console path during rebuild/update work.
+- `0.82.39` keeps `main` ahead of the packaged `0.82.38` runtime release so
+  source-update checks still have a newer live target after the release.
+- `0.82.38` fixes updater fallback so a confirmed update rebuilds from source
+  when `main` is newer and no newer packaged runtime exists.
 - The runtime release continues to ship as `main.zip`, while `main` stays free
   to move ahead with source-only changes between packaged drops.
   the packaged-vs-source actions readable in normal use.
