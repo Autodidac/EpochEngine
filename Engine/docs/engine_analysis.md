@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while compatibility code has been
 consolidated under `Engine/legacy/`.
 
-Current public version: `v0.82.29`
+Current public version: `v0.82.30`
 
 ## Architecture highlights
 
@@ -56,6 +56,10 @@ Current public version: `v0.82.29`
 - The editor shell now maps more cleanly to production-tool expectations:
   launcher responsibilities are separated from editor responsibilities, and the
   updater is confirmation-gated before it can run from the UI.
+- The source-update path is back to behaving like an engine updater instead of
+  a passive download tool: it now restores manifest dependencies with `vcpkg`,
+  rebuilds from the downloaded snapshot, and replaces the running runtime from
+  the rebuilt output.
 - Backend presentation is more visually coherent now that the active renderer
   base colors are being pulled toward the same darker Vulkan-style baseline,
   and SFML’s shared preview path is clipped back to the intended scene view.

@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.30]
+- Restored the source-update flow so it now downloads the latest `main` snapshot, restores manifest dependencies with `vcpkg`, rebuilds `ConsoleApplication1`, and replaces the running runtime from the rebuilt output instead of stopping after extraction.
+- Fixed updater version comparison so builds newer than the latest packaged release stop trying to downgrade themselves.
+- Normalized updater console line emission for redirected output so captured update logs stop leaking raw CR/LF control glyphs.
+
 ## [v0.82.29]
 - Rolled the active version and docs forward to `v0.82.29` immediately after the `0.82.28` update-flow release so the live tree stays ahead of the packaged runtime again.
 

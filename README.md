@@ -262,11 +262,17 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.29
+v0.82.30
 ```
 
 Highlights:
 
+- `0.82.30` restores the source-update path so it now downloads the latest
+  source snapshot, restores manifest dependencies, rebuilds the runtime, and
+  replaces the running binary instead of stopping at an extracted source tree.
+- `0.82.30` also fixes updater version comparison so newer local builds stop
+  trying to downgrade to older packaged releases, and it normalizes updater
+  console line output to avoid leaked CR/LF glyphs in captured logs.
 - `0.82.29` is the post-release bump after the `0.82.28` update-flow release,
   so the active repo surfaces stay ahead of the packaged runtime again.
 - `0.82.28` cleans up the update confirmation flow with explicit packaged vs

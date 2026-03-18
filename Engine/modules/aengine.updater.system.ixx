@@ -30,6 +30,10 @@
  ***********************************************/
 module;
 
+#if defined(_WIN32)
+#  include <windows.h>
+#endif
+
 export module aengine.updater.system;
 
 import <filesystem>;
@@ -43,6 +47,8 @@ import <string>;
 import <iterator>;
 import <source_location>;
 import <cctype>;
+import <cstdio>;
+import <cstdlib>;
 
 import aengine.cli;
 import aengine.updater.tools;
@@ -55,13 +61,57 @@ export namespace epochnamespace::updater
     {
         constexpr std::string_view kUpdaterLog = "Updater";
 
+        inline void emit_console_line(const std::string& message, bool error_stream)
+        {
+#if defined(_WIN32)
+            const HANDLE handle = GetStdHandle(error_stream ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE);
+            const std::string console_line = message + "\r\n";
+            const std::string redirected_line = message + "\n";
+
+            DWORD console_mode = 0;
+            if (handle != nullptr && handle != INVALID_HANDLE_VALUE
+                && GetConsoleMode(handle, &console_mode))
+            {
+                DWORD written = 0;
+                if (WriteConsoleA(
+                    handle,
+                    console_line.c_str(),
+                    static_cast<DWORD>(console_line.size()),
+                    &written,
+                    nullptr))
+                {
+                    return;
+                }
+            }
+
+            if (handle != nullptr && handle != INVALID_HANDLE_VALUE)
+            {
+                DWORD written = 0;
+                if (WriteFile(
+                    handle,
+                    redirected_line.c_str(),
+                    static_cast<DWORD>(redirected_line.size()),
+                    &written,
+                    nullptr))
+                {
+                    return;
+                }
+            }
+#endif
+
+            FILE* stream = error_stream ? stderr : stdout;
+            std::fputs(message.c_str(), stream);
+            std::fputc('\n', stream);
+            std::fflush(stream);
+        }
+
         inline void log_info(const std::string& message)
         {
             logger::get(kUpdaterLog).log(
                 logger::LogLevel::INFO,
                 message,
                 std::source_location::current());
-            std::cout << message << std::endl;
+            emit_console_line(message, false);
         }
 
         inline void log_error(const std::string& message)
@@ -70,7 +120,7 @@ export namespace epochnamespace::updater
                 logger::LogLevel::Error,
                 message,
                 std::source_location::current());
-            std::cerr << message << std::endl;
+            emit_console_line(message, true);
         }
 
         [[nodiscard]] inline std::string strip_utf8_bom(std::string text)
@@ -150,6 +200,43 @@ export namespace epochnamespace::updater
             return {};
         }
 
+        [[nodiscard]] inline std::array<int, 3> parse_version_triplet(const std::string& text)
+        {
+            std::array<int, 3> parts{ 0, 0, 0 };
+
+            std::size_t start = 0;
+            for (std::size_t i = 0; i < parts.size(); ++i)
+            {
+                const std::size_t end = text.find('.', start);
+                const std::string token = text.substr(start, end == std::string::npos ? std::string::npos : (end - start));
+                parts[i] = token.empty() ? 0 : std::stoi(token);
+
+                if (end == std::string::npos)
+                    break;
+                start = end + 1;
+            }
+
+            return parts;
+        }
+
+        [[nodiscard]] inline int compare_versions(
+            const std::string& lhs,
+            const std::string& rhs)
+        {
+            const auto left = parse_version_triplet(lhs);
+            const auto right = parse_version_triplet(rhs);
+
+            for (std::size_t i = 0; i < left.size(); ++i)
+            {
+                if (left[i] < right[i])
+                    return -1;
+                if (left[i] > right[i])
+                    return 1;
+            }
+
+            return 0;
+        }
+
         [[nodiscard]] inline std::filesystem::path current_binary_path()
         {
             std::error_code ec;
@@ -200,6 +287,151 @@ export namespace epochnamespace::updater
             const std::filesystem::path& target_binary)
         {
             return target_binary.parent_path() / "EpochEngine-source-main";
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_solution_path(
+            const std::filesystem::path& source_root)
+        {
+            return source_root / "Engine.sln";
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_runtime_output_dir(
+            const std::filesystem::path& source_root)
+        {
+            return source_root / "x64" / "Debug";
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_runtime_binary_path(
+            const std::filesystem::path& source_root,
+            const std::filesystem::path& target_binary)
+        {
+            return source_runtime_output_dir(source_root) / target_binary.filename();
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_manifest_root(
+            const std::filesystem::path& source_root)
+        {
+            return source_root / "Engine";
+        }
+
+        [[nodiscard]] inline std::filesystem::path env_path(const char* name)
+        {
+#if defined(_WIN32)
+            char* value = nullptr;
+            std::size_t length = 0;
+            if (_dupenv_s(&value, &length, name) == 0 && value != nullptr)
+            {
+                const std::filesystem::path result{ value };
+                std::free(value);
+                return result;
+            }
+#else
+            if (const char* value = std::getenv(name))
+                return std::filesystem::path{ value };
+#endif
+            return {};
+        }
+
+        [[nodiscard]] inline std::filesystem::path find_msbuild_path()
+        {
+#if defined(_WIN32)
+            const auto from_env = env_path("MSBUILD_EXE_PATH");
+            if (!from_env.empty() && std::filesystem::exists(from_env))
+                return from_env;
+
+            const std::filesystem::path program_files = env_path("ProgramFiles");
+            const std::filesystem::path program_files_x86 = env_path("ProgramFiles(x86)");
+
+            const std::array<std::filesystem::path, 10> candidates{
+                program_files / "Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe",
+                program_files / "Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/MSBuild.exe",
+                program_files / "Microsoft Visual Studio/2022/Enterprise/MSBuild/Current/Bin/MSBuild.exe",
+                program_files / "Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe",
+                program_files / "Microsoft Visual Studio/2022/Preview/MSBuild/Current/Bin/MSBuild.exe",
+                program_files_x86 / "Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe",
+                program_files_x86 / "Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/MSBuild.exe",
+                program_files_x86 / "Microsoft Visual Studio/2022/Enterprise/MSBuild/Current/Bin/MSBuild.exe",
+                program_files_x86 / "Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe",
+                program_files_x86 / "Microsoft Visual Studio/2022/Preview/MSBuild/Current/Bin/MSBuild.exe",
+            };
+
+            for (const auto& candidate : candidates)
+            {
+                if (!candidate.empty() && std::filesystem::exists(candidate))
+                    return candidate;
+            }
+#endif
+            return {};
+        }
+
+        [[nodiscard]] inline bool build_runtime_from_source(
+            const std::filesystem::path& source_root,
+            const std::filesystem::path& target_binary)
+        {
+#if defined(_WIN32)
+            const auto manifest_root = source_manifest_root(source_root);
+            const auto vcpkg_root = env_path("VCPKG_ROOT");
+            const auto vcpkg_exe = vcpkg_root / "vcpkg.exe";
+            if (vcpkg_root.empty() || !std::filesystem::exists(vcpkg_exe))
+            {
+                log_error("[ERROR] Could not locate vcpkg. Set VCPKG_ROOT before running a source update.");
+                return false;
+            }
+
+            const auto msbuild = find_msbuild_path();
+            if (msbuild.empty())
+            {
+                log_error("[ERROR] Could not locate MSBuild. Install Visual Studio 2022 or Build Tools to use source updates.");
+                return false;
+            }
+
+            const auto solution = source_solution_path(source_root);
+            if (!std::filesystem::exists(solution))
+            {
+                log_error("[ERROR] Extracted source snapshot does not contain Engine.sln.");
+                return false;
+            }
+
+            log_info("[INFO] Building updated runtime from source.");
+            log_info("[INFO] Restoring source dependencies with vcpkg.");
+            const std::string vcpkg_command =
+                "\"" + vcpkg_exe.string() + "\" install --triplet x64-windows --x-manifest-root=\""
+                + manifest_root.string() + "\"";
+            if (std::system(vcpkg_command.c_str()) != 0)
+            {
+                log_error("[ERROR] vcpkg dependency restore failed.");
+                return false;
+            }
+
+            log_info("[INFO] MSBuild: " + msbuild.string());
+
+            const std::string command =
+                "\"" + msbuild.string() + "\" \"" + solution.string() + "\""
+                " /t:ConsoleApplication1"
+                " /p:Configuration=Debug"
+                " /p:Platform=x64"
+                " /m:1 /clp:ErrorsOnly";
+
+            if (std::system(command.c_str()) != 0)
+            {
+                log_error("[ERROR] Source build failed.");
+                return false;
+            }
+
+            const auto built_binary = source_runtime_binary_path(source_root, target_binary);
+            if (!std::filesystem::exists(built_binary))
+            {
+                log_error("[ERROR] Source build completed without producing the runtime binary.");
+                return false;
+            }
+
+            return true;
+#else
+            (void)source_root;
+            (void)target_binary;
+            log_error("[ERROR] Source rebuild updates are currently implemented for Windows MSBuild builds only.");
+            return false;
+#endif
         }
     }
 
@@ -322,7 +554,7 @@ export namespace epochnamespace::updater
             "if errorlevel 8 exit /b 1\n"
             "rmdir /S /Q \"" << extracted_runtime_dir.string() << "\" >nul 2>&1\n"
             "del /F /Q \"" << package_archive.string() << "\" >nul 2>&1\n"
-            "start \"\" \"" << target_binary.string() << "\"\n";
+            "start \"\" /D \"" << target_dir.string() << "\" \"" << target_binary.string() << "\"\n";
         bat.close();
 
         const std::string command =
@@ -345,6 +577,71 @@ export namespace epochnamespace::updater
             "cp -R \"" << extracted_runtime_dir.string() << "/.\" \"" << target_dir.string() << "\"\n"
             "rm -rf \"" << extracted_runtime_dir.string() << "\"\n"
             "rm -f \"" << package_archive.string() << "\"\n"
+            "cd \"" << target_dir.string() << "\"\n"
+            "\"" << target_binary.string() << "\" &\n";
+        sh.close();
+
+        const std::string command =
+            "chmod +x \"" + script_path.string() + "\" && \"" + script_path.string() + "\" &";
+        if (std::system(command.c_str()) != 0)
+            return false;
+
+        std::exit(0);
+#endif
+    }
+
+    bool replace_runtime_from_source_script(
+        const std::filesystem::path& target_binary,
+        const std::filesystem::path& built_runtime_dir,
+        const std::filesystem::path& source_root,
+        const std::filesystem::path& package_archive)
+    {
+        (void)source_root;
+#if defined(_WIN32)
+        const std::filesystem::path target_dir = target_binary.parent_path();
+        const std::filesystem::path script_path =
+            std::filesystem::absolute(epochnamespace::updater::REPLACE_RUNNING_EXE_SCRIPT_NAME());
+        std::ofstream bat(script_path);
+        if (!bat)
+            return false;
+
+        const std::filesystem::path source_assets_dir = built_runtime_dir / "assets";
+        const std::filesystem::path target_assets_dir = target_dir / "assets";
+
+        bat <<
+            "@echo off\n"
+            "timeout /t 2 >nul\n"
+            "robocopy \"" << built_runtime_dir.string() << "\" \"" << target_dir.string() << "\" "
+            << "\"" << target_binary.filename().string() << "\" *.dll *.manifest /NFL /NDL /NJH /NJS /NC /NS >nul\n"
+            "if errorlevel 8 exit /b 1\n"
+            "if exist \"" << source_assets_dir.string() << "\" robocopy \"" << source_assets_dir.string()
+            << "\" \"" << target_assets_dir.string() << "\" /E /NFL /NDL /NJH /NJS /NC /NS >nul\n"
+            "if errorlevel 8 exit /b 1\n"
+            "del /F /Q \"" << package_archive.string() << "\" >nul 2>&1\n"
+            "start \"\" /D \"" << target_dir.string() << "\" \"" << target_binary.string() << "\"\n";
+        bat.close();
+
+        const std::string command =
+            "cmd.exe /C start \"\" /min \"" + script_path.string() + "\"";
+        if (std::system(command.c_str()) != 0)
+            return false;
+
+        std::exit(0);
+#else
+        const std::filesystem::path target_dir = target_binary.parent_path();
+        const std::filesystem::path script_path =
+            std::filesystem::absolute(epochnamespace::updater::REPLACE_RUNNING_EXE_SCRIPT_NAME());
+        std::ofstream sh(script_path);
+        if (!sh)
+            return false;
+
+        sh <<
+            "#!/bin/sh\n"
+            "sleep 2\n"
+            "cp \"" << (built_runtime_dir / target_binary.filename()).string() << "\" \"" << target_binary.string() << "\"\n"
+            "cp -R \"" << (built_runtime_dir / "assets").string() << "/.\" \"" << (target_dir / "assets").string() << "\"\n"
+            "rm -f \"" << package_archive.string() << "\"\n"
+            "cd \"" << target_dir.string() << "\"\n"
             "\"" << target_binary.string() << "\" &\n";
         sh.close();
 
@@ -397,7 +694,7 @@ export namespace epochnamespace::updater
         system_detail::log_info("[INFO] Local  : " + normalizedLocal);
         system_detail::log_info("[INFO] Remote : " + remoteVersion);
 
-        return remoteVersion != normalizedLocal;
+        return system_detail::compare_versions(normalizedLocal, remoteVersion) < 0;
     }
 
     // ─────────────────────────────────────────────
@@ -516,8 +813,19 @@ export namespace epochnamespace::updater
         std::filesystem::remove(archive_path, ec);
 
         system_detail::log_info("[INFO] Source snapshot ready at: " + final_dir.string());
-        system_detail::log_info("[INFO] This downloads source only. It does not rebuild or replace the running binary.");
-        return true;
+        if (!system_detail::build_runtime_from_source(final_dir, target_binary))
+            return false;
+
+        const auto built_runtime_dir = system_detail::source_runtime_output_dir(final_dir);
+        const auto built_binary = system_detail::source_runtime_binary_path(final_dir, target_binary);
+        if (!std::filesystem::exists(built_binary))
+        {
+            system_detail::log_error("[ERROR] Built runtime output is missing after source update.");
+            return false;
+        }
+
+        system_detail::log_info("[INFO] Replacing current runtime from rebuilt source output.");
+        return replace_runtime_from_source_script(target_binary, built_runtime_dir, final_dir, archive_path);
     }
 
     // ─────────────────────────────────────────────
