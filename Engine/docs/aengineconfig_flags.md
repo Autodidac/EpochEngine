@@ -1,6 +1,6 @@
 # Epoch Configuration Flags
 
-Current public version: `v0.82.35`
+Current public version: `v0.82.36`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility

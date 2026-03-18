@@ -262,13 +262,16 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.35
+v0.82.36
 ```
 
 Highlights:
 
-- `0.82.35` keeps `main` ahead of the packaged `0.82.34` runtime release so
-  source-update checks can see a newer live target again.
+- `0.82.36` restores a single visible updater status stream by writing direct
+  console output only when the engine logger is not already owning console
+  output.
+- `0.82.35` kept `main` ahead of the packaged `0.82.34` runtime release so
+  source-update checks could see a newer live target again.
 - `0.82.34` routes updater status through the engine logger only, so the
   commandline view stops duplicating the same updater lines.
 - `0.82.32` hardened updater version probes by using unique temp files instead

@@ -34,6 +34,7 @@ export module aengine.updater.system;
 
 import <filesystem>;
 import <regex>;
+import <iostream>;
 import <system_error>;
 import <vector>;
 import <array>;
@@ -42,6 +43,7 @@ import <string>;
 import <iterator>;
 import <source_location>;
 import <cctype>;
+import <cstdio>;
 import <cstdlib>;
 import <atomic>;
 import <chrono>;
@@ -57,12 +59,22 @@ export namespace epochnamespace::updater
     {
         constexpr std::string_view kUpdaterLog = "Updater";
 
+        inline void emit_console_line(const std::string& message, bool error_stream)
+        {
+            if (logger::config().console_enabled)
+                return;
+
+            auto& stream = error_stream ? std::cerr : std::cout;
+            stream << message << std::endl;
+        }
+
         inline void log_info(const std::string& message)
         {
             logger::get(kUpdaterLog).log(
                 logger::LogLevel::INFO,
                 message,
                 std::source_location::current());
+            emit_console_line(message, false);
         }
 
         inline void log_error(const std::string& message)
@@ -71,6 +83,7 @@ export namespace epochnamespace::updater
                 logger::LogLevel::Error,
                 message,
                 std::source_location::current());
+            emit_console_line(message, true);
         }
 
         [[nodiscard]] inline std::string strip_utf8_bom(std::string text)

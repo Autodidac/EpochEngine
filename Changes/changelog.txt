@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.36]
+- Restored a single visible updater status path by only emitting direct console output when the engine logger is not already configured to own console output.
+
 ## [v0.82.35]
 - Rolled the active repo surfaces forward after the packaged `0.82.34` release so `main` stays ahead of the downloadable runtime again.
 

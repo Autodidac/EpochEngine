@@ -335,6 +335,7 @@ export namespace epochnamespace::logger
     // API
     // ---------------------------------------------------------------------
     inline void init(LogConfig cfg) { hub().init(std::move(cfg)); }
+    inline LogConfig config() { return hub().config(); }
     inline SystemLogger& get(std::string_view system_name) { return hub().system(system_name); }
 
     inline void info(std::string_view sys, std::string_view msg,
