@@ -253,6 +253,7 @@ Useful entry points:
 - [Engine/docs/menu_overlay_backend_audit.md](Engine/docs/menu_overlay_backend_audit.md)
 - [Engine/docs/renderer_regression_plan.md](Engine/docs/renderer_regression_plan.md)
 - [Engine/docs/wsl_vcpkg_setup.md](Engine/docs/wsl_vcpkg_setup.md)
+- [Changes/release_notes_archive.md](Changes/release_notes_archive.md)
 
 ---
 
@@ -261,11 +262,16 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.16
+v0.82.17
 ```
 
 Highlights:
 
+- Historical versioned release-note markdowns are now consolidated into a single
+  archive file under `Changes/`, while new release notes continue as individual
+  version files.
+- Temporary Windows script-build artifacts are now ignored, and the accidental
+  tracked `.exp` file has been removed from the repo.
 - The editor script compiler no longer launches `clang++` through a fragile
   shell string on Windows, so spaces in the LLVM install path stop breaking the
   `Run` action.

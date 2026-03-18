@@ -15,6 +15,7 @@
 *.so
 *.dylib
 *.dll
+*.exp
 
 # Fortran module files
 *.mod
@@ -69,3 +70,4 @@ Engine/docs/api/
 *.bin
 
 project_snapshot.zip
+Temp Script Test/

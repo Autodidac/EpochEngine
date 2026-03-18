@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.17]
+- Consolidated the older versioned release-note markdowns into a single archive file so the `Changes/` folder keeps one historical notes surface while new releases continue to get their own markdown.
+- Removed the accidentally tracked Windows `.exp` script-build artifact from the repo and added ignore rules for `.exp` files and the local `Temp Script Test/` workspace.
+- Refreshed the active version surfaces to `v0.82.17`.
+
 ## [v0.82.16]
 - Fixed the Windows editor script compiler path so it launches `clang++` directly instead of routing through a fragile shell command string that broke on `Program Files` paths.
 - Kept the script source itself ASCII-clean and re-verified the rebuilt debug app launch from `x64/Debug` after the compiler-path fix.

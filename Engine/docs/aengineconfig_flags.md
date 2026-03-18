@@ -88,6 +88,6 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.16` hardens the Windows script compiler path so editor-run scripts can
-  launch `clang++` correctly even when the compiler lives under `Program Files`
-  or another spaced install path.
+- `v0.82.17` cleans up the release/update surfaces by archiving older release
+  notes into one file, removing the accidental tracked `.exp` artifact, and
+  adding ignore coverage for local script-build outputs.
