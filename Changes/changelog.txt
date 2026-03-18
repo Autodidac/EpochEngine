@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.20]
+- Rolled the active version, README, docs, and release-note surfaces forward to `v0.82.20` so the updater has a fresh live target to detect during manual testing.
+
 ## [v0.82.19]
 - Fixed the self-update flow so it now targets the currently running executable instead of the old hardcoded `updater.exe` replacement path.
 - Added explicit failure reporting for update handoff/install failures so the app no longer looks like it updated successfully when the binary download or replacement step did not complete.

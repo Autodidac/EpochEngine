@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.19
+v0.82.20
 ```
 
 Highlights:
 
+- `0.82.20` is the fresh documentation/version bump so the updater has a new
+  live target to detect and pull during self-update testing.
 - The self-update path now targets the currently running executable instead of
   the old hardcoded `updater.exe` flow, and failed update handoffs are reported
   instead of silently looking successful.

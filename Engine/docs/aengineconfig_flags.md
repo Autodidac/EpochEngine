@@ -88,6 +88,6 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.19` fixes the self-update handoff so it targets the running
-  application binary instead of a leftover hardcoded updater executable path,
-  and now reports install/handoff failures explicitly.
+- `v0.82.20` is the aligned documentation/version bump that follows the
+  updater handoff fix, giving the self-update flow a fresh release target to
+  detect during manual validation.
