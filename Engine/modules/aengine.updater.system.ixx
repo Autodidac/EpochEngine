@@ -42,6 +42,7 @@ import <fstream>;
 import <string>;
 import <iterator>;
 
+import aengine.cli;
 import aengine.updater.tools;
 import aengine.updater.config;
 
@@ -125,6 +126,28 @@ export namespace epochnamespace::updater
 
             return {};
         }
+
+        [[nodiscard]] inline std::filesystem::path current_binary_path()
+        {
+            std::error_code ec;
+            if (!epochnamespace::core::cli::exe_path.empty())
+                return std::filesystem::absolute(epochnamespace::core::cli::exe_path, ec).lexically_normal();
+
+#if defined(_WIN32)
+            return std::filesystem::absolute("ConsoleApplication1.exe", ec).lexically_normal();
+#else
+            return std::filesystem::absolute("ConsoleApplication1", ec).lexically_normal();
+#endif
+        }
+
+        [[nodiscard]] inline std::filesystem::path replacement_binary_path(
+            const std::filesystem::path& target_binary)
+        {
+            const std::filesystem::path parent = target_binary.parent_path();
+            const std::filesystem::path stem = target_binary.stem();
+            const std::filesystem::path ext = target_binary.extension();
+            return parent / (stem.string() + ".update" + ext.string());
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -173,41 +196,63 @@ export namespace epochnamespace::updater
     // ─────────────────────────────────────────────
     // Binary replacement
     // ─────────────────────────────────────────────
-    void replace_binary_from_script(const std::string& new_binary)
+    bool replace_binary_from_script(
+        const std::filesystem::path& target_binary,
+        const std::filesystem::path& new_binary)
     {
 #if defined(_WIN32)
-        std::ofstream bat("replace_updater.bat");
+        const std::filesystem::path script_path =
+            std::filesystem::absolute(epochnamespace::updater::REPLACE_RUNNING_EXE_SCRIPT_NAME());
+        std::ofstream bat(script_path);
+        if (!bat)
+            return false;
+
         bat <<
             "@echo off\n"
             "timeout /t 2 >nul\n"
-            "taskkill /IM updater.exe /F >nul 2>&1\n"
-            "del updater.exe >nul 2>&1\n"
-            "rename \"" << new_binary << "\" updater.exe\n"
-            "start updater.exe\n";
+            "del /F /Q \"" << target_binary.string() << "\" >nul 2>&1\n"
+            "move /Y \"" << new_binary.string() << "\" \"" << target_binary.string() << "\" >nul\n"
+            "if errorlevel 1 exit /b 1\n"
+            "start \"\" \"" << target_binary.string() << "\"\n";
         bat.close();
 
-        std::system("start /min replace_updater.bat");
+        const std::string command =
+            "cmd.exe /C start \"\" /min \"" + script_path.string() + "\"";
+        if (std::system(command.c_str()) != 0)
+            return false;
+
         std::exit(0);
 #else
-        std::ofstream sh("replace_and_restart.sh");
+        const std::filesystem::path script_path =
+            std::filesystem::absolute(epochnamespace::updater::REPLACE_RUNNING_EXE_SCRIPT_NAME());
+        std::ofstream sh(script_path);
+        if (!sh)
+            return false;
+
         sh <<
             "#!/bin/sh\n"
             "sleep 2\n"
-            "pkill updater\n"
-            "mv \"" << new_binary << "\" updater\n"
-            "chmod +x updater\n"
-            "./updater &\n";
+            "rm -f \"" << target_binary.string() << "\"\n"
+            "mv \"" << new_binary.string() << "\" \"" << target_binary.string() << "\"\n"
+            "chmod +x \"" << target_binary.string() << "\"\n"
+            "\"" << target_binary.string() << "\" &\n";
         sh.close();
 
-        std::system("chmod +x replace_and_restart.sh && ./replace_and_restart.sh &");
+        const std::string command =
+            "chmod +x \"" + script_path.string() + "\" && \"" + script_path.string() + "\" &";
+        if (std::system(command.c_str()) != 0)
+            return false;
+
         std::exit(0);
 #endif
     }
 
-    void replace_binary(const std::string& new_binary)
+    bool replace_binary(
+        const std::filesystem::path& target_binary,
+        const std::filesystem::path& new_binary)
     {
         epochnamespace::updater::clean_up_build_files();
-        replace_binary_from_script(new_binary);
+        return replace_binary_from_script(target_binary, new_binary);
     }
 
     // ─────────────────────────────────────────────
@@ -249,14 +294,15 @@ export namespace epochnamespace::updater
     // ─────────────────────────────────────────────
     // Installation paths
     // ─────────────────────────────────────────────
-    void install_from_binary(const std::string& url)
+    bool install_from_binary(const std::string& url)
     {
-        const auto bin = epochnamespace::updater::OUTPUT_BINARY();
+        const auto target_binary = detail::current_binary_path();
+        const auto bin = detail::replacement_binary_path(target_binary);
 
-        if (!epochnamespace::updater::download_file(url, bin))
-            return;
+        if (!epochnamespace::updater::download_file(url, bin.string()))
+            return false;
 
-        replace_binary(bin);
+        return replace_binary(target_binary, bin);
     }
 
     // ─────────────────────────────────────────────
@@ -281,8 +327,7 @@ export namespace epochnamespace::updater
             return r;
         }
 
-        install_from_binary(channel.binary_url);
-        r.update_performed = true;
+        r.update_performed = install_from_binary(channel.binary_url);
         return r;
     }
 }

@@ -88,6 +88,6 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.18` fixes the remaining Windows editor script compiler spawn bug so
-  absolute LLVM installs under `Program Files` launch directly instead of being
-  split by the wrong process-spawn variant.
+- `v0.82.19` fixes the self-update handoff so it targets the running
+  application binary instead of a leftover hardcoded updater executable path,
+  and now reports install/handoff failures explicitly.

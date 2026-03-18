@@ -1100,9 +1100,13 @@ namespace epochnamespace::core
 
         [[nodiscard]] epochnamespace::updater::UpdateChannel default_update_channel()
         {
+            const std::string binary_name =
+                epochnamespace::core::cli::exe_path.empty()
+                ? "ConsoleApplication1.exe"
+                : epochnamespace::core::cli::exe_path.filename().string();
             return epochnamespace::updater::UpdateChannel{
                 .version_url = "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/aengine.version.ixx",
-                .binary_url = "https://github.com/Autodidac/EpochEngine/releases/latest/download/ConsoleApplication1.exe",
+                .binary_url = "https://github.com/Autodidac/EpochEngine/releases/latest/download/" + binary_name,
             };
         }
 
@@ -1478,6 +1482,13 @@ namespace epochnamespace::core
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
                                         "No update available.",
+                                        std::source_location::current());
+                                }
+                                else if (!result.update_performed)
+                                {
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::Error,
+                                        "Update was available but the handoff/install step did not complete.",
                                         std::source_location::current());
                                 }
                                 break;
@@ -2035,7 +2046,10 @@ namespace urls
     const std::string branch = "main/";
 
     const std::string version_url = github_raw_base + owner + repo + "/" + branch + "/modules/aengine.version.ixx";
-    const std::string binary_url = github_base + owner + repo + "/releases/latest/download/ConsoleApplication1.exe";
+    const std::string binary_url = github_base + owner + repo + "/releases/latest/download/"
+        + (epochnamespace::core::cli::exe_path.empty()
+            ? std::string{ "ConsoleApplication1.exe" }
+            : epochnamespace::core::cli::exe_path.filename().string());
 }
 
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
@@ -2072,6 +2086,13 @@ int WINAPI wWinMain(
 
             if (update_result.force_required && !cli_result.force_update)
                 return 2;
+
+            if (cli_result.force_update
+                && update_result.update_available
+                && !update_result.update_performed)
+            {
+                return 1;
+            }
 
             return 0;
         }
@@ -2113,6 +2134,13 @@ int main(int argc, char** argv)
 
             if (update_result.force_required && !cli_result.force_update)
                 return 2;
+
+            if (cli_result.force_update
+                && update_result.update_available
+                && !update_result.update_performed)
+            {
+                return 1;
+            }
 
             return 0;
         }

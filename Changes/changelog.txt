@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.19]
+- Fixed the self-update flow so it now targets the currently running executable instead of the old hardcoded `updater.exe` replacement path.
+- Added explicit failure reporting for update handoff/install failures so the app no longer looks like it updated successfully when the binary download or replacement step did not complete.
+- Refreshed the active version surfaces to `v0.82.19`.
+
 ## [v0.82.18]
 - Fixed the remaining Windows script compiler spawn bug by using a direct executable launch for real LLVM paths instead of the PATH-search variant, which was still splitting `Program Files` incorrectly during editor-run script builds.
 - Refreshed the active version surfaces to `v0.82.18`.

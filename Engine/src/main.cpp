@@ -55,7 +55,11 @@ namespace
 
     [[nodiscard]] std::string make_binary_url()
     {
-        return std::string(kGithubBase) + kOwner + kRepo + "/releases/latest/download/ConsoleApplication1.exe";
+        const std::string binary_name =
+            epochnamespace::core::cli::exe_path.empty()
+            ? "ConsoleApplication1.exe"
+            : epochnamespace::core::cli::exe_path.filename().string();
+        return std::string(kGithubBase) + kOwner + kRepo + "/releases/latest/download/" + binary_name;
     }
 }
 
@@ -80,6 +84,13 @@ int main(int argc, char** argv)
 
             if (update_result.force_required && !cli_result.force_update)
                 return 2;
+
+            if (cli_result.force_update
+                && update_result.update_available
+                && !update_result.update_performed)
+            {
+                return 1;
+            }
 
             return 0;
         }

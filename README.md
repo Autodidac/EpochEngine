@@ -262,11 +262,14 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.18
+v0.82.19
 ```
 
 Highlights:
 
+- The self-update path now targets the currently running executable instead of
+  the old hardcoded `updater.exe` flow, and failed update handoffs are reported
+  instead of silently looking successful.
 - The Windows editor script compiler now uses a true direct executable launch
   for absolute LLVM paths, so `clang++` under `Program Files` no longer gets
   split into a broken `Files/...` argument.
