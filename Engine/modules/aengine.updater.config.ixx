@@ -56,7 +56,7 @@ export namespace epochnamespace::updater
     // ─────────────────────────────────────────
 
     export inline std::string OWNER = "Autodidac";
-    export inline std::string REPO = "Cpp20_Ultimate_Project_Updater";
+    export inline std::string REPO = "EpochEngine";
     export inline std::string BRANCH = "main";
 
     export inline std::string PROJECT_VERSION =
