@@ -79,6 +79,7 @@ export namespace epochnamespace::updater
 #if defined(_WIN32)
         const std::string command =
             "curl -L --fail --silent --show-error "
+            "-A \"EpochUpdater\" "
             "-H \"Accept: application/vnd.github+json\" "
             "-H \"X-GitHub-Api-Version: 2022-11-28\" "
             "-o \""

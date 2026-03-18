@@ -30,10 +30,6 @@
  ***********************************************/
 module;
 
-#if defined(_WIN32)
-#  include <windows.h>
-#endif
-
 export module aengine.updater.system;
 
 import <filesystem>;
@@ -49,6 +45,8 @@ import <source_location>;
 import <cctype>;
 import <cstdio>;
 import <cstdlib>;
+import <atomic>;
+import <chrono>;
 
 import aengine.cli;
 import aengine.updater.tools;
@@ -63,42 +61,6 @@ export namespace epochnamespace::updater
 
         inline void emit_console_line(const std::string& message, bool error_stream)
         {
-#if defined(_WIN32)
-            const HANDLE handle = GetStdHandle(error_stream ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE);
-            const std::string console_line = message + "\r\n";
-            const std::string redirected_line = message + "\n";
-
-            DWORD console_mode = 0;
-            if (handle != nullptr && handle != INVALID_HANDLE_VALUE
-                && GetConsoleMode(handle, &console_mode))
-            {
-                DWORD written = 0;
-                if (WriteConsoleA(
-                    handle,
-                    console_line.c_str(),
-                    static_cast<DWORD>(console_line.size()),
-                    &written,
-                    nullptr))
-                {
-                    return;
-                }
-            }
-
-            if (handle != nullptr && handle != INVALID_HANDLE_VALUE)
-            {
-                DWORD written = 0;
-                if (WriteFile(
-                    handle,
-                    redirected_line.c_str(),
-                    static_cast<DWORD>(redirected_line.size()),
-                    &written,
-                    nullptr))
-                {
-                    return;
-                }
-            }
-#endif
-
             FILE* stream = error_stream ? stderr : stdout;
             std::fputs(message.c_str(), stream);
             std::fputc('\n', stream);
@@ -237,6 +199,14 @@ export namespace epochnamespace::updater
             return 0;
         }
 
+        struct VersionCheckResult
+        {
+            bool ok{ false };
+            std::string local;
+            std::string remote;
+            bool update_available{ false };
+        };
+
         [[nodiscard]] inline std::filesystem::path current_binary_path()
         {
             std::error_code ec;
@@ -287,6 +257,36 @@ export namespace epochnamespace::updater
             const std::filesystem::path& target_binary)
         {
             return target_binary.parent_path() / "EpochEngine-source-main";
+        }
+
+        [[nodiscard]] inline std::filesystem::path make_temp_download_path(std::string_view stem)
+        {
+            static std::atomic<unsigned long long> s_counter{ 0 };
+
+            std::error_code ec;
+            auto temp_root = std::filesystem::temp_directory_path(ec);
+            if (ec || temp_root.empty())
+            {
+                ec.clear();
+                temp_root = std::filesystem::current_path(ec);
+            }
+
+            std::string safe_stem;
+            safe_stem.reserve(stem.size());
+            for (const char ch : stem)
+            {
+                const auto uch = static_cast<unsigned char>(ch);
+                safe_stem.push_back(std::isalnum(uch) ? ch : '_');
+            }
+
+            if (safe_stem.empty())
+                safe_stem = "download";
+
+            const auto serial = s_counter.fetch_add(1, std::memory_order_relaxed);
+            const auto tick =
+                static_cast<unsigned long long>(
+                    std::chrono::high_resolution_clock::now().time_since_epoch().count());
+            return temp_root / ("epoch_" + safe_stem + "_" + std::to_string(tick) + "_" + std::to_string(serial) + ".tmp");
         }
 
         [[nodiscard]] inline std::filesystem::path source_solution_path(
@@ -450,6 +450,7 @@ export namespace epochnamespace::updater
         std::string version_url;
         std::string binary_url;
         std::string source_url;
+        std::string source_version_url;
     };
 
     // ─────────────────────────────────────────────
@@ -665,15 +666,22 @@ export namespace epochnamespace::updater
     // ─────────────────────────────────────────────
     // Version check (MODULE-SAFE)
     // ─────────────────────────────────────────────
-    bool check_for_updates(const std::string& url)
+    system_detail::VersionCheckResult check_for_updates(
+        const std::string& url,
+        std::string_view label = {})
     {
-        constexpr char tmp[] = "remote_version.txt";
+        system_detail::VersionCheckResult result{};
+        const auto tmp = system_detail::make_temp_download_path(
+            label.empty() ? std::string_view{ "remote_version" } : label);
+        std::error_code ec;
 
-        if (!epochnamespace::updater::download_file(url, tmp))
-            return false;
+        std::filesystem::remove(tmp, ec);
+
+        if (!epochnamespace::updater::download_file(url, tmp.string()))
+            return result;
 
         const std::string downloaded = system_detail::read_text_file(tmp);
-        std::filesystem::remove(tmp);
+        std::filesystem::remove(tmp, ec);
 
         const std::string localVersion =
             system_detail::extract_version_string(epochnamespace::updater::PROJECT_VERSION);
@@ -683,7 +691,7 @@ export namespace epochnamespace::updater
         if (remoteVersion.empty())
         {
             system_detail::log_error("Could not parse remote version payload.");
-            return false;
+            return result;
         }
 
         const std::string normalizedLocal =
@@ -691,10 +699,19 @@ export namespace epochnamespace::updater
             ? system_detail::trim_ascii(epochnamespace::updater::PROJECT_VERSION)
             : localVersion;
 
-        system_detail::log_info("[INFO] Local  : " + normalizedLocal);
-        system_detail::log_info("[INFO] Remote : " + remoteVersion);
+        const std::string prefix =
+            label.empty()
+            ? std::string{}
+            : (std::string{ label } + " ");
 
-        return system_detail::compare_versions(normalizedLocal, remoteVersion) < 0;
+        system_detail::log_info("[INFO] " + prefix + "Local  : " + normalizedLocal);
+        system_detail::log_info("[INFO] " + prefix + "Remote : " + remoteVersion);
+
+        result.ok = true;
+        result.local = normalizedLocal;
+        result.remote = remoteVersion;
+        result.update_available = system_detail::compare_versions(normalizedLocal, remoteVersion) < 0;
+        return result;
     }
 
     // ─────────────────────────────────────────────
@@ -744,6 +761,19 @@ export namespace epochnamespace::updater
         {
             system_detail::log_error("[ERROR] Source update URL is not configured.");
             return false;
+        }
+
+        if (!channel.source_version_url.empty())
+        {
+            const auto source_status = check_for_updates(channel.source_version_url, "Source");
+            if (source_status.ok && source_status.update_available)
+            {
+                system_detail::log_info("[INFO] A newer source snapshot is available on main.");
+            }
+            else if (source_status.ok)
+            {
+                system_detail::log_info("[INFO] No newer source snapshot is currently available; continuing because source update was requested explicitly.");
+            }
         }
 
         const auto target_binary = system_detail::current_binary_path();
@@ -839,8 +869,20 @@ export namespace epochnamespace::updater
 
         UpdateCommandResult r{};
 
-        if (!check_for_updates(channel.version_url))
+        const auto packaged_status = check_for_updates(channel.version_url);
+        if (!packaged_status.ok)
+            return r;
+
+        if (!packaged_status.update_available)
         {
+            if (!channel.source_version_url.empty())
+            {
+                const auto source_status = check_for_updates(channel.source_version_url, "Source");
+                if (source_status.ok && source_status.update_available)
+                {
+                    system_detail::log_info("[INFO] A newer source snapshot is available on main. Use Source Snapshot to rebuild from source.");
+                }
+            }
             system_detail::log_info("[INFO] No packaged update is currently available.");
             return r;
         }

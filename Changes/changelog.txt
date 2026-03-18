@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.32]
+- Reworked updater version probes to download into unique temp files instead of a shared `remote_version.txt`, preventing file-in-use failures when packaged and source checks run back to back.
+- Kept the source-update availability messaging separate from packaged-release detection so the updater can point at `main` cleanly without confusing the release path.
+- Cleaned the editor update confirmation modal spacing and trimmed the README snapshot back to a concise current-state summary.
+
 ## [v0.82.31]
 - Rolled the active version and docs forward to `v0.82.31` immediately after the `0.82.30` updater rebuild release so the live tree stays ahead of the packaged runtime again.
 

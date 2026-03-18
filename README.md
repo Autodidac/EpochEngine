@@ -262,64 +262,20 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.31
+v0.82.32
 ```
 
 Highlights:
 
-- `0.82.31` is the post-release bump after the `0.82.30` updater rebuild
-  release, so the live repo stays ahead of the packaged runtime again.
-- `0.82.30` restores the source-update path so it now downloads the latest
-  source snapshot, restores manifest dependencies, rebuilds the runtime, and
-  replaces the running binary instead of stopping at an extracted source tree.
-- `0.82.30` also fixes updater version comparison so newer local builds stop
-  trying to downgrade to older packaged releases, and it normalizes updater
-  console line output to avoid leaked CR/LF glyphs in captured logs.
-- `0.82.29` is the post-release bump after the `0.82.28` update-flow release,
-  so the active repo surfaces stay ahead of the packaged runtime again.
-- `0.82.28` cleans up the update confirmation flow with explicit packaged vs
-  source actions, and adds a deliberate source-snapshot download path for
-  ahead-of-release testing.
-- `0.82.27` is the post-release bump after the `0.82.26` updater-feedback
-  release, so the active repo surfaces stay ahead of the packaged runtime.
-- `0.82.26` restores visible console/update feedback for the GUI-triggered
-  updater path, including explicit status when no newer packaged release is
-  available.
-- `0.82.25` is the post-release bump after the fixed `0.82.24` updater
-  package, so the active docs and version surfaces stay ahead of the shipped
-  release snapshot.
-- `0.82.24` fixes the updater to query the latest real GitHub release instead
-  of `main`, so version detection and `main.zip` download stay aligned.
-- `0.82.23` was the post-release bump after the fixed `0.82.22` package tag, so
-  the updater had a newer live target after the rerelease.
-- `0.82.22` fixes the updater to target the shipped `main.zip` runtime package,
-  extract it in place, and report status through Epoch logging so the captured
-  output no longer leaks raw CR/LF glyphs.
-- `0.82.21` is the post-release bump that follows the `0.82.20` tag so the
-  updater has a newer target than the packaged release snapshot.
-- `0.82.20` is the fresh documentation/version bump so the updater has a new
-  live target to detect and pull during self-update testing.
-- The self-update path now targets the currently running executable instead of
-  the old hardcoded `updater.exe` flow, and failed update handoffs are reported
-  instead of silently looking successful.
-- The Windows editor script compiler now uses a true direct executable launch
-  for absolute LLVM paths, so `clang++` under `Program Files` no longer gets
-  split into a broken `Files/...` argument.
-- Historical versioned release-note markdowns are now consolidated into a single
-  archive file under `Changes/`, while new release notes continue as individual
-  version files.
-- Temporary Windows script-build artifacts are now ignored, and the accidental
-  tracked `.exp` file has been removed from the repo.
-- The editor script compiler no longer launches `clang++` through a fragile
-  shell string on Windows, so spaces in the LLVM install path stop breaking the
-  `Run` action.
-- The editor now owns a real `Run` action for compiled engine scripts, with a
-  host-facing script API and a default `rotate_all_entities` script in the
-  active source tree.
-- Shared preview cameras now support reusable `Editor` and `FPS` modes with
-  keyboard motion and right-mouse look instead of the old fixed preview view.
-- The updater now parses either plain version text or the full version module
-  cleanly, so remote checks stop printing raw file banners or BOM garbage.
+- `0.82.32` hardens updater version probes by using unique temp files instead
+  of a shared `remote_version.txt`, so repeated packaged/source checks stop
+  colliding in live runtimes.
+- The editor update confirmation layout now stays below the title bar and keeps
+  the packaged-vs-source actions readable in normal use.
+- The README snapshot stays intentionally short; detailed release history lives
+  in [Changes/changelog.txt](Changes/changelog.txt),
+  [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
+  current version notes under [Changes/](Changes/).
 - The launcher now owns projects, games, and tool entry points instead of
   overloading the editor command surface.
 - The editor now behaves more like a real desktop tool, with `File`, `Edit`,

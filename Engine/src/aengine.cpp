@@ -1104,6 +1104,7 @@ namespace epochnamespace::core
                 .version_url = "https://api.github.com/repos/Autodidac/EpochEngine/releases/latest",
                 .binary_url = "https://github.com/Autodidac/EpochEngine/releases/latest/download/main.zip",
                 .source_url = "https://github.com/Autodidac/EpochEngine/archive/refs/heads/main.zip",
+                .source_version_url = "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/aengine.version.ixx",
             };
         }
 
@@ -1477,7 +1478,6 @@ namespace epochnamespace::core
                                     true);
                                 if (!result.update_available)
                                 {
-                                    std::cout << "[INFO] No update available." << std::endl;
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
                                         "No update available.",
@@ -2067,6 +2067,7 @@ namespace urls
     const std::string version_url = "https://api.github.com/repos/Autodidac/EpochEngine/releases/latest";
     const std::string binary_url = github_base + owner + repo + "/releases/latest/download/main.zip";
     const std::string source_url = github_base + owner + repo + "/archive/refs/heads/main.zip";
+    const std::string source_version_url = "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/aengine.version.ixx";
 }
 
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
@@ -2095,6 +2096,7 @@ int WINAPI wWinMain(
             .version_url = urls::version_url,
             .binary_url = urls::binary_url,
             .source_url = urls::source_url,
+            .source_version_url = urls::source_version_url,
         };
 
         if (cli_result.update_requested)
@@ -2144,6 +2146,7 @@ int main(int argc, char** argv)
             .version_url = urls::version_url,
             .binary_url = urls::binary_url,
             .source_url = urls::source_url,
+            .source_version_url = urls::source_version_url,
         };
 
         if (cli_result.update_requested)
