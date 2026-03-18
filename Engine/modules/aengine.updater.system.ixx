@@ -34,16 +34,15 @@ export module aengine.updater.system;
 
 import <filesystem>;
 import <regex>;
-import <iostream>;
 import <system_error>;
 import <vector>;
 import <array>;
 import <fstream>;
+import <iostream>;
 import <string>;
 import <iterator>;
 import <source_location>;
 import <cctype>;
-import <cstdio>;
 import <cstdlib>;
 import <atomic>;
 import <chrono>;
@@ -51,39 +50,19 @@ import <chrono>;
 import aengine.cli;
 import aengine.updater.tools;
 import aengine.updater.config;
-import aengine.core.logger;
 
 export namespace epochnamespace::updater
 {
     namespace system_detail
     {
-        constexpr std::string_view kUpdaterLog = "Updater";
-
-        inline void emit_console_line(const std::string& message, bool error_stream)
-        {
-            if (logger::config().console_enabled)
-                return;
-
-            auto& stream = error_stream ? std::cerr : std::cout;
-            stream << message << std::endl;
-        }
-
         inline void log_info(const std::string& message)
         {
-            logger::get(kUpdaterLog).log(
-                logger::LogLevel::INFO,
-                message,
-                std::source_location::current());
-            emit_console_line(message, false);
+            std::cout << message << std::endl;
         }
 
         inline void log_error(const std::string& message)
         {
-            logger::get(kUpdaterLog).log(
-                logger::LogLevel::Error,
-                message,
-                std::source_location::current());
-            emit_console_line(message, true);
+            std::cerr << message << std::endl;
         }
 
         [[nodiscard]] inline std::string strip_utf8_bom(std::string text)
@@ -442,8 +421,14 @@ export namespace epochnamespace::updater
     export struct UpdateCommandResult
     {
         bool update_available{ false };
+        bool packaged_update_available{ false };
         bool force_required{ false };
         bool update_performed{ false };
+        std::string local_version;
+        std::string remote_version;
+        std::string source_local_version;
+        std::string source_remote_version;
+        bool source_update_available{ false };
     };
 
     export struct UpdateChannel
@@ -756,7 +741,7 @@ export namespace epochnamespace::updater
         return replace_binary(target_binary, bin);
     }
 
-    export bool run_source_update_command(const UpdateChannel& channel)
+    export bool run_source_update_command(const UpdateChannel& channel, bool recheck_source_version = true)
     {
         if (channel.source_url.empty())
         {
@@ -764,7 +749,7 @@ export namespace epochnamespace::updater
             return false;
         }
 
-        if (!channel.source_version_url.empty())
+        if (recheck_source_version && !channel.source_version_url.empty())
         {
             const auto source_status = check_for_updates(channel.source_version_url, "Source");
             if (source_status.ok && source_status.update_available)
@@ -874,29 +859,50 @@ export namespace epochnamespace::updater
         if (!packaged_status.ok)
             return r;
 
-        if (!packaged_status.update_available)
+        r.local_version = packaged_status.local;
+        r.remote_version = packaged_status.remote;
+
+        if (packaged_status.update_available)
         {
-            if (!channel.source_version_url.empty())
+            r.packaged_update_available = true;
+            r.update_available = true;
+
+            if (!force)
             {
-                const auto source_status = check_for_updates(channel.source_version_url, "Source");
-                if (source_status.ok && source_status.update_available)
-                {
-                    system_detail::log_info("[INFO] A newer source snapshot is available on main. Use Source Snapshot to rebuild from source.");
-                }
+                r.force_required = true;
+                return r;
             }
-            system_detail::log_info("[INFO] No packaged update is currently available.");
+
+            r.update_performed = install_from_binary(channel.binary_url);
             return r;
         }
 
-        r.update_available = true;
-
-        if (!force)
+        if (!channel.source_version_url.empty())
         {
-            r.force_required = true;
-            return r;
+            const auto source_status = check_for_updates(channel.source_version_url, "Source");
+            if (source_status.ok)
+            {
+                r.source_local_version = source_status.local;
+                r.source_remote_version = source_status.remote;
+                r.source_update_available = source_status.update_available;
+            }
+
+            if (source_status.ok && source_status.update_available)
+            {
+                r.update_available = true;
+
+                if (!force)
+                {
+                    r.force_required = true;
+                    return r;
+                }
+
+                system_detail::log_info("[INFO] No newer packaged runtime is available. Falling back to source update from main.");
+                r.update_performed = run_source_update_command(channel, false);
+                return r;
+            }
         }
 
-        r.update_performed = install_from_binary(channel.binary_url);
         return r;
     }
 }

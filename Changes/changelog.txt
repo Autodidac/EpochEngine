@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.38]
+- Fixed updater fallback so a confirmed update now rebuilds from source when `main` is newer and no newer packaged runtime exists.
+- Removed the duplicate source-version probe so source update checks stop printing the same source comparison twice.
+- Simplified the updater status path to one direct console stream during source/package update work.
+
 ## [v0.82.37]
 - Rolled the active repo surfaces forward after the packaged `0.82.36` release so `main` stays ahead of the downloadable runtime again.
 

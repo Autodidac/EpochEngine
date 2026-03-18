@@ -262,22 +262,17 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.37
+v0.82.38
 ```
 
 Highlights:
 
-- `0.82.37` keeps `main` ahead of the packaged `0.82.36` runtime release so
-  source-update checks can see a newer live target again.
-- `0.82.36` restores a single visible updater status stream by writing direct
-  console output only when the engine logger is not already owning console
-  output.
-- `0.82.34` routes updater status through the engine logger only, so the
-  commandline view stops duplicating the same updater lines.
-- `0.82.32` hardened updater version probes by using unique temp files instead
-  of a shared `remote_version.txt`, so repeated packaged/source checks stop
-  colliding in live runtimes.
-- The editor update confirmation layout now stays below the title bar and keeps
+- `0.82.38` fixes the updater fallback so a confirmed update rebuilds from
+  source when `main` is newer and no newer packaged runtime exists.
+- `0.82.38` also removes the duplicate source probe and keeps updater status on
+  a single direct console path during rebuild/update work.
+- The runtime release continues to ship as `main.zip`, while `main` stays free
+  to move ahead with source-only changes between packaged drops.
   the packaged-vs-source actions readable in normal use.
 - The README snapshot stays intentionally short; detailed release history lives
   in [Changes/changelog.txt](Changes/changelog.txt),
