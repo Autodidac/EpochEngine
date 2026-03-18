@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.22
+v0.82.23
 ```
 
 Highlights:
 
+- `0.82.23` is the post-release bump after the fixed `0.82.22` package tag, so
+  the updater has a newer live target after the rerelease.
 - `0.82.22` fixes the updater to target the shipped `main.zip` runtime package,
   extract it in place, and report status through Epoch logging so the captured
   output no longer leaks raw CR/LF glyphs.

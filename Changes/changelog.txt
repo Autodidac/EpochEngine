@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.23]
+- Rolled the active version and docs forward to `v0.82.23` immediately after the fixed `0.82.22` release tag so the updater has a new target to detect.
+
 ## [v0.82.22]
 - Fixed the updater to target the shipped `main.zip` release package instead of stale direct-executable URLs, and aligned the built-in version URL to `Engine/modules/aengine.version.ixx`.
 - Updated the Windows install path so the updater expands the package in place and replaces the runtime directory, rather than pretending GitHub serves a single replacement `.exe`.
