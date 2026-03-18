@@ -57,6 +57,11 @@ namespace
     {
         return std::string(kGithubBase) + kOwner + kRepo + "/releases/latest/download/main.zip";
     }
+
+    [[nodiscard]] std::string make_source_url()
+    {
+        return std::string(kGithubBase) + kOwner + kRepo + "/archive/refs/heads/main.zip";
+    }
 }
 
 int main(int argc, char** argv)
@@ -71,6 +76,7 @@ int main(int argc, char** argv)
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = make_version_url(),
             .binary_url = make_binary_url(),
+            .source_url = make_source_url(),
         };
 
         if (cli_result.update_requested)

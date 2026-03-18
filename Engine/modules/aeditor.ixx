@@ -47,6 +47,7 @@ export namespace epochnamespace
         RunScript,
         RunGame,
         UpdateApplication,
+        UpdateApplicationFromSource,
         Exit
     };
 

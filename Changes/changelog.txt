@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.82.28]
+- Cleaned up the editor update confirmation flow so packaged updates and source downloads are separate explicit actions instead of one ambiguous destructive button.
+- Added a source-snapshot command that downloads the latest `main` source tree beside the runtime without rebuilding or replacing the running binary.
+
 ## [v0.82.27]
 - Rolled the active version and docs forward to `v0.82.27` immediately after the `0.82.26` release so the live tree stays ahead of the packaged updater build.
 

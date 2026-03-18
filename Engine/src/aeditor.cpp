@@ -181,6 +181,7 @@ namespace epochnamespace
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             bool showAboutModal{ false };
             bool showUpdateConfirmModal{ false };
+            bool showSourceUpdateConfirmModal{ false };
         };
 
         struct ContextPtrHash
@@ -517,6 +518,7 @@ namespace epochnamespace
         it->second.openMenu = TopMenu::None;
         it->second.showAboutModal = false;
         it->second.showUpdateConfirmModal = false;
+        it->second.showSourceUpdateConfirmModal = false;
         it->second.previewMode = core::ScenePreviewMode::Editor;
         epochnamespace::previewgrid::set_camera_mode(ctx, epochnamespace::previewgrid::CameraMode::Editor);
         epochnamespace::previewgrid::reset_camera(ctx);
@@ -833,6 +835,7 @@ namespace epochnamespace
             });
             menu_item("Update Engine...", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
                 editor.showUpdateConfirmModal = true;
+                editor.showSourceUpdateConfirmModal = false;
                 push_editor_log(editor, "[command] Update requested. Awaiting confirmation.");
             });
             menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
@@ -853,28 +856,77 @@ namespace epochnamespace
 
         if (editor.showUpdateConfirmModal)
         {
-            const gui::Vec2 modalSize{ 460.0f, 180.0f };
+            const gui::Vec2 modalSize{ 560.0f, 210.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
-            gui::begin_window("Confirm Update", modalPos, modalSize);
+            gui::begin_window("Update Epoch", modalPos, modalSize);
             gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 18.0f });
-            gui::label("Running update can replace binaries and close the current session.");
+            gui::label("Choose how you want to update this runtime.");
             gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 40.0f });
-            gui::label("Continue only if you are ready to restart Epoch.");
-            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 104.0f });
+            gui::label("Release Package downloads the latest packaged build and restarts Epoch.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 62.0f });
+            gui::label("Source Snapshot downloads the latest main-branch source beside this runtime.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 84.0f });
+            gui::label("Source download does not rebuild or replace the running binary.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 132.0f });
             if (gui::button("Cancel", { 120.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
                 push_editor_log(editor, "[command] Update canceled.");
             }
-            gui::set_cursor({ modalPos.x + 156.0f, modalPos.y + 104.0f });
-            if (gui::button("Update Now", { 140.0f, 30.0f }))
+            gui::set_cursor({ modalPos.x + 156.0f, modalPos.y + 132.0f });
+            if (gui::button("Release Package", { 168.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
                 emit_command(EditorCommand::UpdateApplication);
-                push_editor_log(editor, "[command] Update confirmed.");
+                push_editor_log(editor, "[command] Packaged update confirmed.");
+            }
+            gui::set_cursor({ modalPos.x + 340.0f, modalPos.y + 132.0f });
+            if (gui::button("Source Snapshot...", { 176.0f, 30.0f }))
+            {
+                editor.showUpdateConfirmModal = false;
+                editor.showSourceUpdateConfirmModal = true;
+                push_editor_log(editor, "[command] Source snapshot requested. Awaiting confirmation.");
+            }
+            gui::end_window();
+        }
+
+        if (editor.showSourceUpdateConfirmModal)
+        {
+            const gui::Vec2 modalSize{ 620.0f, 220.0f };
+            const gui::Vec2 modalPos{
+                (std::max)(0.0f, (w - modalSize.x) * 0.5f),
+                (std::max)(0.0f, (h - modalSize.y) * 0.5f)
+            };
+            gui::begin_window("Download Source Snapshot", modalPos, modalSize);
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 18.0f });
+            gui::label("This downloads the latest main-branch source next to the current runtime.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 40.0f });
+            gui::label("It is intended for advanced testing when packaged releases lag behind main.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 62.0f });
+            gui::label("It does not rebuild Epoch and it does not replace the running executable.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 84.0f });
+            gui::label("Use Release Package for normal updates. Use Source Snapshot only on purpose.");
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 148.0f });
+            if (gui::button("Back", { 120.0f, 30.0f }))
+            {
+                editor.showSourceUpdateConfirmModal = false;
+                editor.showUpdateConfirmModal = true;
+            }
+            gui::set_cursor({ modalPos.x + 156.0f, modalPos.y + 148.0f });
+            if (gui::button("Cancel", { 120.0f, 30.0f }))
+            {
+                editor.showSourceUpdateConfirmModal = false;
+                push_editor_log(editor, "[command] Source snapshot canceled.");
+            }
+            gui::set_cursor({ modalPos.x + 292.0f, modalPos.y + 148.0f });
+            if (gui::button("Download Source", { 176.0f, 30.0f }))
+            {
+                editor.showSourceUpdateConfirmModal = false;
+                emit_command(EditorCommand::UpdateApplicationFromSource);
+                push_editor_log(editor, "[command] Source snapshot confirmed.");
             }
             gui::end_window();
         }

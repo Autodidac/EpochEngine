@@ -43,4 +43,5 @@ export namespace epochnamespace::updater
     export using epochnamespace::updater::UpdateCommandResult;
     // Ensure the two-parameter updater entry point is visible to importers
     export using epochnamespace::updater::run_update_command;
+    export using epochnamespace::updater::run_source_update_command;
 }

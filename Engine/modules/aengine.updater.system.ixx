@@ -183,6 +183,24 @@ export namespace epochnamespace::updater
         {
             return target_binary.parent_path() / "__epoch_update";
         }
+
+        [[nodiscard]] inline std::filesystem::path source_archive_path(
+            const std::filesystem::path& target_binary)
+        {
+            return target_binary.parent_path() / "EpochEngine-source-main.zip";
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_staging_dir(
+            const std::filesystem::path& target_binary)
+        {
+            return target_binary.parent_path() / "__epoch_source_update";
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_final_dir(
+            const std::filesystem::path& target_binary)
+        {
+            return target_binary.parent_path() / "EpochEngine-source-main";
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -199,6 +217,7 @@ export namespace epochnamespace::updater
     {
         std::string version_url;
         std::string binary_url;
+        std::string source_url;
     };
 
     // ─────────────────────────────────────────────
@@ -420,6 +439,85 @@ export namespace epochnamespace::updater
             return false;
 
         return replace_binary(target_binary, bin);
+    }
+
+    export bool run_source_update_command(const UpdateChannel& channel)
+    {
+        if (channel.source_url.empty())
+        {
+            system_detail::log_error("[ERROR] Source update URL is not configured.");
+            return false;
+        }
+
+        const auto target_binary = system_detail::current_binary_path();
+        const auto archive_path = system_detail::source_archive_path(target_binary);
+        const auto staging_dir = system_detail::source_staging_dir(target_binary);
+        const auto final_dir = system_detail::source_final_dir(target_binary);
+
+        std::error_code ec;
+        std::filesystem::remove_all(staging_dir, ec);
+        std::filesystem::remove_all(final_dir, ec);
+
+        system_detail::log_info("[INFO] Downloading latest source snapshot from main.");
+        if (!epochnamespace::updater::download_file(channel.source_url, archive_path.string()))
+            return false;
+
+        if (!epochnamespace::updater::extract_archive(archive_path.string(), staging_dir.string()))
+        {
+            system_detail::log_error("[ERROR] Failed to extract source snapshot.");
+            return false;
+        }
+
+        std::filesystem::path extracted_root{};
+        for (const auto& entry : std::filesystem::directory_iterator(staging_dir, ec))
+        {
+            if (entry.is_directory())
+            {
+                extracted_root = entry.path();
+                break;
+            }
+        }
+
+        if (ec)
+        {
+            system_detail::log_error("[ERROR] Failed to inspect extracted source snapshot.");
+            return false;
+        }
+
+        if (!extracted_root.empty())
+        {
+            std::filesystem::rename(extracted_root, final_dir, ec);
+            if (ec)
+            {
+                ec.clear();
+                std::filesystem::copy(
+                    extracted_root,
+                    final_dir,
+                    std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing,
+                    ec);
+                if (ec)
+                {
+                    system_detail::log_error("[ERROR] Failed to move extracted source snapshot into place.");
+                    return false;
+                }
+            }
+        }
+        else
+        {
+            std::filesystem::rename(staging_dir, final_dir, ec);
+            if (ec)
+            {
+                system_detail::log_error("[ERROR] Extracted source snapshot did not contain a project root.");
+                return false;
+            }
+        }
+
+        std::filesystem::remove_all(staging_dir, ec);
+        std::filesystem::remove(archive_path, ec);
+
+        system_detail::log_info("[INFO] Source snapshot ready at: " + final_dir.string());
+        system_detail::log_info("[INFO] This downloads source only. It does not rebuild or replace the running binary.");
+        return true;
     }
 
     // ─────────────────────────────────────────────

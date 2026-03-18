@@ -1103,6 +1103,7 @@ namespace epochnamespace::core
             return epochnamespace::updater::UpdateChannel{
                 .version_url = "https://api.github.com/repos/Autodidac/EpochEngine/releases/latest",
                 .binary_url = "https://github.com/Autodidac/EpochEngine/releases/latest/download/main.zip",
+                .source_url = "https://github.com/Autodidac/EpochEngine/archive/refs/heads/main.zip",
             };
         }
 
@@ -1488,6 +1489,25 @@ namespace epochnamespace::core
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::Error,
                                         "Update was available but the handoff/install step did not complete.",
+                                        std::source_location::current());
+                                }
+                                break;
+                            }
+                            case epochnamespace::EditorCommand::UpdateApplicationFromSource:
+                            {
+                                std::cout << "[INFO] Downloading source snapshot from main." << std::endl;
+                                logger::get(kEditorLog).log(
+                                    logger::LogLevel::INFO,
+                                    "Running confirmed source snapshot command.",
+                                    std::source_location::current());
+                                const bool ok = epochnamespace::updater::run_source_update_command(
+                                    default_update_channel());
+                                if (!ok)
+                                {
+                                    std::cerr << "[ERROR] Source snapshot download did not complete." << std::endl;
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::Error,
+                                        "Source snapshot download did not complete.",
                                         std::source_location::current());
                                 }
                                 break;
@@ -2046,6 +2066,7 @@ namespace urls
 
     const std::string version_url = "https://api.github.com/repos/Autodidac/EpochEngine/releases/latest";
     const std::string binary_url = github_base + owner + repo + "/releases/latest/download/main.zip";
+    const std::string source_url = github_base + owner + repo + "/archive/refs/heads/main.zip";
 }
 
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
@@ -2073,6 +2094,7 @@ int WINAPI wWinMain(
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,
             .binary_url = urls::binary_url,
+            .source_url = urls::source_url,
         };
 
         if (cli_result.update_requested)
@@ -2121,6 +2143,7 @@ int main(int argc, char** argv)
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,
             .binary_url = urls::binary_url,
+            .source_url = urls::source_url,
         };
 
         if (cli_result.update_requested)
