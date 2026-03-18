@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.33]
+- Rolled the active repo surfaces forward after the packaged `0.82.32` release so `main` stays ahead of the downloadable runtime again.
+
 ## [v0.82.32]
 - Reworked updater version probes to download into unique temp files instead of a shared `remote_version.txt`, preventing file-in-use failures when packaged and source checks run back to back.
 - Kept the source-update availability messaging separate from packaged-release detection so the updater can point at `main` cleanly without confusing the release path.

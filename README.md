@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.32
+v0.82.33
 ```
 
 Highlights:
 
+- `0.82.33` keeps `main` ahead of the packaged `0.82.32` runtime release so
+  the source-update path has a newer live target again.
 - `0.82.32` hardens updater version probes by using unique temp files instead
   of a shared `remote_version.txt`, so repeated packaged/source checks stop
   colliding in live runtimes.
