@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.27]
+- Rolled the active version and docs forward to `v0.82.27` immediately after the `0.82.26` release so the live tree stays ahead of the packaged updater build.
+
 ## [v0.82.26]
 - Restored visible console feedback for GUI-triggered update checks so the updater prints what it is doing and explicitly reports when no newer packaged release is available.
 

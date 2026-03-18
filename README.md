@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.26
+v0.82.27
 ```
 
 Highlights:
 
+- `0.82.27` is the post-release bump after the `0.82.26` updater-feedback
+  release, so the active repo surfaces stay ahead of the packaged runtime.
 - `0.82.26` restores visible console/update feedback for the GUI-triggered
   updater path, including explicit status when no newer packaged release is
   available.
