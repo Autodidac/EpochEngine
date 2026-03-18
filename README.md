@@ -262,13 +262,15 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.23
+v0.82.24
 ```
 
 Highlights:
 
-- `0.82.23` is the post-release bump after the fixed `0.82.22` package tag, so
-  the updater has a newer live target after the rerelease.
+- `0.82.24` fixes the updater to query the latest real GitHub release instead
+  of `main`, so version detection and `main.zip` download stay aligned.
+- `0.82.23` was the post-release bump after the fixed `0.82.22` package tag, so
+  the updater had a newer live target after the rerelease.
 - `0.82.22` fixes the updater to target the shipped `main.zip` runtime package,
   extract it in place, and report status through Epoch logging so the captured
   output no longer leaks raw CR/LF glyphs.

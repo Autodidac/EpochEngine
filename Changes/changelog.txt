@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.82.24]
+- Fixed the updater to query the latest real GitHub release instead of reading `main`, so the reported version and the downloadable `main.zip` asset stay in sync.
+- Added GitHub API headers to the download helper so updater version checks use the release API cleanly.
+
 ## [v0.82.23]
 - Rolled the active version and docs forward to `v0.82.23` immediately after the fixed `0.82.22` release tag so the updater has a new target to detect.
 

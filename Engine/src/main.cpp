@@ -50,7 +50,7 @@ namespace
 
     [[nodiscard]] std::string make_version_url()
     {
-        return std::string(kGithubRawBase) + kOwner + kRepo + "/" + kBranch + "/Engine/modules/aengine.version.ixx";
+        return std::string("https://api.github.com/repos/") + kOwner + kRepo + "/releases/latest";
     }
 
     [[nodiscard]] std::string make_binary_url()

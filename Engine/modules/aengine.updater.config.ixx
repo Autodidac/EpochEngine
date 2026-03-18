@@ -109,21 +109,13 @@ export namespace epochnamespace::updater
 
     export inline std::string PROJECT_VERSION_URL()
     {
-        return GITHUB_RAW_BASE()
-            + OWNER + "/" + REPO + "/" + BRANCH
-            + "/Engine/modules/aengine.version.ixx";
+        return "https://api.github.com/repos/"
+            + OWNER + "/" + REPO + "/releases/latest";
     }
 
     export inline std::string PROJECT_VERSION_HEADER_URL()
     {
-        // fallback to legacy aversion module path
-        auto url = PROJECT_VERSION_URL();
-        constexpr std::string_view needle = "/Engine/modules/aengine.version.ixx";
-
-        if (const auto pos = url.rfind(needle); pos != std::string::npos)
-            url.replace(pos, needle.size(), "/Engine/Modules/aversion.ixx");
-
-        return url;
+        return PROJECT_VERSION_URL();
     }
 
     export inline std::string PROJECT_SOURCE_URL()

@@ -1101,7 +1101,7 @@ namespace epochnamespace::core
         [[nodiscard]] epochnamespace::updater::UpdateChannel default_update_channel()
         {
             return epochnamespace::updater::UpdateChannel{
-                .version_url = "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/aengine.version.ixx",
+                .version_url = "https://api.github.com/repos/Autodidac/EpochEngine/releases/latest",
                 .binary_url = "https://github.com/Autodidac/EpochEngine/releases/latest/download/main.zip",
             };
         }
@@ -2041,7 +2041,7 @@ namespace urls
     const std::string repo = "EpochEngine";
     const std::string branch = "main/";
 
-    const std::string version_url = github_raw_base + owner + repo + "/" + branch + "/Engine/modules/aengine.version.ixx";
+    const std::string version_url = "https://api.github.com/repos/Autodidac/EpochEngine/releases/latest";
     const std::string binary_url = github_base + owner + repo + "/releases/latest/download/main.zip";
 }
 
