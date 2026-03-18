@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.82.18]
+- Fixed the remaining Windows script compiler spawn bug by using a direct executable launch for real LLVM paths instead of the PATH-search variant, which was still splitting `Program Files` incorrectly during editor-run script builds.
+- Refreshed the active version surfaces to `v0.82.18`.
+
 ## [v0.82.17]
 - Consolidated the older versioned release-note markdowns into a single archive file so the `Changes/` folder keeps one historical notes surface while new releases continue to get their own markdown.
 - Removed the accidentally tracked Windows `.exp` script-build artifact from the repo and added ignore rules for `.exp` files and the local `Temp Script Test/` workspace.

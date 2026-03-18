@@ -164,8 +164,13 @@ export namespace epochnamespace::compiler
                 argv.push_back(arg.c_str());
             argv.push_back(nullptr);
 
+            const bool useDirectPath =
+                compilerPath.has_parent_path() && std::filesystem::exists(compilerPath);
+
             errno = 0;
-            const intptr_t result = _wspawnvp(_P_WAIT, compilerPath.c_str(), argv.data());
+            const intptr_t result = useDirectPath
+                ? _wspawnv(_P_WAIT, compilerPath.c_str(), argv.data())
+                : _wspawnvp(_P_WAIT, compilerPath.c_str(), argv.data());
             if (result == -1)
             {
                 std::cerr

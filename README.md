@@ -262,11 +262,14 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.17
+v0.82.18
 ```
 
 Highlights:
 
+- The Windows editor script compiler now uses a true direct executable launch
+  for absolute LLVM paths, so `clang++` under `Program Files` no longer gets
+  split into a broken `Files/...` argument.
 - Historical versioned release-note markdowns are now consolidated into a single
   archive file under `Changes/`, while new release notes continue as individual
   version files.

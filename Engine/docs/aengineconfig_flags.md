@@ -88,6 +88,6 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.17` cleans up the release/update surfaces by archiving older release
-  notes into one file, removing the accidental tracked `.exp` artifact, and
-  adding ignore coverage for local script-build outputs.
+- `v0.82.18` fixes the remaining Windows editor script compiler spawn bug so
+  absolute LLVM installs under `Program Files` launch directly instead of being
+  split by the wrong process-spawn variant.
