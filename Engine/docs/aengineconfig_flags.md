@@ -88,6 +88,6 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.82.20` is the aligned documentation/version bump that follows the
-  updater handoff fix, giving the self-update flow a fresh release target to
+- `v0.82.21` is the post-release documentation/version bump that follows the
+  `0.82.20` release tag, giving the self-update flow a newer version target to
   detect during manual validation.

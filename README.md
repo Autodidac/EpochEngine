@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.20
+v0.82.21
 ```
 
 Highlights:
 
+- `0.82.21` is the post-release bump that follows the `0.82.20` tag so the
+  updater has a newer target than the packaged release snapshot.
 - `0.82.20` is the fresh documentation/version bump so the updater has a new
   live target to detect and pull during self-update testing.
 - The self-update path now targets the currently running executable instead of

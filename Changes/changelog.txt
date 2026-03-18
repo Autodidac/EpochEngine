@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.21]
+- Rolled the active version and current docs forward to `v0.82.21` immediately after the `0.82.20` release tag so the updater has a newer target to detect.
+
 ## [v0.82.20]
 - Rolled the active version, README, docs, and release-note surfaces forward to `v0.82.20` so the updater has a fresh live target to detect during manual testing.
 
