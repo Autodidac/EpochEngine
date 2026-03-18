@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.28
+v0.82.29
 ```
 
 Highlights:
 
+- `0.82.29` is the post-release bump after the `0.82.28` update-flow release,
+  so the active repo surfaces stay ahead of the packaged runtime again.
 - `0.82.28` cleans up the update confirmation flow with explicit packaged vs
   source actions, and adds a deliberate source-snapshot download path for
   ahead-of-release testing.
