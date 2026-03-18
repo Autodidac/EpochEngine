@@ -262,11 +262,14 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.24
+v0.82.25
 ```
 
 Highlights:
 
+- `0.82.25` is the post-release bump after the fixed `0.82.24` updater
+  package, so the active docs and version surfaces stay ahead of the shipped
+  release snapshot.
 - `0.82.24` fixes the updater to query the latest real GitHub release instead
   of `main`, so version detection and `main.zip` download stay aligned.
 - `0.82.23` was the post-release bump after the fixed `0.82.22` package tag, so
