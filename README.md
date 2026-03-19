@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.44
+v0.82.45
 ```
 
 Highlights:
 
+- `0.82.45` keeps `main` ahead of the packaged `0.82.44` runtime so source
+  update checks have a newer live target again after the repaired release.
 - `0.82.44` repairs the Windows updater flow again by moving source rebuilds and
   handoff batches onto hidden process launches, writing `epoch_source_update.log`
   and `epoch_update_handoff.log`, and fixing the live source-version path.

@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.45]
+- Rolled the active repo surfaces forward after the packaged `0.82.44` updater repair release so `main` stays ahead of the downloadable runtime again.
+
 ## [v0.82.44]
 - Replaced the Windows updater `system()/cmd/start` path with hidden process launches for `vcpkg`, `MSBuild`, and the final handoff batches.
 - Added `epoch_source_update.log` alongside `epoch_update_handoff.log` so source rebuild failures and post-build replacement failures leave concrete runtime-side diagnostics.
