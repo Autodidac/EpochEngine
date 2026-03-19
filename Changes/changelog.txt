@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.42]
+- Rolled the active repo surfaces forward after the packaged `0.82.41` release so `main` stays ahead of the downloadable runtime again.
+
 ## [v0.82.41]
 - Repaired the Windows updater handoff so packaged and source updates explicitly replace the runtime executable instead of silently leaving the old binary in place.
 - Kept the updater logging path sanitized so updater status stays readable in the commandline pane while the handoff runs.
