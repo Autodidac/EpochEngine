@@ -39,7 +39,8 @@ export namespace epochnamespace::updater
 
             for (char& ch : text)
             {
-                if (ch == '\r' || ch == '\n')
+                const auto uch = static_cast<unsigned char>(ch);
+                if (uch < 0x20 || uch == 0x7F)
                     ch = ' ';
             }
 

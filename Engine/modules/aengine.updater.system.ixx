@@ -57,7 +57,8 @@ export namespace epochnamespace::updater
 
             for (char& ch : text)
             {
-                if (ch == '\r' || ch == '\n')
+                const auto uch = static_cast<unsigned char>(ch);
+                if (uch < 0x20 || uch == 0x7F)
                     ch = ' ';
             }
 
@@ -572,6 +573,28 @@ export namespace epochnamespace::updater
         {
             std::error_code ec;
 
+#if defined(_WIN32)
+            std::wstring module_path(MAX_PATH, L'\0');
+            for (;;)
+            {
+                const DWORD copied = GetModuleFileNameW(
+                    nullptr,
+                    module_path.data(),
+                    static_cast<DWORD>(module_path.size()));
+
+                if (copied == 0)
+                    break;
+
+                if (copied < module_path.size() - 1)
+                {
+                    module_path.resize(copied);
+                    return std::filesystem::path{ module_path }.lexically_normal();
+                }
+
+                module_path.resize(module_path.size() * 2);
+            }
+#endif
+
             if (!epochnamespace::core::cli::exe_path.empty())
                 return std::filesystem::absolute(epochnamespace::core::cli::exe_path, ec).lexically_normal();
 
@@ -1070,27 +1093,50 @@ export namespace epochnamespace::updater
             << "$buildConfiguration = '" << esc(SOURCE_BUILD_CONFIGURATION()) << "'\n"
             << "$buildPlatform = '" << esc(SOURCE_BUILD_PLATFORM()) << "'\n"
             << "$workerPath = $MyInvocation.MyCommand.Path\n"
+            << "$utf8NoBom = New-Object System.Text.UTF8Encoding($false)\n"
+            << "function Append-Text([string]$Path, [string]$Text) {\n"
+            << "  if ([string]::IsNullOrEmpty($Path) -or [string]::IsNullOrEmpty($Text)) {\n"
+            << "    return\n"
+            << "  }\n"
+            << "  [System.IO.File]::AppendAllText($Path, $Text, $utf8NoBom)\n"
+            << "}\n"
+            << "function Append-FileToBuildLog([string]$Path) {\n"
+            << "  if (-not (Test-Path -LiteralPath $Path)) {\n"
+            << "    return\n"
+            << "  }\n"
+            << "  $text = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue\n"
+            << "  if ([string]::IsNullOrEmpty($text)) {\n"
+            << "    return\n"
+            << "  }\n"
+            << "  if (-not $text.EndsWith([Environment]::NewLine)) {\n"
+            << "    $text += [Environment]::NewLine\n"
+            << "  }\n"
+            << "  Append-Text $buildLog $text\n"
+            << "}\n"
             << "function Write-Step([string]$Level, [string]$Message) {\n"
             << "  $line = \"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Message\"\n"
             << "  Write-Host $line\n"
-            << "  Add-Content -LiteralPath $buildLog -Value $line\n"
+            << "  Append-Text $buildLog ($line + [Environment]::NewLine)\n"
             << "}\n"
             << "function Write-Handoff([string]$Level, [string]$Message) {\n"
             << "  $line = \"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Message\"\n"
             << "  Write-Host $line\n"
-            << "  Add-Content -LiteralPath $handoffLog -Value $line\n"
+            << "  Append-Text $handoffLog ($line + [Environment]::NewLine)\n"
             << "}\n"
             << "function Invoke-Tool([string]$FilePath, [string[]]$Arguments, [string]$WorkingDir, [string]$StepName) {\n"
-            << "  Write-Step 'INFO' ($StepName + ' started')\n"
+            << "  $toolLog = [System.IO.Path]::GetTempFileName()\n"
             << "  Push-Location $WorkingDir\n"
             << "  try {\n"
-            << "    & $FilePath @Arguments 2>&1 | Tee-Object -FilePath $buildLog -Append | Out-Host\n"
-            << "    if ($LASTEXITCODE -ne 0) {\n"
-            << "      throw ($StepName + ' failed with exit code ' + $LASTEXITCODE + '.')\n"
+            << "    & $FilePath @Arguments *> $toolLog\n"
+            << "    $toolExitCode = $LASTEXITCODE\n"
+            << "    Append-FileToBuildLog $toolLog\n"
+            << "    if ($toolExitCode -ne 0) {\n"
+            << "      throw ($StepName + ' failed with exit code ' + $toolExitCode + '.')\n"
             << "    }\n"
             << "  }\n"
             << "  finally {\n"
             << "    Pop-Location\n"
+            << "    Remove-Item -LiteralPath $toolLog -Force -ErrorAction SilentlyContinue\n"
             << "  }\n"
             << "}\n"
             << "Remove-Item -LiteralPath $buildLog -Force -ErrorAction SilentlyContinue\n"
