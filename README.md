@@ -262,14 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.50
+v0.82.51
 ```
 
 Highlights:
 
-- `0.82.50` ships the Windows source updater handoff fix so the detached worker
-  resolves the real running executable, replaces it from the rebuilt
-  `<source-root>/x64/Debug` output, and relaunches cleanly.
+- `0.82.51` keeps `main` ahead of the packaged `0.82.50` updater release so
+  the repo remains the next source target during post-release testing.
 - The packaged updater now captures native `vcpkg` and `MSBuild` output in log
   files instead of dumping raw tool junk into the live console.
 - The sample projects now resolve Vulkan, GLM, and SFML through repo-relative

@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.51]
+- Rolled the active repo surfaces forward after the packaged `0.82.50` updater release so `main` stays ahead of the downloadable runtime again.
+
 ## [v0.82.50]
 - Shipped the Windows source updater handoff fix so the detached worker resolves the live executable path correctly, replaces the rebuilt runtime from `<source-root>/x64/Debug`, and relaunches the updated app cleanly.
 - Moved native `vcpkg` and `MSBuild` output into updater log files so restore/build activity no longer dumps raw junk into the live console.
