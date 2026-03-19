@@ -96,7 +96,7 @@ export namespace epochnamespace::updater
 
     export inline std::string SOURCE_VERSION_FILE_NAME()
     {
-        return "version.txt";
+        return "Engine/modules/aengine.version.ixx";
     }
 
     export inline std::string SOURCE_MAIN_FILE()
@@ -130,7 +130,7 @@ export namespace epochnamespace::updater
         return std::string{ GITHUB_RAW_BASE }
             + std::string{ OWNER } + "/"
             + std::string{ REPO } + "/"
-            + std::string{ BRANCH } + "/version.txt";
+            + std::string{ BRANCH } + "/Engine/modules/aengine.version.ixx";
     }
 
     export inline std::string PROJECT_PACKAGED_VERSION_URL()

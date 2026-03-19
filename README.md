@@ -262,16 +262,17 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.43
+v0.82.44
 ```
 
 Highlights:
 
-- `0.82.43` keeps `main` ahead of the packaged `0.82.42` runtime release so
-  source-update checks still have a newer live target after the release.
-- `0.82.42` repairs the Windows updater handoff script again by switching to
-  proper batch variable quoting, explicit executable replacement, and a runtime
-  handoff log in `epoch_update_handoff.log`.
+- `0.82.44` repairs the Windows updater flow again by moving source rebuilds and
+  handoff batches onto hidden process launches, writing `epoch_source_update.log`
+  and `epoch_update_handoff.log`, and fixing the live source-version path.
+- This release is meant to stop the extra developer prompt, unblock source
+  rebuild updates after extraction, and leave behind concrete logs if a machine
+  still refuses the handoff.
 - The runtime release continues to ship as `main.zip`, while `main` stays free
   to move ahead with source-only changes between packaged drops.
 - The README snapshot stays intentionally short; detailed release history lives

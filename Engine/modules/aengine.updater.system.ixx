@@ -8,6 +8,16 @@
  ***********************************************/
 module;
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#endif
+
 export module aengine.updater.system;
 
 import <array>;
@@ -365,6 +375,180 @@ export namespace epochnamespace::updater
             return {};
         }
 
+#if defined(_WIN32)
+        [[nodiscard]] inline std::wstring to_wide(const std::string& value)
+        {
+            if (value.empty())
+                return {};
+
+            const int required = MultiByteToWideChar(
+                CP_UTF8,
+                0,
+                value.c_str(),
+                -1,
+                nullptr,
+                0);
+
+            if (required <= 0)
+                return std::wstring(value.begin(), value.end());
+
+            std::wstring wide(static_cast<std::size_t>(required - 1), L'\0');
+
+            MultiByteToWideChar(
+                CP_UTF8,
+                0,
+                value.c_str(),
+                -1,
+                wide.data(),
+                required);
+
+            return wide;
+        }
+
+        [[nodiscard]] inline std::string last_error_message(const char* prefix)
+        {
+            const DWORD error = GetLastError();
+            std::error_code ec(static_cast<int>(error), std::system_category());
+            return std::string{ prefix } + ": " + ec.message();
+        }
+
+        inline void append_log_line(
+            const std::filesystem::path& log_path,
+            const std::string& line)
+        {
+            if (log_path.empty())
+                return;
+
+            std::ofstream out(log_path, std::ios::binary | std::ios::app);
+            if (!out)
+                return;
+
+            out << line << "\r\n";
+        }
+
+        [[nodiscard]] inline std::string build_command_line(
+            const std::filesystem::path& executable,
+            const std::vector<std::string>& args)
+        {
+            std::string command = quote_shell_arg(executable.string());
+
+            for (const auto& arg : args)
+            {
+                command.push_back(' ');
+                command += quote_shell_arg(arg);
+            }
+
+            return command;
+        }
+
+        [[nodiscard]] inline bool run_process_hidden(
+            const std::filesystem::path& executable,
+            const std::vector<std::string>& args,
+            const std::filesystem::path& working_directory,
+            const std::filesystem::path& log_path,
+            const bool wait_for_exit,
+            int* const exit_code = nullptr)
+        {
+            if (exit_code != nullptr)
+                *exit_code = -1;
+
+            SECURITY_ATTRIBUTES sa{};
+            sa.nLength = sizeof(sa);
+            sa.bInheritHandle = TRUE;
+
+            HANDLE log_handle = INVALID_HANDLE_VALUE;
+            if (!log_path.empty())
+            {
+                log_handle = CreateFileW(
+                    log_path.wstring().c_str(),
+                    FILE_APPEND_DATA,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    &sa,
+                    OPEN_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL,
+                    nullptr);
+
+                if (log_handle == INVALID_HANDLE_VALUE)
+                {
+                    log_error(last_error_message("Failed to open updater process log"));
+                    return false;
+                }
+            }
+
+            STARTUPINFOW si{};
+            si.cb = sizeof(si);
+            si.dwFlags = STARTF_USESHOWWINDOW;
+            si.wShowWindow = SW_HIDE;
+
+            if (log_handle != INVALID_HANDLE_VALUE)
+            {
+                si.dwFlags |= STARTF_USESTDHANDLES;
+                si.hStdOutput = log_handle;
+                si.hStdError = log_handle;
+                si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+            }
+
+            PROCESS_INFORMATION pi{};
+
+            std::string command_line = build_command_line(executable, args);
+            std::wstring command_line_wide = to_wide(command_line);
+            std::wstring working_directory_wide =
+                working_directory.empty() ? std::wstring{} : working_directory.wstring();
+
+            const BOOL created = CreateProcessW(
+                executable.wstring().c_str(),
+                command_line_wide.data(),
+                nullptr,
+                nullptr,
+                log_handle != INVALID_HANDLE_VALUE ? TRUE : FALSE,
+                CREATE_NO_WINDOW,
+                nullptr,
+                working_directory.empty() ? nullptr : working_directory_wide.c_str(),
+                &si,
+                &pi);
+
+            if (log_handle != INVALID_HANDLE_VALUE)
+                CloseHandle(log_handle);
+
+            if (!created)
+            {
+                log_error(last_error_message("Failed to launch updater process"));
+                return false;
+            }
+
+            if (wait_for_exit)
+            {
+                WaitForSingleObject(pi.hProcess, INFINITE);
+
+                DWORD process_exit_code = 0;
+                if (!GetExitCodeProcess(pi.hProcess, &process_exit_code))
+                    process_exit_code = static_cast<DWORD>(-1);
+
+                if (exit_code != nullptr)
+                    *exit_code = static_cast<int>(process_exit_code);
+            }
+
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            return true;
+        }
+
+        [[nodiscard]] inline bool launch_batch_hidden(const std::filesystem::path& script_path)
+        {
+            auto cmd = env_path("ComSpec");
+            if (cmd.empty())
+                cmd = std::filesystem::path{ "C:\\Windows\\System32\\cmd.exe" };
+
+            return run_process_hidden(
+                cmd,
+                { "/C", script_path.string() },
+                script_path.parent_path(),
+                {},
+                false,
+                nullptr);
+        }
+#endif
+
         [[nodiscard]] inline std::filesystem::path current_binary_path()
         {
             std::error_code ec;
@@ -592,45 +776,73 @@ export namespace epochnamespace::updater
                 return false;
             }
 
-            log_info(" Building updated runtime from source.");
+            const auto build_log = target_binary.parent_path() / "epoch_source_update.log";
+            append_log_line(build_log, "[INFO] Source update build started");
+            append_log_line(build_log, "[INFO] Source root: " + source_root.string());
+            append_log_line(build_log, "[INFO] Manifest root: " + manifest_root.string());
+            append_log_line(build_log, "[INFO] MSBuild: " + msbuild.string());
+
+            log_info("Building updated runtime from source.");
             log_info("Restoring source dependencies with vcpkg.");
+            append_log_line(build_log, "[INFO] Restoring source dependencies with vcpkg.");
 
-            const std::string vcpkg_command =
-                quote_shell_arg(vcpkg_exe.string())
-                + " install --triplet "
-                + SOURCE_BUILD_PLATFORM()
-                + "-windows --x-manifest-root="
-                + quote_shell_arg(manifest_root.string());
-
-            if (std::system(vcpkg_command.c_str()) != 0)
+            int vcpkg_exit = -1;
+            if (!run_process_hidden(
+                vcpkg_exe,
+                {
+                    "install",
+                    "--triplet",
+                    SOURCE_BUILD_PLATFORM() + "-windows",
+                    "--x-manifest-root=" + manifest_root.string()
+                },
+                manifest_root,
+                build_log,
+                true,
+                &vcpkg_exit) || vcpkg_exit != 0)
             {
-                log_error("vcpkg dependency restore failed.");
+                append_log_line(
+                    build_log,
+                    "[ERROR] vcpkg dependency restore failed with exit code " + std::to_string(vcpkg_exit));
+                log_error("vcpkg dependency restore failed. See epoch_source_update.log for details.");
                 return false;
             }
 
             log_info("MSBuild: " + msbuild.string());
+            append_log_line(build_log, "[INFO] Building updated runtime with MSBuild.");
 
-            const std::string command =
-                quote_shell_arg(msbuild.string())
-                + " " + quote_shell_arg(solution.string())
-                + " /t:" + SOURCE_BUILD_TARGET()
-                + " /p:Configuration=" + SOURCE_BUILD_CONFIGURATION()
-                + " /p:Platform=" + SOURCE_BUILD_PLATFORM()
-                + " /m:1 /clp:ErrorsOnly";
-
-            if (std::system(command.c_str()) != 0)
+            int msbuild_exit = -1;
+            if (!run_process_hidden(
+                msbuild,
+                {
+                    solution.string(),
+                    "/t:" + SOURCE_BUILD_TARGET(),
+                    "/p:Configuration=" + SOURCE_BUILD_CONFIGURATION(),
+                    "/p:Platform=" + SOURCE_BUILD_PLATFORM(),
+                    "/m:1",
+                    "/clp:ErrorsOnly",
+                    "/p:UseMultiToolTask=false"
+                },
+                source_root,
+                build_log,
+                true,
+                &msbuild_exit) || msbuild_exit != 0)
             {
-                log_error("Source build failed.");
+                append_log_line(
+                    build_log,
+                    "[ERROR] Source build failed with exit code " + std::to_string(msbuild_exit));
+                log_error("Source build failed. See epoch_source_update.log for details.");
                 return false;
             }
 
             const auto built_binary = source_runtime_binary_path(source_root, target_binary);
             if (!std::filesystem::exists(built_binary))
             {
+                append_log_line(build_log, "[ERROR] Source build completed without a runtime binary.");
                 log_error("Source build completed without producing the runtime binary.");
                 return false;
             }
 
+            append_log_line(build_log, "[INFO] Source build completed successfully.");
             return true;
 #else
             (void)source_root;
@@ -747,7 +959,8 @@ export namespace epochnamespace::updater
         const std::string command =
             "cmd.exe /C start \"\" /min " + system_detail::quote_shell_arg(script_path.string());
 
-        if (std::system(command.c_str()) != 0)
+        (void)command;
+        if (!system_detail::launch_batch_hidden(script_path))
         {
             system_detail::log_error("Failed to launch binary replacement batch.");
             return false;
@@ -862,10 +1075,7 @@ export namespace epochnamespace::updater
 
         bat.close();
 
-        const std::string command =
-            "cmd.exe /C start \"\" /min " + system_detail::quote_shell_arg(script_path.string());
-
-        if (std::system(command.c_str()) != 0)
+        if (!system_detail::launch_batch_hidden(script_path))
         {
             system_detail::log_error("Failed to launch packaged runtime replacement batch.");
             return false;
@@ -998,10 +1208,7 @@ export namespace epochnamespace::updater
 
         bat.close();
 
-        const std::string command =
-            "cmd.exe /C start \"\" /min " + system_detail::quote_shell_arg(script_path.string());
-
-        if (std::system(command.c_str()) != 0)
+        if (!system_detail::launch_batch_hidden(script_path))
         {
             system_detail::log_error("Failed to launch source runtime replacement batch.");
             return false;
