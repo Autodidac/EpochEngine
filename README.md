@@ -262,17 +262,16 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.42
+v0.82.43
 ```
 
 Highlights:
 
+- `0.82.43` keeps `main` ahead of the packaged `0.82.42` runtime release so
+  source-update checks still have a newer live target after the release.
 - `0.82.42` repairs the Windows updater handoff script again by switching to
   proper batch variable quoting, explicit executable replacement, and a runtime
   handoff log in `epoch_update_handoff.log`.
-- `0.82.42` keeps packaged and source update flows on the same replacement path
-  so both update modes restart from the new runtime instead of silently keeping
-  the old executable alive.
 - The runtime release continues to ship as `main.zip`, while `main` stays free
   to move ahead with source-only changes between packaged drops.
 - The README snapshot stays intentionally short; detailed release history lives
