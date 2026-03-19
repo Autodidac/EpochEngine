@@ -1,7 +1,7 @@
 # Epoch Changelog
 
 ## [v0.83.2]
-- Rolled `main` forward after the packaged `0.83.1` updater-shell hotfix release so the live public binary can demonstrate the release-to-source update path against a newer source revision.
+- Fixed the updater worker's managed-vcpkg Git `HEAD` detection so the public shell can continue past managed tool bootstrap and reach the real restore/build/restart path during source fallback updates.
 
 ## [v0.83.1]
 - Fixed the updater-shell source fallback so it always uses the updater-managed `vcpkg` toolchain instead of mutating any configured local `VCPKG_ROOT` checkout during the rebuild path.
