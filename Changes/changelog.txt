@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.83.1]
+- Rolled `main` forward after the packaged `0.83.0` updater-shell release so the public binary has a newer source revision to discover and rebuild into.
+
 ## [v0.83.0]
 - Shipped the first dedicated `Release|x64` updater-shell runtime as the downloadable `main.zip` payload, so first launch now lands directly on the minimal bootstrap UI instead of the full launcher surface.
 - Replaced the source-updater dependency bootstrap with a managed toolchain flow that can download `vcpkg`, provision Git when needed, patch the `glad` port for current CMake, and rebuild from source without assuming a preinstalled development environment.
