@@ -176,6 +176,9 @@ namespace epochnamespace::gui
 
         static GuiResources g_resources{};
         static std::mutex g_resourceMutex{};
+        static bool g_missingFontPathWarningLogged = false;
+        static bool g_failedFontLoadWarningLogged = false;
+        static bool g_missingFontAssetWarningLogged = false;
 
         struct PtrHash { std::size_t operator()(const void* p) const noexcept { return std::hash<const void*>{}(p); } };
 
@@ -427,22 +430,34 @@ namespace epochnamespace::gui
             const std::filesystem::path fontPath = find_default_font_path();
             if (fontPath.empty())
             {
-                std::cerr << "[agui] Unable to locate GUI font '" << kDefaultFontFile << "'\n";
-                std::cerr << "[agui] Place '" << kDefaultFontFile
-                    << "' in 'assets/fonts' (relative to the working directory) or set EPOCH_GUI_FONT_PATH.\n";
+                if (!g_missingFontPathWarningLogged)
+                {
+                    std::cerr << "[agui] Unable to locate GUI font '" << kDefaultFontFile << "'\n";
+                    std::cerr << "[agui] Place '" << kDefaultFontFile
+                        << "' in 'assets/fonts' (relative to the working directory) or set EPOCH_GUI_FONT_PATH.\n";
+                    g_missingFontPathWarningLogged = true;
+                }
                 return;
             }
 
             if (!g_resources.fontRenderer.load_font(g_resources.font.fontName, fontPath.string(), g_resources.font.fontSizePt))
             {
-                std::cerr << "[agui] Failed to load GUI font from '" << fontPath.string() << "'\n";
+                if (!g_failedFontLoadWarningLogged)
+                {
+                    std::cerr << "[agui] Failed to load GUI font from '" << fontPath.string() << "'\n";
+                    g_failedFontLoadWarningLogged = true;
+                }
                 return;
             }
 
             g_resources.font.asset = g_resources.fontRenderer.get_font(g_resources.font.fontName);
             if (!g_resources.font.asset)
             {
-                std::cerr << "[agui] Font renderer returned no asset for '" << g_resources.font.fontName << "'\n";
+                if (!g_missingFontAssetWarningLogged)
+                {
+                    std::cerr << "[agui] Font renderer returned no asset for '" << g_resources.font.fontName << "'\n";
+                    g_missingFontAssetWarningLogged = true;
+                }
                 return;
             }
 

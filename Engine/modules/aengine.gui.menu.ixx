@@ -182,7 +182,7 @@ export namespace epochnamespace::menu
 
         static constexpr std::string_view updater_shell_description() noexcept
         {
-            return "Updates to the newest packaged release first. If a matching release is not ready yet, this shell rebuilds current main source and replaces itself automatically.";
+            return "Updates to the newest packaged release first. If a matching release is not ready yet, this shell rebuilds current main source and replaces itself automatically. After pressing Update, do not interrupt the process until the update finishes and the engine is fully running again.";
         }
 
         [[nodiscard]] static bool updater_shell_auto_update_requested() noexcept
