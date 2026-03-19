@@ -441,12 +441,13 @@ export namespace epochnamespace::updater
             return command;
         }
 
-        [[nodiscard]] inline bool run_process_hidden(
+        [[nodiscard]] inline bool run_process_with_visibility(
             const std::filesystem::path& executable,
             const std::vector<std::string>& args,
             const std::filesystem::path& working_directory,
             const std::filesystem::path& log_path,
             const bool wait_for_exit,
+            const bool hidden,
             int* const exit_code = nullptr)
         {
             if (exit_code != nullptr)
@@ -478,7 +479,7 @@ export namespace epochnamespace::updater
             STARTUPINFOW si{};
             si.cb = sizeof(si);
             si.dwFlags = STARTF_USESHOWWINDOW;
-            si.wShowWindow = SW_HIDE;
+            si.wShowWindow = hidden ? SW_HIDE : SW_SHOWNORMAL;
 
             if (log_handle != INVALID_HANDLE_VALUE)
             {
@@ -501,7 +502,7 @@ export namespace epochnamespace::updater
                 nullptr,
                 nullptr,
                 log_handle != INVALID_HANDLE_VALUE ? TRUE : FALSE,
-                CREATE_NO_WINDOW,
+                hidden ? CREATE_NO_WINDOW : 0,
                 nullptr,
                 working_directory.empty() ? nullptr : working_directory_wide.c_str(),
                 &si,
@@ -531,6 +532,24 @@ export namespace epochnamespace::updater
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);
             return true;
+        }
+
+        [[nodiscard]] inline bool run_process_hidden(
+            const std::filesystem::path& executable,
+            const std::vector<std::string>& args,
+            const std::filesystem::path& working_directory,
+            const std::filesystem::path& log_path,
+            const bool wait_for_exit,
+            int* const exit_code = nullptr)
+        {
+            return run_process_with_visibility(
+                executable,
+                args,
+                working_directory,
+                log_path,
+                wait_for_exit,
+                true,
+                exit_code);
         }
 
         [[nodiscard]] inline bool launch_batch_hidden(const std::filesystem::path& script_path)
@@ -638,6 +657,52 @@ export namespace epochnamespace::updater
             return make_temp_download_path(stem).replace_extension(".sh");
 #endif
         }
+
+#if defined(_WIN32)
+        [[nodiscard]] inline std::filesystem::path make_temp_powershell_script_path(const std::string_view stem)
+        {
+            return make_temp_download_path(stem).replace_extension(".ps1");
+        }
+
+        [[nodiscard]] inline std::string powershell_escape_single_quoted(const std::string_view text)
+        {
+            std::string out;
+            out.reserve(text.size() + 8);
+            for (const char ch : text)
+            {
+                if (ch == '\'')
+                    out += "''";
+                else
+                    out.push_back(ch);
+            }
+            return out;
+        }
+
+        [[nodiscard]] inline bool launch_powershell_script(
+            const std::filesystem::path& script_path,
+            const bool hidden)
+        {
+            auto powershell = env_path("SystemRoot") / "System32/WindowsPowerShell/v1.0/powershell.exe";
+            if (powershell.empty() || !std::filesystem::exists(powershell))
+                powershell = std::filesystem::path{ "powershell.exe" };
+
+            return run_process_with_visibility(
+                powershell,
+                {
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    script_path.string()
+                },
+                script_path.parent_path(),
+                {},
+                false,
+                hidden,
+                nullptr);
+        }
+#endif
 
         [[nodiscard]] inline std::filesystem::path source_solution_path(const std::filesystem::path& source_root)
         {
@@ -895,6 +960,15 @@ export namespace epochnamespace::updater
 
             return {};
         }
+
+        [[nodiscard]] inline bool env_flag_enabled(const char* name)
+        {
+            const auto value = lower_ascii(trim_ascii(env_path(name).string()));
+            return value == "1"
+                || value == "true"
+                || value == "yes"
+                || value == "on";
+        }
     }
 
     export struct UpdateCommandResult
@@ -917,6 +991,202 @@ export namespace epochnamespace::updater
         std::string source_url;
         std::string source_version_url;
     };
+
+#if defined(_WIN32)
+    [[nodiscard]] inline bool launch_source_update_worker(
+        const UpdateChannel& channel,
+        const std::filesystem::path& target_binary,
+        const bool silent_worker)
+    {
+        if (channel.source_url.empty())
+        {
+            system_detail::log_error("Source update URL is not configured.");
+            return false;
+        }
+
+        const auto vcpkg_root = system_detail::env_path("VCPKG_ROOT");
+        const auto vcpkg_exe = vcpkg_root / "vcpkg.exe";
+        if (vcpkg_root.empty() || !std::filesystem::exists(vcpkg_exe))
+        {
+            system_detail::log_error("Could not locate vcpkg. Set VCPKG_ROOT before running a source update.");
+            return false;
+        }
+
+        const auto msbuild = system_detail::find_msbuild_path();
+        if (msbuild.empty())
+        {
+            system_detail::log_error("Could not locate MSBuild. Install Visual Studio Build Tools or set MSBUILD_EXE_PATH.");
+            return false;
+        }
+
+        const auto archive_path = system_detail::source_archive_path(target_binary);
+        const auto staging_dir = system_detail::source_staging_dir(target_binary);
+        const auto final_dir = system_detail::source_final_dir(target_binary);
+        const auto target_dir = target_binary.parent_path();
+        const auto build_log = target_dir / "epoch_source_update.log";
+        const auto handoff_log = target_dir / "epoch_update_handoff.log";
+        const auto worker_script = system_detail::make_temp_powershell_script_path("source_update_worker");
+        const auto built_runtime_dir = system_detail::source_runtime_output_dir(final_dir);
+        const auto built_binary = system_detail::source_runtime_binary_path(final_dir, target_binary);
+        const auto manifest_root = system_detail::source_manifest_root(final_dir);
+        const auto solution = system_detail::source_solution_path(final_dir);
+        const auto target_assets_dir = target_dir / "assets";
+        const auto built_assets_dir = built_runtime_dir / "assets";
+
+        std::ofstream ps(worker_script, std::ios::binary);
+        if (!ps)
+        {
+            system_detail::log_error("Failed to create source update worker script.");
+            return false;
+        }
+
+        const auto triplet = SOURCE_BUILD_PLATFORM() + std::string{ "-windows" };
+        const auto esc = [](const std::string& value)
+            {
+                return system_detail::powershell_escape_single_quoted(value);
+            };
+
+        ps
+            << "$ErrorActionPreference = 'Stop'\n"
+            << "$ProgressPreference = 'SilentlyContinue'\n"
+            << "$sourceUrl = '" << esc(channel.source_url) << "'\n"
+            << "$sourceArchive = '" << esc(archive_path.string()) << "'\n"
+            << "$stagingDir = '" << esc(staging_dir.string()) << "'\n"
+            << "$sourceRoot = '" << esc(final_dir.string()) << "'\n"
+            << "$manifestRoot = '" << esc(manifest_root.string()) << "'\n"
+            << "$solution = '" << esc(solution.string()) << "'\n"
+            << "$buildLog = '" << esc(build_log.string()) << "'\n"
+            << "$handoffLog = '" << esc(handoff_log.string()) << "'\n"
+            << "$targetExe = '" << esc(target_binary.string()) << "'\n"
+            << "$targetDir = '" << esc(target_dir.string()) << "'\n"
+            << "$targetAssetsDir = '" << esc(target_assets_dir.string()) << "'\n"
+            << "$builtDir = '" << esc(built_runtime_dir.string()) << "'\n"
+            << "$builtExe = '" << esc(built_binary.string()) << "'\n"
+            << "$builtAssetsDir = '" << esc(built_assets_dir.string()) << "'\n"
+            << "$vcpkgExe = '" << esc(vcpkg_exe.string()) << "'\n"
+            << "$msbuildExe = '" << esc(msbuild.string()) << "'\n"
+            << "$triplet = '" << esc(triplet) << "'\n"
+            << "$buildTarget = '" << esc(SOURCE_BUILD_TARGET()) << "'\n"
+            << "$buildConfiguration = '" << esc(SOURCE_BUILD_CONFIGURATION()) << "'\n"
+            << "$buildPlatform = '" << esc(SOURCE_BUILD_PLATFORM()) << "'\n"
+            << "$workerPath = $MyInvocation.MyCommand.Path\n"
+            << "function Write-Step([string]$Level, [string]$Message) {\n"
+            << "  $line = \"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Message\"\n"
+            << "  Write-Host $line\n"
+            << "  Add-Content -LiteralPath $buildLog -Value $line\n"
+            << "}\n"
+            << "function Write-Handoff([string]$Level, [string]$Message) {\n"
+            << "  $line = \"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Message\"\n"
+            << "  Write-Host $line\n"
+            << "  Add-Content -LiteralPath $handoffLog -Value $line\n"
+            << "}\n"
+            << "function Invoke-Tool([string]$FilePath, [string[]]$Arguments, [string]$WorkingDir, [string]$StepName) {\n"
+            << "  Write-Step 'INFO' ($StepName + ' started')\n"
+            << "  Push-Location $WorkingDir\n"
+            << "  try {\n"
+            << "    & $FilePath @Arguments 2>&1 | Tee-Object -FilePath $buildLog -Append | Out-Host\n"
+            << "    if ($LASTEXITCODE -ne 0) {\n"
+            << "      throw ($StepName + ' failed with exit code ' + $LASTEXITCODE + '.')\n"
+            << "    }\n"
+            << "  }\n"
+            << "  finally {\n"
+            << "    Pop-Location\n"
+            << "  }\n"
+            << "}\n"
+            << "Remove-Item -LiteralPath $buildLog -Force -ErrorAction SilentlyContinue\n"
+            << "Remove-Item -LiteralPath $handoffLog -Force -ErrorAction SilentlyContinue\n"
+            << "Write-Step 'INFO' 'Source update worker started.'\n"
+            << "Write-Step 'INFO' ('Source root: ' + $sourceRoot)\n"
+            << "Write-Step 'INFO' ('Manifest root: ' + $manifestRoot)\n"
+            << "Write-Step 'INFO' ('MSBuild: ' + $msbuildExe)\n"
+            << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
+            << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "Write-Step 'INFO' 'Downloading latest source snapshot from main.'\n"
+            << "$headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
+            << "Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $sourceUrl -OutFile $sourceArchive\n"
+            << "Expand-Archive -LiteralPath $sourceArchive -DestinationPath $stagingDir -Force\n"
+            << "$extractedRoot = Get-ChildItem -LiteralPath $stagingDir -Directory | Select-Object -First 1\n"
+            << "if ($null -ne $extractedRoot) {\n"
+            << "  Move-Item -LiteralPath $extractedRoot.FullName -Destination $sourceRoot -Force\n"
+            << "} else {\n"
+            << "  New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null\n"
+            << "  Copy-Item -Path (Join-Path $stagingDir '*') -Destination $sourceRoot -Recurse -Force\n"
+            << "}\n"
+            << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "Write-Step 'INFO' ('Source snapshot ready at: ' + $sourceRoot)\n"
+            << "Write-Step 'INFO' 'Restoring source dependencies with vcpkg.'\n"
+            << "Invoke-Tool $vcpkgExe @('install', '--triplet', $triplet, ('--x-manifest-root=' + $manifestRoot)) $manifestRoot 'vcpkg restore'\n"
+            << "$buildSucceeded = $false\n"
+            << "for ($attempt = 1; $attempt -le 3 -and -not $buildSucceeded; ++$attempt) {\n"
+            << "  try {\n"
+            << "    Write-Step 'INFO' ('MSBuild attempt ' + $attempt + ' started.')\n"
+            << "    Invoke-Tool $msbuildExe @($solution, ('/t:' + $buildTarget), ('/p:Configuration=' + $buildConfiguration), ('/p:Platform=' + $buildPlatform), '/p:UseMultiToolTask=false', '/m:1', '/clp:ErrorsOnly') $sourceRoot ('MSBuild attempt ' + $attempt)\n"
+            << "    $buildSucceeded = $true\n"
+            << "  }\n"
+            << "  catch {\n"
+            << "    Write-Step 'WARN' $_.Exception.Message\n"
+            << "    if ($attempt -lt 3) {\n"
+            << "      Write-Step 'INFO' 'Retrying the source build after restore.'\n"
+            << "      Start-Sleep -Seconds 5\n"
+            << "    }\n"
+            << "  }\n"
+            << "}\n"
+            << "if (-not $buildSucceeded) {\n"
+            << "  throw 'Source build failed after three attempts.'\n"
+            << "}\n"
+            << "if (-not (Test-Path -LiteralPath $builtExe)) {\n"
+            << "  throw 'Built runtime output is missing after source update.'\n"
+            << "}\n"
+            << "Write-Step 'INFO' ('Built runtime ready at: ' + $builtExe)\n"
+            << "Write-Handoff 'INFO' 'Waiting for runtime handoff.'\n"
+            << "for ($attempt = 1; $attempt -le 600; ++$attempt) {\n"
+            << "  try {\n"
+            << "    if (Test-Path -LiteralPath $targetExe) {\n"
+            << "      Remove-Item -LiteralPath $targetExe -Force -ErrorAction Stop\n"
+            << "    }\n"
+            << "  }\n"
+            << "  catch {\n"
+            << "  }\n"
+            << "  if (-not (Test-Path -LiteralPath $targetExe)) {\n"
+            << "    break\n"
+            << "  }\n"
+            << "  if ($attempt -eq 1 -or ($attempt % 15) -eq 0) {\n"
+            << "    Write-Handoff 'INFO' ('Waiting for target runtime unlock attempt ' + $attempt + '.')\n"
+            << "  }\n"
+            << "  Start-Sleep -Seconds 1\n"
+            << "}\n"
+            << "if (Test-Path -LiteralPath $targetExe) {\n"
+            << "  throw 'Timed out waiting for target runtime executable to unlock.'\n"
+            << "}\n"
+            << "Copy-Item -LiteralPath $builtExe -Destination $targetExe -Force\n"
+            << "Get-ChildItem -LiteralPath $builtDir -File | Where-Object { $_.Extension -in '.dll', '.manifest' } | ForEach-Object {\n"
+            << "  Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $targetDir $_.Name) -Force\n"
+            << "}\n"
+            << "if (Test-Path -LiteralPath $builtAssetsDir) {\n"
+            << "  New-Item -ItemType Directory -Path $targetAssetsDir -Force | Out-Null\n"
+            << "  Copy-Item -Path (Join-Path $builtAssetsDir '*') -Destination $targetAssetsDir -Recurse -Force\n"
+            << "}\n"
+            << "Write-Handoff 'INFO' 'Source runtime files copied successfully.'\n"
+            << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
+            << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "Start-Process -FilePath $targetExe -WorkingDirectory $targetDir\n"
+            << "Write-Handoff 'INFO' 'Restarted updated runtime.'\n"
+            << "Start-Sleep -Seconds 1\n"
+            << "Remove-Item -LiteralPath $workerPath -Force -ErrorAction SilentlyContinue\n";
+
+        ps.close();
+
+        if (!system_detail::launch_powershell_script(worker_script, silent_worker))
+        {
+            system_detail::log_error("Failed to launch source update worker.");
+            return false;
+        }
+
+        system_detail::log_info("Source update worker launched successfully.");
+        return true;
+    }
+#endif
 
     export void cleanup_previous_update_artifacts()
     {
@@ -1397,7 +1667,10 @@ export namespace epochnamespace::updater
         return replace_binary(target_binary, new_binary);
     }
 
-    export bool run_source_update_command(const UpdateChannel& channel, const bool recheck_source_version = true)
+    export bool run_source_update_command(
+        const UpdateChannel& channel,
+        const bool recheck_source_version = true,
+        const bool silent_worker = false)
     {
         if (channel.source_url.empty())
         {
@@ -1406,6 +1679,33 @@ export namespace epochnamespace::updater
         }
 
         const auto target_binary = system_detail::current_binary_path();
+
+#if defined(_WIN32)
+        if (recheck_source_version && !channel.source_version_url.empty())
+        {
+            const auto final_dir = system_detail::source_final_dir(target_binary);
+            const std::string local_source_version =
+                system_detail::read_local_source_version(final_dir);
+
+            const auto source_status =
+                check_for_updates(channel.source_version_url, "Source", local_source_version);
+
+            if (source_status.ok && source_status.update_available)
+                system_detail::log_info("A newer source snapshot is available on main.");
+            else if (source_status.ok)
+                system_detail::log_info("No newer source snapshot is currently available; continuing because source update was requested explicitly.");
+        }
+
+        const bool effective_silent_worker =
+            silent_worker || system_detail::env_flag_enabled("EPOCH_UPDATER_SILENT");
+
+        if (!launch_source_update_worker(channel, target_binary, effective_silent_worker))
+            return false;
+
+        system_detail::log_info("Closing the current runtime so the source update worker can finish the replacement.");
+        std::exit(0);
+        return true;
+#else
         const auto archive_path = system_detail::source_archive_path(target_binary);
         const auto staging_dir = system_detail::source_staging_dir(target_binary);
         const auto final_dir = system_detail::source_final_dir(target_binary);
@@ -1490,6 +1790,7 @@ export namespace epochnamespace::updater
 
         system_detail::log_info("Replacing current runtime from rebuilt source output.");
         return replace_runtime_from_source_script(target_binary, built_runtime_dir, final_dir, archive_path);
+#endif
     }
 
     export UpdateCommandResult run_update_command(

@@ -262,25 +262,20 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.47
+v0.82.48
 ```
 
 Highlights:
 
-- `0.82.47` keeps `main` ahead of the packaged `0.82.46` runtime so source
-  update checks have a newer live target again after the repaired release.
-- `0.82.46` keeps source updates downloading the repo directly from `main`, then
-  restoring manifest dependencies and retrying the compile pass once so the
-  freshly restored headers are picked up before the final handoff.
-- `0.82.46` keeps the runtime-side updater logs in place:
-  `epoch_source_update.log` and `epoch_update_handoff.log`.
-- This release is meant to stop the extra developer prompt, unblock source
-  rebuild updates after extraction, and leave behind concrete logs if a machine
+- `0.82.48` moves Windows source updates into a detached worker so the restore,
+  build, handoff, and relaunch can finish even after the live runtime exits.
+- The worker keeps downloading source directly from `main`, restores manifest
+  dependencies first, retries MSBuild after restore, and leaves
+  `epoch_source_update.log` plus `epoch_update_handoff.log` behind if a machine
   still refuses the handoff.
-- The runtime release continues to ship as `main.zip`, while `main` stays free
-  to move ahead with source-only changes between packaged drops.
-- The README snapshot stays intentionally short; detailed release history lives
-  in [Changes/changelog.txt](Changes/changelog.txt),
+- Source updates stay visible by default, and can be run silently on demand by
+  setting `EPOCH_UPDATER_SILENT=1`.
+- Detailed release history lives in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
   current version notes under [Changes/](Changes/).
 - The launcher now owns projects, games, and tool entry points instead of
