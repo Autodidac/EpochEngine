@@ -1,7 +1,7 @@
 # Epoch Changelog
 
 ## [v0.83.1]
-- Rolled `main` forward after the packaged `0.83.0` updater-shell release so the public binary has a newer source revision to discover and rebuild into.
+- Fixed the updater-shell source fallback so it always uses the updater-managed `vcpkg` toolchain instead of mutating any configured local `VCPKG_ROOT` checkout during the rebuild path.
 
 ## [v0.83.0]
 - Shipped the first dedicated `Release|x64` updater-shell runtime as the downloadable `main.zip` payload, so first launch now lands directly on the minimal bootstrap UI instead of the full launcher surface.

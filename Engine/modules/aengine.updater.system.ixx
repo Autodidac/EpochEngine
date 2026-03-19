@@ -944,15 +944,6 @@ export namespace epochnamespace::updater
             const std::filesystem::path& log_path)
         {
 #if defined(_WIN32)
-            const auto from_env_root = env_path("VCPKG_ROOT");
-            const auto from_env_exe = from_env_root / VCPKG_EXECUTABLE_NAME();
-            if (!from_env_root.empty() && std::filesystem::exists(from_env_exe))
-            {
-                log_info("Using configured vcpkg from VCPKG_ROOT.");
-                append_log_line(log_path, "[INFO] Using configured vcpkg: " + from_env_root.string());
-                return from_env_exe;
-            }
-
             const std::string baseline =
                 read_manifest_builtin_baseline(manifest_root);
             const std::string resolved_ref =
@@ -2177,13 +2168,6 @@ export namespace epochnamespace::updater
             << "  throw 'Managed git extraction did not produce git.exe.'\n"
             << "}\n"
             << "function Resolve-VcpkgExe {\n"
-            << "  if (-not [string]::IsNullOrWhiteSpace($env:VCPKG_ROOT)) {\n"
-            << "    $configuredExe = Join-Path $env:VCPKG_ROOT $vcpkgExeName\n"
-            << "    if (Test-Path -LiteralPath $configuredExe) {\n"
-            << "      Write-Step 'INFO' ('Using configured vcpkg: ' + $env:VCPKG_ROOT)\n"
-            << "      return $configuredExe\n"
-            << "    }\n"
-            << "  }\n"
             << "  $vcpkgRef = Get-VcpkgRef\n"
             << "  $safeRef = Get-ShortToken $vcpkgRef\n"
             << "  $managedVcpkgRoot = Join-Path $managedToolsRoot ('v-' + $safeRef)\n"
