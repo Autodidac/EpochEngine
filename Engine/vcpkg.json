@@ -16,8 +16,18 @@
 
     "sdl3",
     "sdl3-image",
-    "sfml",
-    "raylib",
+    {
+      "name": "sfml",
+      "default-features": false,
+      "features": [
+        "graphics",
+        "window"
+      ]
+    },
+    {
+      "name": "raylib",
+      "default-features": false
+    },
 
     "zlib"
   ]

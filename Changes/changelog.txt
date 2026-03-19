@@ -2,6 +2,7 @@
 
 ## [v0.83.3]
 - Rolled `main` forward after the packaged `0.83.2` updater-shell hotfix release so the public binary can demonstrate the full release-to-source update path against a newer source revision.
+- Trimmed the source-update manifest down to the graphics-only `SFML` and non-audio `raylib` feature set so updater-managed rebuilds no longer depend on the flaky `libogg`/`vorbis`/`openal` download chain.
 
 ## [v0.83.2]
 - Fixed the updater worker's managed-vcpkg Git `HEAD` detection so the public shell can continue past managed tool bootstrap and reach the real restore/build/restart path during source fallback updates.
