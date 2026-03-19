@@ -1079,6 +1079,7 @@ namespace epochnamespace::core
             case Choice::ProjectPlatformer:
             case Choice::ProjectPuzzle:
             case Choice::About:
+            case Choice::UpdateLatest:
             case Choice::Exit:
             default:
                 return {};
@@ -1576,6 +1577,30 @@ namespace epochnamespace::core
                                     session.mode = SessionMode::Exit;
                                     ctx_running = false;
                                     win->running = false;
+                                }
+                                else if (*choice == epochnamespace::menu::Choice::UpdateLatest)
+                                {
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::INFO,
+                                        "Updater shell requested a current Epoch update.",
+                                        std::source_location::current());
+                                    const auto result = epochnamespace::updater::run_update_command(
+                                        default_update_channel(),
+                                        true);
+                                    if (!result.update_available)
+                                    {
+                                        logger::get(kEditorLog).log(
+                                            logger::LogLevel::INFO,
+                                            "Updater shell is already on the newest packaged or source build.",
+                                            std::source_location::current());
+                                    }
+                                    else if (!result.update_performed)
+                                    {
+                                        logger::get(kEditorLog).log(
+                                            logger::LogLevel::Error,
+                                            "Updater shell found an update but the install handoff did not complete.",
+                                            std::source_location::current());
+                                    }
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)
                                 {

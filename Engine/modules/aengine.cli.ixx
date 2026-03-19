@@ -51,6 +51,7 @@ export namespace epochnamespace::core::cli
     export using ::epochnamespace::core::cli::run_menu_loop;
     export using ::epochnamespace::core::cli::capture_requested;
     export using ::epochnamespace::core::cli::smoke_requested;
+    export using ::epochnamespace::core::cli::updater_shell_requested;
     export using ::epochnamespace::core::cli::scene_name;
     export using ::epochnamespace::core::cli::exe_path;
 

@@ -77,6 +77,15 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <EpochExtraDefines></EpochExtraDefines>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(EpochUpdaterShell)'=='true'">
+    <EpochExtraDefines>EPOCH_UPDATER_SHELL_BUILD=1;$(EpochExtraDefines)</EpochExtraDefines>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(EpochVersionOverrideMajor)' != '' and '$(EpochVersionOverrideMinor)' != '' and '$(EpochVersionOverrideRevision)' != ''">
+    <EpochExtraDefines>EPOCH_OVERRIDE_VERSION_MAJOR=$(EpochVersionOverrideMajor);EPOCH_OVERRIDE_VERSION_MINOR=$(EpochVersionOverrideMinor);EPOCH_OVERRIDE_VERSION_REVISION=$(EpochVersionOverrideRevision);$(EpochExtraDefines)</EpochExtraDefines>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IntDir>$(SolutionDir)\Debug\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
@@ -138,7 +147,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ENGINE_STATICLIB;_DEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\include;$(VcpkgInstalledDir)$(VcpkgTriplet)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -146,6 +155,7 @@
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
       <AdditionalModuleDependencies>%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <CallingConvention>Cdecl</CallingConvention>
     </ClCompile>
     <Link>
@@ -162,7 +172,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ENGINE_STATICLIB;NDEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\include;$(VcpkgInstalledDir)$(VcpkgTriplet)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -170,6 +180,7 @@
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
       <AdditionalModuleDependencies>%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <CallingConvention>StdCall</CallingConvention>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
     </ClCompile>

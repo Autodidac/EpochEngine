@@ -742,6 +742,28 @@ namespace epochnamespace::gui
             return (std::max)(maxWidth, current);
         }
 
+        [[nodiscard]] static bool is_wrap_space(char ch) noexcept
+        {
+            return ch == ' ' || ch == '\t';
+        }
+
+        [[nodiscard]] static float measure_word_advance(std::string_view text, std::size_t start, float scale) noexcept
+        {
+            float advance = 0.0f;
+
+            for (std::size_t i = start; i < text.size(); ++i)
+            {
+                const char ch = text[i];
+                if (ch == '\n' || is_wrap_space(ch))
+                    break;
+
+                const auto next = next_drawable_char(text, i);
+                advance += glyph_advance_with_kerning(static_cast<unsigned char>(ch), next, scale);
+            }
+
+            return advance;
+        }
+
         [[nodiscard]] static float measure_wrapped_text_height(std::string_view text, float width, float scale) noexcept
         {
             ensure_resources();
@@ -760,6 +782,47 @@ namespace epochnamespace::gui
                     ++lines;
                     penX = 0.0f;
                     continue;
+                }
+
+                if (is_wrap_space(ch))
+                {
+                    std::size_t runEnd = i;
+                    float whitespaceAdvance = 0.0f;
+                    while (runEnd < text.size() && is_wrap_space(text[runEnd]))
+                    {
+                        const auto next = next_drawable_char(text, runEnd);
+                        whitespaceAdvance += glyph_advance_with_kerning(static_cast<unsigned char>(text[runEnd]), next, scale);
+                        ++runEnd;
+                    }
+
+                    if (penX <= 0.0f)
+                    {
+                        i = runEnd - 1;
+                        continue;
+                    }
+
+                    const float nextWordAdvance = measure_word_advance(text, runEnd, scale);
+                    if (nextWordAdvance > 0.0f && penX + whitespaceAdvance + nextWordAdvance > effectiveWidth + 0.001f)
+                    {
+                        ++lines;
+                        penX = 0.0f;
+                        i = runEnd - 1;
+                        continue;
+                    }
+
+                    penX += whitespaceAdvance;
+                    i = runEnd - 1;
+                    continue;
+                }
+
+                if ((i == 0 || text[i - 1] == '\n' || is_wrap_space(text[i - 1])) && penX > 0.0f)
+                {
+                    const float wordAdvance = measure_word_advance(text, i, scale);
+                    if (wordAdvance > 0.0f && penX + wordAdvance > effectiveWidth + 0.001f)
+                    {
+                        ++lines;
+                        penX = 0.0f;
+                    }
                 }
 
                 const auto next = next_drawable_char(text, i);
@@ -794,6 +857,47 @@ namespace epochnamespace::gui
                     penX = x;
                     baseline += lineAdvance;
                     continue;
+                }
+
+                if (is_wrap_space(ch))
+                {
+                    std::size_t runEnd = i;
+                    float whitespaceAdvance = 0.0f;
+                    while (runEnd < text.size() && is_wrap_space(text[runEnd]))
+                    {
+                        const auto next = next_drawable_char(text, runEnd);
+                        whitespaceAdvance += glyph_advance_with_kerning(static_cast<unsigned char>(text[runEnd]), next, scale);
+                        ++runEnd;
+                    }
+
+                    if (penX <= x)
+                    {
+                        i = runEnd - 1;
+                        continue;
+                    }
+
+                    const float nextWordAdvance = measure_word_advance(text, runEnd, scale);
+                    if (nextWordAdvance > 0.0f && penX - x + whitespaceAdvance + nextWordAdvance > effectiveWidth + 0.001f)
+                    {
+                        penX = x;
+                        baseline += lineAdvance;
+                        i = runEnd - 1;
+                        continue;
+                    }
+
+                    penX += whitespaceAdvance;
+                    i = runEnd - 1;
+                    continue;
+                }
+
+                if ((i == 0 || text[i - 1] == '\n' || is_wrap_space(text[i - 1])) && penX > x)
+                {
+                    const float wordAdvance = measure_word_advance(text, i, scale);
+                    if (wordAdvance > 0.0f && penX - x + wordAdvance > effectiveWidth + 0.001f)
+                    {
+                        penX = x;
+                        baseline += lineAdvance;
+                    }
                 }
 
                 const auto next = next_drawable_char(text, i);
@@ -835,6 +939,49 @@ namespace epochnamespace::gui
                     baseline += lineAdvance;
                     ++lines;
                     continue;
+                }
+
+                if (is_wrap_space(ch))
+                {
+                    std::size_t runEnd = i;
+                    float whitespaceAdvance = 0.0f;
+                    while (runEnd < text.size() && is_wrap_space(text[runEnd]))
+                    {
+                        const auto next = next_drawable_char(text, runEnd);
+                        whitespaceAdvance += glyph_advance_with_kerning(static_cast<unsigned char>(text[runEnd]), next, scale);
+                        ++runEnd;
+                    }
+
+                    if (penX <= x)
+                    {
+                        i = runEnd - 1;
+                        continue;
+                    }
+
+                    const float nextWordAdvance = measure_word_advance(text, runEnd, scale);
+                    if (nextWordAdvance > 0.0f && penX - x + whitespaceAdvance + nextWordAdvance > effectiveWidth + 0.001f)
+                    {
+                        penX = x;
+                        baseline += lineAdvance;
+                        ++lines;
+                        i = runEnd - 1;
+                        continue;
+                    }
+
+                    penX += whitespaceAdvance;
+                    i = runEnd - 1;
+                    continue;
+                }
+
+                if ((i == 0 || text[i - 1] == '\n' || is_wrap_space(text[i - 1])) && penX > x)
+                {
+                    const float wordAdvance = measure_word_advance(text, i, scale);
+                    if (wordAdvance > 0.0f && penX - x + wordAdvance > effectiveWidth + 0.001f)
+                    {
+                        penX = x;
+                        baseline += lineAdvance;
+                        ++lines;
+                    }
                 }
 
                 const auto next = next_drawable_char(text, i);
@@ -1335,6 +1482,20 @@ namespace epochnamespace::gui
             wrapWidth,
             kFontScale);
         advance_cursor({ 0.0f, drawnHeight });
+    }
+
+    float wrapped_text_height(std::string_view text, float width) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx) return 0.0f;
+
+        const float availableWidth = (std::max)(
+            space_advance(kFontScale),
+            (g_frame.origin.x + g_frame.windowSize.x - kContentPadding) - g_frame.cursor.x);
+        const float wrapWidth = width > 0.0f
+            ? (std::max)(space_advance(kFontScale), width)
+            : availableWidth;
+
+        return measure_wrapped_text_height(text, wrapWidth, kFontScale);
     }
 
     EditBoxResult edit_box(std::string& text, Vec2 size, std::size_t max_chars, bool multiline) noexcept

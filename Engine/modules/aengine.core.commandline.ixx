@@ -43,6 +43,15 @@ export namespace epochnamespace::core::cli
 
     namespace detail
     {
+        [[nodiscard]] constexpr bool default_updater_shell_mode() noexcept
+        {
+#if defined(EPOCH_UPDATER_SHELL_BUILD) && (EPOCH_UPDATER_SHELL_BUILD == 1)
+            return true;
+#else
+            return false;
+#endif
+        }
+
         enum class BackendSelection
         {
             Auto,
@@ -142,6 +151,7 @@ export namespace epochnamespace::core::cli
     inline bool capture_requested = false;
     inline bool smoke_requested = false;
     inline bool editor_requested = false;
+    inline bool updater_shell_requested = false;
     inline std::string scene_name{};
     inline std::filesystem::path exe_path;
 
@@ -225,6 +235,7 @@ export namespace epochnamespace::core::cli
         capture_requested = false;
         smoke_requested = false;
         editor_requested = false;
+        updater_shell_requested = detail::default_updater_shell_mode();
         scene_name.clear();
         window_width_overridden = false;
         window_height_overridden = false;
@@ -233,6 +244,17 @@ export namespace epochnamespace::core::cli
         runtime_path = RuntimePath::Epoch;
 
         (void)apply_backend_selection("auto");
+
+        if (updater_shell_requested)
+        {
+            run_menu_loop = true;
+            menu_columns = 1;
+            window_mode = WindowMode::Standalone;
+            parented_mode = false;
+            window_width = 960;
+            window_height = 640;
+            (void)apply_backend_selection("opengl");
+        }
 
         if (argc < 1)
         {
@@ -312,6 +334,7 @@ export namespace epochnamespace::core::cli
                     "  --scene <name>             Optional scene hint for smoke tooling\n"
                     "  --capture                  Optional capture hint for smoke tooling\n"
                     "  --smoke                    Run bounded smoke flow where supported\n"
+                    "  --updater-shell            Start the bootstrap updater shell\n"
                     "  --update, -u               Check for a newer epochengine build\n"
                     "  --force                    Apply the available update immediately\n");
             }
@@ -368,6 +391,11 @@ export namespace epochnamespace::core::cli
             else if (key == "--force"sv)
             {
                 result.force_update = true;
+            }
+            else if (key == "--updater-shell"sv)
+            {
+                updater_shell_requested = true;
+                run_menu_loop = true;
             }
             else if (key == "--runtime"sv)
             {
@@ -438,6 +466,25 @@ export namespace epochnamespace::core::cli
 
         if (result.force_update && !result.update_requested)
             detail::log_warn("Ignoring --force without --update.");
+
+        if (updater_shell_requested)
+        {
+            run_menu_loop = true;
+            editor_requested = false;
+            result.editor_requested = false;
+            runtime_path = RuntimePath::Epoch;
+            result.runtime = runtime_path;
+            window_mode = WindowMode::Standalone;
+            parented_mode = false;
+            menu_columns = 1;
+
+            if (!window_width_overridden)
+                window_width = 960;
+            if (!window_height_overridden)
+                window_height = 640;
+
+            (void)apply_backend_selection("opengl");
+        }
 
         return result;
     }

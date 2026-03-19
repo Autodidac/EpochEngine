@@ -218,9 +218,8 @@ export namespace epochnamespace::atlasmanager
             logger::get(kLogSys).logf(
                 logger::LogLevel::INFO,
                 std::source_location::current(),
-                "Atlas registry updated: {} atlas(es), vector size {}",
-                atlas_map.size(),
-                atlas_vector.size());
+                "Atlas registry ready: {} atlas(es)",
+                atlas_map.size());
         }
     }
 

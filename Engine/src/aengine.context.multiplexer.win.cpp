@@ -319,6 +319,13 @@ namespace epochnamespace::core
 
         std::wstring BuildChildWindowTitle(ContextType type, int index)
         {
+            if (epochnamespace::core::cli::updater_shell_requested
+                && type == ContextType::OpenGL
+                && index == 0)
+            {
+                return L"Epoch Updater Shell";
+            }
+
             const std::wstring_view base = BackendDisplayName(type);
             std::wstring title{ base.begin(), base.end() };
             title += L" Dock ";
@@ -647,6 +654,59 @@ namespace epochnamespace::core
                 {
                     const std::wstring windowTitle = backend::BuildChildWindowTitle(type, i);
                     const std::string narrowTitle = epochnamespace::text::narrow_utf8(windowTitle);
+                    const bool singleStandaloneWindow = (!parent && totalRequested == 1);
+                    const bool updaterStandaloneWindow = singleStandaloneWindow && cli::updater_shell_requested;
+                    const int initialWidth = singleStandaloneWindow ? cli::window_width : 1280;
+                    const int initialHeight = singleStandaloneWindow ? cli::window_height : 1277;
+                    int initialX = singleStandaloneWindow ? CW_USEDEFAULT : 0;
+                    int initialY = singleStandaloneWindow ? CW_USEDEFAULT : 0;
+
+                    if (updaterStandaloneWindow)
+                    {
+                        RECT workArea{};
+                        if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0))
+                        {
+                            constexpr int kMargin = 24;
+                            const int workLeft = static_cast<int>(workArea.left);
+                            const int workTop = static_cast<int>(workArea.top);
+                            const int workRight = static_cast<int>(workArea.right);
+                            const int workBottom = static_cast<int>(workArea.bottom);
+                            const int minX = workLeft + kMargin;
+                            const int minY = workTop + kMargin;
+                            const int maxX = (std::max)(minX, workRight - initialWidth - kMargin);
+                            const int maxY = (std::max)(minY, workBottom - initialHeight - kMargin);
+
+                            if (const HWND consoleWindow = ::GetConsoleWindow())
+                            {
+                                RECT consoleRect{};
+                                if (::GetWindowRect(consoleWindow, &consoleRect))
+                                {
+                                    const int consoleLeft = static_cast<int>(consoleRect.left);
+                                    const int consoleTop = static_cast<int>(consoleRect.top);
+                                    const int consoleRight = static_cast<int>(consoleRect.right);
+                                    const int consoleBottom = static_cast<int>(consoleRect.bottom);
+                                    const int rightSideX = consoleRight + kMargin;
+                                    const bool fitsRight = rightSideX <= maxX;
+                                    if (fitsRight)
+                                    {
+                                        initialX = rightSideX;
+                                        initialY = (std::clamp)(consoleTop, minY, maxY);
+                                    }
+                                    else
+                                    {
+                                        initialX = (std::clamp)(consoleLeft, minX, maxX);
+                                        initialY = (std::clamp)(consoleBottom + kMargin, minY, maxY);
+                                    }
+                                }
+                            }
+
+                            if (initialX == CW_USEDEFAULT || initialY == CW_USEDEFAULT)
+                            {
+                                initialX = maxX;
+                                initialY = minY + 48;
+                            }
+                        }
+                    }
 
                     HWND hwnd = ::CreateWindowExW(
                         0,
@@ -655,7 +715,7 @@ namespace epochnamespace::core
                         (parent
                             ? (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
                             : (WS_OVERLAPPEDWINDOW | WS_VISIBLE)),
-                        0, 0, 1280, 1277,
+                        initialX, initialY, initialWidth, initialHeight,
                         parent,
                         nullptr,
                         hInst,

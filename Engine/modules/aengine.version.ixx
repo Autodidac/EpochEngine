@@ -31,6 +31,24 @@
 
 module;
 
+#if defined(EPOCH_OVERRIDE_VERSION_MAJOR)
+#  define EPOCH_VERSION_MAJOR_VALUE EPOCH_OVERRIDE_VERSION_MAJOR
+#else
+#  define EPOCH_VERSION_MAJOR_VALUE 0
+#endif
+
+#if defined(EPOCH_OVERRIDE_VERSION_MINOR)
+#  define EPOCH_VERSION_MINOR_VALUE EPOCH_OVERRIDE_VERSION_MINOR
+#else
+#  define EPOCH_VERSION_MINOR_VALUE 82
+#endif
+
+#if defined(EPOCH_OVERRIDE_VERSION_REVISION)
+#  define EPOCH_VERSION_REVISION_VALUE EPOCH_OVERRIDE_VERSION_REVISION
+#else
+#  define EPOCH_VERSION_REVISION_VALUE 56
+#endif
+
 export module aengine.version;
 
 import <array>;
@@ -40,9 +58,9 @@ import <string_view>;
 
 export namespace epochnamespace
 {
-    export constexpr int major = 0;
-    export constexpr int minor = 82;
-    export constexpr int revision = 55;
+    export constexpr int major = EPOCH_VERSION_MAJOR_VALUE;
+    export constexpr int minor = EPOCH_VERSION_MINOR_VALUE;
+    export constexpr int revision = EPOCH_VERSION_REVISION_VALUE;
 
     export constexpr std::string_view kEngineName = "Epoch";
 
@@ -95,6 +113,9 @@ export namespace epochnamespace
         std::string result{ kEngineName };
         result.push_back(' ');
         result += GetEngineVersion();
+#if defined(EPOCH_UPDATER_SHELL_BUILD) && (EPOCH_UPDATER_SHELL_BUILD == 1)
+        result += " (Updater Shell)";
+#endif
         return result;
     }
 }

@@ -61,6 +61,7 @@ import <tuple>;
 import <algorithm>;
 import <array>;
 import <cmath>;
+import <cstdlib>;
 import <iomanip>;
 import <iostream>;
 import <memory>;
@@ -78,6 +79,7 @@ export namespace epochnamespace::menu
     inline constexpr std::string_view kLogSys = "Epoch.Menu";
 
     enum class Choice {
+        UpdateLatest,
         OpenEditor,
         ProjectSandbox,
         ProjectPlatformer,
@@ -126,6 +128,7 @@ export namespace epochnamespace::menu
             prevRight = false, prevEnter = false;
         bool initialized = false;
         bool initializationLogEmitted = false;
+        bool autoCommandConsumed = false;
 
         std::vector<std::pair<int, int>> cachedPositions;
         std::vector<float> colWidths, rowHeights;
@@ -172,6 +175,37 @@ export namespace epochnamespace::menu
             ChoiceDescriptor{ Choice::About, "About Epoch", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::Exit, "Quit", { 256.0f, 96.0f } }
         };
+
+        static constexpr std::array kUpdaterShellChoices = {
+            ChoiceDescriptor{ Choice::UpdateLatest, "Update Epoch Now", { 520.0f, 168.0f } }
+        };
+
+        static constexpr std::string_view updater_shell_description() noexcept
+        {
+            return "Updates to the newest packaged release first. If a matching release is not ready yet, this shell rebuilds current main source and replaces itself automatically.";
+        }
+
+        [[nodiscard]] static bool updater_shell_auto_update_requested() noexcept
+        {
+            std::string value;
+
+#if defined(_WIN32)
+            char* raw = nullptr;
+            std::size_t raw_size = 0;
+            if (_dupenv_s(&raw, &raw_size, "EPOCH_UPDATER_SHELL_AUTO_COMMAND") != 0 || raw == nullptr)
+                return false;
+
+            value.assign(raw, raw_size > 0 ? raw_size - 1 : 0);
+            free(raw);
+#else
+            if (const char* const raw = std::getenv("EPOCH_UPDATER_SHELL_AUTO_COMMAND"))
+                value = raw;
+            else
+                return false;
+#endif
+
+            return value == "smart-update";
+        }
 
         std::size_t& selection_for_panel(LauncherPanel panel) noexcept
         {
@@ -339,7 +373,38 @@ export namespace epochnamespace::menu
         {
             if (initialized) return;
 
-            set_max_columns(core::cli::menu_columns);
+            set_max_columns(core::cli::updater_shell_requested ? 1 : core::cli::menu_columns);
+            autoCommandConsumed = false;
+
+            if (core::cli::updater_shell_requested)
+            {
+                descriptors.clear();
+                descriptors.reserve(kUpdaterShellChoices.size());
+                for (const auto& item : kUpdaterShellChoices)
+                    descriptors.push_back(item);
+
+                activePanel = LauncherPanel::Tools;
+                projectSelection = 0;
+                gameSelection = 0;
+                toolSelection = 0;
+                selection = 0;
+                prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
+
+                const int w = ctx ? ctx->get_width_safe() : cachedWidth;
+                const int h = ctx ? ctx->get_height_safe() : cachedHeight;
+                recompute_layout(ctx, w, h);
+
+                initialized = true;
+                if (!initializationLogEmitted)
+                {
+                    initializationLogEmitted = true;
+                    logger::get(kLogSys).log(
+                        logger::LogLevel::INFO,
+                        "Initialized updater-shell launcher.",
+                        std::source_location::current());
+                }
+                return;
+            }
 
             activePanel = LauncherPanel::Projects;
             projectSelection = 0;
@@ -406,6 +471,21 @@ export namespace epochnamespace::menu
             bool clampToWindow)
         {
             if (!initialized) return std::nullopt;
+            if (core::cli::updater_shell_requested)
+                return update_and_draw_updater_shell(
+                    ctx,
+                    win,
+                    dt,
+                    upPressed,
+                    downPressed,
+                    leftPressed,
+                    rightPressed,
+                    enterPressed,
+                    title,
+                    windowPosition,
+                    windowSize,
+                    clampToWindow);
+
             constexpr float kHeaderOffsetY = 136.0f;
 
             std::ignore = win;
@@ -547,6 +627,99 @@ export namespace epochnamespace::menu
             return std::nullopt;
         }
 
+        std::optional<Choice> update_and_draw_updater_shell(
+            std::shared_ptr<core::Context> ctx,
+            core::WindowData* win,
+            float dt,
+            bool upPressed,
+            bool downPressed,
+            bool leftPressed,
+            bool rightPressed,
+            bool enterPressed,
+            std::string_view title,
+            gui::Vec2 windowPosition,
+            gui::Vec2 windowSize,
+            bool clampToWindow)
+        {
+            std::ignore = win;
+            std::ignore = dt;
+            std::ignore = upPressed;
+            std::ignore = downPressed;
+            std::ignore = leftPressed;
+            std::ignore = rightPressed;
+            std::ignore = title;
+
+            int currentWidth = windowSize.x > 0 ? static_cast<int>(windowSize.x) : (ctx ? ctx->get_width_safe() : cachedWidth);
+            int currentHeight = windowSize.y > 0 ? static_cast<int>(windowSize.y) : (ctx ? ctx->get_height_safe() : cachedHeight);
+            if (currentWidth <= 0) currentWidth = cachedWidth;
+            if (currentHeight <= 0) currentHeight = cachedHeight;
+            if (currentWidth <= 0) currentWidth = 1;
+            if (currentHeight <= 0) currentHeight = 1;
+
+            const gui::Vec2 framePosition = windowPosition;
+            const gui::Vec2 frameSize = (clampToWindow && windowSize.x > 0.f && windowSize.y > 0.f)
+                ? windowSize
+                : gui::Vec2{
+                    static_cast<float>(currentWidth),
+                    static_cast<float>(currentHeight)
+                };
+
+            gui::begin_window("", framePosition, frameSize);
+
+            const float contentWidth = (std::max)(360.0f, (std::min)(frameSize.x - 240.0f, 560.0f));
+            const float contentX = framePosition.x + (frameSize.x - contentWidth) * 0.5f;
+            const float buttonWidth = contentWidth;
+            const float buttonHeight = (std::max)(120.0f, (std::min)(160.0f, frameSize.y * 0.24f));
+            const float lineHeight = gui::line_height();
+
+            gui::set_cursor({ contentX, framePosition.y + 48.0f });
+            const float descriptionHeight = gui::wrapped_text_height(updater_shell_description(), contentWidth);
+            const float stackHeight =
+                lineHeight +
+                18.0f +
+                lineHeight +
+                26.0f +
+                descriptionHeight +
+                32.0f +
+                buttonHeight;
+            const float contentY = framePosition.y + (std::max)(32.0f, (frameSize.y - stackHeight) * 0.5f);
+
+            gui::set_cursor({ contentX, contentY });
+            gui::label("Epoch Updater Shell");
+
+            gui::set_cursor({ contentX, contentY + lineHeight + 18.0f });
+            gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
+
+            gui::set_cursor({ contentX, contentY + lineHeight * 2.0f + 44.0f });
+            gui::wrapped_label(updater_shell_description(), contentWidth);
+
+            gui::set_cursor({ contentX, contentY + lineHeight * 2.0f + 76.0f + descriptionHeight });
+            const bool clicked = gui::button("Update To Current Epoch", { buttonWidth, buttonHeight });
+
+            gui::end_window();
+
+            std::optional<Choice> chosen{};
+            if (clicked)
+                chosen = Choice::UpdateLatest;
+            else if (updater_shell_auto_update_requested() && !autoCommandConsumed)
+            {
+                autoCommandConsumed = true;
+                chosen = Choice::UpdateLatest;
+            }
+            else if (core::cli::smoke_requested && !autoCommandConsumed)
+            {
+                autoCommandConsumed = true;
+                chosen = Choice::UpdateLatest;
+            }
+            else if (enterPressed && !prevEnter)
+            {
+                chosen = Choice::UpdateLatest;
+            }
+
+            prevEnter = enterPressed;
+            return chosen;
+        }
+
         // ----------------------------------------------------
         void cleanup()
         {
@@ -565,6 +738,7 @@ export namespace epochnamespace::menu
             toolSelection = 0;
             selection = 0;
             prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
+            autoCommandConsumed = false;
             initialized = false;
         }
     };
