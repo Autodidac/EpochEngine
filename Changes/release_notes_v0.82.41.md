@@ -2,10 +2,10 @@
 
 ## Highlights
 
-- Rolled the active repo surfaces forward after the packaged `0.82.40` release so `main` stays ahead of the downloadable runtime again.
-- Kept the README snapshot and current docs aligned with the new post-release source target.
+- Repaired the Windows updater handoff so packaged and source updates explicitly replace the runtime executable instead of silently leaving the old binary in place.
+- Kept the updater logging path sanitized so updater status stays readable in the commandline pane while the handoff runs.
 
 ## Notes
 
-- The packaged updater release is `0.82.40`.
-- The active source target on `main` is now `0.82.41`.
+- This packaged updater release is `0.82.41`.
+- The next `main` bump will move ahead again after the release so source-update checks keep a newer live target.

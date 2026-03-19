@@ -267,13 +267,13 @@ v0.82.41
 
 Highlights:
 
-- `0.82.41` keeps `main` ahead of the packaged `0.82.40` runtime release so
-  source-update checks still have a newer live target after the release.
-- `0.82.40` keeps the updater on one sanitized logging path again so command
-  output no longer mixes logger lines with raw newline garbage.
+- `0.82.41` repairs the Windows updater handoff so packaged and source updates
+  explicitly replace the runtime executable instead of silently leaving the old
+  binary in place after extraction/build.
+- `0.82.41` keeps the updater on one sanitized logging path so command output
+  stays readable while the update path runs.
 - The runtime release continues to ship as `main.zip`, while `main` stays free
   to move ahead with source-only changes between packaged drops.
-  the packaged-vs-source actions readable in normal use.
 - The README snapshot stays intentionally short; detailed release history lives
   in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
