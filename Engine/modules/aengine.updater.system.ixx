@@ -261,6 +261,32 @@ export namespace epochnamespace::updater
                 }
             }
 
+            const auto parse_defined_component = [&](const char* macro_name) -> std::string
+                {
+                    const std::regex component_regex(
+                        std::string{ R"(\b)" } + macro_name + R"(\b(?:\s*=\s*|\s+)(\d+))",
+                        std::regex::optimize);
+
+                    std::smatch match;
+                    if (!std::regex_search(text, match, component_regex))
+                        return {};
+
+                    return match[1].str();
+                };
+
+            const std::string defined_major = parse_defined_component("EPOCH_VERSION_MAJOR_VALUE");
+            const std::string defined_minor = parse_defined_component("EPOCH_VERSION_MINOR_VALUE");
+            const std::string defined_revision = parse_defined_component("EPOCH_VERSION_REVISION_VALUE");
+
+            if (!defined_major.empty() && !defined_minor.empty() && !defined_revision.empty())
+            {
+                return std::to_string(parse_int_or_zero(defined_major))
+                    + "."
+                    + std::to_string(parse_int_or_zero(defined_minor))
+                    + "."
+                    + std::to_string(parse_int_or_zero(defined_revision));
+            }
+
             const auto parse_named_component = [&](const char* name) -> std::string
                 {
                     const std::regex component_regex(
