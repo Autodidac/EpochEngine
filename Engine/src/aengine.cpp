@@ -1179,6 +1179,7 @@ namespace epochnamespace::core
         {
             std::unordered_map<Context*, ContextSession> sessions;
             bool running = true;
+            bool deferred_updater_shell_update = false;
             std::uint64_t frame_count = 0;
             const std::uint64_t smoke_max_frames = smoke_frame_budget();
             auto pump = std::forward<PumpFunc>(pump_events);
@@ -1584,23 +1585,14 @@ namespace epochnamespace::core
                                         logger::LogLevel::INFO,
                                         "Updater shell requested a current Epoch update.",
                                         std::source_location::current());
-                                    const auto result = epochnamespace::updater::run_update_command(
-                                        default_update_channel(),
-                                        true);
-                                    if (!result.update_available)
-                                    {
-                                        logger::get(kEditorLog).log(
-                                            logger::LogLevel::INFO,
-                                            "Updater shell is already on the newest packaged or source build.",
-                                            std::source_location::current());
-                                    }
-                                    else if (!result.update_performed)
-                                    {
-                                        logger::get(kEditorLog).log(
-                                            logger::LogLevel::Error,
-                                            "Updater shell found an update but the install handoff did not complete.",
-                                            std::source_location::current());
-                                    }
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::INFO,
+                                        "Closing updater shell window and continuing the update in the console.",
+                                        std::source_location::current());
+                                    deferred_updater_shell_update = true;
+                                    session.mode = SessionMode::Exit;
+                                    ctx_running = false;
+                                    win->running = false;
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)
                                 {
@@ -1726,6 +1718,27 @@ namespace epochnamespace::core
 
             epochnamespace::shutdown_chat_system();
             mgr.StopAll();
+
+            if (deferred_updater_shell_update)
+            {
+                const auto result = epochnamespace::updater::run_update_command(
+                    default_update_channel(),
+                    true);
+                if (!result.update_available)
+                {
+                    logger::get(kEditorLog).log(
+                        logger::LogLevel::INFO,
+                        "Updater shell is already on the newest packaged or source build.",
+                        std::source_location::current());
+                }
+                else if (!result.update_performed)
+                {
+                    logger::get(kEditorLog).log(
+                        logger::LogLevel::Error,
+                        "Updater shell found an update but the install handoff did not complete.",
+                        std::source_location::current());
+                }
+            }
 
             return 0;
         }

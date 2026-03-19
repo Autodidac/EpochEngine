@@ -253,7 +253,7 @@ export namespace epochnamespace::core::cli
             parented_mode = false;
             window_width = 960;
             window_height = 640;
-            (void)apply_backend_selection("opengl");
+            (void)apply_backend_selection("software");
         }
 
         if (argc < 1)
@@ -483,7 +483,7 @@ export namespace epochnamespace::core::cli
             if (!window_height_overridden)
                 window_height = 640;
 
-            (void)apply_backend_selection("opengl");
+            (void)apply_backend_selection("software");
         }
 
         return result;
