@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.47]
+- Rolled the active repo surfaces forward after the packaged `0.82.46` updater repair release so `main` stays ahead of the downloadable runtime again.
+
 ## [v0.82.46]
 - Kept the source updater on the direct `main.zip` repository snapshot instead of GitHub release assets.
 - Adjusted the source rebuild path so it restores manifest dependencies first, then retries the compile pass once before giving up.

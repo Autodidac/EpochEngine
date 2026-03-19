@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.46
+v0.82.47
 ```
 
 Highlights:
 
+- `0.82.47` keeps `main` ahead of the packaged `0.82.46` runtime so source
+  update checks have a newer live target again after the repaired release.
 - `0.82.46` keeps source updates downloading the repo directly from `main`, then
   restoring manifest dependencies and retrying the compile pass once so the
   freshly restored headers are picked up before the final handoff.
