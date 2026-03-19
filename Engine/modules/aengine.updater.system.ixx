@@ -780,6 +780,7 @@ export namespace epochnamespace::updater
             append_log_line(build_log, "[INFO] Source update build started");
             append_log_line(build_log, "[INFO] Source root: " + source_root.string());
             append_log_line(build_log, "[INFO] Manifest root: " + manifest_root.string());
+            append_log_line(build_log, "[INFO] vcpkg root: " + vcpkg_root.string());
             append_log_line(build_log, "[INFO] MSBuild: " + msbuild.string());
 
             log_info("Building updated runtime from source.");
@@ -810,26 +811,57 @@ export namespace epochnamespace::updater
             log_info("MSBuild: " + msbuild.string());
             append_log_line(build_log, "[INFO] Building updated runtime with MSBuild.");
 
-            int msbuild_exit = -1;
-            if (!run_process_hidden(
-                msbuild,
-                {
-                    solution.string(),
-                    "/t:" + SOURCE_BUILD_TARGET(),
-                    "/p:Configuration=" + SOURCE_BUILD_CONFIGURATION(),
-                    "/p:Platform=" + SOURCE_BUILD_PLATFORM(),
-                    "/m:1",
-                    "/clp:ErrorsOnly",
-                    "/p:UseMultiToolTask=false"
-                },
-                source_root,
-                build_log,
-                true,
-                &msbuild_exit) || msbuild_exit != 0)
+            const std::vector<std::string> msbuild_args{
+                solution.string(),
+                "/t:" + SOURCE_BUILD_TARGET(),
+                "/p:Configuration=" + SOURCE_BUILD_CONFIGURATION(),
+                "/p:Platform=" + SOURCE_BUILD_PLATFORM(),
+                "/p:UseMultiToolTask=false",
+                "/m:1",
+                "/clp:ErrorsOnly"
+            };
+
+            bool build_ok = false;
+            for (int attempt = 1; attempt <= 2; ++attempt)
             {
                 append_log_line(
                     build_log,
-                    "[ERROR] Source build failed with exit code " + std::to_string(msbuild_exit));
+                    "[INFO] MSBuild attempt " + std::to_string(attempt) + " started.");
+
+                int msbuild_exit = -1;
+                const bool launched = run_process_hidden(
+                    msbuild,
+                    msbuild_args,
+                    source_root,
+                    build_log,
+                    true,
+                    &msbuild_exit);
+
+                if (launched && msbuild_exit == 0)
+                {
+                    build_ok = true;
+                    append_log_line(
+                        build_log,
+                        "[INFO] MSBuild attempt " + std::to_string(attempt) + " completed successfully.");
+                    break;
+                }
+
+                append_log_line(
+                    build_log,
+                    "[WARN] MSBuild attempt " + std::to_string(attempt)
+                    + " failed with exit code " + std::to_string(msbuild_exit) + ".");
+
+                if (attempt == 1)
+                {
+                    append_log_line(
+                        build_log,
+                        "[INFO] Retrying the source build once after dependency restore.");
+                }
+            }
+
+            if (!build_ok)
+            {
+                append_log_line(build_log, "[ERROR] Source build failed after two attempts.");
                 log_error("Source build failed. See epoch_source_update.log for details.");
                 return false;
             }

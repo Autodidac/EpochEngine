@@ -262,16 +262,16 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.45
+v0.82.46
 ```
 
 Highlights:
 
-- `0.82.45` keeps `main` ahead of the packaged `0.82.44` runtime so source
-  update checks have a newer live target again after the repaired release.
-- `0.82.44` repairs the Windows updater flow again by moving source rebuilds and
-  handoff batches onto hidden process launches, writing `epoch_source_update.log`
-  and `epoch_update_handoff.log`, and fixing the live source-version path.
+- `0.82.46` keeps source updates downloading the repo directly from `main`, then
+  restoring manifest dependencies and retrying the compile pass once so the
+  freshly restored headers are picked up before the final handoff.
+- `0.82.46` keeps the runtime-side updater logs in place:
+  `epoch_source_update.log` and `epoch_update_handoff.log`.
 - This release is meant to stop the extra developer prompt, unblock source
   rebuild updates after extraction, and leave behind concrete logs if a machine
   still refuses the handoff.
