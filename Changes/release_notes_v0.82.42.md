@@ -2,10 +2,10 @@
 
 ## Highlights
 
-- Rolled the active repo surfaces forward after the packaged `0.82.41` release so `main` stays ahead of the downloadable runtime again.
-- Kept the README snapshot and current docs aligned with the new post-release source target.
+- Repaired the Windows updater handoff batch by switching to proper batch variable quoting and explicit executable replacement.
+- Added `epoch_update_handoff.log` in the runtime folder so failed packaged/source handoffs leave behind a concrete trail instead of silently stalling.
 
 ## Notes
 
-- The packaged updater release is `0.82.41`.
-- The active source target on `main` is now `0.82.42`.
+- This packaged updater release is `0.82.42`.
+- The next `main` bump will move ahead again after the release so source-update checks keep a newer live target.
