@@ -1470,7 +1470,7 @@ namespace epochnamespace::core
                             {
                                 logger::get(kEditorLog).log(
                                     logger::LogLevel::INFO,
-                                    "Running confirmed update command.",
+                                    "Running confirmed smart update command.",
                                     std::source_location::current());
                                 const auto result = epochnamespace::updater::run_update_command(
                                     default_update_channel(),
@@ -1495,7 +1495,7 @@ namespace epochnamespace::core
                             {
                                 logger::get(kEditorLog).log(
                                     logger::LogLevel::INFO,
-                                    "Running confirmed source snapshot command.",
+                                    "Running confirmed advanced source rebuild command.",
                                     std::source_location::current());
                                 const bool ok = epochnamespace::updater::run_source_update_command(
                                     default_update_channel());
@@ -1503,7 +1503,7 @@ namespace epochnamespace::core
                                 {
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::Error,
-                                        "Source snapshot download did not complete.",
+                                        "Advanced source rebuild did not complete.",
                                         std::source_location::current());
                                 }
                                 break;
@@ -1944,7 +1944,11 @@ namespace epochnamespace::core
                     return true;
                 };
 
-            const int result = engine::RunContextSessionLoop(mgr, pump, engine::SessionMode::Menu);
+            const auto initial_mode =
+                epochnamespace::core::cli::editor_requested
+                ? engine::SessionMode::Editor
+                : engine::SessionMode::Menu;
+            const int result = engine::RunContextSessionLoop(mgr, pump, initial_mode);
             if (result != 0)
                 logger::get(engine::kEditorLog).logf(
                     logger::LogLevel::Error,
@@ -2000,7 +2004,11 @@ namespace epochnamespace::core
                     return epochnamespace::platform::pump_events();
                 };
 
-            const int result = engine::RunContextSessionLoop(mgr, pump, engine::SessionMode::Menu);
+            const auto initial_mode =
+                epochnamespace::core::cli::editor_requested
+                ? engine::SessionMode::Editor
+                : engine::SessionMode::Menu;
+            const int result = engine::RunContextSessionLoop(mgr, pump, initial_mode);
             if (result != 0)
                 logger::get(engine::kEditorLog).logf(
                     logger::LogLevel::Error,

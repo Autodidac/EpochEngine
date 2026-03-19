@@ -40,9 +40,12 @@ module;
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <cstddef>
 #include <format>
+#include <fstream>
 #include <future>
 #include <mutex>
 #include <optional>
@@ -75,6 +78,13 @@ namespace epochnamespace
             Scene,
             Command,
             Help
+        };
+
+        enum class EditorAutomationCommand : unsigned char
+        {
+            None = 0,
+            SmartUpdate,
+            SourceUpdate
         };
 
         [[nodiscard]] static bool is_ws_only(std::string_view s) noexcept
@@ -182,6 +192,8 @@ namespace epochnamespace
             bool showAboutModal{ false };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
+            EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
+            bool automationConsumed{ false };
         };
 
         struct ContextPtrHash
@@ -231,6 +243,52 @@ namespace epochnamespace
             constexpr std::size_t kMaxLogLines = 10;
             if (state.logLines.size() > kMaxLogLines)
                 state.logLines.erase(state.logLines.begin(), state.logLines.begin() + static_cast<std::ptrdiff_t>(state.logLines.size() - kMaxLogLines));
+        }
+
+        [[nodiscard]] EditorAutomationCommand read_editor_automation_command() noexcept
+        {
+            std::string value;
+
+#if defined(_WIN32)
+            char* raw = nullptr;
+            std::size_t raw_size = 0;
+            if (_dupenv_s(&raw, &raw_size, "EPOCH_EDITOR_AUTO_COMMAND") != 0 || raw == nullptr)
+                return EditorAutomationCommand::None;
+
+            value.assign(raw, raw_size > 0 ? raw_size - 1 : 0);
+            free(raw);
+#else
+            if (const char* const raw = std::getenv("EPOCH_EDITOR_AUTO_COMMAND"))
+                value = raw;
+            else
+                return EditorAutomationCommand::None;
+#endif
+
+            if (value == "smart-update")
+                return EditorAutomationCommand::SmartUpdate;
+            if (value == "source-update")
+                return EditorAutomationCommand::SourceUpdate;
+
+            return EditorAutomationCommand::None;
+        }
+
+        void append_editor_automation_trace(const std::string_view message)
+        {
+            std::ofstream trace("epoch_editor_auto_command.log", std::ios::app | std::ios::binary);
+            if (!trace)
+                return;
+
+            trace << message << '\n';
+        }
+
+        [[nodiscard]] bool try_claim_editor_automation_command(EditorAutomationCommand command) noexcept
+        {
+            if (command == EditorAutomationCommand::None)
+                return false;
+
+            static std::atomic<bool> claimed{ false };
+            bool expected = false;
+            return claimed.compare_exchange_strong(expected, true, std::memory_order_acq_rel);
         }
 
         [[nodiscard]] std::vector<EditorEntity> sandbox_entities()
@@ -453,12 +511,17 @@ namespace epochnamespace
             if (inserted)
             {
                 it->second.initialized = true;
+                it->second.automationCommand = read_editor_automation_command();
                 set_project(it->second, "sandbox", false);
                 if (ctx)
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
                 push_editor_log(it->second, "[info] Use File > Launcher for projects and games.");
                 push_editor_log(it->second, "[info] Scene viewport is owned by the active backend.");
+                if (it->second.automationCommand == EditorAutomationCommand::SmartUpdate)
+                    push_editor_log(it->second, "[info] Auto command armed: smart update.");
+                else if (it->second.automationCommand == EditorAutomationCommand::SourceUpdate)
+                    push_editor_log(it->second, "[info] Auto command armed: source update.");
             }
             return it->second;
         }
@@ -833,10 +896,10 @@ namespace epochnamespace
                 emit_command(EditorCommand::RunScript, editor.activeScript);
                 push_editor_log(editor, std::string("[command] Script run requested for '") + editor.activeScript + "'.");
             });
-            menu_item("Update Engine...", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
+            menu_item("Update to Latest...", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
                 editor.showUpdateConfirmModal = true;
                 editor.showSourceUpdateConfirmModal = false;
-                push_editor_log(editor, "[command] Update requested. Awaiting confirmation.");
+                push_editor_log(editor, "[command] Latest update requested. Awaiting confirmation.");
             });
             menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
                 emit_command(EditorCommand::OpenLauncher);
@@ -864,13 +927,13 @@ namespace epochnamespace
             const float contentY = modalPos.y + 38.0f;
             gui::begin_window("Update Epoch", modalPos, modalSize);
             gui::set_cursor({ modalPos.x + 16.0f, contentY });
-            gui::label("Choose how you want to update this runtime.");
+            gui::label("Update to Latest checks the newest packaged release first.");
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 22.0f });
-            gui::label("Release Package downloads the latest packaged build and restarts Epoch.");
+            gui::label("If the packaged release is already current, Epoch falls back to the latest main source.");
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 44.0f });
-            gui::label("Source Snapshot downloads the latest main-branch source beside this runtime.");
+            gui::label("That source fallback restores dependencies, rebuilds Epoch, and replaces this runtime.");
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 66.0f });
-            gui::label("Source Snapshot restores dependencies, rebuilds Epoch, and replaces this runtime.");
+            gui::label("Use Advanced Source only when you intentionally want to skip straight to a rebuild from main.");
             gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 144.0f });
             if (gui::button("Cancel", { 120.0f, 30.0f }))
             {
@@ -878,18 +941,18 @@ namespace epochnamespace
                 push_editor_log(editor, "[command] Update canceled.");
             }
             gui::set_cursor({ modalPos.x + 156.0f, modalPos.y + 144.0f });
-            if (gui::button("Release Package", { 168.0f, 30.0f }))
+            if (gui::button("Update to Latest", { 168.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
                 emit_command(EditorCommand::UpdateApplication);
-                push_editor_log(editor, "[command] Packaged update confirmed.");
+                push_editor_log(editor, "[command] Smart update confirmed.");
             }
             gui::set_cursor({ modalPos.x + 340.0f, modalPos.y + 144.0f });
-            if (gui::button("Source Snapshot...", { 176.0f, 30.0f }))
+            if (gui::button("Advanced Source...", { 176.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
                 editor.showSourceUpdateConfirmModal = true;
-                push_editor_log(editor, "[command] Source snapshot requested. Awaiting confirmation.");
+                push_editor_log(editor, "[command] Advanced source rebuild requested. Awaiting confirmation.");
             }
             gui::end_window();
         }
@@ -902,15 +965,15 @@ namespace epochnamespace
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
             const float contentY = modalPos.y + 38.0f;
-            gui::begin_window("Download Source Snapshot", modalPos, modalSize);
+            gui::begin_window("Rebuild From Main Source", modalPos, modalSize);
             gui::set_cursor({ modalPos.x + 16.0f, contentY });
-            gui::label("This downloads the latest main-branch source next to the current runtime.");
+            gui::label("This skips the packaged release check and goes straight to the latest main source.");
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 22.0f });
-            gui::label("It is intended for advanced testing when packaged releases lag behind main.");
+            gui::label("Use it when you explicitly want to test current source before a release exists.");
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 44.0f });
-            gui::label("It restores dependencies, rebuilds Epoch from source, and replaces this runtime.");
+            gui::label("Epoch restores dependencies, rebuilds from source, and replaces this runtime.");
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 66.0f });
-            gui::label("Use Release Package for normal updates. Use Source Snapshot only on purpose.");
+            gui::label("For normal updates, use Update to Latest and let it fall back automatically when needed.");
             gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 156.0f });
             if (gui::button("Back", { 120.0f, 30.0f }))
             {
@@ -921,16 +984,48 @@ namespace epochnamespace
             if (gui::button("Cancel", { 120.0f, 30.0f }))
             {
                 editor.showSourceUpdateConfirmModal = false;
-                push_editor_log(editor, "[command] Source snapshot canceled.");
+                push_editor_log(editor, "[command] Advanced source rebuild canceled.");
             }
             gui::set_cursor({ modalPos.x + 292.0f, modalPos.y + 156.0f });
-            if (gui::button("Download Source", { 176.0f, 30.0f }))
+            if (gui::button("Rebuild From Source", { 176.0f, 30.0f }))
             {
                 editor.showSourceUpdateConfirmModal = false;
                 emit_command(EditorCommand::UpdateApplicationFromSource);
-                push_editor_log(editor, "[command] Source snapshot confirmed.");
+                push_editor_log(editor, "[command] Advanced source rebuild confirmed.");
             }
             gui::end_window();
+        }
+
+        // Enables deterministic smoke coverage of GUI-only updater actions.
+        if (!editor.automationConsumed)
+        {
+            if (editor.automationCommand != EditorAutomationCommand::None
+                && !try_claim_editor_automation_command(editor.automationCommand))
+            {
+                editor.automationConsumed = true;
+            }
+
+            switch (editor.automationCommand)
+            {
+            case EditorAutomationCommand::SmartUpdate:
+                if (editor.automationConsumed)
+                    break;
+                editor.automationConsumed = true;
+                push_editor_log(editor, "[command] Auto command triggered: smart update.");
+                append_editor_automation_trace("triggered smart-update");
+                emit_command(EditorCommand::UpdateApplication);
+                break;
+            case EditorAutomationCommand::SourceUpdate:
+                if (editor.automationConsumed)
+                    break;
+                editor.automationConsumed = true;
+                push_editor_log(editor, "[command] Auto command triggered: advanced source rebuild.");
+                append_editor_automation_trace("triggered source-update");
+                emit_command(EditorCommand::UpdateApplicationFromSource);
+                break;
+            case EditorAutomationCommand::None:
+                break;
+            }
         }
 
         if (editor.showAboutModal)

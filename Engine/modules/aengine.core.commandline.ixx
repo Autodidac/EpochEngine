@@ -141,6 +141,7 @@ export namespace epochnamespace::core::cli
     inline bool run_menu_loop = false;
     inline bool capture_requested = false;
     inline bool smoke_requested = false;
+    inline bool editor_requested = false;
     inline std::string scene_name{};
     inline std::filesystem::path exe_path;
 
@@ -222,6 +223,7 @@ export namespace epochnamespace::core::cli
         run_menu_loop = false;
         capture_requested = false;
         smoke_requested = false;
+        editor_requested = false;
         scene_name.clear();
         window_width_overridden = false;
         window_height_overridden = false;
@@ -333,6 +335,7 @@ export namespace epochnamespace::core::cli
             else if (key == "--editor"sv)
             {
                 result.editor_requested = true;
+                editor_requested = true;
             }
             else if (key == "--menu"sv)
             {
