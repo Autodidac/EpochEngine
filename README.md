@@ -262,21 +262,20 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.49
+v0.82.50
 ```
 
 Highlights:
 
-- `0.82.49` keeps `main` ahead of the packaged `0.82.48` runtime so source
-  updates still have a newer live target after the detached-worker release.
-- `0.82.48` moves Windows source updates into a detached worker so the restore,
-  build, handoff, and relaunch can finish even after the live runtime exits.
-- The worker keeps downloading source directly from `main`, restores manifest
-  dependencies first, retries MSBuild after restore, and leaves
-  `epoch_source_update.log` plus `epoch_update_handoff.log` behind if a machine
-  still refuses the handoff.
-- Source updates stay visible by default, and can be run silently on demand by
-  setting `EPOCH_UPDATER_SILENT=1`.
+- `0.82.50` ships the Windows source updater handoff fix so the detached worker
+  resolves the real running executable, replaces it from the rebuilt
+  `<source-root>/x64/Debug` output, and relaunches cleanly.
+- The packaged updater now captures native `vcpkg` and `MSBuild` output in log
+  files instead of dumping raw tool junk into the live console.
+- The sample projects now resolve Vulkan, GLM, and SFML through repo-relative
+  vcpkg paths instead of hardcoded machine-local directories.
+- Source updates stay visible by default and can still be run silently on
+  demand by setting `EPOCH_UPDATER_SILENT=1`.
 - Detailed release history lives in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
   current version notes under [Changes/](Changes/).
