@@ -262,11 +262,13 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.48
+v0.82.49
 ```
 
 Highlights:
 
+- `0.82.49` keeps `main` ahead of the packaged `0.82.48` runtime so source
+  updates still have a newer live target after the detached-worker release.
 - `0.82.48` moves Windows source updates into a detached worker so the restore,
   build, handoff, and relaunch can finish even after the live runtime exits.
 - The worker keeps downloading source directly from `main`, restores manifest

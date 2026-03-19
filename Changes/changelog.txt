@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.82.49]
+- Rolled the active repo surfaces forward after the packaged `0.82.48` detached-worker updater release so `main` stays ahead of the downloadable runtime again.
+
 ## [v0.82.48]
 - Moved Windows source updates into a detached worker process so download, restore, build, replacement, and relaunch can continue after the live runtime exits.
 - Kept source updates pointed at the direct `main.zip` repository snapshot, added a visible-by-default worker path, and allowed silent worker launches with `EPOCH_UPDATER_SILENT=1`.
