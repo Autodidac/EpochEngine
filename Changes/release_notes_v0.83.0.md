@@ -12,6 +12,9 @@ engine.
 
 This document compresses the scattered point releases in that range into one
 story that can be read as a single milestone instead of dozens of hotfix notes.
+It also marks the first public binary release where the downloadable runtime is
+the updater shell itself: a small `Release|x64` bootstrap build that can update
+forward into the current full engine/editor.
 
 ## Headline Outcome
 
@@ -49,14 +52,19 @@ story that can be read as a single milestone instead of dozens of hotfix notes.
 ### 3. Source fallback became a real rebuild path
 
 - When `main` is newer than the latest packaged release, Epoch can now download
-  the current source snapshot, restore dependencies with `vcpkg`, build
+  the current source snapshot, restore dependencies with managed tooling, build
   `ConsoleApplication1`, and replace the local runtime from
-  `<source-root>/x64/Debug`.
+  `<source-root>/x64/Release`.
 - The Windows update flow was moved into detached worker/handoff stages so the
   rebuild and replacement can continue after the live runtime exits.
 - `epoch_source_update.log` and `epoch_update_handoff.log` now leave behind a
   concrete trail for failed restore/build/replacement steps instead of silently
   stalling.
+- Managed updater dependencies now include the ability to provision `vcpkg`
+  and Git automatically for end users instead of assuming an existing dev
+  machine setup.
+- The updater also stages a patched `glad` overlay port so the source rebuild
+  path survives current CMake policy behavior cleanly.
 
 ### 4. Handoff and replacement became reliable
 
@@ -88,12 +96,15 @@ story that can be read as a single milestone instead of dozens of hotfix notes.
 ### 7. The updater shell was introduced and stabilized
 
 - Epoch now ships a dedicated updater-shell build with a minimal package shape:
-  the runtime executable, required debug DLLs, and font assets.
+  the runtime executable, required release DLLs, and font assets.
 - The shell is software-only, intentionally avoiding the heavier mixed-backend
   path used by the full engine launcher.
 - Pressing the update button no longer blocks inside the shell render loop. The
   shell window closes first, then the console-driven update work continues in
   process, which avoids the hang/close crash path seen in earlier iterations.
+- The public binary can now boot straight into updater-shell mode by default,
+  which makes the downloadable `main.zip` package a focused update/bootstrap
+  surface instead of a full launcher drop.
 - The live release flow has been demonstrated end to end:
   packaged release -> source fallback -> source rebuild -> runtime replacement
   -> automatic relaunch.

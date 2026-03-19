@@ -81,7 +81,7 @@ export namespace epochnamespace::updater
 
     export inline std::string SOURCE_BUILD_CONFIGURATION()
     {
-        return "Debug";
+        return "Release";
     }
 
     export inline std::string SOURCE_BUILD_PLATFORM()
@@ -162,6 +162,74 @@ export namespace epochnamespace::updater
         return std::string{ GITHUB_API_BASE }
             + std::string{ OWNER } + "/"
             + std::string{ REPO } + "/releases/latest";
+    }
+
+    // ─────────────────────────────────────────
+    // Managed updater tools
+    // ─────────────────────────────────────────
+
+    export inline std::string UPDATER_TOOLS_SUBDIR()
+    {
+        return "Epoch/t";
+    }
+
+    export inline std::string UPDATER_WORK_SUBDIR()
+    {
+        return "Epoch/u";
+    }
+
+    export inline constexpr std::string_view VCPKG_OWNER = "microsoft";
+    export inline constexpr std::string_view VCPKG_REPO = "vcpkg";
+    export inline constexpr std::string_view VCPKG_DEFAULT_REF = "master";
+    export inline constexpr std::string_view GIT_WINDOWS_OWNER = "git-for-windows";
+    export inline constexpr std::string_view GIT_WINDOWS_REPO = "git";
+
+    export inline std::string VCPKG_ARCHIVE_BASE_URL()
+    {
+        return std::string{ GITHUB_BASE }
+            + std::string{ VCPKG_OWNER } + "/"
+            + std::string{ VCPKG_REPO } + "/archive/";
+    }
+
+    export inline std::string VCPKG_ARCHIVE_URL(const std::string_view ref)
+    {
+        const std::string resolved_ref =
+            ref.empty() ? std::string{ VCPKG_DEFAULT_REF } : std::string{ ref };
+
+        if (resolved_ref == VCPKG_DEFAULT_REF)
+        {
+            return VCPKG_ARCHIVE_BASE_URL()
+                + "refs/heads/"
+                + resolved_ref + ".zip";
+        }
+
+        return VCPKG_ARCHIVE_BASE_URL()
+            + resolved_ref + ".zip";
+    }
+
+    export inline std::string VCPKG_BOOTSTRAP_SCRIPT_NAME()
+    {
+#if defined(_WIN32)
+        return "bootstrap-vcpkg.bat";
+#else
+        return "bootstrap-vcpkg.sh";
+#endif
+    }
+
+    export inline std::string VCPKG_EXECUTABLE_NAME()
+    {
+#if defined(_WIN32)
+        return "vcpkg.exe";
+#else
+        return "vcpkg";
+#endif
+    }
+
+    export inline std::string GIT_WINDOWS_RELEASE_API_URL()
+    {
+        return std::string{ GITHUB_API_BASE }
+            + std::string{ GIT_WINDOWS_OWNER } + "/"
+            + std::string{ GIT_WINDOWS_REPO } + "/releases/latest";
     }
 
     // ─────────────────────────────────────────

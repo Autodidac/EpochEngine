@@ -1,8 +1,9 @@
 # Epoch Changelog
 
-## [v0.82.61]
-- Rolled the active repo surfaces forward after the packaged `0.82.60` updater-shell release so `main` stays ahead of the downloadable runtime again.
-- Added a consolidated `v0.83.0` release-notes draft that compresses the `0.82.17` through current updater and launcher work into one public-facing summary.
+## [v0.83.0]
+- Shipped the first dedicated `Release|x64` updater-shell runtime as the downloadable `main.zip` payload, so first launch now lands directly on the minimal bootstrap UI instead of the full launcher surface.
+- Replaced the source-updater dependency bootstrap with a managed toolchain flow that can download `vcpkg`, provision Git when needed, patch the `glad` port for current CMake, and rebuild from source without assuming a preinstalled development environment.
+- Moved live source-update work into shorter managed work roots and kept the console/process output readable, which makes the shell demonstration path much easier to follow while leaving the rebuilt runtime path aimed at the full engine.
 
 ## [v0.82.60]
 - Shipped the updater shell as a dedicated software-only bootstrap runtime with a single large update action and a minimal packaged payload.

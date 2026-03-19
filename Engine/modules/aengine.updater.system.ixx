@@ -403,6 +403,878 @@ export namespace epochnamespace::updater
         }
 
 #if defined(_WIN32)
+        inline void append_log_line(
+            const std::filesystem::path& log_path,
+            const std::string& line);
+
+        [[nodiscard]] inline bool run_process_hidden(
+            const std::filesystem::path& executable,
+            const std::vector<std::string>& args,
+            const std::filesystem::path& working_directory,
+            const std::filesystem::path& log_path,
+            const bool wait_for_exit,
+            int* const exit_code);
+
+        [[nodiscard]] inline std::filesystem::path make_temp_download_path(
+            const std::string_view stem);
+#endif
+
+        [[nodiscard]] inline std::string sanitize_path_component(std::string text)
+        {
+            for (char& ch : text)
+            {
+                const auto uch = static_cast<unsigned char>(ch);
+                if (!std::isalnum(uch) && ch != '-' && ch != '_')
+                    ch = '_';
+            }
+
+            while (!text.empty() && text.back() == '_')
+                text.pop_back();
+
+            if (text.empty())
+                text = "default";
+
+            return text;
+        }
+
+        [[nodiscard]] inline std::filesystem::path managed_tools_root()
+        {
+#if defined(_WIN32)
+            const auto local_app_data = env_path("LOCALAPPDATA");
+            if (!local_app_data.empty())
+                return local_app_data / UPDATER_TOOLS_SUBDIR();
+#endif
+
+            std::error_code ec;
+            auto temp_root = std::filesystem::temp_directory_path(ec);
+            if (!ec && !temp_root.empty())
+                return temp_root / UPDATER_TOOLS_SUBDIR();
+
+            ec.clear();
+            const auto cwd = std::filesystem::current_path(ec);
+            if (!ec && !cwd.empty())
+                return cwd / UPDATER_TOOLS_SUBDIR();
+
+            return std::filesystem::path{ UPDATER_TOOLS_SUBDIR() };
+        }
+
+        [[nodiscard]] inline std::filesystem::path managed_work_root()
+        {
+#if defined(_WIN32)
+            const auto local_app_data = env_path("LOCALAPPDATA");
+            if (!local_app_data.empty())
+                return local_app_data / UPDATER_WORK_SUBDIR();
+#endif
+
+            std::error_code ec;
+            auto temp_root = std::filesystem::temp_directory_path(ec);
+            if (!ec && !temp_root.empty())
+                return temp_root / UPDATER_WORK_SUBDIR();
+
+            ec.clear();
+            const auto cwd = std::filesystem::current_path(ec);
+            if (!ec && !cwd.empty())
+                return cwd / UPDATER_WORK_SUBDIR();
+
+            return std::filesystem::path{ UPDATER_WORK_SUBDIR() };
+        }
+
+        [[nodiscard]] inline std::string shorten_token(
+            std::string text,
+            const std::size_t max_length = 12)
+        {
+            text = sanitize_path_component(std::move(text));
+            if (text.size() > max_length)
+                text.resize(max_length);
+
+            while (!text.empty() && text.back() == '_')
+                text.pop_back();
+
+            if (text.empty())
+                text = "default";
+
+            return text;
+        }
+
+        [[nodiscard]] inline std::string read_manifest_builtin_baseline(
+            const std::filesystem::path& manifest_root)
+        {
+            const auto manifest_file = manifest_root / "vcpkg.json";
+            const auto text = read_text_file(manifest_file);
+            if (text.empty())
+                return {};
+
+            static const std::regex k_baseline_regex(
+                R"REGEX("builtin-baseline"\s*:\s*"([0-9A-Fa-f]+)")REGEX",
+                std::regex::optimize);
+
+            std::smatch match;
+            if (!std::regex_search(text, match, k_baseline_regex))
+                return {};
+
+            return lower_ascii(trim_ascii(match[1].str()));
+        }
+
+        [[nodiscard]] inline std::filesystem::path find_executable_on_path(
+            const std::string_view executable_name)
+        {
+            std::string path_value;
+#if defined(_WIN32)
+            char* path_env = nullptr;
+            std::size_t path_size = 0;
+            if (_dupenv_s(&path_env, &path_size, "PATH") != 0
+                || path_env == nullptr
+                || *path_env == '\0')
+            {
+                if (path_env != nullptr)
+                    std::free(path_env);
+                return {};
+            }
+
+            path_value.assign(path_env);
+            std::free(path_env);
+#else
+            const char* const path_env = std::getenv("PATH");
+            if (path_env == nullptr || *path_env == '\0')
+                return {};
+
+            path_value.assign(path_env);
+#endif
+
+#if defined(_WIN32)
+            constexpr char separator = ';';
+#else
+            constexpr char separator = ':';
+#endif
+
+            std::string current;
+            for (const char ch : path_value)
+            {
+                if (ch == separator)
+                {
+                    if (!current.empty())
+                    {
+                        std::filesystem::path candidate =
+                            std::filesystem::path{ current } / executable_name;
+                        if (std::filesystem::exists(candidate))
+                            return candidate;
+                    }
+
+                    current.clear();
+                    continue;
+                }
+
+                current.push_back(ch);
+            }
+
+            if (!current.empty())
+            {
+                std::filesystem::path candidate =
+                    std::filesystem::path{ current } / executable_name;
+                if (std::filesystem::exists(candidate))
+                    return candidate;
+            }
+
+            return {};
+        }
+
+        [[nodiscard]] inline std::string unescape_json_string_basic(std::string text)
+        {
+            std::string out;
+            out.reserve(text.size());
+
+            for (std::size_t i = 0; i < text.size(); ++i)
+            {
+                if (text[i] != '\\' || (i + 1) >= text.size())
+                {
+                    out.push_back(text[i]);
+                    continue;
+                }
+
+                const char next = text[++i];
+                switch (next)
+                {
+                case '\\': out.push_back('\\'); break;
+                case '/':  out.push_back('/'); break;
+                case '"':  out.push_back('"'); break;
+                case 'n':  out.push_back('\n'); break;
+                case 'r':  out.push_back('\r'); break;
+                case 't':  out.push_back('\t'); break;
+                default:
+                    out.push_back(next);
+                    break;
+                }
+            }
+
+            return out;
+        }
+
+        [[nodiscard]] inline std::string capture_process_output(
+            const std::filesystem::path& executable,
+            const std::vector<std::string>& args,
+            const std::filesystem::path& working_directory,
+            int* const exit_code = nullptr)
+        {
+#if defined(_WIN32)
+            const auto temp_output =
+                make_temp_download_path("proc_capture").replace_extension(".log");
+
+            int local_exit_code = -1;
+            const bool launched = run_process_hidden(
+                executable,
+                args,
+                working_directory,
+                temp_output,
+                true,
+                &local_exit_code);
+
+            auto output = trim_ascii(read_text_file(temp_output));
+            std::error_code ec;
+            std::filesystem::remove(temp_output, ec);
+
+            if (exit_code != nullptr)
+                *exit_code = launched ? local_exit_code : -1;
+
+            return launched ? output : std::string{};
+#else
+            (void)executable;
+            (void)args;
+            (void)working_directory;
+            if (exit_code != nullptr)
+                *exit_code = -1;
+            return {};
+#endif
+        }
+
+        [[nodiscard]] inline std::string query_latest_github_asset_url(
+            const std::string& api_url,
+            const std::string_view include_fragment,
+            const std::string_view include_suffix,
+            const std::string_view excluded_fragment,
+            const std::filesystem::path& log_path)
+        {
+            const auto json_path =
+                make_temp_download_path("release_asset").replace_extension(".json");
+
+            const bool downloaded = download_file(api_url, json_path.string());
+            const auto json = downloaded ? read_text_file(json_path) : std::string{};
+
+            std::error_code ec;
+            std::filesystem::remove(json_path, ec);
+
+            if (json.empty())
+            {
+                append_log_line(log_path, "[ERROR] Failed to query GitHub release metadata: " + api_url);
+                return {};
+            }
+
+            static const std::regex k_asset_regex(
+                R"REGEX("browser_download_url"\s*:\s*"([^"]+)")REGEX",
+                std::regex::optimize);
+
+            std::string fallback_match;
+            for (auto it = std::sregex_iterator(json.begin(), json.end(), k_asset_regex);
+                it != std::sregex_iterator();
+                ++it)
+            {
+                std::string candidate = unescape_json_string_basic((*it)[1].str());
+                if (!include_fragment.empty()
+                    && candidate.find(include_fragment) == std::string::npos)
+                {
+                    continue;
+                }
+
+                if (!include_suffix.empty()
+                    && !candidate.ends_with(std::string{ include_suffix }))
+                {
+                    continue;
+                }
+
+                if (excluded_fragment.empty()
+                    || candidate.find(excluded_fragment) == std::string::npos)
+                {
+                    return candidate;
+                }
+
+                if (fallback_match.empty())
+                    fallback_match = std::move(candidate);
+            }
+
+            if (fallback_match.empty())
+            {
+                append_log_line(log_path, "[ERROR] No matching GitHub release asset was found.");
+                return {};
+            }
+
+            return fallback_match;
+        }
+
+        [[nodiscard]] inline std::filesystem::path git_executable_in_root(
+            const std::filesystem::path& root)
+        {
+#if defined(_WIN32)
+            const std::array<std::filesystem::path, 4> candidates{
+                root / "cmd/git.exe",
+                root / "bin/git.exe",
+                root / "mingw64/bin/git.exe",
+                root / "usr/bin/git.exe"
+            };
+
+            for (const auto& candidate : candidates)
+            {
+                if (std::filesystem::exists(candidate))
+                    return candidate;
+            }
+#else
+            const auto candidate = root / "bin/git";
+            if (std::filesystem::exists(candidate))
+                return candidate;
+#endif
+
+            return {};
+        }
+
+        [[nodiscard]] inline std::filesystem::path find_or_prepare_git(
+            const std::filesystem::path& log_path)
+        {
+#if defined(_WIN32)
+            const auto configured = env_path("GIT_EXE_PATH");
+            if (!configured.empty() && std::filesystem::exists(configured))
+            {
+                append_log_line(log_path, "[INFO] Using configured git: " + configured.string());
+                return configured;
+            }
+
+            if (const auto from_path = find_executable_on_path("git.exe");
+                !from_path.empty())
+            {
+                append_log_line(log_path, "[INFO] Using git from PATH: " + from_path.string());
+                return from_path;
+            }
+
+            const auto program_files = env_path("ProgramFiles");
+            const auto program_files_x86 = env_path("ProgramFiles(x86)");
+            const std::array<std::filesystem::path, 6> common_candidates{
+                program_files / "Git/cmd/git.exe",
+                program_files / "Git/bin/git.exe",
+                program_files / "Git/mingw64/bin/git.exe",
+                program_files_x86 / "Git/cmd/git.exe",
+                program_files_x86 / "Git/bin/git.exe",
+                program_files_x86 / "Git/mingw64/bin/git.exe"
+            };
+
+            for (const auto& candidate : common_candidates)
+            {
+                if (!candidate.empty() && std::filesystem::exists(candidate))
+                {
+                    append_log_line(log_path, "[INFO] Using installed git: " + candidate.string());
+                    return candidate;
+                }
+            }
+
+            const auto tools_root = managed_tools_root();
+            const auto managed_root = tools_root / "g";
+            if (const auto managed_git = git_executable_in_root(managed_root);
+                !managed_git.empty())
+            {
+                append_log_line(log_path, "[INFO] Using managed git: " + managed_git.string());
+                return managed_git;
+            }
+
+            std::error_code ec;
+            std::filesystem::create_directories(tools_root, ec);
+            if (ec)
+            {
+                append_log_line(log_path, "[ERROR] Failed to create updater tools directory for git.");
+                return {};
+            }
+
+            const auto archive_url = query_latest_github_asset_url(
+                GIT_WINDOWS_RELEASE_API_URL(),
+                "MinGit-",
+                "-64-bit.zip",
+                "busybox",
+                log_path);
+            if (archive_url.empty())
+                return {};
+
+            const auto archive_path =
+                make_temp_download_path("git_mingit").replace_extension(".zip");
+            const auto staging_dir = tools_root / "gx";
+
+            std::filesystem::remove_all(staging_dir, ec);
+            ec.clear();
+            std::filesystem::remove_all(managed_root, ec);
+
+            append_log_line(log_path, "[INFO] Downloading managed git.");
+            if (!download_file(archive_url, archive_path.string()))
+            {
+                append_log_line(log_path, "[ERROR] Failed to download managed git archive.");
+                return {};
+            }
+
+            if (!extract_archive(archive_path.string(), staging_dir.string()))
+            {
+                append_log_line(log_path, "[ERROR] Failed to extract managed git archive.");
+                std::filesystem::remove(archive_path, ec);
+                return {};
+            }
+
+            std::filesystem::create_directories(managed_root.parent_path(), ec);
+            if (!ec)
+                std::filesystem::rename(staging_dir, managed_root, ec);
+
+            if (ec)
+            {
+                ec.clear();
+                std::filesystem::copy(
+                    staging_dir,
+                    managed_root,
+                    std::filesystem::copy_options::recursive
+                    | std::filesystem::copy_options::overwrite_existing,
+                    ec);
+            }
+
+            std::filesystem::remove(archive_path, ec);
+            std::filesystem::remove_all(staging_dir, ec);
+
+            if (ec)
+            {
+                append_log_line(log_path, "[ERROR] Failed to stage managed git.");
+                return {};
+            }
+
+            if (const auto managed_git = git_executable_in_root(managed_root);
+                !managed_git.empty())
+            {
+                append_log_line(log_path, "[INFO] Managed git ready at: " + managed_git.string());
+                return managed_git;
+            }
+
+            append_log_line(log_path, "[ERROR] Managed git executable is missing after extraction.");
+            return {};
+#else
+            return find_executable_on_path("git");
+#endif
+        }
+
+        [[nodiscard]] inline std::string ensure_vcpkg_git_head(
+            const std::filesystem::path& git_exe,
+            const std::filesystem::path& vcpkg_root,
+            const std::filesystem::path& log_path)
+        {
+            int git_exit = -1;
+            auto head = capture_process_output(
+                git_exe,
+                { "rev-parse", "--verify", "HEAD" },
+                vcpkg_root,
+                &git_exit);
+
+            if (git_exit == 0 && !head.empty())
+                return lower_ascii(trim_ascii(std::move(head)));
+
+            append_log_line(log_path, "[INFO] Initializing managed vcpkg git registry snapshot.");
+
+            const std::array<std::vector<std::string>, 4> setup_steps{
+                std::vector<std::string>{ "init" },
+                std::vector<std::string>{ "config", "user.name", "Epoch Updater" },
+                std::vector<std::string>{ "config", "user.email", "updater@epoch.local" },
+                std::vector<std::string>{ "add", "--all" }
+            };
+
+            for (const auto& args : setup_steps)
+            {
+                int step_exit = -1;
+                if (!run_process_hidden(
+                    git_exe,
+                    args,
+                    vcpkg_root,
+                    log_path,
+                    true,
+                    &step_exit) || step_exit != 0)
+                {
+                    append_log_line(log_path, "[ERROR] Failed to prepare the managed vcpkg git registry.");
+                    return {};
+                }
+            }
+
+            int commit_exit = -1;
+            if (!run_process_hidden(
+                git_exe,
+                { "commit", "--no-gpg-sign", "-m", "Managed vcpkg registry snapshot" },
+                vcpkg_root,
+                log_path,
+                true,
+                &commit_exit))
+            {
+                append_log_line(log_path, "[ERROR] Failed to launch git commit for the managed vcpkg registry.");
+                return {};
+            }
+
+            if (commit_exit != 0)
+            {
+                head = capture_process_output(
+                    git_exe,
+                    { "rev-parse", "--verify", "HEAD" },
+                    vcpkg_root,
+                    &git_exit);
+
+                if (git_exit == 0 && !head.empty())
+                    return lower_ascii(trim_ascii(std::move(head)));
+
+                append_log_line(log_path, "[ERROR] Managed vcpkg git registry did not produce a usable HEAD revision.");
+                return {};
+            }
+
+            head = capture_process_output(
+                git_exe,
+                { "rev-parse", "--verify", "HEAD" },
+                vcpkg_root,
+                &git_exit);
+
+            if (git_exit == 0 && !head.empty())
+                return lower_ascii(trim_ascii(std::move(head)));
+
+            append_log_line(log_path, "[ERROR] Failed to resolve the managed vcpkg git HEAD revision.");
+            return {};
+        }
+
+        [[nodiscard]] inline std::filesystem::path find_or_prepare_vcpkg(
+            const std::filesystem::path& manifest_root,
+            const std::filesystem::path& log_path)
+        {
+#if defined(_WIN32)
+            const auto from_env_root = env_path("VCPKG_ROOT");
+            const auto from_env_exe = from_env_root / VCPKG_EXECUTABLE_NAME();
+            if (!from_env_root.empty() && std::filesystem::exists(from_env_exe))
+            {
+                log_info("Using configured vcpkg from VCPKG_ROOT.");
+                append_log_line(log_path, "[INFO] Using configured vcpkg: " + from_env_root.string());
+                return from_env_exe;
+            }
+
+            const std::string baseline =
+                read_manifest_builtin_baseline(manifest_root);
+            const std::string resolved_ref =
+                baseline.empty() ? std::string{ VCPKG_DEFAULT_REF } : baseline;
+            const std::string safe_ref = shorten_token(resolved_ref);
+
+            const auto tools_root = managed_tools_root();
+            const auto managed_root = tools_root / ("v-" + safe_ref);
+            const auto managed_exe = managed_root / VCPKG_EXECUTABLE_NAME();
+
+            if (std::filesystem::exists(managed_exe))
+            {
+                log_info("Using managed vcpkg toolchain.");
+                append_log_line(log_path, "[INFO] Using managed vcpkg: " + managed_root.string());
+                return managed_exe;
+            }
+
+            std::error_code ec;
+            std::filesystem::create_directories(tools_root, ec);
+            if (ec)
+            {
+                log_error("Failed to create updater tools directory.");
+                append_log_line(log_path, "[ERROR] Failed to create updater tools directory: " + tools_root.string());
+                return {};
+            }
+
+            const auto archive_path =
+                make_temp_download_path("vcpkg_" + safe_ref).replace_extension(".zip");
+            const auto staging_dir = tools_root / ("vx-" + safe_ref);
+            const auto bootstrap_script = managed_root / VCPKG_BOOTSTRAP_SCRIPT_NAME();
+
+            log_info("Downloading managed vcpkg toolchain.");
+            append_log_line(log_path, "[INFO] Preparing managed vcpkg ref: " + resolved_ref);
+            append_log_line(log_path, "[INFO] Managed vcpkg target: " + managed_root.string());
+
+            std::filesystem::remove_all(staging_dir, ec);
+            ec.clear();
+            std::filesystem::remove_all(managed_root, ec);
+
+            if (!download_file(VCPKG_ARCHIVE_URL(resolved_ref), archive_path.string()))
+            {
+                append_log_line(log_path, "[ERROR] Failed to download managed vcpkg archive.");
+                return {};
+            }
+
+            if (!extract_archive(archive_path.string(), staging_dir.string()))
+            {
+                append_log_line(log_path, "[ERROR] Failed to extract managed vcpkg archive.");
+                std::filesystem::remove(archive_path, ec);
+                return {};
+            }
+
+            std::filesystem::path extracted_root;
+            for (const auto& entry : std::filesystem::directory_iterator(staging_dir, ec))
+            {
+                if (ec)
+                    break;
+
+                if (entry.is_directory())
+                {
+                    extracted_root = entry.path();
+                    break;
+                }
+            }
+
+            if (extracted_root.empty())
+            {
+                append_log_line(log_path, "[ERROR] Managed vcpkg archive did not contain an extracted root directory.");
+                std::filesystem::remove(archive_path, ec);
+                std::filesystem::remove_all(staging_dir, ec);
+                return {};
+            }
+
+            ec.clear();
+            std::filesystem::rename(extracted_root, managed_root, ec);
+            if (ec)
+            {
+                ec.clear();
+                std::filesystem::create_directories(managed_root.parent_path(), ec);
+                if (ec)
+                {
+                    append_log_line(log_path, "[ERROR] Failed to prepare managed vcpkg destination directory.");
+                    std::filesystem::remove(archive_path, ec);
+                    std::filesystem::remove_all(staging_dir, ec);
+                    return {};
+                }
+
+                std::filesystem::copy(
+                    extracted_root,
+                    managed_root,
+                    std::filesystem::copy_options::recursive
+                    | std::filesystem::copy_options::overwrite_existing,
+                    ec);
+
+                if (ec)
+                {
+                    append_log_line(log_path, "[ERROR] Failed to copy managed vcpkg files into place.");
+                    std::filesystem::remove(archive_path, ec);
+                    std::filesystem::remove_all(staging_dir, ec);
+                    return {};
+                }
+            }
+
+            std::filesystem::remove(archive_path, ec);
+            std::filesystem::remove_all(staging_dir, ec);
+
+            if (!std::filesystem::exists(bootstrap_script))
+            {
+                append_log_line(log_path, "[ERROR] Managed vcpkg bootstrap script is missing.");
+                return {};
+            }
+
+            auto cmd = env_path("ComSpec");
+            if (cmd.empty())
+                cmd = std::filesystem::path{ "C:\\Windows\\System32\\cmd.exe" };
+
+            int bootstrap_exit = -1;
+            append_log_line(log_path, "[INFO] Bootstrapping managed vcpkg.");
+
+            if (!run_process_hidden(
+                cmd,
+                {
+                    "/C",
+                    bootstrap_script.string(),
+                    "-disableMetrics"
+                },
+                managed_root,
+                log_path,
+                true,
+                &bootstrap_exit) || bootstrap_exit != 0)
+            {
+                append_log_line(
+                    log_path,
+                    "[ERROR] Managed vcpkg bootstrap failed with exit code " + std::to_string(bootstrap_exit));
+                log_error("Managed vcpkg bootstrap failed. See epoch_source_update.log for details.");
+                return {};
+            }
+
+            if (!std::filesystem::exists(managed_exe))
+            {
+                append_log_line(log_path, "[ERROR] Managed vcpkg executable is missing after bootstrap.");
+                return {};
+            }
+
+            append_log_line(log_path, "[INFO] Managed vcpkg ready at: " + managed_exe.string());
+            log_info("Managed vcpkg ready.");
+            return managed_exe;
+#else
+            (void)manifest_root;
+            (void)log_path;
+            return {};
+#endif
+        }
+
+        [[nodiscard]] inline bool prepare_manifest_for_managed_vcpkg_registry(
+            const std::filesystem::path& manifest_root,
+            const std::filesystem::path& vcpkg_root,
+            const std::filesystem::path& log_path)
+        {
+            const auto manifest_file = manifest_root / "vcpkg.json";
+            if (!std::filesystem::exists(manifest_file))
+            {
+                append_log_line(log_path, "[ERROR] Source manifest file is missing for vcpkg preparation.");
+                return false;
+            }
+
+            const auto config_file = manifest_root / "vcpkg-configuration.json";
+            std::error_code ec;
+            std::filesystem::remove(config_file, ec);
+
+            const auto git_exe = find_or_prepare_git(log_path);
+            if (git_exe.empty())
+            {
+                append_log_line(log_path, "[ERROR] Could not locate or prepare git for the managed vcpkg registry.");
+                return false;
+            }
+
+            auto manifest_text = read_text_file(manifest_file);
+            if (manifest_text.empty())
+            {
+                append_log_line(log_path, "[ERROR] Failed to read the source manifest before vcpkg preparation.");
+                return false;
+            }
+
+            const auto registry_head = ensure_vcpkg_git_head(git_exe, vcpkg_root, log_path);
+            if (registry_head.empty())
+            {
+                append_log_line(log_path, "[ERROR] Failed to prepare the managed vcpkg registry revision.");
+                return false;
+            }
+
+            static const std::regex k_baseline_regex(
+                R"REGEX("builtin-baseline"\s*:\s*"[0-9A-Fa-f]+")REGEX",
+                std::regex::optimize);
+            const std::string baseline_line =
+                "\"builtin-baseline\": \"" + registry_head + "\"";
+
+            if (std::regex_search(manifest_text, k_baseline_regex))
+            {
+                manifest_text = std::regex_replace(
+                    manifest_text,
+                    k_baseline_regex,
+                    baseline_line,
+                    std::regex_constants::format_first_only);
+            }
+            else
+            {
+                const auto brace = manifest_text.find('{');
+                if (brace == std::string::npos)
+                {
+                    append_log_line(log_path, "[ERROR] Source manifest is malformed and could not be updated.");
+                    return false;
+                }
+
+                manifest_text.insert(brace + 1, "\n  " + baseline_line + ",");
+            }
+
+            {
+                std::ofstream manifest_out(manifest_file, std::ios::binary | std::ios::trunc);
+                if (!manifest_out)
+                {
+                    append_log_line(log_path, "[ERROR] Failed to rewrite the source manifest for managed vcpkg.");
+                    return false;
+                }
+
+                manifest_out << manifest_text;
+            }
+
+            append_log_line(log_path, "[INFO] Reconfigured the source snapshot to use the managed vcpkg git registry.");
+            return true;
+        }
+
+        [[nodiscard]] inline std::filesystem::path prepare_vcpkg_overlay_ports(
+            const std::filesystem::path& vcpkg_root,
+            const std::filesystem::path& log_path)
+        {
+            const auto source_glad_dir = vcpkg_root / "ports" / "glad";
+            if (!std::filesystem::exists(source_glad_dir))
+            {
+                append_log_line(log_path, "[WARN] Managed vcpkg glad port was not found; skipping overlay patch.");
+                return {};
+            }
+
+            const auto overlay_root = managed_tools_root() / "ov";
+            const auto glad_overlay_dir = overlay_root / "glad";
+            std::error_code ec;
+
+            std::filesystem::remove_all(glad_overlay_dir, ec);
+            ec.clear();
+            std::filesystem::create_directories(overlay_root, ec);
+            if (ec)
+            {
+                append_log_line(log_path, "[WARN] Failed to create the updater overlay-ports directory.");
+                return {};
+            }
+
+            std::filesystem::copy(
+                source_glad_dir,
+                glad_overlay_dir,
+                std::filesystem::copy_options::recursive
+                | std::filesystem::copy_options::overwrite_existing,
+                ec);
+            if (ec)
+            {
+                append_log_line(log_path, "[WARN] Failed to stage the glad overlay port.");
+                return {};
+            }
+
+            const auto portfile = glad_overlay_dir / "portfile.cmake";
+            auto portfile_text = read_text_file(portfile);
+            if (portfile_text.empty())
+            {
+                append_log_line(log_path, "[WARN] Failed to read the staged glad portfile.");
+                return {};
+            }
+
+            if (portfile_text.find("CMAKE_POLICY_VERSION_MINIMUM=3.5") == std::string::npos)
+            {
+                const std::string option_line =
+                    "        -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n";
+                const auto options_pos = portfile_text.find("\n    OPTIONS\n");
+                if (options_pos != std::string::npos)
+                {
+                    portfile_text.insert(options_pos + std::string{ "\n    OPTIONS\n" }.size(), option_line);
+                }
+                else
+                {
+                    const auto configure_pos = portfile_text.find("vcpkg_cmake_configure(");
+                    if (configure_pos == std::string::npos)
+                    {
+                        append_log_line(log_path, "[WARN] Could not patch the staged glad portfile.");
+                        return {};
+                    }
+
+                    const auto line_break = portfile_text.find('\n', configure_pos);
+                    if (line_break == std::string::npos)
+                    {
+                        append_log_line(log_path, "[WARN] Could not patch the staged glad portfile.");
+                        return {};
+                    }
+
+                    portfile_text.insert(
+                        line_break + 1,
+                        "    OPTIONS\n"
+                        "        -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n");
+                }
+
+                std::ofstream out(portfile, std::ios::binary | std::ios::trunc);
+                if (!out)
+                {
+                    append_log_line(log_path, "[WARN] Failed to write the staged glad overlay port.");
+                    return {};
+                }
+
+                out << portfile_text;
+            }
+
+            append_log_line(log_path, "[INFO] Prepared a glad overlay port for modern CMake policy handling.");
+            return overlay_root;
+        }
+
+#if defined(_WIN32)
         [[nodiscard]] inline std::wstring to_wide(const std::string& value)
         {
             if (value.empty())
@@ -655,17 +1527,17 @@ export namespace epochnamespace::updater
 
         [[nodiscard]] inline std::filesystem::path source_archive_path(const std::filesystem::path& target_binary)
         {
-            return target_binary.parent_path() / "EpochEngine-source-main.zip";
+            return (managed_work_root() / shorten_token(target_binary.stem().string(), 10)) / "src.zip";
         }
 
         [[nodiscard]] inline std::filesystem::path source_staging_dir(const std::filesystem::path& target_binary)
         {
-            return target_binary.parent_path() / "__epoch_source_update";
+            return (managed_work_root() / shorten_token(target_binary.stem().string(), 10)) / "sx";
         }
 
         [[nodiscard]] inline std::filesystem::path source_final_dir(const std::filesystem::path& target_binary)
         {
-            return target_binary.parent_path() / "EpochEngine-source-main";
+            return (managed_work_root() / shorten_token(target_binary.stem().string(), 10)) / "src";
         }
 
         [[nodiscard]] inline std::filesystem::path make_temp_download_path(const std::string_view stem)
@@ -807,20 +1679,21 @@ export namespace epochnamespace::updater
 
             if (!vswhere.empty() && std::filesystem::exists(vswhere))
             {
-                const auto out = make_temp_download_path("msbuild_path");
+                int query_exit = -1;
+                const auto text = capture_process_output(
+                    vswhere,
+                    {
+                        "-latest",
+                        "-requires",
+                        "Microsoft.Component.MSBuild",
+                        "-find",
+                        "MSBuild\\**\\Bin\\MSBuild.exe"
+                    },
+                    vswhere.parent_path(),
+                    &query_exit);
 
-                const std::string command =
-                    quote_shell_arg(vswhere.string())
-                    + " -latest -requires Microsoft.Component.MSBuild "
-                    "-find MSBuild\\**\\Bin\\MSBuild.exe > "
-                    + quote_shell_arg(out.string());
-
-                if (std::system(command.c_str()) == 0)
+                if (query_exit == 0)
                 {
-                    const auto text = trim_ascii(read_text_file(out));
-                    std::error_code ec;
-                    std::filesystem::remove(out, ec);
-
                     if (!text.empty() && std::filesystem::exists(text))
                         return std::filesystem::path{ text };
                 }
@@ -867,14 +1740,7 @@ export namespace epochnamespace::updater
         {
 #if defined(_WIN32)
             const auto manifest_root = source_manifest_root(source_root);
-            const auto vcpkg_root = env_path("VCPKG_ROOT");
-            const auto vcpkg_exe = vcpkg_root / "vcpkg.exe";
-
-            if (vcpkg_root.empty() || !std::filesystem::exists(vcpkg_exe))
-            {
-                log_error("Could not locate vcpkg. Set VCPKG_ROOT before running a source update.");
-                return false;
-            }
+            const auto build_log = target_binary.parent_path() / "epoch_source_update.log";
 
             const auto msbuild = find_msbuild_path();
             if (msbuild.empty())
@@ -890,26 +1756,50 @@ export namespace epochnamespace::updater
                 return false;
             }
 
-            const auto build_log = target_binary.parent_path() / "epoch_source_update.log";
+            const auto vcpkg_exe = find_or_prepare_vcpkg(manifest_root, build_log);
+            if (vcpkg_exe.empty())
+            {
+                log_error("Could not prepare vcpkg for the source update.");
+                return false;
+            }
+
+            const auto vcpkg_root = vcpkg_exe.parent_path();
             append_log_line(build_log, "[INFO] Source update build started");
             append_log_line(build_log, "[INFO] Source root: " + source_root.string());
             append_log_line(build_log, "[INFO] Manifest root: " + manifest_root.string());
             append_log_line(build_log, "[INFO] vcpkg root: " + vcpkg_root.string());
             append_log_line(build_log, "[INFO] MSBuild: " + msbuild.string());
 
+            if (!prepare_manifest_for_managed_vcpkg_registry(
+                manifest_root,
+                vcpkg_root,
+                build_log))
+            {
+                log_error("Could not prepare the source snapshot for managed vcpkg.");
+                return false;
+            }
+
+            const auto overlay_ports = prepare_vcpkg_overlay_ports(vcpkg_root, build_log);
+
             log_info("Building updated runtime from source.");
             log_info("Restoring source dependencies with vcpkg.");
             append_log_line(build_log, "[INFO] Restoring source dependencies with vcpkg.");
 
+            std::vector<std::string> vcpkg_args{
+                "install",
+                "--triplet",
+                SOURCE_BUILD_PLATFORM() + "-windows",
+                "--x-manifest-root=" + manifest_root.string(),
+                "--x-builtin-ports-root=" + (vcpkg_root / "ports").string(),
+                "--x-builtin-registry-versions-dir=" + (vcpkg_root / "versions").string()
+            };
+            if (!overlay_ports.empty())
+                vcpkg_args.push_back("--overlay-ports=" + overlay_ports.string());
+
             int vcpkg_exit = -1;
             if (!run_process_hidden(
                 vcpkg_exe,
-                {
-                    "install",
-                    "--triplet",
-                    SOURCE_BUILD_PLATFORM() + "-windows",
-                    "--x-manifest-root=" + manifest_root.string()
-                },
+                vcpkg_args,
                 manifest_root,
                 build_log,
                 true,
@@ -1053,14 +1943,6 @@ export namespace epochnamespace::updater
             return false;
         }
 
-        const auto vcpkg_root = system_detail::env_path("VCPKG_ROOT");
-        const auto vcpkg_exe = vcpkg_root / "vcpkg.exe";
-        if (vcpkg_root.empty() || !std::filesystem::exists(vcpkg_exe))
-        {
-            system_detail::log_error("Could not locate vcpkg. Set VCPKG_ROOT before running a source update.");
-            return false;
-        }
-
         const auto msbuild = system_detail::find_msbuild_path();
         if (msbuild.empty())
         {
@@ -1081,6 +1963,8 @@ export namespace epochnamespace::updater
         const auto solution = system_detail::source_solution_path(final_dir);
         const auto target_assets_dir = target_dir / "assets";
         const auto built_assets_dir = built_runtime_dir / "assets";
+        const auto source_repo_assets_dir = manifest_root / "assets";
+        const auto managed_tools_root = system_detail::managed_tools_root();
 
         std::ofstream ps(worker_script, std::ios::binary);
         if (!ps)
@@ -1112,7 +1996,14 @@ export namespace epochnamespace::updater
             << "$builtDir = '" << esc(built_runtime_dir.string()) << "'\n"
             << "$builtExe = '" << esc(built_binary.string()) << "'\n"
             << "$builtAssetsDir = '" << esc(built_assets_dir.string()) << "'\n"
-            << "$vcpkgExe = '" << esc(vcpkg_exe.string()) << "'\n"
+            << "$sourceRepoAssetsDir = '" << esc(source_repo_assets_dir.string()) << "'\n"
+            << "$managedToolsRoot = '" << esc(managed_tools_root.string()) << "'\n"
+            << "$vcpkgDefaultRef = '" << esc(std::string{ VCPKG_DEFAULT_REF }) << "'\n"
+            << "$vcpkgDefaultArchiveUrl = '" << esc(VCPKG_ARCHIVE_URL(VCPKG_DEFAULT_REF)) << "'\n"
+            << "$vcpkgArchiveBaseUrl = '" << esc(VCPKG_ARCHIVE_BASE_URL()) << "'\n"
+            << "$vcpkgExeName = '" << esc(VCPKG_EXECUTABLE_NAME()) << "'\n"
+            << "$vcpkgBootstrapName = '" << esc(VCPKG_BOOTSTRAP_SCRIPT_NAME()) << "'\n"
+            << "$gitReleaseApiUrl = '" << esc(GIT_WINDOWS_RELEASE_API_URL()) << "'\n"
             << "$msbuildExe = '" << esc(msbuild.string()) << "'\n"
             << "$triplet = '" << esc(triplet) << "'\n"
             << "$buildTarget = '" << esc(SOURCE_BUILD_TARGET()) << "'\n"
@@ -1125,6 +2016,65 @@ export namespace epochnamespace::updater
             << "    return\n"
             << "  }\n"
             << "  [System.IO.File]::AppendAllText($Path, $Text, $utf8NoBom)\n"
+            << "}\n"
+            << "function Get-SafeToken([string]$Value) {\n"
+            << "  if ([string]::IsNullOrWhiteSpace($Value)) {\n"
+            << "    return 'default'\n"
+            << "  }\n"
+            << "  $chars = $Value.ToCharArray() | ForEach-Object {\n"
+            << "    if ([char]::IsLetterOrDigit($_) -or $_ -eq '-' -or $_ -eq '_') { $_ } else { '_' }\n"
+            << "  }\n"
+            << "  $safe = -join $chars\n"
+            << "  $safe = $safe.TrimEnd('_')\n"
+            << "  if ([string]::IsNullOrWhiteSpace($safe)) {\n"
+            << "    return 'default'\n"
+            << "  }\n"
+            << "  return $safe\n"
+            << "}\n"
+            << "function Get-ShortToken([string]$Value, [int]$MaxLength = 12) {\n"
+            << "  $safe = Get-SafeToken $Value\n"
+            << "  if ($safe.Length -gt $MaxLength) {\n"
+            << "    $safe = $safe.Substring(0, $MaxLength)\n"
+            << "  }\n"
+            << "  return $safe.TrimEnd('_')\n"
+            << "}\n"
+            << "function Get-VcpkgRef {\n"
+            << "  $manifestFile = Join-Path $manifestRoot 'vcpkg.json'\n"
+            << "  if (-not (Test-Path -LiteralPath $manifestFile)) {\n"
+            << "    return $vcpkgDefaultRef\n"
+            << "  }\n"
+            << "  $text = Get-Content -LiteralPath $manifestFile -Raw -ErrorAction SilentlyContinue\n"
+            << "  if ([string]::IsNullOrWhiteSpace($text)) {\n"
+            << "    return $vcpkgDefaultRef\n"
+            << "  }\n"
+            << "  $match = [regex]::Match($text, '\"builtin-baseline\"\\s*:\\s*\"([0-9A-Fa-f]+)\"')\n"
+            << "  if ($match.Success) {\n"
+            << "    return $match.Groups[1].Value.ToLowerInvariant()\n"
+            << "  }\n"
+            << "  return $vcpkgDefaultRef\n"
+            << "}\n"
+            << "function Get-VcpkgArchiveUrl([string]$Ref) {\n"
+            << "  if ($Ref -eq $vcpkgDefaultRef) {\n"
+            << "    return $vcpkgDefaultArchiveUrl\n"
+            << "  }\n"
+            << "  return ($vcpkgArchiveBaseUrl + $Ref + '.zip')\n"
+            << "}\n"
+            << "function Get-ReleaseAssetUrl([string]$ApiUrl, [string]$IncludeFragment, [string]$IncludeSuffix, [string]$ExcludeFragment) {\n"
+            << "  $headers = @{ 'User-Agent' = 'EpochUpdater/1.0'; 'Accept' = 'application/vnd.github+json' }\n"
+            << "  $release = Invoke-RestMethod -Headers $headers -Uri $ApiUrl -UseBasicParsing\n"
+            << "  $fallback = $null\n"
+            << "  foreach ($asset in $release.assets) {\n"
+            << "    if ($null -eq $asset) { continue }\n"
+            << "    $url = [string]$asset.browser_download_url\n"
+            << "    if ([string]::IsNullOrWhiteSpace($url)) { continue }\n"
+            << "    if (-not [string]::IsNullOrWhiteSpace($IncludeFragment) -and -not $url.Contains($IncludeFragment)) { continue }\n"
+            << "    if (-not [string]::IsNullOrWhiteSpace($IncludeSuffix) -and -not $url.EndsWith($IncludeSuffix)) { continue }\n"
+            << "    if ([string]::IsNullOrWhiteSpace($ExcludeFragment) -or -not $url.Contains($ExcludeFragment)) {\n"
+            << "      return $url\n"
+            << "    }\n"
+            << "    if ($null -eq $fallback) { $fallback = $url }\n"
+            << "  }\n"
+            << "  return $fallback\n"
             << "}\n"
             << "function Append-FileToBuildLog([string]$Path) {\n"
             << "  if (-not (Test-Path -LiteralPath $Path)) {\n"
@@ -1165,6 +2115,192 @@ export namespace epochnamespace::updater
             << "    Remove-Item -LiteralPath $toolLog -Force -ErrorAction SilentlyContinue\n"
             << "  }\n"
             << "}\n"
+            << "function Resolve-GitExe {\n"
+            << "  if (-not [string]::IsNullOrWhiteSpace($env:GIT_EXE_PATH) -and (Test-Path -LiteralPath $env:GIT_EXE_PATH)) {\n"
+            << "    Write-Step 'INFO' ('Using configured git: ' + $env:GIT_EXE_PATH)\n"
+            << "    return $env:GIT_EXE_PATH\n"
+            << "  }\n"
+            << "  $gitCommand = Get-Command git.exe -ErrorAction SilentlyContinue\n"
+            << "  if ($null -ne $gitCommand -and -not [string]::IsNullOrWhiteSpace($gitCommand.Source) -and (Test-Path -LiteralPath $gitCommand.Source)) {\n"
+            << "    Write-Step 'INFO' ('Using git from PATH: ' + $gitCommand.Source)\n"
+            << "    return $gitCommand.Source\n"
+            << "  }\n"
+            << "  $commonCandidates = @(\n"
+            << "    (Join-Path $env:ProgramFiles 'Git\\cmd\\git.exe'),\n"
+            << "    (Join-Path $env:ProgramFiles 'Git\\bin\\git.exe'),\n"
+            << "    (Join-Path $env:ProgramFiles 'Git\\mingw64\\bin\\git.exe'),\n"
+            << "    (Join-Path ${env:ProgramFiles(x86)} 'Git\\cmd\\git.exe'),\n"
+            << "    (Join-Path ${env:ProgramFiles(x86)} 'Git\\bin\\git.exe'),\n"
+            << "    (Join-Path ${env:ProgramFiles(x86)} 'Git\\mingw64\\bin\\git.exe')\n"
+            << "  )\n"
+            << "  foreach ($candidate in $commonCandidates) {\n"
+            << "    if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) {\n"
+            << "      Write-Step 'INFO' ('Using installed git: ' + $candidate)\n"
+            << "      return $candidate\n"
+            << "    }\n"
+            << "  }\n"
+            << "  $managedGitRoot = Join-Path $managedToolsRoot 'g'\n"
+            << "  $managedGitCandidates = @(\n"
+            << "    (Join-Path $managedGitRoot 'cmd\\git.exe'),\n"
+            << "    (Join-Path $managedGitRoot 'bin\\git.exe'),\n"
+            << "    (Join-Path $managedGitRoot 'mingw64\\bin\\git.exe'),\n"
+            << "    (Join-Path $managedGitRoot 'usr\\bin\\git.exe')\n"
+            << "  )\n"
+            << "  foreach ($candidate in $managedGitCandidates) {\n"
+            << "    if (Test-Path -LiteralPath $candidate) {\n"
+            << "      Write-Step 'INFO' ('Using managed git: ' + $candidate)\n"
+            << "      return $candidate\n"
+            << "    }\n"
+            << "  }\n"
+            << "  New-Item -ItemType Directory -Path $managedToolsRoot -Force | Out-Null\n"
+            << "  $gitArchiveUrl = Get-ReleaseAssetUrl $gitReleaseApiUrl 'MinGit-' '-64-bit.zip' 'busybox'\n"
+            << "  if ([string]::IsNullOrWhiteSpace($gitArchiveUrl)) {\n"
+            << "    throw 'Could not locate a managed Git release asset.'\n"
+            << "  }\n"
+            << "  $gitArchive = Join-Path $managedToolsRoot 'git.zip'\n"
+            << "  $gitStaging = Join-Path $managedToolsRoot 'gx'\n"
+            << "  Remove-Item -LiteralPath $gitArchive -Force -ErrorAction SilentlyContinue\n"
+            << "  Remove-Item -LiteralPath $gitStaging -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  Remove-Item -LiteralPath $managedGitRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  Write-Step 'INFO' 'Downloading managed git.'\n"
+            << "  $headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
+            << "  Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $gitArchiveUrl -OutFile $gitArchive\n"
+            << "  Expand-Archive -LiteralPath $gitArchive -DestinationPath $gitStaging -Force\n"
+            << "  Move-Item -LiteralPath $gitStaging -Destination $managedGitRoot -Force\n"
+            << "  Remove-Item -LiteralPath $gitArchive -Force -ErrorAction SilentlyContinue\n"
+            << "  foreach ($candidate in $managedGitCandidates) {\n"
+            << "    if (Test-Path -LiteralPath $candidate) {\n"
+            << "      Write-Step 'INFO' ('Managed git ready at: ' + $candidate)\n"
+            << "      return $candidate\n"
+            << "    }\n"
+            << "  }\n"
+            << "  throw 'Managed git extraction did not produce git.exe.'\n"
+            << "}\n"
+            << "function Resolve-VcpkgExe {\n"
+            << "  if (-not [string]::IsNullOrWhiteSpace($env:VCPKG_ROOT)) {\n"
+            << "    $configuredExe = Join-Path $env:VCPKG_ROOT $vcpkgExeName\n"
+            << "    if (Test-Path -LiteralPath $configuredExe) {\n"
+            << "      Write-Step 'INFO' ('Using configured vcpkg: ' + $env:VCPKG_ROOT)\n"
+            << "      return $configuredExe\n"
+            << "    }\n"
+            << "  }\n"
+            << "  $vcpkgRef = Get-VcpkgRef\n"
+            << "  $safeRef = Get-ShortToken $vcpkgRef\n"
+            << "  $managedVcpkgRoot = Join-Path $managedToolsRoot ('v-' + $safeRef)\n"
+            << "  $managedVcpkgExe = Join-Path $managedVcpkgRoot $vcpkgExeName\n"
+            << "  if (Test-Path -LiteralPath $managedVcpkgExe) {\n"
+            << "    Write-Step 'INFO' ('Using managed vcpkg: ' + $managedVcpkgRoot)\n"
+            << "    return $managedVcpkgExe\n"
+            << "  }\n"
+            << "  $vcpkgArchive = Join-Path $managedToolsRoot ('v-' + $safeRef + '.zip')\n"
+            << "  $vcpkgStaging = Join-Path $managedToolsRoot ('vx-' + $safeRef)\n"
+            << "  $bootstrapScript = Join-Path $managedVcpkgRoot $vcpkgBootstrapName\n"
+            << "  New-Item -ItemType Directory -Path $managedToolsRoot -Force | Out-Null\n"
+            << "  Remove-Item -LiteralPath $vcpkgArchive -Force -ErrorAction SilentlyContinue\n"
+            << "  Remove-Item -LiteralPath $vcpkgStaging -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  Remove-Item -LiteralPath $managedVcpkgRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  Write-Step 'INFO' ('Downloading managed vcpkg (' + $vcpkgRef + ').')\n"
+            << "  $headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
+            << "  Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri (Get-VcpkgArchiveUrl $vcpkgRef) -OutFile $vcpkgArchive\n"
+            << "  Expand-Archive -LiteralPath $vcpkgArchive -DestinationPath $vcpkgStaging -Force\n"
+            << "  $extractedRoot = Get-ChildItem -LiteralPath $vcpkgStaging -Directory | Select-Object -First 1\n"
+            << "  if ($null -eq $extractedRoot) {\n"
+            << "    throw 'Managed vcpkg archive did not extract correctly.'\n"
+            << "  }\n"
+            << "  Move-Item -LiteralPath $extractedRoot.FullName -Destination $managedVcpkgRoot -Force\n"
+            << "  Remove-Item -LiteralPath $vcpkgArchive -Force -ErrorAction SilentlyContinue\n"
+            << "  Remove-Item -LiteralPath $vcpkgStaging -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  Invoke-Tool $bootstrapScript @('-disableMetrics') $managedVcpkgRoot 'vcpkg bootstrap'\n"
+            << "  if (-not (Test-Path -LiteralPath $managedVcpkgExe)) {\n"
+            << "    throw 'Managed vcpkg bootstrap did not produce vcpkg.exe.'\n"
+            << "  }\n"
+            << "  Write-Step 'INFO' ('Managed vcpkg ready at: ' + $managedVcpkgExe)\n"
+            << "  return $managedVcpkgExe\n"
+            << "}\n"
+            << "function Prepare-ManifestForManagedVcpkg([string]$ManifestRoot, [string]$VcpkgRoot) {\n"
+            << "  $manifestFile = Join-Path $ManifestRoot 'vcpkg.json'\n"
+            << "  if (-not (Test-Path -LiteralPath $manifestFile)) {\n"
+            << "    throw 'Source manifest file is missing for managed vcpkg preparation.'\n"
+            << "  }\n"
+            << "  $configFile = Join-Path $ManifestRoot 'vcpkg-configuration.json'\n"
+            << "  Remove-Item -LiteralPath $configFile -Force -ErrorAction SilentlyContinue\n"
+            << "  $gitExe = Resolve-GitExe\n"
+            << "  Push-Location $VcpkgRoot\n"
+            << "  try {\n"
+            << "    $head = ''\n"
+            << "    try {\n"
+            << "      $head = (& $gitExe 'rev-parse' '--verify' 'HEAD' 2>$null | Select-Object -First 1)\n"
+            << "      if ($LASTEXITCODE -ne 0) { $head = '' }\n"
+            << "    }\n"
+            << "    catch {\n"
+            << "      $head = ''\n"
+            << "    }\n"
+            << "    if ([string]::IsNullOrWhiteSpace($head)) {\n"
+            << "      Write-Step 'INFO' 'Initializing managed vcpkg git registry snapshot.'\n"
+            << "      Invoke-Tool $gitExe @('init') $VcpkgRoot 'git init'\n"
+            << "      Invoke-Tool $gitExe @('config', 'user.name', 'Epoch Updater') $VcpkgRoot 'git config user.name'\n"
+            << "      Invoke-Tool $gitExe @('config', 'user.email', 'updater@epoch.local') $VcpkgRoot 'git config user.email'\n"
+            << "      Invoke-Tool $gitExe @('add', '--all') $VcpkgRoot 'git add'\n"
+            << "      try {\n"
+            << "        Invoke-Tool $gitExe @('commit', '--no-gpg-sign', '-m', 'Managed vcpkg registry snapshot') $VcpkgRoot 'git commit'\n"
+            << "      }\n"
+            << "      catch {\n"
+            << "      }\n"
+            << "      $head = (& $gitExe 'rev-parse' '--verify' 'HEAD' 2>$null | Select-Object -First 1)\n"
+            << "      if ($LASTEXITCODE -ne 0) { $head = '' }\n"
+            << "    }\n"
+            << "  }\n"
+            << "  finally {\n"
+            << "    Pop-Location\n"
+            << "  }\n"
+            << "  if ([string]::IsNullOrWhiteSpace($head)) {\n"
+            << "    throw 'Managed vcpkg git registry did not produce a usable HEAD revision.'\n"
+            << "  }\n"
+            << "  $head = $head.Trim().ToLowerInvariant()\n"
+            << "  $manifestText = Get-Content -LiteralPath $manifestFile -Raw -ErrorAction Stop\n"
+            << "  $baselineRegex = [regex]'\"builtin-baseline\"\\s*:\\s*\"[0-9A-Fa-f]+\"'\n"
+            << "  if ($baselineRegex.IsMatch($manifestText)) {\n"
+            << "    $manifestText = $baselineRegex.Replace($manifestText, ('\"builtin-baseline\": \"' + $head + '\"'), 1)\n"
+            << "  }\n"
+            << "  else {\n"
+            << "    $braceIndex = $manifestText.IndexOf('{')\n"
+            << "    if ($braceIndex -lt 0) {\n"
+            << "      throw 'Source manifest is malformed and could not be updated.'\n"
+            << "    }\n"
+            << "    $manifestText = $manifestText.Insert($braceIndex + 1, [Environment]::NewLine + '  \"builtin-baseline\": \"' + $head + '\",')\n"
+            << "  }\n"
+            << "  [System.IO.File]::WriteAllText($manifestFile, $manifestText, $utf8NoBom)\n"
+            << "  Write-Step 'INFO' 'Reconfigured the source snapshot to use the managed vcpkg git registry.'\n"
+            << "}\n"
+            << "function Prepare-GladOverlay([string]$VcpkgRoot) {\n"
+            << "  $sourceGladDir = Join-Path $VcpkgRoot 'ports\\glad'\n"
+            << "  if (-not (Test-Path -LiteralPath $sourceGladDir)) {\n"
+            << "    return ''\n"
+            << "  }\n"
+            << "  $overlayRoot = Join-Path $managedToolsRoot 'ov'\n"
+            << "  $gladOverlayDir = Join-Path $overlayRoot 'glad'\n"
+            << "  Remove-Item -LiteralPath $gladOverlayDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  New-Item -ItemType Directory -Path $overlayRoot -Force | Out-Null\n"
+            << "  Copy-Item -LiteralPath $sourceGladDir -Destination $gladOverlayDir -Recurse -Force\n"
+            << "  $portfile = Join-Path $gladOverlayDir 'portfile.cmake'\n"
+            << "  $portfileText = Get-Content -LiteralPath $portfile -Raw -ErrorAction Stop\n"
+            << "  if (-not $portfileText.Contains('CMAKE_POLICY_VERSION_MINIMUM=3.5')) {\n"
+            << "    $optionsMarker = [Environment]::NewLine + '    OPTIONS' + [Environment]::NewLine\n"
+            << "    if ($portfileText.Contains($optionsMarker)) {\n"
+            << "      $portfileText = $portfileText.Replace($optionsMarker, $optionsMarker + '        -DCMAKE_POLICY_VERSION_MINIMUM=3.5' + [Environment]::NewLine)\n"
+            << "    }\n"
+            << "    else {\n"
+            << "      $configureMarker = 'vcpkg_cmake_configure(' + [Environment]::NewLine\n"
+            << "      if (-not $portfileText.Contains($configureMarker)) {\n"
+            << "        throw 'Could not patch the glad overlay port.'\n"
+            << "      }\n"
+            << "      $portfileText = $portfileText.Replace($configureMarker, $configureMarker + '    OPTIONS' + [Environment]::NewLine + '        -DCMAKE_POLICY_VERSION_MINIMUM=3.5' + [Environment]::NewLine)\n"
+            << "    }\n"
+            << "    [System.IO.File]::WriteAllText($portfile, $portfileText, $utf8NoBom)\n"
+            << "  }\n"
+            << "  Write-Step 'INFO' 'Prepared a glad overlay port for modern CMake policy handling.'\n"
+            << "  return $overlayRoot\n"
+            << "}\n"
             << "Remove-Item -LiteralPath $buildLog -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $handoffLog -Force -ErrorAction SilentlyContinue\n"
             << "Write-Step 'INFO' 'Source update worker started.'\n"
@@ -1174,6 +2310,7 @@ export namespace epochnamespace::updater
             << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "New-Item -ItemType Directory -Path (Split-Path -Parent $sourceArchive) -Force | Out-Null\n"
             << "Write-Step 'INFO' 'Downloading latest source snapshot from main.'\n"
             << "$headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
             << "Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $sourceUrl -OutFile $sourceArchive\n"
@@ -1187,8 +2324,17 @@ export namespace epochnamespace::updater
             << "}\n"
             << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Write-Step 'INFO' ('Source snapshot ready at: ' + $sourceRoot)\n"
+            << "$vcpkgExe = Resolve-VcpkgExe\n"
+            << "$vcpkgRoot = Split-Path -Parent $vcpkgExe\n"
+            << "$env:VCPKG_ROOT = $vcpkgRoot\n"
+            << "Prepare-ManifestForManagedVcpkg $manifestRoot $vcpkgRoot\n"
+            << "$overlayRoot = Prepare-GladOverlay $vcpkgRoot\n"
             << "Write-Step 'INFO' 'Restoring source dependencies with vcpkg.'\n"
-            << "Invoke-Tool $vcpkgExe @('install', '--triplet', $triplet, ('--x-manifest-root=' + $manifestRoot)) $manifestRoot 'vcpkg restore'\n"
+            << "$vcpkgArgs = @('install', '--triplet', $triplet, ('--x-manifest-root=' + $manifestRoot), ('--x-builtin-ports-root=' + (Join-Path $vcpkgRoot 'ports')), ('--x-builtin-registry-versions-dir=' + (Join-Path $vcpkgRoot 'versions')))\n"
+            << "if (-not [string]::IsNullOrWhiteSpace($overlayRoot)) {\n"
+            << "  $vcpkgArgs += ('--overlay-ports=' + $overlayRoot)\n"
+            << "}\n"
+            << "Invoke-Tool $vcpkgExe $vcpkgArgs $manifestRoot 'vcpkg restore'\n"
             << "$buildSucceeded = $false\n"
             << "for ($attempt = 1; $attempt -le 3 -and -not $buildSucceeded; ++$attempt) {\n"
             << "  try {\n"
@@ -1238,6 +2384,10 @@ export namespace epochnamespace::updater
             << "if (Test-Path -LiteralPath $builtAssetsDir) {\n"
             << "  New-Item -ItemType Directory -Path $targetAssetsDir -Force | Out-Null\n"
             << "  Copy-Item -Path (Join-Path $builtAssetsDir '*') -Destination $targetAssetsDir -Recurse -Force\n"
+            << "}\n"
+            << "if (Test-Path -LiteralPath $sourceRepoAssetsDir) {\n"
+            << "  New-Item -ItemType Directory -Path $targetAssetsDir -Force | Out-Null\n"
+            << "  Copy-Item -Path (Join-Path $sourceRepoAssetsDir '*') -Destination $targetAssetsDir -Recurse -Force\n"
             << "}\n"
             << "Write-Handoff 'INFO' 'Source runtime files copied successfully.'\n"
             << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
@@ -1527,6 +2677,7 @@ export namespace epochnamespace::updater
         }
 
         const auto source_assets_dir = built_runtime_dir / "assets";
+        const auto source_repo_assets_dir = system_detail::source_manifest_root(source_root) / "assets";
         const auto target_assets_dir = target_dir / "assets";
 
         bat
@@ -1538,6 +2689,7 @@ export namespace epochnamespace::updater
             << "set \"EXENAME=" << target_binary.filename().string() << "\"\r\n"
             << "set \"BUILTEXE=" << built_binary.string() << "\"\r\n"
             << "set \"SRCASSETS=" << source_assets_dir.string() << "\"\r\n"
+            << "set \"REPOASSETS=" << source_repo_assets_dir.string() << "\"\r\n"
             << "set \"DSTASSETS=" << target_assets_dir.string() << "\"\r\n"
             << "set \"SRCROOT=" << source_root.string() << "\"\r\n"
             << "set \"ARCHIVE=" << package_archive.string() << "\"\r\n"
@@ -1571,6 +2723,11 @@ export namespace epochnamespace::updater
             << "if exist \"%SRCASSETS%\" robocopy \"%SRCASSETS%\" \"%DSTASSETS%\" /E /NFL /NDL /NJH /NJS /NC /NS >nul\r\n"
             << "if errorlevel 8 (\r\n"
             << "  >> \"%LOG%\" echo [ERROR] Source asset robocopy failed with errorlevel %%ERRORLEVEL%%.\r\n"
+            << "  exit /b 1\r\n"
+            << ")\r\n"
+            << "if exist \"%REPOASSETS%\" robocopy \"%REPOASSETS%\" \"%DSTASSETS%\" /E /NFL /NDL /NJH /NJS /NC /NS >nul\r\n"
+            << "if errorlevel 8 (\r\n"
+            << "  >> \"%LOG%\" echo [ERROR] Source repository asset robocopy failed with errorlevel %%ERRORLEVEL%%.\r\n"
             << "  exit /b 1\r\n"
             << ")\r\n"
             << ">> \"%LOG%\" echo [INFO] Source runtime files copied successfully.\r\n"
