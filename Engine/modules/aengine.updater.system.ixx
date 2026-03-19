@@ -2894,12 +2894,8 @@ export namespace epochnamespace::updater
 #if defined(_WIN32)
         if (recheck_source_version && !channel.source_version_url.empty())
         {
-            const auto final_dir = system_detail::source_final_dir(target_binary);
-            const std::string local_source_version =
-                system_detail::read_local_source_version(final_dir);
-
             const auto source_status =
-                check_for_updates(channel.source_version_url, "Source", local_source_version);
+                check_for_updates(channel.source_version_url, "Source", PROJECT_VERSION);
 
             if (source_status.ok && source_status.update_available)
                 system_detail::log_info("A newer source snapshot is available on main.");
@@ -3036,13 +3032,8 @@ export namespace epochnamespace::updater
 
         if (!channel.source_version_url.empty())
         {
-            const auto target_binary = system_detail::current_binary_path();
-            const auto final_dir = system_detail::source_final_dir(target_binary);
-            const auto local_source_version =
-                system_detail::read_local_source_version(final_dir);
-
             const auto source_status =
-                check_for_updates(channel.source_version_url, "Source", local_source_version);
+                check_for_updates(channel.source_version_url, "Source", packaged_status.local);
 
             if (source_status.ok)
             {
