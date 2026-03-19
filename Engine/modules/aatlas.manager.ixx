@@ -82,6 +82,8 @@ export namespace epochnamespace::atlasmanager
 
     // Stable pointers to heap atlases.
     export inline std::vector<const TextureAtlas*> atlas_vector{};
+    inline std::size_t last_logged_atlas_count = static_cast<std::size_t>(-1);
+    inline int last_logged_atlas_max_index = -1;
 
     export struct AtlasRegistrar
     {
@@ -190,12 +192,6 @@ export namespace epochnamespace::atlasmanager
         for (const auto& [name, up] : atlas_map)
         {
             const auto& atlas = *up;
-            logger::get(kLogSys).logf(
-                logger::LogLevel::INFO,
-                std::source_location::current(),
-                "Atlas '{}' index={}",
-                name,
-                atlas.index);
             if (atlas.index > maxIndex)
                 maxIndex = atlas.index;
         }
@@ -210,12 +206,21 @@ export namespace epochnamespace::atlasmanager
         {
             const auto* atlas = up.get();
             atlas_vector[static_cast<std::size_t>(atlas->index)] = atlas;
+            (void)name;
+        }
+
+        if (last_logged_atlas_count != atlas_map.size()
+            || last_logged_atlas_max_index != maxIndex)
+        {
+            last_logged_atlas_count = atlas_map.size();
+            last_logged_atlas_max_index = maxIndex;
+
             logger::get(kLogSys).logf(
                 logger::LogLevel::INFO,
                 std::source_location::current(),
-                "atlas_vector[{}] assigned for '{}'",
-                atlas->index,
-                name);
+                "Atlas registry updated: {} atlas(es), vector size {}",
+                atlas_map.size(),
+                atlas_vector.size());
         }
     }
 

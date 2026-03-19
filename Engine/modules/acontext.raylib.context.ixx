@@ -437,7 +437,9 @@ namespace epochnamespace::raylibcontext
 
         if (!st.hdc || !st.hglrc)
         {
-            logger::warn("Raylib", "Missing host OpenGL context; raylib will create its own.");
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
+            logger::info("Raylib", "Missing host OpenGL context; raylib will create its own.");
+#endif
         }
 #else
         st.hwnd = parent ? parent : (ctx ? ctx->hwnd : nullptr);
@@ -453,6 +455,7 @@ namespace epochnamespace::raylibcontext
 
         epochnamespace::raylib_api::set_config_flags(
             static_cast<unsigned>(epochnamespace::raylib_api::flag_msaa_4x_hint));
+        epochnamespace::raylib_api::set_trace_log_level(epochnamespace::raylib_api::log_warning);
 
         epochnamespace::raylib_api::init_window(
             static_cast<int>(st.width),

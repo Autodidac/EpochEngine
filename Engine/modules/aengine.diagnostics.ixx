@@ -86,7 +86,9 @@ export namespace epochnamespace::diagnostics {
             static std::unordered_map<std::uint64_t, std::chrono::steady_clock::time_point> s_lastWarnAt;
 
             const auto key = slow_frame_key(type, windowId);
-            const auto minInterval = std::chrono::milliseconds(EPOCH_SLOW_FRAME_LOG_THROTTLE_MS);
+            const auto minInterval = (type == ContextType::Software)
+                ? std::chrono::milliseconds(30000)
+                : std::chrono::milliseconds(EPOCH_SLOW_FRAME_LOG_THROTTLE_MS);
 
             std::scoped_lock lock(s_mutex);
             auto& lastWarnAt = s_lastWarnAt[key];
@@ -140,13 +142,17 @@ export namespace epochnamespace::diagnostics {
                 lastMs,
                 epochnamespace::telemetry::RendererTelemetryTags{ backendType, windowId });
 
-            if (lastMs > slowFrameMs
+            const double effectiveSlowFrameMs = (backendType == ContextType::Software)
+                ? (std::max)(slowFrameMs, 100.0)
+                : slowFrameMs;
+
+            if (lastMs > effectiveSlowFrameMs
                 && detail::should_emit_slow_frame_warning(backendType, windowId, end))
             {
                 const std::string_view backend = backendName.empty() ? "Unknown" : backendName;
                 epochnamespace::logger::warn(
                     "Renderer",
-                    std::format("[{}] Slow frame {:.2f} ms (> {:.2f} ms)", backend, lastMs, slowFrameMs));
+                    std::format("[{}] Slow frame {:.2f} ms (> {:.2f} ms)", backend, lastMs, effectiveSlowFrameMs));
             }
 
             return lastMs;

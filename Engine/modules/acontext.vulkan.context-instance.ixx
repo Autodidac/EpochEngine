@@ -226,8 +226,8 @@ export namespace epochnamespace::vulkancontext
         if (validationLayersEnabled && !checkValidationLayerSupport())
         {
             logger::get(kLogSys).log(
-                logger::LogLevel::WARN,
-                "Validation layers requested but not available; continuing with validation disabled.",
+                logger::LogLevel::INFO,
+                "Validation layers unavailable; continuing with validation disabled.",
                 std::source_location::current());
             validationLayersEnabled = false;
         }

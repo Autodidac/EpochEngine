@@ -254,10 +254,12 @@ export namespace epochnamespace::openglquad
         const char* glsl = (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
         const char* ven = (const char*)glGetString(GL_VENDOR);
         const char* ren = (const char*)glGetString(GL_RENDERER);
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_OPENGL_CONFIRMATION_LOGS
         std::cerr << "QUAD_V3 GL_VERSION=[" << (glv ? glv : "null")
             << "] GLSL=[" << (glsl ? glsl : "null")
             << "] VENDOR=[" << (ven ? ven : "null")
             << "] RENDERER=[" << (ren ? ren : "null") << "]\n";
+#endif
 
         GLint maj = 0, min = 0;
         glGetIntegerv(GL_MAJOR_VERSION, &maj);

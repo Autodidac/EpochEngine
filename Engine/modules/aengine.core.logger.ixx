@@ -168,10 +168,17 @@ export namespace epochnamespace::logger
 
             const bool include_src = m_include_source.load(std::memory_order_relaxed);
 
-            std::string line;
+            const std::string console_line = std::format(
+                "{} [{}] [{}] - {}",
+                timing::getCurrentTimeString(),
+                detail::level_text(lvl),
+                m_system,
+                msg);
+
+            std::string file_line;
             if (include_src)
             {
-                line = std::format(
+                file_line = std::format(
                     "{} [{}] [{}] ({}:{}) - {}",
                     timing::getCurrentTimeString(),
                     detail::level_text(lvl),
@@ -182,12 +189,7 @@ export namespace epochnamespace::logger
             }
             else
             {
-                line = std::format(
-                    "{} [{}] [{}] - {}",
-                    timing::getCurrentTimeString(),
-                    detail::level_text(lvl),
-                    m_system,
-                    msg);
+                file_line = console_line;
             }
 
             if (m_console_enabled.load(std::memory_order_relaxed))
@@ -195,7 +197,7 @@ export namespace epochnamespace::logger
                 std::scoped_lock lock(detail::console_mutex());
 
                 FILE* stream = (lvl == LogLevel::Error) ? stderr : stdout;
-                std::fwrite(line.data(), 1, line.size(), stream);
+                std::fwrite(console_line.data(), 1, console_line.size(), stream);
                 std::fwrite("\n", 1, 1, stream);
 
                 if (m_flush_each.load(std::memory_order_relaxed))
@@ -207,7 +209,7 @@ export namespace epochnamespace::logger
                 std::scoped_lock lock(m_mutex);
                 if (m_file.is_open())
                 {
-                    m_file << line << '\n';
+                    m_file << file_line << '\n';
                     if (m_flush_each.load(std::memory_order_relaxed))
                         m_file.flush();
                 }

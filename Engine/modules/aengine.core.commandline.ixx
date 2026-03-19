@@ -241,7 +241,29 @@ export namespace epochnamespace::core::cli
         }
 
         exe_path = argv[0];
-        detail::log_info("Commandline for " + exe_path.filename().string() + ":");
+
+        std::string rendered_command = exe_path.filename().string();
+        if (argc <= 1)
+        {
+            rendered_command += " (no extra args)";
+        }
+        else
+        {
+            for (int i = 1; i < argc; ++i)
+            {
+                rendered_command.push_back(' ');
+
+                const std::string_view arg{ argv[i] };
+                const bool needs_quotes = arg.find_first_of(" \t") != std::string_view::npos;
+                if (needs_quotes)
+                    rendered_command.push_back('"');
+                rendered_command.append(arg);
+                if (needs_quotes)
+                    rendered_command.push_back('"');
+            }
+        }
+
+        detail::log_info("Command line: " + rendered_command);
 
         for (int i = 1; i < argc; ++i)
         {

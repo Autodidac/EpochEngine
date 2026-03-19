@@ -125,6 +125,7 @@ export namespace epochnamespace::menu
         bool prevUp = false, prevDown = false, prevLeft = false,
             prevRight = false, prevEnter = false;
         bool initialized = false;
+        bool initializationLogEmitted = false;
 
         std::vector<std::pair<int, int>> cachedPositions;
         std::vector<float> colWidths, rowHeights;
@@ -353,11 +354,15 @@ export namespace epochnamespace::menu
             recompute_layout(ctx, w, h);
 
             initialized = true;
-            logger::get(kLogSys).logf(
-                logger::LogLevel::INFO,
-                std::source_location::current(),
-                "Initialized {} entries",
-                descriptors.size());
+            if (!initializationLogEmitted)
+            {
+                initializationLogEmitted = true;
+                logger::get(kLogSys).logf(
+                    logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "Initialized launcher menu with {} entries",
+                    descriptors.size());
+            }
         }
 
         // ----------------------------------------------------

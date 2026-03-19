@@ -619,10 +619,12 @@ namespace epochnamespace::core
             if (!gladInitialized)
             {
                 gladInitialized = (gladLoadGL() != 0);
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
                 epochnamespace::logger::get(kLogSys).log(
-                    epochnamespace::logger::LogLevel::WARN,
+                    epochnamespace::logger::LogLevel::INFO,
                     "GLAD loaded on dummy context",
                     std::source_location::current());
+#endif
             }
 
             ::wglMakeCurrent(nullptr, nullptr);
@@ -799,21 +801,25 @@ namespace epochnamespace::core
                     {
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
                     case ContextType::OpenGL:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::WARN,
+                            epochnamespace::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring OpenGL init to render thread. host={}",
                             static_cast<void*>(hwnd));
+#endif
                         break;
 #endif
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
                     case ContextType::Software:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::WARN,
+                            epochnamespace::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Initializing Software renderer for hwnd={}",
                             static_cast<void*>(hwnd));
+#endif
                         epochnamespace::anativecontext::softrenderer_initialize(
                             ctx,
                             hwnd,
@@ -824,38 +830,46 @@ namespace epochnamespace::core
 #endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                     case ContextType::RayLib:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::WARN,
+                            epochnamespace::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring Raylib init to render thread. host={}",
                             static_cast<void*>(hwnd));
+#endif
                         break;
 #endif
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
                     case ContextType::SDL:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::WARN,
+                            epochnamespace::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring SDL init to render thread. host={}",
                             static_cast<void*>(hwnd));
+#endif
                         break;
 #endif
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
                     case ContextType::Vulkan:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::WARN,
+                            epochnamespace::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring Vulkan init to render thread. host={}",
                             static_cast<void*>(hwnd));
+#endif
                         break;
 #endif
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
                     case ContextType::SFML:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
                         epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::WARN,
+                            epochnamespace::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring SFML init to render thread. host={}",
                             static_cast<void*>(hwnd));
+#endif
                         break;
 #endif
 
@@ -1315,11 +1329,13 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         if (ctx->type == ContextType::SDL)
         {
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
             epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::WARN,
+                epochnamespace::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "SDL init. host={}",
                 static_cast<void*>(win.hwnd));
+#endif
             epochnamespace::sdlcontext::sdl_initialize(
                 ctx,
                 win.hwnd,
@@ -1332,11 +1348,13 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
         if (ctx->type == ContextType::SFML)
         {
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
             epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::WARN,
+                epochnamespace::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "SFML init. host={}",
                 static_cast<void*>(win.hwnd));
+#endif
             const bool ok = epochnamespace::sfmlcontext::sfml_initialize(
                 ctx,
                 win.hwnd,
@@ -1352,11 +1370,13 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         if (ctx->type == ContextType::RayLib)
         {
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
             epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::WARN,
+                epochnamespace::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "Raylib init. host={}",
                 static_cast<void*>(win.hwnd));
+#endif
             const bool initialized = epochnamespace::raylibcontext::raylib_initialize(
                 ctx,
                 win.hwnd,

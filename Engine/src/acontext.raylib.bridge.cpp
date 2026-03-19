@@ -55,6 +55,7 @@ namespace epochnamespace::raylib_api
 
     const unsigned int flag_msaa_4x_hint = ::FLAG_MSAA_4X_HINT;
     const unsigned int flag_vsync_hint = ::FLAG_VSYNC_HINT;
+    const int log_warning = ::LOG_WARNING;
 
     const int key_a = ::KEY_A;
     const int key_b = ::KEY_B;
@@ -178,6 +179,7 @@ namespace epochnamespace::raylib_api
     // Functions
     // ------------------------------------------------------------
     void set_config_flags(unsigned int flags) { ::SetConfigFlags(flags); }
+    void set_trace_log_level(int level) { ::SetTraceLogLevel(level); }
     void init_window(int w, int h, const char* title) { ::InitWindow(w, h, title); }
     void close_window() { ::CloseWindow(); }
     void set_window_size(int w, int h) { ::SetWindowSize(w, h); }

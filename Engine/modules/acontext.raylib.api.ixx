@@ -101,6 +101,7 @@ export namespace epochnamespace::raylib_api
 
     extern const unsigned int flag_msaa_4x_hint;
     extern const unsigned int flag_vsync_hint;
+    extern const int log_warning;
 
     extern const int key_a;
     extern const int key_b;
@@ -163,6 +164,7 @@ export namespace epochnamespace::raylib_api
     // Functions (implemented in acontext.raylib.bridge.cpp)
     // ------------------------------------------------------------
     void set_config_flags(unsigned int flags);
+    void set_trace_log_level(int level);
     void init_window(int w, int h, const char* title);
     void close_window();
     void set_window_size(int w, int h);

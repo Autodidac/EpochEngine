@@ -442,7 +442,9 @@ export namespace epochnamespace::sdlcontext
             SDL_Renderer* renderer = SDL_CreateRenderer(sdlcontext.window, name);
             if (renderer)
             {
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SDL_CONFIRMATION_LOGS
                 std::cerr << "[ SDL3 ] - Created renderer with " << label << ".\n";
+#endif
                 return renderer;
             }
 
@@ -468,12 +470,18 @@ export namespace epochnamespace::sdlcontext
         const int vsyncResult = SDL_SetRenderVSync(sdlcontext.renderer, 1);
         if (vsyncResult != 0)
         {
-            std::cerr << "[ SDL3 ] - SDL_SetRenderVSync failed: " << SDL_GetError() << "\n";
+            const char* const sdlError = SDL_GetError();
+            const bool hasDetail = sdlError && sdlError[0] != '\0';
+            std::cerr << "[ SDL3 ] - Render VSync unavailable";
+            if (hasDetail)
+                std::cerr << ": " << sdlError;
             if (sdlcontext.parent)
             {
                 sdlcontext.useFrameLimiter = true;
                 sdlcontext.lastFrameTime = std::chrono::steady_clock::now();
+                std::cerr << "; using internal frame limiter";
             }
+            std::cerr << "\n";
         }
         else
         {
