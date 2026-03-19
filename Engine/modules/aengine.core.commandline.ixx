@@ -5,28 +5,6 @@
  *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
  *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
  *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
- *                                              *
- *   This file is part of the Epoch   Project.  *
- *   epochengine - Modular C++ Framework        *
- *                                              *
- *   SPDX-License-Identifier:                   *
- *   LicenseRef-MIT-NoSell                      *
- *                                              *
- *   Provided "AS IS", without warranty         *
- *   of any kind.                               *
- *                                              *
- *   Use permitted for Non-Commercial           *
- *   Purposes ONLY, without prior               *
- *   commercial licensing agreement.            *
- *                                              *
- *   Redistribution Allowed with This Notice    *
- *   and LICENSE file.                          *
- *                                              *
- *   No obligation to disclose                  *
- *   modifications.                             *
- *                                              *
- *   See LICENSE file for full terms.           *
- *                                              *
  ***********************************************/
 module;
 
@@ -37,12 +15,13 @@ export module aengine.core.commandline;
 import <algorithm>;
 import <cctype>;
 import <filesystem>;
-import <iostream>;
+import <source_location>;
 import <string>;
 import <string_view>;
 
 import aengine.context.type;
 import aengine.version;
+import aengine.core.logger;
 
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1277;
 inline constexpr int DEFAULT_WINDOW_HEIGHT = 1277;
@@ -75,17 +54,41 @@ export namespace epochnamespace::core::cli
             Software,
         };
 
-        [[nodiscard]] inline std::string to_lower(std::string_view value)
+        inline void log_info(const std::string& message)
+        {
+            logger::get("CommandLine").log(
+                logger::LogLevel::INFO,
+                message,
+                std::source_location::current());
+        }
+
+        inline void log_warn(const std::string& message)
+        {
+            logger::get("CommandLine").log(
+                logger::LogLevel::WARN,
+                message,
+                std::source_location::current());
+        }
+
+        inline void log_error(const std::string& message)
+        {
+            logger::get("CommandLine").log(
+                logger::LogLevel::Error,
+                message,
+                std::source_location::current());
+        }
+
+        [[nodiscard]] inline std::string to_lower(const std::string_view value)
         {
             std::string lower(value.begin(), value.end());
-            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch)
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](const unsigned char ch)
                 {
                     return static_cast<char>(std::tolower(ch));
                 });
             return lower;
         }
 
-        [[nodiscard]] inline BackendSelection parse_backend(std::string_view value)
+        [[nodiscard]] inline BackendSelection parse_backend(const std::string_view value)
         {
             const std::string lowered = to_lower(value);
 
@@ -100,7 +103,7 @@ export namespace epochnamespace::core::cli
             return BackendSelection::Auto;
         }
 
-        [[nodiscard]] inline RuntimePath parse_runtime(std::string_view value)
+        [[nodiscard]] inline RuntimePath parse_runtime(const std::string_view value)
         {
             const std::string lowered = to_lower(value);
             if (lowered == "legacy" || lowered == "compat")
@@ -108,7 +111,7 @@ export namespace epochnamespace::core::cli
             return RuntimePath::Epoch;
         }
 
-        [[nodiscard]] inline WindowMode parse_window_mode(std::string_view value)
+        [[nodiscard]] inline WindowMode parse_window_mode(const std::string_view value)
         {
             const std::string lowered = to_lower(value);
             if (lowered == "parented" || lowered == "child" || lowered == "docked")
@@ -160,7 +163,7 @@ export namespace epochnamespace::core::cli
         RuntimePath runtime = RuntimePath::Epoch;
     };
 
-    [[nodiscard]] inline bool apply_backend_selection(std::string_view value)
+    [[nodiscard]] inline bool apply_backend_selection(const std::string_view value)
     {
         using detail::BackendSelection;
 
@@ -187,24 +190,12 @@ export namespace epochnamespace::core::cli
 
         switch (selected)
         {
-        case BackendSelection::OpenGL:
-            opengl_window_count = 1;
-            break;
-        case BackendSelection::SDL:
-            sdl_window_count = 1;
-            break;
-        case BackendSelection::SFML:
-            sfml_window_count = 1;
-            break;
-        case BackendSelection::RayLib:
-            raylib_window_count = 1;
-            break;
-        case BackendSelection::Vulkan:
-            vulkan_window_count = 1;
-            break;
-        case BackendSelection::Software:
-            software_window_count = 1;
-            break;
+        case BackendSelection::OpenGL:  opengl_window_count = 1;  break;
+        case BackendSelection::SDL:     sdl_window_count = 1;     break;
+        case BackendSelection::SFML:    sfml_window_count = 1;    break;
+        case BackendSelection::RayLib:  raylib_window_count = 1;  break;
+        case BackendSelection::Vulkan:  vulkan_window_count = 1;  break;
+        case BackendSelection::Software: software_window_count = 1; break;
         case BackendSelection::Auto:
         default:
             break;
@@ -215,10 +206,13 @@ export namespace epochnamespace::core::cli
 
     inline void print_engine_info()
     {
-        std::cout << epochnamespace::GetEngineName() << " v" << epochnamespace::GetEngineVersion() << '\n';
+        detail::log_info(
+            std::string{ epochnamespace::GetEngineName() }
+            + " v"
+            + std::string{ epochnamespace::GetEngineVersion() });
     }
 
-    inline ParseResult parse(int argc, char* argv[])
+    inline ParseResult parse(const int argc, char* argv[])
     {
         using namespace std::string_view_literals;
 
@@ -235,16 +229,16 @@ export namespace epochnamespace::core::cli
         parented_mode = detail::default_parented_mode();
         runtime_path = RuntimePath::Epoch;
 
-        auto isBackendAutomatic = apply_backend_selection("auto");
+        (void)apply_backend_selection("auto");
 
         if (argc < 1)
         {
-            std::cerr << "No command-line arguments provided.\n";
+            detail::log_error("No command-line arguments provided.");
             return result;
         }
 
         exe_path = argv[0];
-        std::cout << "Commandline for " << exe_path.filename().string() << ":\n";
+        detail::log_info("Commandline for " + exe_path.filename().string() + ":");
 
         for (int i = 1; i < argc; ++i)
         {
@@ -258,7 +252,7 @@ export namespace epochnamespace::core::cli
                 value = arg.substr(eq + 1);
             }
 
-            auto read_value = [&](std::string_view name) -> std::string_view
+            auto read_value = [&](const std::string_view name) -> std::string_view
                 {
                     if (!value.empty())
                         return value;
@@ -266,35 +260,35 @@ export namespace epochnamespace::core::cli
                     if (i + 1 < argc)
                         return std::string_view{ argv[++i] };
 
-                    std::cerr << "Missing value for " << name << '\n';
+                    detail::log_error("Missing value for " + std::string(name));
                     return {};
                 };
 
             if (key == "--help"sv || key == "-h"sv)
             {
-                std::cout
-                    << "  --help, -h                 Show this help message\n"
-                    << "  --version, -v              Display the engine version\n"
-                    << "  --width <value>            Set window width\n"
-                    << "  --height <value>           Set window height\n"
-                    << "  --menu-columns <n>         Cap the menu grid at n columns (default 4)\n"
-                    << "  --trace-menu-button0       Log GUI bounds for menu button index 0\n"
-                    << "  --trace-raylib-design      Log framebuffer vs design canvas dimensions\n"
-                    << "  --editor                   Start the editor interface\n"
-                    << "  --menu                     Start the menu + games loop\n"
-                    << "  --runtime <epoch|legacy>   Select epoch-native or legacy parity runtime\n"
-                    << "  --epoch-native             Shortcut for --runtime epoch\n"
-                    << "  --legacy-runtime           Shortcut for --runtime legacy\n"
-                    << "  --window-mode <mode>       Select auto|parented|standalone\n"
-                    << "  --parented                 Shortcut for --window-mode parented\n"
-                    << "  --standalone               Shortcut for --window-mode standalone\n"
-                    << "  --renderer <backend>       Limit run to one backend\n"
-                    << "  --backend <backend>        Alias for --renderer\n"
-                    << "  --scene <name>             Optional scene hint for smoke tooling\n"
-                    << "  --capture                  Optional capture hint for smoke tooling\n"
-                    << "  --smoke                    Run bounded smoke flow where supported\n"
-                    << "  --update, -u               Check for a newer epochengine build\n"
-                    << "  --force                    Apply the available update immediately\n";
+                detail::log_info(
+                    "  --help, -h                 Show this help message\n"
+                    "  --version, -v              Display the engine version\n"
+                    "  --width <value>            Set window width\n"
+                    "  --height <value>           Set window height\n"
+                    "  --menu-columns <n>         Cap the menu grid at n columns (default 4)\n"
+                    "  --trace-menu-button0       Log GUI bounds for menu button index 0\n"
+                    "  --trace-raylib-design      Log framebuffer vs design canvas dimensions\n"
+                    "  --editor                   Start the editor interface\n"
+                    "  --menu                     Start the menu + games loop\n"
+                    "  --runtime <epoch|legacy>   Select epoch-native or legacy parity runtime\n"
+                    "  --epoch-native             Shortcut for --runtime epoch\n"
+                    "  --legacy-runtime           Shortcut for --runtime legacy\n"
+                    "  --window-mode <mode>       Select auto|parented|standalone\n"
+                    "  --parented                 Shortcut for --window-mode parented\n"
+                    "  --standalone               Shortcut for --window-mode standalone\n"
+                    "  --renderer <backend>       Limit run to one backend\n"
+                    "  --backend <backend>        Alias for --renderer\n"
+                    "  --scene <name>             Optional scene hint for smoke tooling\n"
+                    "  --capture                  Optional capture hint for smoke tooling\n"
+                    "  --smoke                    Run bounded smoke flow where supported\n"
+                    "  --update, -u               Check for a newer epochengine build\n"
+                    "  --force                    Apply the available update immediately\n");
             }
             else if (key == "--version"sv || key == "-v"sv)
             {
@@ -393,9 +387,7 @@ export namespace epochnamespace::core::cli
             {
                 const auto parsed = read_value(key);
                 if (!parsed.empty() && !apply_backend_selection(parsed))
-                {
-                    std::cerr << "Unknown renderer/backend selection: " << parsed << '\n';
-                }
+                    detail::log_error("Unknown renderer/backend selection: " + std::string(parsed));
             }
             else if (key == "--scene"sv)
             {
@@ -413,14 +405,12 @@ export namespace epochnamespace::core::cli
             }
             else
             {
-                std::cerr << "Unknown arg: " << arg << '\n';
+                detail::log_error("Unknown arg: " + std::string(arg));
             }
         }
 
-        std::cout << '\n';
-
         if (result.force_update && !result.update_requested)
-            std::cout << "[WARN] Ignoring --force without --update.\n";
+            detail::log_warn("Ignoring --force without --update.");
 
         return result;
     }

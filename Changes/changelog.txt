@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.82.40]
+- Routed updater status back through Epoch logging with sanitized updater messages so the commandline pane stops showing the raw `♪◙` newline artifacts.
+- Kept the newer-source fallback intact so a confirmed update still rebuilds from source when no newer packaged runtime exists.
+- Refreshed the active release surfaces for the repaired updater runtime drop.
+
 ## [v0.82.39]
 - Rolled the active repo surfaces forward after the packaged `0.82.38` release so `main` stays ahead of the downloadable runtime again.
 

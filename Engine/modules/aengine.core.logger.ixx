@@ -1,44 +1,21 @@
-﻿/************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
- *                                              *
- *   This file is part of the Epoch   Project.  *
- *   epochengine - Modular C++ Framework        *
- *                                              *
- *   SPDX-License-Identifier:                   *
- *   LicenseRef-MIT-NoSell                      *
- *                                              *
- *   Provided "AS IS", without warranty         *
- *   of any kind.                               *
- *                                              *
- *   Use permitted for Non-Commercial           *
- *   Purposes ONLY, without prior               *
- *   commercial licensing agreement.            *
- *                                              *
- *   Redistribution Allowed with This Notice    *
- *   and LICENSE file.                          *
- *                                              *
- *   No obligation to disclose                  *
- *   modifications.                             *
- *                                              *
- *   See LICENSE file for full terms.           *
- *                                              *
+/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  ***********************************************/
-
 module;
 
 export module aengine.core.logger;
 
 import <atomic>;
 import <cctype>;
+import <cstdio>;
 import <filesystem>;
 import <fstream>;
 import <format>;
-import <iostream>;
 import <memory>;
 import <mutex>;
 import <source_location>;
@@ -52,9 +29,6 @@ import aengine.core.time;
 
 export namespace epochnamespace::logger
 {
-    // ---------------------------------------------------------------------
-    // Levels
-    // ---------------------------------------------------------------------
     enum class LogLevel : int
     {
         INFO = 0,
@@ -63,9 +37,6 @@ export namespace epochnamespace::logger
         OFF = 3
     };
 
-    // ---------------------------------------------------------------------
-    // Config
-    // ---------------------------------------------------------------------
     struct LogConfig
     {
         std::filesystem::path root_dir = "logs";
@@ -74,48 +45,53 @@ export namespace epochnamespace::logger
         bool flush_each_write = true;
         bool include_source = true;
 
-        bool console_enabled = false;
+        bool console_enabled = true;
         bool file_enabled = true;
     };
 
     namespace detail
     {
-        constexpr std::string_view level_text(LogLevel lvl) noexcept
+        [[nodiscard]] constexpr std::string_view level_text(const LogLevel lvl) noexcept
         {
             switch (lvl)
             {
-            case LogLevel::INFO:         return "INFO";
-            case LogLevel::WARN:         return "WARN";
-            case LogLevel::Error:        return "ERROR";
-            case LogLevel::OFF:          return "OFF";
+            case LogLevel::INFO:  return "INFO";
+            case LogLevel::WARN:  return "WARN";
+            case LogLevel::Error: return "ERROR";
+            case LogLevel::OFF:   return "OFF";
             }
             return "UNKNOWN";
         }
 
-        inline std::string_view filename_only(std::string_view path) noexcept
+        [[nodiscard]] inline std::string_view filename_only(const std::string_view path) noexcept
         {
-            const auto p = path.find_last_of("/\\");
-            return (p == std::string_view::npos) ? path : path.substr(p + 1);
+            const auto pos = path.find_last_of("/\\");
+            return (pos == std::string_view::npos) ? path : path.substr(pos + 1);
         }
 
-        inline std::string sanitize_system_name(std::string_view sys)
+        [[nodiscard]] inline std::string sanitize_system_name(const std::string_view sys)
         {
             std::string out;
             out.reserve(sys.size());
-            for (char c : sys)
+
+            for (const char c : sys)
             {
-                const unsigned char uc = static_cast<unsigned char>(c);
-                const bool ok = std::isalnum(uc) || c == '.' || c == '_' || c == '-';
+                const auto uc = static_cast<unsigned char>(c);
+                const bool ok = std::isalnum(uc) != 0 || c == '.' || c == '_' || c == '-';
                 out.push_back(ok ? c : '_');
             }
+
             if (out.empty())
                 out = "system";
+
             return out;
         }
 
-        inline bool should_log(LogLevel msg, LogLevel cur) noexcept
+        [[nodiscard]] constexpr bool should_log(const LogLevel msg, const LogLevel cur) noexcept
         {
-            if (cur == LogLevel::OFF) return false;
+            if (cur == LogLevel::OFF)
+                return false;
+
             return static_cast<int>(msg) >= static_cast<int>(cur);
         }
 
@@ -124,20 +100,20 @@ export namespace epochnamespace::logger
             static std::mutex m{};
             return m;
         }
-    } // namespace detail
+    }
 
-    // ---------------------------------------------------------------------
-    // SystemLogger (loc-first logf)
-    // ---------------------------------------------------------------------
     class SystemLogger final
     {
     public:
-        explicit SystemLogger(std::string systemName)
-            : m_system(std::move(systemName))
+        explicit SystemLogger(std::string system_name)
+            : m_system(std::move(system_name))
         {
         }
 
-        ~SystemLogger() { close(); }
+        ~SystemLogger()
+        {
+            close();
+        }
 
         SystemLogger(const SystemLogger&) = delete;
         SystemLogger& operator=(const SystemLogger&) = delete;
@@ -165,11 +141,12 @@ export namespace epochnamespace::logger
             {
                 throw std::runtime_error(std::format(
                     "Logger: could not create log directory '{}': {}",
-                    cfg.root_dir.string(), ec.message()));
+                    cfg.root_dir.string(),
+                    ec.message()));
             }
 
-            const auto safe = detail::sanitize_system_name(m_system);
-            m_path = cfg.root_dir / (safe + ".log");
+            const auto safe_name = detail::sanitize_system_name(m_system);
+            m_path = cfg.root_dir / (safe_name + ".log");
 
             m_file.open(m_path, std::ios::out | std::ios::app);
             if (!m_file.is_open())
@@ -180,29 +157,28 @@ export namespace epochnamespace::logger
             }
         }
 
-        void log(LogLevel lvl,
-            std::string_view msg,
-            std::source_location loc)
+        void log(
+            const LogLevel lvl,
+            const std::string_view msg,
+            const std::source_location loc = std::source_location::current())
         {
             const auto cur = m_level.load(std::memory_order_relaxed);
             if (!detail::should_log(lvl, cur))
                 return;
 
-            const bool includeSrc = m_include_source.load(std::memory_order_relaxed);
+            const bool include_src = m_include_source.load(std::memory_order_relaxed);
 
             std::string line;
-            if (includeSrc)
+            if (include_src)
             {
                 line = std::format(
-                    "{} [{}] [{}] ({}:{} {}) - {}",
+                    "{} [{}] [{}] ({}:{}) - {}",
                     timing::getCurrentTimeString(),
                     detail::level_text(lvl),
                     m_system,
                     detail::filename_only(loc.file_name()),
                     loc.line(),
-                    loc.function_name(),
-                    msg
-                );
+                    msg);
             }
             else
             {
@@ -211,16 +187,19 @@ export namespace epochnamespace::logger
                     timing::getCurrentTimeString(),
                     detail::level_text(lvl),
                     m_system,
-                    msg
-                );
+                    msg);
             }
 
             if (m_console_enabled.load(std::memory_order_relaxed))
             {
                 std::scoped_lock lock(detail::console_mutex());
-                std::cout << line << "\n";
+
+                FILE* stream = (lvl == LogLevel::Error) ? stderr : stdout;
+                std::fwrite(line.data(), 1, line.size(), stream);
+                std::fwrite("\n", 1, 1, stream);
+
                 if (m_flush_each.load(std::memory_order_relaxed))
-                    std::cout.flush();
+                    std::fflush(stream);
             }
 
             if (m_file_enabled.load(std::memory_order_relaxed))
@@ -228,28 +207,29 @@ export namespace epochnamespace::logger
                 std::scoped_lock lock(m_mutex);
                 if (m_file.is_open())
                 {
-                    m_file << line << "\n";
+                    m_file << line << '\n';
                     if (m_flush_each.load(std::memory_order_relaxed))
                         m_file.flush();
                 }
             }
         }
 
-        // -----------------------------
-        // LOC-FIRST logf (required)
-        // -----------------------------
         template <class... Args>
-        void logf(LogLevel lvl,
-            std::source_location loc,
+        void logf(
+            const LogLevel lvl,
+            const std::source_location loc,
             std::format_string<Args...> fmt,
             Args&&... args)
         {
             log(lvl, std::format(fmt, std::forward<Args>(args)...), loc);
         }
 
-        std::string_view system_name() const noexcept { return m_system; }
+        [[nodiscard]] std::string_view system_name() const noexcept
+        {
+            return m_system;
+        }
 
-        std::filesystem::path file_path() const
+        [[nodiscard]] std::filesystem::path file_path() const
         {
             std::scoped_lock lock(m_mutex);
             return m_path;
@@ -278,13 +258,10 @@ export namespace epochnamespace::logger
         std::atomic<LogLevel> m_level{ LogLevel::INFO };
         std::atomic<bool> m_flush_each{ true };
         std::atomic<bool> m_include_source{ true };
-        std::atomic<bool> m_console_enabled{ true };
+        std::atomic<bool> m_console_enabled{ false };
         std::atomic<bool> m_file_enabled{ true };
     };
 
-    // ---------------------------------------------------------------------
-    // Hub
-    // ---------------------------------------------------------------------
     class LoggerHub final
     {
     public:
@@ -297,23 +274,22 @@ export namespace epochnamespace::logger
                 ptr->configure(m_cfg);
         }
 
-        SystemLogger& system(std::string_view name)
+        SystemLogger& system(const std::string_view name)
         {
             std::scoped_lock lock(m_mutex);
 
             const std::string key{ name };
-            auto it = m_systems.find(key);
-            if (it != m_systems.end())
+            if (const auto it = m_systems.find(key); it != m_systems.end())
                 return *it->second;
 
             auto ptr = std::make_unique<SystemLogger>(key);
             ptr->configure(m_cfg);
 
-            auto [insIt, _] = m_systems.emplace(key, std::move(ptr));
-            return *insIt->second;
+            auto [it, _] = m_systems.emplace(key, std::move(ptr));
+            return *it->second;
         }
 
-        LogConfig config() const
+        [[nodiscard]] LogConfig config() const
         {
             std::scoped_lock lock(m_mutex);
             return m_cfg;
@@ -331,37 +307,49 @@ export namespace epochnamespace::logger
         return h;
     }
 
-    // ---------------------------------------------------------------------
-    // API
-    // ---------------------------------------------------------------------
-    inline void init(LogConfig cfg) { hub().init(std::move(cfg)); }
-    inline LogConfig config() { return hub().config(); }
-    inline SystemLogger& get(std::string_view system_name) { return hub().system(system_name); }
+    inline void init(LogConfig cfg)
+    {
+        hub().init(std::move(cfg));
+    }
 
-    inline void info(std::string_view sys, std::string_view msg,
-        std::source_location loc = std::source_location::current())
+    [[nodiscard]] inline LogConfig config()
+    {
+        return hub().config();
+    }
+
+    inline SystemLogger& get(const std::string_view system_name)
+    {
+        return hub().system(system_name);
+    }
+
+    inline void info(
+        const std::string_view sys,
+        const std::string_view msg,
+        const std::source_location loc = std::source_location::current())
     {
         hub().system(sys).log(LogLevel::INFO, msg, loc);
     }
 
-    inline void warn(std::string_view sys, std::string_view msg,
-        std::source_location loc = std::source_location::current())
+    inline void warn(
+        const std::string_view sys,
+        const std::string_view msg,
+        const std::source_location loc = std::source_location::current())
     {
         hub().system(sys).log(LogLevel::WARN, msg, loc);
     }
 
-    inline void error(std::string_view sys, std::string_view msg,
-        std::source_location loc = std::source_location::current())
+    inline void error(
+        const std::string_view sys,
+        const std::string_view msg,
+        const std::source_location loc = std::source_location::current())
     {
         hub().system(sys).log(LogLevel::Error, msg, loc);
     }
 
-    // ---------------------------------------------------------------------
-    // LOC-FIRST formatted API (callers SHOULD use macros to capture loc)
-    // ---------------------------------------------------------------------
     template <class... Args>
-    inline void infof_loc(std::string_view sys,
-        std::source_location loc,
+    inline void infof_loc(
+        const std::string_view sys,
+        const std::source_location loc,
         std::format_string<Args...> fmt,
         Args&&... args)
     {
@@ -369,8 +357,9 @@ export namespace epochnamespace::logger
     }
 
     template <class... Args>
-    inline void warnf_loc(std::string_view sys,
-        std::source_location loc,
+    inline void warnf_loc(
+        const std::string_view sys,
+        const std::source_location loc,
         std::format_string<Args...> fmt,
         Args&&... args)
     {
@@ -378,28 +367,23 @@ export namespace epochnamespace::logger
     }
 
     template <class... Args>
-    inline void errorf_loc(std::string_view sys,
-        std::source_location loc,
+    inline void errorf_loc(
+        const std::string_view sys,
+        const std::source_location loc,
         std::format_string<Args...> fmt,
         Args&&... args)
     {
         hub().system(sys).logf(LogLevel::Error, loc, fmt, std::forward<Args>(args)...);
     }
 
-    // ---------------------------------------------------------------------
-    // Legacy compatibility (minimal)
-    // ---------------------------------------------------------------------
     class Logger final
     {
     public:
-        Logger(const std::string& system_name_or_file,
-            LogLevel level = LogLevel::INFO)
+        Logger(const std::string& system_name_or_file, const LogLevel level = LogLevel::INFO)
             : m_system(system_name_or_file)
         {
             (void)level;
         }
-
-        ~Logger() = default;
 
         inline static Logger& GetInstance(const std::string& system_name_or_file)
         {
@@ -407,21 +391,23 @@ export namespace epochnamespace::logger
             return instance;
         }
 
-        void log(std::string_view message,
-            LogLevel level = LogLevel::INFO,
-            std::source_location loc = std::source_location::current())
+        void log(
+            const std::string_view message,
+            const LogLevel level = LogLevel::INFO,
+            const std::source_location loc = std::source_location::current())
         {
             hub().system(m_system).log(level, message, loc);
         }
 
-        void log(const std::string& message,
-            LogLevel level = LogLevel::INFO,
-            std::source_location loc = std::source_location::current())
+        void log(
+            const std::string& message,
+            const LogLevel level = LogLevel::INFO,
+            const std::source_location loc = std::source_location::current())
         {
             log(std::string_view{ message }, level, loc);
         }
 
-        std::string getLogFileName() const
+        [[nodiscard]] std::string getLogFileName() const
         {
             return hub().system(m_system).file_path().string();
         }
@@ -429,6 +415,4 @@ export namespace epochnamespace::logger
     private:
         std::string m_system;
     };
-
-} // namespace epochnamespace::logger
-
+}

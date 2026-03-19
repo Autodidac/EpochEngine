@@ -1468,7 +1468,6 @@ namespace epochnamespace::core
                             }
                             case epochnamespace::EditorCommand::UpdateApplication:
                             {
-                                std::cout << "[INFO] Running confirmed update command." << std::endl;
                                 logger::get(kEditorLog).log(
                                     logger::LogLevel::INFO,
                                     "Running confirmed update command.",
@@ -1480,12 +1479,11 @@ namespace epochnamespace::core
                                 {
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
-                                        "No update available.",
+                                        "No packaged or source update is currently available.",
                                         std::source_location::current());
                                 }
                                 else if (!result.update_performed)
                                 {
-                                    std::cerr << "[ERROR] Update was available but the handoff/install step did not complete." << std::endl;
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::Error,
                                         "Update was available but the handoff/install step did not complete.",
@@ -1495,7 +1493,6 @@ namespace epochnamespace::core
                             }
                             case epochnamespace::EditorCommand::UpdateApplicationFromSource:
                             {
-                                std::cout << "[INFO] Downloading source snapshot from main." << std::endl;
                                 logger::get(kEditorLog).log(
                                     logger::LogLevel::INFO,
                                     "Running confirmed source snapshot command.",
@@ -1504,7 +1501,6 @@ namespace epochnamespace::core
                                     default_update_channel());
                                 if (!ok)
                                 {
-                                    std::cerr << "[ERROR] Source snapshot download did not complete." << std::endl;
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::Error,
                                         "Source snapshot download did not complete.",

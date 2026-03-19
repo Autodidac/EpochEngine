@@ -32,15 +32,9 @@ module;
 
 export module aengine.updater.config;
 
-// ─────────────────────────────────────────────
-// Standard library imports
-// ─────────────────────────────────────────────
 import <string>;
 import <string_view>;
 
-// ─────────────────────────────────────────────
-// Engine version module (replacement for aversion.hpp)
-// ─────────────────────────────────────────────
 import aengine.version;
 
 export namespace epochnamespace::updater
@@ -55,24 +49,54 @@ export namespace epochnamespace::updater
     // Project identity
     // ─────────────────────────────────────────
 
-    export inline std::string OWNER = "Autodidac";
-    export inline std::string REPO = "EpochEngine";
-    export inline std::string BRANCH = "main";
+    export inline constexpr std::string_view OWNER = "Autodidac";
+    export inline constexpr std::string_view REPO = "EpochEngine";
+    export inline constexpr std::string_view BRANCH = "main";
 
-    export inline std::string PROJECT_VERSION =
+    export inline const std::string PROJECT_VERSION =
         epochnamespace::GetEngineVersionString();
 
     // ─────────────────────────────────────────
-    // Build / output
+    // Runtime / source build metadata
     // ─────────────────────────────────────────
 
-    export inline std::string OUTPUT_BINARY()
+    export inline std::string RUNTIME_BINARY_NAME()
     {
 #if defined(_WIN32)
-        return "updater_new.exe";
+        return "ConsoleApplication1.exe";
 #else
-        return "updater_new";
+        return "ConsoleApplication1";
 #endif
+    }
+
+    export inline std::string SOURCE_SOLUTION_NAME()
+    {
+        return "Engine.sln";
+    }
+
+    export inline std::string SOURCE_BUILD_TARGET()
+    {
+        return "ConsoleApplication1";
+    }
+
+    export inline std::string SOURCE_BUILD_CONFIGURATION()
+    {
+        return "Debug";
+    }
+
+    export inline std::string SOURCE_BUILD_PLATFORM()
+    {
+        return "x64";
+    }
+
+    export inline std::string SOURCE_MANIFEST_ROOT_NAME()
+    {
+        return "Engine";
+    }
+
+    export inline std::string SOURCE_VERSION_FILE_NAME()
+    {
+        return "version.txt";
     }
 
     export inline std::string SOURCE_MAIN_FILE()
@@ -93,66 +117,74 @@ export namespace epochnamespace::updater
     // GitHub base URLs
     // ─────────────────────────────────────────
 
-    export inline std::string GITHUB_BASE()
-    {
-        return "https://github.com/";
-    }
-
-    export inline std::string GITHUB_RAW_BASE()
-    {
-        return "https://raw.githubusercontent.com/";
-    }
+    export inline constexpr std::string_view GITHUB_BASE = "https://github.com/";
+    export inline constexpr std::string_view GITHUB_RAW_BASE = "https://raw.githubusercontent.com/";
+    export inline constexpr std::string_view GITHUB_API_BASE = "https://api.github.com/repos/";
 
     // ─────────────────────────────────────────
-    // Project URLs
+    // Version / package URLs
     // ─────────────────────────────────────────
 
-    export inline std::string PROJECT_VERSION_URL()
+    export inline std::string PROJECT_SOURCE_VERSION_URL()
     {
-        return "https://api.github.com/repos/"
-            + OWNER + "/" + REPO + "/releases/latest";
+        return std::string{ GITHUB_RAW_BASE }
+            + std::string{ OWNER } + "/"
+            + std::string{ REPO } + "/"
+            + std::string{ BRANCH } + "/version.txt";
     }
 
-    export inline std::string PROJECT_VERSION_HEADER_URL()
+    export inline std::string PROJECT_PACKAGED_VERSION_URL()
     {
-        return PROJECT_VERSION_URL();
+        return std::string{ GITHUB_BASE }
+            + std::string{ OWNER } + "/"
+            + std::string{ REPO } + "/releases/latest/download/version.txt";
     }
 
     export inline std::string PROJECT_SOURCE_URL()
     {
-        return GITHUB_BASE()
-            + OWNER + "/" + REPO
-            + "/archive/refs/heads/" + BRANCH + ".zip";
+        return std::string{ GITHUB_BASE }
+            + std::string{ OWNER } + "/"
+            + std::string{ REPO }
+            + "/archive/refs/heads/"
+            + std::string{ BRANCH } + ".zip";
     }
 
     export inline std::string PROJECT_BINARY_URL()
     {
-        return GITHUB_BASE()
-            + OWNER + "/" + REPO
-            + "/releases/latest/download/main.zip";
+        return std::string{ GITHUB_BASE }
+            + std::string{ OWNER } + "/"
+            + std::string{ REPO }
+        + "/releases/latest/download/main.zip";
+    }
+
+    export inline std::string PROJECT_RELEASE_API_URL()
+    {
+        return std::string{ GITHUB_API_BASE }
+            + std::string{ OWNER } + "/"
+            + std::string{ REPO } + "/releases/latest";
     }
 
     // ─────────────────────────────────────────
     // LLVM configuration
     // ─────────────────────────────────────────
 
-    export inline std::string LLVM_VERSION = "20.1.0";
+    export inline constexpr std::string_view LLVM_VERSION = "20.1.0";
 
 #if defined(_WIN32)
 
     export inline std::string LLVM_SOURCE_URL()
     {
-        return GITHUB_BASE()
-            + "llvm/llvm-project/archive/refs/tags/"
-            + "llvmorg-" + LLVM_VERSION + ".zip";
+        return std::string{ GITHUB_BASE }
+            + "llvm/llvm-project/archive/refs/tags/llvmorg-"
+            + std::string{ LLVM_VERSION } + ".zip";
     }
 
     export inline std::string LLVM_EXE_URL()
     {
-        return GITHUB_BASE()
-            + "llvm/llvm-project/releases/download/"
-            + "llvmorg-" + LLVM_VERSION
-            + "/LLVM-" + LLVM_VERSION + "-win64.exe";
+        return std::string{ GITHUB_BASE }
+            + "llvm/llvm-project/releases/download/llvmorg-"
+            + std::string{ LLVM_VERSION }
+        + "/LLVM-" + std::string{ LLVM_VERSION } + "-win64.exe";
     }
 
     export inline std::string LLVM_BIN_PATH()
@@ -162,24 +194,23 @@ export namespace epochnamespace::updater
 
     export inline std::string NINJA_ZIP_URL()
     {
-        return GITHUB_BASE()
-            + "ninja-build/ninja/releases/latest/download/ninja-win.zip";
+        return std::string{ GITHUB_BASE }
+        + "ninja-build/ninja/releases/latest/download/ninja-win.zip";
     }
 
     export inline std::string NINJA_EXE_URL()
     {
-        return GITHUB_BASE()
-            + "ninja-build/ninja/releases/latest/download/ninja.exe";
+        return std::string{ GITHUB_BASE }
+        + "ninja-build/ninja/releases/latest/download/ninja-win.zip";
     }
 
 #elif defined(__linux__)
 
     export inline std::string LLVM_SOURCE_URL()
     {
-        return GITHUB_BASE()
-            + "llvm/llvm-project/archive/refs/tags/"
-            + "llvmorg-" + LLVM_VERSION + "/LLVM-"
-            + LLVM_VERSION + "-linux.tar.xz";
+        return std::string{ GITHUB_BASE }
+            + "llvm/llvm-project/archive/refs/tags/llvmorg-"
+            + std::string{ LLVM_VERSION } + ".tar.gz";
     }
 
     export inline std::string LLVM_BIN_PATH()
@@ -189,18 +220,17 @@ export namespace epochnamespace::updater
 
     export inline std::string NINJA_ZIP_URL()
     {
-        return GITHUB_BASE()
-            + "ninja-build/ninja/releases/latest/download/ninja-linux.zip";
+        return std::string{ GITHUB_BASE }
+        + "ninja-build/ninja/releases/latest/download/ninja-linux.zip";
     }
 
 #elif defined(__APPLE__)
 
     export inline std::string LLVM_SOURCE_URL()
     {
-        return GITHUB_BASE()
-            + "llvm/llvm-project/archive/refs/tags/"
-            + "llvmorg-" + LLVM_VERSION + "/LLVM-"
-            + LLVM_VERSION + "-macos.tar.xz";
+        return std::string{ GITHUB_BASE }
+            + "llvm/llvm-project/archive/refs/tags/llvmorg-"
+            + std::string{ LLVM_VERSION } + ".tar.gz";
     }
 
     export inline std::string LLVM_BIN_PATH()
@@ -210,33 +240,33 @@ export namespace epochnamespace::updater
 
     export inline std::string NINJA_ZIP_URL()
     {
-        return GITHUB_BASE()
-            + "ninja-build/ninja/releases/latest/download/ninja-mac.zip";
+        return std::string{ GITHUB_BASE }
+        + "ninja-build/ninja/releases/latest/download/ninja-mac.zip";
     }
 
 #endif
 
     // ─────────────────────────────────────────
-    // 7-Zip configuration
+    // 7-Zip / archive tooling
     // ─────────────────────────────────────────
 
-    export inline std::string SEVEN_ZIP_VERSION = "24.09";
-    export inline std::string SEVEN_ZIP_VERSION_NAMETAG = "2409";
+    export inline constexpr std::string_view SEVEN_ZIP_VERSION = "24.09";
+    export inline constexpr std::string_view SEVEN_ZIP_VERSION_NAMETAG = "2409";
 
 #if defined(_WIN32)
 
     export inline std::string SEVEN_ZIP_SOURCE_URL()
     {
-        return GITHUB_BASE()
+        return std::string{ GITHUB_BASE }
             + "ip7z/7zip/archive/refs/tags/"
-            + SEVEN_ZIP_VERSION + ".zip";
+            + std::string{ SEVEN_ZIP_VERSION } + ".zip";
     }
 
     export inline std::string SEVEN_ZIP_EXE_URL()
     {
-        return GITHUB_BASE()
-            + "ip7z/7zip/releases/latest/download/"
-            + "7z" + SEVEN_ZIP_VERSION_NAMETAG + "-x64.exe";
+        return std::string{ GITHUB_BASE }
+            + "ip7z/7zip/releases/latest/download/7z"
+            + std::string{ SEVEN_ZIP_VERSION_NAMETAG } + "-x64.exe";
     }
 
     export inline std::string SEVEN_ZIP_LOCAL_BINARY()
@@ -244,17 +274,15 @@ export namespace epochnamespace::updater
         return "C:/Program Files/7-Zip/7z.exe";
     }
 
-    export inline std::string SEVEN_ZIP_BINARY = "7z.exe";
+    export inline constexpr std::string_view SEVEN_ZIP_BINARY = "7z.exe";
 
 #elif defined(__linux__)
 
     export inline std::string SEVEN_ZIP_SOURCE_URL()
     {
-        return GITHUB_BASE()
+        return std::string{ GITHUB_BASE }
             + "ip7z/7zip/archive/refs/tags/"
-            + SEVEN_ZIP_VERSION
-            + "/7z" + SEVEN_ZIP_VERSION_NAMETAG
-            + "-linux-x64.tar.xz";
+            + std::string{ SEVEN_ZIP_VERSION } + ".tar.gz";
     }
 
     export inline std::string SEVEN_ZIP_LOCAL_BINARY()
@@ -262,7 +290,7 @@ export namespace epochnamespace::updater
         return "/usr/bin/7z";
     }
 
-    export inline std::string SEVEN_ZIP_BINARY = "7z";
+    export inline constexpr std::string_view SEVEN_ZIP_BINARY = "7z";
 
     export inline std::string SEVEN_ZIP_INSTALL_CMD()
     {
@@ -273,12 +301,12 @@ export namespace epochnamespace::updater
 
     export inline std::string SEVEN_ZIP_SOURCE_URL()
     {
-        return GITHUB_BASE()
-            + "ip7z/7zip/releases/latest/download/"
-            + SEVEN_ZIP_VERSION + "/p7zip-mac.tar.gz";
+        return std::string{ GITHUB_BASE }
+            + "ip7z/7zip/archive/refs/tags/"
+            + std::string{ SEVEN_ZIP_VERSION } + ".tar.gz";
     }
 
-    export inline std::string SEVEN_ZIP_BINARY = "7z";
+    export inline constexpr std::string_view SEVEN_ZIP_BINARY = "7z";
 
     export inline std::string SEVEN_ZIP_INSTALL_CMD()
     {

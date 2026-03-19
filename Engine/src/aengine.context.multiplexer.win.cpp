@@ -85,7 +85,6 @@ import aengine.telemetry;
 import acontext.opengl.context;
 #endif
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-
 import acontext.softrenderer.context;
 #endif
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)

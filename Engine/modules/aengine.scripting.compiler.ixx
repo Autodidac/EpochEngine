@@ -49,9 +49,9 @@ export namespace epochnamespace::compiler
     namespace detail
     {
 #ifdef _WIN32
-        [[nodiscard]] inline std::string narrow_lossy(const std::wstring& value)
+        [[nodiscard]] inline std::wstring narrow_lossy(const std::wstring& value)
         {
-            return std::string(value.begin(), value.end());
+            return std::wstring(value.begin(), value.end());
         }
 
         [[nodiscard]] inline std::string errno_message(int code)
@@ -175,7 +175,8 @@ export namespace epochnamespace::compiler
             {
                 std::cerr
                     << "[compiler] failed to launch clang++: "
-                    << narrow_lossy(compilerPath.wstring())
+                   // << narrow_lossy(compilerPath.wstring())
+					<< compilerPath.string()
                     << " (errno=" << errno << ": " << errno_message(errno) << ")\n";
                 return false;
             }
