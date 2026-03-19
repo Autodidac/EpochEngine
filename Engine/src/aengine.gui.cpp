@@ -1317,6 +1317,26 @@ namespace epochnamespace::gui
         advance_cursor({ 0.0f, line_advance_amount(kFontScale) });
     }
 
+    void wrapped_label(std::string_view text, float width) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx) return;
+
+        const float availableWidth = (std::max)(
+            space_advance(kFontScale),
+            (g_frame.origin.x + g_frame.windowSize.x - kContentPadding) - g_frame.cursor.x);
+        const float wrapWidth = width > 0.0f
+            ? (std::max)(space_advance(kFontScale), width)
+            : availableWidth;
+
+        const float drawnHeight = draw_wrapped_text(
+            text,
+            g_frame.cursor.x,
+            g_frame.cursor.y,
+            wrapWidth,
+            kFontScale);
+        advance_cursor({ 0.0f, drawnHeight });
+    }
+
     EditBoxResult edit_box(std::string& text, Vec2 size, std::size_t max_chars, bool multiline) noexcept
     {
         EditBoxResult result{};

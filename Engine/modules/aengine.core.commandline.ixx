@@ -158,6 +158,7 @@ export namespace epochnamespace::core::cli
 
     struct ParseResult
     {
+        bool version_requested = false;
         bool update_requested = false;
         bool force_update = false;
         bool editor_requested = false;
@@ -294,6 +295,7 @@ export namespace epochnamespace::core::cli
             }
             else if (key == "--version"sv || key == "-v"sv)
             {
+                result.version_requested = true;
                 print_engine_info();
             }
             else if (key == "--width"sv)

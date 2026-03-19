@@ -89,6 +89,14 @@ export namespace epochnamespace
     {
         return std::string{ GetEngineVersion() };
     }
+
+    export std::string GetEngineDisplayString()
+    {
+        std::string result{ kEngineName };
+        result.push_back(' ');
+        result += GetEngineVersion();
+        return result;
+    }
 }
 
 export namespace epochengine = epochnamespace;

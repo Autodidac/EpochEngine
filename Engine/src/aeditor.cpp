@@ -58,6 +58,7 @@ module;
 module aeditor;
 
 import aengine.gui;
+import aengine.version;
 import aengine.core.context;
 import aengine.input;
 import ascripting.system;
@@ -629,7 +630,7 @@ namespace epochnamespace
         const float w = static_cast<float>(ctx->get_width_safe());
         const float h = static_cast<float>(ctx->get_height_safe());
 
-        const float toolbar_h = 88.0f;
+        const float toolbar_h = 116.0f;
         const float bottom_h = (std::max)(220.0f, h * 0.24f);
         const float left_w = (std::max)(280.0f, w * 0.2f);
         const float right_w = (std::max)(320.0f, w * 0.22f);
@@ -699,12 +700,18 @@ namespace epochnamespace
         }
         toolbar_x += 112.0f;
         gui::set_cursor({ toolbar_x + 18.0f, toolbar_button_y + 5.0f });
-        gui::label(std::string("Project: ") + editor.projectName + "  |  Renderer: "
-            + renderer_name(ctx) + "  |  Preview: " + std::string(preview_mode_name(editor.previewMode))
+        gui::wrapped_label(
+            std::string("Version: ") + epochnamespace::GetEngineDisplayString()
+            + "  |  Project: " + editor.projectName
+            + "  |  Renderer: " + renderer_name(ctx)
+            + "  |  Preview: " + std::string(preview_mode_name(editor.previewMode))
             + "  |  Camera: " + preview_camera_name(ctx)
-            + "  |  Script: " + editor.activeScript);
-        gui::set_cursor({ 14.0f, toolbar_pos.y + 64.0f });
-        gui::label("Launcher owns projects and games. Editor menus now focus on file, scene, commands, and help.");
+            + "  |  Script: " + editor.activeScript,
+            (std::max)(240.0f, w - (toolbar_x + 34.0f)));
+        gui::set_cursor({ 14.0f, toolbar_pos.y + 78.0f });
+        gui::wrapped_label(
+            "Launcher owns projects and games. Editor menus focus on file, scene, commands, and help.",
+            (std::max)(240.0f, w - 28.0f));
 
         gui::end_window();
 
@@ -919,35 +926,36 @@ namespace epochnamespace
 
         if (editor.showUpdateConfirmModal)
         {
-            const gui::Vec2 modalSize{ 560.0f, 210.0f };
+            const gui::Vec2 modalSize{ 560.0f, 284.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
             const float contentY = modalPos.y + 38.0f;
+            const float contentWidth = modalSize.x - 32.0f;
             gui::begin_window("Update Epoch", modalPos, modalSize);
             gui::set_cursor({ modalPos.x + 16.0f, contentY });
-            gui::label("Update to Latest checks the newest packaged release first.");
-            gui::set_cursor({ modalPos.x + 16.0f, contentY + 22.0f });
-            gui::label("If the packaged release is already current, Epoch falls back to the latest main source.");
-            gui::set_cursor({ modalPos.x + 16.0f, contentY + 44.0f });
-            gui::label("That source fallback restores dependencies, rebuilds Epoch, and replaces this runtime.");
-            gui::set_cursor({ modalPos.x + 16.0f, contentY + 66.0f });
-            gui::label("Use Advanced Source only when you intentionally want to skip straight to a rebuild from main.");
-            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 144.0f });
+            gui::wrapped_label("Update to Latest checks the newest packaged release first.", contentWidth);
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 36.0f });
+            gui::wrapped_label("If the packaged release is already current, Epoch falls back to the latest main source.", contentWidth);
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 84.0f });
+            gui::wrapped_label("That source fallback restores dependencies, rebuilds Epoch, and replaces this runtime.", contentWidth);
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 132.0f });
+            gui::wrapped_label("Use Advanced Source only when you intentionally want to skip straight to a rebuild from main.", contentWidth);
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 218.0f });
             if (gui::button("Cancel", { 120.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
                 push_editor_log(editor, "[command] Update canceled.");
             }
-            gui::set_cursor({ modalPos.x + 156.0f, modalPos.y + 144.0f });
+            gui::set_cursor({ modalPos.x + 156.0f, modalPos.y + 218.0f });
             if (gui::button("Update to Latest", { 168.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
                 emit_command(EditorCommand::UpdateApplication);
                 push_editor_log(editor, "[command] Smart update confirmed.");
             }
-            gui::set_cursor({ modalPos.x + 340.0f, modalPos.y + 144.0f });
+            gui::set_cursor({ modalPos.x + 340.0f, modalPos.y + 218.0f });
             if (gui::button("Advanced Source...", { 176.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
@@ -959,34 +967,35 @@ namespace epochnamespace
 
         if (editor.showSourceUpdateConfirmModal)
         {
-            const gui::Vec2 modalSize{ 620.0f, 220.0f };
+            const gui::Vec2 modalSize{ 620.0f, 292.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
             const float contentY = modalPos.y + 38.0f;
+            const float contentWidth = modalSize.x - 32.0f;
             gui::begin_window("Rebuild From Main Source", modalPos, modalSize);
             gui::set_cursor({ modalPos.x + 16.0f, contentY });
-            gui::label("This skips the packaged release check and goes straight to the latest main source.");
-            gui::set_cursor({ modalPos.x + 16.0f, contentY + 22.0f });
-            gui::label("Use it when you explicitly want to test current source before a release exists.");
-            gui::set_cursor({ modalPos.x + 16.0f, contentY + 44.0f });
-            gui::label("Epoch restores dependencies, rebuilds from source, and replaces this runtime.");
-            gui::set_cursor({ modalPos.x + 16.0f, contentY + 66.0f });
-            gui::label("For normal updates, use Update to Latest and let it fall back automatically when needed.");
-            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 156.0f });
+            gui::wrapped_label("This skips the packaged release check and goes straight to the latest main source.", contentWidth);
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 36.0f });
+            gui::wrapped_label("Use it when you explicitly want to test current source before a release exists.", contentWidth);
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 84.0f });
+            gui::wrapped_label("Epoch restores dependencies, rebuilds from source, and replaces this runtime.", contentWidth);
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 132.0f });
+            gui::wrapped_label("For normal updates, use Update to Latest and let it fall back automatically when needed.", contentWidth);
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 226.0f });
             if (gui::button("Back", { 120.0f, 30.0f }))
             {
                 editor.showSourceUpdateConfirmModal = false;
                 editor.showUpdateConfirmModal = true;
             }
-            gui::set_cursor({ modalPos.x + 156.0f, modalPos.y + 156.0f });
+            gui::set_cursor({ modalPos.x + 156.0f, modalPos.y + 226.0f });
             if (gui::button("Cancel", { 120.0f, 30.0f }))
             {
                 editor.showSourceUpdateConfirmModal = false;
                 push_editor_log(editor, "[command] Advanced source rebuild canceled.");
             }
-            gui::set_cursor({ modalPos.x + 292.0f, modalPos.y + 156.0f });
+            gui::set_cursor({ modalPos.x + 292.0f, modalPos.y + 226.0f });
             if (gui::button("Rebuild From Source", { 176.0f, 30.0f }))
             {
                 editor.showSourceUpdateConfirmModal = false;
@@ -1030,21 +1039,25 @@ namespace epochnamespace
 
         if (editor.showAboutModal)
         {
-            const gui::Vec2 modalSize{ 420.0f, 168.0f };
+            const gui::Vec2 modalSize{ 456.0f, 222.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
+            const float contentY = modalPos.y + 38.0f;
+            const float contentWidth = modalSize.x - 32.0f;
             gui::begin_window("About Epoch", modalPos, modalSize);
-            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 18.0f });
+            gui::set_cursor({ modalPos.x + 16.0f, contentY });
             gui::label("Epoch Editor");
-            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 42.0f });
-            gui::label("Multi-backend engine/editor shell with launcher-driven projects and games.");
-            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 66.0f });
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 22.0f });
+            gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 46.0f });
+            gui::wrapped_label("Multi-backend engine/editor shell with launcher-driven projects and games.", contentWidth);
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 86.0f });
             gui::label(std::string("Renderer: ") + renderer_name(ctx));
-            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 90.0f });
+            gui::set_cursor({ modalPos.x + 16.0f, contentY + 110.0f });
             gui::label(std::string("Project: ") + editor.projectName);
-            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 118.0f });
+            gui::set_cursor({ modalPos.x + 16.0f, modalPos.y + 170.0f });
             if (gui::button("Close", { 120.0f, 30.0f }))
                 editor.showAboutModal = false;
             gui::end_window();

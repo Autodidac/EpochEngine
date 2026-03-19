@@ -79,6 +79,9 @@ int main(int argc, char** argv)
         if (epochnamespace::core::cli::smoke_requested)
             (void)epoch::core::env::set("DEMO_SMOKE", "1");
 
+        if (cli_result.version_requested && !cli_result.update_requested)
+            return 0;
+
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = make_version_url(),
             .binary_url = make_binary_url(),

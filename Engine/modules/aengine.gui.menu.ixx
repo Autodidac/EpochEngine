@@ -45,6 +45,7 @@ import aengine.context.multiplexer;
 import aengine.cli;
 import aengine.input;
 import aengine.gui;
+import aengine.version;
 import aengine.context.window;
 import aengine.core.context;
 import aengine.context.type;
@@ -400,7 +401,7 @@ export namespace epochnamespace::menu
             bool clampToWindow)
         {
             if (!initialized) return std::nullopt;
-            constexpr float kHeaderOffsetY = 112.0f;
+            constexpr float kHeaderOffsetY = 136.0f;
 
             std::ignore = win;
             std::ignore = dt;
@@ -507,9 +508,11 @@ export namespace epochnamespace::menu
             draw_panel_button(LauncherPanel::Tools);
 
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 52.0f });
-            gui::label(std::string("Launcher: ") + std::string(panel_title(activePanel)));
+            gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 72.0f });
-            gui::label(panel_hint(activePanel));
+            gui::label(std::string("Launcher: ") + std::string(panel_title(activePanel)));
+            gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 92.0f });
+            gui::wrapped_label(panel_hint(activePanel), frameSize.x - 32.0f);
 
             std::optional<Choice> chosen{};
             for (int i = 0; i < totalItems; ++i) {

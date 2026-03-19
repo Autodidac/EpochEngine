@@ -2096,6 +2096,9 @@ int WINAPI wWinMain(
 
         const auto cli_result = epochnamespace::core::cli::parse(argc, argv);
 
+        if (cli_result.version_requested && !cli_result.update_requested)
+            return 0;
+
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,
             .binary_url = urls::binary_url,
@@ -2145,6 +2148,9 @@ int main(int argc, char** argv)
     try
     {
         const auto cli_result = epochnamespace::core::cli::parse(argc, argv);
+
+        if (cli_result.version_requested && !cli_result.update_requested)
+            return 0;
 
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,

@@ -148,6 +148,7 @@ export namespace epochnamespace::gui
     export ConsoleWindowResult console_window(const ConsoleWindowOptions& options) noexcept;
 
     export void label(std::string_view text) noexcept;
+    export void wrapped_label(std::string_view text, float width = 0.0f) noexcept;
 
     export float line_height() noexcept;
     export float glyph_width() noexcept;
