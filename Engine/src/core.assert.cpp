@@ -77,7 +77,11 @@ namespace epoch::core::asserts
                 epoch::to_view(std::string_view{ line }));
 
 #if defined(_WIN32)
-            ::DebugBreak();
+            // Only trigger a breakpoint when a debugger is actually attached.
+            // Otherwise Windows may surface an interactive JIT/debug dialog,
+            // which is the opposite of what we want for unattended updater runs.
+            if (::IsDebuggerPresent() != FALSE)
+                ::DebugBreak();
 #endif
             std::terminate();
         }

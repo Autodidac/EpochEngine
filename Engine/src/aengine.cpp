@@ -50,6 +50,9 @@
 #    define NOMINMAX
 #  endif
 #  include <windows.h>
+#  if defined(_DEBUG)
+#    include <crtdbg.h>
+#  endif
 #endif
 
 // -----------------------------
@@ -2112,6 +2115,29 @@ namespace urls
     const std::string source_version_url = "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/aengine.version.ixx";
 }
 
+#if defined(_WIN32)
+namespace
+{
+    void configure_unattended_windows_error_mode()
+    {
+        ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+
+#if defined(_DEBUG)
+        if (::IsDebuggerPresent() == FALSE)
+        {
+            _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+            _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+            _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+            _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+            _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+            _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+            _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+        }
+#endif
+    }
+}
+#endif
+
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
 int WINAPI wWinMain(
     _In_     HINSTANCE hInstance,
@@ -2122,6 +2148,8 @@ int WINAPI wWinMain(
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
     UNREFERENCED_PARAMETER(nCmdShow);
+
+    configure_unattended_windows_error_mode();
 
 #if defined(_DEBUG)
     epochnamespace::core::ShowConsole();
@@ -2183,6 +2211,9 @@ int main(int argc, char** argv)
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
     return wWinMain(GetModuleHandleW(nullptr), nullptr, GetCommandLineW(), SW_SHOWNORMAL);
 #else
+    #if defined(_WIN32)
+    configure_unattended_windows_error_mode();
+    #endif
     try
     {
         const auto cli_result = epochnamespace::core::cli::parse(argc, argv);

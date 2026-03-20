@@ -35,6 +35,19 @@
 #include <iostream>
 #include <string>
 
+#if defined(_WIN32)
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#  if defined(_DEBUG)
+#    include <crtdbg.h>
+#  endif
+#endif
+
 import aengine.cli;
 import aengine.updater;
 import core.env;
@@ -68,10 +81,33 @@ namespace
         return std::string(kGithubRawBase) + kOwner + kRepo + "/" + kBranch + "Engine/modules/aengine.version.ixx";
     }
 
+#if defined(_WIN32)
+    void configure_unattended_windows_error_mode()
+    {
+        ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+
+#if defined(_DEBUG)
+        if (::IsDebuggerPresent() == FALSE)
+        {
+            _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+            _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+            _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+            _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+            _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+            _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+            _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+        }
+#endif
+    }
+#endif
+
 }
 
 int main(int argc, char** argv)
 {
+#if defined(_WIN32)
+    configure_unattended_windows_error_mode();
+#endif
     try
     {
         const auto cli_result = epochnamespace::core::cli::parse(argc, argv);

@@ -867,25 +867,100 @@ export namespace epochnamespace::updater
             std::string head;
             const auto local_git_dir = vcpkg_root / ".git";
 
-            if (std::filesystem::exists(local_git_dir))
+            const auto resolve_local_head = [&]() -> std::string
             {
-                head = capture_process_output(
+                if (!std::filesystem::exists(local_git_dir))
+                    return {};
+
+                std::error_code git_dir_ec;
+                const auto resolved_git_dir = trim_ascii(capture_process_output(
                     git_exe,
-                    { "rev-parse", "--verify", "HEAD" },
+                    { "rev-parse", "--absolute-git-dir" },
+                    vcpkg_root,
+                    &git_exit));
+
+                if (git_exit != 0 || resolved_git_dir.empty())
+                    return {};
+
+                if (!std::filesystem::equivalent(
+                    local_git_dir,
+                    std::filesystem::path{ resolved_git_dir },
+                    git_dir_ec))
+                {
+                    if (!git_dir_ec)
+                    {
+                        append_log_line(
+                            log_path,
+                            "[WARN] Managed vcpkg git resolution escaped the sandboxed repo: "
+                            + resolved_git_dir);
+                    }
+
+                    return {};
+                }
+
+                std::string local_head = capture_process_output(
+                    git_exe,
+                    {
+                        "--git-dir=" + local_git_dir.string(),
+                        "--work-tree=" + vcpkg_root.string(),
+                        "rev-parse",
+                        "--verify",
+                        "HEAD"
+                    },
                     vcpkg_root,
                     &git_exit);
 
-                if (git_exit == 0 && !head.empty())
-                    return lower_ascii(trim_ascii(std::move(head)));
-            }
+                if (git_exit == 0 && !local_head.empty())
+                    return lower_ascii(trim_ascii(std::move(local_head)));
+
+                return {};
+            };
+
+            if (head = resolve_local_head(); !head.empty())
+                return head;
 
             append_log_line(log_path, "[INFO] Initializing managed vcpkg git registry snapshot.");
 
-            const std::array<std::vector<std::string>, 4> setup_steps{
-                std::vector<std::string>{ "init" },
-                std::vector<std::string>{ "config", "user.name", "Epoch Updater" },
-                std::vector<std::string>{ "config", "user.email", "updater@epoch.local" },
-                std::vector<std::string>{ "add", "--all" }
+            int init_exit = -1;
+            if (!run_process_hidden(
+                git_exe,
+                { "-C", vcpkg_root.string(), "init" },
+                vcpkg_root,
+                log_path,
+                true,
+                &init_exit) || init_exit != 0)
+            {
+                append_log_line(log_path, "[ERROR] Failed to initialize the managed vcpkg git registry.");
+                return {};
+            }
+
+            if (!std::filesystem::exists(local_git_dir))
+            {
+                append_log_line(log_path, "[ERROR] Managed vcpkg git init did not create a local .git directory.");
+                return {};
+            }
+
+            const std::array<std::vector<std::string>, 3> setup_steps{
+                std::vector<std::string>{
+                    "--git-dir=" + local_git_dir.string(),
+                    "--work-tree=" + vcpkg_root.string(),
+                    "config",
+                    "user.name",
+                    "Epoch Updater"
+                },
+                std::vector<std::string>{
+                    "--git-dir=" + local_git_dir.string(),
+                    "--work-tree=" + vcpkg_root.string(),
+                    "config",
+                    "user.email",
+                    "updater@epoch.local"
+                },
+                std::vector<std::string>{
+                    "--git-dir=" + local_git_dir.string(),
+                    "--work-tree=" + vcpkg_root.string(),
+                    "add",
+                    "--all"
+                }
             };
 
             for (const auto& args : setup_steps)
@@ -907,7 +982,14 @@ export namespace epochnamespace::updater
             int commit_exit = -1;
             if (!run_process_hidden(
                 git_exe,
-                { "commit", "--no-gpg-sign", "-m", "Managed vcpkg registry snapshot" },
+                {
+                    "--git-dir=" + local_git_dir.string(),
+                    "--work-tree=" + vcpkg_root.string(),
+                    "commit",
+                    "--no-gpg-sign",
+                    "-m",
+                    "Managed vcpkg registry snapshot"
+                },
                 vcpkg_root,
                 log_path,
                 true,
@@ -919,27 +1001,15 @@ export namespace epochnamespace::updater
 
             if (commit_exit != 0)
             {
-                head = capture_process_output(
-                    git_exe,
-                    { "rev-parse", "--verify", "HEAD" },
-                    vcpkg_root,
-                    &git_exit);
-
-                if (git_exit == 0 && !head.empty())
-                    return lower_ascii(trim_ascii(std::move(head)));
+                if (head = resolve_local_head(); !head.empty())
+                    return head;
 
                 append_log_line(log_path, "[ERROR] Managed vcpkg git registry did not produce a usable HEAD revision.");
                 return {};
             }
 
-            head = capture_process_output(
-                git_exe,
-                { "rev-parse", "--verify", "HEAD" },
-                vcpkg_root,
-                &git_exit);
-
-            if (git_exit == 0 && !head.empty())
-                return lower_ascii(trim_ascii(std::move(head)));
+            if (head = resolve_local_head(); !head.empty())
+                return head;
 
             append_log_line(log_path, "[ERROR] Failed to resolve the managed vcpkg git HEAD revision.");
             return {};
@@ -2215,33 +2285,46 @@ export namespace epochnamespace::updater
             << "  $configFile = Join-Path $ManifestRoot 'vcpkg-configuration.json'\n"
             << "  Remove-Item -LiteralPath $configFile -Force -ErrorAction SilentlyContinue\n"
             << "  $gitExe = Resolve-GitExe\n"
-            << "  Push-Location $VcpkgRoot\n"
-            << "  try {\n"
-            << "    $head = ''\n"
-            << "    if (Test-Path -LiteralPath (Join-Path $VcpkgRoot '.git')) {\n"
-            << "      try {\n"
-            << "        $head = (& $gitExe 'rev-parse' '--verify' 'HEAD' 2>$null | Out-String).Trim()\n"
-            << "      }\n"
-            << "      catch {\n"
-            << "        $head = ''\n"
+            << "  $gitDir = Join-Path $VcpkgRoot '.git'\n"
+            << "  $head = ''\n"
+            << "  if (Test-Path -LiteralPath $gitDir) {\n"
+            << "    try {\n"
+            << "      $resolvedGitDir = (& $gitExe '-C' $VcpkgRoot 'rev-parse' '--absolute-git-dir' 2>$null | Out-String).Trim()\n"
+            << "      if (-not [string]::IsNullOrWhiteSpace($resolvedGitDir)) {\n"
+            << "        $resolvedGitDir = [System.IO.Path]::GetFullPath($resolvedGitDir)\n"
+            << "        $expectedGitDir = [System.IO.Path]::GetFullPath($gitDir)\n"
+            << "        if ([string]::Equals($resolvedGitDir, $expectedGitDir, [System.StringComparison]::OrdinalIgnoreCase)) {\n"
+            << "          $head = (& $gitExe ('--git-dir=' + $gitDir) ('--work-tree=' + $VcpkgRoot) 'rev-parse' '--verify' 'HEAD' 2>$null | Out-String).Trim()\n"
+            << "        }\n"
+            << "        else {\n"
+            << "          Write-Step 'WARN' ('Managed vcpkg git resolution escaped the sandboxed repo: ' + $resolvedGitDir)\n"
+            << "        }\n"
             << "      }\n"
             << "    }\n"
-            << "    if ([string]::IsNullOrWhiteSpace($head)) {\n"
-            << "      Write-Step 'INFO' 'Initializing managed vcpkg git registry snapshot.'\n"
-            << "      Invoke-Tool $gitExe @('init') $VcpkgRoot 'git init'\n"
-            << "      Invoke-Tool $gitExe @('config', 'user.name', 'Epoch Updater') $VcpkgRoot 'git config user.name'\n"
-            << "      Invoke-Tool $gitExe @('config', 'user.email', 'updater@epoch.local') $VcpkgRoot 'git config user.email'\n"
-            << "      Invoke-Tool $gitExe @('add', '--all') $VcpkgRoot 'git add'\n"
-            << "      try {\n"
-            << "        Invoke-Tool $gitExe @('commit', '--no-gpg-sign', '-m', 'Managed vcpkg registry snapshot') $VcpkgRoot 'git commit'\n"
-            << "      }\n"
-            << "      catch {\n"
-            << "      }\n"
-            << "      $head = (& $gitExe 'rev-parse' '--verify' 'HEAD' 2>$null | Out-String).Trim()\n"
+            << "    catch {\n"
+            << "      $head = ''\n"
             << "    }\n"
             << "  }\n"
-            << "  finally {\n"
-            << "    Pop-Location\n"
+            << "  if ([string]::IsNullOrWhiteSpace($head)) {\n"
+            << "    Write-Step 'INFO' 'Initializing managed vcpkg git registry snapshot.'\n"
+            << "    Invoke-Tool $gitExe @('-C', $VcpkgRoot, 'init') $VcpkgRoot 'git init'\n"
+            << "    if (-not (Test-Path -LiteralPath $gitDir)) {\n"
+            << "      throw 'Managed vcpkg git init did not create a local .git directory.'\n"
+            << "    }\n"
+            << "    Invoke-Tool $gitExe @(('--git-dir=' + $gitDir), ('--work-tree=' + $VcpkgRoot), 'config', 'user.name', 'Epoch Updater') $VcpkgRoot 'git config user.name'\n"
+            << "    Invoke-Tool $gitExe @(('--git-dir=' + $gitDir), ('--work-tree=' + $VcpkgRoot), 'config', 'user.email', 'updater@epoch.local') $VcpkgRoot 'git config user.email'\n"
+            << "    Invoke-Tool $gitExe @(('--git-dir=' + $gitDir), ('--work-tree=' + $VcpkgRoot), 'add', '--all') $VcpkgRoot 'git add'\n"
+            << "    try {\n"
+            << "      Invoke-Tool $gitExe @(('--git-dir=' + $gitDir), ('--work-tree=' + $VcpkgRoot), 'commit', '--no-gpg-sign', '-m', 'Managed vcpkg registry snapshot') $VcpkgRoot 'git commit'\n"
+            << "    }\n"
+            << "    catch {\n"
+            << "    }\n"
+            << "    try {\n"
+            << "      $head = (& $gitExe ('--git-dir=' + $gitDir) ('--work-tree=' + $VcpkgRoot) 'rev-parse' '--verify' 'HEAD' 2>$null | Out-String).Trim()\n"
+            << "    }\n"
+            << "    catch {\n"
+            << "      $head = ''\n"
+            << "    }\n"
             << "  }\n"
             << "  if ([string]::IsNullOrWhiteSpace($head)) {\n"
             << "    throw 'Managed vcpkg git registry did not produce a usable HEAD revision.'\n"
