@@ -1,5 +1,8 @@
 # Epoch Changelog
 
+## [v0.83.4]
+- Rolled `main` forward after the packaged `0.83.3` updater-shell release so the public binary can demonstrate the live fallback path into the newer source revision with the repaired runtime-version comparison.
+
 ## [v0.83.3]
 - Rolled `main` forward after the packaged `0.83.2` updater-shell hotfix release so the public binary can demonstrate the full release-to-source update path against a newer source revision.
 - Trimmed the source-update manifest down to the graphics-only `SFML` and non-audio `raylib` feature set so updater-managed rebuilds no longer depend on the flaky `libogg`/`vorbis`/`openal` download chain.
