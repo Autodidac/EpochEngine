@@ -864,14 +864,20 @@ export namespace epochnamespace::updater
             const std::filesystem::path& log_path)
         {
             int git_exit = -1;
-            auto head = capture_process_output(
-                git_exe,
-                { "rev-parse", "--verify", "HEAD" },
-                vcpkg_root,
-                &git_exit);
+            std::string head;
+            const auto local_git_dir = vcpkg_root / ".git";
 
-            if (git_exit == 0 && !head.empty())
-                return lower_ascii(trim_ascii(std::move(head)));
+            if (std::filesystem::exists(local_git_dir))
+            {
+                head = capture_process_output(
+                    git_exe,
+                    { "rev-parse", "--verify", "HEAD" },
+                    vcpkg_root,
+                    &git_exit);
+
+                if (git_exit == 0 && !head.empty())
+                    return lower_ascii(trim_ascii(std::move(head)));
+            }
 
             append_log_line(log_path, "[INFO] Initializing managed vcpkg git registry snapshot.");
 
@@ -2212,11 +2218,13 @@ export namespace epochnamespace::updater
             << "  Push-Location $VcpkgRoot\n"
             << "  try {\n"
             << "    $head = ''\n"
-            << "    try {\n"
-            << "      $head = (& $gitExe 'rev-parse' '--verify' 'HEAD' 2>$null | Out-String).Trim()\n"
-            << "    }\n"
-            << "    catch {\n"
-            << "      $head = ''\n"
+            << "    if (Test-Path -LiteralPath (Join-Path $VcpkgRoot '.git')) {\n"
+            << "      try {\n"
+            << "        $head = (& $gitExe 'rev-parse' '--verify' 'HEAD' 2>$null | Out-String).Trim()\n"
+            << "      }\n"
+            << "      catch {\n"
+            << "        $head = ''\n"
+            << "      }\n"
             << "    }\n"
             << "    if ([string]::IsNullOrWhiteSpace($head)) {\n"
             << "      Write-Step 'INFO' 'Initializing managed vcpkg git registry snapshot.'\n"
