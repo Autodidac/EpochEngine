@@ -388,7 +388,6 @@ namespace epochnamespace::vulkancontext
             std::vector<void*> guiUniformBuffersMapped;
             vk::UniquePipeline guiPipeline;
             std::vector<GuiDrawCommand> guiDraws{};
-            std::vector<GuiDrawCommand> lastGuiDraws{};
         };
 
         std::unordered_map<const epochnamespace::core::Context*, GuiContextState> guiContexts{};

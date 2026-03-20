@@ -243,7 +243,8 @@ namespace epochnamespace::gui
         {
             return ctx
                 && (ctx->type == core::ContextType::Software
-                    || ctx->type == core::ContextType::RayLib);
+                    || ctx->type == core::ContextType::RayLib
+                    || ctx->type == core::ContextType::Vulkan);
         }
 
         [[nodiscard]] static bool same_queued_draw(

@@ -124,6 +124,7 @@ import :commands;
 import aengine.context.commandqueue;
 import aengine.core.context;
 import aengine.core.logger;
+import aengine.gui;
 import aengine.input;
 import :shared_vk;
 
@@ -317,7 +318,6 @@ namespace epochnamespace::vulkancontext
             if (auto* guiState = find_gui_state(ctx.get()))
             {
                 guiState->guiDraws.clear();
-                guiState->lastGuiDraws.clear();
             }
             queue.drain();
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
@@ -325,39 +325,9 @@ namespace epochnamespace::vulkancontext
         }
         if (auto* guiState = find_gui_state(ctx.get()))
             guiState->guiDraws.clear();
-        // Vulkan should mirror the other backends here without starving frame
-        // updates. A small second pass helps absorb same-frame follow-up work
-        // without reintroducing the old multi-pass churn.
-        constexpr int kMaxDrainPasses = 2;
-        int drainPasses = 0;
-        do
-        {
-            const bool drained = queue.drain();
-            ++drainPasses;
-            if (!drained || queue.depth() == 0 || drainPasses >= kMaxDrainPasses)
-                break;
-        } while (true);
-        const bool queueSettled = queue.depth() == 0;
-
-        if (auto* guiState = find_gui_state(ctx.get()))
-        {
-            const bool hasLastFrame = !guiState->lastGuiDraws.empty();
-            const bool missingCurrentFrame = guiState->guiDraws.empty();
-            const bool suspiciouslyPartial =
-                hasLastFrame
-                && !missingCurrentFrame
-                && (guiState->guiDraws.size() * 3u) < (guiState->lastGuiDraws.size() * 2u);
-
-            if ((missingCurrentFrame && !queueSettled) || suspiciouslyPartial)
-            {
-                if (hasLastFrame)
-                    guiState->guiDraws = guiState->lastGuiDraws;
-            }
-            else
-            {
-                guiState->lastGuiDraws = guiState->guiDraws;
-            }
-        }
+        (void)queue.drain();
+        if (ctx)
+            (void)epochnamespace::gui::render_deferred_batch(ctx);
 
 #if EPOCH_VULKAN_RUNTIME_DIAGNOSTICS
         {
@@ -367,8 +337,6 @@ namespace epochnamespace::vulkancontext
                  << " fb=" << get_framebuffer_width() << "x" << get_framebuffer_height()
                  << " queuedGui=" << (guiState ? guiState->guiDraws.size() : 0)
                  << " queueDepth=" << queue.depth()
-                 << " drainPasses=" << drainPasses
-                 << " queueSettled=" << (queueSettled ? 1 : 0)
                  << "\n";
         }
 #endif
@@ -443,7 +411,6 @@ namespace epochnamespace::vulkancontext
         guiState.guiUniformBuffersMapped.clear();
         guiState.guiAtlases.clear();
         guiState.guiDraws.clear();
-        guiState.lastGuiDraws.clear();
     }
 
     void Application::set_framebuffer_size(int width, int height)
