@@ -2621,13 +2621,15 @@ export namespace epochnamespace::updater
     bool replace_runtime_from_script(
         const std::filesystem::path& target_binary,
         const std::filesystem::path& extracted_runtime_dir,
-        const std::filesystem::path& package_archive)
+        const std::filesystem::path& package_archive,
+        const std::string_view restart_auto_command = {})
     {
 #if defined(_WIN32)
         const auto target_dir = target_binary.parent_path();
         const auto script_path = system_detail::make_temp_script_path("replace_runtime_zip");
         const auto extracted_binary = extracted_runtime_dir / target_binary.filename();
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
+        const bool chain_after_restart = !restart_auto_command.empty();
 
         std::ofstream bat(script_path, std::ios::binary);
         if (!bat)
@@ -2679,7 +2681,14 @@ export namespace epochnamespace::updater
             << ">> \"%LOG%\" echo [INFO] Packaged runtime files copied successfully.\r\n"
             << "rmdir /S /Q \"%EXTRACTED%\" >nul 2>&1\r\n"
             << "del /F /Q \"%ARCHIVE%\" >nul 2>&1\r\n"
+            << (chain_after_restart
+                ? ("set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND="
+                    + system_detail::powershell_escape_single_quoted(std::string{ restart_auto_command }) + "\"\r\n")
+                : std::string{})
             << "start \"\" /D \"%TARGETDIR%\" \"%TARGETEXE%\"\r\n"
+            << (chain_after_restart
+                ? "set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND=\"\r\n"
+                : "")
             << ">> \"%LOG%\" echo [INFO] Restarted updated runtime.\r\n"
             << "del /F /Q \"%~f0\" >nul 2>&1\r\n";
 
@@ -2695,6 +2704,7 @@ export namespace epochnamespace::updater
 #else
         const auto target_dir = target_binary.parent_path();
         const auto script_path = system_detail::make_temp_script_path("replace_runtime_zip");
+        const bool chain_after_restart = !restart_auto_command.empty();
 
         std::ofstream sh(script_path, std::ios::binary);
         if (!sh)
@@ -2718,7 +2728,11 @@ export namespace epochnamespace::updater
             << "rm -rf \"$EXTRACTED\"\n"
             << "rm -f \"$ARCHIVE\"\n"
             << "cd \"$TARGETDIR\"\n"
-            << "\"$TARGETEXE\" &\n"
+            << (chain_after_restart
+                ? ("EPOCH_UPDATER_SHELL_AUTO_COMMAND="
+                    + system_detail::quote_shell_arg(std::string{ restart_auto_command })
+                    + " \"$TARGETEXE\" &\n")
+                : "\"$TARGETEXE\" &\n")
             << "rm -f \"$0\"\n";
 
         sh.close();
@@ -2948,7 +2962,9 @@ export namespace epochnamespace::updater
         return result;
     }
 
-    bool install_from_binary(const std::string& url)
+    bool install_from_binary(
+        const std::string& url,
+        const std::string_view restart_auto_command = {})
     {
         const auto target_binary = system_detail::current_binary_path();
         const auto normalized_url =
@@ -2971,7 +2987,11 @@ export namespace epochnamespace::updater
                 return false;
             }
 
-            return replace_runtime_from_script(target_binary, extract_dir, archive_path);
+            return replace_runtime_from_script(
+                target_binary,
+                extract_dir,
+                archive_path,
+                restart_auto_command);
         }
 
         const auto new_binary = system_detail::replacement_binary_path(target_binary);
@@ -3119,6 +3139,25 @@ export namespace epochnamespace::updater
         result.local_version = packaged_status.local;
         result.remote_version = packaged_status.remote;
 
+        system_detail::VersionCheckResult source_status{};
+        if (!channel.source_version_url.empty())
+        {
+            const std::string source_compare_local =
+                packaged_status.update_available ? packaged_status.remote : packaged_status.local;
+
+            source_status = check_for_updates(
+                channel.source_version_url,
+                "Source",
+                source_compare_local);
+
+            if (source_status.ok)
+            {
+                result.source_local_version = source_status.local;
+                result.source_remote_version = source_status.remote;
+                result.source_update_available = source_status.update_available;
+            }
+        }
+
         if (packaged_status.update_available)
         {
             result.packaged_update_available = true;
@@ -3130,36 +3169,33 @@ export namespace epochnamespace::updater
                 return result;
             }
 
-            result.update_performed = install_from_binary(channel.binary_url);
+            if (source_status.ok && source_status.update_available)
+            {
+                system_detail::log_info(
+                    "Packaged update will continue into the current source build after restart.");
+            }
+
+            result.update_performed = install_from_binary(
+                channel.binary_url,
+                (source_status.ok && source_status.update_available)
+                    ? std::string_view{ "smart-update" }
+                    : std::string_view{});
             return result;
         }
 
-        if (!channel.source_version_url.empty())
+        if (source_status.ok && source_status.update_available)
         {
-            const auto source_status =
-                check_for_updates(channel.source_version_url, "Source", packaged_status.local);
+            result.update_available = true;
 
-            if (source_status.ok)
+            if (!force)
             {
-                result.source_local_version = source_status.local;
-                result.source_remote_version = source_status.remote;
-                result.source_update_available = source_status.update_available;
-            }
-
-            if (source_status.ok && source_status.update_available)
-            {
-                result.update_available = true;
-
-                if (!force)
-                {
-                    result.force_required = true;
-                    return result;
-                }
-
-                system_detail::log_info("No newer packaged runtime is available. Falling back to source update from main.");
-                result.update_performed = run_source_update_command(channel, false);
+                result.force_required = true;
                 return result;
             }
+
+            system_detail::log_info("No newer packaged runtime is available. Falling back to source update from main.");
+            result.update_performed = run_source_update_command(channel, false);
+            return result;
         }
 
         return result;

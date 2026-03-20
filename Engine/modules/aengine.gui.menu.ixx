@@ -182,7 +182,7 @@ export namespace epochnamespace::menu
 
         static constexpr std::string_view updater_shell_description() noexcept
         {
-            return "Updates to the newest packaged release first. If a matching release is not ready yet, this shell rebuilds current main source and replaces itself automatically.";
+            return "Moves through the newest packaged release first, then continues into the current main source build automatically when needed.";
         }
 
         [[nodiscard]] static bool updater_shell_auto_update_requested() noexcept
@@ -666,14 +666,16 @@ export namespace epochnamespace::menu
 
             gui::begin_window("", framePosition, frameSize);
 
-            const float contentWidth = (std::max)(360.0f, (std::min)(frameSize.x - 240.0f, 560.0f));
+            const float contentWidth = (std::max)(380.0f, (std::min)(frameSize.x - 240.0f, 560.0f));
             const float contentX = framePosition.x + (frameSize.x - contentWidth) * 0.5f;
+            const float textInset = 8.0f;
+            const float textWidth = (std::max)(240.0f, contentWidth - textInset * 2.0f);
             const float buttonWidth = contentWidth;
             const float buttonHeight = (std::max)(120.0f, (std::min)(160.0f, frameSize.y * 0.24f));
             const float lineHeight = gui::line_height();
 
             gui::set_cursor({ contentX, framePosition.y + 48.0f });
-            const float descriptionHeight = gui::wrapped_text_height(updater_shell_description(), contentWidth);
+            const float descriptionHeight = gui::wrapped_text_height(updater_shell_description(), textWidth);
             const float stackHeight =
                 lineHeight +
                 18.0f +
@@ -690,8 +692,8 @@ export namespace epochnamespace::menu
             gui::set_cursor({ contentX, contentY + lineHeight + 18.0f });
             gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
 
-            gui::set_cursor({ contentX, contentY + lineHeight * 2.0f + 44.0f });
-            gui::wrapped_label(updater_shell_description(), contentWidth);
+            gui::set_cursor({ contentX + textInset, contentY + lineHeight * 2.0f + 44.0f });
+            gui::wrapped_label(updater_shell_description(), textWidth);
 
             gui::set_cursor({ contentX, contentY + lineHeight * 2.0f + 76.0f + descriptionHeight });
             const bool clicked = gui::button("Update To Current Epoch", { buttonWidth, buttonHeight });

@@ -1105,10 +1105,10 @@ namespace epochnamespace::core
         [[nodiscard]] epochnamespace::updater::UpdateChannel default_update_channel()
         {
             return epochnamespace::updater::UpdateChannel{
-                .version_url = "https://api.github.com/repos/Autodidac/EpochEngine/releases/latest",
-                .binary_url = "https://github.com/Autodidac/EpochEngine/releases/latest/download/main.zip",
-                .source_url = "https://github.com/Autodidac/EpochEngine/archive/refs/heads/main.zip",
-                .source_version_url = "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/aengine.version.ixx",
+                .version_url = epochnamespace::updater::PROJECT_PACKAGED_VERSION_URL(),
+                .binary_url = epochnamespace::updater::PROJECT_BINARY_URL(),
+                .source_url = epochnamespace::updater::PROJECT_SOURCE_URL(),
+                .source_version_url = epochnamespace::updater::PROJECT_SOURCE_VERSION_URL(),
             };
         }
 
@@ -2109,10 +2109,10 @@ namespace urls
     const std::string repo = "EpochEngine";
     const std::string branch = "main/";
 
-    const std::string version_url = "https://api.github.com/repos/Autodidac/EpochEngine/releases/latest";
-    const std::string binary_url = github_base + owner + repo + "/releases/latest/download/main.zip";
-    const std::string source_url = github_base + owner + repo + "/archive/refs/heads/main.zip";
-    const std::string source_version_url = "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/aengine.version.ixx";
+    const std::string version_url = epochnamespace::updater::PROJECT_PACKAGED_VERSION_URL();
+    const std::string binary_url = epochnamespace::updater::PROJECT_BINARY_URL();
+    const std::string source_url = epochnamespace::updater::PROJECT_SOURCE_URL();
+    const std::string source_version_url = epochnamespace::updater::PROJECT_SOURCE_VERSION_URL();
 }
 
 #if defined(_WIN32)

@@ -295,7 +295,7 @@ namespace epochnamespace::font
         std::vector<unsigned char> mono_bitmap(static_cast<std::size_t>(pack_width) * pack_height, 0);
 
         stbtt_pack_context pack_context{};
-        if (!stbtt_PackBegin(&pack_context, mono_bitmap.data(), pack_width, pack_height, pack_width, 2, nullptr))
+        if (!stbtt_PackBegin(&pack_context, mono_bitmap.data(), pack_width, pack_height, pack_width, 3, nullptr))
         {
             std::cerr << "[FontRenderer] Failed to begin packing for font '" << ttf_path << "'\n";
             return false;

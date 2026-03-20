@@ -90,7 +90,7 @@
     <IntDir>$(SolutionDir)\Debug\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IntDir>$(SolutionDir)\Debug\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
+    <IntDir>$(SolutionDir)\Release\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
     <VcpkgEnableManifest>true</VcpkgEnableManifest>

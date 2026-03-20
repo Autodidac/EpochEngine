@@ -1401,7 +1401,6 @@ namespace epochnamespace::gui
 
         const Vec2 pos = g_frame.cursor;
         const float baseHeight = base_line_height(kFontScale);
-        const float lineAdvance = line_advance_amount(kFontScale);
         const float minWidth = space_advance(kFontScale) + 2.0f * kContentPadding;
         const float width = (std::max)(static_cast<float>(size.x), minWidth);
         const float height = (std::max)(static_cast<float>(size.y), baseHeight + 2.0f * kContentPadding);
@@ -1414,10 +1413,11 @@ namespace epochnamespace::gui
 
         draw_sprite(background, pos.x, pos.y, width, height);
 
-        const float textWidth = measure_text_width(label, kFontScale);
+        const float textWidth = measure_text_width(label, kFontScale) + 2.0f;
         const float textHeight = baseHeight;
         const float textX = pos.x + (std::max)(0.0f, (width - textWidth) * 0.5f);
-        const float textY = pos.y + (std::max)(0.0f, (height - textHeight) * 0.5f);
+        const float textY =
+            pos.y + std::floor((std::max)(0.0f, (height - textHeight) * 0.5f)) + 1.0f;
 
         draw_text_line(label, textX, textY, kFontScale);
 
