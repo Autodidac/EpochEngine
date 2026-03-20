@@ -48,10 +48,12 @@ export module acontext.vulkan.context:swapchain;
 
 import acontext.vulkan.context;
 import :shared_vk;
+import aengine.core.logger;
 
 import <algorithm>;
 import <cstdint>;
 import <limits>;
+import <source_location>;
 import <stdexcept>;
 import <string>;
 import <vector>;
@@ -110,6 +112,11 @@ namespace epochnamespace::vulkancontext
             if (mode == vk::PresentModeKHR::eMailbox)
                 return mode;
         }
+        for (const auto& mode : modes)
+        {
+            if (mode == vk::PresentModeKHR::eImmediate)
+                return mode;
+        }
         return vk::PresentModeKHR::eFifo;
     }
 
@@ -158,6 +165,14 @@ namespace epochnamespace::vulkancontext
         const vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(details.formats);
         const vk::PresentModeKHR presentMode = chooseSwapPresentMode(details.presentModes);
         const vk::Extent2D extent = chooseSwapExtent(details.capabilities);
+
+        logger::get("Epoch.Vulkan").logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "Swapchain present mode: {}",
+            presentMode == vk::PresentModeKHR::eMailbox
+                ? "Mailbox"
+                : (presentMode == vk::PresentModeKHR::eImmediate ? "Immediate" : "Fifo"));
 
         if (extent.width == 0 || extent.height == 0)
             throw RecoverableSwapChainError("[ Vulkan ] - Swapchain extent is zero; waiting for a valid framebuffer size.");

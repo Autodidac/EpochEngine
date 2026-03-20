@@ -331,7 +331,10 @@ namespace epochnamespace::vulkancontext
         }
         if (auto* guiState = find_gui_state(ctx.get()))
             guiState->guiDraws.clear();
-        constexpr int kMaxDrainPasses = 4;
+        // Vulkan should mirror the other backends here: drain the command queue
+        // once, then render from a stable snapshot instead of repeatedly spinning
+        // the queue on the render thread every frame.
+        constexpr int kMaxDrainPasses = 1;
         int drainPasses = 0;
         do
         {
