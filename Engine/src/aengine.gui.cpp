@@ -1415,7 +1415,7 @@ namespace epochnamespace::gui
         draw_sprite(background, pos.x, pos.y, width, height);
 
         const float textWidth = measure_text_width(label, kFontScale);
-        const float textHeight = lineAdvance;
+        const float textHeight = baseHeight;
         const float textX = pos.x + (std::max)(0.0f, (width - textWidth) * 0.5f);
         const float textY = pos.y + (std::max)(0.0f, (height - textHeight) * 0.5f);
 
