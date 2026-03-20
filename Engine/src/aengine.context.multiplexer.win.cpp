@@ -1507,7 +1507,17 @@ namespace epochnamespace::core
                 break;
             }
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            const bool backendOwnsFramePacing =
+                ctx->type == ContextType::OpenGL
+                || ctx->type == ContextType::Vulkan
+                || ctx->type == ContextType::SDL
+                || ctx->type == ContextType::SFML
+                || ctx->type == ContextType::RayLib;
+
+            if (backendOwnsFramePacing)
+                std::this_thread::yield();
+            else
+                std::this_thread::sleep_for(std::chrono::milliseconds(16));
         }
 
         if (win.running && !win.get_should_close())
