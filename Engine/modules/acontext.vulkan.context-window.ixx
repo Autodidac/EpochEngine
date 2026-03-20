@@ -73,10 +73,8 @@ export namespace epochnamespace::vulkancontext {
             return;
         }
         float xOffset = static_cast<float>(xpos) - lastX;
-        // To invert Y movement, use lastY - ypos instead:
+        // Screen-space Y grows downward, so invert it before feeding pitch.
         float yOffset = lastY - static_cast<float>(ypos);
-        // Remove Y inversion for natural mouse control
-        yOffset = static_cast<float>(ypos) - lastY;
 
         lastX = static_cast<float>(xpos);
         lastY = static_cast<float>(ypos);

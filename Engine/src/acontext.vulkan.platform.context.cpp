@@ -331,10 +331,10 @@ namespace epochnamespace::vulkancontext
         }
         if (auto* guiState = find_gui_state(ctx.get()))
             guiState->guiDraws.clear();
-        // Vulkan should mirror the other backends here: drain the command queue
-        // once, then render from a stable snapshot instead of repeatedly spinning
-        // the queue on the render thread every frame.
-        constexpr int kMaxDrainPasses = 1;
+        // Vulkan should mirror the other backends here without starving frame
+        // updates. A small second pass helps absorb same-frame follow-up work
+        // without reintroducing the old multi-pass churn.
+        constexpr int kMaxDrainPasses = 2;
         int drainPasses = 0;
         do
         {
@@ -348,12 +348,13 @@ namespace epochnamespace::vulkancontext
         if (auto* guiState = find_gui_state(ctx.get()))
         {
             const bool hasLastFrame = !guiState->lastGuiDraws.empty();
+            const bool missingCurrentFrame = guiState->guiDraws.empty();
             const bool suspiciouslyPartial =
                 hasLastFrame
-                && (!queueSettled
-                    || (guiState->guiDraws.size() * 3u) < (guiState->lastGuiDraws.size() * 2u));
+                && !missingCurrentFrame
+                && (guiState->guiDraws.size() * 3u) < (guiState->lastGuiDraws.size() * 2u);
 
-            if (guiState->guiDraws.empty() || suspiciouslyPartial)
+            if ((missingCurrentFrame && !queueSettled) || suspiciouslyPartial)
             {
                 if (hasLastFrame)
                     guiState->guiDraws = guiState->lastGuiDraws;

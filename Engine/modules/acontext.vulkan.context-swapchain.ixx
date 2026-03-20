@@ -109,12 +109,12 @@ namespace epochnamespace::vulkancontext
     {
         for (const auto& mode : modes)
         {
-            if (mode == vk::PresentModeKHR::eMailbox)
+            if (mode == vk::PresentModeKHR::eImmediate)
                 return mode;
         }
         for (const auto& mode : modes)
         {
-            if (mode == vk::PresentModeKHR::eImmediate)
+            if (mode == vk::PresentModeKHR::eMailbox)
                 return mode;
         }
         return vk::PresentModeKHR::eFifo;
@@ -170,9 +170,9 @@ namespace epochnamespace::vulkancontext
             logger::LogLevel::INFO,
             std::source_location::current(),
             "Swapchain present mode: {}",
-            presentMode == vk::PresentModeKHR::eMailbox
-                ? "Mailbox"
-                : (presentMode == vk::PresentModeKHR::eImmediate ? "Immediate" : "Fifo"));
+            presentMode == vk::PresentModeKHR::eImmediate
+                ? "Immediate"
+                : (presentMode == vk::PresentModeKHR::eMailbox ? "Mailbox" : "Fifo"));
 
         if (extent.width == 0 || extent.height == 0)
             throw RecoverableSwapChainError("[ Vulkan ] - Swapchain extent is zero; waiting for a valid framebuffer size.");
