@@ -1882,11 +1882,18 @@ export namespace epochnamespace::updater
             log_info("MSBuild: " + msbuild.string());
             append_log_line(build_log, "[INFO] Building updated runtime with MSBuild.");
 
+            const auto vcpkg_install_root = manifest_root / "vcpkg_installed";
+
             const std::vector<std::string> msbuild_args{
                 solution.string(),
                 "/t:" + SOURCE_BUILD_TARGET(),
                 "/p:Configuration=" + SOURCE_BUILD_CONFIGURATION(),
                 "/p:Platform=" + SOURCE_BUILD_PLATFORM(),
+                "/p:VcpkgRoot=" + vcpkg_root.string(),
+                "/p:VcpkgManifestRoot=" + manifest_root.string(),
+                "/p:VcpkgInstalledDir=" + vcpkg_install_root.string(),
+                "/p:VcpkgManifestInstall=false",
+                "/p:VcpkgTriplet=" + SOURCE_BUILD_PLATFORM() + "-windows",
                 "/p:UseMultiToolTask=false",
                 "/m:1",
                 "/clp:ErrorsOnly"
@@ -2403,6 +2410,7 @@ export namespace epochnamespace::updater
             << "Remove-Item Env:VCPKG_ROOT -Force -ErrorAction SilentlyContinue\n"
             << "$vcpkgExe = Resolve-VcpkgExe\n"
             << "$vcpkgRoot = Split-Path -Parent $vcpkgExe\n"
+            << "$managedInstallRoot = Join-Path $manifestRoot 'vcpkg_installed'\n"
             << "$env:VCPKG_ROOT = $vcpkgRoot\n"
             << "Write-Step 'INFO' ('Pinned worker-local VCPKG_ROOT to managed toolchain: ' + $vcpkgRoot)\n"
             << "Prepare-ManifestForManagedVcpkg $manifestRoot $vcpkgRoot\n"
@@ -2417,7 +2425,7 @@ export namespace epochnamespace::updater
             << "for ($attempt = 1; $attempt -le 3 -and -not $buildSucceeded; ++$attempt) {\n"
             << "  try {\n"
             << "    Write-Step 'INFO' ('MSBuild attempt ' + $attempt + ' started.')\n"
-            << "    Invoke-Tool $msbuildExe @($solution, ('/t:' + $buildTarget), ('/p:Configuration=' + $buildConfiguration), ('/p:Platform=' + $buildPlatform), '/p:UseMultiToolTask=false', '/m:1', '/clp:ErrorsOnly') $sourceRoot ('MSBuild attempt ' + $attempt)\n"
+            << "    Invoke-Tool $msbuildExe @($solution, ('/t:' + $buildTarget), ('/p:Configuration=' + $buildConfiguration), ('/p:Platform=' + $buildPlatform), ('/p:VcpkgRoot=' + $vcpkgRoot), ('/p:VcpkgManifestRoot=' + $manifestRoot), ('/p:VcpkgInstalledDir=' + $managedInstallRoot), '/p:VcpkgManifestInstall=false', ('/p:VcpkgTriplet=' + $triplet), '/p:UseMultiToolTask=false', '/m:1', '/clp:ErrorsOnly') $sourceRoot ('MSBuild attempt ' + $attempt)\n"
             << "    $buildSucceeded = $true\n"
             << "  }\n"
             << "  catch {\n"
