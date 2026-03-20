@@ -3,6 +3,7 @@
 ## [v0.83.4]
 - Rolled `main` forward after the packaged `0.83.3` updater-shell release so the public binary can demonstrate the live fallback path into the newer source revision with the repaired runtime-version comparison.
 - Fixed managed-vcpkg baseline rewriting inside updater sandboxes so the source fallback no longer walks up to the Epoch repo's own `HEAD` when it needs a vcpkg registry git revision.
+- Made the source-update worker ignore any inherited `VCPKG_ROOT` and pin a worker-local managed toolchain instead, so updater rebuilds stay isolated from preexisting user vcpkg installs.
 
 ## [v0.83.3]
 - Rolled `main` forward after the packaged `0.83.2` updater-shell hotfix release so the public binary can demonstrate the full release-to-source update path against a newer source revision.
