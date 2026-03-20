@@ -117,32 +117,16 @@ namespace epochnamespace::vulkancontext
 
         cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
-
-        const vk::Buffer vb[] = { *vertexBuffer };
-        const vk::DeviceSize offsets[] = { 0 };
-        cmd.bindVertexBuffers(0, 1, vb, offsets);
-
-        cmd.bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics,
-            *pipelineLayout,
-            0,
-            1,
-            &*descriptorSets[imageIndex],
-            0,
-            nullptr
-        );
-
-        cmd.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
-
         int viewportX = 0;
         int viewportY = 0;
         int viewportWidth = static_cast<int>(swapChainExtent.width);
         int viewportHeight = static_cast<int>(swapChainExtent.height);
         bool hasSceneViewport = false;
+        bool editorPreview = false;
 
         if (const auto* ctx = bound_context())
         {
+            editorPreview = ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor;
             const auto sceneViewport = ctx->scene_viewport();
             if (sceneViewport.valid())
             {
@@ -154,26 +138,46 @@ namespace epochnamespace::vulkancontext
             }
         }
 
-        vk::Viewport viewport{};
-        viewport.x = static_cast<float>(viewportX);
-        viewport.y = static_cast<float>(viewportY);
-        viewport.width = static_cast<float>(viewportWidth);
-        viewport.height = static_cast<float>(viewportHeight);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        cmd.setViewport(0, viewport);
+        const bool renderScenePreview = editorPreview && hasSceneViewport && indexCount > 0;
 
-        vk::Rect2D scissor{};
-        scissor.offset = vk::Offset2D{ viewportX, viewportY };
-        scissor.extent = vk::Extent2D{
-            static_cast<std::uint32_t>(viewportWidth),
-            static_cast<std::uint32_t>(viewportHeight)
-        };
-        cmd.setScissor(0, scissor);
+        if (renderScenePreview)
+        {
+            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+
+            const vk::Buffer vb[] = { *vertexBuffer };
+            const vk::DeviceSize offsets[] = { 0 };
+            cmd.bindVertexBuffers(0, 1, vb, offsets);
+
+            cmd.bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics,
+                *pipelineLayout,
+                0,
+                1,
+                &*descriptorSets[imageIndex],
+                0,
+                nullptr
+            );
+
+            cmd.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
+
+            vk::Viewport viewport{};
+            viewport.x = static_cast<float>(viewportX);
+            viewport.y = static_cast<float>(viewportY);
+            viewport.width = static_cast<float>(viewportWidth);
+            viewport.height = static_cast<float>(viewportHeight);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            cmd.setViewport(0, viewport);
+
+            vk::Rect2D scissor{};
+            scissor.offset = vk::Offset2D{ viewportX, viewportY };
+            scissor.extent = vk::Extent2D{
+                static_cast<std::uint32_t>(viewportWidth),
+                static_cast<std::uint32_t>(viewportHeight)
+            };
+            cmd.setScissor(0, scissor);
 
 #if EPOCH_USE_CLEAR_COLOR_VULKAN
-        if (hasSceneViewport)
-        {
             vk::ClearAttachment sceneAttachment{};
             sceneAttachment.aspectMask = vk::ImageAspectFlagBits::eColor;
             sceneAttachment.colorAttachment = 0;
@@ -188,11 +192,9 @@ namespace epochnamespace::vulkancontext
             sceneRect.baseArrayLayer = 0;
             sceneRect.layerCount = 1;
             cmd.clearAttachments(1, &sceneAttachment, 1, &sceneRect);
-        }
 #endif
-
-        if (indexCount > 0)
             cmd.drawIndexed(indexCount, 1, 0, 0, 0);
+        }
 
         cmd.nextSubpass(vk::SubpassContents::eInline);
 

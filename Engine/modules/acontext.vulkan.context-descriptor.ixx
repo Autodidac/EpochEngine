@@ -206,7 +206,9 @@ namespace epochnamespace::vulkancontext
         UniformBufferObject ubo{};
         const auto* ctx = bound_context();
         const bool editorPreview =
-            ctx && ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor;
+            ctx
+            && ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor
+            && ctx->scene_viewport().valid();
         const auto previewCamera = epochnamespace::previewgrid::camera_for(ctx);
 
         ubo.model = glm::mat4(1.0f);

@@ -286,14 +286,6 @@ namespace epochnamespace::vulkancontext
             if (glfwWindowShouldClose(window))
                 return false;
         }
-#else
-        if (ctx && ctx->get_mouse_position)
-        {
-            int mouseX = 0;
-            int mouseY = 0;
-            ctx->get_mouse_position(mouseX, mouseY);
-            processMouseInput(static_cast<double>(mouseX), static_cast<double>(mouseY));
-        }
 #endif
 
         bool framebufferMinimized = false;
@@ -316,7 +308,9 @@ namespace epochnamespace::vulkancontext
         }
 #endif
 
+#if defined(EPOCH_VULKAN_STANDALONE)
         updateCamera(deltaTime);
+#endif
 
         if (framebufferMinimized)
         {
