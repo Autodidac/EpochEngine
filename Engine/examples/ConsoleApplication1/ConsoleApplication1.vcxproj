@@ -86,6 +86,15 @@
   <PropertyGroup Condition="'$(EpochVersionOverrideMajor)' != '' and '$(EpochVersionOverrideMinor)' != '' and '$(EpochVersionOverrideRevision)' != ''">
     <EpochExtraDefines>EPOCH_OVERRIDE_VERSION_MAJOR=$(EpochVersionOverrideMajor);EPOCH_OVERRIDE_VERSION_MINOR=$(EpochVersionOverrideMinor);EPOCH_OVERRIDE_VERSION_REVISION=$(EpochVersionOverrideRevision);$(EpochExtraDefines)</EpochExtraDefines>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(EpochWindowsPackagedVersionOverrideMajor)' != '' and '$(EpochWindowsPackagedVersionOverrideMinor)' != '' and '$(EpochWindowsPackagedVersionOverrideRevision)' != ''">
+    <EpochExtraDefines>EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_MAJOR=$(EpochWindowsPackagedVersionOverrideMajor);EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_MINOR=$(EpochWindowsPackagedVersionOverrideMinor);EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_REVISION=$(EpochWindowsPackagedVersionOverrideRevision);$(EpochExtraDefines)</EpochExtraDefines>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(EpochLinuxPackagedVersionOverrideMajor)' != '' and '$(EpochLinuxPackagedVersionOverrideMinor)' != '' and '$(EpochLinuxPackagedVersionOverrideRevision)' != ''">
+    <EpochExtraDefines>EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_MAJOR=$(EpochLinuxPackagedVersionOverrideMajor);EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_MINOR=$(EpochLinuxPackagedVersionOverrideMinor);EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_REVISION=$(EpochLinuxPackagedVersionOverrideRevision);$(EpochExtraDefines)</EpochExtraDefines>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(EpochMacosPackagedVersionOverrideMajor)' != '' and '$(EpochMacosPackagedVersionOverrideMinor)' != '' and '$(EpochMacosPackagedVersionOverrideRevision)' != ''">
+    <EpochExtraDefines>EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MAJOR=$(EpochMacosPackagedVersionOverrideMajor);EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MINOR=$(EpochMacosPackagedVersionOverrideMinor);EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_REVISION=$(EpochMacosPackagedVersionOverrideRevision);$(EpochExtraDefines)</EpochExtraDefines>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IntDir>$(SolutionDir)\Debug\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>

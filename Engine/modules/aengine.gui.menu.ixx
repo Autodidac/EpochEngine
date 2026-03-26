@@ -179,7 +179,7 @@ export namespace epochnamespace::menu
 
         static constexpr std::string_view updater_shell_description() noexcept
         {
-            return "Moves through the newest packaged release first, then continues into the current main source build automatically when needed.";
+            return "Moves to the newest packaged release first. If main is newer after restart, run update again to continue from source.";
         }
 
         [[nodiscard]] static bool updater_shell_auto_update_requested() noexcept

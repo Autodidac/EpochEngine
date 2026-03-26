@@ -3058,6 +3058,10 @@ namespace epochnamespace::updater
             << (chain_after_restart
                 ? "set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND=\"\r\n"
                 : "")
+            << "if errorlevel 1 (\r\n"
+            << "  >> \"%LOG%\" echo [ERROR] Failed to restart updated runtime.\r\n"
+            << "  exit /b 1\r\n"
+            << ")\r\n"
             << ">> \"%LOG%\" echo [INFO] Restarted updated runtime.\r\n"
             << "del /F /Q \"%~f0\" >nul 2>&1\r\n";
 
@@ -3205,6 +3209,10 @@ namespace epochnamespace::updater
             << ">> \"%LOG%\" echo [INFO] Source runtime files copied successfully.\r\n"
             << "del /F /Q \"%ARCHIVE%\" >nul 2>&1\r\n"
             << "start \"\" /D \"%TARGETDIR%\" \"%TARGETEXE%\"\r\n"
+            << "if errorlevel 1 (\r\n"
+            << "  >> \"%LOG%\" echo [ERROR] Failed to restart updated runtime.\r\n"
+            << "  exit /b 1\r\n"
+            << ")\r\n"
             << ">> \"%LOG%\" echo [INFO] Restarted updated runtime.\r\n"
             << "rmdir /S /Q \"%SRCROOT%\" >nul 2>&1\r\n"
             << "del /F /Q \"%~f0\" >nul 2>&1\r\n";
@@ -3596,14 +3604,12 @@ namespace epochnamespace::updater
             if (source_status.ok && source_status.update_available)
             {
                 system_detail::log_info(
-                    "Packaged update will continue into the current source build after restart.");
+                    "A newer source snapshot is still available after the packaged restart.");
+                system_detail::log_info(
+                    "Run update again after restart if you want to continue from the packaged build to main source.");
             }
 
-            result.update_performed = install_from_binary(
-                packaged_release.binary_url,
-                (source_status.ok && source_status.update_available)
-                    ? std::string_view{ "smart-update" }
-                    : std::string_view{});
+            result.update_performed = install_from_binary(packaged_release.binary_url);
             return result;
         }
 
