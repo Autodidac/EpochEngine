@@ -55,32 +55,6 @@ import runtime;
 
 namespace
 {
-    constexpr const char* kGithubBase = "https://github.com/";
-    constexpr const char* kGithubRawBase = "https://raw.githubusercontent.com/";
-    constexpr const char* kOwner = "Autodidac/";
-    constexpr const char* kRepo = "EpochEngine";
-    constexpr const char* kBranch = "main/";
-
-    [[nodiscard]] std::string make_version_url()
-    {
-        return std::string("https://api.github.com/repos/") + kOwner + kRepo + "/releases/latest";
-    }
-
-    [[nodiscard]] std::string make_binary_url()
-    {
-        return std::string(kGithubBase) + kOwner + kRepo + "/releases/latest/download/main.zip";
-    }
-
-    [[nodiscard]] std::string make_source_url()
-    {
-        return std::string(kGithubBase) + kOwner + kRepo + "/archive/refs/heads/main.zip";
-    }
-
-    [[nodiscard]] std::string make_source_version_url()
-    {
-        return std::string(kGithubRawBase) + kOwner + kRepo + "/" + kBranch + "Engine/modules/aengine.version.ixx";
-    }
-
 #if defined(_WIN32)
     void configure_unattended_windows_error_mode()
     {
@@ -119,10 +93,10 @@ int main(int argc, char** argv)
             return 0;
 
         const epochnamespace::updater::UpdateChannel channel{
-            .version_url = make_version_url(),
-            .binary_url = make_binary_url(),
-            .source_url = make_source_url(),
-            .source_version_url = make_source_version_url(),
+            .version_url = epochnamespace::updater::PROJECT_PACKAGED_VERSION_URL(),
+            .binary_url = epochnamespace::updater::PROJECT_BINARY_URL(),
+            .source_url = epochnamespace::updater::PROJECT_SOURCE_URL(),
+            .source_version_url = epochnamespace::updater::PROJECT_SOURCE_VERSION_URL(),
         };
 
         if (cli_result.update_requested)

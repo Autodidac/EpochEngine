@@ -31,6 +31,7 @@
 module;
 
 #include <string>
+#include <string_view>
 
 // Keep platform / ABI macros in the global fragment.
 // They must remain macros for ABI + build-system compatibility.
@@ -78,6 +79,57 @@ export namespace epochnamespace
 
 export namespace epochnamespace::platform
 {
+    enum class RuntimePlatform
+    {
+        Windows,
+        Linux,
+        MacOS,
+        Unknown
+    };
+
+    constexpr RuntimePlatform current_platform() noexcept
+    {
+#if defined(_WIN32)
+        return RuntimePlatform::Windows;
+#elif defined(__APPLE__)
+        return RuntimePlatform::MacOS;
+#elif defined(__linux__)
+        return RuntimePlatform::Linux;
+#else
+        return RuntimePlatform::Unknown;
+#endif
+    }
+
+    constexpr bool is_windows() noexcept
+    {
+        return current_platform() == RuntimePlatform::Windows;
+    }
+
+    constexpr bool is_linux() noexcept
+    {
+        return current_platform() == RuntimePlatform::Linux;
+    }
+
+    constexpr bool is_macos() noexcept
+    {
+        return current_platform() == RuntimePlatform::MacOS;
+    }
+
+    constexpr std::string_view current_platform_key() noexcept
+    {
+        switch (current_platform())
+        {
+        case RuntimePlatform::Windows:
+            return "windows";
+        case RuntimePlatform::Linux:
+            return "linux";
+        case RuntimePlatform::MacOS:
+            return "macos";
+        default:
+            return "unknown";
+        }
+    }
+
 #if !defined(__linux__)
     inline bool pump_events() { return true; }
 #endif

@@ -1,29 +1,30 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  ***********************************************/
 module;
 
-export module aengine.updater.tools;
+#include <array>
+#include <cctype>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <source_location>
+#include <string>
+#include <string_view>
+#include <system_error>
 
-import <array>;
-import <cstdlib>;
-import <filesystem>;
-import <fstream>;
-import <iterator>;
-import <source_location>;
-import <string>;
-import <string_view>;
-import <system_error>;
+export module aengine.updater.tools;
 
 import aengine.updater.config;
 import aengine.core.logger;
 
-export namespace epochnamespace::updater
+namespace epochnamespace::updater
 {
     namespace detail
     {
@@ -276,16 +277,36 @@ export namespace epochnamespace::updater
             "$dest='" + destination_ps + "'; "
             "if(Test-Path -LiteralPath $dest){Remove-Item -LiteralPath $dest -Recurse -Force}; "
             "New-Item -ItemType Directory -Path $dest -Force | Out-Null; "
-            "Expand-Archive -LiteralPath $archive -DestinationPath $dest -Force\"";
+            "if($archive.ToLowerInvariant().EndsWith('.zip')) { "
+            "  Expand-Archive -LiteralPath $archive -DestinationPath $dest -Force "
+            "} else { "
+            "  tar -xf $archive -C $dest "
+            "}\"";
 #else
-        if (!setup_7zip())
-            return false;
+        std::string lowered_archive = archive;
+        for (char& ch : lowered_archive)
+            ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
-        const std::string cmd =
-            "7z x "
-            + detail::quote_shell_arg(archive)
-            + " -o" + detail::quote_shell_arg(destination)
-            + " -y > /dev/null";
+        std::string cmd;
+        if (lowered_archive.ends_with(".tar.gz") || lowered_archive.ends_with(".tgz"))
+        {
+            cmd =
+                "tar -xzf "
+                + detail::quote_shell_arg(archive)
+                + " -C " + detail::quote_shell_arg(destination)
+                + " >/dev/null 2>&1";
+        }
+        else
+        {
+            if (!setup_7zip())
+                return false;
+
+            cmd =
+                "7z x "
+                + detail::quote_shell_arg(archive)
+                + " -o" + detail::quote_shell_arg(destination)
+                + " -y > /dev/null";
+        }
 #endif
 
         if (std::system(cmd.c_str()) != 0)

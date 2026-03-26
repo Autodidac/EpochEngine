@@ -1,12 +1,30 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  ***********************************************/
 module;
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <cctype>
+#include <charconv>
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <optional>
+#include <regex>
+#include <source_location>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <vector>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -16,32 +34,20 @@ module;
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#else
+#include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 export module aengine.updater.system;
 
-import <array>;
-import <atomic>;
-import <cctype>;
-import <charconv>;
-import <chrono>;
-import <cstdlib>;
-import <filesystem>;
-import <fstream>;
-import <iterator>;
-import <regex>;
-import <source_location>;
-import <string>;
-import <string_view>;
-import <system_error>;
-import <vector>;
-
 import aengine.core.logger;
 import aengine.cli;
+import aengine.platform;
 import aengine.updater.tools;
 import aengine.updater.config;
 
-export namespace epochnamespace::updater
+namespace epochnamespace::updater
 {
     namespace system_detail
     {
@@ -402,7 +408,6 @@ export namespace epochnamespace::updater
             return {};
         }
 
-#if defined(_WIN32)
         inline void append_log_line(
             const std::filesystem::path& log_path,
             const std::string& line);
@@ -417,7 +422,6 @@ export namespace epochnamespace::updater
 
         [[nodiscard]] inline std::filesystem::path make_temp_download_path(
             const std::string_view stem);
-#endif
 
         [[nodiscard]] inline std::string sanitize_path_component(std::string text)
         {
@@ -607,6 +611,255 @@ export namespace epochnamespace::updater
             }
 
             return out;
+        }
+
+        [[nodiscard]] inline std::vector<std::string> extract_json_objects(const std::string_view text)
+        {
+            std::vector<std::string> objects;
+            bool in_string = false;
+            bool escaping = false;
+            int depth = 0;
+            std::size_t start = std::string_view::npos;
+
+            for (std::size_t i = 0; i < text.size(); ++i)
+            {
+                const char ch = text[i];
+
+                if (in_string)
+                {
+                    if (escaping)
+                    {
+                        escaping = false;
+                    }
+                    else if (ch == '\\')
+                    {
+                        escaping = true;
+                    }
+                    else if (ch == '"')
+                    {
+                        in_string = false;
+                    }
+
+                    continue;
+                }
+
+                if (ch == '"')
+                {
+                    in_string = true;
+                    continue;
+                }
+
+                if (ch == '{')
+                {
+                    if (depth == 0)
+                        start = i;
+                    ++depth;
+                    continue;
+                }
+
+                if (ch == '}')
+                {
+                    if (depth <= 0)
+                        continue;
+
+                    --depth;
+                    if (depth == 0 && start != std::string_view::npos)
+                    {
+                        objects.emplace_back(text.substr(start, i - start + 1));
+                        start = std::string_view::npos;
+                    }
+                }
+            }
+
+            return objects;
+        }
+
+        [[nodiscard]] inline std::string extract_json_string_field(
+            const std::string& object_text,
+            const char* field_name)
+        {
+            const std::string field_pattern =
+                std::string{ "\"" } + field_name + "\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"";
+
+            const std::regex field_regex(
+                field_pattern,
+                std::regex::optimize);
+
+            std::smatch match;
+            if (!std::regex_search(object_text, match, field_regex))
+                return {};
+
+            return unescape_json_string_basic(match[1].str());
+        }
+
+        [[nodiscard]] inline std::string extract_json_array_text(
+            const std::string& object_text,
+            const char* field_name)
+        {
+            const auto key = std::string{ "\"" } + field_name + "\"";
+            const auto key_pos = object_text.find(key);
+            if (key_pos == std::string::npos)
+                return {};
+
+            const auto open_pos = object_text.find('[', key_pos + key.size());
+            if (open_pos == std::string::npos)
+                return {};
+
+            bool in_string = false;
+            bool escaping = false;
+            int depth = 0;
+
+            for (std::size_t i = open_pos; i < object_text.size(); ++i)
+            {
+                const char ch = object_text[i];
+
+                if (in_string)
+                {
+                    if (escaping)
+                    {
+                        escaping = false;
+                    }
+                    else if (ch == '\\')
+                    {
+                        escaping = true;
+                    }
+                    else if (ch == '"')
+                    {
+                        in_string = false;
+                    }
+
+                    continue;
+                }
+
+                if (ch == '"')
+                {
+                    in_string = true;
+                    continue;
+                }
+
+                if (ch == '[')
+                {
+                    ++depth;
+                    continue;
+                }
+
+                if (ch == ']')
+                {
+                    --depth;
+                    if (depth == 0)
+                        return object_text.substr(open_pos, i - open_pos + 1);
+                }
+            }
+
+            return {};
+        }
+
+        struct ReleaseAssetInfo
+        {
+            std::string name;
+            std::string browser_download_url;
+        };
+
+        struct ReleaseInfo
+        {
+            std::string tag_name;
+            std::vector<ReleaseAssetInfo> assets;
+        };
+
+        [[nodiscard]] inline std::vector<ReleaseInfo> parse_github_releases_json(const std::string& json)
+        {
+            std::vector<ReleaseInfo> releases;
+
+            for (const auto& release_object : extract_json_objects(json))
+            {
+                ReleaseInfo release{};
+                release.tag_name = extract_json_string_field(release_object, "tag_name");
+
+                const auto assets_array = extract_json_array_text(release_object, "assets");
+                if (!assets_array.empty())
+                {
+                    for (const auto& asset_object : extract_json_objects(assets_array))
+                    {
+                        ReleaseAssetInfo asset{};
+                        asset.name = extract_json_string_field(asset_object, "name");
+                        asset.browser_download_url =
+                            extract_json_string_field(asset_object, "browser_download_url");
+
+                        if (!asset.name.empty() && !asset.browser_download_url.empty())
+                            release.assets.push_back(std::move(asset));
+                    }
+                }
+
+                if (!release.tag_name.empty())
+                    releases.push_back(std::move(release));
+            }
+
+            return releases;
+        }
+
+        struct ResolvedPackagedRelease
+        {
+            bool found{ false };
+            std::string tag_name;
+            std::string version_url;
+            std::string binary_url;
+        };
+
+        [[nodiscard]] inline ResolvedPackagedRelease resolve_packaged_release()
+        {
+            ResolvedPackagedRelease resolved{};
+            const auto releases_json_path =
+                make_temp_download_path("release_index").replace_extension(".json");
+
+            if (!download_file(PROJECT_RELEASES_API_URL(), releases_json_path.string()))
+                return resolved;
+
+            const auto json = read_text_file(releases_json_path);
+            std::error_code ec;
+            std::filesystem::remove(releases_json_path, ec);
+            if (json.empty())
+                return resolved;
+
+            const auto releases = parse_github_releases_json(json);
+            const auto version_candidates = PACKAGED_VERSION_ASSET_CANDIDATES();
+            const auto binary_candidates = PACKAGED_BINARY_ASSET_CANDIDATES();
+
+            for (const auto& release : releases)
+            {
+                for (const auto& version_name : version_candidates)
+                {
+                    const auto version_it = std::find_if(
+                        release.assets.begin(),
+                        release.assets.end(),
+                        [&](const ReleaseAssetInfo& asset)
+                        {
+                            return asset.name == version_name;
+                        });
+                    if (version_it == release.assets.end())
+                        continue;
+
+                    for (const auto& binary_name : binary_candidates)
+                    {
+                        const auto binary_it = std::find_if(
+                            release.assets.begin(),
+                            release.assets.end(),
+                            [&](const ReleaseAssetInfo& asset)
+                            {
+                                return asset.name == binary_name;
+                            });
+                        if (binary_it == release.assets.end())
+                            continue;
+
+                        resolved.found = true;
+                        resolved.tag_name = release.tag_name;
+                        resolved.version_url = version_it->browser_download_url;
+                        resolved.binary_url = binary_it->browser_download_url;
+                        return resolved;
+                    }
+                }
+            }
+
+            return resolved;
         }
 
         [[nodiscard]] inline std::string capture_process_output(
@@ -1532,6 +1785,94 @@ export namespace epochnamespace::updater
                 false,
                 nullptr);
         }
+#else
+        inline void append_log_line(
+            const std::filesystem::path& log_path,
+            const std::string& line)
+        {
+            if (log_path.empty())
+                return;
+
+            std::ofstream out(log_path, std::ios::binary | std::ios::app);
+            if (!out)
+                return;
+
+            out << line << '\n';
+        }
+
+        [[nodiscard]] inline std::string build_command_line(
+            const std::filesystem::path& executable,
+            const std::vector<std::string>& args)
+        {
+            std::string command = quote_shell_arg(executable.string());
+
+            for (const auto& arg : args)
+            {
+                command.push_back(' ');
+                command += quote_shell_arg(arg);
+            }
+
+            return command;
+        }
+
+        [[nodiscard]] inline bool run_process_hidden(
+            const std::filesystem::path& executable,
+            const std::vector<std::string>& args,
+            const std::filesystem::path& working_directory,
+            const std::filesystem::path& log_path,
+            const bool wait_for_exit,
+            int* const exit_code = nullptr)
+        {
+            if (exit_code != nullptr)
+                *exit_code = -1;
+
+            std::string shell_command;
+            if (!working_directory.empty())
+                shell_command += "cd " + quote_shell_arg(working_directory.string()) + " && ";
+
+            shell_command += build_command_line(executable, args);
+
+            if (!log_path.empty())
+                shell_command += " >> " + quote_shell_arg(log_path.string()) + " 2>&1";
+            else
+                shell_command += " >/dev/null 2>&1";
+
+            if (!wait_for_exit)
+                shell_command += " &";
+
+            const std::string wrapped = "/bin/sh -lc " + quote_shell_arg(shell_command);
+            const int rc = std::system(wrapped.c_str());
+
+            if (!wait_for_exit)
+            {
+                if (exit_code != nullptr)
+                    *exit_code = 0;
+                return rc == 0;
+            }
+
+            if (rc == -1)
+                return false;
+
+            int normalized = rc;
+            if (WIFEXITED(rc))
+                normalized = WEXITSTATUS(rc);
+
+            if (exit_code != nullptr)
+                *exit_code = normalized;
+
+            return true;
+        }
+
+        [[nodiscard]] inline bool launch_batch_hidden(const std::filesystem::path& script_path)
+        {
+            return run_process_hidden(
+                std::filesystem::path{ "/bin/sh" },
+                { script_path.string() },
+                script_path.parent_path(),
+                {},
+                false,
+                nullptr);
+        }
 #endif
 
         [[nodiscard]] inline std::filesystem::path current_binary_path()
@@ -1570,7 +1911,7 @@ export namespace epochnamespace::updater
 #if defined(_WIN32)
             return std::filesystem::absolute("ConsoleApplication1.exe", ec).lexically_normal();
 #else
-            return std::filesystem::absolute("ConsoleApplication1", ec).lexically_normal();
+            return std::filesystem::absolute("epoch", ec).lexically_normal();
 #endif
         }
 
@@ -1584,7 +1925,7 @@ export namespace epochnamespace::updater
 
         [[nodiscard]] inline std::filesystem::path replacement_package_path(const std::filesystem::path& target_binary)
         {
-            return target_binary.parent_path() / "main.update.zip";
+            return target_binary.parent_path() / "main.update.pkg";
         }
 
         [[nodiscard]] inline std::filesystem::path replacement_extract_dir(const std::filesystem::path& target_binary)
@@ -1730,7 +2071,7 @@ export namespace epochnamespace::updater
                     return version;
             }
 
-            return extract_version_string(PROJECT_VERSION);
+            return extract_version_string(PROJECT_SOURCE_VERSION);
         }
 
         [[nodiscard]] inline std::filesystem::path find_msbuild_path()
@@ -2936,7 +3277,7 @@ export namespace epochnamespace::updater
 
         const std::string normalized_local =
             local_version_override.empty()
-            ? system_detail::extract_version_string(PROJECT_VERSION)
+            ? system_detail::extract_version_string(PROJECT_SOURCE_VERSION)
             : system_detail::extract_version_string(local_version_override);
 
         if (normalized_local.empty())
@@ -2970,9 +3311,22 @@ export namespace epochnamespace::updater
         const auto normalized_url =
             system_detail::lower_ascii(system_detail::strip_url_query_and_fragment(url));
 
-        if (normalized_url.ends_with(".zip"))
+        const auto archive_extension = [&]() -> std::string
+            {
+                if (normalized_url.ends_with(".tar.gz"))
+                    return ".tar.gz";
+                if (normalized_url.ends_with(".tgz"))
+                    return ".tgz";
+                if (normalized_url.ends_with(".zip"))
+                    return ".zip";
+                return {};
+            }();
+
+        if (!archive_extension.empty())
         {
-            const auto archive_path = system_detail::replacement_package_path(target_binary);
+            auto archive_path = system_detail::replacement_package_path(target_binary);
+            archive_path.replace_extension();
+            archive_path += archive_extension;
             const auto extract_dir = system_detail::replacement_extract_dir(target_binary);
 
             std::error_code ec;
@@ -3019,7 +3373,7 @@ export namespace epochnamespace::updater
         if (recheck_source_version && !channel.source_version_url.empty())
         {
             const auto source_status =
-                check_for_updates(channel.source_version_url, "Source", PROJECT_VERSION);
+                check_for_updates(channel.source_version_url, "Source", PROJECT_SOURCE_VERSION);
 
             if (source_status.ok && source_status.update_available)
                 system_detail::log_info("A newer source snapshot is available on main.");
@@ -3131,24 +3485,63 @@ export namespace epochnamespace::updater
         cleanup_previous_update_artifacts();
 
         UpdateCommandResult result{};
+        const std::string local_packaged_version =
+            system_detail::extract_version_string(PROJECT_PACKAGED_VERSION);
+        const std::string local_source_version =
+            system_detail::extract_version_string(PROJECT_SOURCE_VERSION);
 
-        const auto packaged_status = check_for_updates(channel.version_url);
-        if (!packaged_status.ok)
-            return result;
+        auto packaged_release = system_detail::resolve_packaged_release();
+        if (!packaged_release.found
+            && !channel.version_url.empty()
+            && !channel.binary_url.empty())
+        {
+            packaged_release.found = true;
+            packaged_release.version_url = channel.version_url;
+            packaged_release.binary_url = channel.binary_url;
+        }
 
-        result.local_version = packaged_status.local;
-        result.remote_version = packaged_status.remote;
+        system_detail::VersionCheckResult packaged_status{};
+        packaged_status.local = local_packaged_version;
+        result.local_version = local_packaged_version;
+
+        if (packaged_release.found && !packaged_release.version_url.empty())
+        {
+            packaged_status = check_for_updates(
+                packaged_release.version_url,
+                "Packaged",
+                PROJECT_PACKAGED_VERSION);
+
+            if (packaged_status.ok)
+            {
+                const bool current_source_is_newer =
+                    !local_source_version.empty()
+                    && system_detail::compare_versions(local_source_version, packaged_status.remote) > 0;
+
+                if (current_source_is_newer && packaged_status.update_available)
+                {
+                    system_detail::log_info(
+                        "Ignoring packaged release because the current source build is already newer.");
+                    packaged_status.update_available = false;
+                }
+
+                result.local_version = packaged_status.local;
+                result.remote_version = packaged_status.remote;
+            }
+        }
+        else
+        {
+            system_detail::log_info(
+                "No packaged release asset was found for platform '"
+                + std::string{ platform::current_platform_key() } + "'.");
+        }
 
         system_detail::VersionCheckResult source_status{};
         if (!channel.source_version_url.empty())
         {
-            const std::string source_compare_local =
-                packaged_status.update_available ? packaged_status.remote : packaged_status.local;
-
             source_status = check_for_updates(
                 channel.source_version_url,
                 "Source",
-                source_compare_local);
+                PROJECT_SOURCE_VERSION);
 
             if (source_status.ok)
             {
@@ -3176,7 +3569,7 @@ export namespace epochnamespace::updater
             }
 
             result.update_performed = install_from_binary(
-                channel.binary_url,
+                packaged_release.binary_url,
                 (source_status.ok && source_status.update_available)
                     ? std::string_view{ "smart-update" }
                     : std::string_view{});
