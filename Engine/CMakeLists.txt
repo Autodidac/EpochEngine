@@ -24,11 +24,6 @@ set(EPOCH_SOURCES
     src/afilewatch.cpp
     src/afont.renderer.cpp
     src/acontext.raylib.bridge.cpp
-    src/acontext.vulkan.platform.context.cpp
-    src/acontext.vulkan.platform.descriptors.cpp
-    src/acontext.vulkan.context-texture.cpp
-    src/acontext.vulkan.context_buffers.cpp
-    src/acontext.vulkan.dispatch_storage.cpp
     src/core.assert.cpp
     src/core.env.cpp
     src/core.error.cpp
@@ -73,12 +68,6 @@ set(EPOCH_MODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
 file(GLOB EPOCH_MODULE_FILES ${EPOCH_MODULE_DIR}/*.ixx)
 list(SORT EPOCH_MODULE_FILES)
 
-target_sources(epoch PRIVATE
-    FILE_SET epoch_modules TYPE CXX_MODULES
-        BASE_DIRS ${EPOCH_MODULE_DIR}
-        FILES ${EPOCH_MODULE_FILES}
-)
-
 target_include_directories(epoch PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -96,13 +85,30 @@ target_include_directories(epoch_renderer_smoke PRIVATE
 find_program(GLSLANG_VALIDATOR glslangValidator)
 set(EPOCH_VULKAN_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/vulkan)
 set(EPOCH_VULKAN_SHADER_DIR ${EPOCH_VULKAN_ASSET_DIR}/shaders)
+set(EPOCH_FONT_ASSET_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/examples/ConsoleApplication1/assets/fonts)
+set(EPOCH_FONT_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/fonts)
 
 file(MAKE_DIRECTORY ${EPOCH_VULKAN_SHADER_DIR})
+file(MAKE_DIRECTORY ${EPOCH_FONT_ASSET_DIR})
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/texture.ppm
     ${EPOCH_VULKAN_ASSET_DIR}/texture.ppm
     COPYONLY
 )
+if(EXISTS ${EPOCH_FONT_ASSET_SOURCE_DIR}/Roboto-Regular.ttf)
+    configure_file(
+        ${EPOCH_FONT_ASSET_SOURCE_DIR}/Roboto-Regular.ttf
+        ${EPOCH_FONT_ASSET_DIR}/Roboto-Regular.ttf
+        COPYONLY
+    )
+endif()
+if(EXISTS ${EPOCH_FONT_ASSET_SOURCE_DIR}/OFL.txt)
+    configure_file(
+        ${EPOCH_FONT_ASSET_SOURCE_DIR}/OFL.txt
+        ${EPOCH_FONT_ASSET_DIR}/OFL.txt
+        COPYONLY
+    )
+endif()
 
 if(GLSLANG_VALIDATOR)
     add_custom_command(
@@ -143,9 +149,8 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # BMI build rules correctly when paired with Ninja or Makefiles.
     target_compile_options(epoch PRIVATE -fmodules-ts)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    # Clang builds rely on the Modules TS flag to keep BMI generation
-    # consistent across CMake presets and helper scripts.
-    target_compile_options(epoch PRIVATE -fmodules-ts)
+    # Clang 18+ works with CMake's standard scanning flow directly; the
+    # GCC-specific Modules TS switch is not accepted by clang-scan-deps.
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
@@ -153,19 +158,27 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(epoch_renderer_smoke PRIVATE -fmodules-ts)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(epoch_renderer_smoke PRIVATE -fmodules-ts)
+    # No extra module flag is needed for Clang here.
 endif()
 
 function(epoch_option suffix default_value help_text)
     option(EPOCH_${suffix} "${help_text}" ${default_value})
 endfunction()
 
+set(EPOCH_DEFAULT_ENABLE_VULKAN ON)
+if(UNIX AND NOT APPLE)
+    # Keep the Linux path on the stable backends until the Vulkan module graph
+    # is fully mirrored to the working Windows implementation.
+    set(EPOCH_DEFAULT_ENABLE_VULKAN OFF)
+endif()
+
 epoch_option(ENABLE_RAYLIB ON "Enable the Raylib backend")
 epoch_option(ENABLE_SDL ON "Enable the SDL backend")
 epoch_option(ENABLE_SFML ON "Enable the SFML backend")
-epoch_option(ENABLE_VULKAN ON "Enable the Vulkan backend")
+epoch_option(ENABLE_VULKAN ${EPOCH_DEFAULT_ENABLE_VULKAN} "Enable the Vulkan backend")
 epoch_option(ENABLE_OPENGL ON "Enable the OpenGL backend")
 epoch_option(ENABLE_SOFTWARE_RENDERER ON "Enable the software renderer backend")
+epoch_option(UPDATER_SHELL_BUILD OFF "Build the lightweight updater shell by default")
 epoch_option(REQUIRE_OPTIONAL_DEPENDENCIES OFF "Treat missing optional backend dependencies as a configuration error")
 
 set(EPOCH_RAYLIB_ACTIVE ${EPOCH_ENABLE_RAYLIB})
@@ -174,6 +187,14 @@ set(EPOCH_SFML_ACTIVE ${EPOCH_ENABLE_SFML})
 set(EPOCH_VULKAN_ACTIVE ${EPOCH_ENABLE_VULKAN})
 set(EPOCH_OPENGL_ACTIVE ${EPOCH_ENABLE_OPENGL})
 set(EPOCH_SOFTWARE_RENDERER_ACTIVE ${EPOCH_ENABLE_SOFTWARE_RENDERER})
+
+if(NOT EPOCH_RAYLIB_ACTIVE)
+    list(FILTER EPOCH_SOURCES EXCLUDE REGEX [[src/acontext\.raylib\..*\.cpp$]])
+endif()
+
+if(NOT EPOCH_VULKAN_ACTIVE)
+    list(FILTER EPOCH_SOURCES EXCLUDE REGEX [[src/acontext\.vulkan\..*\.cpp$]])
+endif()
 
 find_package(PkgConfig QUIET)
 
@@ -356,9 +377,11 @@ if(EPOCH_VULKAN_ACTIVE)
     endif()
 
     if(EPOCH_VULKAN_ACTIVE)
-        list(APPEND EPOCH_SOURCES
-        )
         target_sources(epoch PRIVATE
+            src/acontext.vulkan.platform.context.cpp
+            src/acontext.vulkan.platform.descriptors.cpp
+            src/acontext.vulkan.dispatch_storage.cpp
+            modules/acontext.vulkan.context-api_unit.ixx
         )
     endif()
 endif()
@@ -433,12 +456,62 @@ if(EPOCH_GLAD_NEED_HEADERS)
     endif()
 endif()
 
+set(EPOCH_ACTIVE_MODULE_FILES ${EPOCH_MODULE_FILES})
+
+function(epoch_exclude_modules list_var regex_pattern)
+    set(_epoch_filtered ${${list_var}})
+    list(FILTER _epoch_filtered EXCLUDE REGEX "${regex_pattern}")
+    set(${list_var} "${_epoch_filtered}" PARENT_SCOPE)
+endfunction()
+
+if(NOT EPOCH_RAYLIB_ACTIVE)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.raylib\.]])
+endif()
+
+if(NOT EPOCH_SDL_ACTIVE)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.sdl\.]])
+endif()
+
+if(NOT EPOCH_SFML_ACTIVE)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.sfml\.]])
+endif()
+
+if(NOT EPOCH_VULKAN_ACTIVE)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.vulkan\.]])
+endif()
+
+epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.vulkan\.context-api_unit\.ixx$]])
+epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])almondshell\.ixx$]])
+
+if(NOT EPOCH_OPENGL_ACTIVE)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.opengl\.]])
+endif()
+
+if(NOT EPOCH_SOFTWARE_RENDERER_ACTIVE)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.softrenderer\.]])
+endif()
+
+if(NOT WIN32)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\]).*\.win\.ixx$]])
+endif()
+
+if(NOT (UNIX AND NOT APPLE))
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\]).*\.linux\.ixx$]])
+endif()
+
+target_sources(epoch PRIVATE
+    FILE_SET epoch_modules TYPE CXX_MODULES
+        BASE_DIRS ${EPOCH_MODULE_DIR}
+        FILES ${EPOCH_ACTIVE_MODULE_FILES}
+)
+
 if(MSVC AND EPOCH_RAYLIB_ACTIVE AND EPOCH_GLAD_SHOULD_LINK)
     target_link_options(epoch PRIVATE /FORCE:MULTIPLE)
 endif()
 
 target_compile_definitions(epoch PRIVATE
     EPOCH_MAIN_IN_MAIN_CPP=1
+    $<$<BOOL:${EPOCH_UPDATER_SHELL_BUILD}>:EPOCH_UPDATER_SHELL_BUILD=1>
     $<$<BOOL:${EPOCH_RAYLIB_ACTIVE}>:EPOCH_FORCE_ENABLE_RAYLIB>
     $<$<NOT:$<BOOL:${EPOCH_RAYLIB_ACTIVE}>>:EPOCH_FORCE_DISABLE_RAYLIB>
     $<$<BOOL:${EPOCH_SDL_ACTIVE}>:EPOCH_FORCE_ENABLE_SDL>
@@ -459,6 +532,13 @@ target_compile_definitions(epoch PRIVATE
 find_package(glm CONFIG QUIET)
 if(glm_FOUND)
     target_link_libraries(epoch PRIVATE glm::glm)
+else()
+    find_path(GLM_INCLUDE_DIR glm/glm.hpp)
+    if(GLM_INCLUDE_DIR)
+        target_include_directories(epoch PRIVATE ${GLM_INCLUDE_DIR})
+    elseif(EPOCH_VULKAN_ACTIVE)
+        message(FATAL_ERROR "glm headers were not found. Install glm or rerun with -DEPOCH_ENABLE_VULKAN=OFF.")
+    endif()
 endif()
 
 find_package(fmt CONFIG QUIET)
@@ -469,6 +549,11 @@ endif()
 find_package(asio CONFIG QUIET)
 if(asio_FOUND)
     target_link_libraries(epoch PRIVATE asio::asio)
+else()
+    find_path(ASIO_INCLUDE_DIR asio.hpp)
+    if(ASIO_INCLUDE_DIR)
+        target_include_directories(epoch PRIVATE ${ASIO_INCLUDE_DIR})
+    endif()
 endif()
 
 find_package(Threads REQUIRED)

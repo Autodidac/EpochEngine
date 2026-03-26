@@ -1,3 +1,5 @@
+* text=auto
+
 *.h linguist-language=C++
 *.c linguist-language=C
 *.cpp linguist-language=C++
@@ -15,6 +17,20 @@ CMakeLists.txt linguist-language=CMake
 *.ps1 linguist-language=PowerShell
 *.bat linguist-language=Batchfile
 *.cmd linguist-language=Batchfile
+
+*.sh text eol=lf
+CMakeLists.txt text eol=lf
+*.cmake text eol=lf
+*.h text eol=lf
+*.c text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.ipp text eol=lf
+*.inl text eol=lf
+*.ixx text eol=lf
+*.cppm text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
 
 *.vcxproj linguist-language=XML
 *.vcxitems linguist-language=XML

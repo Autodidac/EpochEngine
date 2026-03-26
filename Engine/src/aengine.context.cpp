@@ -28,42 +28,46 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- // aengine.context.cpp  (TU implementation; NOT a module interface)
- //
+module;
 
-#include <include/aengine.config.hpp> // macros only â€” must NOT include windows
+// aengine.context.cpp  (module implementation unit for aengine.core.context)
 
-import <algorithm>;
-import <cstdint>;
-import <format>;
-import <map>;
-import <memory>;
-import <mutex>;
-import <queue>;
-import <shared_mutex>;
-import <span>;
-import <source_location>;
-import <stdexcept>;
-import <string>;
-import <string_view>;
-import <utility>;
-import <vector>;
+#include <include/aengine.config.hpp> // macros only - must stay in the global module fragment
+
+#include <algorithm>
+#include <cstdint>
+#include <format>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <shared_mutex>
+#include <span>
+#include <source_location>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+module aengine.core.context;
 
 import aengine.platform;
 
-import aengine.input;
-import aengine.context.type;
-import aengine.core.context;
-import aengine.core.logger;
-import aengine.gui;
-//import aengine.context.window;
-import aengine.context.multiplexer;
+ import aengine.input;
+ import aengine.context.type;
+ import aengine.context.commandqueue;
+ import aengine.core.logger;
+ import aengine.gui;
+ //import aengine.context.window;
+ import aengine.context.multiplexer;
 
-import aatlas.manager;
-import aatlas.texture;
-import aimage.loader;
+ import aatlas.manager;
+ import aatlas.texture;
+ import aimage.loader;
+ import aatomicfunction;
 
-#ifdef EPOCH_USING_VULKAN
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
 import acontext.vulkan.context;
 //import acontext.vulkan.context:renderer;
 //import acontext.vulkan.context:texture;
@@ -211,7 +215,7 @@ namespace
     }
 #endif
 
-#if defined(EPOCH_USING_VULKAN)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
     void vulkan_initialize_adapter()
     {
         auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
@@ -729,7 +733,7 @@ namespace epochnamespace::core
         }
 #endif
 
-#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
         {
             auto ctx = std::make_shared<Context>();
             ctx->type = ContextType::Vulkan;

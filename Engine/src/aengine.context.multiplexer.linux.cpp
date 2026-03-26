@@ -29,24 +29,25 @@
  *                                              *
  ***********************************************/
 
-// aengine.context.multiplexer.linux.cpp  (TU implementation; NOT a module interface)
-//
+// aengine.context.multiplexer.linux.cpp
+
+module;
 
 #if defined(__linux__)
 
 // Feature flags (defines EPOCH_USING_*)
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
+// If GLAD is enabled on Linux, it must come before the GLX headers.
+#if (defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)) || defined(EPOCH_USING_RAYLIB) || defined(EPOCH_USING_SDL)
+#   include <glad/glad.h>
+#endif
+
 // X11 / GLX headers must be includes (not module imports)
 #include <X11/Xatom.h>
 #include <X11/extensions/Xrandr.h>
 #include <GL/glx.h>
 #include <GL/glxext.h>
-
-// If you use GLAD on Linux, include it here (raylib/sdl/opengl paths share it)
-#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) || defined(EPOCH_USING_RAYLIB) || defined(EPOCH_USING_SDL)
-#   include <glad/glad.h>
-#endif
 
 // ---- std ----
 #include <algorithm>
@@ -69,8 +70,9 @@
 #include <utility>
 #include <vector>
 
+module aengine.context.multiplexer;
+
 // ---- engine interfaces/types (modules you already own) ----
-import aengine.context.multiplexer;   // MultiContextManager (decls)
 import aengine.core.context;          // Context, InitializeAllContexts(), CloneContext(), g_backends, etc.
 import aengine.core.logger;
 import aengine.context.window;        // WindowData
@@ -1214,7 +1216,7 @@ namespace epochnamespace::core
         const int clampedHeight = (std::max)(1, height);
 
         std::function<void(int, int)> resizeCallback;
-        core::ContextType contextType = core::ContextType::None;
+        core::ContextType contextType = core::ContextType::Custom;
         std::uintptr_t windowId = 0;
         WindowData* window = nullptr;
 
@@ -1466,8 +1468,7 @@ namespace epochnamespace::core
             {
                 std::size_t depth = 0;
                 {
-                    std::scoped_lock lock(win.commandQueue.get_mutex());
-                    depth = win.commandQueue.get_queue().size();
+                    depth = win.commandQueue.depth();
                 }
                 telemetry::emit_gauge(
                     "renderer.command_queue.depth",

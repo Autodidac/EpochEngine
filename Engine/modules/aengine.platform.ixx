@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -29,6 +29,8 @@
  *                                              *
  ***********************************************/
 module;
+
+#include <string>
 
 // Keep platform / ABI macros in the global fragment.
 // They must remain macros for ABI + build-system compatibility.
@@ -62,8 +64,6 @@ module;
 // -----------------------------------------------------------------------------
 export module aengine.platform;
 
-import <string>;
-
 // -----------------------------------------------------------------------------
 // Namespace selection
 // -----------------------------------------------------------------------------
@@ -78,9 +78,7 @@ export namespace epochnamespace
 
 export namespace epochnamespace::platform
 {
-#if defined(__linux__)
-    bool pump_events();
-#else
+#if !defined(__linux__)
     inline bool pump_events() { return true; }
 #endif
 }

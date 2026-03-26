@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -29,6 +29,13 @@
  *                                              *
  ***********************************************/
 module;
+
+#include <string>
+#include <string_view>
+#include <stdexcept>
+#include <utility>
+#include <functional>
+#include <memory>
 
 // Must be before anything that might include <windows.h>
 #if defined(_WIN32)
@@ -73,18 +80,11 @@ module;
 
 export module aengine.context.window;
 
-import <string>;
-import <string_view>;
-import <stdexcept>;
-import <utility>;
-import <functional>;
-import <memory>;
-
 //import aframework;                    // if this imports SFML headers, NOMINMAX is already set
 import aengine.context.type;
 import aengine.context.commandqueue;
 
-export namespace epochnamespace::core
+namespace epochnamespace::core
 {
     class Context;
 
@@ -100,6 +100,10 @@ export namespace epochnamespace::core
         HGLRC glrc = nullptr;
         HGLRC& glContext = glrc; // legacy alias
 #   endif
+#else
+        void* hwnd = nullptr;
+        void* hdc = nullptr;
+        void* glContext = nullptr;
 #endif
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
@@ -114,6 +118,7 @@ export namespace epochnamespace::core
 
         std::shared_ptr<core::Context> context{};
         core::CommandQueue            commandQueue{};
+        std::function<bool(const std::shared_ptr<core::Context>&)> threadInitialize{};
 
         bool running = false;
         bool usesSharedContext = false;
@@ -155,8 +160,11 @@ export namespace epochnamespace::core
         {
         }
 #else
-        WindowData(void*, void*, void*, bool inUsesShared, core::ContextType inType)
-            : usesSharedContext(inUsesShared)
+        WindowData(void* inHwnd, void* inHdc, void* inGlrc, bool inUsesShared, core::ContextType inType)
+            : hwnd(inHwnd)
+            , hdc(inHdc)
+            , glContext(inGlrc)
+            , usesSharedContext(inUsesShared)
             , type(inType)
         {
         }
@@ -222,7 +230,7 @@ export namespace epochnamespace::core
     };
 }
 
-export namespace epochnamespace::contextwindow
+namespace epochnamespace::contextwindow
 {
     export using WindowData = epochnamespace::core::WindowData;
 }

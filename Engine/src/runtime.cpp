@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+module;
+
 #include "../include/app_api.h"
 #include "../include/epoch.api_types.hpp"
 
@@ -37,6 +39,26 @@
 #include <memory>
 #include <print>
 #include <utility>
+
+namespace epochnamespace::core::bridge
+{
+    int run_legacy_runtime(bool editor_mode);
+}
+
+module runtime;
+
+import aengine.cli;
+
+import core.env;
+import core.format;
+import core.log;
+import core.time;
+import epoch.perf.select;
+import epoch.perf.tier;
+import epoch.platform.capabilities;
+import epoch.platform.context;
+import epoch.platform.window;
+import epoch.systems;
 
 extern "C"
 {
@@ -77,25 +99,6 @@ extern "C"
         return &k_epoch_default_callbacks;
     }
 #endif
-}
-import runtime;
-
-import aengine.cli;
-
-import core.env;
-import core.format;
-import core.log;
-import core.time;
-import epoch.perf.select;
-import epoch.perf.tier;
-import epoch.platform.capabilities;
-import epoch.platform.context;
-import epoch.platform.window;
-import epoch.systems;
-
-namespace epochnamespace::core::bridge
-{
-    int run_legacy_runtime(bool editor_mode);
 }
 
 namespace runtime
