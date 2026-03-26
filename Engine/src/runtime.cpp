@@ -105,6 +105,12 @@ namespace runtime
 {
     namespace
     {
+#if defined(EPOCH_EXTERNAL_APP_CALLBACKS)
+        constexpr bool k_has_external_app_callbacks = true;
+#else
+        constexpr bool k_has_external_app_callbacks = false;
+#endif
+
         std::string_view to_std(epoch::string_view v) noexcept
         {
             return std::string_view{ v.data ? v.data : "", v.size };
@@ -425,6 +431,15 @@ namespace runtime
     {
         if (options.editor_requested)
             return run_legacy_bridge(true);
+
+        if constexpr (!k_has_external_app_callbacks)
+        {
+            epoch::core::log::write(
+                epoch::core::log::level::info,
+                "engine",
+                "native app callbacks not linked; using full engine runtime");
+            return run_legacy_bridge(false);
+        }
 
         if (options.path == Path::LegacyParity)
             return run_legacy_bridge(false);
