@@ -52,6 +52,17 @@ namespace epochnamespace::core::cli
 #endif
         }
 
+        [[nodiscard]] constexpr std::string_view default_updater_shell_backend() noexcept
+        {
+#if defined(_WIN32)
+            return "software";
+#elif defined(__linux__)
+            return "opengl";
+#else
+            return "software";
+#endif
+        }
+
         enum class BackendSelection
         {
             Auto,
@@ -253,7 +264,7 @@ namespace epochnamespace::core::cli
             parented_mode = false;
             window_width = 960;
             window_height = 640;
-            (void)apply_backend_selection("software");
+            (void)apply_backend_selection(detail::default_updater_shell_backend());
         }
 
         if (argc < 1)

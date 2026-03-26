@@ -58,6 +58,28 @@ directory is the safest default for local testing.
 
 ---
 
+# In action
+
+Multi-context runtime with all active backend windows:
+
+![Epoch Windows Multi-context](Images/readme/windows-multicontext.png)
+
+Single-backend context proofs on Windows:
+
+![Epoch OpenGL](Images/readme/windows-opengl.png)
+![Epoch Vulkan](Images/readme/windows-vulkan.png)
+![Epoch SDL](Images/readme/windows-sdl.png)
+![Epoch SFML](Images/readme/windows-sfml.png)
+![Epoch Raylib](Images/readme/windows-raylib.png)
+![Epoch Software](Images/readme/windows-software.png)
+
+WSL/Linux note:
+
+- The Linux updater shell is intended to run under native Linux and WSL2 with WSLg/X11 plus working OpenGL.
+- The automated capture pass in this repo currently generates the Windows proofs above; WSL/Linux launch and build flow are documented in the shell-script section below.
+
+---
+
 # Repository layout
 
 ```text
@@ -210,6 +232,12 @@ cd Engine
 ./build.sh gcc Release
 ./run.sh gcc Release
 ```
+
+WSL note:
+
+- The packaged Linux updater shell can also be smoke-tested under Windows WSL2.
+- Use a WSLg/X11 setup with working OpenGL, extract the Linux release asset inside WSL, then launch `./epoch`.
+- The Linux updater shell now prefers OpenGL by default on Linux/WSL; you can still force `--backend software` if you need the CPU path.
 
 ---
 

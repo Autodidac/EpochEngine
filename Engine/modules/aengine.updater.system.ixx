@@ -2043,11 +2043,39 @@ namespace epochnamespace::updater
             return source_root / SOURCE_BUILD_PLATFORM() / SOURCE_BUILD_CONFIGURATION();
         }
 
+        [[nodiscard]] inline std::filesystem::path resolve_runtime_binary_path(
+            const std::filesystem::path& runtime_dir,
+            const std::filesystem::path& target_binary)
+        {
+#if defined(_WIN32)
+            const std::array<std::filesystem::path, 3> candidates{
+                runtime_dir / target_binary.filename(),
+                runtime_dir / "ConsoleApplication1.exe",
+                runtime_dir / "epoch.exe",
+            };
+#else
+            const std::array<std::filesystem::path, 2> candidates{
+                runtime_dir / target_binary.filename(),
+                runtime_dir / "epoch",
+            };
+#endif
+
+            std::error_code ec;
+            for (const auto& candidate : candidates)
+            {
+                if (!candidate.empty() && std::filesystem::exists(candidate, ec))
+                    return candidate;
+                ec.clear();
+            }
+
+            return runtime_dir / target_binary.filename();
+        }
+
         [[nodiscard]] inline std::filesystem::path source_runtime_binary_path(
             const std::filesystem::path& source_root,
             const std::filesystem::path& target_binary)
         {
-            return source_runtime_output_dir(source_root) / target_binary.filename();
+            return resolve_runtime_binary_path(source_runtime_output_dir(source_root), target_binary);
         }
 
         [[nodiscard]] inline std::filesystem::path source_manifest_root(const std::filesystem::path& source_root)
@@ -2968,7 +2996,7 @@ namespace epochnamespace::updater
 #if defined(_WIN32)
         const auto target_dir = target_binary.parent_path();
         const auto script_path = system_detail::make_temp_script_path("replace_runtime_zip");
-        const auto extracted_binary = extracted_runtime_dir / target_binary.filename();
+        const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
         const bool chain_after_restart = !restart_auto_command.empty();
 
@@ -3045,6 +3073,7 @@ namespace epochnamespace::updater
 #else
         const auto target_dir = target_binary.parent_path();
         const auto script_path = system_detail::make_temp_script_path("replace_runtime_zip");
+        const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
         const bool chain_after_restart = !restart_auto_command.empty();
 
         std::ofstream sh(script_path, std::ios::binary);
@@ -3060,8 +3089,10 @@ namespace epochnamespace::updater
             << "TARGETDIR=" << system_detail::quote_shell_arg(target_dir.string()) << "\n"
             << "ARCHIVE=" << system_detail::quote_shell_arg(package_archive.string()) << "\n"
             << "TARGETEXE=" << system_detail::quote_shell_arg(target_binary.string()) << "\n"
+            << "NEWEXE=" << system_detail::quote_shell_arg(extracted_binary.string()) << "\n"
             << "i=0\n"
             << "while [ $i -lt 20 ]; do\n"
+            << "  cp \"$NEWEXE\" \"$TARGETEXE\" 2>/dev/null || true\n"
             << "  cp -R \"$EXTRACTED/.\" \"$TARGETDIR\" 2>/dev/null && break\n"
             << "  i=$((i+1))\n"
             << "  sleep 1\n"
@@ -3098,7 +3129,7 @@ namespace epochnamespace::updater
         const std::filesystem::path& source_root,
         const std::filesystem::path& package_archive)
     {
-        const auto built_binary = built_runtime_dir / target_binary.filename();
+        const auto built_binary = system_detail::resolve_runtime_binary_path(built_runtime_dir, target_binary);
         if (!std::filesystem::exists(built_binary))
         {
             system_detail::log_error("Source replacement aborted because the built runtime binary is missing.");
@@ -3203,7 +3234,7 @@ namespace epochnamespace::updater
             << "BUILTDIR=" << system_detail::quote_shell_arg(built_runtime_dir.string()) << "\n"
             << "TARGETDIR=" << system_detail::quote_shell_arg(target_dir.string()) << "\n"
             << "TARGETEXE=" << system_detail::quote_shell_arg(target_binary.string()) << "\n"
-            << "BUILTEXE=" << system_detail::quote_shell_arg((built_runtime_dir / target_binary.filename()).string()) << "\n"
+            << "BUILTEXE=" << system_detail::quote_shell_arg(built_binary.string()) << "\n"
             << "SRCROOT=" << system_detail::quote_shell_arg(source_root.string()) << "\n"
             << "ARCHIVE=" << system_detail::quote_shell_arg(package_archive.string()) << "\n"
             << "i=0\n"

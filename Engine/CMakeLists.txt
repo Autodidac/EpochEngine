@@ -59,7 +59,17 @@ endif()
 add_executable(epoch ${EPOCH_SOURCES})
 set_target_properties(epoch PROPERTIES OUTPUT_NAME epoch)
 
-add_executable(epoch_renderer_smoke
+if(EPOCH_UPDATER_SHELL_BUILD)
+  add_custom_command(
+    TARGET epoch POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -f
+            "$<TARGET_FILE_DIR:epoch>/epoch_renderer_smoke.exe"
+            "$<TARGET_FILE_DIR:epoch>/epoch_renderer_smoke"
+    COMMENT "Removing stale renderer smoke artifacts from updater-shell output"
+  )
+endif()
+
+add_executable(epoch_renderer_smoke EXCLUDE_FROM_ALL
     src/renderer_smoke_harness.cpp
 )
 
