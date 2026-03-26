@@ -708,7 +708,6 @@ namespace
         create_backend_windows(ContextType::OpenGL, OpenGLWinCount);
         create_backend_windows(ContextType::Software, SoftwareWinCount);
 
-        StartRenderThreads();
         return true;
     }
 
@@ -1180,41 +1179,68 @@ namespace
     {
         if (!display) return;
 
-        std::scoped_lock lock(windowsMutex);
-        if (windows.empty()) return;
-
-        const int total = static_cast<int>(windows.size());
-        int cols = 1;
-        int rows = 1;
-        while (cols * rows < total)
-            (cols <= rows ? ++cols : ++rows);
-
-        const int screenIndex = screen >= 0 ? screen : DefaultScreen(display);
-        const int screenWidth = DisplayWidth(display, screenIndex);
-        const int screenHeight = DisplayHeight(display, screenIndex);
-
-        const int cellWidth = clamp_positive(screenWidth / cols);
-        const int cellHeight = clamp_positive(screenHeight / rows);
-
-        for (size_t i = 0; i < windows.size(); ++i)
+        struct WindowPlacement
         {
-            const int column = static_cast<int>(i) % cols;
-            const int row = static_cast<int>(i) / cols;
+            HWND hwnd{};
+            int x{};
+            int y{};
+            int width{};
+            int height{};
+        };
 
-            WindowData& win = *windows[i];
-            ::Window xwin = to_xwindow(win.hwnd);
+        std::vector<WindowPlacement> placements;
+        {
+            std::scoped_lock lock(windowsMutex);
+            if (windows.empty()) return;
 
-            if (!xwin) continue;
+            const int total = static_cast<int>(windows.size());
+            int cols = 1;
+            int rows = 1;
+            while (cols * rows < total)
+                (cols <= rows ? ++cols : ++rows);
+
+            const int screenIndex = screen >= 0 ? screen : DefaultScreen(display);
+            const int screenWidth = DisplayWidth(display, screenIndex);
+            const int screenHeight = DisplayHeight(display, screenIndex);
+
+            const int cellWidth = clamp_positive(screenWidth / cols);
+            const int cellHeight = clamp_positive(screenHeight / rows);
+
+            placements.reserve(windows.size());
+            for (size_t i = 0; i < windows.size(); ++i)
+            {
+                const int column = static_cast<int>(i) % cols;
+                const int row = static_cast<int>(i) / cols;
+
+                WindowData& win = *windows[i];
+                if (!win.hwnd)
+                    continue;
+
+                placements.push_back(WindowPlacement{
+                    .hwnd = win.hwnd,
+                    .x = column * cellWidth,
+                    .y = row * cellHeight,
+                    .width = cellWidth,
+                    .height = cellHeight,
+                });
+            }
+        }
+
+        for (const auto& placement : placements)
+        {
+            ::Window xwin = to_xwindow(placement.hwnd);
+            if (!xwin)
+                continue;
 
             XMoveResizeWindow(
                 display,
                 xwin,
-                column * cellWidth,
-                row * cellHeight,
-                static_cast<unsigned>(cellWidth),
-                static_cast<unsigned>(cellHeight));
+                placement.x,
+                placement.y,
+                static_cast<unsigned>(placement.width),
+                static_cast<unsigned>(placement.height));
 
-            HandleResize(win.hwnd, cellWidth, cellHeight);
+            HandleResize(placement.hwnd, placement.width, placement.height);
         }
 
         XFlush(display);
@@ -1431,10 +1457,12 @@ namespace
             }
         } reset{ localDisplay, glxCtx };
 
+        bool initializedOnThread = false;
         if (win.threadInitialize)
         {
             auto init = std::move(win.threadInitialize);
             win.threadInitialize = nullptr;
+            initializedOnThread = true;
 
             if (!init || !init(ctx))
             {
@@ -1444,6 +1472,7 @@ namespace
         }
 
         const bool skipGenericInit =
+            initializedOnThread ||
 #if defined(EPOCH_USING_SFML)
             (ctx->type == ContextType::SFML) ||
 #endif

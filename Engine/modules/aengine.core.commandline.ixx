@@ -10,6 +10,7 @@ module;
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <source_location>
 #include <string>
@@ -52,7 +53,7 @@ namespace epochnamespace::core::cli
 #endif
         }
 
-        [[nodiscard]] constexpr std::string_view default_updater_shell_backend() noexcept
+        [[nodiscard]] inline std::string_view default_updater_shell_backend() noexcept
         {
 #if defined(_WIN32)
             return "software";
@@ -507,6 +508,10 @@ namespace epochnamespace::core::cli
 
             if (!backend_selection_explicit)
                 (void)apply_backend_selection(detail::default_updater_shell_backend());
+
+            detail::log_info(
+                "Updater shell backend: "
+                + std::string(detail::default_updater_shell_backend()));
         }
 
         return result;

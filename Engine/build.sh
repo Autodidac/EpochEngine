@@ -247,6 +247,9 @@ if [[ $UPDATER_SHELL_BUILD -ne 0 ]]; then
     -DEPOCH_ENABLE_OPENGL=ON
     -DEPOCH_ENABLE_SOFTWARE_RENDERER=ON
   )
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    cmake_args+=(-DEPOCH_ENABLE_SOFTWARE_RENDERER=OFF)
+  fi
 else
   cmake_args+=(-DEPOCH_UPDATER_SHELL_BUILD=OFF)
 fi
