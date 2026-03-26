@@ -30,11 +30,16 @@
  ***********************************************/
 module;
 
+#include <bit>
+#include <cstdint>
+#include <ranges>
+#include <utility>
+#include <algorithm>
+
 // Global module fragment: macros + native headers only.
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-
 
 #if defined(_WIN32)
 
@@ -71,12 +76,6 @@ module;
 #endif // EPOCH_USING_OPENGL
 
 export module acontext.opengl.platform;
-
-import <bit>;
-import <cstdint>;
-import <ranges>;
-import <utility>;
-import <algorithm>;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 

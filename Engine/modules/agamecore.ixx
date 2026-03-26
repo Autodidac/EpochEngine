@@ -31,12 +31,13 @@
 
 module;
 
+#include <vector>
+#include <utility>
+#include <span>
+#include <cassert>
+
 export module agamecore;
 
-import <vector>;
-import <utility>;
-import <span>;
-import <cassert>;
 
 import aatlas.manager;
 import aatlas.texture;

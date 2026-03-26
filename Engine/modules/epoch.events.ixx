@@ -147,7 +147,7 @@ export namespace epoch::events
             handler h{};
             h.type = id_of<E>();
             h.user = user;
-            h.fn = [](void* u, const void* p) noexcept
+            h.fn = [fn](void* u, const void* p) noexcept
             {
                 fn(u, *static_cast<const E*>(p));
             };

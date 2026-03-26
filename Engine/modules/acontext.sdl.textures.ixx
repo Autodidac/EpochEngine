@@ -30,6 +30,23 @@
  ***********************************************/
 
 module;
+
+#include <SDL3/SDL.h>
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <stdexcept>
+#include <span>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+
 // configuration
 #include "..\\include\\aengine.config.hpp"
 
@@ -54,22 +71,6 @@ import aspritehandle;
 
 import acontext.sdl.renderer;
 import acontext.sdl.state;
-
-import <SDL3/SDL.h>;
-import <algorithm>;
-import <atomic>;
-import <cstdint>;
-import <filesystem>;
-import <format>;
-import <fstream>;
-import <functional>;
-import <iostream>;
-import <stdexcept>;
-import <span>;
-import <string>;
-import <string_view>;
-import <unordered_map>;
-import <vector>;
 
 export namespace epochnamespace::sdltextures
 {
@@ -137,7 +138,6 @@ export namespace epochnamespace::sdltextures
     {
         if (!sdl_renderer)
             throw std::runtime_error("[ SDL3 ] - Renderer not set!");
-
 
         if (atlas.pixel_data.empty()) {
             const_cast<TextureAtlas&>(atlas).rebuild_pixels();
@@ -356,7 +356,6 @@ export namespace epochnamespace::sdltextures
             static_cast<float>(region.width),
             static_cast<float>(region.height)
         };
-
 
         //std::cout << "[DEBUG] draw_sprite: "
         //    << "x=" << x << ", y=" << y

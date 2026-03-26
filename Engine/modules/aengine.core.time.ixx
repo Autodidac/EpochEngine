@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -31,19 +31,22 @@
 
 module;
 
+#include <array>
+#include <chrono>
+#include <cstdio>
+#include <format>
+#include <ctime>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+
 export module aengine.core.time;
 
-import <chrono>;
-import <format>;
-import <string>;
-import <string_view>;
-import <unordered_map>;
-
-export namespace epochnamespace
+namespace epochnamespace
 {
     namespace timing
     {
-        using Clock = std::chrono::steady_clock;
+        export using Clock = std::chrono::steady_clock;
 
         // ---------------------------------------------------------------------
         // TIMER
@@ -86,12 +89,10 @@ export namespace epochnamespace
         // QUERIES
         // ---------------------------------------------------------------------
 
-
         export inline double elapsed(const Timer& t) noexcept
         {
             return unscaledElapsed(t) * t.timeScale;
         }
-
 
         export inline double realElapsed(const Timer& t) noexcept
         {
@@ -196,9 +197,28 @@ export namespace epochnamespace
         export inline std::string getCurrentTimeString()
         {
             const auto now = std::chrono::system_clock::now();
-            return std::format(
-                "{:%Y-%m-%d %H:%M:%S}",
-                std::chrono::floor<std::chrono::seconds>(now));
+            const std::time_t time_value = std::chrono::system_clock::to_time_t(now);
+
+            std::tm local_tm{};
+#if defined(_WIN32)
+            localtime_s(&local_tm, &time_value);
+#else
+            localtime_r(&time_value, &local_tm);
+#endif
+
+            std::array<char, 32> buffer{};
+            std::snprintf(
+                buffer.data(),
+                buffer.size(),
+                "%04d-%02d-%02d %02d:%02d:%02d",
+                local_tm.tm_year + 1900,
+                local_tm.tm_mon + 1,
+                local_tm.tm_mday,
+                local_tm.tm_hour,
+                local_tm.tm_min,
+                local_tm.tm_sec);
+
+            return std::string{ buffer.data() };
         }
     }
 } // namespace epochnamespace::timing

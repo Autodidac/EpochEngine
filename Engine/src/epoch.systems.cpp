@@ -72,7 +72,7 @@ namespace epoch::systems
 
             epoch::string name{};
             SystemFactory factory{};
-            std::unique_ptr<ISystem, Deleter> system{};
+            std::unique_ptr<ISystem, Deleter> system{ nullptr, Deleter{} };
         };
 
         struct RegistryState

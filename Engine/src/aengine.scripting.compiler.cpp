@@ -29,12 +29,12 @@
  *                                              *
  ***********************************************/
 // Prefer standard library module imports in the module purview.
-import <cstdlib>;
-import <iostream>;
-import <filesystem>;
-import <string>;
-import <string_view>;
-import <vector>;
+#include <cstdlib>
+#include <filesystem>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace epochnamespace::compiler
 {

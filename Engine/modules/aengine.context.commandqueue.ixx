@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,6 +30,14 @@
  ***********************************************/
 module; // REQUIRED global module fragment
 
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <mutex>
+#include <queue>
+#include <utility>
+
 // ============================================================
 // Named module
 // ============================================================
@@ -39,13 +47,6 @@ export module aengine.context.commandqueue;
 // ------------------------------------------------------------
 // Standard library
 // ------------------------------------------------------------
-import <atomic>;
-import <cstddef>;
-import <cstdint>;
-import <functional>;
-import <mutex>;
-import <queue>;
-import <utility>;
 
 // ============================================================
 // Command queue (thread-safe, no raw mutex access)

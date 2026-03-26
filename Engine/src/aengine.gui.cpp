@@ -28,13 +28,16 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- // Engine/src/aengine.gui.cpp
+module;
+
+// Engine/src/aengine.gui.cpp
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -49,6 +52,9 @@
 #include <utility>
 #include <vector>
 
+module aengine.gui;
+
+import aengine.context.type;
 import aengine.core.context;
 import aengine.context.multiplexer;
 import aengine.context.window;
@@ -61,8 +67,6 @@ import asprite.pool;
 import aspriteregistry;
 import aspritehandle;
 import atexture;
-
-import aengine.gui;
 
 namespace epochnamespace::gui
 {
@@ -564,13 +568,15 @@ namespace epochnamespace::gui
 
             if (ctx.windowData)
             {
-                std::weak_ptr<Context> weak = ctx.windowData->context;
+                auto shared = ctx.windowData->context
+                    ? std::reinterpret_pointer_cast<Context>(ctx.windowData->context)
+                    : std::shared_ptr<Context>{};
                 const core::RenderPath renderPath = render_path_for_context(&ctx);
-                ctx.windowData->commandQueue.enqueue([weak]()
+                ctx.windowData->commandQueue.enqueue([shared = std::move(shared)]()
                     {
-                        if (auto self = weak.lock())
+                        if (shared)
                         {
-                            try { perform_backend_upload(*self); }
+                            try { perform_backend_upload(*shared); }
                             catch (...) { /* GUI optional */ }
                         }
                     }, renderPath);
@@ -1204,15 +1210,15 @@ namespace epochnamespace::gui
         return it->second.generation;
     }
 
-    bool render_deferred_batch(const std::shared_ptr<core::Context>& ctx) noexcept
+    bool render_deferred_batch(core::Context* ctx) noexcept
     {
-        if (!ctx || !uses_deferred_gui_batch(ctx.get()))
+        if (!ctx || !uses_deferred_gui_batch(ctx))
             return false;
 
         std::shared_ptr<std::vector<QueuedSpriteDraw>> draws;
         {
             std::scoped_lock lock(g_deferredBatchMutex);
-            const auto it = g_deferredDrawBatches.find(ctx.get());
+            const auto it = g_deferredDrawBatches.find(ctx);
             if (it == g_deferredDrawBatches.end())
                 return false;
             draws = it->second.draws;

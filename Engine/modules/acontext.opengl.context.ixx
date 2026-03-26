@@ -30,6 +30,23 @@
  ***********************************************/
  // acontext.opengl.context.ixx
 module;
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <format>
+#include <functional>
+#include <fstream>
+#include <iostream>
+#include <mutex>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
 // NOTE: Keep your engine config include if it sets global compile flags.
 // Do NOT rely on it for Win32 type definitions in a module global fragment.
 #include "../include/aengine.config.hpp"
@@ -93,9 +110,11 @@ import aengine.core.context;
 import aengine.context.multiplexer;
 import aengine.context.commandqueue;
 import aengine.context.window;
+import aengine.context.type;
 import aengine.input;
 import aplatformpump;
 import aatlas.manager;
+import aatlas.texture;
 import aengine.core.commandline;
 import aengine.diagnostics;
 import aengine.telemetry;
@@ -112,21 +131,6 @@ import acontext.opengl.quad;
 // ------------------------------------------------------------
 // Standard library
 // ------------------------------------------------------------
-import <algorithm>;
-import <array>;
-import <cmath>;
-import <cstddef>;
-import <cstdint>;
-import <format>;
-import <functional>;
-import <fstream>;
-import <iostream>;
-import <mutex>;
-import <stdexcept>;
-import <string>;
-import <string_view>;
-import <utility>;
-import <vector>;
 
 export namespace epochnamespace::openglcontext
 {
@@ -280,7 +284,6 @@ export namespace epochnamespace::openglcontext
         }
 #endif
     } // namespace detail
-
 
     // ------------------------------------------------------------
     // Public API
@@ -914,9 +917,12 @@ void main() {
         auto& backend = opengltextures::get_opengl_backend();
         auto& glState = backend.glState;
 
-        const std::uintptr_t windowId = ctx->windowData
+        std::uintptr_t windowId = 0;
+#if defined(_WIN32)
+        windowId = ctx->windowData
             ? reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd)
             : 0;
+#endif
 
 #if defined(_WIN32)
         const HWND processHwnd = ctx->windowData && ctx->windowData->hwnd
@@ -1088,6 +1094,5 @@ void main() {
 
 #endif // EPOCH_USING_OPENGL
 } // namespace epochnamespace::openglcontext
-
 
 #endif

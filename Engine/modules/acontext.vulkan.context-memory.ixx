@@ -31,6 +31,8 @@
 
 module;
 
+#include <source_location>
+
 // Keep this in the global module fragment so it doesn't leak macros into importers.
 #ifndef _CRT_SECURE_NO_WARNINGS
 #   define _CRT_SECURE_NO_WARNINGS
@@ -46,13 +48,13 @@ module;
 
 #include <include/acontext.vulkan.hpp>
 // Include Vulkan-Hpp after config.
+#include <compare>
 #include <vulkan/vulkan.hpp>
 
 export module acontext.vulkan.context:memory;
 
 import :shared_vk;
 import aengine.core.logger;
-import <source_location>;
 
 namespace epochnamespace::vulkancontext
 {

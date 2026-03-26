@@ -1,10 +1,10 @@
-﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+/************************************************
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -29,14 +29,16 @@
  *                                              *
  ***********************************************/
 module;
+
+#include <memory>
+#include <string>
+
 export module aeditor;
 
 import aengine.core.context;
 import aengine.gui;
-import <memory>;
-import <string>;
 
-export namespace epochnamespace
+namespace epochnamespace
 {
     export enum class EditorCommand : unsigned char
     {
@@ -58,12 +60,12 @@ export namespace epochnamespace
         std::string command_argument{};
     };
 
-    EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx);
-    void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id);
-    void editor_reset_transient_ui(const core::Context* ctx);
-    bool editor_run_script(const core::Context* ctx, std::string_view script_name);
+    export EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx);
+    export void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id);
+    export void editor_reset_transient_ui(const core::Context* ctx);
+    export bool editor_run_script(const core::Context* ctx, std::string_view script_name);
 
-    void cleanup_chat_context(const core::Context* ctx);
-    void shutdown_chat_system();
+    export void cleanup_chat_context(const core::Context* ctx);
+    export void shutdown_chat_system();
 }
 

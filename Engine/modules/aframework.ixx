@@ -30,6 +30,11 @@
  ***********************************************/
 module; // global module fragment — REQUIRED for Win32 headers
 
+#if !defined(_WIN32)
+#include <cstddef>
+#include <cstdint>
+#endif
+
 #if defined(_WIN32)
 
 // ------------------------------------------------------------
@@ -88,10 +93,23 @@ export namespace epochnamespace::platform::win32
 
 #else
 
-// ------------------------------------------------------------
-// Non-Windows hard stop (intentional)
-// ------------------------------------------------------------
+export namespace epochnamespace::platform::win32
+{
+    using hwnd = void*;
+    using hinst = void*;
+    using msg = std::nullptr_t;
+    using lparam = std::intptr_t;
+    using wparam = std::uintptr_t;
 
-static_assert(false, "epoch.platform.win32 imported on non-Windows platform");
+    [[nodiscard]] inline int mouse_x(lparam) noexcept
+    {
+        return 0;
+    }
+
+    [[nodiscard]] inline int mouse_y(lparam) noexcept
+    {
+        return 0;
+    }
+}
 
 #endif

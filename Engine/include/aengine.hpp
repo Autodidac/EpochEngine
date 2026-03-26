@@ -30,8 +30,11 @@
  ***********************************************/
 
 
-#include <wtypes.h>
 #include <cstdint>
+
+#if defined(_WIN32)
+#include <wtypes.h>
+#endif
 
 //import aengine.platform;
 //import aengine.config;

@@ -30,6 +30,7 @@
  ***********************************************/
 
 #include <cstdint>
+#include "../include/aengine.config.hpp"
 
  // IMPORTANT:
  // This TU is the *only* place that should include <raylib.h>.
@@ -39,6 +40,8 @@
  //
  // If you truly need Win32 types here, include raylib.h first and then include
  // your minimal Win32 shims that undef/avoid collisions.
+
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 #include <raylib.h>
 
@@ -237,3 +240,5 @@ namespace epochnamespace::raylib_api
         ::DrawTexturePro(to_rl(tex), to_rl(src), to_rl(dst), to_rl(origin), rotation, to_rl(tint));
     }
 } // namespace epochnamespace::raylib_api
+
+#endif

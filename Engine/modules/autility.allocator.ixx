@@ -29,15 +29,16 @@
  *                                              *
  ***********************************************/
 module;
-export module aallocator;
 
-import <cstddef>;
-import <cstdint>;
-import <memory_resource>;
-import <new>;
-import <type_traits>;
-import <vector>;
-import <utility>;
+#include <cstddef>
+#include <cstdint>
+#include <memory_resource>
+#include <new>
+#include <type_traits>
+#include <vector>
+#include <utility>
+
+export module aallocator;
 
 export namespace epochnamespace::mem
 {

@@ -476,7 +476,7 @@ namespace
         epochnamespace::raylibcontext::raylib_clear(0.0f, 0.0f, 0.0f, 1.0f);
         epochnamespace::raylibcontext::raylib_render_scene_preview(ctx);
         (void)queue.drain();
-        (void)epochnamespace::gui::render_deferred_batch(ctx);
+        (void)epochnamespace::gui::render_deferred_batch(ctx.get());
         epochnamespace::raylibcontext::raylib_present();
 
         return epochnamespace::raylibstate::s_raylibstate.running;
@@ -752,7 +752,9 @@ namespace epochnamespace::core
             ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
             ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
 
-            ctx->draw_sprite = epochnamespace::vulkancontext::vulkan_draw_sprite;
+            // Vulkan binds its sprite path during backend initialization once the
+            // per-context application bridge is available.
+            ctx->draw_sprite = nullptr;
             ctx->add_texture = &add_texture_default;
             ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::Vulkan); };
 

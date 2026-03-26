@@ -28,86 +28,10 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-// acomponentmanager.hpp
 module;
 
 export module aecs.entitycomponentmanager;
-import aengine.platform;
 
-import <unordered_map>;
-import <typeindex>;
-import <memory>;
-import <cassert>;
-
-export namespace epochnamespace::ecs {
-    /// The basic ID type
-    using EntityID = std::size_t;
-
-    /// Underlying storage:
-    ///   map EntityID → ( map type_index → erased shared_ptr )
-    using ComponentStorage =
-        std::unordered_map<EntityID,
-        std::unordered_map<std::type_index, std::shared_ptr<void>>>;
-
-    /**
-     * add_component
-     *   - storage: your global ComponentStorage
-     *   - entity:  the ID
-     *   - comp:    the new component (by value or moveable)
-     */
-    template<typename T>
-    inline void add_component(ComponentStorage& storage,
-        EntityID entity,
-        T comp)
-    {
-        storage[entity][std::type_index(typeid(T))]
-            = std::make_shared<T>(std::move(comp));
-    }
-
-    /**
-     * has_component
-     *   - storage: your ComponentStorage
-     *   - entity:  the ID
-     * Returns true if entity has a T.
-     */
-    template<typename T>
-    inline bool has_component(ComponentStorage const& storage,
-        EntityID entity)
-    {
-        auto it = storage.find(entity);
-        return it != storage.end()
-            && it->second.count(std::type_index(typeid(T))) > 0;
-    }
-
-    /**
-     * get_component
-     *   - storage: your ComponentStorage
-     *   - entity:  the ID
-     * Returns a reference to the stored T. Asserts if missing.
-     */
-    template<typename T>
-    inline T& get_component(ComponentStorage& storage,
-        EntityID entity)
-    {
-        assert(has_component<T>(storage, entity) && "Component not found!");
-        auto& ptr = storage[entity][std::type_index(typeid(T))];
-        return *static_cast<T*>(ptr.get());
-    }
-
-    /**
-     * remove_component
-     *   - storage: your ComponentStorage
-     *   - entity:  the ID
-     * Erases the T for that entity.
-     */
-    template<typename T>
-    inline void remove_component(ComponentStorage& storage,
-        EntityID entity)
-    {
-        auto it = storage.find(entity);
-        if (it != storage.end()) {
-            it->second.erase(std::type_index(typeid(T)));
-        }
-    }
-
-} // namespace epochnamespace::ecs
+// Keep the legacy module name as a thin re-export so old imports still work
+// without creating duplicate ECS helper definitions across module units.
+export import aecs.storage;

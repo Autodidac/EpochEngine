@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,9 +30,20 @@
  ***********************************************/
 module;
 
+#include <span>
+#include <atomic>
+#include <chrono>
+#include <fstream>
+#include <coroutine>
+#include <filesystem>
+#include <functional>
+#include <semaphore>
+#include <thread>
+#include <vector>
+#include <string>
+#include <cstddef>
 
 export module aengine.systems;
-
 
 // ------------------------------------------------------------
 // Engine headers (order-sensitive, header units)
@@ -44,18 +55,6 @@ import ampmcboundedqueue;   // Lock-free MPMCQueue<T>
 // ------------------------------------------------------------
 // Standard library
 // ------------------------------------------------------------
-import <span>;
-import <atomic>;
-import <chrono>;
-import <fstream>;
-import <coroutine>;
-import <filesystem>;
-import <functional>;
-import <semaphore>;
-import <thread>;
-import <vector>;
-import <string>;
-import <cstddef>;
 
 // ============================================================
 // Named module
@@ -67,12 +66,12 @@ import <cstddef>;
 // Scheduler + coroutine utilities
 // ============================================================
 
-export namespace epochnamespace
+namespace epochnamespace
 {
     // ---------------------------------------------------------
     // Coroutine Task (public coroutine handle type)
     // ---------------------------------------------------------
-    struct Task
+    export struct Task
     {
         struct promise_type
         {
@@ -159,7 +158,7 @@ export namespace epochnamespace
     // Awaitables (no heap, no classes, clean C++23)
     // ---------------------------------------------------------
 
-    // LoadAssetAwaitable — runs blocking disk I/O on a worker
+    // LoadAssetAwaitable â€” runs blocking disk I/O on a worker
     struct LoadAssetAwaitable
     {
         std::string path;
@@ -190,7 +189,7 @@ export namespace epochnamespace
     };
 
     // ---------------------------------------------------------
-    // ReceiveNetworkAwaitable — polls network input then resumes
+    // ReceiveNetworkAwaitable â€” polls network input then resumes
     struct ReceiveNetworkAwaitable
     {
         bool await_ready() const noexcept { return false; }
@@ -210,7 +209,7 @@ export namespace epochnamespace
     };
 
     // ---------------------------------------------------------
-    // NextFrame — requeues coroutine for next engine tick
+    // NextFrame â€” requeues coroutine for next engine tick
     struct NextFrame
     {
         bool await_ready() const noexcept { return false; }

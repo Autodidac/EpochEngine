@@ -28,16 +28,19 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- // src modules/afilewatch.cppm
+module;
 
-import <algorithm>;
-import <cstdint>;
-import <filesystem>;
-import <fstream>;
-import <system_error>;
-import <vector>;
+// src modules/afilewatch.cppm
 
-import autility.filewatch;
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <system_error>
+#include <vector>
+
+module autility.filewatch;
 
 namespace epochnamespace::filewatch
 {

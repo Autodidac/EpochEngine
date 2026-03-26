@@ -1,21 +1,21 @@
 module;
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <mutex>
+#include <shared_mutex>
+#include <span>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+
 export module epoch.render.preview_grid;
 
-import <algorithm>;
-import <array>;
-import <cmath>;
-import <cstddef>;
-import <cstdint>;
-import <functional>;
-import <mutex>;
-import <shared_mutex>;
-import <span>;
-import <string_view>;
-import <unordered_map>;
-import <vector>;
-
-export namespace epochnamespace::previewgrid
+namespace epochnamespace::previewgrid
 {
     export struct Vec3
     {
@@ -208,7 +208,7 @@ export namespace epochnamespace::previewgrid
             float distance = 13.5f;
         };
 
-        inline std::unordered_map<const void*, CameraRigState, PtrHash> g_cameraRigs{};
+        export inline std::unordered_map<const void*, CameraRigState, PtrHash> g_cameraRigs{};
         inline std::shared_mutex g_cameraRigMutex{};
 
         [[nodiscard]] inline CameraRigState make_editor_rig() noexcept

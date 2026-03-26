@@ -30,15 +30,15 @@
  ***********************************************/
 module;
 
-export module aecs.storage;
+#include <cassert>
+#include <cstddef>
+#include <memory>
+#include <typeindex>
+#include <typeinfo>
+#include <unordered_map>
+#include <utility>
 
-import <cassert>;
-import <cstddef>;
-import <memory>;
-import <typeindex>;
-import <typeinfo>;
-import <unordered_map>;
-import <utility>;
+export module aecs.storage;
 
 export namespace epochnamespace::ecs
 {

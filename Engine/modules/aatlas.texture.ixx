@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -34,23 +34,27 @@
 
 module;
 
+#include <string>
+#include <vector>
+#include <cstdint>
+#include <optional>
+#include <iostream>
+#include <algorithm>
+#include <mutex>
+#include <shared_mutex>
+#include <unordered_map>
+#include <memory>
+#include <utility>
+
 export module aatlas.texture;
 
 // ────────────────────────────────────────────────────────────
 // STANDARD LIBRARY IMPORTS
 // ────────────────────────────────────────────────────────────
 
-import <string>;
-import <vector>;
-import <cstdint>;
-import <optional>;
-import <iostream>;
-import <algorithm>;
-import <mutex>;
-import <shared_mutex>; // legacy include; this module now uses recursive_mutex for atlas entry protection
-import <unordered_map>;
-import <memory>;    // std::unique_ptr
-import <utility>;   // std::pair
+ // legacy include; this module now uses recursive_mutex for atlas entry protection
+    // std::unique_ptr
+   // std::pair
 
 // ────────────────────────────────────────────────────────────
 // ENGINE DEPENDENCIES

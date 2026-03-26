@@ -8,22 +8,22 @@
  ***********************************************/
 module;
 
-export module aengine.core.logger;
+#include <atomic>
+#include <cctype>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <format>
+#include <memory>
+#include <mutex>
+#include <source_location>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <unordered_map>
+#include <utility>
 
-import <atomic>;
-import <cctype>;
-import <cstdio>;
-import <filesystem>;
-import <fstream>;
-import <format>;
-import <memory>;
-import <mutex>;
-import <source_location>;
-import <string>;
-import <string_view>;
-import <system_error>;
-import <unordered_map>;
-import <utility>;
+export module aengine.core.logger;
 
 import aengine.core.time;
 

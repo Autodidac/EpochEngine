@@ -101,6 +101,14 @@ import acontext.sdl.context;
 
 namespace
 {
+    [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> typed_context(
+        const epochnamespace::core::OpaqueContextHandle& opaque) noexcept
+    {
+        return opaque
+            ? std::reinterpret_pointer_cast<epochnamespace::core::Context>(opaque)
+            : nullptr;
+    }
+
     // TU-owned globals.
     std::unordered_map<HWND, std::thread> g_threads;
     epochnamespace::core::DragState       g_drag;
@@ -367,7 +375,7 @@ namespace epochnamespace::core
         if (!ctx) return nullptr;
         std::scoped_lock lock(windowsMutex);
         auto it = std::find_if(windows.begin(), windows.end(),
-            [&](const std::unique_ptr<WindowData>& w) { return w && w->context && w->context.get() == ctx.get(); });
+            [&](const std::unique_ptr<WindowData>& w) { return w && w->context && w->context.get() == static_cast<void*>(ctx.get()); });
         return (it != windows.end()) ? it->get() : nullptr;
     }
 
@@ -376,7 +384,7 @@ namespace epochnamespace::core
         if (!ctx) return nullptr;
         std::scoped_lock lock(windowsMutex);
         auto it = std::find_if(windows.begin(), windows.end(),
-            [&](const std::unique_ptr<WindowData>& w) { return w && w->context && w->context.get() == ctx.get(); });
+            [&](const std::unique_ptr<WindowData>& w) { return w && w->context && w->context.get() == static_cast<void*>(ctx.get()); });
         return (it != windows.end()) ? it->get() : nullptr;
     }
 
@@ -1112,10 +1120,13 @@ namespace epochnamespace::core
 
             if (window->context)
             {
-                window->context->width = clampedWidth;
-                window->context->height = clampedHeight;
-                contextType = window->context->type;
-                if (window->context->onResize) resizeCallback = window->context->onResize;
+                if (auto liveContext = typed_context(window->context))
+                {
+                    liveContext->width = clampedWidth;
+                    liveContext->height = clampedHeight;
+                    contextType = liveContext->type;
+                    if (liveContext->onResize) resizeCallback = liveContext->onResize;
+                }
             }
             else
             {
@@ -1202,7 +1213,7 @@ namespace epochnamespace::core
 
             if ((*it)->context)
             {
-                auto ctx = (*it)->context;
+                auto ctx = typed_context((*it)->context);
                 if (ctx->windowData == it->get()) ctx->windowData = nullptr;
                 if (ctx->hwnd == hwnd)
                 {
@@ -1293,7 +1304,8 @@ namespace epochnamespace::core
 
         const auto dock_order = [](const WindowData* win) noexcept
         {
-            const auto type = (win && win->context) ? win->context->type : ContextType::None;
+            const auto liveContext = (win && win->context) ? typed_context(win->context) : nullptr;
+            const auto type = liveContext ? liveContext->type : ContextType::None;
             switch (type)
             {
             case ContextType::RayLib: return 0;
@@ -1372,7 +1384,7 @@ namespace epochnamespace::core
 
     void MultiContextManager::RenderLoop(WindowData& win)
     {
-        auto ctx = win.context;
+        auto ctx = typed_context(win.context);
         if (!ctx)
         {
             win.running = false;
@@ -1615,8 +1627,11 @@ namespace epochnamespace::core
                     win->running = false;
                     win->set_should_close(true);
 
-                    if (win->context && win->context->windowData == win.get())
-                        win->context->windowData->set_should_close(true);
+                    if (auto liveContext = typed_context(win->context);
+                        liveContext && liveContext->windowData == win.get())
+                    {
+                        liveContext->windowData->set_should_close(true);
+                    }
 
                     children.push_back(closeTarget);
                 }

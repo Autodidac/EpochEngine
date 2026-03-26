@@ -40,6 +40,7 @@ module;
 #   endif
 #endif
 
+#include <compare>
 #include <vulkan/vulkan.h>
 
 #include <include/aframework.hpp>

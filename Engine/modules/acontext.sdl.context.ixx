@@ -31,6 +31,17 @@
  // acontext.sdl.context.ixx
 module;
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <stdexcept>
+#include <string>
+#include <utility>
+
 // -----------------------------------------------------------------------------
 // Global module fragment: macros + C headers MUST live here.
 // -----------------------------------------------------------------------------
@@ -77,17 +88,7 @@ import aengine.telemetry;
 import epoch.render.preview_grid;
 
 // Std
-import <algorithm>;
 //import <chrono>;  // as include for intellisense stability, this can probably be changed in the future
-import <cmath>;
-import <cstdint>;
-import <functional>;
-import <iostream>;
-import <memory>;
-import <mutex>;
-import <stdexcept>;
-import <string>;
-import <utility>;
 
 export namespace epochnamespace::sdlcontext
 {
@@ -490,7 +491,6 @@ export namespace epochnamespace::sdlcontext
 
         init_renderer(sdlcontext.renderer);
         sdltextures::sdl_renderer = sdlcontext.renderer;
-
 
         refresh_dimensions(ctx);
 

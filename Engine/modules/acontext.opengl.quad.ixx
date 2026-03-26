@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -34,6 +34,13 @@
 
 module;
 
+#include <algorithm>
+#include <cstdint>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <utility>
+
 #include <include/aengine.config.hpp>
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
@@ -45,16 +52,9 @@ export module acontext.opengl.quad;
 import acontext.opengl.state;
 import acontext.opengl.platform;
 
-import <algorithm>;
-import <cstdint>;
-import <iostream>;
-import <string>;
-import <string_view>;
-import <utility>;
-
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
-export namespace epochnamespace::openglquad
+namespace epochnamespace::openglquad
 {
     // ---------------------------------------------------------------------
     // Quad VAO wrapper (renderer depends on this type existing)
@@ -438,6 +438,5 @@ void main() {
         return build_quad_pipeline(state);
     }
 } // namespace epochnamespace::openglquad
-
 
 #endif // EPOCH_USING_OPENGL

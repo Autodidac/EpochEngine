@@ -1,10 +1,10 @@
-﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+/************************************************
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,6 +30,18 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 export module asokobanlike;
 
 // Epoch engine / project modules
@@ -37,6 +49,7 @@ import aengine.core.context;      // core::Context
 import aengine.context.window;    // core::WindowData
 import aengine.input;             // input::Key
 import aatlas.manager;            // atlasmanager
+import aatlas.texture;            // TextureAtlas
 import aimage.loader;             // a_loadImage
 import aspritehandle;             // SpriteHandle
 import asprite.pool;              // spritepool
@@ -45,20 +58,10 @@ import aengine.core.logger;       // logger::Logger
 import aengine.core.time;         // timing::Timer
 
 // C++ std
-import <algorithm>;
-import <cstdint>;
-import <span>;
-import <stdexcept>;
-import <string>;
-import <string_view>;
-import <tuple>;
-import <unordered_map>;
-import <utility>;
-import <vector>;
 
-export namespace epochnamespace::sokobanlike
+namespace epochnamespace::sokobanlike
 {
-    struct SokobanLikeScene : public scene::Scene
+    export struct SokobanLikeScene : public scene::Scene
     {
         SokobanLikeScene(logger::Logger* L = nullptr, timing::Timer* C = nullptr)
             : Scene(L, C) {}

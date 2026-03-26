@@ -36,12 +36,23 @@
 
 module;
 
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <fstream>
+#include <cstring>
+#include <limits>
+#include <span>
+#include <stdexcept>
+#include <vector>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
 // Include Vulkan-Hpp after config.
+#include <compare>
 #include <vulkan/vulkan.hpp>
 
 export module acontext.vulkan.context:commands;
@@ -51,15 +62,6 @@ import aengine.core.context;
 import aatlas.texture;
 import epoch.render.preview_grid;
 
-import <algorithm>;
-import <array>;
-import <cstdint>;
-import <fstream>;
-import <cstring>;
-import <limits>;
-import <span>;
-import <stdexcept>;
-import <vector>;
 
 namespace epochnamespace::vulkancontext
 {
@@ -481,7 +483,6 @@ namespace epochnamespace::vulkancontext
         if (acquireRes != vk::Result::eSuccess && acquireRes != vk::Result::eSuboptimalKHR)
             throw std::runtime_error("[ Vulkan ] - Failed to acquire swap chain image.");
 
-
         // Reset fence for this frame.
         {
             vk::Fence f = *inFlightFences[currentFrame];
@@ -522,7 +523,6 @@ namespace epochnamespace::vulkancontext
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = scs;
         presentInfo.pImageIndices = &imageIndex;
-
 
         // this needs protected from thread and cross context make current...
         // also needs an if running

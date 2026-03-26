@@ -39,6 +39,14 @@
 
 module;
 
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <source_location>
+#include <stdexcept>
+#include <vector>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
@@ -63,6 +71,7 @@ module;
 #endif
 
 // Include Vulkan-Hpp after config.
+#include <compare>
 #include <vulkan/vulkan.hpp>
 
 export module acontext.vulkan.context:instance;
@@ -72,13 +81,6 @@ import :shared_vk;
 import :renderer;
 import aengine.core.logger;
 
-import <algorithm>;
-import <cstdint>;
-import <cstring>;
-import <iostream>;
-import <source_location>;
-import <stdexcept>;
-import <vector>;
 
 namespace epochnamespace::vulkancontext
 {

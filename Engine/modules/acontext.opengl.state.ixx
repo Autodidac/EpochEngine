@@ -30,6 +30,10 @@
  ***********************************************/
 module;
 
+#include <array>
+#include <bitset>
+#include <functional>
+
 // Global module fragment: macros + native headers + GL typedefs only.
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
@@ -62,10 +66,6 @@ module;
 #endif // EPOCH_USING_OPENGL
 
 export module acontext.opengl.state;
-
-import <array>;
-import <bitset>;
-import <functional>;
 
 import aengine.core.time;          // timing::Timer, timing::createTimer(...)
 import acontext.opengl.platform;   // PlatformGLContext

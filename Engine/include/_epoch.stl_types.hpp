@@ -34,6 +34,7 @@
 // Centralized STL includes for header-importing translation units.
 // Modules should STILL include what they use in their global module fragment.
 #include <algorithm>
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -51,6 +52,86 @@
 
 namespace epoch
 {
+    #if defined(__cpp_lib_expected) && (__cpp_lib_expected >= 202202L)
+    template <class E>
+    using unexpected = std::unexpected<E>;
+
+    template <class T, class E>
+    using expected = std::expected<T, E>;
+    #else
+    template <class E>
+    class unexpected
+    {
+    public:
+        unexpected(const E& error) : error_(error) {}
+        unexpected(E&& error) : error_(std::move(error)) {}
+
+        [[nodiscard]] const E& error() const& noexcept { return error_; }
+        [[nodiscard]] E&       error() & noexcept { return error_; }
+        [[nodiscard]] E&&      error() && noexcept { return std::move(error_); }
+
+    private:
+        E error_;
+    };
+
+    template <class T, class E>
+    class expected
+    {
+    public:
+        expected(const T& value) : value_(value) {}
+        expected(T&& value) : value_(std::move(value)) {}
+        template <class U>
+            requires (!std::same_as<std::remove_cvref_t<U>, T> &&
+                      !std::same_as<std::remove_cvref_t<U>, unexpected<E>> &&
+                      std::constructible_from<T, U&&>)
+        expected(U&& value) : value_(std::in_place, std::forward<U>(value)) {}
+        expected(const unexpected<E>& error) : error_(error.error()) {}
+        expected(unexpected<E>&& error) : error_(std::move(error).error()) {}
+
+        [[nodiscard]] explicit operator bool() const noexcept { return value_.has_value(); }
+        [[nodiscard]] bool has_value() const noexcept { return value_.has_value(); }
+
+        [[nodiscard]] T&       value() & { return *value_; }
+        [[nodiscard]] const T& value() const& { return *value_; }
+        [[nodiscard]] T&&      value() && { return std::move(*value_); }
+
+        [[nodiscard]] E&       error() & { return *error_; }
+        [[nodiscard]] const E& error() const& { return *error_; }
+        [[nodiscard]] E&&      error() && { return std::move(*error_); }
+
+        [[nodiscard]] T&       operator*() & noexcept { return *value_; }
+        [[nodiscard]] const T& operator*() const& noexcept { return *value_; }
+        [[nodiscard]] T*       operator->() noexcept { return std::addressof(*value_); }
+        [[nodiscard]] const T* operator->() const noexcept { return std::addressof(*value_); }
+
+    private:
+        std::optional<T> value_{};
+        std::optional<E> error_{};
+    };
+
+    template <class E>
+    class expected<void, E>
+    {
+    public:
+        expected() noexcept = default;
+        expected(const unexpected<E>& error) : has_value_(false), error_(error.error()) {}
+        expected(unexpected<E>&& error) : has_value_(false), error_(std::move(error).error()) {}
+
+        [[nodiscard]] explicit operator bool() const noexcept { return has_value_; }
+        [[nodiscard]] bool has_value() const noexcept { return has_value_; }
+
+        void value() const noexcept {}
+
+        [[nodiscard]] E&       error() & { return *error_; }
+        [[nodiscard]] const E& error() const& { return *error_; }
+        [[nodiscard]] E&&      error() && { return std::move(*error_); }
+
+    private:
+        bool has_value_ = true;
+        std::optional<E> error_{};
+    };
+    #endif
+
     // ------------------------------------------------------------------------
     // Owned UTF-8 string wrapper (backed by std::string)
     // ------------------------------------------------------------------------
@@ -177,9 +258,6 @@ namespace epoch
     // ------------------------------------------------------------------------
     template <class T>
     using optional = std::optional<T>;
-
-    template <class T, class E>
-    using expected = std::expected<T, E>;
 
     template <class T, class Alloc = std::allocator<T>>
     using small_vector = std::vector<T, Alloc>;

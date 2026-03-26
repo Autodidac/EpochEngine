@@ -1,10 +1,10 @@
-﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+/************************************************
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,6 +30,21 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <random>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 export module aminesweeperlike;
 
 // ------------------------------------------------------------
@@ -41,6 +56,7 @@ import aengine.context.window;    // WindowData
 import aengine.input;             // input
 import agamecore;                 // grid helpers
 import aatlas.manager;            // atlas manager
+import aatlas.texture;            // TextureAtlas
 import aimage.loader;             // a_loadImage / ImageData
 import aspritehandle;             // SpriteHandle
 import asprite.pool;              // spritepool
@@ -55,21 +71,8 @@ import aengine.core.logger;
 // ------------------------------------------------------------
 // C++ standard library modules
 // ------------------------------------------------------------
-import <algorithm>;
-import <chrono>;
-import <cstddef>;
-import <cstdint>;
-import <random>;
-import <span>;
-import <stdexcept>;
-import <string>;
-import <string_view>;
-import <tuple>;
-import <unordered_map>;
-import <utility>;
-import <vector>;
 
-export namespace epochnamespace::minesweeperlike
+namespace epochnamespace::minesweeperlike
 {
     inline constexpr int GRID_W = 16;
     inline constexpr int GRID_H = 16;

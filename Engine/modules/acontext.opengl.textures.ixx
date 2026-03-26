@@ -31,6 +31,20 @@
 
 module;
 
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <iostream>
+#include <mutex>
+#include <shared_mutex>
+#include <span>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 // -----------------------------------------------------------------------------
 // Global module fragment: macros + platform / C headers live here.
 // -----------------------------------------------------------------------------
@@ -62,24 +76,12 @@ module;
 
 export module acontext.opengl.textures;
 
-import <algorithm>;
-import <atomic>;
-import <cstdint>;
-import <filesystem>;
-import <format>;
-import <fstream>;
-import <iostream>;
-import <mutex>;
-import <span>;
-import <string>;
-import <unordered_map>;
-import <vector>;
-
 import aengine.platform;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) && (EPOCH_USING_OPENGL == 1)
 
 import aengine.cli;
+import aengine.context.type;
 import aengine.core.context;
 import aengine.context.multiplexer;
 
@@ -165,7 +167,7 @@ export namespace epochnamespace::opengltextures
     inline BackendData& get_opengl_backend() {
         BackendData* data = nullptr;
         {
-            std::unique_lock lock(epochnamespace::core::g_backendsMutex);
+            std::unique_lock<std::shared_mutex> lock{ epochnamespace::core::g_backendsMutex };
             auto& backend = epochnamespace::core::g_backends[epochnamespace::core::ContextType::OpenGL];
             if (!backend.data) {
                 backend.data = {
@@ -218,7 +220,7 @@ export namespace epochnamespace::opengltextures
     {
         BackendData* oglData = nullptr;
         {
-            std::shared_lock lock(core::g_backendsMutex);
+            std::shared_lock<std::shared_mutex> lock{ core::g_backendsMutex };
             auto it = core::g_backends.find(core::ContextType::OpenGL);
             if (it != core::g_backends.end()) {
                 oglData = static_cast<BackendData*>(it->second.data.get());
@@ -299,7 +301,7 @@ export namespace epochnamespace::opengltextures
     {
         BackendData* oglData = nullptr;
         {
-            std::shared_lock lock(core::g_backendsMutex);
+            std::shared_lock<std::shared_mutex> lock{ core::g_backendsMutex };
             auto it = core::g_backends.find(core::ContextType::OpenGL);
             if (it != core::g_backends.end()) {
                 oglData = static_cast<BackendData*>(it->second.data.get());
@@ -330,7 +332,7 @@ export namespace epochnamespace::opengltextures
     {
         BackendData* oglData = nullptr;
         {
-            std::shared_lock lock(core::g_backendsMutex);
+            std::shared_lock<std::shared_mutex> lock{ core::g_backendsMutex };
             auto it = core::g_backends.find(core::ContextType::OpenGL);
             if (it != core::g_backends.end()) {
                 oglData = static_cast<BackendData*>(it->second.data.get());

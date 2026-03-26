@@ -94,7 +94,7 @@ namespace epoch::platform
             [[nodiscard]] core::error::result<WindowHandle> create_window(const WindowDesc& desc) noexcept override
             {
                 if (!ensure_class_registered())
-                    return std::unexpected(core::error::failed("failed to register Win32 window class"));
+                    return epoch::unexpected(core::error::failed("failed to register Win32 window class"));
 
                 DWORD style = WS_OVERLAPPEDWINDOW;
                 if (!desc.resizable)
@@ -118,7 +118,7 @@ namespace epoch::platform
                 );
 
                 if (!hwnd)
-                    return std::unexpected(core::error::failed("failed to create Win32 window"));
+                    return epoch::unexpected(core::error::failed("failed to create Win32 window"));
 
                 if (desc.visible)
                     ::ShowWindow(hwnd, SW_SHOW);

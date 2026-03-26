@@ -152,6 +152,14 @@
 #undef EPOCH_USING_OPENGL
 #define EPOCH_USING_OPENGL 1
 #endif
+
+#if defined(EPOCH_FORCE_DISABLE_VULKAN)
+#undef EPOCH_USING_VULKAN
+#endif
+#if defined(EPOCH_FORCE_ENABLE_VULKAN)
+#undef EPOCH_USING_VULKAN
+#define EPOCH_USING_VULKAN 1
+#endif
 // ============================================================
 // Includes (verbatim, order preserved)
 // ============================================================

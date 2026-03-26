@@ -28,11 +28,13 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-export module aecs.internal_private;
+module;
 
-import <format>;
-import <string>;
-import <string_view>;
+#include <format>
+#include <string>
+#include <string_view>
+
+export module aecs.internal_private;
 
 import aecs.storage;
 import aengine.core.logger;

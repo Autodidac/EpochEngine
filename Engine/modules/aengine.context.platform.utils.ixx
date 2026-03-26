@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,12 +30,20 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+#include <memory>
+
+#if defined(_WIN32)
+#include <wtypes.h>
+#endif
+
 export module aengine.context.platform.utils;
 
-import <wtypes.h>;
-import <memory>;
+#if defined(_WIN32)
+#endif
 
 import aengine.core.context;
+import aengine.input;
 
 namespace
 {

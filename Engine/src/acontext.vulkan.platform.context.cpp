@@ -327,7 +327,7 @@ namespace epochnamespace::vulkancontext
             guiState->guiDraws.clear();
         (void)queue.drain();
         if (ctx)
-            (void)epochnamespace::gui::render_deferred_batch(ctx);
+            (void)epochnamespace::gui::render_deferred_batch(ctx.get());
 
 #if EPOCH_VULKAN_RUNTIME_DIAGNOSTICS
         {

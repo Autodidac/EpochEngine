@@ -31,11 +31,23 @@
 
 module;
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <fstream>
+#include <stdexcept>
+#include <utility>
+#include <memory>
+#include <source_location>
+#include <iostream>
+#include <span>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-export module acontext.vulkan.context;
+module acontext.vulkan.context;
 
 import :api;            // brings in declarations for vulkan_* funcs
 import :shared_vk; // brings in per-context Application registry helpers
@@ -50,19 +62,8 @@ import aatlas.texture;
 import aspritehandle;
 import aengine.context.commandqueue;
 
-import <algorithm>;
-import <cstddef>;
-import <cstdint>;
-import <functional>;
-import <fstream>;
-import <stdexcept>;
-import <utility>;
-import <memory>;
-import <source_location>;
-import <iostream>;
-import <span>;
 
-export namespace epochnamespace::vulkancontext
+namespace epochnamespace::vulkancontext
 {
     inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
 

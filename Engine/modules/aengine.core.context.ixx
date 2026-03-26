@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”   *
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   *
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜     Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   *
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜     Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   *
+ *  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜     Ã¢â€¢Å¡Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€Ã¢â€¢ÂÃ¢â€¢Å¡Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€”Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜  Ã¢â€“Ë†Ã¢â€“Ë†Ã¢â€¢â€˜   *
+ *  Ã¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢Â      Ã¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â  Ã¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢Â  Ã¢â€¢Å¡Ã¢â€¢ÂÃ¢â€¢Â   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,6 +30,21 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <shared_mutex>
+#include <span>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
@@ -50,22 +65,7 @@ module;
 
 export module aengine.core.context;
 
-
 // Std
-import <algorithm>;
-import <array>;
-import <atomic>;
-import <cstdint>;
-import <functional>;
-import <map>;
-import <memory>;
-import <mutex>;
-import <queue>;
-import <shared_mutex>;
-import <span>;
-import <string>;
-import <utility>;
-import <vector>;
 
 // Project
 import aengine.context.type;
@@ -77,9 +77,8 @@ import aatlas.texture;
 import aatlas.manager;   // reacquire atlas vector inside queued draw
 import aspritehandle;
 import aimage.loader;
-import acontext.raylib.api; // for ImageData
 
-export namespace epochnamespace::core
+namespace epochnamespace::core
 {
     class MultiContextManager;
 
@@ -231,11 +230,11 @@ export namespace epochnamespace::core
 
             // Assumption: WindowData owns `std::shared_ptr<Context> context;`
             // (your multiplexer sets it that way). If your field name differs, rename it.
-            std::weak_ptr<Context> weak = windowData->context;
-            windowData->commandQueue.enqueue([weak]()
+            const auto clear_fn = clear;
+            windowData->commandQueue.enqueue([clear_fn]()
                 {
-                    if (auto self = weak.lock(); self && self->clear)
-                        self->clear();
+                    if (clear_fn)
+                        clear_fn();
                 });
         }
 
@@ -253,11 +252,11 @@ export namespace epochnamespace::core
 
             if (!windowData) return;
 
-            std::weak_ptr<Context> weak = windowData->context;
-            windowData->commandQueue.enqueue([weak]()
+            const auto present_fn = present;
+            windowData->commandQueue.enqueue([present_fn]()
                 {
-                    if (auto self = weak.lock(); self && self->present)
-                        self->present();
+                    if (present_fn)
+                        present_fn();
                 });
         }
 
@@ -432,19 +431,18 @@ export namespace epochnamespace::core
                 : (type == core::ContextType::SFML) ? core::RenderPath::SFML
                 : core::RenderPath::Unknown;
 
-            std::weak_ptr<Context> weak = windowData->context;
+            const auto draw_fn = draw_sprite;
 
             // Do NOT capture `atlases` (span may reference transient storage).
             // Re-acquire atlas vector on render thread.
-            windowData->commandQueue.enqueue([weak, sprite, x, y, w, hgt]()
+            windowData->commandQueue.enqueue([draw_fn, sprite, x, y, w, hgt]()
                 {
-                    auto self = weak.lock();
-                    if (!self || !self->draw_sprite) return;
+                    if (!draw_fn) return;
 
                     // Snapshot by value (safe)
                     auto av = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
                     std::span<const TextureAtlas* const> span(av.data(), av.size());
-                    self->draw_sprite(sprite, span, x, y, w, hgt);
+                    draw_fn(sprite, span, x, y, w, hgt);
                 }, renderPath);
         }
 
@@ -467,11 +465,9 @@ export namespace epochnamespace::core
             return add_model ? add_model(name, path) : -1;
         }
 
-#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-        HWND  get_hwnd()  const noexcept { return hwnd; }
-        HDC   get_hdc()   const noexcept { return hdc; }
-        HGLRC get_hglrc() const noexcept { return hglrc; }
-#endif
+        auto get_hwnd() const noexcept { return hwnd; }
+        auto get_hdc() const noexcept { return hdc; }
+        auto get_hglrc() const noexcept { return hglrc; }
 
         // Legacy public pointer (kept on purpose)
         WindowData* windowData = nullptr;
@@ -484,6 +480,10 @@ export namespace epochnamespace::core
         HWND  hwnd = nullptr;
         HDC   hdc = nullptr;
         HGLRC hglrc = nullptr;
+#else
+        void* hwnd = nullptr;
+        void* hdc = nullptr;
+        void* hglrc = nullptr;
 #endif
 
         // logical canvas
@@ -544,13 +544,13 @@ export namespace epochnamespace::core
         std::unique_ptr<void, void(*)(void*)> data{ nullptr, [](void*) {} };
     };
 
-    using BackendMap = std::map<core::ContextType, BackendState>;
+    export using BackendMap = std::map<core::ContextType, BackendState>;
 
-    extern BackendMap        g_backends;
-    extern std::shared_mutex g_backendsMutex;
+    export extern BackendMap        g_backends;
+    export extern std::shared_mutex g_backendsMutex;
 
-    extern void InitializeAllContexts();
-    std::shared_ptr<Context> CloneContext(const Context& prototype);
+    export extern void InitializeAllContexts();
+    export std::shared_ptr<Context> CloneContext(const Context& prototype);
     void AddContextForBackend(core::ContextType type, std::shared_ptr<Context> context);
     bool ProcessAllContexts();
 } // namespace epochnamespace::core

@@ -30,13 +30,13 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+#include <cstdint>
+#include <span>
+
 #include <include/aengine.config.hpp>
 
 export module acontext.raylib.renderer;
-
-import <algorithm>;
-import <cstdint>;
-import <span>;
 
 import acontext.raylib.state;
 import acontext.raylib.textures;

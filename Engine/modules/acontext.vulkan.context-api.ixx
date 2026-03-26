@@ -41,18 +41,17 @@
 
 module;
 
+#include <functional>
+#include <memory>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
 
 export module acontext.vulkan.context:api;
 
-
 import aengine.core.context;
 import aengine.context.commandqueue;
-
-import <functional>;
-import <memory>;
 
 namespace epochnamespace::vulkancontext
 {

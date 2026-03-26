@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -32,7 +32,7 @@ module;
 
 export module aengine.context.type;
 
-export namespace epochnamespace::core
+namespace epochnamespace::core
 {
 #ifdef None
 #undef None

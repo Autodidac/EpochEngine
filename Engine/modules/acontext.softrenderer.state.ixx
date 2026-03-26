@@ -32,6 +32,13 @@
 
 module;
 
+#include <array>
+#include <bitset>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <vector>
+
 //#include "aplatform.hpp"
 
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros   // may bring in <windows.h>, etc.
@@ -49,12 +56,6 @@ module;
 
 export module acontext.softrenderer.state;
 
-import <array>;
-import <bitset>;
-import <cstdint>;
-import <functional>;
-import <memory>;
-import <vector>;
 
 //import aengine.platform;
 import aengine.core.context;

@@ -1,10 +1,10 @@
-﻿/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+/************************************************
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,6 +30,17 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+#include <cstddef>
+#include <deque>
+#include <memory>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
+
 export module apacmanlike;
 
 // ------------------------------------------------------------
@@ -40,6 +51,7 @@ import aengine.context.window;    // core::WindowData
 import aengine.input;             // input::Key
 import agamecore;                 // grid helpers
 import aatlas.manager;            // atlas manager + registry
+import aatlas.texture;            // TextureAtlas
 import aimage.loader;             // a_loadImage / ImageData
 import aspritehandle;             // SpriteHandle
 import asprite.pool;              // spritepool
@@ -54,18 +66,8 @@ import aengine.core.logger;       // logger::Logger
 // ------------------------------------------------------------
 // C++ standard library modules
 // ------------------------------------------------------------
-import <algorithm>;
-import <cstddef>;
-import <deque>;
-import <memory>;
-import <span>;
-import <stdexcept>;
-import <string>;
-import <string_view>;
-import <tuple>;
-import <utility>;
 
-export namespace epochnamespace::pacmanlike
+namespace epochnamespace::pacmanlike
 {
     inline constexpr int GRID_W = 28;
     inline constexpr int GRID_H = 31;

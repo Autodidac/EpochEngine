@@ -32,6 +32,16 @@
  // acontext.sfml.context.ixx
 module;
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
+
 // -----------------------------------------------------------------------------
 // Global module fragment: macros + C headers MUST live here.
 // -----------------------------------------------------------------------------
@@ -78,15 +88,6 @@ import aengine.core.logger;
 import aengine.telemetry;
 import epoch.render.preview_grid;
 
-import <algorithm>;
-import <cmath>;
-import <cstdint>;
-import <functional>;
-import <iostream>;
-import <memory>;
-import <stdexcept>;
-import <string>;
-import <utility>;
 
 export namespace epochnamespace::sfmlcontext
 {

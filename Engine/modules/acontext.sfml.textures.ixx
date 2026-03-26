@@ -30,8 +30,21 @@
  ***********************************************/
 module;
 
-#include <include/aengine.config.hpp>
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <iostream>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
 
+#include <include/aengine.config.hpp>
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 #define SFML_STATIC
@@ -51,20 +64,6 @@ import atexture;
 import aspritehandle;
 
 import acontext.sfml.state;
-
-import <algorithm>;
-import <atomic>;
-import <cstdint>;
-import <filesystem>;
-import <format>;
-import <fstream>;
-import <iostream>;
-import <span>;
-import <stdexcept>;
-import <string>;
-import <string_view>;
-import <unordered_map>;
-import <vector>;
 
 export namespace epochnamespace::sfmlcontext
 {
@@ -151,7 +150,6 @@ export namespace epochnamespace::sfmlcontext
             static_cast<unsigned>(atlas.height),
             reinterpret_cast<const sf::Uint8*>(atlas.pixel_data.data())
         );
-
 
         if (!gpu.texture.loadFromImage(image))
         {

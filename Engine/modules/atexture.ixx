@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -29,11 +29,12 @@
  *                                              *
  ***********************************************/
 module;
-export module atexture;
 
-import <cstdint>;
-import <string>;
-import <vector>;
+#include <cstdint>
+#include <string>
+#include <vector>
+
+export module atexture;
 
 export namespace epochnamespace
 {

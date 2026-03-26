@@ -30,6 +30,9 @@
  ***********************************************/
 module;
 
+#include <cstdint>
+#include <vector>
+
 #define EPOCH_APPLICATION_MODULE(NAME)                                       \
     static void NAME##_init    () noexcept;                                  \
     static void NAME##_update  (float) noexcept;                             \
@@ -45,9 +48,6 @@ module;
 #endif
 
 export module aapplicationmodule;
-
-import <cstdint>;
-import <vector>;
 
 export namespace epochnamespace
 {

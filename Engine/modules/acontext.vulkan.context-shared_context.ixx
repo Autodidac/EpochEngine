@@ -36,6 +36,10 @@
 
 module;
 
+#include <cstdint>
+#include <optional>
+#include <vector>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
@@ -47,10 +51,6 @@ module;
 #include <glm/gtc/matrix_transform.hpp>
 
 export module acontext.vulkan.context:shared_context;
-
-import <cstdint>;
-import <optional>;
-import <vector>;
 
 namespace epochnamespace::vulkancontext
 {

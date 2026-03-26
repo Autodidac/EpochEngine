@@ -30,6 +30,15 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+#include <chrono>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <stdexcept>
+#include <unordered_map>
+#include <vector>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
@@ -40,6 +49,7 @@ module;
 #   include <GLFW/glfw3.h>
 #endif
 // Include Vulkan-Hpp after config.
+#include <compare>
 #include <vulkan/vulkan.hpp>
 
 export module acontext.vulkan.context:runtime;
@@ -56,15 +66,6 @@ import :shader_pipeline;
 import :swapchain;
 import :texture;
 import :window;
-
-import <algorithm>;
-import <chrono>;
-import <memory>;
-import <mutex>;
-import <shared_mutex>;
-import <stdexcept>;
-import <unordered_map>;
-import <vector>;
 
 export namespace epochnamespace::vulkancontext
 {

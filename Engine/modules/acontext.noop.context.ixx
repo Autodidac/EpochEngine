@@ -33,12 +33,12 @@
 
 module;
 
+#include <atomic>
+#include <memory>
+
 #include <include/aengine.config.hpp>
 
 export module acontext.noop.context;
-
-import <atomic>;
-import <memory>;
 
 import aengine.context.commandqueue;
 import aengine.core.context;

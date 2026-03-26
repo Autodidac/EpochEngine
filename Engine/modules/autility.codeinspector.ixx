@@ -30,18 +30,17 @@
  ***********************************************/
 module;
 
+#include <string>
+#include <vector>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <string_view>
+#include <algorithm>
+
 export module autility.codeinspector;
 
-import <string>;
-import <vector>;
-import <filesystem>;
-import <fstream>;
-import <iostream>;
-import <string_view>;
-import <algorithm>;
-
 #undef min
-
 
 export namespace epochnamespace::codeinspector {
 
@@ -225,6 +224,5 @@ export namespace epochnamespace::codeinspector {
 
         return results;
     }
-
 
 } // namespace epochnamespace::codeinspector

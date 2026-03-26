@@ -30,6 +30,8 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -43,6 +45,7 @@ module;
 
 #include <include/acontext.vulkan.hpp>
 // Include Vulkan-Hpp after config.
+#include <compare>
 #include <vulkan/vulkan.hpp>
 
 #include <glm/glm.hpp>
@@ -51,7 +54,6 @@ module;
 export module acontext.vulkan.context:descriptor;
 
 import :shared_context;
-import <algorithm>;
 import :shared_vk;
 import acontext.vulkan.camera;
 import epoch.render.preview_grid;

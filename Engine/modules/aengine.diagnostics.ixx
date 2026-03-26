@@ -30,26 +30,25 @@
  ***********************************************/
 module;
 
-#include <include/aengine.config.hpp>
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <format>
+#include <iostream>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
 
+#include <include/aengine.config.hpp>
 
 export module aengine.diagnostics;
 
 import aengine.context.type;
 import aengine.core.logger;
 import aengine.telemetry;
-
-import <array>;
-import <chrono>;
-import <cstddef>;
-import <cstdint>;
-import <format>;
-import <iostream>;
-import <mutex>;
-import <string>;
-import <string_view>;
-import <unordered_map>;
-import <vector>;
 
 // epochengine diagnostics helpers
 // --------------------------------

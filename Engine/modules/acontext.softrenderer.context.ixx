@@ -39,6 +39,16 @@
 
 module;
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <utility>
+#include <vector>
+
 //#include "aplatform.hpp"
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
@@ -57,16 +67,7 @@ export module acontext.softrenderer.context;
 
 import aengine.platform;
 
-import <algorithm>;
 //import <chrono>;
-import <cmath>;
-import <cstdint>;
-import <functional>;
-import <iostream>;
-import <memory>;
-import <mutex>;
-import <utility>;
-import <vector>;
 
 import aengine.core.context;             // epochnamespace::core::Context
 import aengine.context.commandqueue;     // epochnamespace::core::CommandQueue
@@ -75,10 +76,12 @@ import acontext.softrenderer.state;      // s_softrendererstate, SoftRendState
 import acontext.softrenderer.textures;   // Texture, TexturePtr (as in your project)
 import acontext.softrenderer.renderer;   // SoftwareRenderer (as in your project)
 import aatlas.manager;                  // atlasmanager::atlas_vector (as in your header)
+import aatlas.texture;                  // TextureAtlas
 import aengine.diagnostics;
 import aengine.gui;
 import aengine.telemetry;
 import epoch.render.preview_grid;
+import aspritehandle;
 
 namespace epochnamespace::anativecontext
 {
@@ -526,7 +529,6 @@ export namespace epochnamespace::anativecontext
         }
     }
 
-
     inline void draw_sprite(
         SpriteHandle handle,
         std::span<const TextureAtlas* const> atlases,
@@ -660,14 +662,16 @@ export namespace epochnamespace::anativecontext
         }
     }
 
-
     bool softrenderer_process(core::Context& ctx, core::CommandQueue& queue)
     {
         auto& sr = s_softrendererstate;
         epochnamespace::anativecontext::detail::refresh_dimensions(ctx);
-        const std::uintptr_t windowId = ctx.windowData
+        std::uintptr_t windowId = 0;
+#if defined(_WIN32)
+        windowId = ctx.windowData
             ? reinterpret_cast<std::uintptr_t>(ctx.windowData->hwnd)
             : 0;
+#endif
 
         diagnostics::FrameTiming frameTimer{ ctx.type, windowId, "Software" };
         const auto viewport = ctx.scene_viewport();
@@ -737,7 +741,10 @@ export namespace epochnamespace::anativecontext
                 sr.framebuffer = sr.sceneFramebuffer;
 
             if (ctx.windowData && ctx.windowData->context)
-                ::epochnamespace::gui::render_deferred_batch(ctx.windowData->context);
+            {
+                if (auto liveContext = std::reinterpret_pointer_cast<epochnamespace::core::Context>(ctx.windowData->context))
+                    ::epochnamespace::gui::render_deferred_batch(liveContext.get());
+            }
 
             sr.lastGuiGeneration = guiGeneration;
             sr.lastSceneViewport = viewport;
@@ -797,8 +804,10 @@ export namespace epochnamespace::anativecontext
         sr.lastPreviewMode = static_cast<std::uint8_t>(core::ScenePreviewMode::None);
 
         // DO NOT DestroyWindow here. This backend does not own the window.
+#if defined(_WIN32)
         sr.hwnd = nullptr;
         sr.parent = nullptr;
+#endif
         sr.running = false;
 
         sr = {}; // reset remaining fields

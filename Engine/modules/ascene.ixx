@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,6 +30,11 @@
  ***********************************************/
  // ascene.ixx
 module;
+
+#include <memory>
+#include <string>
+#include <string_view>
+
 export module ascene;
 
 // Centralized platform glue (no OS headers here)
@@ -37,6 +42,7 @@ import aengine.platform;
 
 // Engine modules (must already be modules)
 import aecs;                  // ecs::reg_ex, create_entity, etc.
+import aecs.storage;
 import aecs.components;     // Position, etc.
 import aengine.event.movement;        // MovementEvent
 
@@ -45,11 +51,7 @@ import aengine.core.context;              // core::Context
 import aengine.context.window; // core::WindowData
 import aengine.core.logger;    // Logger, LogLevel
 
-// STL
-import std;
-
-
-export namespace epochnamespace::scene
+namespace epochnamespace::scene
 {
     using epochnamespace::ecs::Entity;
     using epochnamespace::ecs::reg_ex;

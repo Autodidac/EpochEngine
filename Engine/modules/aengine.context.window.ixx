@@ -86,7 +86,8 @@ import aengine.context.commandqueue;
 
 namespace epochnamespace::core
 {
-    class Context;
+    export using OpaqueContextHandle = std::shared_ptr<void>;
+    export using ThreadInitializeCallback = std::function<bool(const OpaqueContextHandle&)>;
 
     export struct WindowData final
     {
@@ -116,9 +117,9 @@ namespace epochnamespace::core
         sf::Context       sfml_context{};
 #endif
 
-        std::shared_ptr<core::Context> context{};
-        core::CommandQueue            commandQueue{};
-        std::function<bool(const std::shared_ptr<core::Context>&)> threadInitialize{};
+        OpaqueContextHandle          context{};
+        core::CommandQueue          commandQueue{};
+        ThreadInitializeCallback    threadInitialize{};
 
         bool running = false;
         bool usesSharedContext = false;

@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,11 +30,11 @@
  ***********************************************/
 module;
 
-export module aimageatlaswriter;
+#include <filesystem>
+#include <string>
+#include <vector>
 
-import <filesystem>;
-import <string>;
-import <vector>;
+export module aimageatlaswriter;
 
 import aimage.writer;
 

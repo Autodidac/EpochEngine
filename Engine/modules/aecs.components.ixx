@@ -30,11 +30,11 @@
  ***********************************************/
 module;
 
-export module aecs.components;
+#include <string>
+#include <utility>
+#include <vector>
 
-import <string>;
-import <utility>;
-import <vector>;
+export module aecs.components;
 
 import aengine.core.logger; // LogLevel lives here
 import aengine.core.time;   // Timer lives here

@@ -1,23 +1,23 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  ***********************************************/
 module;
+
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <source_location>
+#include <string>
+#include <string_view>
 
 #include <include/aengine.config.hpp>
 
 export module aengine.core.commandline;
-
-import <algorithm>;
-import <cctype>;
-import <filesystem>;
-import <source_location>;
-import <string>;
-import <string_view>;
 
 import aengine.context.type;
 import aengine.version;
@@ -26,7 +26,7 @@ import aengine.core.logger;
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1277;
 inline constexpr int DEFAULT_WINDOW_HEIGHT = 1277;
 
-export namespace epochnamespace::core::cli
+namespace epochnamespace::core::cli
 {
     export enum class RuntimePath
     {
@@ -140,33 +140,33 @@ export namespace epochnamespace::core::cli
         }
     }
 
-    inline int  window_width = DEFAULT_WINDOW_WIDTH;
-    inline int  window_height = DEFAULT_WINDOW_HEIGHT;
-    inline bool window_width_overridden = false;
-    inline bool window_height_overridden = false;
-    inline int  menu_columns = 4;
-    inline bool trace_menu_button0_rect = true;
-    inline bool trace_raylib_design_metrics = false;
-    inline bool run_menu_loop = false;
-    inline bool capture_requested = false;
-    inline bool smoke_requested = false;
-    inline bool editor_requested = false;
-    inline bool updater_shell_requested = false;
-    inline std::string scene_name{};
-    inline std::filesystem::path exe_path;
+    export inline int  window_width = DEFAULT_WINDOW_WIDTH;
+    export inline int  window_height = DEFAULT_WINDOW_HEIGHT;
+    export inline bool window_width_overridden = false;
+    export inline bool window_height_overridden = false;
+    export inline int  menu_columns = 4;
+    export inline bool trace_menu_button0_rect = true;
+    export inline bool trace_raylib_design_metrics = false;
+    export inline bool run_menu_loop = false;
+    export inline bool capture_requested = false;
+    export inline bool smoke_requested = false;
+    export inline bool editor_requested = false;
+    export inline bool updater_shell_requested = false;
+    export inline std::string scene_name{};
+    export inline std::filesystem::path exe_path;
 
-    inline RuntimePath runtime_path = RuntimePath::Epoch;
-    inline WindowMode window_mode = WindowMode::Auto;
-    inline bool parented_mode = detail::default_parented_mode();
+    export inline RuntimePath runtime_path = RuntimePath::Epoch;
+    export inline WindowMode window_mode = WindowMode::Auto;
+    export inline bool parented_mode = detail::default_parented_mode();
 
-    inline int raylib_window_count = 1;
-    inline int sdl_window_count = 1;
-    inline int sfml_window_count = 1;
-    inline int vulkan_window_count = 1;
-    inline int opengl_window_count = 1;
-    inline int software_window_count = 1;
+    export inline int raylib_window_count = 1;
+    export inline int sdl_window_count = 1;
+    export inline int sfml_window_count = 1;
+    export inline int vulkan_window_count = 1;
+    export inline int opengl_window_count = 1;
+    export inline int software_window_count = 1;
 
-    struct ParseResult
+    export struct ParseResult
     {
         bool version_requested = false;
         bool update_requested = false;
@@ -175,7 +175,7 @@ export namespace epochnamespace::core::cli
         RuntimePath runtime = RuntimePath::Epoch;
     };
 
-    [[nodiscard]] inline bool apply_backend_selection(const std::string_view value)
+    export [[nodiscard]] inline bool apply_backend_selection(const std::string_view value)
     {
         using detail::BackendSelection;
 
@@ -216,7 +216,7 @@ export namespace epochnamespace::core::cli
         return true;
     }
 
-    inline void print_engine_info()
+    export inline void print_engine_info()
     {
         detail::log_info(
             std::string{ epochnamespace::GetEngineName() }
@@ -224,7 +224,7 @@ export namespace epochnamespace::core::cli
             + std::string{ epochnamespace::GetEngineVersion() });
     }
 
-    inline ParseResult parse(const int argc, char* argv[])
+    export inline ParseResult parse(const int argc, char* argv[])
     {
         using namespace std::string_view_literals;
 

@@ -30,6 +30,18 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <chrono>
+#include <format>
+#include <functional>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
+
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(_WIN32)
@@ -63,18 +75,6 @@ import acontext.raylib.state;
 import acontext.raylib.textures;
 import acontext.raylib.renderer;
 import acontext.raylib.api;
-
-import <algorithm>;
-import <cmath>;
-import <cstdint>;
-import <chrono>;
-import <format>;
-import <functional>;
-import <memory>;
-import <string>;
-import <string_view>;
-import <thread>;
-import <utility>;
 
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
@@ -126,7 +126,6 @@ namespace epochnamespace::raylibcontext
             (void)st; (void)where;
 #endif
         }
-
 
         // If the raylib window is docked as a WS_CHILD, promote it to a top-level window
         // before letting raylib destroy it. This avoids edge cases where the dock host or

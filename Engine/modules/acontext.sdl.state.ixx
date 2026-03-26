@@ -30,6 +30,12 @@
  ***********************************************/
 
 module;
+
+#include <array>
+#include <bitset>
+#include <functional>
+#include <SDL3/SDL.h>
+
 #include <include/aengine.config.hpp> // for EPOCH_USING_RAYLIB
 
 //#include "aengine.hpp" // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
@@ -38,11 +44,6 @@ export module acontext.sdl.state;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 
 import aengine.platform;
-
-import <array>;
-import <bitset>;
-import <functional>;
-import <SDL3/SDL.h>;
 
 import aengine.core.time;
 import aengine.context.window;

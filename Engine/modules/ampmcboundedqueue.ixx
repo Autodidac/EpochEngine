@@ -30,13 +30,13 @@
  ***********************************************/
 module;
 
-export module ampmcboundedqueue;
+#include <atomic>
+#include <cassert>
+#include <cstddef>
+#include <memory>
+#include <type_traits>
 
-import <atomic>;
-import <cassert>;
-import <cstddef>;
-import <memory>;
-import <type_traits>;
+export module ampmcboundedqueue;
 
 export namespace epochnamespace {
     template<typename T>

@@ -43,22 +43,22 @@ module;
 
 #include <include/acontext.vulkan.hpp>
 #include <vulkan/vulkan.hpp>
+#include <array>
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <format>
+#include <source_location>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
-module acontext.vulkan.context:texture;
+module acontext.vulkan.context;
 
-import <array>;
-import <cstdint>;
-import <cstring>;
-import <filesystem>;
-import <format>;
-import <source_location>;
-import <sstream>;
-import <stdexcept>;
-import <string>;
-import <string_view>;
-import <utility>;
-import <vector>;
-
+import :texture;
 import aengine.core.logger;
 import aengine.cli;
 import autility.string.converter;

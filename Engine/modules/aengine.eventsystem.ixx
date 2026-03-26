@@ -33,9 +33,19 @@ module;
  *   This file is part of the Epoch Project.                 *
  *   epochengine - Modular C++ Framework                      *
  **************************************************************/
-export module aengine.eventsystem;
 
-import std;
+#include <array>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+export module aengine.eventsystem;
 
 export namespace epochnamespace::events {
 

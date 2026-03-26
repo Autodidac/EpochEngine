@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -34,14 +34,15 @@
  **************************************************************/
 module;
 
+#include <deque>
+#include <mutex>
+
 #include "../include/epoch.config.hpp"
 #include "../include/epoch.common.hpp"
 #include "../include/_epoch.stl_types.hpp"
 
 export module epoch.assets.streaming;
 
-import <deque>;
-import <mutex>;
 //import <optional>;
 
 export namespace epoch

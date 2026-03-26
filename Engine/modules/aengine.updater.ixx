@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -36,7 +36,7 @@ export import aengine.updater.system; // Primary updater implementation module
 export import aengine.updater.config;
 export import aengine.updater.tools;
 
-export namespace epochnamespace::updater
+namespace epochnamespace::updater
 {
 
     export using epochnamespace::updater::UpdateChannel;

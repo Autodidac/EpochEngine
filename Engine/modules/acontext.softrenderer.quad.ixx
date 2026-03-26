@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -32,22 +32,21 @@
 
 module;
 
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 export module acontext.softrenderer.quad;
-
-import <algorithm>;
-import <cstdint>;
-import <cstring>;
 
 import acontext.softrenderer.textures; // BackendData, Texture, TexturePtr, create_texture
 import aatlas.manager;                 // atlasmanager::atlas_vector (and atlas types)
 import aatlas.texture;                 // TextureAtlas
 
-export namespace epochnamespace::anativecontext
+namespace epochnamespace::anativecontext
 {
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-
 
     export int clamp_int(int v, int lo, int hi) noexcept
     {
@@ -97,7 +96,7 @@ export namespace epochnamespace::anativecontext
         const int fbW = backend.srState.width;
         const int fbH = backend.srState.height;
 
-        // Integer mapping avoids the “u==1.0 => src==width” OOB.
+        // Integer mapping avoids the â€œu==1.0 => src==widthâ€ OOB.
         for (int y = 0; y < dstH; ++y)
         {
             const int fbY = dstY + y;
@@ -133,7 +132,7 @@ export namespace epochnamespace::anativecontext
             {
                 // If your atlas type supports rebuild_pixels(), do it:
                 // const_cast<TextureAtlas*>(atlas)->rebuild_pixels();
-                // (Leaving commented because I can’t assume mutability here.)
+                // (Leaving commented because I canâ€™t assume mutability here.)
             }
         }
 

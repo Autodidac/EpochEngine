@@ -31,6 +31,8 @@
 
 module;
 
+#include <cstdint>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
@@ -40,8 +42,6 @@ module;
 export module acontext.vulkan.context:renderer;
 
 #if defined(EPOCH_USING_VULKAN)
-
-import <cstdint>;
 
 export namespace epochnamespace::vulkanrenderer
 {

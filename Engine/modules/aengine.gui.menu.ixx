@@ -32,6 +32,16 @@
 module; // REQUIRED global module fragment
 
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
+#include <algorithm>
+#include <array>
+#include <cstdlib>
+#include <cmath>
+#include <memory>
+#include <source_location>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 export module aengine.gui.menu;
 
 // ------------------------------------------------------------
@@ -54,19 +64,6 @@ import aengine.core.logger;
 // ------------------------------------------------------------
 // Standard library
 // ------------------------------------------------------------
-import <vector>;
-import <string>;
-import <optional>;
-import <tuple>;
-import <algorithm>;
-import <array>;
-import <cmath>;
-import <cstdlib>;
-import <iomanip>;
-import <iostream>;
-import <memory>;
-import <source_location>;
-import <sstream>;
 
 // ============================================================
 // Menu
@@ -422,11 +419,11 @@ export namespace epochnamespace::menu
             if (!initializationLogEmitted)
             {
                 initializationLogEmitted = true;
-                logger::get(kLogSys).logf(
+                logger::get(kLogSys).log(
                     logger::LogLevel::INFO,
-                    std::source_location::current(),
-                    "Initialized launcher menu with {} entries",
-                    descriptors.size());
+                    "Initialized launcher menu with " +
+                        std::to_string(descriptors.size()) + " entries",
+                    std::source_location::current());
             }
         }
 

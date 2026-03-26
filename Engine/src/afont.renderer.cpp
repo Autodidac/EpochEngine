@@ -33,25 +33,23 @@ module;
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 #undef STB_TRUETYPE_IMPLEMENTATION
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <fstream>
+#include <iostream>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 // If stb_truetype.h uses STBTT_STATIC, define it in the header or here (optional).
 // #define STBTT_STATIC
 
 module afont.renderer;
 
-import <algorithm>;
-import <array>;
-import <cstdint>;
-import <fstream>;
-import <iostream>;
-import <mutex>;
-import <optional>;
-import <string>;
-import <unordered_map>;
-import <utility>;
-import <vector>;
-
-import afont.renderer;
 import aatlas.manager;
 import aatlas.texture;
 

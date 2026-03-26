@@ -40,6 +40,7 @@ module;
 #endif
 
 // We are using Vk* / PFN_* types.
+#include <compare>
 #include <vulkan/vulkan.h>
 
 #ifndef EPOCH_USING_VULKAN

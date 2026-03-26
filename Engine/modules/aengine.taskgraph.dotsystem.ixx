@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,6 +30,18 @@
  ***********************************************/
 module; // REQUIRED global module fragment
 
+#include <algorithm>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <semaphore>
+#include <string>
+#include <thread>
+#include <vector>
+
 // ============================================================
 // Named module
 // ============================================================
@@ -46,17 +58,6 @@ import aengine.systems;     // provides epochnamespace::Task
 // ------------------------------------------------------------
 // Standard library
 // ------------------------------------------------------------
-import <atomic>;
-import <coroutine>;
-import <cstdint>;
-import <fstream>;
-import <iostream>;
-import <memory>;
-import <string>;
-import <thread>;
-import <vector>;
-import <semaphore>;
-import <algorithm>;
 
 // ============================================================
 // Task graph system

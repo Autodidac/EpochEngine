@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -35,6 +35,12 @@
 
 module;
 
+#include <algorithm>
+#include <cstdint>
+#include <cmath>
+#include <limits>
+#include <vector>
+
 //#include "aplatform.hpp"
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
@@ -44,17 +50,11 @@ export module acontext.softrenderer.renderer;
 
 import aengine.platform;
 
-import <algorithm>;
-import <cstdint>;
-import <cmath>;
-import <limits>;
-import <vector>;
-
 // Provides TexturePtr / Texture (with sample(), width/height).
 // If your textures unit is named differently, change this import to match.
 import acontext.softrenderer.textures;
 
-export namespace epochnamespace::anativecontext
+namespace epochnamespace::anativecontext
 {
     struct Vec3 { float x = 0.0f, y = 0.0f, z = 0.0f; };
     struct Vec2 { float u = 0.0f, v = 0.0f; };
@@ -99,7 +99,7 @@ export namespace epochnamespace::anativecontext
         }
     };
 
-    class SoftwareRenderer
+    export class SoftwareRenderer
     {
     public:
         // =======================
@@ -333,5 +333,5 @@ export namespace epochnamespace::anativecontext
 
 #else
 // If the backend is disabled, still provide the module (empty) so imports don't explode.
-export namespace epochnamespace::anativecontext {}
+namespace epochnamespace::anativecontext {}
 #endif // EPOCH_USING_SOFTWARE_RENDERER

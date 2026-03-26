@@ -60,7 +60,7 @@ export namespace epoch::core::error
     };
 
     template <class T>
-    using result = std::expected<T, err>;
+    using result = epoch::expected<T, err>;
 
     [[nodiscard]] constexpr code ok_code() noexcept { return {}; }
     [[nodiscard]] constexpr err  ok() noexcept { return {}; }

@@ -30,6 +30,10 @@
  ***********************************************/
 module;
 
+#include <array>
+#include <bitset>
+#include <functional>
+
 // Must be before anything that might pull <windows.h> (directly or indirectly)
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -53,7 +57,6 @@ module;
 #   endif
 #endif
 
-
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 #define SFML_STATIC
 #include <SFML/Graphics.hpp>
@@ -64,10 +67,6 @@ export module acontext.sfml.state;
 import aengine.platform;
 import aengine.context.window;
 import aengine.core.time;
-
-import <array>;
-import <bitset>;
-import <functional>;
 
 export namespace epochnamespace::sfmlcontext::state
 {

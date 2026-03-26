@@ -36,6 +36,11 @@
 
 module;
 
+#include <array>
+#include <cstdint>
+#include <span>
+#include <vector>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
@@ -45,10 +50,6 @@ export module acontext.vulkan.context:meshcube;
 import :shared_vk;
 import epoch.render.preview_grid;
 
-import <array>;
-import <cstdint>;
-import <span>;
-import <vector>;
 
 namespace epochnamespace::vulkancontext
 {

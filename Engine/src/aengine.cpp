@@ -39,8 +39,8 @@
  //
 //#include "pch.h"
 
-#include "..\include\aengine.config.hpp"
-#include "..\include\aengine.hpp"
+#include "../include/aengine.config.hpp"
+#include "../include/aengine.hpp"
 
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -58,23 +58,23 @@
 // -----------------------------
 // Standard library imports
 // -----------------------------
-import <algorithm>;
-import <chrono>;
-//import <exception>;
-import <format>;
-import <iostream>;
-import <limits>;
-import <memory>;
-import <mutex>;
-import <optional>;
-import <queue>;
-import <shared_mutex>;
-import <string>;
-import <string_view>;
-import <thread>;
-import <unordered_map>;
-import <utility>;
-import <vector>;
+#include <algorithm>
+#include <chrono>
+#include <format>
+#include <iostream>
+#include <limits>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <queue>
+#include <shared_mutex>
+#include <source_location>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 // -----------------------------
 // Engine/module imports
@@ -1896,7 +1896,7 @@ namespace epochnamespace::core
                 "RunEngine terminated with code {}",
                 result);
 #elif defined(__linux__)
-        const int result = RunEngineMainLoopLinux();
+        const int result = engine::RunEngineMainLoopLinux();
         if (result != 0)
             logger::get(engine::kEngineLog).logf(
                 logger::LogLevel::Error,
@@ -2037,7 +2037,7 @@ namespace epochnamespace::core
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     mgr.StopAll();
-                    return 0;
+                    return;
                 }
 
             auto pump = []() -> bool

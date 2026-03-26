@@ -30,6 +30,12 @@
  ***********************************************/
 module;
 
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <unordered_map>
+#include <vector>
+
 //#include "aplatform.hpp"
 //#include "aengineconfig.hpp"
 //#include "aatlastexture.hpp"
@@ -39,18 +45,11 @@ module;
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 export module acontext.softrenderer.textures;
 
-import <algorithm>;
-import <cstdint>;
-import <memory>;
-import <unordered_map>;
-import <vector>;
-
 import aatlas.texture;        // TextureAtlas
 import acontext.softrenderer.state;   // SoftRendState
 import aengine.platform;    // epochnamespace
 import aengine.input;       // epochnamespace::input
 //import aengine.config; // epochnamespace::input
-
 
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 

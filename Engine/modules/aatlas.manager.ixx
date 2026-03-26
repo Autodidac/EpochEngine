@@ -1,9 +1,9 @@
-﻿/************************************************
- *  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½+  ï¿½ï¿½+   *
- *  ï¿½ï¿½+----+ï¿½ï¿½+--ï¿½ï¿½+ï¿½ï¿½+---ï¿½ï¿½+ï¿½ï¿½+----+ï¿½ï¿½ï¿½  ï¿½ï¿½ï¿½   *
- *  ï¿½ï¿½ï¿½ï¿½ï¿½+  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½++ï¿½ï¿½ï¿½   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½     ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½   *
- *  ï¿½ï¿½+--+  ï¿½ï¿½+---+ ï¿½ï¿½ï¿½   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½     ï¿½ï¿½+--ï¿½ï¿½ï¿½   *
- *  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½     +ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+++ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½  ï¿½ï¿½ï¿½   *
+/************************************************
+ *  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½+  Ã¯Â¿Â½Ã¯Â¿Â½+   *
+ *  Ã¯Â¿Â½Ã¯Â¿Â½+----+Ã¯Â¿Â½Ã¯Â¿Â½+--Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½+---Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½+----+Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   *
+ *  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½++Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½     Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   *
+ *  Ã¯Â¿Â½Ã¯Â¿Â½+--+  Ã¯Â¿Â½Ã¯Â¿Â½+---+ Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½     Ã¯Â¿Â½Ã¯Â¿Â½+--Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   *
+ *  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½     +Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+++Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   *
  *  +------++-+      +-----+  +-----++-+  +-+   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
@@ -29,6 +29,24 @@
  *                                              *
  ***********************************************/
 module;
+
+#include <atomic>
+#include <cstdint>
+#include <exception>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <queue>
+#include <shared_mutex>
+#include <source_location>
+#include <string>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 export module aatlas.manager;
 
 import aengine.platform;
@@ -37,35 +55,21 @@ import asprite.pool;
 import aatlas.texture;
 import aspriteregistry;
 import aspritehandle;
+import atexture;
 import aengine.context.type;
 import aengine.core.logger;
 
-import <atomic>;
-import <cstdint>;
-import <exception>;
-import <functional>;
-import <iostream>;
-import <memory>;
-import <mutex>;
-import <optional>;
-import <queue>;
-import <shared_mutex>;
-import <source_location>;
-import <string>;
-import <tuple>;
-import <unordered_map>;
-import <utility>;
-import <vector>;
 
-export namespace epochnamespace::atlasmanager
+namespace epochnamespace::atlasmanager
 {
     inline constexpr std::string_view kLogSys = "Epoch.Atlas";
 
-    using epochnamespace::spritepool::SpriteHandle;
     using epochnamespace::spritepool::allocate;
 
+    using epochnamespace::SpriteHandle;
     using epochnamespace::TextureAtlas;
     using epochnamespace::AtlasConfig;
+    using epochnamespace::Texture;
     using epochnamespace::u8;
     using epochnamespace::u32;
     using epochnamespace::u64;
@@ -240,7 +244,7 @@ export namespace epochnamespace::atlasmanager
         };
 
         inline std::mutex backendMutex{};
-        inline std::unordered_map<core::ContextType, BackendUploadState> backendStates{};
+        export inline std::unordered_map<core::ContextType, BackendUploadState> backendStates{};
 
         inline thread_local bool processingUploads = false;
         inline thread_local std::optional<core::ContextType> activeBackend = std::nullopt;

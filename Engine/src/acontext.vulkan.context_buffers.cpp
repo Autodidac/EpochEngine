@@ -47,8 +47,9 @@ module;
 #include <cstring>
 #include <stdexcept>
 
-module acontext.vulkan.context:buffers;
+module acontext.vulkan.context;
 
+import :buffers;
 import :shared_vk;
 import :meshcube;
 

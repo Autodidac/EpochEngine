@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,15 +30,15 @@
  ***********************************************/
 module;
 
+#include <cstdint>
+#include <compare>
+#include <limits>
+#include <cstddef>
+
 // no macros in global module fragment except directives
 #undef max
 
 export module aspritehandle;
-
-import <cstdint>;
-import <compare>;
-import <limits>;
-import <cstddef>;
 
 export namespace epochnamespace
 {

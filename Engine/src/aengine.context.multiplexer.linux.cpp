@@ -131,8 +131,16 @@ namespace epochnamespace::core
         }
     }
 
-    namespace
+namespace
+{
+    [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> typed_context(
+        const epochnamespace::core::OpaqueContextHandle& opaque) noexcept
     {
+        return opaque
+            ? std::reinterpret_pointer_cast<epochnamespace::core::Context>(opaque)
+            : nullptr;
+    }
+
         constexpr std::string_view kLogSys = "Context.Multiplexer.Linux";
         constexpr int kDefaultWidth = 800;
         constexpr int kDefaultHeight = 600;
@@ -212,13 +220,14 @@ namespace epochnamespace::core
 
         void SetupResizeCallback(WindowData& win)
         {
-            if (!win.context) return;
+            auto liveContext = typed_context(win.context);
+            if (!liveContext) return;
 
-            if (!win.context->onResize && win.onResize)
-                win.context->onResize = win.onResize;
+            if (!liveContext->onResize && win.onResize)
+                liveContext->onResize = win.onResize;
 
-            if (!win.onResize && win.context->onResize)
-                win.onResize = win.context->onResize;
+            if (!win.onResize && liveContext->onResize)
+                win.onResize = liveContext->onResize;
         }
 
         [[nodiscard]] inline int clamp_positive(int value) noexcept
@@ -501,9 +510,9 @@ namespace epochnamespace::core
                         window->threadInitialize =
                             [ctxWeak = std::weak_ptr<Context>(ctx),
                             width, height,
-                            resize = std::move(resizeCopy)](const std::shared_ptr<Context>& liveCtx) mutable -> bool
+                            resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
                             {
-                                auto target = liveCtx ? liveCtx : ctxWeak.lock();
+                                auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                                 if (!target)
                                 {
                                     epochnamespace::logger::get(kLogSys).log(
@@ -582,9 +591,9 @@ namespace epochnamespace::core
                         window->threadInitialize =
                             [ctxWeak = std::weak_ptr<Context>(ctx),
                             width, height, title,
-                            resize = std::move(resizeCopy)](const std::shared_ptr<Context>& liveCtx) mutable -> bool
+                            resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
                             {
-                                auto target = liveCtx ? liveCtx : ctxWeak.lock();
+                                auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                                 if (!target)
                                 {
                                     epochnamespace::logger::get(kLogSys).log(
@@ -622,9 +631,9 @@ namespace epochnamespace::core
                         window->threadInitialize =
                             [ctxWeak = std::weak_ptr<Context>(ctx),
                             width, height, title,
-                            resize = std::move(resizeCopy)](const std::shared_ptr<Context>& liveCtx) mutable -> bool
+                            resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
                             {
-                                auto target = liveCtx ? liveCtx : ctxWeak.lock();
+                                auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                                 if (!target)
                                 {
                                     epochnamespace::logger::get(kLogSys).log(
@@ -662,9 +671,9 @@ namespace epochnamespace::core
                         window->threadInitialize =
                             [ctxWeak = std::weak_ptr<Context>(ctx),
                             width, height, title,
-                            resize = std::move(resizeCopy)](const std::shared_ptr<Context>& liveCtx) mutable -> bool
+                            resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
                             {
-                                auto target = liveCtx ? liveCtx : ctxWeak.lock();
+                                auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                                 if (!target)
                                 {
                                     epochnamespace::logger::get(kLogSys).log(
@@ -919,9 +928,9 @@ namespace epochnamespace::core
             winPtr->threadInitialize =
                 [ctxWeak = std::weak_ptr<Context>(ctx),
                 width, height,
-                resize = std::move(resizeCopy)](const std::shared_ptr<Context>& liveCtx) mutable -> bool
+                resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
                 {
-                    auto target = liveCtx ? liveCtx : ctxWeak.lock();
+                    auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                     if (!target)
                     {
                         epochnamespace::logger::get(kLogSys).log(
@@ -982,9 +991,9 @@ namespace epochnamespace::core
             winPtr->threadInitialize =
                 [ctxWeak = std::weak_ptr<Context>(ctx),
                 width, height, title,
-                resize = std::move(resizeCopy)](const std::shared_ptr<Context>& liveCtx) mutable -> bool
+                resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
                 {
-                    auto target = liveCtx ? liveCtx : ctxWeak.lock();
+                    auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                     if (!target)
                     {
                         epochnamespace::logger::get(kLogSys).log(
@@ -1023,9 +1032,9 @@ namespace epochnamespace::core
             winPtr->threadInitialize =
                 [ctxWeak = std::weak_ptr<Context>(ctx),
                 width, height, title,
-                resize = std::move(resizeCopy)](const std::shared_ptr<Context>& liveCtx) mutable -> bool
+                resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
                 {
-                    auto target = liveCtx ? liveCtx : ctxWeak.lock();
+                    auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                     if (!target)
                     {
                         epochnamespace::logger::get(kLogSys).log(
@@ -1064,9 +1073,9 @@ namespace epochnamespace::core
             winPtr->threadInitialize =
                 [ctxWeak = std::weak_ptr<Context>(ctx),
                 width, height, title,
-                resize = std::move(resizeCopy)](const std::shared_ptr<Context>& liveCtx) mutable -> bool
+                resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
                 {
-                    auto target = liveCtx ? liveCtx : ctxWeak.lock();
+                    auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                     if (!target)
                     {
                         epochnamespace::logger::get(kLogSys).log(
@@ -1143,8 +1152,11 @@ namespace epochnamespace::core
 
         if (removed)
         {
-            if (removed->context && removed->context->windowData == removed.get())
-                removed->context->windowData = nullptr;
+            if (auto liveContext = typed_context(removed->context);
+                liveContext && liveContext->windowData == removed.get())
+            {
+                liveContext->windowData = nullptr;
+            }
 
             DestroyWindowData(*removed);
 
@@ -1234,12 +1246,15 @@ namespace epochnamespace::core
 
             if (window->context)
             {
-                window->context->width = clampedWidth;
-                window->context->height = clampedHeight;
-                contextType = window->context->type;
+                if (auto liveContext = typed_context(window->context))
+                {
+                    liveContext->width = clampedWidth;
+                    liveContext->height = clampedHeight;
+                    contextType = liveContext->type;
 
-                if (window->context->onResize)
-                    resizeCallback = window->context->onResize;
+                    if (liveContext->onResize)
+                        resizeCallback = liveContext->onResize;
+                }
             }
             else
             {
@@ -1330,7 +1345,7 @@ namespace epochnamespace::core
         auto it = std::find_if(windows.begin(), windows.end(),
             [&](const std::unique_ptr<WindowData>& w)
             {
-                return w && w->context && w->context.get() == ctx.get();
+                return w && w->context && w->context.get() == static_cast<void*>(ctx.get());
             });
 
         return (it != windows.end()) ? it->get() : nullptr;
@@ -1344,7 +1359,7 @@ namespace epochnamespace::core
         auto it = std::find_if(windows.begin(), windows.end(),
             [&](const std::unique_ptr<WindowData>& w)
             {
-                return w && w->context && w->context.get() == ctx.get();
+                return w && w->context && w->context.get() == static_cast<void*>(ctx.get());
             });
 
         return (it != windows.end()) ? it->get() : nullptr;
@@ -1352,7 +1367,7 @@ namespace epochnamespace::core
 
     void MultiContextManager::RenderLoop(WindowData& win)
     {
-        auto ctx = win.context;
+        auto ctx = typed_context(win.context);
         if (!ctx)
         {
             win.running = false;

@@ -36,27 +36,28 @@
 
 module;
 
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <source_location>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
 
 #include <include/acontext.vulkan.hpp>
 // Include Vulkan-Hpp after config.
+#include <compare>
 #include <vulkan/vulkan.hpp>
 
 export module acontext.vulkan.context:swapchain;
 
-import acontext.vulkan.context;
 import :shared_vk;
 import aengine.core.logger;
 
-import <algorithm>;
-import <cstdint>;
-import <limits>;
-import <source_location>;
-import <stdexcept>;
-import <string>;
-import <vector>;
 
 namespace epochnamespace::vulkancontext
 {

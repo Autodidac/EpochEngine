@@ -31,6 +31,13 @@
 
 module;
 
+#include <functional>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <SDL3/SDL.h>
+
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 
 export module acontext.sdl.renderer;
@@ -38,11 +45,6 @@ export module acontext.sdl.renderer;
 //import aengine.config;
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-import std;
-import <iostream>;
-import <stdexcept>;
-import <SDL3/SDL.h>;
-
 import aengine.core.context;
 import acontext.sdl.state;
 

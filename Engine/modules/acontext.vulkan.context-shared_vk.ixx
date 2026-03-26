@@ -36,6 +36,20 @@
 
 module;
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
@@ -50,6 +64,7 @@ module;
 #endif
 
 // Include Vulkan-Hpp after config.
+#include <compare>
 #include <vulkan/vulkan.hpp>
 
 #include <glm/glm.hpp>
@@ -61,20 +76,6 @@ struct GLFWwindow; // engine-owned window integration: don't drag GLFW into the 
 #endif
 
 import :shared_context;
-
-import <array>;
-import <cstddef>;
-import <cstdint>;
-import <functional>;
-import <memory>;
-import <mutex>;
-import <optional>;
-import <span>;
-import <string>;
-import <thread>;
-import <unordered_map>;
-import <utility>;
-import <vector>;
 
 import aengine.context.commandqueue;
 import aengine.core.context;

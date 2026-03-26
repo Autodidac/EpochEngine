@@ -37,17 +37,16 @@
 
 module;
 
+#include <atomic>
+#include <shared_mutex>
+
 #include <include/aengine.config.hpp> // for EPOCH_USING_RAYLIB
 
 export module acontext.raylib.input;
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
-import <atomic>;
-import <shared_mutex>;
-
 import acontext.raylib.api;
 import aengine.input;
-
 
 namespace epochnamespace::raylibcontext
 {

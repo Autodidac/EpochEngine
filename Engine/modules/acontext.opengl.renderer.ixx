@@ -30,6 +30,9 @@
  ***********************************************/
 module;
 
+#include <cstdint>
+#include <iostream>
+
 // Global module fragment: macros + headers only.
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
@@ -44,9 +47,6 @@ module;
 #endif
 
 export module acontext.opengl.renderer;
-
-import <cstdint>;
-import <iostream>;
 
 import aengine.platform;
 import aengine.cli;

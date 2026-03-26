@@ -31,10 +31,10 @@
 
 module;
 
-export module aengine.core.types;
+#include <cstddef>
+#include <cstdint>
 
-import <cstddef>;
-import <cstdint>;
+export module aengine.core.types;
 
 export namespace epochnamespace
 {

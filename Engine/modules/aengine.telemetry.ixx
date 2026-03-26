@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,11 +30,11 @@
  ***********************************************/
 module;
 
-export module aengine.telemetry;
+#include <atomic>
+#include <cstdint>
+#include <string_view>
 
-import <atomic>;
-import <cstdint>;
-import <string_view>;
+export module aengine.telemetry;
 
 import aengine.context.type;
 

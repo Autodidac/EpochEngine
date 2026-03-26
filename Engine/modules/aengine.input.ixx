@@ -1,10 +1,10 @@
 /************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
+ *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
+ *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
+ *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -30,7 +30,25 @@
  ***********************************************/
 module;
 
+#include <atomic>
+#include <array>
+#include <bitset>
+#include <cstdint>
+#include <iostream>
+#include <mutex>
+#include <shared_mutex>
+#include <thread>
+
+#if defined(_WIN32)
 #include <wtypes.h>
+#elif defined(__APPLE__)
+#include <ApplicationServices/ApplicationServices.h>
+#elif defined(__linux__)
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/keysym.h>
+#include <X11/extensions/XInput2.h>
+#endif
 
 // ainput.ixx
 export module aengine.input;
@@ -47,35 +65,22 @@ import aengine.context.window;
 #if defined(_WIN32)
 import aframework;
 #elif defined(__APPLE__)
-import <ApplicationServices/ApplicationServices.h>;
 #elif defined(__linux__)
-import <X11/Xlib.h>;
-import <X11/Xutil.h>;
-import <X11/keysym.h>;
-import <X11/extensions/XInput2.h>;
 #endif
 
 // ------------------------------------------------------------
 // Standard library imports
 // ------------------------------------------------------------
-import <atomic>;
-import <array>;
-import <bitset>;
-import <cstdint>;
-import <iostream>;
-import <mutex>;
-import <shared_mutex>;
-import <thread>;
 
 // ============================================================
 // Input core
 // ============================================================
-export namespace epochnamespace::input
+namespace epochnamespace::input
 {
     // --------------------------------------------------------
     // Key / Mouse enums
     // --------------------------------------------------------
-    enum Key : std::uint16_t
+    export enum Key : std::uint16_t
     {
         Unknown = 0,
         A, B, C, D, E, F, G, H, I, J,
@@ -103,7 +108,7 @@ export namespace epochnamespace::input
         Count
     };
 
-    enum MouseButton : std::uint8_t
+    export enum MouseButton : std::uint8_t
     {
         MouseLeft = 0,
         MouseRight,
@@ -117,21 +122,21 @@ export namespace epochnamespace::input
     };
 
     // --------------------------------------------------------
-    // State storage (header-only → module globals)
+    // State storage (header-only â†’ module globals)
     // --------------------------------------------------------
     inline std::thread::id        g_pollingThread{};
     inline std::atomic<bool>     g_pollingThreadLocked{ false };
-    inline std::shared_mutex     g_inputMutex{};
+    export inline std::shared_mutex g_inputMutex{};
 
-    inline std::bitset<Key::Count>               keyDown{};
-    inline std::bitset<Key::Count>               keyPressed{};
-    inline std::bitset<MouseButton::MouseCount>  mouseDown{};
-    inline std::bitset<MouseButton::MouseCount>  mousePressed{};
+    export inline std::bitset<Key::Count>               keyDown{};
+    export inline std::bitset<Key::Count>               keyPressed{};
+    export inline std::bitset<MouseButton::MouseCount>  mouseDown{};
+    export inline std::bitset<MouseButton::MouseCount>  mousePressed{};
 
-    inline std::atomic<int>   mouseX{ 0 };
-    inline std::atomic<int>   mouseY{ 0 };
-    inline std::atomic<int>   mouseWheel{ 0 };
-    inline std::atomic<bool>  mouseCoordsAreGlobal{ true };
+    export inline std::atomic<int>   mouseX{ 0 };
+    export inline std::atomic<int>   mouseY{ 0 };
+    export inline std::atomic<int>   mouseWheel{ 0 };
+    export inline std::atomic<bool>  mouseCoordsAreGlobal{ true };
 
     // --------------------------------------------------------
     // Thread ownership helpers
@@ -305,7 +310,7 @@ export namespace epochnamespace::input
 } // namespace epochnamespace::input
 
 // ============================================================
-// Win32 WndProc hook (module-visible, header-only → module)
+// Win32 WndProc hook (module-visible, header-only â†’ module)
 // ============================================================
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
 

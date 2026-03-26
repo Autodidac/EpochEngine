@@ -51,7 +51,7 @@ namespace epoch::platform
             [[nodiscard]] core::error::result<void> create_surface(WindowHandle handle) noexcept override
             {
                 if (!handle.valid())
-                    return std::unexpected(core::error::invalid_argument("invalid window handle for surface creation"));
+                    return epoch::unexpected(core::error::invalid_argument("invalid window handle for surface creation"));
 
                 has_surface_ = true;
                 return {}; // ok
@@ -86,7 +86,7 @@ namespace epoch::platform
         case GraphicsBackend::null_backend:
             return std::make_unique<NullGraphicsContext>(desc); // ok (value converts)
         default:
-            return std::unexpected(
+            return epoch::unexpected(
                 core::error::make(
                     { core::error::core_domain::id, core::error::core_domain::unsupported },
                     "graphics backend not available"

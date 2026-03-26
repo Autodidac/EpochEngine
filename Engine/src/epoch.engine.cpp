@@ -59,19 +59,19 @@ namespace epoch
         // Create window system
         auto wsys = platform::create_window_system();
         if (!wsys)
-            return std::unexpected(core::error::failed("create_window_system failed"));
+            return epoch::unexpected(core::error::failed("create_window_system failed"));
         _windows = std::move(*wsys);
 
         // Create primary window
         auto wh = _windows->create_window(cfg.window);
         if (!wh)
-            return std::unexpected(core::error::failed("create_window failed"));
+            return epoch::unexpected(core::error::failed("create_window failed"));
         _primary = *wh;
 
         // Create graphics context (can be null_backend)
         auto gctx = platform::create_graphics_context(cfg.gfx);
         if (!gctx)
-            return std::unexpected(core::error::failed("create_graphics_context failed"));
+            return epoch::unexpected(core::error::failed("create_graphics_context failed"));
         _gfx = std::move(*gctx);
 
         // Surface hookup
@@ -79,7 +79,7 @@ namespace epoch
         {
             auto r = _gfx->create_surface(_primary);
             if (!r)
-                return std::unexpected(r.error());
+                return epoch::unexpected(r.error());
         }
 
         _initialized = true;

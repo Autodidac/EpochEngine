@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,13 +30,13 @@
  ***********************************************/
 module;
 
-export module aatomicfunction;
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <stdexcept>
+#include <utility>
 
-import <atomic>;
-import <functional>;
-import <memory>;
-import <stdexcept>;
-import <utility>;
+export module aatomicfunction;
 
 export namespace epochnamespace::core {
 

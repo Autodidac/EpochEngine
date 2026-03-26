@@ -1,58 +1,59 @@
-Epoch Completion Roadmap Prompt
-===============================
+Epoch Spine Roadmap
+==================
 
 Objective
 ---------
-Create a production-ready release of the Epoch runtime that can bootstrap the
-engine end-to-end across supported desktop platforms.
+Converge Epoch onto one reusable cross-platform spine while preserving the old
+timing and logging behavior that already works across the engine, editor, and
+game code.
 
-Guiding Principles
-------------------
-1. Preserve the module-first runtime architecture.
-2. Prioritize developer ergonomics: fast iteration, self-diagnosing tooling,
-   and clear documentation.
-3. Keep compatibility surfaces explicit instead of letting old archive code leak
-   back into the active engine by accident.
+Immediate spine priorities
+--------------------------
+1. Keep public engine syntax stable while moving ownership under canonical Epoch core services.
+2. Treat time as a reusable frame-data service, not an editor-only helper.
+3. Push rendering architecture toward:
+   visibility -> surface data -> lighting -> temporal history -> reconstruction -> present.
+4. Keep AI work vendor-neutral and optional; the engine should prepare data for reconstruction rather than hard-wire a single upscaler.
 
-Execution Plan
+Execution plan
 --------------
-Use the following phases as a checklist for future work.
 
-Phase 1 - Repository Audit & Build Health
------------------------------------------
-- [ ] Verify deterministic builds across supported toolchains.
-- [ ] Keep CMake presets current and honest.
-- [ ] Capture smoke-build logs for the important targets.
+Phase 1 - Spine consolidation
+-----------------------------
+- [x] Keep `aengine.core.logger` syntax stable everywhere.
+- [x] Move timing ownership under `core.time` while preserving `aengine.core.time` call shapes.
+- [x] Audit duplicated ownership boundaries before deleting anything.
 
-Phase 2 - Core Runtime Stabilization
-------------------------------------
-- [ ] Expand renderer regression coverage for OpenGL, SDL, Raylib, SFML, and software paths.
-- [ ] Finish the remaining fragile backend startup/shutdown paths without overcorrecting in the generic multiplexer.
-- [ ] Continue tightening task scheduling, reload behavior, and diagnostics.
+Phase 1 notes
+-------------
+- Legacy logging and timing entry points still compile unchanged across engine, editor, scenes, and backend modules.
+- Canonical timing ownership lives under `core.time`, while the old `aengine.core.time` facade remains the compatibility surface.
+- Runtime/perf selection is now part of the active spine path; broader context adoption should continue in Phase 2 instead of forcing premature deletions.
 
-Phase 3 - Feature Completion
+Phase 2 - Runtime and platform stabilization
+--------------------------------------------
+- [ ] Keep runtime startup/shutdown honest across OpenGL, SDL, Raylib, SFML, software, and Vulkan.
+- [ ] Finish window/context ownership in the Epoch platform layer.
+- [ ] Verify that editor and game runtimes can consume the same core services without dragging each other around.
+- [ ] Keep Windows and Linux build paths in sync instead of fixing one platform at a time.
+
+Phase 3 - Renderer direction
 ----------------------------
-- [ ] Finish the remaining minor unfinished systems carefully.
-- [ ] Either complete Vulkan enough to document it as supported or keep it explicitly experimental.
-- [ ] Keep input, save/load, and scripting features aligned across the active runtime.
+- [ ] Reshape the renderer around reusable frame data instead of a monolithic final-frame pass chain.
+- [ ] Formalize visibility, surface, lighting, temporal, and presentation boundaries.
+- [ ] Keep current backends working while making room for sparse lighting and reconstruction.
+- [ ] Move engine/context pacing further through the `epoch.perf.select` path instead of backend-local throttling folklore.
 
-Phase 4 - Tooling & Automation
-------------------------------
+Phase 4 - Tooling and smoke coverage
+------------------------------------
 - [ ] Improve scripted build/test/package flows.
-- [ ] Keep docs generation and smoke harnesses easy to run locally.
-- [ ] Expand backend telemetry and regression capture tooling.
+- [ ] Keep docs and smoke harnesses runnable locally.
+- [ ] Capture backend regressions without pretending experimental paths are stable.
+- [ ] Keep updater-shell build artifacts isolated from normal developer build trees.
 
-Phase 5 - Documentation & Release Readiness
--------------------------------------------
-- [x] Rebrand the public docs and README to Epoch.
-- [x] Move the legacy archive under `Engine/legacy/`.
-- [ ] Write a migration note for consumers still relying on older compatibility names.
-- [ ] Run a final release-candidate dry run with updated docs and backend smoke coverage.
-
-Acceptance Criteria
+Acceptance criteria
 -------------------
-- Public docs match the actual repo layout and current branding.
-- Runtime version helpers, release notes, and README agree on the active release.
-- Legacy compatibility code stays archived under `Engine/legacy/` unless a piece
-  is intentionally promoted back into the active engine.
-- Experimental backends are labeled honestly.
+- One canonical Epoch timing owner.
+- Existing engine/game logging syntax still compiles unchanged.
+- Renderer docs reflect the actual forward direction: lighting and temporal data first, AI reconstruction later.
+- No fake cleanup that breaks the engine just to look modern.

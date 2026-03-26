@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -29,18 +29,19 @@
  *                                              *
  ***********************************************/
 module;
-export module aimage.loader;
 
-import <algorithm>;
-import <cstdint>;
-import <cstring>;
-import <filesystem>;
-import <fstream>;
-import <iostream>;
-import <limits>;
-import <stdexcept>;
-import <string>;
-import <vector>;
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+export module aimage.loader;
 
 export namespace epochnamespace
 {

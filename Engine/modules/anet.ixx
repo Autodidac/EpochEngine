@@ -30,6 +30,20 @@
  ***********************************************/
 module;
 
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <type_traits>
+#include <utility>
+#include <variant>
+
 // anet.hpp Ã¢â‚¬â€ Hybrid transport shim for the Epoch engine
 //
 // Ã¢â‚¬Â¢ Default: SteamNetworkingSockets (relay, P2P, NAT punch, QUIC)
@@ -58,23 +72,9 @@ module;
 #include <steam/steamnetworkingsockets.h>
 #endif
 
-
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 
 export module anet;
-
-import <cstddef>;
-import <cstdint>;
-import <functional>;
-import <memory>;
-import <optional>;
-import <span>;
-import <stdexcept>;
-import <string>;
-import <string_view>;
-import <system_error>;
-import <type_traits>;
-import <variant>;
 
 import aengine.platform;
 //import aengine.config;

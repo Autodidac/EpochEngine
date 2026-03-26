@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -29,17 +29,18 @@
  *                                              *
  ***********************************************/
 module;
-export module aimage.writer;
 
-import <algorithm>;
-import <cstdint>;
-import <cstring>;
-import <filesystem>;
-import <fstream>;
-import <stdexcept>;
-import <string>;
-import <vector>;
-import <iostream>;
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+#include <iostream>
+
+export module aimage.writer;
 
 export namespace epochnamespace
 {
