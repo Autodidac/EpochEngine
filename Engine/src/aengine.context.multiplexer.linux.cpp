@@ -45,6 +45,8 @@ module;
 
 // X11 / GLX headers must be includes (not module imports)
 #include <X11/Xatom.h>
+#include <X11/Xutil.h>
+#include <X11/keysym.h>
 #include <X11/extensions/Xrandr.h>
 #include <GL/glx.h>
 #include <GL/glxext.h>
@@ -60,6 +62,7 @@ module;
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <source_location>
 #include <stdexcept>
@@ -78,6 +81,7 @@ import aengine.core.logger;
 import aengine.context.window;        // WindowData
 import aengine.context.type;          // ContextType
 import aengine.core.commandline;
+import aengine.input;
 import aengine.cli;
 import aengine.telemetry;
 
@@ -234,6 +238,103 @@ namespace
         {
             return (value < 1) ? 1 : value;
         }
+
+        [[nodiscard]] epochnamespace::input::Key map_keysym(KeySym sym) noexcept
+        {
+            using epochnamespace::input::Key;
+            switch (sym)
+            {
+            case XK_a: case XK_A: return Key::A;
+            case XK_b: case XK_B: return Key::B;
+            case XK_c: case XK_C: return Key::C;
+            case XK_d: case XK_D: return Key::D;
+            case XK_e: case XK_E: return Key::E;
+            case XK_f: case XK_F: return Key::F;
+            case XK_g: case XK_G: return Key::G;
+            case XK_h: case XK_H: return Key::H;
+            case XK_i: case XK_I: return Key::I;
+            case XK_j: case XK_J: return Key::J;
+            case XK_k: case XK_K: return Key::K;
+            case XK_l: case XK_L: return Key::L;
+            case XK_m: case XK_M: return Key::M;
+            case XK_n: case XK_N: return Key::N;
+            case XK_o: case XK_O: return Key::O;
+            case XK_p: case XK_P: return Key::P;
+            case XK_q: case XK_Q: return Key::Q;
+            case XK_r: case XK_R: return Key::R;
+            case XK_s: case XK_S: return Key::S;
+            case XK_t: case XK_T: return Key::T;
+            case XK_u: case XK_U: return Key::U;
+            case XK_v: case XK_V: return Key::V;
+            case XK_w: case XK_W: return Key::W;
+            case XK_x: case XK_X: return Key::X;
+            case XK_y: case XK_Y: return Key::Y;
+            case XK_z: case XK_Z: return Key::Z;
+            case XK_0: return Key::Num0;
+            case XK_1: return Key::Num1;
+            case XK_2: return Key::Num2;
+            case XK_3: return Key::Num3;
+            case XK_4: return Key::Num4;
+            case XK_5: return Key::Num5;
+            case XK_6: return Key::Num6;
+            case XK_7: return Key::Num7;
+            case XK_8: return Key::Num8;
+            case XK_9: return Key::Num9;
+            case XK_Escape: return Key::Escape;
+            case XK_Return: case XK_KP_Enter: return Key::Enter;
+            case XK_Tab: return Key::Tab;
+            case XK_BackSpace: return Key::Backspace;
+            case XK_space: return Key::Space;
+            case XK_Left: return Key::Left;
+            case XK_Right: return Key::Right;
+            case XK_Up: return Key::Up;
+            case XK_Down: return Key::Down;
+            case XK_Shift_L: return Key::LeftShift;
+            case XK_Shift_R: return Key::RightShift;
+            case XK_Control_L: return Key::LeftControl;
+            case XK_Control_R: return Key::RightControl;
+            case XK_Alt_L: case XK_Meta_L: return Key::LeftAlt;
+            case XK_Alt_R: case XK_Meta_R: return Key::RightAlt;
+            case XK_Super_L: return Key::LeftSuper;
+            case XK_Super_R: return Key::RightSuper;
+            case XK_F1: return Key::F1;
+            case XK_F2: return Key::F2;
+            case XK_F3: return Key::F3;
+            case XK_F4: return Key::F4;
+            case XK_F5: return Key::F5;
+            case XK_F6: return Key::F6;
+            case XK_F7: return Key::F7;
+            case XK_F8: return Key::F8;
+            case XK_F9: return Key::F9;
+            case XK_F10: return Key::F10;
+            case XK_F11: return Key::F11;
+            case XK_F12: return Key::F12;
+            default: return Key::Unknown;
+            }
+        }
+
+        [[nodiscard]] std::optional<epochnamespace::input::MouseButton> map_mouse_button(unsigned int button) noexcept
+        {
+            using epochnamespace::input::MouseButton;
+            switch (button)
+            {
+            case Button1: return MouseButton::MouseLeft;
+            case Button2: return MouseButton::MouseMiddle;
+            case Button3: return MouseButton::MouseRight;
+            case 8: return MouseButton::MouseButton4;
+            case 9: return MouseButton::MouseButton5;
+            default: return std::nullopt;
+            }
+        }
+
+        void clear_linux_input_state() noexcept
+        {
+            using namespace epochnamespace::input;
+            std::unique_lock lock(g_inputMutex);
+            keyPressed.reset();
+            mousePressed.reset();
+            mouseWheel.store(0, std::memory_order_relaxed);
+        }
     } // namespace
 
     // ---- MultiContextManager (Linux impl) ----
@@ -255,6 +356,9 @@ namespace
     {
         const int totalRequested =
             RayLibWinCount + SDLWinCount + SFMLWinCount + VulkanWinCount + OpenGLWinCount + SoftwareWinCount;
+        const bool singleWindow = (totalRequested == 1);
+        const int initialWidth = singleWindow ? cli::window_width : kDefaultWidth;
+        const int initialHeight = singleWindow ? cli::window_height : kDefaultHeight;
 
         if (totalRequested <= 0)
             return false;
@@ -373,7 +477,7 @@ namespace
                         display,
                         RootWindow(display, screen),
                         0, 0,
-                        kDefaultWidth, kDefaultHeight,
+                        initialWidth, initialHeight,
                         0,
                         visualInfo.depth,
                         InputOutput,
@@ -417,8 +521,8 @@ namespace
 
                     winPtr->titleWide = titleWide;
                     winPtr->titleNarrow = titleNarrow;
-                    winPtr->width = kDefaultWidth;
-                    winPtr->height = kDefaultHeight;
+                    winPtr->width = initialWidth;
+                    winPtr->height = initialHeight;
                     winPtr->running = true;
 
                     WindowData* raw = winPtr.get();
@@ -495,7 +599,7 @@ namespace
                     }
                     else
                     {
-                        UpdateContextDimensions(*ctx, *window, kDefaultWidth, kDefaultHeight);
+                        UpdateContextDimensions(*ctx, *window, initialWidth, initialHeight);
                     }
 
                     SetupResizeCallback(*window);
@@ -912,7 +1016,11 @@ namespace
         }
         else
         {
-            UpdateContextDimensions(*ctx, *winPtr, kDefaultWidth, kDefaultHeight);
+            UpdateContextDimensions(
+                *ctx,
+                *winPtr,
+                cli::updater_shell_requested ? cli::window_width : kDefaultWidth,
+                cli::updater_shell_requested ? cli::window_height : kDefaultHeight);
         }
 
         SetupResizeCallback(*winPtr);
@@ -1192,6 +1300,7 @@ namespace
         {
             std::scoped_lock lock(windowsMutex);
             if (windows.empty()) return;
+            if (windows.size() <= 1u) return;
 
             const int total = static_cast<int>(windows.size());
             int cols = 1;
@@ -1555,6 +1664,8 @@ namespace epochnamespace::platform
             return true;
         }
 
+        epochnamespace::core::clear_linux_input_state();
+
         bool keepRunning = true;
         while (XPending(display) > 0)
         {
@@ -1569,6 +1680,83 @@ namespace epochnamespace::platform
                     event.xconfigure.width,
                     event.xconfigure.height);
                 break;
+            case MotionNotify:
+            {
+                epochnamespace::input::mouseX.store(event.xmotion.x, std::memory_order_relaxed);
+                epochnamespace::input::mouseY.store(event.xmotion.y, std::memory_order_relaxed);
+                epochnamespace::input::set_mouse_coords_are_global(false);
+                break;
+            }
+            case ButtonPress:
+            {
+                epochnamespace::input::mouseX.store(event.xbutton.x, std::memory_order_relaxed);
+                epochnamespace::input::mouseY.store(event.xbutton.y, std::memory_order_relaxed);
+                epochnamespace::input::set_mouse_coords_are_global(false);
+
+                if (event.xbutton.button == Button4)
+                {
+                    epochnamespace::input::mouseWheel.fetch_add(120, std::memory_order_relaxed);
+                    break;
+                }
+                if (event.xbutton.button == Button5)
+                {
+                    epochnamespace::input::mouseWheel.fetch_add(-120, std::memory_order_relaxed);
+                    break;
+                }
+
+                if (const auto button = epochnamespace::core::map_mouse_button(event.xbutton.button))
+                {
+                    std::unique_lock lock(epochnamespace::input::g_inputMutex);
+                    const auto index = static_cast<size_t>(*button);
+                    if (!epochnamespace::input::mouseDown.test(index))
+                        epochnamespace::input::mousePressed.set(index);
+                    epochnamespace::input::mouseDown.set(index);
+                }
+                break;
+            }
+            case ButtonRelease:
+            {
+                epochnamespace::input::mouseX.store(event.xbutton.x, std::memory_order_relaxed);
+                epochnamespace::input::mouseY.store(event.xbutton.y, std::memory_order_relaxed);
+                epochnamespace::input::set_mouse_coords_are_global(false);
+
+                if (const auto button = epochnamespace::core::map_mouse_button(event.xbutton.button))
+                {
+                    std::unique_lock lock(epochnamespace::input::g_inputMutex);
+                    epochnamespace::input::mouseDown.reset(static_cast<size_t>(*button));
+                }
+                break;
+            }
+            case KeyPress:
+            {
+                const auto key = epochnamespace::core::map_keysym(XLookupKeysym(&event.xkey, 0));
+                if (key != epochnamespace::input::Key::Unknown)
+                {
+                    std::unique_lock lock(epochnamespace::input::g_inputMutex);
+                    const auto index = static_cast<size_t>(key);
+                    if (!epochnamespace::input::keyDown.test(index))
+                        epochnamespace::input::keyPressed.set(index);
+                    epochnamespace::input::keyDown.set(index);
+                }
+                break;
+            }
+            case KeyRelease:
+            {
+                const auto key = epochnamespace::core::map_keysym(XLookupKeysym(&event.xkey, 0));
+                if (key != epochnamespace::input::Key::Unknown)
+                {
+                    std::unique_lock lock(epochnamespace::input::g_inputMutex);
+                    epochnamespace::input::keyDown.reset(static_cast<size_t>(key));
+                }
+                break;
+            }
+            case FocusOut:
+            {
+                std::unique_lock lock(epochnamespace::input::g_inputMutex);
+                epochnamespace::input::keyDown.reset();
+                epochnamespace::input::mouseDown.reset();
+                break;
+            }
             case ClientMessage:
             {
                 const Atom wmDelete = XInternAtom(display, "WM_DELETE_WINDOW", False);
