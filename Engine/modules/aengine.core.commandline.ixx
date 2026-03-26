@@ -256,6 +256,8 @@ namespace epochnamespace::core::cli
 
         (void)apply_backend_selection("auto");
 
+        bool backend_selection_explicit = false;
+
         if (updater_shell_requested)
         {
             run_menu_loop = true;
@@ -452,8 +454,17 @@ namespace epochnamespace::core::cli
             else if (key == "--renderer"sv || key == "--backend"sv)
             {
                 const auto parsed = read_value(key);
-                if (!parsed.empty() && !apply_backend_selection(parsed))
-                    detail::log_error("Unknown renderer/backend selection: " + std::string(parsed));
+                if (!parsed.empty())
+                {
+                    if (!apply_backend_selection(parsed))
+                    {
+                        detail::log_error("Unknown renderer/backend selection: " + std::string(parsed));
+                    }
+                    else
+                    {
+                        backend_selection_explicit = true;
+                    }
+                }
             }
             else if (key == "--scene"sv)
             {
@@ -494,7 +505,8 @@ namespace epochnamespace::core::cli
             if (!window_height_overridden)
                 window_height = 640;
 
-            (void)apply_backend_selection("software");
+            if (!backend_selection_explicit)
+                (void)apply_backend_selection(detail::default_updater_shell_backend());
         }
 
         return result;

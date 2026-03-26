@@ -14,6 +14,19 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(EPOCH_VERSION_OVERRIDE_MAJOR "" CACHE STRING "Override engine version major for packaging builds")
+set(EPOCH_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override engine version minor for packaging builds")
+set(EPOCH_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override engine version revision for packaging builds")
+set(EPOCH_WINDOWS_PACKAGED_VERSION_OVERRIDE_MAJOR "" CACHE STRING "Override packaged Windows version major")
+set(EPOCH_WINDOWS_PACKAGED_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override packaged Windows version minor")
+set(EPOCH_WINDOWS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override packaged Windows version revision")
+set(EPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_MAJOR "" CACHE STRING "Override packaged Linux version major")
+set(EPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override packaged Linux version minor")
+set(EPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override packaged Linux version revision")
+set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MAJOR "" CACHE STRING "Override packaged macOS version major")
+set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override packaged macOS version minor")
+set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override packaged macOS version revision")
+
 set(EPOCH_SOURCES
         src/aengine.cpp
     src/aengine.context.cpp
@@ -59,6 +72,50 @@ endif()
 add_executable(epoch ${EPOCH_SOURCES})
 set_target_properties(epoch PROPERTIES OUTPUT_NAME epoch)
 
+function(epoch_apply_version_overrides target_name)
+    if(NOT "${EPOCH_VERSION_OVERRIDE_MAJOR}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_VERSION_MAJOR=${EPOCH_VERSION_OVERRIDE_MAJOR})
+    endif()
+    if(NOT "${EPOCH_VERSION_OVERRIDE_MINOR}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_VERSION_MINOR=${EPOCH_VERSION_OVERRIDE_MINOR})
+    endif()
+    if(NOT "${EPOCH_VERSION_OVERRIDE_REVISION}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_VERSION_REVISION=${EPOCH_VERSION_OVERRIDE_REVISION})
+    endif()
+
+    if(NOT "${EPOCH_WINDOWS_PACKAGED_VERSION_OVERRIDE_MAJOR}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_MAJOR=${EPOCH_WINDOWS_PACKAGED_VERSION_OVERRIDE_MAJOR})
+    endif()
+    if(NOT "${EPOCH_WINDOWS_PACKAGED_VERSION_OVERRIDE_MINOR}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_MINOR=${EPOCH_WINDOWS_PACKAGED_VERSION_OVERRIDE_MINOR})
+    endif()
+    if(NOT "${EPOCH_WINDOWS_PACKAGED_VERSION_OVERRIDE_REVISION}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_REVISION=${EPOCH_WINDOWS_PACKAGED_VERSION_OVERRIDE_REVISION})
+    endif()
+
+    if(NOT "${EPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_MAJOR}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_MAJOR=${EPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_MAJOR})
+    endif()
+    if(NOT "${EPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_MINOR}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_MINOR=${EPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_MINOR})
+    endif()
+    if(NOT "${EPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_REVISION}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_REVISION=${EPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_REVISION})
+    endif()
+
+    if(NOT "${EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MAJOR}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MAJOR=${EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MAJOR})
+    endif()
+    if(NOT "${EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MINOR}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MINOR=${EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MINOR})
+    endif()
+    if(NOT "${EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION}" STREQUAL "")
+        target_compile_definitions(${target_name} PRIVATE EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_REVISION=${EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION})
+    endif()
+endfunction()
+
+epoch_apply_version_overrides(epoch)
+
 if(EPOCH_UPDATER_SHELL_BUILD)
   add_custom_command(
     TARGET epoch POST_BUILD
@@ -72,6 +129,8 @@ endif()
 add_executable(epoch_renderer_smoke EXCLUDE_FROM_ALL
     src/renderer_smoke_harness.cpp
 )
+
+epoch_apply_version_overrides(epoch_renderer_smoke)
 
 
 set(EPOCH_MODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
