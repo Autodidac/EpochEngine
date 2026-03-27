@@ -31,17 +31,38 @@
 module;
 
 #include "../include/_epoch.stl_types.hpp"
+#include <source_location>
 
 module epoch.engine;
 
-import core.log;
+import aengine.core.logger;
 import core.format;
 import core.error;
 import epoch.platform.window;
 import epoch.platform.context;
+import epoch.platform.runtime;
 
 namespace epoch
 {
+    namespace
+    {
+        inline void engine_info(const std::string_view message)
+        {
+            epochnamespace::logger::get("Epoch.Engine").log(
+                epochnamespace::logger::LogLevel::INFO,
+                message,
+                std::source_location::current());
+        }
+
+        inline void engine_error(const std::string_view message)
+        {
+            epochnamespace::logger::get("Epoch.Engine").log(
+                epochnamespace::logger::LogLevel::Error,
+                message,
+                std::source_location::current());
+        }
+    }
+
     Engine& Engine::instance() noexcept
     {
         static Engine g{};
@@ -59,19 +80,31 @@ namespace epoch
         // Create window system
         auto wsys = platform::create_window_system();
         if (!wsys)
-            return epoch::unexpected(core::error::failed("create_window_system failed"));
+        {
+            const auto& err = wsys.error();
+            engine_error(epoch::core::format::str("create_window_system failed: {}", err.message).impl);
+            return epoch::unexpected(err);
+        }
         _windows = std::move(*wsys);
 
         // Create primary window
         auto wh = _windows->create_window(cfg.window);
         if (!wh)
-            return epoch::unexpected(core::error::failed("create_window failed"));
+        {
+            const auto& err = wh.error();
+            engine_error(epoch::core::format::str("create_window failed: {}", err.message).impl);
+            return epoch::unexpected(err);
+        }
         _primary = *wh;
 
         // Create graphics context (can be null_backend)
         auto gctx = platform::create_graphics_context(cfg.gfx);
         if (!gctx)
-            return epoch::unexpected(core::error::failed("create_graphics_context failed"));
+        {
+            const auto& err = gctx.error();
+            engine_error(epoch::core::format::str("create_graphics_context failed: {}", err.message).impl);
+            return epoch::unexpected(err);
+        }
         _gfx = std::move(*gctx);
 
         // Surface hookup
@@ -79,11 +112,18 @@ namespace epoch
         {
             auto r = _gfx->create_surface(_primary);
             if (!r)
+            {
+                engine_error(epoch::core::format::str("create_surface failed: {}", r.error().message).impl);
                 return epoch::unexpected(r.error());
+            }
         }
 
+        _runtime_profile = platform::build_runtime_frame_profile(_gfx.get());
+        _caps = _runtime_profile.capabilities;
+        platform::log_runtime_profile("Epoch.Engine", "Epoch.Perf", _runtime_profile);
+
         _initialized = true;
-        core::log::write(core::log::level::info, "engine", "Engine::init ok");
+        engine_info("Engine::init ok");
         return {}; // ok
     }
 
@@ -130,6 +170,7 @@ namespace epoch
         }
 
         _initialized = false;
-        core::log::write(core::log::level::info, "engine", "Engine::shutdown");
+        _runtime_profile = {};
+        engine_info("Engine::shutdown");
     }
 } // namespace epoch

@@ -41,6 +41,7 @@ Phase 2 notes
 -------------
 - Platform policy now owns updater-shell backend choice, source snapshot archive type, parented-window support, and the single-context preference used by runtime/perf decisions.
 - Runtime/perf startup now logs through `aengine.core.logger` while continuing to use `core.time` as the canonical timing owner.
+- `runtime.cpp` and `epoch.engine` now consume the same shared `epoch.platform.runtime` frame-profile path instead of maintaining separate capability/perf/logging decisions.
 
 Phase 3 - Renderer direction
 ----------------------------
@@ -52,6 +53,7 @@ Phase 3 - Renderer direction
 Phase 3 notes
 -------------
 - `epoch.platform.budgets::FramePolicy` now carries explicit lighting, temporal-history, and vendor-neutral reconstruction intent so the renderer can evolve toward visibility -> surface -> lighting -> temporal -> reconstruction -> present without hard-wiring one AI vendor path.
+- The shared runtime frame-profile now exposes renderer-facing policy data directly to engine consumers, which keeps context/runtime selection moving toward the spine instead of backend-local folklore.
 
 Phase 4 - Tooling and smoke coverage
 ------------------------------------
