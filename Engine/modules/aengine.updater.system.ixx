@@ -1925,27 +1925,62 @@ namespace epochnamespace::updater
 
         [[nodiscard]] inline std::filesystem::path replacement_package_path(const std::filesystem::path& target_binary)
         {
+#if defined(_WIN32)
             return target_binary.parent_path() / "main.update.pkg";
+#else
+            const auto install_root =
+                managed_work_root()
+                / shorten_token(
+                    target_binary.parent_path().filename().string()
+                    + "_" + target_binary.stem().string(),
+                    24);
+            return install_root / "pkg" / "main.update.pkg";
+#endif
         }
 
         [[nodiscard]] inline std::filesystem::path replacement_extract_dir(const std::filesystem::path& target_binary)
         {
+#if defined(_WIN32)
             return target_binary.parent_path() / "__epoch_update";
+#else
+            const auto install_root =
+                managed_work_root()
+                / shorten_token(
+                    target_binary.parent_path().filename().string()
+                    + "_" + target_binary.stem().string(),
+                    24);
+            return install_root / "px";
+#endif
         }
 
         [[nodiscard]] inline std::filesystem::path source_archive_path(const std::filesystem::path& target_binary)
         {
-            return (managed_work_root() / shorten_token(target_binary.stem().string(), 10)) / "src.zip";
+            return (managed_work_root()
+                / shorten_token(
+                    target_binary.parent_path().filename().string()
+                    + "_" + target_binary.stem().string(),
+                    24))
+                / "src.zip";
         }
 
         [[nodiscard]] inline std::filesystem::path source_staging_dir(const std::filesystem::path& target_binary)
         {
-            return (managed_work_root() / shorten_token(target_binary.stem().string(), 10)) / "sx";
+            return (managed_work_root()
+                / shorten_token(
+                    target_binary.parent_path().filename().string()
+                    + "_" + target_binary.stem().string(),
+                    24))
+                / "sx";
         }
 
         [[nodiscard]] inline std::filesystem::path source_final_dir(const std::filesystem::path& target_binary)
         {
-            return (managed_work_root() / shorten_token(target_binary.stem().string(), 10)) / "src";
+            return (managed_work_root()
+                / shorten_token(
+                    target_binary.parent_path().filename().string()
+                    + "_" + target_binary.stem().string(),
+                    24))
+                / "src";
         }
 
         [[nodiscard]] inline std::filesystem::path make_temp_download_path(const std::string_view stem)
@@ -2040,7 +2075,25 @@ namespace epochnamespace::updater
 
         [[nodiscard]] inline std::filesystem::path source_runtime_output_dir(const std::filesystem::path& source_root)
         {
+#if defined(_WIN32)
             return source_root / SOURCE_BUILD_PLATFORM() / SOURCE_BUILD_CONFIGURATION();
+#else
+            const auto manifest_root = source_root / SOURCE_MANIFEST_ROOT_NAME();
+            const std::array<std::filesystem::path, 2> candidates{
+                manifest_root / "Bin" / "Clang-Release",
+                manifest_root / "Bin" / "GCC-Release",
+            };
+
+            std::error_code ec;
+            for (const auto& candidate : candidates)
+            {
+                if (std::filesystem::exists(candidate, ec))
+                    return candidate;
+                ec.clear();
+            }
+
+            return candidates.front();
+#endif
         }
 
         [[nodiscard]] inline std::filesystem::path resolve_runtime_binary_path(
@@ -2324,10 +2377,101 @@ namespace epochnamespace::updater
             append_log_line(build_log, "[INFO] Source build completed successfully.");
             return true;
 #else
-            (void)source_root;
-            (void)target_binary;
-            log_error("Source rebuild updates are currently implemented for Windows MSBuild builds only.");
-            return false;
+            const auto manifest_root = source_manifest_root(source_root);
+            const auto build_log = target_binary.parent_path() / "epoch_source_update.log";
+            const auto build_script = manifest_root / "build.sh";
+
+            if (!std::filesystem::exists(build_script))
+            {
+                log_error("Extracted source snapshot does not contain the Linux build script.");
+                return false;
+            }
+
+            append_log_line(build_log, "[INFO] Source update build started");
+            append_log_line(build_log, "[INFO] Source root: " + source_root.string());
+            append_log_line(build_log, "[INFO] Manifest root: " + manifest_root.string());
+            append_log_line(build_log, "[INFO] Build script: " + build_script.string());
+
+            const auto run_linux_build =
+                [&](const std::string& compiler_choice, const std::filesystem::path& expected_dir) -> bool
+                {
+                    append_log_line(
+                        build_log,
+                        "[INFO] Linux source build attempt started with compiler '" + compiler_choice + "'.");
+
+                    int build_exit = -1;
+                    const bool launched = run_process_hidden(
+                        std::filesystem::path{ "/bin/bash" },
+                        {
+                            build_script.string(),
+                            "--no-vcpkg",
+                            compiler_choice,
+                            SOURCE_BUILD_CONFIGURATION()
+                        },
+                        manifest_root,
+                        build_log,
+                        true,
+                        &build_exit);
+
+                    if (!launched)
+                    {
+                        append_log_line(
+                            build_log,
+                            "[WARN] Failed to launch Linux source build with compiler '" + compiler_choice + "'.");
+                        return false;
+                    }
+
+                    if (build_exit != 0)
+                    {
+                        append_log_line(
+                            build_log,
+                            "[WARN] Linux source build with compiler '" + compiler_choice
+                            + "' exited with code " + std::to_string(build_exit) + ".");
+                        return false;
+                    }
+
+                    const auto built_binary = resolve_runtime_binary_path(expected_dir, target_binary);
+                    if (!std::filesystem::exists(built_binary))
+                    {
+                        append_log_line(
+                            build_log,
+                            "[WARN] Linux source build with compiler '" + compiler_choice
+                            + "' completed without producing the runtime binary.");
+                        return false;
+                    }
+
+                    append_log_line(
+                        build_log,
+                        "[INFO] Linux source build completed successfully with compiler '" + compiler_choice + "'.");
+                    return true;
+                };
+
+            const bool clang_ok = run_linux_build(
+                "clang",
+                manifest_root / "Bin" / "Clang-Release");
+            const bool build_ok = clang_ok
+                ? true
+                : run_linux_build(
+                    "gcc",
+                    manifest_root / "Bin" / "GCC-Release");
+
+            if (!build_ok)
+            {
+                append_log_line(build_log, "[ERROR] Linux source build failed.");
+                log_error("Linux source build failed. See epoch_source_update.log for details.");
+                return false;
+            }
+
+            const auto built_binary = source_runtime_binary_path(source_root, target_binary);
+            if (!std::filesystem::exists(built_binary))
+            {
+                append_log_line(build_log, "[ERROR] Linux source build completed without a runtime binary.");
+                log_error("Linux source build completed without producing the runtime binary.");
+                return false;
+            }
+
+            append_log_line(build_log, "[INFO] Source build completed successfully.");
+            return true;
 #endif
         }
 
@@ -3078,6 +3222,7 @@ namespace epochnamespace::updater
         const auto target_dir = target_binary.parent_path();
         const auto script_path = system_detail::make_temp_script_path("replace_runtime_zip");
         const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
+        const auto handoff_log = target_dir / "epoch_update_handoff.log";
         const bool chain_after_restart = !restart_auto_command.empty();
 
         std::ofstream sh(script_path, std::ios::binary);
@@ -3089,26 +3234,58 @@ namespace epochnamespace::updater
 
         sh
             << "#!/bin/sh\n"
+            << "set -eu\n"
             << "EXTRACTED=" << system_detail::quote_shell_arg(extracted_runtime_dir.string()) << "\n"
             << "TARGETDIR=" << system_detail::quote_shell_arg(target_dir.string()) << "\n"
             << "ARCHIVE=" << system_detail::quote_shell_arg(package_archive.string()) << "\n"
             << "TARGETEXE=" << system_detail::quote_shell_arg(target_binary.string()) << "\n"
             << "NEWEXE=" << system_detail::quote_shell_arg(extracted_binary.string()) << "\n"
+            << "LOG=" << system_detail::quote_shell_arg(handoff_log.string()) << "\n"
+            << ": > \"$LOG\"\n"
+            << "echo \"[INFO] Packaged runtime replacement started\" >> \"$LOG\"\n"
+            << "echo \"[INFO] TARGETEXE=$TARGETEXE\" >> \"$LOG\"\n"
+            << "echo \"[INFO] NEWEXE=$NEWEXE\" >> \"$LOG\"\n"
+            << "if [ ! -f \"$NEWEXE\" ]; then\n"
+            << "  echo \"[ERROR] Extracted runtime binary is missing.\" >> \"$LOG\"\n"
+            << "  exit 1\n"
+            << "fi\n"
+            << "mkdir -p \"$TARGETDIR\"\n"
             << "i=0\n"
-            << "while [ $i -lt 20 ]; do\n"
-            << "  cp \"$NEWEXE\" \"$TARGETEXE\" 2>/dev/null || true\n"
-            << "  cp -R \"$EXTRACTED/.\" \"$TARGETDIR\" 2>/dev/null && break\n"
+            << "while [ $i -lt 60 ]; do\n"
+            << "  cp -f \"$NEWEXE\" \"$TARGETEXE\" 2>/dev/null || true\n"
+            << "  if [ -f \"$TARGETEXE\" ]; then\n"
+            << "    break\n"
+            << "  fi\n"
             << "  i=$((i+1))\n"
+            << "  if [ $i -eq 1 ] || [ $((i % 10)) -eq 0 ]; then\n"
+            << "    echo \"[INFO] Waiting for packaged runtime handoff attempt $i.\" >> \"$LOG\"\n"
+            << "  fi\n"
             << "  sleep 1\n"
             << "done\n"
+            << "if [ ! -f \"$TARGETEXE\" ]; then\n"
+            << "  echo \"[ERROR] Timed out waiting to copy the packaged runtime executable.\" >> \"$LOG\"\n"
+            << "  exit 1\n"
+            << "fi\n"
+            << "chmod +x \"$TARGETEXE\" 2>/dev/null || true\n"
+            << "find \"$EXTRACTED\" -maxdepth 1 -type f \\( -name '*.so' -o -name '*.so.*' -o -name '*.dll' -o -name '*.manifest' \\) -exec cp -f {} \"$TARGETDIR\" \\; 2>/dev/null || true\n"
+            << "if [ -d \"$EXTRACTED/assets\" ]; then\n"
+            << "  mkdir -p \"$TARGETDIR/assets\"\n"
+            << "  cp -R \"$EXTRACTED/assets/.\" \"$TARGETDIR/assets/\" 2>/dev/null || true\n"
+            << "fi\n"
+            << "echo \"[INFO] Packaged runtime files copied successfully.\" >> \"$LOG\"\n"
             << "rm -rf \"$EXTRACTED\"\n"
             << "rm -f \"$ARCHIVE\"\n"
             << "cd \"$TARGETDIR\"\n"
             << (chain_after_restart
                 ? ("EPOCH_UPDATER_SHELL_AUTO_COMMAND="
                     + system_detail::quote_shell_arg(std::string{ restart_auto_command })
-                    + " \"$TARGETEXE\" &\n")
-                : "\"$TARGETEXE\" &\n")
+                    + " \"$TARGETEXE\" >/dev/null 2>&1 &\n")
+                : "\"$TARGETEXE\" >/dev/null 2>&1 &\n")
+            << "if [ $? -ne 0 ]; then\n"
+            << "  echo \"[ERROR] Failed to restart updated runtime.\" >> \"$LOG\"\n"
+            << "  exit 1\n"
+            << "fi\n"
+            << "echo \"[INFO] Restarted updated runtime.\" >> \"$LOG\"\n"
             << "rm -f \"$0\"\n";
 
         sh.close();
@@ -3229,6 +3406,10 @@ namespace epochnamespace::updater
 #else
         const auto target_dir = target_binary.parent_path();
         const auto script_path = system_detail::make_temp_script_path("replace_runtime_source");
+        const auto handoff_log = target_dir / "epoch_update_handoff.log";
+        const auto source_assets_dir = built_runtime_dir / "assets";
+        const auto source_repo_assets_dir = system_detail::source_manifest_root(source_root) / "assets";
+        const auto target_assets_dir = target_dir / "assets";
 
         std::ofstream sh(script_path, std::ios::binary);
         if (!sh)
@@ -3239,26 +3420,60 @@ namespace epochnamespace::updater
 
         sh
             << "#!/bin/sh\n"
+            << "set -eu\n"
             << "BUILTDIR=" << system_detail::quote_shell_arg(built_runtime_dir.string()) << "\n"
             << "TARGETDIR=" << system_detail::quote_shell_arg(target_dir.string()) << "\n"
             << "TARGETEXE=" << system_detail::quote_shell_arg(target_binary.string()) << "\n"
             << "BUILTEXE=" << system_detail::quote_shell_arg(built_binary.string()) << "\n"
             << "SRCROOT=" << system_detail::quote_shell_arg(source_root.string()) << "\n"
             << "ARCHIVE=" << system_detail::quote_shell_arg(package_archive.string()) << "\n"
+            << "SRCASSETS=" << system_detail::quote_shell_arg(source_assets_dir.string()) << "\n"
+            << "REPOASSETS=" << system_detail::quote_shell_arg(source_repo_assets_dir.string()) << "\n"
+            << "DSTASSETS=" << system_detail::quote_shell_arg(target_assets_dir.string()) << "\n"
+            << "LOG=" << system_detail::quote_shell_arg(handoff_log.string()) << "\n"
+            << ": > \"$LOG\"\n"
+            << "echo \"[INFO] Source runtime replacement started\" >> \"$LOG\"\n"
+            << "echo \"[INFO] TARGETEXE=$TARGETEXE\" >> \"$LOG\"\n"
+            << "echo \"[INFO] BUILTEXE=$BUILTEXE\" >> \"$LOG\"\n"
+            << "if [ ! -f \"$BUILTEXE\" ]; then\n"
+            << "  echo \"[ERROR] Built runtime binary is missing.\" >> \"$LOG\"\n"
+            << "  exit 1\n"
+            << "fi\n"
             << "i=0\n"
-            << "while [ $i -lt 20 ]; do\n"
-            << "  cp \"$BUILTEXE\" \"$TARGETEXE\" 2>/dev/null && break\n"
+            << "while [ $i -lt 60 ]; do\n"
+            << "  cp -f \"$BUILTEXE\" \"$TARGETEXE\" 2>/dev/null || true\n"
+            << "  if [ -f \"$TARGETEXE\" ]; then\n"
+            << "    break\n"
+            << "  fi\n"
             << "  i=$((i+1))\n"
+            << "  if [ $i -eq 1 ] || [ $((i % 10)) -eq 0 ]; then\n"
+            << "    echo \"[INFO] Waiting for source runtime handoff attempt $i.\" >> \"$LOG\"\n"
+            << "  fi\n"
             << "  sleep 1\n"
             << "done\n"
-            << "if [ -d "
-            << system_detail::quote_shell_arg((built_runtime_dir / "assets").string())
-            << " ]; then cp -R "
-            << system_detail::quote_shell_arg(((built_runtime_dir / "assets") / ".").string()) << " "
-            << system_detail::quote_shell_arg((target_dir / "assets").string()) << "; fi\n"
+            << "if [ ! -f \"$TARGETEXE\" ]; then\n"
+            << "  echo \"[ERROR] Timed out waiting to copy the rebuilt runtime executable.\" >> \"$LOG\"\n"
+            << "  exit 1\n"
+            << "fi\n"
+            << "chmod +x \"$TARGETEXE\" 2>/dev/null || true\n"
+            << "find \"$BUILTDIR\" -maxdepth 1 -type f \\( -name '*.so' -o -name '*.so.*' -o -name '*.dll' -o -name '*.manifest' \\) -exec cp -f {} \"$TARGETDIR\" \\; 2>/dev/null || true\n"
+            << "if [ -d \"$SRCASSETS\" ]; then\n"
+            << "  mkdir -p \"$DSTASSETS\"\n"
+            << "  cp -R \"$SRCASSETS/.\" \"$DSTASSETS/\" 2>/dev/null || true\n"
+            << "fi\n"
+            << "if [ -d \"$REPOASSETS\" ]; then\n"
+            << "  mkdir -p \"$DSTASSETS\"\n"
+            << "  cp -R \"$REPOASSETS/.\" \"$DSTASSETS/\" 2>/dev/null || true\n"
+            << "fi\n"
+            << "echo \"[INFO] Source runtime files copied successfully.\" >> \"$LOG\"\n"
             << "rm -f \"$ARCHIVE\"\n"
             << "cd \"$TARGETDIR\"\n"
-            << "\"$TARGETEXE\" &\n"
+            << "\"$TARGETEXE\" >/dev/null 2>&1 &\n"
+            << "if [ $? -ne 0 ]; then\n"
+            << "  echo \"[ERROR] Failed to restart updated runtime.\" >> \"$LOG\"\n"
+            << "  exit 1\n"
+            << "fi\n"
+            << "echo \"[INFO] Restarted updated runtime.\" >> \"$LOG\"\n"
             << "rm -rf \"$SRCROOT\"\n"
             << "rm -f \"$0\"\n";
 
@@ -3615,11 +3830,6 @@ namespace epochnamespace::updater
 
         if (source_status.ok && source_status.update_available)
         {
-#if !defined(_WIN32)
-            system_detail::log_info(
-                "A newer source snapshot is available on main, but packaged source rebuild updates are not supported on this platform yet.");
-            return result;
-#else
             result.update_available = true;
 
             if (!force)
@@ -3631,7 +3841,6 @@ namespace epochnamespace::updater
             system_detail::log_info("No newer packaged runtime is available. Falling back to source update from main.");
             result.update_performed = run_source_update_command(channel, false);
             return result;
-#endif
         }
 
         return result;
