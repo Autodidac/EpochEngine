@@ -629,7 +629,7 @@ namespace
                                 try
                                 {
                                     if (!epochnamespace::openglcontext::opengl_initialize(
-                                        target, nullptr, width, height, std::move(resize)))
+                                        target, target->hwnd, width, height, std::move(resize)))
                                     {
                                         epochnamespace::logger::get(kLogSys).logf(
                                             epochnamespace::logger::LogLevel::Error,
@@ -1050,7 +1050,7 @@ namespace
                     try
                     {
                         if (!epochnamespace::openglcontext::opengl_initialize(
-                            target, nullptr, width, height, std::move(resize)))
+                            target, target->hwnd, width, height, std::move(resize)))
                         {
                             epochnamespace::logger::get(kLogSys).logf(
                                 epochnamespace::logger::LogLevel::Error,

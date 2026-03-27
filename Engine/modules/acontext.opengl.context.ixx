@@ -481,9 +481,38 @@ export namespace epochnamespace::openglcontext
         // a valid active GL context on this thread.
 
 #elif defined(__linux__)
-        (void)parentWindowOpaque;
+        ::Window providedWindow = parentWindowOpaque ? detail::to_xwindow(parentWindowOpaque) : 0;
+        Display* providedDisplay = nullptr;
+        GLXContext providedContext = nullptr;
 
-        Display* display = glState.display ? glState.display : XOpenDisplay(nullptr);
+        if (ctx->windowData)
+        {
+            if (!providedWindow && ctx->windowData->hwnd)
+                providedWindow = detail::to_xwindow(ctx->windowData->hwnd);
+            if (!providedDisplay && ctx->windowData->hdc)
+                providedDisplay = static_cast<Display*>(ctx->windowData->hdc);
+            if (!providedContext && ctx->windowData->glContext)
+                providedContext = static_cast<GLXContext>(ctx->windowData->glContext);
+        }
+
+        if (!providedWindow && ctx->hwnd)
+            providedWindow = detail::to_xwindow(ctx->hwnd);
+        if (!providedDisplay && ctx->hdc)
+            providedDisplay = static_cast<Display*>(ctx->hdc);
+        if (!providedContext && ctx->hglrc)
+            providedContext = static_cast<GLXContext>(ctx->hglrc);
+
+        Display* display = providedDisplay ? providedDisplay : glState.display;
+        if (!display)
+        {
+            display = XOpenDisplay(nullptr);
+            glState.ownsDisplay = true;
+        }
+        else
+        {
+            glState.ownsDisplay = false;
+        }
+
         if (!display)
             throw std::runtime_error("[ OpenGL ] - XOpenDisplay failed");
         glState.display = display;
@@ -516,7 +545,7 @@ export namespace epochnamespace::openglcontext
         if (!vi)
             throw std::runtime_error("[ OpenGL ] - glXGetVisualFromFBConfig failed");
 
-        if (!glState.colormap)
+        if (!providedWindow && !glState.colormap)
         {
             glState.colormap = XCreateColormap(display, RootWindow(display, vi->screen), vi->visual, AllocNone);
             if (!glState.colormap)
@@ -524,9 +553,21 @@ export namespace epochnamespace::openglcontext
                 XFree(vi);
                 throw std::runtime_error("[ OpenGL ] - XCreateColormap failed");
             }
+            glState.ownsColormap = true;
+        }
+        else if (providedWindow)
+        {
+            glState.colormap = 0;
+            glState.ownsColormap = false;
         }
 
-        if (!glState.window)
+        if (providedWindow)
+        {
+            glState.window = providedWindow;
+            glState.drawable = providedWindow;
+            glState.ownsWindow = false;
+        }
+        else if (!glState.window)
         {
             XSetWindowAttributes swa{};
             swa.colormap = glState.colormap;
@@ -546,12 +587,19 @@ export namespace epochnamespace::openglcontext
             XStoreName(display, glState.window, "Epoch OpenGL");
             XMapWindow(display, glState.window);
             XFlush(display);
+            glState.ownsWindow = true;
         }
 
         XFree(vi);
-        glState.drawable = glState.window;
+        if (!glState.drawable)
+            glState.drawable = glState.window;
 
-        if (!glState.glxContext)
+        if (providedContext)
+        {
+            glState.glxContext = providedContext;
+            glState.ownsContext = false;
+        }
+        else if (!glState.glxContext)
         {
             // Use the single authoritative loader.
             auto createContextAttribs =
@@ -573,6 +621,7 @@ export namespace epochnamespace::openglcontext
 
             if (!glState.glxContext)
                 throw std::runtime_error("[ OpenGL ] - Failed to create GLX context");
+            glState.ownsContext = true;
         }
 
         PlatformGL::PlatformGLContext finalCtx{};
@@ -595,7 +644,7 @@ export namespace epochnamespace::openglcontext
         if (version.empty())
             throw std::runtime_error("[ OpenGL ] - GL_VERSION string is empty");
 
-        ctx->native_window = reinterpret_cast<void*>(static_cast<std::uintptr_t>(glState.window));
+        ctx->native_window = detail::from_xwindow(glState.window);
         ctx->native_drawable = display;
         ctx->native_gl_context = glState.glxContext;
 
@@ -1078,10 +1127,10 @@ void main() {
             }
         }
         PlatformGL::clear_current();
-        if (glState.display && glState.glxContext) glXDestroyContext(glState.display, glState.glxContext);
-        if (glState.display && glState.window) XDestroyWindow(glState.display, glState.window);
-        if (glState.display && glState.colormap) XFreeColormap(glState.display, glState.colormap);
-        if (glState.display) XCloseDisplay(glState.display);
+        if (glState.display && glState.glxContext && glState.ownsContext) glXDestroyContext(glState.display, glState.glxContext);
+        if (glState.display && glState.window && glState.ownsWindow) XDestroyWindow(glState.display, glState.window);
+        if (glState.display && glState.colormap && glState.ownsColormap) XFreeColormap(glState.display, glState.colormap);
+        if (glState.display && glState.ownsDisplay) XCloseDisplay(glState.display);
 
         glState.display = nullptr;
         glState.window = 0;
@@ -1089,6 +1138,10 @@ void main() {
         glState.glxContext = nullptr;
         glState.colormap = 0;
         glState.fbConfig = nullptr;
+        glState.ownsDisplay = false;
+        glState.ownsWindow = false;
+        glState.ownsContext = false;
+        glState.ownsColormap = false;
 #endif
     }
 
