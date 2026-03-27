@@ -23,6 +23,7 @@ export module aengine.core.commandline;
 import aengine.context.type;
 import aengine.version;
 import aengine.core.logger;
+import aengine.platform;
 
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1277;
 inline constexpr int DEFAULT_WINDOW_HEIGHT = 1277;
@@ -55,13 +56,14 @@ namespace epochnamespace::core::cli
 
         [[nodiscard]] inline std::string_view default_updater_shell_backend() noexcept
         {
-#if defined(_WIN32)
-            return "software";
-#elif defined(__linux__)
-            return "opengl";
-#else
-            return "software";
-#endif
+            return epoch::platform::policy::updater_shell_backend_name();
+        }
+
+        [[nodiscard]] inline std::string standalone_only_window_message(const std::string_view action)
+        {
+            return std::string{ epoch::platform::policy::current_runtime_policy().platform_key }
+                + " platform policy keeps runtime windows standalone-only; "
+                + std::string{ action };
         }
 
         enum class BackendSelection
@@ -136,11 +138,9 @@ namespace epochnamespace::core::cli
         {
             const std::string lowered = to_lower(value);
             if (lowered == "parented" || lowered == "child" || lowered == "docked")
-#if defined(__linux__)
-                return WindowMode::Standalone;
-#else
-                return WindowMode::Parented;
-#endif
+                return epoch::platform::policy::supports_parented_multiwindow()
+                    ? WindowMode::Parented
+                    : WindowMode::Standalone;
             if (lowered == "standalone" || lowered == "top" || lowered == "top-level")
                 return WindowMode::Standalone;
             return WindowMode::Auto;
@@ -148,13 +148,7 @@ namespace epochnamespace::core::cli
 
         [[nodiscard]] constexpr bool default_parented_mode() noexcept
         {
-#if defined(__linux__)
-            return false;
-#elif defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
-            return true;
-#else
-            return false;
-#endif
+            return epoch::platform::policy::default_parented_multiwindow();
         }
     }
 
@@ -446,22 +440,30 @@ namespace epochnamespace::core::cli
                         parented_mode = true;
                     else if (window_mode == WindowMode::Standalone)
                         parented_mode = false;
-#if defined(__linux__)
-                    if (detail::to_lower(parsed) == "parented" || detail::to_lower(parsed) == "child" || detail::to_lower(parsed) == "docked")
-                        detail::log_warn("Linux currently runs standalone windows only; treating parented mode as standalone.");
-#endif
+                    if (!epoch::platform::policy::supports_parented_multiwindow()
+                        && (detail::to_lower(parsed) == "parented"
+                            || detail::to_lower(parsed) == "child"
+                            || detail::to_lower(parsed) == "docked"))
+                    {
+                        detail::log_warn(detail::standalone_only_window_message(
+                            "treating parented mode as standalone."));
+                    }
                 }
             }
             else if (key == "--parented"sv)
             {
-#if defined(__linux__)
-                detail::log_warn("Linux currently runs standalone windows only; ignoring --parented.");
-                window_mode = WindowMode::Standalone;
-                parented_mode = false;
-#else
-                window_mode = WindowMode::Parented;
-                parented_mode = true;
-#endif
+                if (!epoch::platform::policy::supports_parented_multiwindow())
+                {
+                    detail::log_warn(detail::standalone_only_window_message(
+                        "ignoring --parented."));
+                    window_mode = WindowMode::Standalone;
+                    parented_mode = false;
+                }
+                else
+                {
+                    window_mode = WindowMode::Parented;
+                    parented_mode = true;
+                }
             }
             else if (key == "--standalone"sv)
             {

@@ -130,7 +130,165 @@ export namespace epochnamespace::platform
         }
     }
 
+    enum class WindowTopology
+    {
+        SingleParent,
+        StandaloneOnly
+    };
+
+    enum class SourceSnapshotArchive
+    {
+        Zip,
+        TarGz
+    };
+
+    struct RuntimePolicy
+    {
+        RuntimePlatform platform = RuntimePlatform::Unknown;
+        std::string_view platform_key = "unknown";
+        WindowTopology window_topology = WindowTopology::StandaloneOnly;
+        bool prefer_single_context_runtime = false;
+        std::string_view updater_shell_backend = "software";
+        SourceSnapshotArchive source_snapshot_archive = SourceSnapshotArchive::Zip;
+    };
+
+    [[nodiscard]] constexpr std::string_view source_snapshot_archive_extension_for(
+        const SourceSnapshotArchive archive) noexcept
+    {
+        switch (archive)
+        {
+        case SourceSnapshotArchive::TarGz:
+            return ".tar.gz";
+        case SourceSnapshotArchive::Zip:
+        default:
+            return ".zip";
+        }
+    }
+
+    [[nodiscard]] constexpr std::string_view source_snapshot_archive_label_for(
+        const SourceSnapshotArchive archive) noexcept
+    {
+        switch (archive)
+        {
+        case SourceSnapshotArchive::TarGz:
+            return "GitHub source snapshot tarball from main";
+        case SourceSnapshotArchive::Zip:
+        default:
+            return "GitHub source snapshot zip archive from main";
+        }
+    }
+
+    [[nodiscard]] constexpr RuntimePolicy current_runtime_policy() noexcept
+    {
+        switch (current_platform())
+        {
+        case RuntimePlatform::Windows:
+            return {
+                .platform = RuntimePlatform::Windows,
+                .platform_key = "windows",
+                .window_topology = WindowTopology::SingleParent,
+                .prefer_single_context_runtime = false,
+                .updater_shell_backend = "software",
+                .source_snapshot_archive = SourceSnapshotArchive::Zip
+            };
+        case RuntimePlatform::Linux:
+            return {
+                .platform = RuntimePlatform::Linux,
+                .platform_key = "linux",
+                .window_topology = WindowTopology::StandaloneOnly,
+                .prefer_single_context_runtime = true,
+                .updater_shell_backend = "opengl",
+                .source_snapshot_archive = SourceSnapshotArchive::TarGz
+            };
+        case RuntimePlatform::MacOS:
+            return {
+                .platform = RuntimePlatform::MacOS,
+                .platform_key = "macos",
+                .window_topology = WindowTopology::StandaloneOnly,
+                .prefer_single_context_runtime = true,
+                .updater_shell_backend = "software",
+                .source_snapshot_archive = SourceSnapshotArchive::TarGz
+            };
+        case RuntimePlatform::Unknown:
+        default:
+            return {};
+        }
+    }
+
+    [[nodiscard]] constexpr bool supports_parented_multiwindow() noexcept
+    {
+        return current_runtime_policy().window_topology == WindowTopology::SingleParent;
+    }
+
+    [[nodiscard]] constexpr bool default_parented_multiwindow() noexcept
+    {
+        return supports_parented_multiwindow();
+    }
+
+    [[nodiscard]] constexpr bool prefer_single_context_runtime() noexcept
+    {
+        return current_runtime_policy().prefer_single_context_runtime;
+    }
+
+    [[nodiscard]] constexpr std::string_view updater_shell_backend_name() noexcept
+    {
+        return current_runtime_policy().updater_shell_backend;
+    }
+
+    [[nodiscard]] constexpr std::string_view source_snapshot_archive_extension() noexcept
+    {
+        return source_snapshot_archive_extension_for(current_runtime_policy().source_snapshot_archive);
+    }
+
+    [[nodiscard]] constexpr std::string_view source_snapshot_archive_label() noexcept
+    {
+        return source_snapshot_archive_label_for(current_runtime_policy().source_snapshot_archive);
+    }
+
 #if !defined(__linux__)
     inline bool pump_events() { return true; }
 #endif
+}
+
+export namespace epoch::platform::policy
+{
+    using RuntimePlatform = epochnamespace::platform::RuntimePlatform;
+    using WindowTopology = epochnamespace::platform::WindowTopology;
+    using SourceSnapshotArchive = epochnamespace::platform::SourceSnapshotArchive;
+    using RuntimePolicy = epochnamespace::platform::RuntimePolicy;
+
+    [[nodiscard]] constexpr RuntimePolicy current_runtime_policy() noexcept
+    {
+        return epochnamespace::platform::current_runtime_policy();
+    }
+
+    [[nodiscard]] constexpr bool supports_parented_multiwindow() noexcept
+    {
+        return epochnamespace::platform::supports_parented_multiwindow();
+    }
+
+    [[nodiscard]] constexpr bool default_parented_multiwindow() noexcept
+    {
+        return epochnamespace::platform::default_parented_multiwindow();
+    }
+
+    [[nodiscard]] constexpr bool prefer_single_context_runtime() noexcept
+    {
+        return epochnamespace::platform::prefer_single_context_runtime();
+    }
+
+    [[nodiscard]] constexpr std::string_view updater_shell_backend_name() noexcept
+    {
+        return epochnamespace::platform::updater_shell_backend_name();
+    }
+
+    [[nodiscard]] constexpr std::string_view source_snapshot_archive_extension() noexcept
+    {
+        return epochnamespace::platform::source_snapshot_archive_extension();
+    }
+
+    [[nodiscard]] constexpr std::string_view source_snapshot_archive_label() noexcept
+    {
+        return epochnamespace::platform::source_snapshot_archive_label();
+    }
 }

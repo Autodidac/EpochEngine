@@ -1556,7 +1556,7 @@ namespace epochnamespace::core
                                 {
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
-                                        "Updater shell requested a current Epoch update.",
+                                        "Updater shell requested the newest packaged Epoch release, then main source if it is still newer afterward.",
                                         std::source_location::current());
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
@@ -1703,14 +1703,14 @@ namespace epochnamespace::core
                         {
                             logger::get(kEditorLog).log(
                                 logger::LogLevel::INFO,
-                                "A newer source snapshot exists, but this platform's packaged updater currently stops at the newest packaged release.",
+                                "A newer source snapshot remains available on main. Run Update again after the packaged restart to continue from source.",
                                 std::source_location::current());
                         }
                         else
                         {
                             logger::get(kEditorLog).log(
                                 logger::LogLevel::INFO,
-                                "Updater shell is already on the newest packaged or source build.",
+                                "Updater shell is already on the newest packaged or source build available from GitHub.",
                                 std::source_location::current());
                         }
                     }

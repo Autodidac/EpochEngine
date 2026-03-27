@@ -32,12 +32,14 @@ module;
 
 #include "../include/app_api.h"
 #include "../include/epoch.api_types.hpp"
+#include "../include/_epoch.stl_types.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <print>
+#include <source_location>
 #include <utility>
 
 namespace epochnamespace::core::bridge
@@ -48,13 +50,15 @@ namespace epochnamespace::core::bridge
 module runtime;
 
 import aengine.cli;
+import aengine.core.logger;
+import aengine.platform;
 
 import core.env;
 import core.format;
-import core.log;
 import core.time;
 import epoch.perf.select;
 import epoch.perf.tier;
+import epoch.platform.budgets;
 import epoch.platform.capabilities;
 import epoch.platform.context;
 import epoch.platform.window;
@@ -111,9 +115,94 @@ namespace runtime
         constexpr bool k_has_external_app_callbacks = false;
 #endif
 
-        std::string_view to_std(epoch::string_view v) noexcept
+        inline void runtime_info(const std::string_view message)
         {
-            return std::string_view{ v.data ? v.data : "", v.size };
+            epochnamespace::logger::get("Epoch.Runtime").log(
+                epochnamespace::logger::LogLevel::INFO,
+                message,
+                std::source_location::current());
+        }
+
+        inline void runtime_error(const std::string_view message)
+        {
+            epochnamespace::logger::get("Epoch.Runtime").log(
+                epochnamespace::logger::LogLevel::Error,
+                message,
+                std::source_location::current());
+        }
+
+        inline void perf_info(const std::string_view message)
+        {
+            epochnamespace::logger::get("Epoch.Perf").log(
+                epochnamespace::logger::LogLevel::INFO,
+                message,
+                std::source_location::current());
+        }
+
+        [[nodiscard]] inline std::string_view as_std_view(const epoch::string& text) noexcept
+        {
+            return std::string_view{ text.data(), text.size() };
+        }
+
+        [[nodiscard]] epoch::Budgets budgets_for_tier(const epoch::perf::tier perf_tier) noexcept
+        {
+            epoch::Budgets budgets{};
+
+            switch (perf_tier)
+            {
+            case epoch::perf::tier::mobile_30:
+                budgets.cpu_ms = 10.0f;
+                budgets.gpu_ms = 20.0f;
+                budgets.max_w = 1280;
+                budgets.max_h = 720;
+                budgets.max_lights = 32;
+                budgets.shadow_cascades = 1;
+                break;
+            case epoch::perf::tier::deck_40:
+                budgets.cpu_ms = 8.0f;
+                budgets.gpu_ms = 16.0f;
+                budgets.max_w = 1600;
+                budgets.max_h = 900;
+                budgets.max_lights = 48;
+                budgets.shadow_cascades = 2;
+                break;
+            case epoch::perf::tier::desktop_60:
+                budgets.cpu_ms = 6.0f;
+                budgets.gpu_ms = 12.0f;
+                budgets.max_w = 1920;
+                budgets.max_h = 1080;
+                budgets.max_lights = 64;
+                budgets.shadow_cascades = 2;
+                break;
+            case epoch::perf::tier::uncapped:
+            default:
+                budgets.cpu_ms = 4.0f;
+                budgets.gpu_ms = 8.0f;
+                budgets.max_w = 2560;
+                budgets.max_h = 1440;
+                budgets.max_lights = 96;
+                budgets.shadow_cascades = 4;
+                break;
+            }
+
+            return budgets;
+        }
+
+        [[nodiscard]] epoch::FramePolicy frame_policy_for(
+            const epoch::Capabilities& caps,
+            const epoch::perf::tier perf_tier,
+            const double target_fps) noexcept
+        {
+            const auto budgets = budgets_for_tier(perf_tier);
+            auto policy = epoch::compute_policy(
+                budgets,
+                caps.bindless_textures && caps.descriptor_indexing,
+                caps.sparse_resources,
+                caps.async_compute,
+                caps.indirect_draw || caps.multi_draw_indirect,
+                budgets.gpu_ms);
+            policy.target_fps = target_fps > 0.0 ? static_cast<float>(target_fps) : 0.0f;
+            return policy;
         }
 
         struct RuntimePlatformGuard
@@ -138,7 +227,7 @@ namespace runtime
 
             if (auto v = epoch::core::env::get("DEMO_SMOKE"))
             {
-                const auto value = to_std(*v);
+                const auto value = as_std_view(*v);
                 return value == std::string_view{ "1" }
                     || value == std::string_view{ "true" }
                     || value == std::string_view{ "on" };
@@ -206,9 +295,7 @@ namespace runtime
 
         int run_legacy_bridge(bool editor_requested)
         {
-            epoch::core::log::write(
-                epoch::core::log::level::info,
-                "engine",
+            runtime_info(
                 editor_requested
                     ? "epoch runtime bridge -> legacy editor"
                     : "epoch runtime bridge -> legacy engine");
@@ -218,21 +305,22 @@ namespace runtime
 
         int run_epoch_native()
         {
-            epoch::core::log::write(epoch::core::log::level::info, "engine", "startup");
-            epoch::core::log::write(epoch::core::log::level::info, "engine", "epoch native runtime");
+            runtime_info("startup");
+            runtime_info("epoch native runtime");
 
             const app_callbacks_v1* callbacks = app_get_callbacks();
             if (!callbacks)
             {
-                epoch::core::log::write(epoch::core::log::level::error, "engine", "app_get_callbacks() returned nullptr");
+                runtime_error("app_get_callbacks() returned nullptr");
                 return 1;
             }
 
             if (callbacks->version != APP_API_VERSION)
             {
-                epoch::core::log::write(epoch::core::log::level::error, "engine",
-                    epoch::core::format::str("app callbacks version mismatch ({} != {})",
-                        callbacks->version, APP_API_VERSION));
+                runtime_error(as_std_view(epoch::core::format::str(
+                    "app callbacks version mismatch ({} != {})",
+                    callbacks->version,
+                    APP_API_VERSION)));
                 return 1;
             }
 
@@ -244,8 +332,7 @@ namespace runtime
             if (!window_system_result)
             {
                 const auto& err = window_system_result.error();
-                epoch::core::log::write(epoch::core::log::level::error, "engine",
-                    epoch::core::format::str("window system init failed: {}", err.message));
+                runtime_error(as_std_view(epoch::core::format::str("window system init failed: {}", err.message)));
                 return 1;
             }
             platform_guard.window_system = std::move(*window_system_result);
@@ -255,8 +342,7 @@ namespace runtime
             if (!window_result)
             {
                 const auto& err = window_result.error();
-                epoch::core::log::write(epoch::core::log::level::error, "engine",
-                    epoch::core::format::str("window creation failed: {}", err.message));
+                runtime_error(as_std_view(epoch::core::format::str("window creation failed: {}", err.message)));
                 return 1;
             }
             platform_guard.window_handle = *window_result;
@@ -266,8 +352,7 @@ namespace runtime
             if (!context_result)
             {
                 const auto& err = context_result.error();
-                epoch::core::log::write(epoch::core::log::level::error, "engine",
-                    epoch::core::format::str("graphics context init failed: {}", err.message));
+                runtime_error(as_std_view(epoch::core::format::str("graphics context init failed: {}", err.message)));
                 return 1;
             }
             platform_guard.graphics_context = std::move(*context_result);
@@ -275,23 +360,21 @@ namespace runtime
             if (auto surface_result = platform_guard.graphics_context->create_surface(platform_guard.window_handle); !surface_result)
             {
                 const auto& err = surface_result.error();
-                epoch::core::log::write(epoch::core::log::level::error, "engine",
-                    epoch::core::format::str("surface creation failed: {}", err.message));
+                runtime_error(as_std_view(epoch::core::format::str("surface creation failed: {}", err.message)));
                 return 1;
             }
 
             auto& systems_registry = epoch::systems::Registry::instance();
             if (!systems_registry.initialize())
             {
-                epoch::core::log::write(epoch::core::log::level::error, "engine", "system registry init failed");
+                runtime_error("system registry init failed");
                 return 1;
             }
 
             const int init_rc = callbacks->on_init ? callbacks->on_init(cb_user) : 0;
             if (init_rc != 0)
             {
-                epoch::core::log::write(epoch::core::log::level::error, "engine",
-                    epoch::core::format::str("app init failed with code {}", init_rc));
+                runtime_error(as_std_view(epoch::core::format::str("app init failed with code {}", init_rc)));
                 systems_registry.shutdown();
                 return init_rc;
             }
@@ -302,13 +385,32 @@ namespace runtime
             const epoch::Capabilities caps = probe_capabilities(platform_guard.graphics_context.get());
             const auto perf_tier = epoch::perf::select_tier(caps);
             const double target_fps = epoch::perf::target_fps_for(perf_tier);
+            const epoch::FramePolicy frame_policy = frame_policy_for(caps, perf_tier, target_fps);
 
             epoch::perf::frame_limiter limiter{};
             limiter.set_target_fps(target_fps);
 
-            epoch::core::log::write(epoch::core::log::level::info, "engine",
-                epoch::core::format::str("perf tier={}, target_fps={}",
-                    epoch::perf::to_string(perf_tier), target_fps));
+            const auto runtime_policy = epoch::platform::policy::current_runtime_policy();
+            perf_info(as_std_view(epoch::core::format::str(
+                "platform={}, api={}, parented_windows={}, single_context_runtime={}, perf_tier={}, target_fps={}",
+                runtime_policy.platform_key,
+                caps.api_name,
+                epoch::platform::policy::supports_parented_multiwindow(),
+                epoch::platform::policy::prefer_single_context_runtime(),
+                epoch::perf::to_string(perf_tier),
+                target_fps)));
+            perf_info(as_std_view(epoch::core::format::str(
+                "frame policy={}x{}, lights={}, lighting={}, temporal={}, reconstruction={}, ai_inputs={}, visibility={}, bindless={}, async={}",
+                frame_policy.render_w,
+                frame_policy.render_h,
+                frame_policy.max_lights,
+                frame_policy.use_lighting,
+                frame_policy.use_temporal_history,
+                epoch::to_string(frame_policy.reconstruction),
+                frame_policy.expose_ai_reconstruction_inputs,
+                frame_policy.use_visibility_buffer,
+                frame_policy.use_bindless,
+                frame_policy.use_async_compute)));
 
             const bool smoke = smoke_mode();
             const std::uint64_t max_frames = smoke ? 3u : ~0ull;
@@ -416,7 +518,7 @@ namespace runtime
             systems_registry.shutdown();
 
             if (smoke)
-                epoch::core::log::write(epoch::core::log::level::info, "engine", "smoke complete");
+                runtime_info("smoke complete");
 
             return 0;
         }
@@ -434,10 +536,7 @@ namespace runtime
 
         if constexpr (!k_has_external_app_callbacks)
         {
-            epoch::core::log::write(
-                epoch::core::log::level::info,
-                "engine",
-                "native app callbacks not linked; using full engine runtime");
+            runtime_info("native app callbacks not linked; using full engine runtime");
             return run_legacy_bridge(false);
         }
 

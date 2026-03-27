@@ -2002,16 +2002,9 @@ namespace epochnamespace::updater
             return archive_path;
         }
 
-        [[nodiscard]] inline std::string describe_source_archive(const std::string_view source_url)
+        [[nodiscard]] inline std::string describe_source_archive(const std::string_view /*source_url*/)
         {
-            const auto normalized_url =
-                lower_ascii(strip_url_query_and_fragment(std::string{ source_url }));
-
-            if (normalized_url.ends_with(".tar.gz") || normalized_url.ends_with(".tgz"))
-                return "GitHub source snapshot tarball from main";
-            if (normalized_url.ends_with(".zip"))
-                return "GitHub source snapshot zip archive from main";
-            return "GitHub source snapshot archive from main";
+            return PROJECT_SOURCE_ARCHIVE_LABEL();
         }
 
         [[nodiscard]] inline std::filesystem::path source_staging_dir(const std::filesystem::path& target_binary)
@@ -2955,7 +2948,7 @@ namespace epochnamespace::updater
             << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "New-Item -ItemType Directory -Path (Split-Path -Parent $sourceArchive) -Force | Out-Null\n"
-            << "Write-Step 'INFO' 'Downloading latest GitHub source snapshot zip archive from main.'\n"
+            << "Write-Step 'INFO' 'Downloading latest " << PROJECT_SOURCE_ARCHIVE_LABEL() << ".'\n"
             << "$headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
             << "Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $sourceUrl -OutFile $sourceArchive\n"
             << "Expand-Archive -LiteralPath $sourceArchive -DestinationPath $stagingDir -Force\n"

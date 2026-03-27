@@ -139,6 +139,16 @@ namespace epochnamespace::updater
             + std::string{ BRANCH } + "/Engine/modules/aengine.version.ixx";
     }
 
+    export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()
+    {
+        return std::string{ epoch::platform::policy::source_snapshot_archive_extension() };
+    }
+
+    export inline std::string PROJECT_SOURCE_ARCHIVE_LABEL()
+    {
+        return std::string{ epoch::platform::policy::source_snapshot_archive_label() };
+    }
+
     export inline std::vector<std::string> PACKAGED_VERSION_ASSET_CANDIDATES()
     {
         switch (platform::current_platform())
@@ -209,16 +219,11 @@ namespace epochnamespace::updater
 
     export inline std::string PROJECT_SOURCE_URL()
     {
-#if defined(__linux__) || defined(__APPLE__)
-        constexpr std::string_view source_archive_extension = ".tar.gz";
-#else
-        constexpr std::string_view source_archive_extension = ".zip";
-#endif
         return std::string{ GITHUB_BASE }
             + std::string{ OWNER } + "/"
             + std::string{ REPO }
             + "/archive/refs/heads/"
-            + std::string{ BRANCH } + std::string{ source_archive_extension };
+            + std::string{ BRANCH } + PROJECT_SOURCE_ARCHIVE_EXTENSION();
     }
 
     export inline std::string PROJECT_BINARY_URL()
