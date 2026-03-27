@@ -120,6 +120,20 @@ namespace epochnamespace::updater
 #endif
         }
 
+#if !defined(_WIN32)
+        [[nodiscard]] inline bool launch_detached_posix_script(
+            const std::filesystem::path& script_path)
+        {
+            const std::string shell_command =
+                "chmod +x " + quote_shell_arg(script_path.string())
+                + " && nohup " + quote_shell_arg(script_path.string())
+                + " >/dev/null 2>&1 </dev/null &";
+            const std::string wrapped =
+                "/bin/sh -lc " + quote_shell_arg(shell_command);
+            return std::system(wrapped.c_str()) == 0;
+        }
+#endif
+
         [[nodiscard]] inline std::string strip_utf8_bom(std::string text)
         {
             if (text.size() >= 3
@@ -3117,11 +3131,7 @@ namespace epochnamespace::updater
 
         sh.close();
 
-        const std::string command =
-            "chmod +x " + system_detail::quote_shell_arg(script_path.string())
-            + " && " + system_detail::quote_shell_arg(script_path.string()) + " &";
-
-        if (std::system(command.c_str()) != 0)
+        if (!system_detail::launch_detached_posix_script(script_path))
         {
             system_detail::log_error("Failed to launch binary replacement script.");
             return false;
@@ -3290,11 +3300,7 @@ namespace epochnamespace::updater
 
         sh.close();
 
-        const std::string command =
-            "chmod +x " + system_detail::quote_shell_arg(script_path.string())
-            + " && " + system_detail::quote_shell_arg(script_path.string()) + " &";
-
-        if (std::system(command.c_str()) != 0)
+        if (!system_detail::launch_detached_posix_script(script_path))
         {
             system_detail::log_error("Failed to launch packaged runtime replacement script.");
             return false;
@@ -3479,11 +3485,7 @@ namespace epochnamespace::updater
 
         sh.close();
 
-        const std::string command =
-            "chmod +x " + system_detail::quote_shell_arg(script_path.string())
-            + " && " + system_detail::quote_shell_arg(script_path.string()) + " &";
-
-        if (std::system(command.c_str()) != 0)
+        if (!system_detail::launch_detached_posix_script(script_path))
         {
             system_detail::log_error("Failed to launch source runtime replacement script.");
             return false;
