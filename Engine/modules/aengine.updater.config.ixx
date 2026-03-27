@@ -209,11 +209,16 @@ namespace epochnamespace::updater
 
     export inline std::string PROJECT_SOURCE_URL()
     {
+#if defined(__linux__) || defined(__APPLE__)
+        constexpr std::string_view source_archive_extension = ".tar.gz";
+#else
+        constexpr std::string_view source_archive_extension = ".zip";
+#endif
         return std::string{ GITHUB_BASE }
             + std::string{ OWNER } + "/"
             + std::string{ REPO }
             + "/archive/refs/heads/"
-            + std::string{ BRANCH } + ".zip";
+            + std::string{ BRANCH } + std::string{ source_archive_extension };
     }
 
     export inline std::string PROJECT_BINARY_URL()

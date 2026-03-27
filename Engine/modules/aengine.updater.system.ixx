@@ -1974,7 +1974,44 @@ namespace epochnamespace::updater
                     target_binary.parent_path().filename().string()
                     + "_" + target_binary.stem().string(),
                     24))
-                / "src.zip";
+                / "source_snapshot";
+        }
+
+        [[nodiscard]] inline std::string archive_extension_from_url(const std::string_view url)
+        {
+            const auto normalized_url =
+                lower_ascii(strip_url_query_and_fragment(std::string{ url }));
+
+            if (normalized_url.ends_with(".tar.gz"))
+                return ".tar.gz";
+            if (normalized_url.ends_with(".tgz"))
+                return ".tgz";
+            if (normalized_url.ends_with(".zip"))
+                return ".zip";
+            return {};
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_archive_path(
+            const std::filesystem::path& target_binary,
+            const std::string_view source_url)
+        {
+            auto archive_path = source_archive_path(target_binary);
+            const auto extension = archive_extension_from_url(source_url);
+            if (!extension.empty())
+                archive_path += extension;
+            return archive_path;
+        }
+
+        [[nodiscard]] inline std::string describe_source_archive(const std::string_view source_url)
+        {
+            const auto normalized_url =
+                lower_ascii(strip_url_query_and_fragment(std::string{ source_url }));
+
+            if (normalized_url.ends_with(".tar.gz") || normalized_url.ends_with(".tgz"))
+                return "GitHub source snapshot tarball from main";
+            if (normalized_url.ends_with(".zip"))
+                return "GitHub source snapshot zip archive from main";
+            return "GitHub source snapshot archive from main";
         }
 
         [[nodiscard]] inline std::filesystem::path source_staging_dir(const std::filesystem::path& target_binary)
@@ -2551,7 +2588,7 @@ namespace epochnamespace::updater
             return false;
         }
 
-        const auto archive_path = system_detail::source_archive_path(target_binary);
+        const auto archive_path = system_detail::source_archive_path(target_binary, channel.source_url);
         const auto staging_dir = system_detail::source_staging_dir(target_binary);
         const auto final_dir = system_detail::source_final_dir(target_binary);
         const auto target_dir = target_binary.parent_path();
@@ -2918,7 +2955,7 @@ namespace epochnamespace::updater
             << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "New-Item -ItemType Directory -Path (Split-Path -Parent $sourceArchive) -Force | Out-Null\n"
-            << "Write-Step 'INFO' 'Downloading latest source snapshot from main.'\n"
+            << "Write-Step 'INFO' 'Downloading latest GitHub source snapshot zip archive from main.'\n"
             << "$headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
             << "Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $sourceUrl -OutFile $sourceArchive\n"
             << "Expand-Archive -LiteralPath $sourceArchive -DestinationPath $stagingDir -Force\n"
@@ -3647,7 +3684,7 @@ namespace epochnamespace::updater
         std::exit(0);
         return true;
 #else
-        const auto archive_path = system_detail::source_archive_path(target_binary);
+        const auto archive_path = system_detail::source_archive_path(target_binary, channel.source_url);
         const auto staging_dir = system_detail::source_staging_dir(target_binary);
         const auto final_dir = system_detail::source_final_dir(target_binary);
 
@@ -3669,7 +3706,10 @@ namespace epochnamespace::updater
         std::filesystem::remove_all(staging_dir, ec);
         std::filesystem::remove_all(final_dir, ec);
 
-        system_detail::log_info("Downloading latest source snapshot from main.");
+        system_detail::log_info(
+            "Downloading latest "
+            + system_detail::describe_source_archive(channel.source_url)
+            + ".");
         if (!download_file(channel.source_url, archive_path.string()))
             return false;
 
