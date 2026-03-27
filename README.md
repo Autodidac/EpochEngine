@@ -64,10 +64,10 @@ These README captures are editor/source proofs, not updater-shell screenshots.
 If a packaged bootstrap release looks older than these, it has not caught up to
 the current source/editor state yet.
 
-Windows editor multi-context proof, source `v0.83.41`:
+Windows editor multi-context dev test mode, source `v0.83.41`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08341.png" alt="Epoch Windows editor multi-context proof" width="100%" />
+  <img src="Images/readme/windows-multicontext-editor-v08341.png" alt="Epoch Windows editor multi-context dev test mode" width="100%" />
 </p>
 
 Windows editor backend proofs, source `v0.83.41`:
