@@ -60,13 +60,17 @@ directory is the safest default for local testing.
 
 # In action
 
-Windows editor multi-context proof:
+These README captures are editor/source proofs, not updater-shell screenshots.
+If a packaged bootstrap release looks older than these, it has not caught up to
+the current source/editor state yet.
+
+Windows editor multi-context proof, source `v0.83.41`:
 
 <p align="center">
   <img src="Images/readme/windows-multicontext.png" alt="Epoch Windows editor multi-context proof" width="100%" />
 </p>
 
-Windows editor backend proofs:
+Windows editor backend proofs, source `v0.83.41`:
 
 <p align="center">
   <img src="Images/readme/windows-opengl.png" alt="Epoch Windows OpenGL editor proof" width="32%" />
@@ -74,7 +78,7 @@ Windows editor backend proofs:
   <img src="Images/readme/windows-software.png" alt="Epoch Windows software editor proof" width="32%" />
 </p>
 
-WSL/Linux editor proof:
+WSL/Linux editor proof, source `v0.83.42`:
 
 <p align="center">
   <img src="Images/readme/linux-sfml.png" alt="Epoch Linux WSL SFML editor proof" width="62%" />
