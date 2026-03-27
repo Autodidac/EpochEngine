@@ -200,11 +200,11 @@ namespace
             }
         }
 
-        std::wstring BuildWindowTitle(ContextType type, int index)
+        std::wstring BuildWindowTitle(ContextType type, int index, bool parented)
         {
             const std::wstring_view base = BackendDisplayName(type);
             std::wstring title{ base.begin(), base.end() };
-            title += L" Dock ";
+            title += parented ? L" Dock " : L" Window ";
             title += std::to_wstring(static_cast<long long>(index) + 1);
             return title;
         }
@@ -352,16 +352,25 @@ namespace
         int VulkanWinCount,
         int OpenGLWinCount,
         int SoftwareWinCount,
-        bool /*parented*/)
+        bool parented)
     {
         const int totalRequested =
             RayLibWinCount + SDLWinCount + SFMLWinCount + VulkanWinCount + OpenGLWinCount + SoftwareWinCount;
+        const bool effectiveParented = false;
         const bool singleWindow = (totalRequested == 1);
         const int initialWidth = singleWindow ? cli::window_width : kDefaultWidth;
         const int initialHeight = singleWindow ? cli::window_height : kDefaultHeight;
 
         if (totalRequested <= 0)
             return false;
+
+        if (parented)
+        {
+            epochnamespace::logger::get(kLogSys).log(
+                epochnamespace::logger::LogLevel::WARN,
+                "Linux multiplexer currently forces standalone windows; parented mode is ignored.",
+                std::source_location::current());
+        }
 
         std::call_once(g_xlibInitFlag, []()
             {
@@ -462,7 +471,7 @@ namespace
 
                 for (int i = 0; i < count; ++i)
                 {
-                    const std::wstring titleWide = BuildWindowTitle(type, i);
+                    const std::wstring titleWide = BuildWindowTitle(type, i, effectiveParented);
                     const std::string titleNarrow = epochnamespace::text::narrow_utf8(titleWide);
 
                     XSetWindowAttributes swa{};

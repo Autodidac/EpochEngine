@@ -136,7 +136,11 @@ namespace epochnamespace::core::cli
         {
             const std::string lowered = to_lower(value);
             if (lowered == "parented" || lowered == "child" || lowered == "docked")
+#if defined(__linux__)
+                return WindowMode::Standalone;
+#else
                 return WindowMode::Parented;
+#endif
             if (lowered == "standalone" || lowered == "top" || lowered == "top-level")
                 return WindowMode::Standalone;
             return WindowMode::Auto;
@@ -144,7 +148,9 @@ namespace epochnamespace::core::cli
 
         [[nodiscard]] constexpr bool default_parented_mode() noexcept
         {
-#if defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
+#if defined(__linux__)
+            return false;
+#elif defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
             return true;
 #else
             return false;
@@ -440,12 +446,22 @@ namespace epochnamespace::core::cli
                         parented_mode = true;
                     else if (window_mode == WindowMode::Standalone)
                         parented_mode = false;
+#if defined(__linux__)
+                    if (detail::to_lower(parsed) == "parented" || detail::to_lower(parsed) == "child" || detail::to_lower(parsed) == "docked")
+                        detail::log_warn("Linux currently runs standalone windows only; treating parented mode as standalone.");
+#endif
                 }
             }
             else if (key == "--parented"sv)
             {
+#if defined(__linux__)
+                detail::log_warn("Linux currently runs standalone windows only; ignoring --parented.");
+                window_mode = WindowMode::Standalone;
+                parented_mode = false;
+#else
                 window_mode = WindowMode::Parented;
                 parented_mode = true;
+#endif
             }
             else if (key == "--standalone"sv)
             {

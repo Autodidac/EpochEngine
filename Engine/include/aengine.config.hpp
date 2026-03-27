@@ -104,7 +104,11 @@
 #   define EPOCH_USE_CLEAR_COLOR_VULKAN 1
 #endif
 
-#define EPOCH_SINGLE_PARENT 1
+#if defined(__linux__)
+#   define EPOCH_SINGLE_PARENT 0
+#else
+#   define EPOCH_SINGLE_PARENT 1
+#endif
 
 #define EPOCH_USING_OPENGL 1
 #define EPOCH_USING_SFML 1
