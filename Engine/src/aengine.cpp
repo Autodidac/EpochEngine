@@ -1692,22 +1692,32 @@ namespace epochnamespace::core
             epochnamespace::shutdown_chat_system();
             mgr.StopAll();
 
-            if (deferred_updater_shell_update)
-            {
-                const auto result = epochnamespace::updater::run_update_command(
-                    default_update_channel(),
-                    true);
-                if (!result.update_available)
+                if (deferred_updater_shell_update)
                 {
-                    logger::get(kEditorLog).log(
-                        logger::LogLevel::INFO,
-                        "Updater shell is already on the newest packaged or source build.",
-                        std::source_location::current());
-                }
-                else if (!result.update_performed)
-                {
-                    logger::get(kEditorLog).log(
-                        logger::LogLevel::Error,
+                    const auto result = epochnamespace::updater::run_update_command(
+                        default_update_channel(),
+                        true);
+                    if (!result.update_available)
+                    {
+                        if (result.source_update_available)
+                        {
+                            logger::get(kEditorLog).log(
+                                logger::LogLevel::INFO,
+                                "A newer source snapshot exists, but this platform's packaged updater currently stops at the newest packaged release.",
+                                std::source_location::current());
+                        }
+                        else
+                        {
+                            logger::get(kEditorLog).log(
+                                logger::LogLevel::INFO,
+                                "Updater shell is already on the newest packaged or source build.",
+                                std::source_location::current());
+                        }
+                    }
+                    else if (!result.update_performed)
+                    {
+                        logger::get(kEditorLog).log(
+                            logger::LogLevel::Error,
                         "Updater shell found an update but the install handoff did not complete.",
                         std::source_location::current());
                 }

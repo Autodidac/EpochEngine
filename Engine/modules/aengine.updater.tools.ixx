@@ -191,7 +191,19 @@ namespace epochnamespace::updater
         detail::log_info("Downloading: " + url + " -> " + output_path);
 
         std::error_code ec;
-        fs::remove(fs::path{ output_path }, ec);
+        const fs::path output{ output_path };
+        fs::remove(output, ec);
+
+        const auto parent = output.parent_path();
+        if (!parent.empty())
+        {
+            fs::create_directories(parent, ec);
+            if (ec)
+            {
+                detail::log_error("Failed to create download directory: " + parent.string());
+                return false;
+            }
+        }
 
 #if defined(_WIN32)
         const std::string command =
@@ -213,7 +225,7 @@ namespace epochnamespace::updater
         if (result != 0 || !detail::file_exists_and_nontrivial(output_path))
         {
             detail::log_error("Download failed: " + output_path);
-            fs::remove(fs::path{ output_path }, ec);
+            fs::remove(output, ec);
             return false;
         }
 

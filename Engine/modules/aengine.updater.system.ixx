@@ -3615,6 +3615,11 @@ namespace epochnamespace::updater
 
         if (source_status.ok && source_status.update_available)
         {
+#if !defined(_WIN32)
+            system_detail::log_info(
+                "A newer source snapshot is available on main, but packaged source rebuild updates are not supported on this platform yet.");
+            return result;
+#else
             result.update_available = true;
 
             if (!force)
@@ -3626,6 +3631,7 @@ namespace epochnamespace::updater
             system_detail::log_info("No newer packaged runtime is available. Falling back to source update from main.");
             result.update_performed = run_source_update_command(channel, false);
             return result;
+#endif
         }
 
         return result;
