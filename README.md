@@ -60,23 +60,30 @@ directory is the safest default for local testing.
 
 # In action
 
-Multi-context runtime with all active backend windows:
+Windows editor multi-context proof:
 
-![Epoch Windows Multi-context](Images/readme/windows-multicontext.png)
+<p align="center">
+  <img src="Images/readme/windows-multicontext.png" alt="Epoch Windows editor multi-context proof" width="100%" />
+</p>
 
-Single-backend context proofs on Windows:
+Windows editor backend proofs:
 
-![Epoch OpenGL](Images/readme/windows-opengl.png)
-![Epoch Vulkan](Images/readme/windows-vulkan.png)
-![Epoch SDL](Images/readme/windows-sdl.png)
-![Epoch SFML](Images/readme/windows-sfml.png)
-![Epoch Raylib](Images/readme/windows-raylib.png)
-![Epoch Software](Images/readme/windows-software.png)
+<p align="center">
+  <img src="Images/readme/windows-opengl.png" alt="Epoch Windows OpenGL editor proof" width="32%" />
+  <img src="Images/readme/windows-sdl.png" alt="Epoch Windows SDL editor proof" width="32%" />
+  <img src="Images/readme/windows-software.png" alt="Epoch Windows software editor proof" width="32%" />
+</p>
+
+WSL/Linux editor proof:
+
+<p align="center">
+  <img src="Images/readme/linux-sfml.png" alt="Epoch Linux WSL SFML editor proof" width="62%" />
+</p>
 
 WSL/Linux note:
 
-- The Linux updater shell is intended to run under native Linux and WSL2 with WSLg/X11 plus working OpenGL.
-- The automated capture pass in this repo currently generates the Windows proofs above; WSL/Linux launch and build flow are documented in the shell-script section below.
+- The Linux screenshot above comes from the engine's own frame capture under WSLg, which avoids the extra-window behavior that can make desktop grabs misleading.
+- The broader Linux multi-window view is still visually inconsistent under WSLg, so the README is using the clean single-backend editor proof for now.
 
 ---
 
