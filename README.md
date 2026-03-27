@@ -67,7 +67,7 @@ the current source/editor state yet.
 Windows editor multi-context dev test mode, source `v0.83.41`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08341.png" alt="Epoch Windows editor multi-context dev test mode" width="100%" />
+  <img src="Images/readme/windows-multicontext-editor-v08341.png" alt="Epoch Windows editor multi-context dev test mode" width="1400" />
 </p>
 
 ---
@@ -85,7 +85,7 @@ Windows editor backend proofs, source `v0.83.41`:
 WSL/Linux editor proof, source `v0.83.42`:
 
 <p align="center">
-  <img src="Images/readme/linux-sfml.png" alt="Epoch Linux WSL SFML editor proof" width="62%" />
+  <img src="Images/readme/linux-sfml.png" alt="Epoch Linux WSL SFML editor proof" width="960" />
 </p>
 
 WSL/Linux note:
