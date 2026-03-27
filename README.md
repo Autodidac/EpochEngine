@@ -67,7 +67,7 @@ the current source/editor state yet.
 Windows editor multi-context proof, source `v0.83.41`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext.png" alt="Epoch Windows editor multi-context proof" width="100%" />
+  <img src="Images/readme/windows-multicontext-editor-v08341.png" alt="Epoch Windows editor multi-context proof" width="100%" />
 </p>
 
 Windows editor backend proofs, source `v0.83.41`:
