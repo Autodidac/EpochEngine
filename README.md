@@ -70,6 +70,8 @@ Windows editor multi-context dev test mode, source `v0.83.41`:
   <img src="Images/readme/windows-multicontext-editor-v08341.png" alt="Epoch Windows editor multi-context dev test mode" width="100%" />
 </p>
 
+---
+
 Windows editor backend proofs, source `v0.83.41`:
 
 <p align="center">
@@ -77,6 +79,8 @@ Windows editor backend proofs, source `v0.83.41`:
   <img src="Images/readme/windows-sdl.png" alt="Epoch Windows SDL editor proof" width="32%" />
   <img src="Images/readme/windows-software.png" alt="Epoch Windows software editor proof" width="32%" />
 </p>
+
+---
 
 WSL/Linux editor proof, source `v0.83.42`:
 
