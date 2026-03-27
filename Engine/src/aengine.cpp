@@ -1142,39 +1142,9 @@ namespace epochnamespace::core
         {
             if (!ctx) return;
 
+            (void)type;
             epochnamespace::gui::cleanup_context(ctx.get());
             epochnamespace::cleanup_chat_context(ctx.get());
-
-            switch (type)
-            {
-#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-            case epochnamespace::core::ContextType::OpenGL:
-                epochnamespace::openglcontext::opengl_cleanup(ctx);
-                break;
-#endif
-#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-            case epochnamespace::core::ContextType::Software:
-                break;
-#endif
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-            case epochnamespace::core::ContextType::SDL:
-                break;
-#endif
-#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-            case epochnamespace::core::ContextType::SFML:
-                epochnamespace::sfmlcontext::sfml_cleanup(ctx);
-                break;
-#endif
-#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-            case epochnamespace::core::ContextType::RayLib:
-                epochnamespace::raylibcontext::raylib_cleanup(ctx);
-                break;
-#endif
-            case epochnamespace::core::ContextType::Noop:
-                break;
-            default:
-                break;
-            }
         }
 
         template <typename PumpFunc>
