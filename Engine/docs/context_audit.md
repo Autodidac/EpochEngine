@@ -14,12 +14,12 @@ This is the current high-level status of the context and renderer stack.
 | `acontext.noop.context` | Minimal | Headless placeholder. |
 | `acontext.vulkan.*` | Experimental | Under active migration, not a stable default backend. |
 | `acontext.opengl.renderer.ixx` | Review candidate | Looks more archival than central; keep under review. |
-| `Engine/legacy/` context stack | Archived | Historical compatibility/reference code, not the preferred active path. |
+| Retired legacy context stack | Retired | Historical snapshots have been removed; keep migration work in active modules and documented feature maps instead. |
 
 ## Practical guidance
 
 - Prefer module-backed active context surfaces under `Engine/modules/` and
   `Engine/src/`.
-- Use `Engine/legacy/` for migration help or archaeology, not for new runtime work.
+- Use the active modules plus `legacy_feature_map.md` for migration help, not deleted archive snapshots.
 - Treat Vulkan and a few minor archival helpers as incomplete until their paths
   are explicitly finished and tested.

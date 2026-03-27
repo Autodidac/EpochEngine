@@ -30,9 +30,9 @@ Use this index to jump to the current docs set for the active engine tree under
 - `menu_overlay_backend_audit.md` - backend GUI parity notes.
 - `renderer_regression_plan.md` - smoke-test plan for renderer regressions.
 
-## Repository and legacy reference
+## Repository and migration reference
 
 - `file_structure.txt` - high-level repo layout.
 - `filelist.txt` - condensed module/header inventory.
-- `legacy_archive.md` - summary of the compatibility archive now stored under
-  `Engine/legacy/`.
+- `legacy_feature_map.md` - map of retired legacy surfaces to their active
+  Epoch-owned replacements.

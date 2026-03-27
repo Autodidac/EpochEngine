@@ -7,7 +7,6 @@
 |   |-- src/              runtime and backend implementation files
 |   |-- docs/             current engine documentation
 |   |-- examples/         sample launcher and assets
-|   |-- legacy/           archived compatibility headers and sources
 |   |-- build.sh / run.sh / install.sh / clean.sh
 |-- Changes/              changelog, roadmap, release notes
 |-- Images/               repository/readme assets

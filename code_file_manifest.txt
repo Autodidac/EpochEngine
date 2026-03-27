@@ -47,7 +47,7 @@ Engine/docs/engine_analysis.md	Markdown documentation.
 Engine/docs/file_structure.txt	Text documentation.
 Engine/docs/filelist.txt	Text documentation.
 Engine/docs/legacy linuxdoc.txt	Text documentation.
-Engine/docs/legacy_archive.md	Markdown documentation.
+Engine/docs/legacy_feature_map.md	Markdown documentation.
 Engine/docs/menu_overlay_backend_audit.md	Markdown documentation.
 Engine/docs/README.md	Markdown documentation.
 Engine/docs/renderer_regression_plan.md	Markdown documentation.
@@ -466,39 +466,6 @@ Engine/unix/stylesheet.css	Project file.
 Engine/vcpkg.json	JSON metadata.
 Images/567.jpg	Project file.
 Images/appsetting.jpg	Project file.
-legacy/include/aallocator.hpp	C++ header.
-legacy/include/aapplicationmodule.hpp	C++ header.
-legacy/include/abuildsystem.hpp	C++ header.
-legacy/include/acodeinspector.hpp	C++ header.
-legacy/include/acompiler.hpp	C++ header.
-legacy/include/aenginebindings.hpp	C++ header.
-legacy/include/aenginehandles.hpp	C++ header.
-legacy/include/aentity.hpp	C++ header.
-legacy/include/afilewatch.hpp	C++ header.
-legacy/include/agamecore.hpp	C++ header.
-legacy/include/aimagewriter.hpp	C++ header.
-legacy/include/amipmapatlas.hpp	C++ header.
-legacy/include/amovementevent.hpp	C++ header.
-legacy/include/ampmcboundedqueue.hpp	C++ header.
-legacy/include/anet.hpp	C++ header.
-legacy/include/anoopcontext.hpp	C++ header.
-legacy/include/aplatform.hpp	C++ header.
-legacy/include/aplatformpump.hpp	C++ header.
-legacy/include/arobusttime.hpp	C++ header.
-legacy/include/asaveloadsystem.hpp	C++ header.
-legacy/include/ascene.hpp	C++ header.
-legacy/include/asceneserializer.hpp	C++ header.
-legacy/include/ascenesnapshot.hpp	C++ header.
-legacy/include/ascriptingsystem.hpp	C++ header.
-legacy/include/astringconverter.hpp	C++ header.
-legacy/include/ataskgraphwithdot.hpp	C++ header.
-legacy/include/autilities.hpp	C++ header.
-legacy/src/acompiler.cpp	C/C++ source implementation.
-legacy/src/acontextmultiplexer_linux.cpp	C/C++ source implementation.
-legacy/src/afilewatch.cpp	C/C++ source implementation.
-legacy/src/amodelloader.hpp	C++ header.
-legacy/src/aopenglplatform_linux.cpp	C/C++ source implementation.
-legacy/src/ascriptingsystem.cpp	C/C++ source implementation.
 LICENSE	Project file.
 README.md	Markdown documentation.
 Tools/epoch_install_build_tools.ps1	PowerShell script.

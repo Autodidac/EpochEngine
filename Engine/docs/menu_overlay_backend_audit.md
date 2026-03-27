@@ -15,4 +15,4 @@ This note tracks practical GUI parity across the currently active backends.
 
 - Fix backend-specific GUI/render issues locally where possible.
 - Keep atlas upload, clear/present behavior, and input scaling aligned across the active backends.
-- Do not let archived `Engine/legacy/` UI code become the accidental source of truth again.
+- Do not let retired archive-era UI code become the accidental source of truth again.

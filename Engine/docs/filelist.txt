@@ -18,6 +18,5 @@ Examples and tooling
 - `Engine/examples/ConsoleApplication1/`
 - `Engine/build.sh`, `Engine/run.sh`, `Engine/install.sh`, `Engine/clean.sh`
 
-Archive
-- `Engine/legacy/include/` compatibility headers
-- `Engine/legacy/src/` older runtime/source snapshots
+Migration notes
+- `Engine/docs/legacy_feature_map.md` legacy-to-active feature ownership map

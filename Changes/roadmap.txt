@@ -42,6 +42,7 @@ Phase 2 notes
 - Platform policy now owns updater-shell backend choice, source snapshot archive type, parented-window support, and the single-context preference used by runtime/perf decisions.
 - Runtime/perf startup now logs through `aengine.core.logger` while continuing to use `core.time` as the canonical timing owner.
 - `runtime.cpp` and `epoch.engine` now consume the same shared `epoch.platform.runtime` frame-profile path instead of maintaining separate capability/perf/logging decisions.
+- The retired legacy archive has been collapsed into active ownership plus `Engine/docs/legacy_feature_map.md`, so further spine work should land directly in Epoch-owned modules instead of parking code in archive folders.
 
 Phase 3 - Renderer direction
 ----------------------------

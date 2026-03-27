@@ -3,8 +3,8 @@
 ## Snapshot
 
 Epoch is now documented as a module-first engine with the active runtime living
-under `Engine/modules/` and `Engine/src/`, while compatibility code has been
-consolidated under `Engine/legacy/`.
+under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
+surfaces have been retired and mapped into active replacements.
 
 Current public version: `v0.82.51`
 
@@ -22,9 +22,9 @@ Current public version: `v0.82.51`
   task scheduling rather than ad hoc threaded entry points, and editor-triggered
   compiled scripts now run through an explicit host API instead of a loose
   filewatch-first loop.
-- **Compatibility archive**: older header/source snapshots are preserved in
-  `Engine/legacy/` for migration and archaeology, not as the preferred
-  implementation surface.
+- **Migration map**: formerly archived compatibility surfaces are now either
+  preserved in active modules or called out explicitly in
+  `Engine/docs/legacy_feature_map.md`.
 
 ## Current strengths
 
@@ -83,5 +83,5 @@ Current public version: `v0.82.51`
    resize, docking, and shutdown behavior.
 2. Continue reducing duplicated compatibility naming in public surfaces while
    preserving compile compatibility where needed.
-3. Promote only the active, tested legacy pieces into the main engine surface;
-   leave pure archive material under `Engine/legacy/`.
+3. Promote only active, tested functionality into the main engine surface and
+   keep migration notes honest when a retired system still needs a modern home.
