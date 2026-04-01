@@ -37,6 +37,7 @@ module;
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
+#include <source_location>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -51,6 +52,7 @@ export module opengl.quad;
 
 import opengl.state;
 import opengl.platform;
+import core.logger;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
@@ -255,10 +257,14 @@ namespace epochnamespace::openglquad
         const char* ven = (const char*)glGetString(GL_VENDOR);
         const char* ren = (const char*)glGetString(GL_RENDERER);
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_OPENGL_CONFIRMATION_LOGS
-        std::cerr << "QUAD_V3 GL_VERSION=[" << (glv ? glv : "null")
-            << "] GLSL=[" << (glsl ? glsl : "null")
-            << "] VENDOR=[" << (ven ? ven : "null")
-            << "] RENDERER=[" << (ren ? ren : "null") << "]\n";
+        logger::infof_loc(
+            "OpenGL.Context",
+            std::source_location::current(),
+            "GL_VERSION=[{}] GLSL=[{}] VENDOR=[{}] RENDERER=[{}]",
+            glv ? glv : "null",
+            glsl ? glsl : "null",
+            ven ? ven : "null",
+            ren ? ren : "null");
 #endif
 
         GLint maj = 0, min = 0;
@@ -349,7 +355,7 @@ void main() {
         }
         catch (const std::exception& e)
         {
-            std::cerr << "[ OpenGL ] - Pipeline build failed: " << e.what() << "\n";
+            logger::errorf_loc("OpenGL", std::source_location::current(), "Pipeline build failed: {}", e.what());
             destroy_quad_pipeline(s);
             return false;
         }

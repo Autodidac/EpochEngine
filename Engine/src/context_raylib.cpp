@@ -4,20 +4,18 @@
 #include <string>
 
 #include <include/aengine.config.hpp>
-#include "core_context_backends.hpp"
 
-import core.context;
-
-#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 import aengine.gui;
 import aengine.input;
 import atlas.texture;
-import context.commandqueue;
+import core.context;
 import image.loader;
 import raylib.api;
+import raylib.context;
 import raylib.renderer;
 import raylib.state;
 
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 namespace
 {
     std::uint32_t default_add_texture(
@@ -46,79 +44,6 @@ namespace
         ctx->is_mouse_button_held = [](epochnamespace::input::MouseButton button) { return epochnamespace::input::is_mouse_button_held(button); };
         ctx->is_mouse_button_down = [](epochnamespace::input::MouseButton button) { return epochnamespace::input::is_mouse_button_down(button); };
     }
-
-    void raylib_initialize_adapter()
-    {
-        auto ctx = epochnamespace::core::get_current_render_context();
-        if (!ctx)
-            return;
-
-        const int width = (std::max)(1, ctx->width);
-        const int height = (std::max)(1, ctx->height);
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
-
-        if (!epochnamespace::raylib_api::is_window_ready())
-        {
-            epochnamespace::raylib_api::set_config_flags(
-                epochnamespace::raylib_api::flag_msaa_4x_hint
-                | epochnamespace::raylib_api::flag_vsync_hint);
-            epochnamespace::raylib_api::set_trace_log_level(epochnamespace::raylib_api::log_warning);
-            epochnamespace::raylib_api::init_window(width, height, ctx->backendName.c_str());
-            epochnamespace::raylib_api::set_target_fps(60);
-        }
-        else
-        {
-            epochnamespace::raylib_api::set_window_title(ctx->backendName.c_str());
-            epochnamespace::raylib_api::set_window_size(width, height);
-        }
-
-        st.running = epochnamespace::raylib_api::is_window_ready();
-        st.owner_ctx = ctx.get();
-        st.width = static_cast<unsigned>(width);
-        st.height = static_cast<unsigned>(height);
-        st.frameActive = false;
-        st.frameInTextureMode = false;
-    }
-
-    void raylib_cleanup_adapter()
-    {
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
-        st.frameActive = false;
-        st.frameInTextureMode = false;
-        st.owner_ctx = nullptr;
-        st.running = false;
-
-        if (epochnamespace::raylib_api::is_window_ready())
-            epochnamespace::raylib_api::close_window();
-    }
-
-    bool raylib_process_adapter(
-        std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
-    {
-        if (!ctx || !epochnamespace::raylib_api::is_window_ready())
-            return false;
-
-        if (epochnamespace::raylib_api::window_should_close())
-            return false;
-
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
-        st.running = true;
-        st.owner_ctx = ctx.get();
-        st.width = static_cast<unsigned>((std::max)(1, epochnamespace::raylib_api::get_render_width()));
-        st.height = static_cast<unsigned>((std::max)(1, epochnamespace::raylib_api::get_render_height()));
-        st.frameActive = true;
-        st.frameInTextureMode = false;
-
-        epochnamespace::raylib_api::begin_drawing();
-        epochnamespace::raylib_api::clear_background({ 0, 0, 0, 255 });
-        (void)queue.drain();
-        (void)epochnamespace::gui::render_deferred_batch(ctx.get());
-        epochnamespace::raylib_api::end_drawing();
-
-        st.frameActive = false;
-        return !epochnamespace::raylib_api::window_should_close();
-    }
 }
 
 namespace epochnamespace::core::detail
@@ -128,9 +53,55 @@ namespace epochnamespace::core::detail
         auto ctx = std::make_shared<Context>();
         ctx->type = ContextType::RayLib;
         ctx->backendName = "RayLib";
-        ctx->initialize = raylib_initialize_adapter;
-        ctx->cleanup = raylib_cleanup_adapter;
-        ctx->process = raylib_process_adapter;
+        ctx->initialize = []()
+        {
+            auto current = epochnamespace::core::get_current_render_context();
+            if (!current)
+                return;
+
+            (void)epochnamespace::raylibcontext::raylib_initialize(
+                current,
+                current->get_hwnd(),
+                static_cast<unsigned>((std::max)(1, current->width)),
+                static_cast<unsigned>((std::max)(1, current->height)),
+                current->onResize,
+                current->backendName);
+        };
+        ctx->cleanup = []()
+        {
+            auto current = epochnamespace::core::get_current_render_context();
+            if (!current)
+                return;
+
+            epochnamespace::raylibcontext::raylib_cleanup(current);
+        };
+        ctx->process = [](std::shared_ptr<Context> current, CommandQueue& queue)
+        {
+            if (!current)
+                return false;
+
+            epochnamespace::raylibcontext::raylib_process();
+            if (!epochnamespace::raylibcontext::raylib_is_running())
+                return false;
+
+            auto& st = epochnamespace::raylibstate::s_raylibstate;
+            st.running = true;
+            st.owner_ctx = current.get();
+            st.width = static_cast<unsigned>((std::max)(1, epochnamespace::raylib_api::get_render_width()));
+            st.height = static_cast<unsigned>((std::max)(1, epochnamespace::raylib_api::get_render_height()));
+            st.frameActive = false;
+            st.frameInTextureMode = false;
+
+            epochnamespace::raylib_api::begin_drawing();
+            epochnamespace::raylib_api::clear_background({ 0, 0, 0, 255 });
+            epochnamespace::raylibcontext::raylib_render_scene_preview(current);
+            (void)queue.drain();
+            (void)epochnamespace::gui::render_deferred_batch(current.get());
+            epochnamespace::raylib_api::end_drawing();
+
+            st.frameActive = false;
+            return !epochnamespace::raylib_api::window_should_close();
+        };
         ctx->clear = nullptr;
         ctx->present = nullptr;
         ctx->get_width = []() { return epochnamespace::raylib_api::get_render_width(); };

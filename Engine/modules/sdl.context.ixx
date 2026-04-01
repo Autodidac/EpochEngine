@@ -382,7 +382,7 @@ export namespace epochnamespace::sdlcontext
 
         if (static_cast<int>(SDL_Init(SDL_INIT_VIDEO)) < 0)
         {
-            SDL_Log("SDL_Init failed: %s", SDL_GetError());
+            logger::error("SDL", std::string("SDL_Init failed: ") + SDL_GetError());
             return false;
         }
 
@@ -392,7 +392,7 @@ export namespace epochnamespace::sdlcontext
         SDL_PropertiesID props = SDL_CreateProperties();
         if (!props)
         {
-            std::cerr << "[ SDL3 ] - SDL_CreateProperties failed: " << SDL_GetError() << "\n";
+            logger::error("SDL", std::string("SDL_CreateProperties failed: ") + SDL_GetError());
             SDL_Quit();
             return false;
         }
@@ -407,7 +407,7 @@ export namespace epochnamespace::sdlcontext
 
         if (!sdlcontext.window)
         {
-            std::cerr << "[ SDL3 ] - SDL_CreateWindowWithProperties failed: " << SDL_GetError() << "\n";
+            logger::error("SDL", std::string("SDL_CreateWindowWithProperties failed: ") + SDL_GetError());
             SDL_Quit();
             return false;
         }
@@ -417,7 +417,7 @@ export namespace epochnamespace::sdlcontext
             SDL_PropertiesID windowProps = SDL_GetWindowProperties(sdlcontext.window);
             if (!windowProps)
             {
-                std::cerr << "[ SDL3 ] - SDL_GetWindowProperties failed: " << SDL_GetError() << "\n";
+                logger::error("SDL", std::string("SDL_GetWindowProperties failed: ") + SDL_GetError());
                 SDL_DestroyWindow(sdlcontext.window);
                 SDL_Quit();
                 return false;
@@ -428,7 +428,7 @@ export namespace epochnamespace::sdlcontext
 
             if (!sdlcontext.hwnd)
             {
-                std::cerr << "[ SDL3 ] - Failed to retrieve HWND\n";
+                logger::error("SDL", "Failed to retrieve HWND");
                 SDL_DestroyWindow(sdlcontext.window);
                 SDL_Quit();
                 return false;
@@ -473,14 +473,11 @@ export namespace epochnamespace::sdlcontext
             SDL_Renderer* renderer = SDL_CreateRenderer(sdlcontext.window, name);
             if (renderer)
             {
-#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SDL_CONFIRMATION_LOGS
-                std::cerr << "[ SDL3 ] - Created renderer with " << label << ".\n";
-#endif
+                logger::info("SDL", std::string("Created renderer with ") + label + '.');
                 return renderer;
             }
 
-            std::cerr << "[ SDL3 ] - SDL_CreateRenderer (" << label << ") failed: "
-                      << SDL_GetError() << "\n";
+            logger::error("SDL", std::string("SDL_CreateRenderer (") + label + ") failed: " + SDL_GetError());
             return nullptr;
         };
 
@@ -491,8 +488,7 @@ export namespace epochnamespace::sdlcontext
         }
         if (!sdlcontext.renderer)
         {
-            std::cerr << "[ SDL3 ] - SDL_CreateRenderer failed after fallbacks: "
-                      << SDL_GetError() << "\n";
+            logger::error("SDL", std::string("SDL_CreateRenderer failed after fallbacks: ") + SDL_GetError());
             SDL_DestroyWindow(sdlcontext.window);
             SDL_Quit();
             return false;
@@ -503,16 +499,16 @@ export namespace epochnamespace::sdlcontext
         {
             const char* const sdlError = SDL_GetError();
             const bool hasDetail = sdlError && sdlError[0] != '\0';
-            std::cerr << "[ SDL3 ] - Render VSync unavailable";
+            std::string message = "Render VSync unavailable";
             if (hasDetail)
-                std::cerr << ": " << sdlError;
+                message += std::string(": ") + sdlError;
             if (sdlcontext.parent)
             {
                 sdlcontext.useFrameLimiter = true;
                 sdlcontext.lastFrameTime = std::chrono::steady_clock::now();
-                std::cerr << "; using internal frame limiter";
+                message += "; using internal frame limiter";
             }
-            std::cerr << "\n";
+            logger::warn("SDL", message);
         }
         else
         {
@@ -578,6 +574,13 @@ export namespace epochnamespace::sdlcontext
             {
                 sdltextures::ensure_uploaded(atlas);
             });
+
+        logger::info(
+            "SDL",
+            std::string("Initialized ")
+                + std::to_string(sdlcontext.width)
+                + "x"
+                + std::to_string(sdlcontext.height));
 
         return true;
     }

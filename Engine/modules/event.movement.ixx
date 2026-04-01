@@ -31,12 +31,14 @@
 module;
 
 #include <iostream>
+#include <source_location>
 
 export module event.movement;
 
 import aengine.platform;
 import aecs;
 import ecs.storage;
+import core.logger;
 
 export namespace epochnamespace
 {
@@ -52,8 +54,13 @@ export namespace epochnamespace
 
         void print() const
         {
-            std::cout << "Movement Event - Entity ID: " << entityId
-                << ", Amount: (" << deltaX << ", " << deltaY << ")\n";
+            logger::infof_loc(
+                "MovementEvent",
+                std::source_location::current(),
+                "Entity ID: {}, Amount: ({}, {})",
+                entityId,
+                deltaX,
+                deltaY);
         }
 
         ecs::Entity getEntityId() const

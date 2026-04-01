@@ -40,6 +40,7 @@ module;
 #include <iostream>
 #include <mutex>
 #include <shared_mutex>
+#include <source_location>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -93,6 +94,7 @@ import atlas.texture;
 import atexture;
 import image.loader;
 import aspritehandle;
+import core.logger;
 
 // If u32/u64 are yours and not from <cstdint>, you must import the module that
 // defines them. Uncomment the correct one in your project.
@@ -227,21 +229,20 @@ export namespace epochnamespace::opengltextures
             }
         }
         if (!oglData) {
-            std::cerr << "[UploadAtlas] OpenGL backendData not initialized!\n";
+            logger::error("OpenGL.Upload", "OpenGL backend data not initialized.");
             return;
         }
         auto& glState = oglData->glState;
 
         if (atlas.pixel_data.empty()) {
-            std::cerr << "[UploadAtlas] Pixel data empty for '" << atlas.name
-                << "', rebuilding...\n";
+            logger::warnf_loc("OpenGL.Upload", std::source_location::current(), "Pixel data empty for '{}', rebuilding", atlas.name);
             const_cast<TextureAtlas&>(atlas).rebuild_pixels();
         }
 
         const auto platformCtx = detail::to_platform_context(glState);
         epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!contextGuard.set(platformCtx)) {
-            std::cerr << "[UploadAtlas] Failed to activate GL context for upload\n";
+            logger::error("OpenGL.Upload", "Failed to activate GL context for upload.");
             return;
         }
 
@@ -251,8 +252,7 @@ export namespace epochnamespace::opengltextures
         if (!gpu.textureHandle) {
             glGenTextures(1, &gpu.textureHandle);
             if (!gpu.textureHandle) {
-                std::cerr << "[ OpenGL ] - Failed to generate texture for atlas: "
-                    << atlas.name << "\n";
+                logger::errorf_loc("OpenGL.Upload", std::source_location::current(), "Failed to generate texture for atlas '{}'", atlas.name);
                 return;
             }
         }
@@ -288,9 +288,13 @@ export namespace epochnamespace::opengltextures
         gpu.version = atlas.version;
 
 #if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_OPENGL_CONFIRMATION_LOGS
-        std::cout << "[ OpenGL ] - Uploaded atlas '" << atlas.name
-            << "' (tex id " << gpu.textureHandle
-            << ", version " << gpu.version << ")\n";
+        logger::infof_loc(
+            "OpenGL.Upload",
+            std::source_location::current(),
+            "Uploaded atlas '{}' (tex id {}, version {})",
+            atlas.name,
+            gpu.textureHandle,
+            gpu.version);
 #endif
 
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -308,7 +312,7 @@ export namespace epochnamespace::opengltextures
             }
         }
         if (!oglData) {
-            std::cerr << "[EnsureUploaded] OpenGL backendData not initialized!\n";
+            logger::error("OpenGL.Upload", "OpenGL backend data not initialized.");
             return;
         }
 
@@ -405,7 +409,7 @@ export namespace epochnamespace::opengltextures
         auto log_draw_skip = [](std::string_view) {};
 
         if (!handle.is_valid()) {
-            std::cerr << "[DrawSprite] Invalid sprite handle.\n";
+            logger::error("OpenGL.DrawSprite", "Invalid sprite handle.");
             return;
         }
 
@@ -540,7 +544,7 @@ export namespace epochnamespace::opengltextures
 
         const GLenum err = glGetError();
         if (err != GL_NO_ERROR) {
-            std::cerr << "[OpenGL ERROR] glDrawElements failed: " << std::hex << err << "\n";
+            logger::errorf_loc("OpenGL.DrawSprite", std::source_location::current(), "glDrawElements failed: 0x{:X}", static_cast<unsigned int>(err));
         }
 
         glBindVertexArray(0);

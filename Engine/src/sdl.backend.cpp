@@ -6,7 +6,6 @@ module;
 #include <memory>
 #include <source_location>
 #include <string>
-#include <string_view>
 
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -20,19 +19,12 @@ module;
 
 #include <include/aengine.config.hpp>
 
-#ifdef min
-#   undef min
-#endif
-#ifdef max
-#   undef max
-#endif
-
 module sdl.backend;
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import aengine.input;
-import atlas.manager;
 import atlas.texture;
+import core.context;
 import core.logger;
 import image.loader;
 import sdl.context;
@@ -51,15 +43,6 @@ namespace epochnamespace::sdlbackend
 
         std::uint32_t default_add_atlas(const TextureAtlas& atlas) noexcept
         {
-            try
-            {
-                atlasmanager::ensure_uploaded(atlas);
-                atlasmanager::process_pending_uploads(core::ContextType::SDL);
-            }
-            catch (...)
-            {
-            }
-
             const int idx = atlas.get_index();
             return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
         }
@@ -87,8 +70,14 @@ namespace epochnamespace::sdlbackend
                 return ctx->windowData->hwnd;
             return nullptr;
         }
+    }
 
-        void initialize_adapter()
+    void configure(const std::shared_ptr<core::Context>& ctx)
+    {
+        if (!ctx)
+            return;
+
+        ctx->initialize = []()
         {
             auto current = core::get_current_render_context();
             if (!current)
@@ -99,7 +88,7 @@ namespace epochnamespace::sdlbackend
 #if defined(_WIN32)
                 (void)sdlcontext::sdl_initialize(
                     current,
-                    reinterpret_cast<HWND>(native_window_handle(current)),
+                    reinterpret_cast<HWND>(detail::native_window_handle(current)),
                     static_cast<int>((std::max)(1, current->width)),
                     static_cast<int>((std::max)(1, current->height)),
                     current->onResize,
@@ -107,7 +96,7 @@ namespace epochnamespace::sdlbackend
 #else
                 (void)sdlcontext::sdl_initialize(
                     current,
-                    native_window_handle(current),
+                    detail::native_window_handle(current),
                     static_cast<int>((std::max)(1, current->width)),
                     static_cast<int>((std::max)(1, current->height)),
                     current->onResize,
@@ -116,7 +105,7 @@ namespace epochnamespace::sdlbackend
             }
             catch (const std::exception& e)
             {
-                logger::get(kLogSdl).logf(
+                logger::get(detail::kLogSdl).logf(
                     logger::LogLevel::Error,
                     std::source_location::current(),
                     "init exception: {}",
@@ -124,14 +113,14 @@ namespace epochnamespace::sdlbackend
             }
             catch (...)
             {
-                logger::get(kLogSdl).log(
+                logger::get(detail::kLogSdl).log(
                     logger::LogLevel::Error,
                     "init unknown exception",
                     std::source_location::current());
             }
-        }
+        };
 
-        void cleanup_adapter()
+        ctx->cleanup = []()
         {
             auto current = core::get_current_render_context();
             if (!current)
@@ -144,7 +133,7 @@ namespace epochnamespace::sdlbackend
             }
             catch (const std::exception& e)
             {
-                logger::get(kLogSdl).logf(
+                logger::get(detail::kLogSdl).logf(
                     logger::LogLevel::Error,
                     std::source_location::current(),
                     "cleanup exception: {}",
@@ -152,31 +141,20 @@ namespace epochnamespace::sdlbackend
             }
             catch (...)
             {
-                logger::get(kLogSdl).log(
+                logger::get(detail::kLogSdl).log(
                     logger::LogLevel::Error,
                     "cleanup unknown exception",
                     std::source_location::current());
             }
-        }
+        };
 
-        bool process_adapter(
-            std::shared_ptr<core::Context> ctx,
-            core::CommandQueue& queue)
+        ctx->process = [](std::shared_ptr<core::Context> current, core::CommandQueue& queue)
         {
-            if (!ctx)
+            if (!current)
                 return false;
-            return sdlcontext::sdl_process(ctx, queue);
-        }
-    }
+            return sdlcontext::sdl_process(current, queue);
+        };
 
-    void configure(const std::shared_ptr<core::Context>& ctx)
-    {
-        if (!ctx)
-            return;
-
-        ctx->initialize = detail::initialize_adapter;
-        ctx->cleanup = detail::cleanup_adapter;
-        ctx->process = detail::process_adapter;
         ctx->draw_sprite = sdltextures::draw_sprite;
         ctx->add_texture = &detail::default_add_texture;
         ctx->add_atlas = +[](const TextureAtlas& atlas) { return detail::default_add_atlas(atlas); };

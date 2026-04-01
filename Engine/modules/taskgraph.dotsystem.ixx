@@ -54,6 +54,7 @@ export module taskgraph.dotsystem;
 
 import ampmcboundedqueue;   // provides epochnamespace::MPMCQueue
 import aengine.systems;     // provides epochnamespace::Task
+import core.logger;
 
 // ------------------------------------------------------------
 // Standard library
@@ -212,7 +213,7 @@ export namespace epochnamespace::taskgraph
 
                 if (!n || !n->Task_.h) {
 #ifndef NDEBUG
-                    std::cerr << "[TaskGraph] WARNING: null coroutine handle, skipping\n";
+                    logger::warn("TaskGraph", "Null coroutine handle, skipping.");
 #endif
                     continue;
                 }

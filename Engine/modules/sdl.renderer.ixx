@@ -46,6 +46,7 @@ export module sdl.renderer;
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import core.context;
+import core.logger;
 import sdl.state;
 
 export namespace epochnamespace::sdlcontext
@@ -69,7 +70,7 @@ export namespace epochnamespace::sdlcontext
     {
         const char* err = SDL_GetError();
         if (err && *err) {
-            std::cerr << "[SDL ERROR] " << location << ": " << err << "\n";
+            logger::error("SDL", std::format("{}: {}", location, err));
             SDL_ClearError();
         }
     }

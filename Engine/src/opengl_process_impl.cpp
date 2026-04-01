@@ -12,9 +12,6 @@
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import core.context;
 import context.commandqueue;
-import context.multiplexer;
-import context.type;
-import atlas.manager;
 import opengl.context;
 import opengl.platform;
 import opengl.quad;
@@ -27,6 +24,14 @@ namespace epochnamespace::openglcontext
     {
         if (!ctx)
             return false;
+
+        std::uintptr_t windowId = 0u;
+#if defined(_WIN32)
+        if (ctx->windowData)
+            windowId = reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd);
+        else if (ctx->hwnd)
+            windowId = reinterpret_cast<std::uintptr_t>(ctx->hwnd);
+#endif
 
         auto& backend = opengltextures::get_opengl_backend();
         auto& glState = backend.glState;
@@ -42,11 +47,6 @@ namespace epochnamespace::openglcontext
             if (!fallback.valid() || !guard.set(fallback))
                 return false;
         }
-
-        const auto previousContext = core::MultiContextManager::GetCurrent();
-        core::MultiContextManager::SetCurrent(ctx);
-
-        atlasmanager::process_pending_uploads(core::ContextType::OpenGL);
 
         int fbW = (std::max)(1, opengl_get_width());
         int fbH = (std::max)(1, opengl_get_height());
@@ -79,16 +79,7 @@ namespace epochnamespace::openglcontext
         }
 
         opengl_clear();
-        {
-            struct ScopedCurrentContext
-            {
-                std::shared_ptr<core::Context> previous;
-                ~ScopedCurrentContext() { core::MultiContextManager::SetCurrent(std::move(previous)); }
-            } scoped{ previousContext };
-
-            (void)queue.drain();
-        }
-
+        opengl_render_active_frame(ctx, queue, fbW, fbH, windowId);
         PlatformGL::swap_buffers(guard.target());
         return true;
     }

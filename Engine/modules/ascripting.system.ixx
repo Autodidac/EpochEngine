@@ -38,6 +38,7 @@ module;
 #include <filesystem>
 #include <iostream>
 #include <mutex>
+#include <source_location>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -58,6 +59,7 @@ import scripting.compiler;
 import aengine.cli;
 import aengine.systems;
 import taskgraph.dotsystem;
+import core.logger;
 
 
 namespace epochnamespace::scripting
@@ -272,7 +274,7 @@ namespace epochnamespace::scripting
             if (!std::filesystem::exists(sourcePath))
             {
                 const std::string message = "[script] Source file missing: " + sourcePath.string();
-                std::cerr << message << "\n";
+                logger::error("Scripting", message);
                 report.log_error(message);
                 co_return;
             }
@@ -292,7 +294,7 @@ namespace epochnamespace::scripting
             if (!compiler::compile_script_to_dll(sourcePath, dllPath))
             {
                 const std::string message = "[script] Compilation failed: " + sourcePath.string();
-                std::cerr << message << "\n";
+                logger::error("Scripting", message);
                 report.log_error(message);
                 co_return;
             }
@@ -303,7 +305,7 @@ namespace epochnamespace::scripting
             if (!std::filesystem::exists(dllPath))
             {
                 const std::string message = "[script] Expected output missing after compilation: " + dllPath.string();
-                std::cerr << message << "\n";
+                logger::error("Scripting", message);
                 report.log_error(message);
                 co_return;
             }
@@ -314,7 +316,7 @@ namespace epochnamespace::scripting
             if (!lastLib)
             {
                 const std::string message = "[script] LoadLibrary failed: " + dllPath.string();
-                std::cerr << message << "\n";
+                logger::error("Scripting", message);
                 report.log_error(message);
                 co_return;
             }
@@ -325,7 +327,7 @@ namespace epochnamespace::scripting
             if (!lastLib)
             {
                 const std::string message = "[script] dlopen failed: " + dllPath.string();
-                std::cerr << message << "\n";
+                logger::error("Scripting", message);
                 report.log_error(message);
                 co_return;
             }
@@ -338,7 +340,7 @@ namespace epochnamespace::scripting
             if (!entry)
             {
                 const std::string message = "[script] Missing run_script symbol in: " + dllPath.string();
-                std::cerr << message << "\n";
+                logger::error("Scripting", message);
                 report.log_error(message);
                 co_return;
             }
@@ -351,13 +353,13 @@ namespace epochnamespace::scripting
         catch (const std::exception& e)
         {
             const std::string message = std::string("[script] Exception during script load: ") + e.what();
-            std::cerr << message << "\n";
+            logger::error("Scripting", message);
             report.log_error(message);
         }
         catch (...)
         {
             const std::string message = "[script] Unknown exception during script load";
-            std::cerr << message << "\n";
+            logger::error("Scripting", message);
             report.log_error(message);
         }
 
@@ -396,7 +398,7 @@ namespace epochnamespace::scripting
         catch (const std::exception& e)
         {
             const std::string message = std::string("[script] Scheduling exception: ") + e.what();
-            std::cerr << message << "\n";
+            logger::error("Scripting", message);
             report.log_error(message);
             return false;
         }
@@ -496,15 +498,29 @@ namespace epochnamespace::scripting
             summary.deadlockSignature = "TaskGraph timed out before reaching expected completion count.";
         }
 
-        std::cout << "[StressTest] Completed=" << summary.completedNodes
-            << " Total=" << summary.totalNodes
-            << " MaxQueueDepth=" << summary.maxQueueDepth
-            << " ReloadFailures=" << summary.reloadFailures;
-
         if (summary.deadlockDetected)
-            std::cout << " Deadlock=" << summary.deadlockSignature;
-
-        std::cout << "\n";
+        {
+            logger::warnf_loc(
+                "Scripting.Stress",
+                std::source_location::current(),
+                "Completed={} Total={} MaxQueueDepth={} ReloadFailures={} Deadlock={}",
+                summary.completedNodes,
+                summary.totalNodes,
+                summary.maxQueueDepth,
+                summary.reloadFailures,
+                summary.deadlockSignature);
+        }
+        else
+        {
+            logger::infof_loc(
+                "Scripting.Stress",
+                std::source_location::current(),
+                "Completed={} Total={} MaxQueueDepth={} ReloadFailures={}",
+                summary.completedNodes,
+                summary.totalNodes,
+                summary.maxQueueDepth,
+                summary.reloadFailures);
+        }
 
         return summary;
     }

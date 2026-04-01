@@ -62,6 +62,7 @@ import context.commandqueue;
 
 import atlas.manager;
 import atlas.texture;
+import core.logger;
 import font.renderer;
 import sprite.pool;
 import aspriteregistry;
@@ -437,9 +438,11 @@ namespace epochnamespace::gui
             {
                 if (!g_missingFontPathWarningLogged)
                 {
-                    std::cerr << "[agui] Unable to locate GUI font '" << kDefaultFontFile << "'\n";
-                    std::cerr << "[agui] Place '" << kDefaultFontFile
-                        << "' in 'assets/fonts' (relative to the working directory) or set EPOCH_GUI_FONT_PATH.\n";
+                    logger::warn(
+                        "Epoch.GUI",
+                        std::format(
+                            "Unable to locate GUI font '{}'. Place it in assets/fonts or set EPOCH_GUI_FONT_PATH.",
+                            kDefaultFontFile));
                     g_missingFontPathWarningLogged = true;
                 }
                 return;
@@ -449,7 +452,9 @@ namespace epochnamespace::gui
             {
                 if (!g_failedFontLoadWarningLogged)
                 {
-                    std::cerr << "[agui] Failed to load GUI font from '" << fontPath.string() << "'\n";
+                    logger::error(
+                        "Epoch.GUI",
+                        std::format("Failed to load GUI font from '{}'", fontPath.string()));
                     g_failedFontLoadWarningLogged = true;
                 }
                 return;
@@ -460,7 +465,9 @@ namespace epochnamespace::gui
             {
                 if (!g_missingFontAssetWarningLogged)
                 {
-                    std::cerr << "[agui] Font renderer returned no asset for '" << g_resources.font.fontName << "'\n";
+                    logger::error(
+                        "Epoch.GUI",
+                        std::format("Font renderer returned no asset for '{}'", g_resources.font.fontName));
                     g_missingFontAssetWarningLogged = true;
                 }
                 return;

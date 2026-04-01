@@ -51,6 +51,7 @@
 import aengine.cli;
 import aengine.updater;
 import core.env;
+import core.log;
 import runtime;
 
 namespace
@@ -127,7 +128,10 @@ int main(int argc, char** argv)
     }
     catch (const std::exception& ex)
     {
-        std::cerr << "[Fatal] " << ex.what() << '\n';
+        epoch::core::log::core_log_write(
+            static_cast<std::uint32_t>(epoch::core::log::level::error),
+            "Epoch.Fatal",
+            ex.what());
         return -1;
     }
 }

@@ -37,6 +37,7 @@ module;
 #include <format>
 #include <iostream>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -315,19 +316,28 @@ export namespace epochnamespace::diagnostics {
         record.virtualWidth = snapshot.virtualWidth;
         record.virtualHeight = snapshot.virtualHeight;
 
-        output << "[Context][Dims] backend=" << (record.backendName.empty() ? "(unnamed)" : record.backendName)
+        std::ostringstream message;
+        message << "backend=" << (record.backendName.empty() ? "(unnamed)" : record.backendName)
             << " type=" << to_string(record.type)
             << " logical=" << record.logicalWidth << 'x' << record.logicalHeight
             << " framebuffer=" << record.framebufferWidth << 'x' << record.framebufferHeight
-            << " virtual=" << record.virtualWidth << 'x' << record.virtualHeight
-            << '\n';
+            << " virtual=" << record.virtualWidth << 'x' << record.virtualHeight;
+
+        if (std::addressof(output) == std::addressof(std::cout))
+        {
+            logger::info("Context.Dims", message.str());
+            return;
+        }
+
+        output << "[Context][Dims] " << message.str() << '\n';
     }
 
     inline void print_engine_configuration_summary(std::ostream& output = std::cout)
     {
         const EngineConfigurationSnapshot snapshot = capture_engine_configuration();
 
-        output << "[Engine] Active context topology: "
+        std::ostringstream report;
+        report << "[Engine] Active context topology: "
             << (snapshot.single_parent_topology ? "Single parent window" : "Multiple top-level windows")
             << '\n';
 
@@ -341,7 +351,7 @@ export namespace epochnamespace::diagnostics {
             {"DirectX renderer", snapshot.using_directx},
         } };
 
-        output << "[Engine] Enabled integrations:";
+        report << "[Engine] Enabled integrations:";
         bool first = true;
         for (const auto& [label, enabled] : renderers)
         {
@@ -350,22 +360,38 @@ export namespace epochnamespace::diagnostics {
                 continue;
             }
 
-            output << (first ? ' ' : ', ') << label;
+            if (first)
+            {
+                report << ' ';
+            }
+            else
+            {
+                report << ", ";
+            }
+            report << label;
             first = false;
         }
 
         if (first)
         {
-            output << " none";
+            report << " none";
         }
 
-        output << '\n';
+        report << '\n';
 
         if (!snapshot.using_opengl && !snapshot.using_software_renderer && !snapshot.using_raylib
             && !snapshot.using_sdl)
         {
-            output << "[Engine][Warning] No primary renderer or context is enabled."
+            report << "[Engine][Warning] No primary renderer or context is enabled."
                 << " Update aengineconfig.hpp before launching.\n";
         }
+
+        if (std::addressof(output) == std::addressof(std::cout))
+        {
+            logger::info("Engine.Config", report.str());
+            return;
+        }
+
+        output << report.str();
     }
 } // namespace epochnamespace::diagnostics

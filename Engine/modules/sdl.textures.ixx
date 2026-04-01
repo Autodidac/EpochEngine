@@ -40,6 +40,7 @@ module;
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <source_location>
 #include <stdexcept>
 #include <span>
 #include <string>
@@ -68,6 +69,7 @@ import atlas.texture;
 import image.loader;
 import atexture;
 import aspritehandle;
+import core.logger;
 
 import sdl.renderer;
 import sdl.state;
@@ -176,9 +178,14 @@ export namespace epochnamespace::sdltextures
         gpu.version = atlas.version;
 
 #if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_SDL_CONFIRMATION_LOGS
-        std::cout << "[ SDL3 ] - Uploaded atlas '" << atlas.name
-            << "' (" << gpu.width << "x" << gpu.height
-            << ", version " << gpu.version << ")\n";
+        logger::infof_loc(
+            "SDL",
+            std::source_location::current(),
+            "Uploaded atlas '{}' ({}x{}, version {})",
+            atlas.name,
+            gpu.width,
+            gpu.height,
+            gpu.version);
 #endif
 
     }
@@ -238,7 +245,7 @@ export namespace epochnamespace::sdltextures
     inline void draw_sprite(SpriteHandle handle, std::span<const TextureAtlas* const> atlases, float x, float y, float width, float height) noexcept
     {
         if (!is_handle_live(handle)) {
-            std::cerr << "[SDL_DrawSprite] Invalid sprite handle.\n";
+            logger::error("SDL.DrawSprite", "Invalid sprite handle.");
             return;
         }
 
@@ -254,7 +261,7 @@ export namespace epochnamespace::sdltextures
         const int w = sharedState.window.width;
         const int h = sharedState.window.height;
         if (w == 0 || h == 0) {
-            std::cerr << "[SDL_DrawSprite] ERROR: Window dimensions are zero.\n";
+            logger::error("SDL.DrawSprite", "Window dimensions are zero.");
             return;
         }
 
@@ -262,18 +269,18 @@ export namespace epochnamespace::sdltextures
         const int localIdx = int(handle.localIndex);
 
         if (atlasIdx < 0 || atlasIdx >= int(atlases.size())) {
-            std::cerr << "[SDL_DrawSprite] Atlas index out of bounds: " << atlasIdx << '\n';
+            logger::errorf_loc("SDL.DrawSprite", std::source_location::current(), "Atlas index out of bounds: {}", atlasIdx);
             return;
         }
 
         const TextureAtlas* atlas = atlases[atlasIdx];
         if (!atlas) {
-            std::cerr << "[SDL_DrawSprite] Null atlas pointer at index: " << atlasIdx << '\n';
+            logger::errorf_loc("SDL.DrawSprite", std::source_location::current(), "Null atlas pointer at index: {}", atlasIdx);
             return;
         }
         AtlasRegion region{};
         if (!atlas->try_get_entry_info(localIdx, region)) {
-            std::cerr << "[SDL_DrawSprite] Sprite index out of bounds: " << localIdx << '\n';
+            logger::errorf_loc("SDL.DrawSprite", std::source_location::current(), "Sprite index out of bounds: {}", localIdx);
             return;
         }
 
@@ -283,13 +290,13 @@ export namespace epochnamespace::sdltextures
 
         auto it = sdl_gpu_atlases.find(atlas);
         if (it == sdl_gpu_atlases.end()) {
-            std::cerr << "[SDL_DrawSprite] GPU texture not found for atlas '" << atlas->name << "'\n";
+            logger::errorf_loc("SDL.DrawSprite", std::source_location::current(), "GPU texture not found for atlas '{}'", atlas->name);
             return;
         }
 
         SDL_Texture* texture = it->second.textureHandle;
         if (!texture) {
-            std::cerr << "[SDL_DrawSprite] GPU texture handle is null for atlas '" << atlas->name << "'\n";
+            logger::errorf_loc("SDL.DrawSprite", std::source_location::current(), "GPU texture handle is null for atlas '{}'", atlas->name);
             return;
         }
 

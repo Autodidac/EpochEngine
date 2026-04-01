@@ -32,12 +32,16 @@ set(EPOCH_SOURCES
     src/aengine.context.cpp
     src/context_software.cpp
     src/context_vulkan.cpp
+    src/opengl.backend.cpp
     src/opengl.context.cpp
     src/opengl.init.cpp
     src/opengl.process.cpp
     src/opengl.cleanup.cpp
+    src/opengl_capture_bridge.cpp
     src/opengl_context_detail.cpp
+    src/opengl_preview_bridge.cpp
     src/opengl_process_impl.cpp
+    src/opengl_upload_bridge.cpp
     src/software.context.cpp
     src/software.context_capture.cpp
     src/software.context_draw.cpp
@@ -117,12 +121,16 @@ if(MSVC)
 
     set_source_files_properties(
         src/context_opengl.cpp
+        src/opengl.backend.cpp
         src/opengl.context.cpp
         src/opengl.init.cpp
         src/opengl.process.cpp
         src/opengl.cleanup.cpp
+        src/opengl_capture_bridge.cpp
         src/opengl_context_detail.cpp
+        src/opengl_preview_bridge.cpp
         src/opengl_process_impl.cpp
+        src/opengl_upload_bridge.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj /Zm2000 /Od /Ob0 /GL-"
     )
@@ -642,6 +650,31 @@ endif()
 
 if(NOT (UNIX AND NOT APPLE))
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\]).*\.linux\.ixx$]])
+endif()
+
+if(NOT EPOCH_RAYLIB_ACTIVE)
+    set_source_files_properties(
+        src/raylib.backend.cpp
+        src/context_raylib.cpp
+        src/acontext.raylib.bridge.cpp
+        PROPERTIES HEADER_FILE_ONLY TRUE
+    )
+endif()
+
+if(NOT EPOCH_SDL_ACTIVE)
+    set_source_files_properties(
+        src/sdl.backend.cpp
+        src/context_sdl.cpp
+        PROPERTIES HEADER_FILE_ONLY TRUE
+    )
+endif()
+
+if(NOT EPOCH_SFML_ACTIVE)
+    set_source_files_properties(
+        src/sfml.backend.cpp
+        src/context_sfml.cpp
+        PROPERTIES HEADER_FILE_ONLY TRUE
+    )
 endif()
 
 target_sources(epoch PRIVATE

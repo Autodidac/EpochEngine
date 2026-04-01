@@ -32,6 +32,7 @@ module;
 
 #include <cstdint>
 #include <iostream>
+#include <source_location>
 
 // Global module fragment: macros + headers only.
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
@@ -51,6 +52,7 @@ export module opengl.renderer;
 import aengine.platform;
 import aengine.cli;
 import core.context;
+import core.logger;
 
 import opengl.context;
 import opengl.state;
@@ -79,7 +81,7 @@ export namespace epochnamespace::openglrenderer
     {
         auto& glState = renderer_gl_state();
         if (!epochnamespace::openglquad::ensure_quad_pipeline(glState))
-            std::cerr << "[ OpenGL ] - Failed to rebuild quad pipeline\n";
+            logger::error("OpenGL", "Failed to rebuild quad pipeline.");
         return glState;
     }
 
@@ -106,8 +108,7 @@ export namespace epochnamespace::openglrenderer
     {
         const GLenum err = glGetError();
         if (err != GL_NO_ERROR)
-            std::cerr << "[GL ERROR] " << location << " : 0x"
-            << std::hex << static_cast<unsigned int>(err) << std::dec << '\n';
+            logger::errorf_loc("OpenGL", std::source_location::current(), "GL error at {}: 0x{:X}", location, static_cast<unsigned int>(err));
     }
 
     inline bool is_handle_live(const SpriteHandle& h) noexcept
@@ -129,25 +130,23 @@ export namespace epochnamespace::openglrenderer
         GLint v = 0;
 
         glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &v);
-        std::cerr << "[Debug] VAO " << v << " (expected " << expectedVAO << ")\n";
+        logger::infof_loc("OpenGL.Debug", std::source_location::current(), "VAO {} (expected {})", v, expectedVAO);
 
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &v);
-        std::cerr << "[Debug] TEX " << v << " (expected " << expectedTex << ")\n";
+        logger::infof_loc("OpenGL.Debug", std::source_location::current(), "TEX {} (expected {})", v, expectedTex);
 
         if (uUVRegionLoc >= 0)
         {
             GLfloat uv[4]{};
             glGetUniformfv(shader, uUVRegionLoc, uv);
-            std::cerr << "[Debug] UV (" << uv[0] << "," << uv[1]
-                << "," << uv[2] << "," << uv[3] << ")\n";
+            logger::infof_loc("OpenGL.Debug", std::source_location::current(), "UV ({}, {}, {}, {})", uv[0], uv[1], uv[2], uv[3]);
         }
 
         if (uTransformLoc >= 0)
         {
             GLfloat tr[4]{};
             glGetUniformfv(shader, uTransformLoc, tr);
-            std::cerr << "[Debug] Xform (" << tr[0] << "," << tr[1]
-                << "," << tr[2] << "," << tr[3] << ")\n";
+            logger::infof_loc("OpenGL.Debug", std::source_location::current(), "Xform ({}, {}, {}, {})", tr[0], tr[1], tr[2], tr[3]);
         }
     }
 

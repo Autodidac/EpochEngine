@@ -43,6 +43,8 @@ module;
 
 export module image.loader;
 
+import core.logger;
+
 export namespace epochnamespace
 {
     struct ImageData
@@ -58,7 +60,7 @@ export namespace epochnamespace
 
     inline void a_listSupportedImageTypes()
     {
-        std::cout << "Supported image types: BMP, TGA, PPM\n";
+        logger::info("ImageLoader", "Supported image types: BMP, TGA, PPM");
     }
 
     inline ImageData a_loadBMP(const std::filesystem::path& path, bool flipVertically);

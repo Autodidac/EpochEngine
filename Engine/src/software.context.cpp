@@ -26,6 +26,7 @@ import aspritehandle;
 import atlas.texture;
 import core.context;
 import context.commandqueue;
+import core.logger;
 import software.state;
 import software.textures;
 
@@ -80,7 +81,7 @@ namespace epochnamespace::anativecontext
     {
         if (!ctx)
         {
-            std::cerr << "[ SoftRenderer ] - Invalid context\n";
+            logger::error("Epoch.Software", "Invalid context.");
             return false;
         }
 
@@ -135,7 +136,7 @@ namespace epochnamespace::anativecontext
 
         if (!resolvedParent)
         {
-            std::cerr << "[ SoftRenderer ] - No parent HWND available. Pass parentWnd from multiplexer.\n";
+            logger::error("Epoch.Software", "No parent HWND available. Pass parentWnd from multiplexer.");
             return false;
         }
 
@@ -151,14 +152,16 @@ namespace epochnamespace::anativecontext
         sr.bmi.bmiHeader.biCompression = BI_RGB;
 
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS
-        std::cout << "[ SoftRenderer ] - Initialized. HWND=" << sr.hwnd
-            << " (" << sr.width << "x" << sr.height << ")\n";
+        logger::info(
+            "Epoch.Software",
+            std::format("Initialized. HWND={} ({}x{})", reinterpret_cast<std::uintptr_t>(sr.hwnd), sr.width, sr.height));
 #endif
 #else
         (void)parentWnd;
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS
-        std::cout << "[ SoftRenderer ] - Initialized (non-Win32) "
-            << sr.width << "x" << sr.height << "\n";
+        logger::info(
+            "Epoch.Software",
+            std::format("Initialized (non-Win32) {}x{}", sr.width, sr.height));
 #endif
 #endif
 
@@ -198,7 +201,7 @@ namespace epochnamespace::anativecontext
         sr = {};
 
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS
-        std::cout << "[ SoftRenderer ] - Cleanup complete\n";
+        logger::info("Epoch.Software", "Cleanup complete.");
 #endif
     }
 
@@ -208,7 +211,7 @@ namespace epochnamespace::anativecontext
 #else
     bool softrenderer_initialize(std::shared_ptr<core::Context>, void*, unsigned, unsigned, std::function<void(int, int)>)
     {
-        std::cerr << "[ SoftRenderer ] - Not built (EPOCH_USING_SOFTWARE_RENDERER not defined)\n";
+        logger::error("Epoch.Software", "Not built (EPOCH_USING_SOFTWARE_RENDERER not defined).");
         return false;
     }
 

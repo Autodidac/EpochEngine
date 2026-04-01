@@ -34,6 +34,7 @@ module;
 #include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <source_location>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,8 @@ module;
 #endif
 
 export module scripting.compiler;
+
+import core.logger;
 
 namespace epochnamespace::compiler 
 {
@@ -173,17 +176,19 @@ namespace epochnamespace::compiler
                 : _wspawnvp(_P_WAIT, compilerPath.c_str(), argv.data());
             if (result == -1)
             {
-                std::cerr
-                    << "[compiler] failed to launch clang++: "
-                   // << narrow_lossy(compilerPath.wstring())
-					<< compilerPath.string()
-                    << " (errno=" << errno << ": " << errno_message(errno) << ")\n";
+                logger::errorf_loc(
+                    "Compiler",
+                    std::source_location::current(),
+                    "failed to launch clang++: {} (errno={}: {})",
+                    compilerPath.string(),
+                    errno,
+                    errno_message(errno));
                 return false;
             }
 
             if (result != 0)
             {
-                std::cerr << "[compiler] clang++ failed with code: " << result << std::endl;
+                logger::errorf_loc("Compiler", std::source_location::current(), "clang++ failed with code: {}", result);
                 return false;
             }
 
@@ -200,7 +205,7 @@ namespace epochnamespace::compiler
             const int result = std::system(cmd.c_str());
             if (result != 0)
             {
-                std::cerr << "[compiler] clang++ failed with code: " << result << std::endl;
+                logger::errorf_loc("Compiler", std::source_location::current(), "clang++ failed with code: {}", result);
                 return false;
             }
             return true;
@@ -211,10 +216,11 @@ namespace epochnamespace::compiler
     export bool compile_script_to_dll(const std::filesystem::path& input, const std::filesystem::path& output) {
         const auto compilerPath = detail::resolve_clangxx();
         const auto includeRoot = detail::resolve_engine_include_root(input);
-        std::cout
-            << "[compiler] running: "
-            << detail::describe_command(compilerPath, input, output, includeRoot)
-            << std::endl;
+        logger::infof_loc(
+            "Compiler",
+            std::source_location::current(),
+            "running: {}",
+            detail::describe_command(compilerPath, input, output, includeRoot));
         return detail::spawn_compiler(compilerPath, input, output, includeRoot);
     }
 

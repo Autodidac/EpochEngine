@@ -1,5 +1,6 @@
 module;
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 
@@ -37,6 +38,12 @@ export namespace epochnamespace::openglcontext
     int opengl_get_height();
     void opengl_clear();
     bool opengl_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue);
+    void opengl_render_active_frame(
+        std::shared_ptr<core::Context> ctx,
+        core::CommandQueue& queue,
+        int framebufferWidth,
+        int framebufferHeight,
+        std::uintptr_t windowId);
     void opengl_cleanup(std::shared_ptr<core::Context> ctx);
 #endif
 }

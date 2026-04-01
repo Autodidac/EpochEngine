@@ -116,12 +116,12 @@ namespace epochnamespace::ecs
         pos.y += dy;
 
         auto& lc = get_component<LoggerComponent>(R, e);
-        epochnamespace::logger::Logger logger{ lc.file, *lc.clock, lc.level };
-
-        const std::string ts = lc.clock->getCurrentTimeString();
-        logger.log(std::format(
-            "[ECS] Entity {} moved to ({:.2f},{:.2f}) at {}",
-            e, pos.x, pos.y, ts));
+        const std::string ts = epochnamespace::timing::getCurrentTimeString();
+        epochnamespace::logger::get(lc.system).log(
+            std::format(
+                "[ECS] Entity {} moved to ({:.2f},{:.2f}) at {}",
+                e, pos.x, pos.y, ts),
+            lc.min_level);
 
         events::push_event(events::Event{
             events::EventType::Custom,
@@ -155,12 +155,12 @@ namespace epochnamespace::ecs
         pos.y = py;
 
         auto& lc = get_component<LoggerComponent>(R, e);
-        epochnamespace::logger::Logger logger{ lc.file, *lc.clock, lc.level };
-
-        const std::string ts = lc.clock->getCurrentTimeString();
-        logger.log(std::format(
-            "[ECS] Entity {} rewound to ({:.2f},{:.2f}) at {}",
-            e, pos.x, pos.y, ts));
+        const std::string ts = epochnamespace::timing::getCurrentTimeString();
+        epochnamespace::logger::get(lc.system).log(
+            std::format(
+                "[ECS] Entity {} rewound to ({:.2f},{:.2f}) at {}",
+                e, pos.x, pos.y, ts),
+            lc.min_level);
 
         events::push_event(events::Event{
             events::EventType::Custom,

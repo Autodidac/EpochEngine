@@ -36,11 +36,14 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 export module image.writer;
+
+import core.logger;
 
 export namespace epochnamespace
 {
@@ -199,7 +202,7 @@ export namespace epochnamespace
         if (ext == ".tga") return a_writeTGA(filepath, pixels, width, height, flipVertically);
         if (ext == ".ppm") return a_writePPM(filepath, pixels, width, height, flipVertically);
 
-        std::cerr << "Unsupported image format for writing: " << ext << "\n";
+        logger::errorf_loc("ImageWriter", std::source_location::current(), "Unsupported image format for writing: {}", ext);
         return false;
     }
 

@@ -34,8 +34,12 @@
 
 module;
 
+#include <array>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <ctime>
+#include <string>
 #include <thread>
 
 module core.time;
@@ -55,6 +59,33 @@ namespace epoch::core::time
         const auto t = steady::now().time_since_epoch();
         const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t).count();
         return static_cast<double>(ns) * 1e-9;
+    }
+
+    std::string system_time_string()
+    {
+        const auto now = std::chrono::system_clock::now();
+        const std::time_t time_value = std::chrono::system_clock::to_time_t(now);
+
+        std::tm local_tm{};
+#if defined(_WIN32)
+        localtime_s(&local_tm, &time_value);
+#else
+        localtime_r(&time_value, &local_tm);
+#endif
+
+        std::array<char, 32> buffer{};
+        std::snprintf(
+            buffer.data(),
+            buffer.size(),
+            "%04d-%02d-%02d %02d:%02d:%02d",
+            local_tm.tm_year + 1900,
+            local_tm.tm_mon + 1,
+            local_tm.tm_mday,
+            local_tm.tm_hour,
+            local_tm.tm_min,
+            local_tm.tm_sec);
+
+        return std::string{ buffer.data() };
     }
 
     void sleep_ms(std::uint32_t ms)

@@ -60,6 +60,8 @@ module;
 
 export module core.utilities;
 
+import core.logger;
+
 export namespace epochnamespace::utilities
 {
 #ifdef _WIN32
@@ -79,7 +81,7 @@ export namespace epochnamespace::utilities
         try {                                       \
             call;                                   \
         } catch (...) {                             \
-            std::cerr << "[Retry] Retrying: " #call "\n"; \
+            ::epochnamespace::logger::warn("Retry", "Retrying: " #call); \
             call;                                   \
         }                                           \
     } while (0)
@@ -95,7 +97,7 @@ export namespace epochnamespace::utilities
                 }
                 catch (...)
                 {
-                    std::cerr << "[Retry] First attempt failed, retrying once...\n";
+                    ::epochnamespace::logger::warn("Retry", "First attempt failed, retrying once.");
                     return f(std::forward<decltype(args)>(args)...);
                 }
             };

@@ -37,6 +37,7 @@ module;
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <source_location>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -62,6 +63,7 @@ import atlas.texture;
 import image.loader;
 import atexture;
 import aspritehandle;
+import core.logger;
 
 import sfml.state;
 
@@ -161,9 +163,14 @@ export namespace epochnamespace::sfmlcontext
         gpu.version = atlas.version;
 
 #if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_SFML_CONFIRMATION_LOGS
-        std::cout << "[ SFML ] - Uploaded atlas '" << atlas.name
-            << "' (" << gpu.width << "x" << gpu.height
-            << ", version " << gpu.version << ")\n";
+        logger::infof_loc(
+            "SFML",
+            std::source_location::current(),
+            "Uploaded atlas '{}' ({}x{}, version {})",
+            atlas.name,
+            gpu.width,
+            gpu.height,
+            gpu.version);
 #endif
 
     }
@@ -219,7 +226,7 @@ export namespace epochnamespace::sfmlcontext
     {
         if (!handle.is_valid())
         {
-            std::cerr << "[SFML_DrawSprite] Invalid sprite handle.\n";
+            logger::error("SFML.DrawSprite", "Invalid sprite handle.");
             return;
         }
 
@@ -228,21 +235,21 @@ export namespace epochnamespace::sfmlcontext
 
         if (atlasIdx < 0 || atlasIdx >= int(atlases.size()))
         {
-            std::cerr << "[SFML_DrawSprite] Atlas index out of bounds: " << atlasIdx << '\n';
+            logger::errorf_loc("SFML.DrawSprite", std::source_location::current(), "Atlas index out of bounds: {}", atlasIdx);
             return;
         }
 
         const TextureAtlas* atlas = atlases[atlasIdx];
         if (!atlas)
         {
-            std::cerr << "[SFML_DrawSprite] Null atlas pointer at index: " << atlasIdx << '\n';
+            logger::errorf_loc("SFML.DrawSprite", std::source_location::current(), "Null atlas pointer at index: {}", atlasIdx);
             return;
         }
 
         AtlasRegion region{};
         if (!atlas->try_get_entry_info(localIdx, region))
         {
-            std::cerr << "[SFML_DrawSprite] Sprite index out of bounds: " << localIdx << '\n';
+            logger::errorf_loc("SFML.DrawSprite", std::source_location::current(), "Sprite index out of bounds: {}", localIdx);
             return;
         }
 
@@ -251,7 +258,7 @@ export namespace epochnamespace::sfmlcontext
         auto it = sfml_gpu_atlases.find(atlas);
         if (it == sfml_gpu_atlases.end())
         {
-            std::cerr << "[SFML_DrawSprite] GPU texture not found for atlas '" << atlas->name << "'\n";
+            logger::errorf_loc("SFML.DrawSprite", std::source_location::current(), "GPU texture not found for atlas '{}'", atlas->name);
             return;
         }
 

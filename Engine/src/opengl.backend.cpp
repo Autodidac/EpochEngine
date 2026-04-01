@@ -16,6 +16,8 @@ module opengl.backend;
 import aengine.input;
 import atlas.manager;
 import atlas.texture;
+import context.commandqueue;
+import context.type;
 import core.logger;
 import image.loader;
 import opengl.context;

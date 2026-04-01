@@ -35,6 +35,7 @@ module;
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <source_location>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -53,6 +54,7 @@ export module aspriteregistry;
 import aspritehandle;
 import sprite.pool;
 import atlas.texture;
+import core.logger;
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -140,9 +142,7 @@ namespace epochnamespace
         {
             if (!handle.is_valid() || !spritepool::is_alive(handle))
             {
-                std::cerr
-                    << "[SpriteRegistry] Rejecting invalid handle for '"
-                    << name << "'\n";
+                logger::warnf_loc("SpriteRegistry", std::source_location::current(), "Rejecting invalid handle for '{}'", name);
                 return;
             }
 
@@ -154,9 +154,7 @@ namespace epochnamespace
                 if (std::get<0>(entry) == handle &&
                     existingName != name)
                 {
-                    std::cerr
-                        << "[SpriteRegistry] Duplicate handle for '"
-                        << name << "'\n";
+                    logger::warnf_loc("SpriteRegistry", std::source_location::current(), "Duplicate handle for '{}'", name);
                     return;
                 }
             }
@@ -169,11 +167,16 @@ namespace epochnamespace
                 Entry{ handle, u0, v0, u1, v1, pivotX, pivotY });
 
 #if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
-            std::cout
-                << "[SpriteRegistry] Added '" << name
-                << "' handle=" << handle.id
-                << " UV=(" << u0 << "," << v0
-                << ")->(" << u1 << "," << v1 << ")\n";
+            logger::infof_loc(
+                "SpriteRegistry",
+                std::source_location::current(),
+                "Added '{}' handle={} UV=({}, {})->({}, {})",
+                name,
+                handle.id,
+                u0,
+                v0,
+                u1,
+                v1);
 #endif
         }
 

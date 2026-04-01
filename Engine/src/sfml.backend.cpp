@@ -6,7 +6,6 @@ module;
 #include <memory>
 #include <source_location>
 #include <string>
-#include <string_view>
 
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -20,19 +19,12 @@ module;
 
 #include <include/aengine.config.hpp>
 
-#ifdef min
-#   undef min
-#endif
-#ifdef max
-#   undef max
-#endif
-
 module sfml.backend;
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 import aengine.input;
-import atlas.manager;
 import atlas.texture;
+import core.context;
 import core.logger;
 import image.loader;
 import sfml.context;
@@ -51,15 +43,6 @@ namespace epochnamespace::sfmlbackend
 
         std::uint32_t default_add_atlas(const TextureAtlas& atlas) noexcept
         {
-            try
-            {
-                atlasmanager::ensure_uploaded(atlas);
-                atlasmanager::process_pending_uploads(core::ContextType::SFML);
-            }
-            catch (...)
-            {
-            }
-
             const int idx = atlas.get_index();
             return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
         }
@@ -76,86 +59,6 @@ namespace epochnamespace::sfmlbackend
             ctx->is_mouse_button_held = [](input::MouseButton button) { return input::is_mouse_button_held(button); };
             ctx->is_mouse_button_down = [](input::MouseButton button) { return input::is_mouse_button_down(button); };
         }
-
-        void* native_window_handle(const std::shared_ptr<core::Context>& ctx) noexcept
-        {
-            if (!ctx)
-                return nullptr;
-            if (auto handle = ctx->get_hwnd())
-                return handle;
-            if (ctx->windowData && ctx->windowData->hwnd)
-                return ctx->windowData->hwnd;
-            return nullptr;
-        }
-
-        void initialize_adapter()
-        {
-            auto current = core::get_current_render_context();
-            if (!current)
-                return;
-
-            const auto native = native_window_handle(current);
-            const unsigned w = static_cast<unsigned>((std::max)(1, current->width));
-            const unsigned h = static_cast<unsigned>((std::max)(1, current->height));
-
-            try
-            {
-                std::string windowTitle{};
-                if (current->windowData)
-                    windowTitle = current->windowData->titleNarrow;
-#if defined(_WIN32)
-                (void)sfmlcontext::sfml_initialize(
-                    current,
-                    reinterpret_cast<HWND>(native),
-                    w,
-                    h,
-                    current->onResize,
-                    windowTitle);
-#else
-                (void)sfmlcontext::sfml_initialize(
-                    current,
-                    native,
-                    w,
-                    h,
-                    current->onResize,
-                    windowTitle);
-#endif
-            }
-            catch (const std::exception& e)
-            {
-                logger::get(kLogSfml).logf(
-                    logger::LogLevel::Error,
-                    std::source_location::current(),
-                    "init exception: {}",
-                    e.what());
-            }
-            catch (...)
-            {
-                logger::get(kLogSfml).log(
-                    logger::LogLevel::Error,
-                    "init unknown exception",
-                    std::source_location::current());
-            }
-        }
-
-        void cleanup_adapter()
-        {
-            auto current = core::get_current_render_context();
-            if (!current)
-                return;
-
-            auto copy = current;
-            sfmlcontext::sfml_cleanup(copy);
-        }
-
-        bool process_adapter(
-            std::shared_ptr<core::Context> ctx,
-            core::CommandQueue& queue)
-        {
-            if (!ctx)
-                return false;
-            return sfmlcontext::sfml_process(ctx, queue);
-        }
     }
 
     void configure(const std::shared_ptr<core::Context>& ctx)
@@ -163,9 +66,70 @@ namespace epochnamespace::sfmlbackend
         if (!ctx)
             return;
 
-        ctx->initialize = detail::initialize_adapter;
-        ctx->cleanup = detail::cleanup_adapter;
-        ctx->process = detail::process_adapter;
+        ctx->initialize = []()
+        {
+            auto current = core::get_current_render_context();
+            if (!current)
+                return;
+
+            try
+            {
+                std::string windowTitle{};
+                if (current->windowData)
+                    windowTitle = current->windowData->titleNarrow;
+
+#if defined(_WIN32)
+                (void)sfmlcontext::sfml_initialize(
+                    current,
+                    reinterpret_cast<HWND>(current->get_hwnd()),
+                    static_cast<unsigned>((std::max)(1, current->width)),
+                    static_cast<unsigned>((std::max)(1, current->height)),
+                    current->onResize,
+                    windowTitle);
+#else
+                (void)sfmlcontext::sfml_initialize(
+                    current,
+                    current->get_hwnd(),
+                    static_cast<unsigned>((std::max)(1, current->width)),
+                    static_cast<unsigned>((std::max)(1, current->height)),
+                    current->onResize,
+                    windowTitle);
+#endif
+            }
+            catch (const std::exception& e)
+            {
+                logger::get(detail::kLogSfml).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "init exception: {}",
+                    e.what());
+            }
+            catch (...)
+            {
+                logger::get(detail::kLogSfml).log(
+                    logger::LogLevel::Error,
+                    "init unknown exception",
+                    std::source_location::current());
+            }
+        };
+
+        ctx->cleanup = []()
+        {
+            auto current = core::get_current_render_context();
+            if (!current)
+                return;
+
+            auto copy = current;
+            sfmlcontext::sfml_cleanup(copy);
+        };
+
+        ctx->process = [](std::shared_ptr<core::Context> current, core::CommandQueue& queue)
+        {
+            if (!current)
+                return false;
+            return sfmlcontext::sfml_process(current, queue);
+        };
+
         ctx->draw_sprite = sfmlcontext::draw_sprite;
         ctx->add_texture = &detail::default_add_texture;
         ctx->add_atlas = +[](const TextureAtlas& atlas) { return detail::default_add_atlas(atlas); };

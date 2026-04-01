@@ -25,7 +25,8 @@ module;
 
 export module core.logger;
 
-import core.timer;
+import core.log;
+import core.time;
 
 export namespace epochnamespace::logger
 {
@@ -95,10 +96,16 @@ export namespace epochnamespace::logger
             return static_cast<int>(msg) >= static_cast<int>(cur);
         }
 
-        inline std::mutex& console_mutex()
+        [[nodiscard]] constexpr epoch::core::log::level map_level(const LogLevel lvl) noexcept
         {
-            static std::mutex m{};
-            return m;
+            switch (lvl)
+            {
+            case LogLevel::INFO:  return epoch::core::log::level::info;
+            case LogLevel::WARN:  return epoch::core::log::level::warn;
+            case LogLevel::Error: return epoch::core::log::level::error;
+            case LogLevel::OFF:   return epoch::core::log::level::off;
+            }
+            return epoch::core::log::level::info;
         }
     }
 
@@ -168,40 +175,43 @@ export namespace epochnamespace::logger
 
             const bool include_src = m_include_source.load(std::memory_order_relaxed);
 
-            const std::string console_line = std::format(
-                "{} [{}] [{}] - {}",
-                timing::getCurrentTimeString(),
-                detail::level_text(lvl),
-                m_system,
-                msg);
+            const std::string message{ msg };
+            std::string console_message = message;
 
             std::string file_line;
             if (include_src)
             {
                 file_line = std::format(
                     "{} [{}] [{}] ({}:{}) - {}",
-                    timing::getCurrentTimeString(),
+                    epoch::core::time::system_time_string(),
                     detail::level_text(lvl),
                     m_system,
                     detail::filename_only(loc.file_name()),
                     loc.line(),
                     msg);
+
+                console_message = std::format(
+                    "({}:{}) - {}",
+                    detail::filename_only(loc.file_name()),
+                    loc.line(),
+                    message);
             }
             else
             {
-                file_line = console_line;
+                file_line = std::format(
+                    "{} [{}] [{}] - {}",
+                    epoch::core::time::system_time_string(),
+                    detail::level_text(lvl),
+                    m_system,
+                    message);
             }
 
             if (m_console_enabled.load(std::memory_order_relaxed))
             {
-                std::scoped_lock lock(detail::console_mutex());
-
-                FILE* stream = (lvl == LogLevel::Error) ? stderr : stdout;
-                std::fwrite(console_line.data(), 1, console_line.size(), stream);
-                std::fwrite("\n", 1, 1, stream);
-
-                if (m_flush_each.load(std::memory_order_relaxed))
-                    std::fflush(stream);
+                epoch::core::log::core_log_write(
+                    static_cast<std::uint32_t>(detail::map_level(lvl)),
+                    m_system.c_str(),
+                    console_message.c_str());
             }
 
             if (m_file_enabled.load(std::memory_order_relaxed))
@@ -271,6 +281,7 @@ export namespace epochnamespace::logger
         {
             std::scoped_lock lock(m_mutex);
             m_cfg = std::move(cfg);
+            apply_runtime_sink_locked();
 
             for (auto& [_, ptr] : m_systems)
                 ptr->configure(m_cfg);
@@ -279,6 +290,7 @@ export namespace epochnamespace::logger
         SystemLogger& system(const std::string_view name)
         {
             std::scoped_lock lock(m_mutex);
+            apply_runtime_sink_locked();
 
             const std::string key{ name };
             if (const auto it = m_systems.find(key); it != m_systems.end())
@@ -298,6 +310,12 @@ export namespace epochnamespace::logger
         }
 
     private:
+        void apply_runtime_sink_locked() const
+        {
+            epoch::core::log::enable_console(m_cfg.console_enabled);
+            epoch::core::log::set_level(detail::map_level(m_cfg.level));
+        }
+
         mutable std::mutex m_mutex{};
         LogConfig m_cfg{};
         std::unordered_map<std::string, std::unique_ptr<SystemLogger>> m_systems{};

@@ -21,6 +21,7 @@ module;
 module software.context;
 
 import core.commandline;
+import core.log;
 
 namespace epochnamespace::anativecontext
 {
@@ -214,10 +215,13 @@ namespace epochnamespace::anativecontext
             return;
 
         const bool wrote = detail::write_bmp(capturePath, framebuffer, width, height);
-        const char* streamMessage = wrote ? "Captured software frame" : "Failed to capture software frame";
-        std::FILE* stream = wrote ? stdout : stderr;
-        std::fprintf(stream, "%s: %s\n", streamMessage, capturePath.string().c_str());
-        std::fflush(stream);
+        const auto level = wrote ? epoch::core::log::level::info : epoch::core::log::level::warn;
+        const std::string message = std::string(wrote ? "Captured software frame: " : "Failed to capture software frame: ")
+            + capturePath.string();
+        epoch::core::log::write(
+            level,
+            "Software.Capture",
+            { message.c_str(), message.size() });
     }
 #endif
 }

@@ -52,6 +52,7 @@ module font.renderer;
 
 import atlas.manager;
 import atlas.texture;
+import core.logger;
 
 namespace epochnamespace::font
 {
@@ -101,13 +102,13 @@ namespace epochnamespace::font
 
         if (!load_and_bake_font(path, size_pt, baked_glyphs, metrics, kerning_pairs, raw_texture))
         {
-            std::cerr << "[FontRenderer] Failed to bake font '" << name << "' from '" << path << "'\n";
+            logger::error("FontRenderer", std::format("Failed to bake font '{}' from '{}'", name, path));
             return false;
         }
 
         if (raw_texture.empty())
         {
-            std::cerr << "[FontRenderer] Baked texture for font '" << name << "' is empty\n";
+            logger::error("FontRenderer", std::format("Baked texture for font '{}' is empty", name));
             return false;
         }
 
@@ -128,7 +129,7 @@ namespace epochnamespace::font
         auto* registrar = atlasmanager::get_registrar(atlas_name);
         if (!registrar)
         {
-            std::cerr << "[FontRenderer] Missing registrar for atlas '" << atlas_name << "'\n";
+            logger::error("FontRenderer", std::format("Missing registrar for atlas '{}'", atlas_name));
             return false;
         }
 
@@ -142,7 +143,7 @@ namespace epochnamespace::font
 
         if (!maybe_entry)
         {
-            std::cerr << "[FontRenderer] Failed to pack font '" << name << "' into shared atlas\n";
+            logger::error("FontRenderer", std::format("Failed to pack font '{}' into shared atlas", name));
             return false;
         }
 
@@ -252,28 +253,28 @@ namespace epochnamespace::font
 
         if (size_pt <= 0.0f)
         {
-            std::cerr << "[FontRenderer] Invalid font size '" << size_pt << "' requested for '" << ttf_path << "'\n";
+            logger::error("FontRenderer", std::format("Invalid font size '{}' requested for '{}'", size_pt, ttf_path));
             return false;
         }
 
         auto font_buffer = read_file_binary(ttf_path);
         if (font_buffer.empty())
         {
-            std::cerr << "[FontRenderer] Unable to read font file '" << ttf_path << "'\n";
+            logger::error("FontRenderer", std::format("Unable to read font file '{}'", ttf_path));
             return false;
         }
 
         const int font_offset = stbtt_GetFontOffsetForIndex(font_buffer.data(), 0);
         if (font_offset < 0)
         {
-            std::cerr << "[FontRenderer] Invalid font offset for '" << ttf_path << "'\n";
+            logger::error("FontRenderer", std::format("Invalid font offset for '{}'", ttf_path));
             return false;
         }
 
         stbtt_fontinfo font{};
         if (!stbtt_InitFont(&font, font_buffer.data(), font_offset))
         {
-            std::cerr << "[FontRenderer] Failed to initialise font info for '" << ttf_path << "'\n";
+            logger::error("FontRenderer", std::format("Failed to initialise font info for '{}'", ttf_path));
             return false;
         }
 
@@ -295,7 +296,7 @@ namespace epochnamespace::font
         stbtt_pack_context pack_context{};
         if (!stbtt_PackBegin(&pack_context, mono_bitmap.data(), pack_width, pack_height, pack_width, 3, nullptr))
         {
-            std::cerr << "[FontRenderer] Failed to begin packing for font '" << ttf_path << "'\n";
+            logger::error("FontRenderer", std::format("Failed to begin packing for font '{}'", ttf_path));
             return false;
         }
 
@@ -333,7 +334,7 @@ namespace epochnamespace::font
         if (!stbtt_PackFontRanges(&pack_context, font_buffer.data(), 0, pack_ranges.data(), static_cast<int>(pack_ranges.size())))
         {
             stbtt_PackEnd(&pack_context);
-            std::cerr << "[FontRenderer] Failed to pack glyph ranges for font '" << ttf_path << "'\n";
+            logger::error("FontRenderer", std::format("Failed to pack glyph ranges for '{}'", ttf_path));
             return false;
         }
 
@@ -349,7 +350,7 @@ namespace epochnamespace::font
 
         if (max_x1 <= 0 || max_y1 <= 0)
         {
-            std::cerr << "[FontRenderer] Packed bitmap for font '" << ttf_path << "' is empty\n";
+            logger::error("FontRenderer", std::format("Packed bitmap for font '{}' is empty", ttf_path));
             return false;
         }
 

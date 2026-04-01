@@ -413,7 +413,7 @@ export namespace epochnamespace::sfmlcontext
 
         if (!sfmlcontext.window || !sfmlcontext.window->isOpen())
         {
-            std::cerr << "[ SFML ] - Failed to create SFML window\n";
+            logger::error("SFML", "Failed to create SFML window");
             return false;
         }
 
@@ -457,14 +457,14 @@ export namespace epochnamespace::sfmlcontext
         // Ensure the SFML context is current *on this thread* before capturing HGLRC.
         if (!sfmlcontext.window->setActive(true))
         {
-            std::cerr << "[ SFML ] - Failed to activate SFML window for context capture\n";
+            logger::error("SFML", "Failed to activate SFML window for context capture");
             return false;
         }
 
         sfmlcontext.glContext = wglGetCurrentContext();
         if (!sfmlcontext.glContext)
         {
-            std::cerr << "[ SFML ] - Failed to get OpenGL context\n";
+            logger::error("SFML", "Failed to get OpenGL context");
             sfmlcontext.window->setActive(false);
             return false;
         }
@@ -523,15 +523,12 @@ export namespace epochnamespace::sfmlcontext
         sfmlcontext.running = true;
         sfmlcontext.gpuAtlasesReleased = false;
 
-#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SFML_CONFIRMATION_LOGS
-#if defined(_WIN32)
-        std::cout << "[ SFML ] - Initialized. HWND=" << sfmlcontext.hwnd
-            << " (" << sfmlcontext.width << "x" << sfmlcontext.height << ")\n";
-#else
-        std::cout << "[ SFML ] - Initialized (" << sfmlcontext.width
-            << "x" << sfmlcontext.height << ")\n";
-#endif
-#endif
+        logger::info(
+            "SFML",
+            std::string("Initialized ")
+                + std::to_string(sfmlcontext.width)
+                + "x"
+                + std::to_string(sfmlcontext.height));
 
         atlasmanager::register_backend_uploader(
             core::ContextType::SFML,
@@ -592,7 +589,7 @@ export namespace epochnamespace::sfmlcontext
                 return false;
             }
 #endif
-            std::cerr << "[SFMLRender] Failed to activate SFML window\n";
+            logger::error("SFML", "Failed to activate SFML window during render");
             sfmlcontext.running = false;
             state::s_sfmlstate.running = false;
             return false;

@@ -36,6 +36,8 @@
 #include <string_view>
 #include <vector>
 
+import core.log;
+
 namespace epochnamespace::compiler
 {
     // Builds a single TU into a shared library (DLL/.so).
@@ -94,12 +96,19 @@ namespace epochnamespace::compiler
             cmd.push_back(' ');
         }
 
-        std::cout << "[compiler] running: " << cmd << '\n';
+        epoch::core::log::core_log_write(
+            static_cast<std::uint32_t>(epoch::core::log::level::info),
+            "Compiler",
+            cmd.c_str());
 
         const int result = std::system(cmd.c_str());
         if (result != 0)
         {
-            std::cerr << "[compiler] clang failed with code: " << result << '\n';
+            const std::string errorMessage = "[compiler] clang failed with code: " + std::to_string(result);
+            epoch::core::log::core_log_write(
+                static_cast<std::uint32_t>(epoch::core::log::level::error),
+                "Compiler",
+                errorMessage.c_str());
             return false;
         }
 

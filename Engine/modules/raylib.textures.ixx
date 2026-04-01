@@ -37,6 +37,7 @@ module;
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <source_location>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -64,6 +65,7 @@ import atlas.manager;
 import atlas.texture;
 import image.loader;
 import atexture;
+import core.logger;
 import raylib.api;
 import raylib.state;
 
@@ -251,8 +253,12 @@ namespace epochnamespace::raylibtextures
         if (newTex.id == 0)
         {
             // Raylib already printed warnings; add one line of ours.
-            std::cerr << "[ RayLib ] - Upload failed for atlas '" << atlas.name
-                << "' (version " << atlas.version << ")\n";
+            logger::errorf_loc(
+                "Raylib",
+                std::source_location::current(),
+                "Upload failed for atlas '{}' (version {})",
+                atlas.name,
+                atlas.version);
             {
                 std::scoped_lock lock(backend.gpuMutex);
                 auto it = backend.gpu_atlases.find(&atlas);
@@ -310,9 +316,13 @@ namespace epochnamespace::raylibtextures
 #if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
         if (committedUpload)
         {
-            std::cout << "[ Raylib ] - Uploaded atlas '" << atlas.name
-                << "' (tex id " << committedTextureId
-                << ", version " << atlas.version << ")\n";
+            logger::infof_loc(
+                "Raylib",
+                std::source_location::current(),
+                "Uploaded atlas '{}' (tex id {}, version {})",
+                atlas.name,
+                committedTextureId,
+                atlas.version);
         }
 #endif
     }

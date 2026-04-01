@@ -37,6 +37,7 @@ module;
 #include <coroutine>
 #include <memory>
 #include <iostream>
+#include <source_location>
 #include <algorithm>
 #include <cstdint>
 
@@ -54,6 +55,7 @@ import aspritehandle;          // SpriteHandle
 import aengine.systems;         // Task
 import ampmcboundedqueue;
 import taskgraph.dotsystem;      // taskgraph::TaskGraph, Node
+import core.logger;
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -87,7 +89,7 @@ namespace epochnamespace::spritepool
         lastAllocIndex.store(0, std::memory_order_relaxed);
 
 #if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
-        std::cerr << "[SpritePool] Initialized with capacity " << capacity << "\n";
+        logger::infof_loc("SpritePool", std::source_location::current(), "Initialized with capacity {}", capacity);
 #endif
     }
 
@@ -97,14 +99,14 @@ namespace epochnamespace::spritepool
         generations.clear();
         lastAllocIndex.store(0, std::memory_order_relaxed);
         capacity = 0;
-        std::cerr << "[SpritePool] Cleared\n";
+        logger::info("SpritePool", "Cleared");
     }
 
     export inline void reset() noexcept
     {
         if (capacity == 0)
         {
-            std::cerr << "[SpritePool] Warning: reset on uninitialized pool\n";
+            logger::warn("SpritePool", "Reset on uninitialized pool.");
             return;
         }
 
@@ -113,14 +115,14 @@ namespace epochnamespace::spritepool
         lastAllocIndex.store(0, std::memory_order_relaxed);
 
 #if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
-        std::cerr << "[SpritePool] Reset\n";
+        logger::info("SpritePool", "Reset");
 #endif
     }
 
     export inline void set_task_graph(taskgraph::TaskGraph* graph) noexcept
     {
         g_taskGraph = graph;
-        std::cerr << "[SpritePool] Task graph set\n";
+        logger::info("SpritePool", "Task graph set.");
     }
 
     export inline void validate_pool() noexcept
@@ -129,8 +131,7 @@ namespace epochnamespace::spritepool
         for (std::size_t i = 0; i < capacity; ++i)
             if (usedFlags[i] == 0) ++freeCount;
 
-        std::cerr << "[SpritePool] " << freeCount
-            << " free slots out of " << capacity << "\n";
+        logger::infof_loc("SpritePool", std::source_location::current(), "{} free slots out of {}", freeCount, capacity);
     }
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

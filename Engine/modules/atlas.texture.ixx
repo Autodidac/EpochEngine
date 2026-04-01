@@ -44,6 +44,7 @@ module;
 #include <shared_mutex>
 #include <unordered_map>
 #include <memory>
+#include <source_location>
 #include <utility>
 
 export module atlas.texture;
@@ -61,6 +62,7 @@ export module atlas.texture;
 // ────────────────────────────────────────────────────────────
 
 import atexture;        // provides Texture
+import core.logger;
 
 // ────────────────────────────────────────────────────────────
 // MODULE EXPORTS
@@ -262,20 +264,20 @@ namespace epochnamespace
     inline std::optional<AtlasEntry> TextureAtlas::add_entry(const std::string& id, const Texture& tex)
     {
         if (tex.width == 0 || tex.height == 0 || tex.pixels.empty()) {
-            std::cerr << "[Atlas] Rejected empty texture '" << id << "'\n";
+            logger::warnf_loc("Epoch.Atlas", std::source_location::current(), "Rejected empty texture '{}'", id);
             return std::nullopt;
         }
 
         std::unique_lock<std::recursive_mutex> lock(entriesMutex);
 
         if (lookup.contains(id)) {
-            std::cerr << "[Atlas] Duplicate ID: '" << id << "'\n";
+            logger::warnf_loc("Epoch.Atlas", std::source_location::current(), "Duplicate ID: '{}'", id);
             return std::nullopt;
         }
 
         auto pos = try_pack(tex.width, tex.height);
         if (!pos) {
-            std::cerr << "[Atlas] Failed to pack '" << id << "'\n";
+            logger::warnf_loc("Epoch.Atlas", std::source_location::current(), "Failed to pack '{}'", id);
             return std::nullopt;
         }
 
@@ -305,8 +307,7 @@ namespace epochnamespace
         lookup.emplace(id, region);
         ++version;
 #if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
-        std::cerr << "[Atlas] Added '" << id << "' at (" << x << ", " << y
-            << ") EntryIndex=" << entryIndex << "\n";
+        logger::infof_loc("Epoch.Atlas", std::source_location::current(), "Added '{}' at ({}, {}) EntryIndex={}", id, x, y, entryIndex);
 #endif
         return entry;
     }
@@ -321,12 +322,12 @@ namespace epochnamespace
         std::unique_lock<std::recursive_mutex> lock(entriesMutex);
 
         if (w <= 0 || h <= 0) {
-            std::cerr << "[Atlas] Invalid slice size for '" << id << "'\n";
+            logger::warnf_loc("Epoch.Atlas", std::source_location::current(), "Invalid slice size for '{}'", id);
             return std::nullopt;
         }
 
         if (lookup.contains(id)) {
-            std::cerr << "[Atlas] Duplicate ID: '" << id << "'\n";
+            logger::warnf_loc("Epoch.Atlas", std::source_location::current(), "Duplicate ID: '{}'", id);
             return std::nullopt;
         }
 
@@ -356,9 +357,16 @@ namespace epochnamespace
         ++version;
 
 #if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
-        std::cerr << "[Atlas] Added slice entry '" << id << "' at ("
-            << x << ", " << y << ") size [" << w << "x" << h << "] "
-            << "EntryIndex=" << entryIndex << "\n";
+        logger::infof_loc(
+            "Epoch.Atlas",
+            std::source_location::current(),
+            "Added slice entry '{}' at ({}, {}) size [{}x{}] EntryIndex={}",
+            id,
+            x,
+            y,
+            w,
+            h,
+            entryIndex);
 #endif
         return entry;
     }
@@ -389,9 +397,13 @@ namespace epochnamespace
             const size_t requiredBytes = static_cast<size_t>(entry.texWidth)
                 * static_cast<size_t>(entry.texHeight) * 4;
             if (entry.pixels.size() < requiredBytes) {
-                std::cerr << "[Atlas] Skipping rebuild for entry '" << entry.name
-                    << "' due to insufficient pixel data (have "
-                    << entry.pixels.size() << ", need " << requiredBytes << ")\n";
+                logger::warnf_loc(
+                    "Epoch.Atlas",
+                    std::source_location::current(),
+                    "Skipping rebuild for entry '{}' due to insufficient pixel data (have {}, need {})",
+                    entry.name,
+                    entry.pixels.size(),
+                    requiredBytes);
                 continue;
             }
 
