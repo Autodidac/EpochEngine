@@ -38,7 +38,7 @@ module;
 #include <vector>
 #include <utility>
 
-export module aallocator;
+export module utility.allocator;
 
 export namespace epochnamespace::mem
 {

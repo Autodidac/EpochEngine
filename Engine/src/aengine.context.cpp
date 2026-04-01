@@ -65,7 +65,7 @@ import aengine.platform;
  import atlas.manager;
  import atlas.texture;
  import image.loader;
- import aatomicfunction;
+import utility.atomicfunction;
 
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
 import vulkan.context;

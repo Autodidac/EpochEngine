@@ -36,7 +36,7 @@ module;
 #include <stdexcept>
 #include <utility>
 
-export module aatomicfunction;
+export module utility.atomicfunction;
 
 export namespace epochnamespace::core {
 

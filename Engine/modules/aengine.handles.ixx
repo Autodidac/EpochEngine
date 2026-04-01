@@ -30,5 +30,5 @@
  ***********************************************/
 module;
 
-export module aenginehandles;
+export module aengine.handles;
 

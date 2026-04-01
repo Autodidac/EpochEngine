@@ -71,7 +71,7 @@ export module core.context;
 import context.type;
 import context.commandqueue;
 import context.window;
-import aatomicfunction;
+import utility.atomicfunction;
 import aengine.input;
 import atlas.texture;
 import atlas.manager;   // reacquire atlas vector inside queued draw
