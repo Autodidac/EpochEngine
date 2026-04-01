@@ -250,7 +250,7 @@ namespace
                 s_height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-            ::ShowWindow(s_hostWindow, SW_HIDE);
+            ::ShowWindow(s_hostWindow, SW_SHOWNA);
             apply_view_size();
         }
 

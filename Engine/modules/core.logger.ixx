@@ -178,52 +178,36 @@ export namespace epochnamespace::logger
             const std::string message{ msg };
             std::string console_message = message;
 
-            std::string file_line;
-            if (include_src)
-            {
-                file_line = std::format(
-                    "{} [{}] [{}] ({}:{}) - {}",
-                    epoch::core::time::system_time_string(),
-                    detail::level_text(lvl),
-                    m_system,
-                    detail::filename_only(loc.file_name()),
-                    loc.line(),
-                    msg);
+            std::scoped_lock lock(m_mutex);
 
-                console_message = std::format(
-                    "({}:{}) - {}",
-                    detail::filename_only(loc.file_name()),
-                    loc.line(),
-                    message);
-            }
-            else
+            const auto file_name = std::string(detail::filename_only(loc.file_name()));
+            const auto line = loc.line();
+            const auto repeat_key = std::format(
+                "{}|{}|{}|{}|{}",
+                static_cast<int>(lvl),
+                include_src ? 1 : 0,
+                file_name,
+                line,
+                message);
+
+            if (m_repeat.active && m_repeat.key == repeat_key)
             {
-                file_line = std::format(
-                    "{} [{}] [{}] - {}",
-                    epoch::core::time::system_time_string(),
-                    detail::level_text(lvl),
-                    m_system,
-                    message);
+                ++m_repeat.suppressed;
+                return;
             }
 
-            if (m_console_enabled.load(std::memory_order_relaxed))
-            {
-                epoch::core::log::core_log_write(
-                    static_cast<std::uint32_t>(detail::map_level(lvl)),
-                    m_system.c_str(),
-                    console_message.c_str());
-            }
+            flush_repeat_locked();
 
-            if (m_file_enabled.load(std::memory_order_relaxed))
-            {
-                std::scoped_lock lock(m_mutex);
-                if (m_file.is_open())
-                {
-                    m_file << file_line << '\n';
-                    if (m_flush_each.load(std::memory_order_relaxed))
-                        m_file.flush();
-                }
-            }
+            m_repeat.active = true;
+            m_repeat.key = repeat_key;
+            m_repeat.level = lvl;
+            m_repeat.include_source = include_src;
+            m_repeat.file_name = file_name;
+            m_repeat.line = line;
+            m_repeat.message = message;
+            m_repeat.suppressed = 0;
+
+            write_line_locked(lvl, include_src, file_name, line, message);
         }
 
         template <class... Args>
@@ -254,11 +238,96 @@ export namespace epochnamespace::logger
         }
 
     private:
+        struct RepeatState
+        {
+            bool active = false;
+            LogLevel level = LogLevel::INFO;
+            bool include_source = true;
+            std::string key{};
+            std::string file_name{};
+            std::uint_least32_t line = 0;
+            std::string message{};
+            std::size_t suppressed = 0;
+        };
+
+        void write_line_locked(
+            const LogLevel lvl,
+            const bool include_src,
+            const std::string_view file_name,
+            const std::uint_least32_t line,
+            const std::string_view message)
+        {
+            std::string console_message{ message };
+            std::string file_line;
+
+            if (include_src)
+            {
+                file_line = std::format(
+                    "{} [{}] [{}] ({}:{}) - {}",
+                    epoch::core::time::system_time_string(),
+                    detail::level_text(lvl),
+                    m_system,
+                    file_name,
+                    line,
+                    message);
+
+                console_message = std::format(
+                    "({}:{}) - {}",
+                    file_name,
+                    line,
+                    message);
+            }
+            else
+            {
+                file_line = std::format(
+                    "{} [{}] [{}] - {}",
+                    epoch::core::time::system_time_string(),
+                    detail::level_text(lvl),
+                    m_system,
+                    message);
+            }
+
+            if (m_console_enabled.load(std::memory_order_relaxed))
+            {
+                epoch::core::log::core_log_write(
+                    static_cast<std::uint32_t>(detail::map_level(lvl)),
+                    m_system.c_str(),
+                    console_message.c_str());
+            }
+
+            if (m_file_enabled.load(std::memory_order_relaxed) && m_file.is_open())
+            {
+                m_file << file_line << '\n';
+                if (m_flush_each.load(std::memory_order_relaxed))
+                    m_file.flush();
+            }
+        }
+
+        void flush_repeat_locked()
+        {
+            if (!m_repeat.active || m_repeat.suppressed == 0)
+                return;
+
+            write_line_locked(
+                m_repeat.level,
+                m_repeat.include_source,
+                m_repeat.file_name,
+                m_repeat.line,
+                std::format(
+                    "{} (repeated {} more times)",
+                    m_repeat.message,
+                    m_repeat.suppressed));
+
+            m_repeat.suppressed = 0;
+        }
+
         void close_locked()
         {
+            flush_repeat_locked();
             if (m_file.is_open())
                 m_file.close();
             m_path.clear();
+            m_repeat = {};
         }
 
         std::string m_system;
@@ -272,6 +341,7 @@ export namespace epochnamespace::logger
         std::atomic<bool> m_include_source{ true };
         std::atomic<bool> m_console_enabled{ false };
         std::atomic<bool> m_file_enabled{ true };
+        RepeatState m_repeat{};
     };
 
     class LoggerHub final
