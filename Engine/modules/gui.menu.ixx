@@ -74,6 +74,8 @@ namespace gui = epochnamespace::gui;
 export namespace epochnamespace::menu
 {
     inline constexpr std::string_view kLogSys = "Epoch.Menu";
+    inline bool g_launcherMenuInitLogged = false;
+    inline bool g_updaterShellInitLogged = false;
 
     enum class Choice {
         UpdateLatest,
@@ -392,9 +394,9 @@ export namespace epochnamespace::menu
                 recompute_layout(ctx, w, h);
 
                 initialized = true;
-                if (!initializationLogEmitted)
+                if (!g_updaterShellInitLogged)
                 {
-                    initializationLogEmitted = true;
+                    g_updaterShellInitLogged = true;
                     logger::get(kLogSys).log(
                         logger::LogLevel::INFO,
                         "Initialized updater-shell launcher.",
@@ -416,9 +418,9 @@ export namespace epochnamespace::menu
             recompute_layout(ctx, w, h);
 
             initialized = true;
-            if (!initializationLogEmitted)
+            if (!g_launcherMenuInitLogged)
             {
-                initializationLogEmitted = true;
+                g_launcherMenuInitLogged = true;
                 logger::get(kLogSys).log(
                     logger::LogLevel::INFO,
                     "Initialized launcher menu with " +

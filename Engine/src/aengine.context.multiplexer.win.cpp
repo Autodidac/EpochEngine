@@ -1396,49 +1396,8 @@ namespace epochnamespace::core
 
         struct ResetGuard { ~ResetGuard() { MultiContextManager::SetCurrent(nullptr); } } resetGuard;
 
-        // Raylib/SDL must be created+initialized on the SAME thread that will render them.
-		// they are passed the HWND from outside, but they create their own internal windowing context.
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-        if (ctx->type == ContextType::SDL)
-        {
-#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
-                std::source_location::current(),
-                "SDL init. host={}",
-                static_cast<void*>(win.hwnd));
-#endif
-            epochnamespace::sdlcontext::sdl_initialize(
-                ctx,
-                win.hwnd,
-                static_cast<unsigned>(ctx->width),
-                static_cast<unsigned>(ctx->height),
-                win.onResize ? win.onResize : ctx->onResize,
-                win.titleNarrow);
-        }
-#endif
-#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-        if (ctx->type == ContextType::SFML)
-        {
-#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
-                std::source_location::current(),
-                "SFML init. host={}",
-                static_cast<void*>(win.hwnd));
-#endif
-            const bool ok = epochnamespace::sfmlcontext::sfml_initialize(
-                ctx,
-                win.hwnd,
-                static_cast<unsigned>(ctx->width),
-                static_cast<unsigned>(ctx->height),
-                win.onResize ? win.onResize : ctx->onResize,
-                win.titleNarrow
-            );
-
-            if (!ok) { win.running = false; return; }
-        }
-#endif
+        // Raylib must be created+initialized on the SAME thread that will render it.
+		// it is passed the HWND from outside, but it creates its own internal windowing context.
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         if (ctx->type == ContextType::RayLib)
         {
@@ -1467,15 +1426,8 @@ namespace epochnamespace::core
 
 		// skipGenericInit for backends that do their own init above
         const bool skipGenericInit =
-#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-            (ctx->type == ContextType::SFML) ||
-#endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
             (ctx->type == ContextType::RayLib) ||
-#endif
-
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-            (ctx->type == ContextType::SDL) ||
 #endif
             false;
 
