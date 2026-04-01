@@ -68,6 +68,7 @@
 #   include <glad/glad.h>
 #endif
 
+
 import aengine.platform;
 import utility.string_converter;
 
@@ -87,14 +88,8 @@ import opengl.context;
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 import software.context;
 #endif
-#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-import sfml.context;
-#endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 import raylib.context;
-#endif
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-import sdl.context;
 #endif
 
 #if defined(_WIN32)
@@ -1424,7 +1419,7 @@ namespace epochnamespace::core
         }
 #endif
 
-		// skipGenericInit for backends that do their own init above
+        // skipGenericInit for backends that do their own init above
         const bool skipGenericInit =
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
             (ctx->type == ContextType::RayLib) ||
@@ -1462,7 +1457,7 @@ namespace epochnamespace::core
                     });
             }
 
-                                    if (ctx->process) keepRunning = ctx->process_safe(ctx, win.commandQueue);
+            if (ctx->process) keepRunning = ctx->process_safe(ctx, win.commandQueue);
             else win.commandQueue.drain();
 
             if (!keepRunning)
