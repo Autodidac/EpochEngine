@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -32,9 +32,9 @@ module;
 
 // NOTE:
 // This is the *interface* module. It must not include <windows.h> or <raylib.h>.
-// The implementation lives in a normal TU: src/acontext.raylib.bridge.cpp.
+// The implementation lives in a normal TU/module implementation unit.
 
-#include <include/aengine.config.hpp> // for EPOCH_USING_RAYLIB
+#include <include/aengine.config.hpp>
 #include <cstdint>
 
 export module raylib.api;
@@ -43,9 +43,6 @@ export module raylib.api;
 
 export namespace epochnamespace::raylib_api
 {
-    // ------------------------------------------------------------
-    // ABI-stable mirror types (match raylib's public structs)
-    // ------------------------------------------------------------
     struct Color
     {
         std::uint8_t r{};
@@ -93,9 +90,6 @@ export namespace epochnamespace::raylib_api
         int format{};
     };
 
-    // ------------------------------------------------------------
-    // Constants (subset; extend as needed)
-    // ------------------------------------------------------------
     extern const Color raywhite;
     extern const Color white;
 
@@ -160,9 +154,6 @@ export namespace epochnamespace::raylib_api
 
     extern const int pixelformat_rgba8;
 
-    // ------------------------------------------------------------
-    // Functions (implemented in acontext.raylib.bridge.cpp)
-    // ------------------------------------------------------------
     void set_config_flags(unsigned int flags);
     void set_trace_log_level(int level);
     void init_window(int w, int h, const char* title);
@@ -191,10 +182,10 @@ export namespace epochnamespace::raylib_api
     void set_target_fps(int fps);
     void set_window_title(const char* title);
 
-    bool  is_key_down(int k);
-    bool  is_mouse_button_down(int b);
-    int   get_mouse_x();
-    int   get_mouse_y();
+    bool is_key_down(int k);
+    bool is_mouse_button_down(int b);
+    int get_mouse_x();
+    int get_mouse_y();
     float get_mouse_wheel_move();
     Vector2 get_mouse_position();
     void set_mouse_offset(int ox, int oy);
@@ -215,5 +206,5 @@ export namespace epochnamespace::raylib_api
         Vector2 origin,
         float rotation,
         Color tint);
-} // namespace epochnamespace::raylib_api
+}
 #endif

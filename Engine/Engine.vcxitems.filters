@@ -344,6 +344,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.backend.ixx">
+      <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.renderer.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
@@ -351,6 +354,9 @@
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.context.ixx">
+      <Filter>Module Files\ixx\core\context\backends\sdl</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.backend.ixx">
       <Filter>Module Files\ixx\core\context\backends\sdl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.renderer.ixx">
@@ -378,6 +384,9 @@
       <Filter>Module Files\ixx\core\context\backends\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context.ixx">
+      <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.backend.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aopenglfreetype.ixx">
@@ -408,6 +417,9 @@
       <Filter>Module Files\ixx\core\context\backends\noop</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.context.ixx">
+      <Filter>Module Files\ixx\core\context\backends\sfml</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.backend.ixx">
       <Filter>Module Files\ixx\core\context\backends\sfml</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.renderer.ixx">
@@ -495,6 +507,12 @@
       <Filter>Module Files\ixx\core\networking</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.state.ixx">
+      <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.capture.ixx">
+      <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.preview.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascripting.system.ixx">
@@ -689,6 +707,60 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.cpp">
       <Filter>Source Files\core\context</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.context.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.init.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.process.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.cleanup.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_context_detail.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_opengl.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_sfml.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_sdl.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_raylib.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_software.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_vulkan.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_capture.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_draw.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_present.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_preview.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_render.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context_buffers.cpp">
       <Filter>Source Files\core\context\vulkan</Filter>
     </ClCompile>
@@ -845,6 +917,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.ai.cpp">
       <Filter>Source Files\core\epoch\ai</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx">
+      <Filter>Module Files\ixx\core</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
-

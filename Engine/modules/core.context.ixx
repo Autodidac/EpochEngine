@@ -61,6 +61,12 @@ module;
 
     // Optional: if you still need your framework helpers, include it AFTER windows.h
 #   include <include/aframework.hpp>
+#   ifdef min
+#       undef min
+#   endif
+#   ifdef max
+#       undef max
+#   endif
 #endif
 
 export module core.context;
@@ -551,6 +557,6 @@ namespace epochnamespace::core
 
     export extern void InitializeAllContexts();
     export std::shared_ptr<Context> CloneContext(const Context& prototype);
-    void AddContextForBackend(core::ContextType type, std::shared_ptr<Context> context);
+    export void AddContextForBackend(core::ContextType type, std::shared_ptr<Context> context);
     bool ProcessAllContexts();
 } // namespace epochnamespace::core

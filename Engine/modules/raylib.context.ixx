@@ -39,10 +39,11 @@ module;
 #include <memory>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#if !defined(_WIN32)
+#include <thread>
+#endif
 
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -59,7 +60,15 @@ module;
 //#   undef CloseWindow
 
 #   include <wingdi.h> // HGLRC + wgl*
+#   ifdef min
+#       undef min
+#   endif
+#   ifdef max
+#       undef max
+#   endif
 #endif
+
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 export module raylib.context;
 
@@ -94,6 +103,9 @@ namespace epochnamespace::raylibcontext
 #if defined(_WIN32)
     namespace detail
     {
+        [[nodiscard]] inline unsigned long current_thread_token() noexcept { return ::GetCurrentThreadId(); }
+        inline void sleep_short_ms(const unsigned long milliseconds) noexcept { ::Sleep(milliseconds); }
+
         [[nodiscard]] inline HGLRC current_context() noexcept { return ::wglGetCurrentContext(); }
         [[nodiscard]] inline HDC   current_dc() noexcept { return ::wglGetCurrentDC(); }
 
@@ -239,6 +251,17 @@ namespace epochnamespace::raylibcontext
                 ::PostMessageW(st.parent, WM_SIZE, 0, MAKELPARAM(st.width, st.height));
         }
 
+    }
+#endif
+
+#if !defined(_WIN32)
+    namespace detail
+    {
+        [[nodiscard]] inline std::thread::id current_thread_token() noexcept { return std::this_thread::get_id(); }
+        inline void sleep_short_ms(const unsigned long milliseconds) noexcept
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+        }
     }
 #endif
 
@@ -462,7 +485,11 @@ namespace epochnamespace::raylibcontext
 #endif
 
         st.owner_ctx = ctx.get();
-        st.owner_thread = std::this_thread::get_id();
+#if defined(_WIN32)
+        st.owner_thread_id = detail::current_thread_token();
+#else
+        st.owner_thread = detail::current_thread_token();
+#endif
         st.userResize = std::move(resizeCallback);
 
 #if defined(_WIN32)
@@ -525,7 +552,7 @@ namespace epochnamespace::raylibcontext
         {
             epochnamespace::raylib_api::begin_drawing();
             epochnamespace::raylib_api::end_drawing();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            detail::sleep_short_ms(10);
             adoptedHwnd = static_cast<HWND>(epochnamespace::raylib_api::get_window_handle());
         }
         if (adoptedHwnd)
@@ -693,7 +720,7 @@ namespace epochnamespace::raylibcontext
             if (!st.cleanupIssued)
             {
 #if defined(_WIN32)
-                const bool on_owner_thread = (st.owner_thread == std::this_thread::get_id());
+                const bool on_owner_thread = (st.owner_thread_id == detail::current_thread_token());
 #else
                 const bool on_owner_thread = true;
 #endif
@@ -886,7 +913,7 @@ namespace epochnamespace::raylibcontext
             return;
 
 #if defined(_WIN32)
-        const bool on_owner_thread = (st.owner_thread == std::this_thread::get_id());
+        const bool on_owner_thread = (st.owner_thread_id == detail::current_thread_token());
 #else
         const bool on_owner_thread = true;
 #endif
@@ -917,6 +944,11 @@ namespace epochnamespace::raylibcontext
     export inline int raylib_get_height()
     {
         return static_cast<int>(epochnamespace::raylibstate::s_raylibstate.height);
+    }
+
+    export inline bool raylib_is_running() noexcept
+    {
+        return epochnamespace::raylibstate::s_raylibstate.running;
     }
 
     export inline epochnamespace::raylib_api::Vector2 raylib_get_mouse_position()

@@ -45,8 +45,6 @@ module;
 // -----------------------------------------------------------------------------
 // Global module fragment: macros + C headers MUST live here.
 // -----------------------------------------------------------------------------
-#include <include/aengine.config.hpp>
-
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -63,6 +61,8 @@ module;
 #    undef max
 #  endif
 #endif
+
+#include <include/aengine.config.hpp>
 
 #define SFML_STATIC
 #include <SFML/Graphics/RenderWindow.hpp>

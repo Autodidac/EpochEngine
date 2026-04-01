@@ -266,6 +266,12 @@ Engine/modules/software.quad.ixx	C++20 module interface.
 Engine/modules/software.renderer.ixx	C++20 module interface.
 Engine/modules/software.state.ixx	C++20 module interface.
 Engine/modules/software.textures.ixx	C++20 module interface.
+Engine/src/software.context.cpp	C/C++ source implementation.
+Engine/src/software.context_draw.cpp	C/C++ source implementation.
+Engine/src/software.context_present.cpp	C/C++ source implementation.
+Engine/src/software.context_preview.cpp	C/C++ source implementation.
+Engine/src/software.context_render.cpp	C/C++ source implementation.
+Engine/src/software_context_detail.hpp	C/C++ header.
 Engine/modules/vulkan.camera.ixx	C++20 module interface.
 Engine/modules/vulkan.context.ixx	C++20 module interface.
 Engine/modules/vulkan.context_api.ixx	C++20 module interface.

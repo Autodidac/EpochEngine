@@ -34,7 +34,10 @@ module;
 #include <bitset>
 #include <cstdint>
 #include <functional>
+
+#if !defined(_WIN32)
 #include <thread>
+#endif
 
 #include <include/aengine.config.hpp>
 
@@ -89,7 +92,11 @@ namespace epochnamespace::raylibstate
 
         // Owning engine context + thread
         epochnamespace::core::Context* owner_ctx = nullptr;
+#if defined(_WIN32)
+        unsigned long owner_thread_id = 0;
+#else
         std::thread::id owner_thread{};
+#endif
 
         // Optional user resize callback (engine-driven only)
         std::function<void(int, int)> onResize{};

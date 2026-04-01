@@ -1,6 +1,8 @@
-#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-
 module;
+
+#include "../include/aengine.config.hpp"
+
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 /************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
@@ -34,8 +36,6 @@ module;
  ***********************************************/
 
 #include <cstdint>
-#include "../include/aengine.config.hpp"
-
  // IMPORTANT:
  // This TU is the *only* place that should include <raylib.h>.
  // Keep Win32 headers out of here to avoid symbol collisions:
@@ -48,7 +48,6 @@ module;
 #include <raylib.h>
 
 module raylib.api;
-
 namespace epochnamespace::raylib_api
 {
     const Color raywhite = Color{ ::RAYWHITE.r, ::RAYWHITE.g, ::RAYWHITE.b, ::RAYWHITE.a };

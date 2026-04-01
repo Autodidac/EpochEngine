@@ -53,8 +53,6 @@ module;
 // SDL wants this defined BEFORE including SDL headers.
 #define SDL_MAIN_HANDLED
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
-
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -63,10 +61,17 @@ module;
 #    define NOMINMAX
 #  endif
 #  include <windows.h>   // HWND, RECT, LONG_PTR, SetParent, GetWindowLongPtr, etc.
+#  ifdef min
+#    undef min
+#  endif
+#  ifdef max
+#    undef max
+#  endif
 #endif
 
+#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+
 #include <chrono>
-#include <thread>
 
 #include <SDL3/SDL.h>    // keep in GMF because itâ€™s a C header with macros
 
@@ -702,7 +707,9 @@ export namespace epochnamespace::sdlcontext
             const auto elapsed = now - sdlcontext.lastFrameTime;
             if (elapsed < frameDuration)
             {
-                std::this_thread::sleep_for(frameDuration - elapsed);
+                const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(frameDuration - elapsed);
+                if (remaining.count() > 0)
+                    SDL_Delay(static_cast<Uint32>(remaining.count()));
             }
             sdlcontext.lastFrameTime = clock::now();
         }

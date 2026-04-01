@@ -36,464 +36,76 @@ module;
 
 #include <algorithm>
 #include <cstdint>
-#include <format>
 #include <map>
 #include <memory>
 #include <mutex>
-#include <queue>
 #include <shared_mutex>
-#include <span>
 #include <source_location>
-#include <stdexcept>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 module core.context;
 
-import aengine.platform;
-
- import aengine.input;
- import context.type;
- import context.commandqueue;
- import core.logger;
- import aengine.gui;
- //import context.window;
- import context.multiplexer;
-
- import atlas.manager;
- import atlas.texture;
- import image.loader;
+import context.type;
+import context.commandqueue;
+import core.logger;
+import atlas.texture;
+import image.loader;
 import utility.atomicfunction;
-
-#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
-import vulkan.context;
-//import vulkan.context:renderer;
-//import vulkan.context:texture;
-#endif
-
-#ifdef EPOCH_USING_DIRECTX
-import "adirectxcontext.hpp";
-import "adirectxrenderer.hpp";
-import "adirectxtextures.hpp";
-#endif
-#ifdef EPOCH_USING_SFML
-import sfml.context;
-import sfml.textures;
-#endif
-#ifdef EPOCH_USING_CUSTOM
-import "acustomcontext.hpp";
-import "acustomrenderer.hpp";
-import "acustomtextures.hpp";
-#endif
-
-#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-import opengl.context;
-import opengl.textures;
-#endif
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-import sdl.context;
-import sdl.textures;
-#endif
-#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-import raylib.context;
-import raylib.renderer;
-import raylib.state;
-#endif
-#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-import software.context;
-#endif
 #if defined(EPOCH_USING_NOOP_HEADLESS)
 import noop.context;
 #endif
+namespace epochnamespace::core::detail
+{
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+    void register_opengl_backend();
+#endif
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
+    void register_sfml_backend();
+#endif
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+    extern "C" void epoch_register_raylib_backend();
+#endif
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+    void register_sdl_backend();
+#endif
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
+    void register_vulkan_backend();
+#endif
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+    void register_software_backend();
+#endif
+}
 
 namespace
 {
-    constexpr std::string_view kLogOpenGL = "Context.OpenGL";
-    constexpr std::string_view kLogVulkan = "Context.Vulkan";
-    constexpr std::string_view kLogSoftRenderer = "Context.SoftRenderer";
-    constexpr std::string_view kLogSfml = "Context.SFML";
-    constexpr std::string_view kLogSdl = "Context.SDL";
-    constexpr std::string_view kLogRaylib = "Context.Raylib";
-
-    // ------------------------------------------------------------
-    // Atlas helpers that do NOT depend on removed backend APIs.
-    // ------------------------------------------------------------
-    std::uint32_t default_add_atlas(const epochnamespace::TextureAtlas& atlas,
-        epochnamespace::core::ContextType type) noexcept
-    {
-        try {
-            epochnamespace::atlasmanager::ensure_uploaded(atlas);
-            epochnamespace::atlasmanager::process_pending_uploads(type);
-        }
-        catch (...) {}
-
-        const int idx = atlas.get_index();
-        return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
-    }
-
-    std::uint32_t default_add_texture(epochnamespace::TextureAtlas&, std::string,
+    std::uint32_t default_add_texture(
+        epochnamespace::TextureAtlas&,
+        std::string,
         const epochnamespace::ImageData&) noexcept
     {
         return 0u;
     }
 
-    // ------------------------------------------------------------
-    // Helpers: keep core TU platform-neutral.
-    // We never name HWND here; we pass opaque handles through.
-    // ------------------------------------------------------------
-    inline void* ctx_native_window_handle(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
+    std::uint32_t add_atlas_default(
+        const epochnamespace::TextureAtlas& atlas,
+        const epochnamespace::core::ContextType type) noexcept
     {
-        if (!ctx) return nullptr;
-        if (auto h = ctx->get_hwnd()) return h;               // assumed void*/opaque
-        if (ctx->windowData && ctx->windowData->hwnd) return ctx->windowData->hwnd; // assumed void*/opaque
-        return nullptr;
+        try
+        {
+            epochnamespace::atlasmanager::ensure_uploaded(atlas);
+            epochnamespace::atlasmanager::process_pending_uploads(type);
+        }
+        catch (...)
+        {
+        }
+
+        const int idx = atlas.get_index();
+        return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
     }
 
-#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-    void opengl_initialize_adapter()
-    {
-        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
-        if (!ctx) return;
-
-        void* native = ctx_native_window_handle(ctx);
-
-        const unsigned w = static_cast<unsigned>((std::max)(1, ctx->width));
-        const unsigned h = static_cast<unsigned>((std::max)(1, ctx->height));
-
-        ctx->init_failed = false;
-        try {
-            // backend owns the platform cast
-            (void)epochnamespace::openglcontext::opengl_initialize(ctx, native, w, h, ctx->onResize);
-        }
-        catch (const std::exception& e) {
-            ctx->init_failed = true;
-            epochnamespace::logger::get(kLogOpenGL).logf(
-                epochnamespace::logger::LogLevel::Error,
-                std::source_location::current(),
-                "init exception: {}",
-                e.what());
-        }
-        catch (...) {
-            ctx->init_failed = true;
-            epochnamespace::logger::get(kLogOpenGL).log(
-                epochnamespace::logger::LogLevel::Error,
-                "init unknown exception",
-                std::source_location::current());
-        }
-    }
-
-    void opengl_cleanup_adapter()
-    {
-        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
-        if (!ctx) return;
-
-        try { epochnamespace::openglcontext::opengl_cleanup(ctx); }
-        catch (const std::exception& e) {
-            ctx->init_failed = true;
-            epochnamespace::logger::get(kLogOpenGL).logf(
-                epochnamespace::logger::LogLevel::Error,
-                std::source_location::current(),
-                "cleanup exception: {}",
-                e.what());
-        }
-        catch (...) {
-            ctx->init_failed = true;
-            epochnamespace::logger::get(kLogOpenGL).log(
-                epochnamespace::logger::LogLevel::Error,
-                "cleanup unknown exception",
-                std::source_location::current());
-        }
-    }
-
-    bool opengl_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
-    {
-        if (!ctx) return false;
-        return epochnamespace::openglcontext::opengl_process(ctx, queue);
-    }
-#endif
-
-#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
-    void vulkan_initialize_adapter()
-    {
-        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
-        if (!ctx) return;
-
-        void* native = ctx_native_window_handle(ctx);
-
-        const unsigned w = static_cast<unsigned>((std::max)(1, ctx->width));
-        const unsigned h = static_cast<unsigned>((std::max)(1, ctx->height));
-
-        ctx->init_failed = false;
-        try {
-            (void)epochnamespace::vulkancontext::vulkan_initialize(ctx, native, w, h, ctx->onResize);
-        }
-        catch (const std::exception& e) {
-            ctx->init_failed = true;
-            epochnamespace::logger::get(kLogVulkan).logf(
-                epochnamespace::logger::LogLevel::Error,
-                std::source_location::current(),
-                "init exception: {}",
-                e.what());
-        }
-        catch (...) {
-            ctx->init_failed = true;
-            epochnamespace::logger::get(kLogVulkan).log(
-                epochnamespace::logger::LogLevel::Error,
-                "init unknown exception",
-                std::source_location::current());
-        }
-    }
-
-    void vulkan_cleanup_adapter()
-    {
-        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
-        if (!ctx) return;
-
-        try { epochnamespace::vulkancontext::vulkan_cleanup(ctx); }
-        catch (const std::exception& e) {
-            epochnamespace::logger::get(kLogVulkan).logf(
-                epochnamespace::logger::LogLevel::Error,
-                std::source_location::current(),
-                "cleanup exception: {}",
-                e.what());
-        }
-        catch (...) {
-            epochnamespace::logger::get(kLogVulkan).log(
-                epochnamespace::logger::LogLevel::Error,
-                "cleanup unknown exception",
-                std::source_location::current());
-        }
-    }
-
-    bool vulkan_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
-    {
-        if (!ctx) return false;
-        return epochnamespace::vulkancontext::vulkan_process(ctx, queue);
-    }
-#endif
-
-#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-    void softrenderer_initialize_adapter()
-    {
-        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
-        if (!ctx) return;
-
-        try {
-            (void)epochnamespace::anativecontext::softrenderer_initialize(
-                ctx,
-                ctx->get_hwnd(),
-                static_cast<unsigned>((std::max)(1, ctx->width)),
-                static_cast<unsigned>((std::max)(1, ctx->height)),
-                ctx->onResize
-            );
-        }
-        catch (const std::exception& e) {
-            epochnamespace::logger::get(kLogSoftRenderer).logf(
-                epochnamespace::logger::LogLevel::Error,
-                std::source_location::current(),
-                "init exception: {}",
-                e.what());
-        }
-        catch (...) {
-            epochnamespace::logger::get(kLogSoftRenderer).log(
-                epochnamespace::logger::LogLevel::Error,
-                "init unknown exception",
-                std::source_location::current());
-        }
-    }
-
-    void softrenderer_cleanup_adapter()
-    {
-        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
-        if (!ctx) return;
-
-        try {
-            auto copy = ctx;
-            epochnamespace::anativecontext::softrenderer_cleanup(copy);
-        }
-        catch (const std::exception& e) {
-            epochnamespace::logger::get(kLogSoftRenderer).logf(
-                epochnamespace::logger::LogLevel::Error,
-                std::source_location::current(),
-                "cleanup exception: {}",
-                e.what());
-        }
-        catch (...) {
-            epochnamespace::logger::get(kLogSoftRenderer).log(
-                epochnamespace::logger::LogLevel::Error,
-                "cleanup unknown exception",
-                std::source_location::current());
-        }
-    }
-
-    bool softrenderer_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
-    {
-        if (!ctx) return false;
-        return epochnamespace::anativecontext::softrenderer_process(*ctx, queue);
-    }
-#endif
-
-#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-    void sfml_initialize_adapter()
-    {
-        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
-        if (!ctx) return;
-
-        void* native = ctx_native_window_handle(ctx);
-
-        const unsigned w = static_cast<unsigned>((std::max)(1, ctx->width));
-        const unsigned h = static_cast<unsigned>((std::max)(1, ctx->height));
-
-        ctx->init_failed = false;
-        try {
-            std::string windowTitle{};
-            if (ctx->windowData)
-                windowTitle = ctx->windowData->titleNarrow;
-#if defined(_WIN32)
-            (void)epochnamespace::sfmlcontext::sfml_initialize(
-                ctx,
-                reinterpret_cast<HWND>(native),
-                w,
-                h,
-                ctx->onResize,
-                windowTitle
-            );
-#else
-            (void)epochnamespace::sfmlcontext::sfml_initialize(
-                ctx,
-                native,
-                w,
-                h,
-                ctx->onResize,
-                windowTitle
-            );
-#endif
-        }
-        catch (const std::exception& e) {
-            epochnamespace::logger::get(kLogSfml).logf(
-                epochnamespace::logger::LogLevel::Error,
-                std::source_location::current(),
-                "init exception: {}",
-                e.what());
-        }
-        catch (...) {
-            epochnamespace::logger::get(kLogSfml).log(
-                epochnamespace::logger::LogLevel::Error,
-                "init unknown exception",
-                std::source_location::current());
-        }
-    }
-
-    void sfml_cleanup_adapter()
-    {
-        if (auto ctx = epochnamespace::core::MultiContextManager::GetCurrent()) {
-            auto copy = ctx;
-            epochnamespace::sfmlcontext::sfml_cleanup(copy);
-        }
-    }
-
-    bool sfml_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
-    {
-        if (!ctx) return false;
-        return epochnamespace::sfmlcontext::sfml_process(ctx, queue);
-    }
-#endif
-
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-    void sdl_initialize_adapter()
-    {
-        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
-        if (!ctx) return;
-
-        HWND parent = ctx->get_hwnd();
-        if (!parent && ctx->windowData) parent = ctx->windowData->hwnd;
-
-        try {
-            (void)epochnamespace::sdlcontext::sdl_initialize(
-                ctx,
-                parent,
-                static_cast<int>((std::max)(1, ctx->width)),
-                static_cast<int>((std::max)(1, ctx->height)),
-                ctx->onResize,
-                ctx->backendName
-            );
-        }
-        catch (const std::exception& e) {
-            epochnamespace::logger::get(kLogSdl).logf(
-                epochnamespace::logger::LogLevel::Error,
-                std::source_location::current(),
-                "init exception: {}",
-                e.what());
-        }
-        catch (...) {
-            epochnamespace::logger::get(kLogSdl).log(
-                epochnamespace::logger::LogLevel::Error,
-                "init unknown exception",
-                std::source_location::current());
-        }
-    }
-
-    void sdl_cleanup_adapter()
-    {
-        auto ctx = epochnamespace::core::MultiContextManager::GetCurrent();
-        if (!ctx) return;
-
-        try {
-            auto copy = ctx;
-            epochnamespace::sdlcontext::sdl_cleanup(copy);
-        }
-        catch (const std::exception& e) {
-            epochnamespace::logger::get(kLogSdl).logf(
-                epochnamespace::logger::LogLevel::Error,
-                std::source_location::current(),
-                "cleanup exception: {}",
-                e.what());
-        }
-        catch (...) {
-            epochnamespace::logger::get(kLogSdl).log(
-                epochnamespace::logger::LogLevel::Error,
-                "cleanup unknown exception",
-                std::source_location::current());
-        }
-    }
-
-    bool sdl_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
-    {
-        if (!ctx) return false;
-        return epochnamespace::sdlcontext::sdl_process(ctx, queue);
-    }
-#endif
-
-
-#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-    bool raylib_process_adapter(std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
-    {
-        if (!ctx) return false;
-
-        epochnamespace::raylibcontext::raylib_process();
-        if (!epochnamespace::raylibstate::s_raylibstate.running)
-            return false;
-
-        epochnamespace::atlasmanager::process_pending_uploads(epochnamespace::core::ContextType::RayLib);
-
-        epochnamespace::raylibcontext::raylib_clear(0.0f, 0.0f, 0.0f, 1.0f);
-        epochnamespace::raylibcontext::raylib_render_scene_preview(ctx);
-        (void)queue.drain();
-        (void)epochnamespace::gui::render_deferred_batch(ctx.get());
-        epochnamespace::raylibcontext::raylib_present();
-
-        return epochnamespace::raylibstate::s_raylibstate.running;
-    }
-#endif
-} // namespace
+}
 
 namespace epochnamespace::core
 {
@@ -517,11 +129,11 @@ namespace epochnamespace::core
         try { return process(std::move(ctx), queue); }
         catch (const std::exception& e)
         {
-            logger::get("Context").logf(
+            const auto message = std::string("Exception in process: ") + e.what();
+            logger::get("Context").log(
                 logger::LogLevel::Error,
-                std::source_location::current(),
-                "Exception in process: {}",
-                e.what());
+                message,
+                std::source_location::current());
             return false;
         }
         catch (...)
@@ -548,16 +160,6 @@ namespace epochnamespace::core
             const EpochAtomicFunction<std::uint32_t(const TextureAtlas&)>& src)
         {
             dst.ptr.store(src.ptr.load(std::memory_order_acquire), std::memory_order_release);
-        }
-
-        std::uint32_t add_texture_default(TextureAtlas& a, std::string n, const ImageData& i)
-        {
-            return default_add_texture(a, std::move(n), i);
-        }
-
-        std::uint32_t add_atlas_default(const TextureAtlas& a, ContextType t)
-        {
-            return default_add_atlas(a, t);
         }
     }
 
@@ -606,223 +208,27 @@ namespace epochnamespace::core
         s_initialized = true;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-        {
-            auto ctx = std::make_shared<Context>();
-            ctx->type = ContextType::OpenGL;
-            ctx->backendName = "OpenGL";
-
-            ctx->initialize = opengl_initialize_adapter;
-            ctx->cleanup = opengl_cleanup_adapter;
-            ctx->process = opengl_process_adapter;
-            ctx->clear = epochnamespace::openglcontext::opengl_clear;
-            // OpenGL swaps in opengl_process; keep present unset to avoid double-swap.
-            ctx->present = nullptr;
-            ctx->get_width = epochnamespace::openglcontext::opengl_get_width;
-            ctx->get_height = epochnamespace::openglcontext::opengl_get_height;
-
-            ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
-            ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
-            ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
-            ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
-
-            ctx->draw_sprite = epochnamespace::opengltextures::draw_sprite;
-            ctx->add_texture = &add_texture_default;
-            ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::OpenGL); };
-
-            AddContextForBackend(ContextType::OpenGL, std::move(ctx));
-        }
+        detail::register_opengl_backend();
 #endif
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-        {
-            auto ctx = std::make_shared<Context>();
-            ctx->type = ContextType::SFML;
-            ctx->backendName = "SFML";
-
-            ctx->initialize = sfml_initialize_adapter;
-            ctx->cleanup = sfml_cleanup_adapter;
-            ctx->process = sfml_process_adapter;
-            //ctx->clear = epochnamespace::sfmlcontext::sfml_clear;
-            //ctx->present = epochnamespace::sfmlcontext::sfml_present;
-            //ctx->get_width = epochnamespace::sfmlcontext::sfml_get_width;
-            //ctx->get_height = epochnamespace::sfmlcontext::sfml_get_height;
-
-            ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
-            ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
-            ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
-            ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
-
-            ctx->draw_sprite = epochnamespace::sfmlcontext::draw_sprite;
-            ctx->add_texture = &add_texture_default;
-            ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::SFML); };
-
-            AddContextForBackend(ContextType::SFML, std::move(ctx));
-        }
+        detail::register_sfml_backend();
 #endif
 
-
-
-
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-        {
-            auto ctx = std::make_shared<Context>();
-            ctx->type = ContextType::RayLib;
-            ctx->backendName = "RayLib";
-
-            ctx->initialize = []() {
-                auto current = epochnamespace::core::MultiContextManager::GetCurrent();
-                if (!current) return;
-
-                void* parent = ctx_native_window_handle(current);
-
-                try {
-                    (void)epochnamespace::raylibcontext::raylib_initialize(
-                        current,
-                        parent,
-                        static_cast<unsigned>((std::max)(1, current->width)),
-                        static_cast<unsigned>((std::max)(1, current->height)),
-                        current->onResize,
-                        current->backendName
-                    );
-                }
-                catch (const std::exception& e) {
-                    epochnamespace::logger::get(kLogRaylib).logf(
-                        epochnamespace::logger::LogLevel::Error,
-                        std::source_location::current(),
-                        "init exception: {}",
-                        e.what());
-                }
-                catch (...) {
-                    epochnamespace::logger::get(kLogRaylib).log(
-                        epochnamespace::logger::LogLevel::Error,
-                        "init unknown exception",
-                        std::source_location::current());
-                }
-                };
-
-            ctx->cleanup = []() {
-                auto current = epochnamespace::core::MultiContextManager::GetCurrent();
-                if (!current) return;
-
-                try { epochnamespace::raylibcontext::raylib_cleanup(current); }
-                catch (const std::exception& e) {
-                    epochnamespace::logger::get(kLogRaylib).logf(
-                        epochnamespace::logger::LogLevel::Error,
-                        std::source_location::current(),
-                        "cleanup exception: {}",
-                        e.what());
-                }
-                catch (...) {
-                    epochnamespace::logger::get(kLogRaylib).log(
-                        epochnamespace::logger::LogLevel::Error,
-                        "cleanup unknown exception",
-                        std::source_location::current());
-                }
-                };
-
-            ctx->process = raylib_process_adapter;
-            // Raylib owns frame ordering inside its process adapter so deferred GUI and scene
-            // preview render before the backend presents.
-            ctx->clear = nullptr;
-            ctx->present = nullptr;
-            ctx->get_width = epochnamespace::raylibcontext::raylib_get_width;
-            ctx->get_height = epochnamespace::raylibcontext::raylib_get_height;
-
-            ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
-            ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
-            ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
-            ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
-
-            ctx->draw_sprite = epochnamespace::raylibrenderer::draw_sprite;
-            ctx->add_texture = &add_texture_default;
-            ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::RayLib); };
-
-            AddContextForBackend(ContextType::RayLib, std::move(ctx));
-        }
+        detail::epoch_register_raylib_backend();
 #endif
 
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
-        {
-            auto ctx = std::make_shared<Context>();
-            ctx->type = ContextType::Vulkan;
-            ctx->backendName = "Vulkan";
-
-            ctx->initialize = vulkan_initialize_adapter;
-            ctx->cleanup = vulkan_cleanup_adapter;
-            ctx->process = vulkan_process_adapter;
-            ctx->present = epochnamespace::vulkancontext::vulkan_present;
-            ctx->get_width = epochnamespace::vulkancontext::vulkan_get_width;
-            ctx->get_height = epochnamespace::vulkancontext::vulkan_get_height;
-
-            ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
-            ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
-            ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
-            ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
-
-            // Vulkan binds its sprite path during backend initialization once the
-            // per-context application bridge is available.
-            ctx->draw_sprite = nullptr;
-            ctx->add_texture = &add_texture_default;
-            ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::Vulkan); };
-
-            AddContextForBackend(ContextType::Vulkan, std::move(ctx));
-        }
+        detail::register_vulkan_backend();
 #endif
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-        {
-            auto ctx = std::make_shared<Context>();
-            ctx->type = ContextType::SDL;
-            ctx->backendName = "SDL";
-
-            ctx->initialize = sdl_initialize_adapter;
-            ctx->cleanup = sdl_cleanup_adapter;
-            ctx->process = sdl_process_adapter;
-            //ctx->clear = epochnamespace::sdlcontext::sdl_clear;
-            //ctx->present = epochnamespace::sdlcontext::sdl_present;
-            //ctx->get_width = epochnamespace::sdlcontext::sdl_get_width;
-            //ctx->get_height = epochnamespace::sdlcontext::sdl_get_height;
-
-            ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
-            ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
-            ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
-            ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
-
-            ctx->draw_sprite = sdltextures::draw_sprite;
-            ctx->add_texture = &add_texture_default;
-            ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::SDL); };
-
-            AddContextForBackend(ContextType::SDL, std::move(ctx));
-        }
+        detail::register_sdl_backend();
 #endif
 
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-        {
-            auto ctx = std::make_shared<Context>();
-            ctx->type = ContextType::Software;
-            ctx->backendName = "Software";
-
-            ctx->initialize = softrenderer_initialize_adapter;
-            ctx->cleanup = softrenderer_cleanup_adapter;
-            ctx->process = softrenderer_process_adapter;
-
-            ctx->is_key_held = [](input::Key k) { return input::is_key_held(k); };
-            ctx->is_key_down = [](input::Key k) { return input::is_key_down(k); };
-            ctx->get_mouse_position = [](int& x, int& y) { x = input::mouseX.load(std::memory_order_relaxed); y = input::mouseY.load(std::memory_order_relaxed); };
-            ctx->is_mouse_button_held = [](input::MouseButton b) { return input::is_mouse_button_held(b); };
-            ctx->is_mouse_button_down = [](input::MouseButton b) { return input::is_mouse_button_down(b); };
-
-            ctx->draw_sprite = epochnamespace::anativecontext::draw_sprite;
-            ctx->add_texture = &add_texture_default;
-            ctx->add_atlas = +[](const TextureAtlas& a) { return add_atlas_default(a, ContextType::Software); };
-
-            AddContextForBackend(ContextType::Software, std::move(ctx));
-        }
+        detail::register_software_backend();
 #endif
 
 #if defined(EPOCH_USING_NOOP_HEADLESS)

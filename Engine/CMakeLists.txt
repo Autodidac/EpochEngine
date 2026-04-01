@@ -28,15 +28,33 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override packag
 set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override packaged macOS version revision")
 
 set(EPOCH_SOURCES
-        src/aengine.cpp
+    src/aengine.cpp
     src/aengine.context.cpp
+    src/context_software.cpp
+    src/context_vulkan.cpp
+    src/opengl.context.cpp
+    src/opengl.init.cpp
+    src/opengl.process.cpp
+    src/opengl.cleanup.cpp
+    src/opengl_context_detail.cpp
+    src/opengl_process_impl.cpp
+    src/software.context.cpp
+    src/software.context_capture.cpp
+    src/software.context_draw.cpp
+    src/software.context_present.cpp
+    src/software.context_preview.cpp
+    src/software.context_render.cpp
+    src/context_opengl.cpp
+    src/context_sfml.cpp
+    src/context_sdl.cpp
+    src/context_raylib.cpp
+    src/acontext.raylib.bridge.cpp
     src/aengine.gui.cpp
     src/aengine.scripting.compiler.cpp
     src/aeditor.cpp
     src/aeditor.scene.cpp
     src/afilewatch.cpp
     src/afont.renderer.cpp
-    src/acontext.raylib.bridge.cpp
     src/core.assert.cpp
     src/core.env.cpp
     src/core.error.cpp
@@ -71,6 +89,64 @@ endif()
 
 add_executable(epoch ${EPOCH_SOURCES})
 set_target_properties(epoch PROPERTIES OUTPUT_NAME epoch)
+
+if(MSVC)
+    set_source_files_properties(
+        src/aengine.context.cpp
+        src/context_software.cpp
+        src/context_vulkan.cpp
+        src/software.context.cpp
+        src/software.context_capture.cpp
+        src/software.context_draw.cpp
+        src/software.context_present.cpp
+        src/software.context_preview.cpp
+        src/software.context_render.cpp
+        src/context_opengl.cpp
+        src/context_sfml.cpp
+        src/context_sdl.cpp
+        src/context_raylib.cpp
+        PROPERTIES
+            COMPILE_OPTIONS "/Zm500"
+    )
+
+    set_source_files_properties(
+        src/aengine.context.cpp
+        PROPERTIES
+            COMPILE_OPTIONS "/bigobj /Zm2000"
+    )
+
+    set_source_files_properties(
+        src/context_opengl.cpp
+        src/opengl.context.cpp
+        src/opengl.init.cpp
+        src/opengl.process.cpp
+        src/opengl.cleanup.cpp
+        src/opengl_context_detail.cpp
+        src/opengl_process_impl.cpp
+        PROPERTIES
+            COMPILE_OPTIONS "/bigobj /Zm2000 /Od /Ob0 /GL-"
+    )
+
+    set_source_files_properties(
+        src/context_sfml.cpp
+        src/context_sdl.cpp
+        src/context_raylib.cpp
+        PROPERTIES
+            COMPILE_OPTIONS "/bigobj /Zm2000 /GL-"
+    )
+
+    set_source_files_properties(
+        src/software.context_render.cpp
+        PROPERTIES
+            COMPILE_OPTIONS "/bigobj /Zm2000 /GL-"
+    )
+
+    set_source_files_properties(
+        src/acontext.raylib.bridge.cpp
+        PROPERTIES
+            COMPILE_OPTIONS "/GL-"
+    )
+endif()
 
 function(epoch_apply_version_overrides target_name)
     if(NOT "${EPOCH_VERSION_OVERRIDE_MAJOR}" STREQUAL "")
