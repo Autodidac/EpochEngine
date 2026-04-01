@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -59,12 +59,12 @@ module aeditor;
 
 import aengine.gui;
 import aengine.version;
-import aengine.core.context;
-import aengine.context.type;
+import core.context;
+import context.type;
 import aengine.input;
 import ascripting.system;
 import epoch.ai;
-import epoch.render.preview_grid;
+import render.preview_grid;
 
 namespace epochnamespace
 {

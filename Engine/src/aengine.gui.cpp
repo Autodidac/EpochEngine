@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
  *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
  *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
@@ -54,16 +54,16 @@ module;
 
 module aengine.gui;
 
-import aengine.context.type;
-import aengine.core.context;
-import aengine.context.multiplexer;
-import aengine.context.window;
-import aengine.context.commandqueue;
+import context.type;
+import core.context;
+import context.multiplexer;
+import context.window;
+import context.commandqueue;
 
-import aatlas.manager;
-import aatlas.texture;
-import afont.renderer;
-import asprite.pool;
+import atlas.manager;
+import atlas.texture;
+import font.renderer;
+import sprite.pool;
 import aspriteregistry;
 import aspritehandle;
 import atexture;

@@ -11,30 +11,30 @@ important behavior while cleaning up the repo.
 - Application module registry:
   `Engine/modules/aapplicationmodule.ixx`
 - Code inspection helpers:
-  `Engine/modules/autility.codeinspector.ixx`
+  `Engine/modules/utility.codeinspector.ixx`
 - Script compiler and reload flow:
-  `Engine/modules/aengine.scripting.compiler.ixx`,
+  `Engine/modules/scripting.compiler.ixx`,
   `Engine/src/aengine.scripting.compiler.cpp`,
   `Engine/modules/ascripting.system.ixx`
 - File watching:
-  `Engine/modules/autility.filewatch.ixx`,
+  `Engine/modules/utility.filewatch.ixx`,
   `Engine/src/afilewatch.cpp`
 - Image writing:
-  `Engine/modules/aimage.writer.ixx`,
+  `Engine/modules/image.writer.ixx`,
   `Engine/modules/aimageatlaswriter.ixx`
 - Mipmap atlas support:
   `Engine/modules/amipmapatlas.ixx`
 - Movement events:
-  `Engine/modules/aengine.event.movement.ixx`
+  `Engine/modules/event.movement.ixx`
 - String conversion:
-  `Engine/modules/autility.string.converter.ixx`
+  `Engine/modules/utility.string_converter.ixx`
 - Retry-once utilities:
-  `Engine/modules/aengine.core.utilities.ixx`
+  `Engine/modules/core.utilities.ixx`
 - Task graph with DOT output:
-  `Engine/modules/aengine.taskgraph.dotsystem.ixx`
+  `Engine/modules/taskgraph.dotsystem.ixx`
 - Linux OpenGL / multiplexer ownership:
   `Engine/src/aengine.context.multiplexer.linux.cpp`,
-  `Engine/modules/acontext.opengl.context.ixx`
+  `Engine/modules/opengl.context.ixx`
 
 ## Explicitly deferred
 

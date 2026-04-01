@@ -8,11 +8,30 @@ Public headers
 - supporting API/common headers under `Engine/include/`
 
 Primary module families
-- `aengine.*` core runtime, platform, logger, updater, bindings, systems
-- `acontext.*` backend/context integrations
-- `aecs.*` and `aentity.*` ECS surfaces
-- `aatlas.*`, sprite, texture, and GUI support
-- `epoch.*` higher-level engine/runtime modules
+- `core.*`, `context.*`, `platform.*`, `render.*`, `perf.*`, `updater.*` spine/runtime ownership
+- `opengl.*`, `sdl.*`, `raylib.*`, `sfml.*`, `software.*`, `vulkan.*`, `noop.context` backend/context integrations
+- `ecs.*` and `aentity.*` ECS surfaces
+- `atlas.*`, sprite, image, texture, and GUI support
+- `epoch.*` higher-level engine/runtime entry surfaces that still intentionally brand the top-level API
+
+Great renaming conversions
+- `aengine.core.*` -> `core.*`
+- `aengine.context.*` -> `context.*`
+- `aengine.updater.*` -> `updater.*`
+- `aengine.saveload.*` -> `saveload.*`
+- `aengine.scripting.*` -> `scripting.*`
+- `aengine.taskgraph.*` -> `taskgraph.*`
+- `aengine.event.*` -> `event.*`
+- `aengine.engine_*` -> `engine.*`
+- `acontext.opengl.*` -> `opengl.*`
+- `acontext.sdl.*` -> `sdl.*`
+- `acontext.raylib.*` -> `raylib.*`
+- `acontext.sfml.*` -> `sfml.*`
+- `acontext.softrenderer.*` -> `software.*`
+- `acontext.vulkan.*` -> `vulkan.*`
+- `aecs.*` -> `ecs.*`
+- `aatlas.*` -> `atlas.*`
+- `aimage.loader` / `epoch.image.writer` / `aimage.writer` -> `image.loader` / `image.writer`
 
 Examples and tooling
 - `Engine/examples/ConsoleApplication1/`

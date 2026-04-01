@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -40,7 +40,7 @@ module;
 #include <system_error>
 #include <vector>
 
-module autility.filewatch;
+module utility.filewatch;
 
 namespace epochnamespace::filewatch
 {

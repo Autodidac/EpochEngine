@@ -39,8 +39,8 @@ module;
 export module agamecore;
 
 
-import aatlas.manager;
-import aatlas.texture;
+import atlas.manager;
+import atlas.texture;
 
 /**************************************************************
  *   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•—     â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ•—    â–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—    *

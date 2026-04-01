@@ -4,16 +4,16 @@ This is the current high-level status of the context and renderer stack.
 
 | Surface | Status | Notes |
 | --- | --- | --- |
-| `aengine.core.context` | Active | Shared context abstraction used everywhere. |
-| `aengine.context.*` multiplexer/window/control/type | Active | Core windowing and command-routing layer. |
-| `acontext.opengl.*` | Active | Primary GPU renderer path. |
-| `acontext.sdl.*` | Active | Important desktop backend, still worth continued stabilization. |
-| `acontext.raylib.*` | Active | Active and feature-rich, especially for docked-window workflows. |
-| `acontext.sfml.*` | Active | Supported, but generally more delicate due to GL/context behavior. |
-| `acontext.softrenderer.*` | Active | Fallback/debug path. |
-| `acontext.noop.context` | Minimal | Headless placeholder. |
-| `acontext.vulkan.*` | Experimental | Under active migration, not a stable default backend. |
-| `acontext.opengl.renderer.ixx` | Review candidate | Looks more archival than central; keep under review. |
+| `core.context` | Active | Shared context abstraction used everywhere. |
+| `context.*` multiplexer/window/control/type/platform_utils | Active | Core windowing and command-routing layer. |
+| `opengl.*` | Active | Primary GPU renderer path. |
+| `sdl.*` | Active | Important desktop backend, still worth continued stabilization. |
+| `raylib.*` | Active | Active and feature-rich, especially for docked-window workflows. |
+| `sfml.*` | Active | Supported, but generally more delicate due to GL/context behavior. |
+| `software.*` | Active | Fallback/debug path. |
+| `noop.context` | Minimal | Headless placeholder. |
+| `vulkan.*` | Experimental | Under active migration, not a stable default backend. |
+| `opengl.renderer` | Review candidate | Looks more archival than central; keep under review. |
 | Retired legacy context stack | Retired | Historical snapshots have been removed; keep migration work in active modules and documented feature maps instead. |
 
 ## Practical guidance

@@ -42,14 +42,14 @@ import aengine.platform;
 
 // Engine modules (must already be modules)
 import aecs;                  // ecs::reg_ex, create_entity, etc.
-import aecs.storage;
-import aecs.components;     // Position, etc.
-import aengine.event.movement;        // MovementEvent
+import ecs.storage;
+import ecs.components;     // Position, etc.
+import event.movement;        // MovementEvent
 
-import aengine.core.time;    // time::Timer
-import aengine.core.context;              // core::Context
-import aengine.context.window; // core::WindowData
-import aengine.core.logger;    // Logger, LogLevel
+import core.timer;    // time::Timer
+import core.context;              // core::Context
+import context.window; // core::WindowData
+import core.logger;    // Logger, LogLevel
 
 namespace epochnamespace::scene
 {

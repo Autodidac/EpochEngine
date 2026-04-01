@@ -46,12 +46,12 @@ export module aentity;
 // No textual includes remain.
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import aengine.platform;          // replaces aplatform.hpp (ordering handled by BMI)
-import aengine.core.logger;    // Logger, LogLevel
+import core.logger;    // Logger, LogLevel
 import aengine.eventsystem;              // events::push_event
-import aengine.core.time;        // Timer, time helpers
+import core.timer;        // Timer, time helpers
 import aecs;                      // reg_ex, Entity, ECS core API
-import aecs.storage;
-import aecs.components;         // Position, History, LoggerComponent
+import ecs.storage;
+import ecs.components;         // Position, History, LoggerComponent
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 namespace epochnamespace::ecs

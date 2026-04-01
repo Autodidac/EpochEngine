@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -39,12 +39,12 @@ module;
 export module epoch.engine;
 
 import core.error;
-import epoch.perf.tier;
-import epoch.platform.capabilities;
-import epoch.platform.budgets;
-import epoch.platform.window;
-import epoch.platform.context;
-import epoch.platform.runtime;
+import perf.tier;
+import platform.capabilities;
+import platform.budgets;
+import platform.window;
+import platform.context;
+import platform.runtime;
 import epoch.systems;
 import epoch.events;
 import epoch.ecs;

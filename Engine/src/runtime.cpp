@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -50,16 +50,16 @@ namespace epochnamespace::core::bridge
 module runtime;
 
 import aengine.cli;
-import aengine.core.logger;
+import core.logger;
 import aengine.platform;
 
 import core.env;
 import core.format;
 import core.time;
-import epoch.perf.tier;
-import epoch.platform.context;
-import epoch.platform.runtime;
-import epoch.platform.window;
+import perf.tier;
+import platform.context;
+import platform.runtime;
+import platform.window;
 import epoch.systems;
 
 extern "C"
@@ -261,7 +261,9 @@ namespace runtime
             epoch::platform::log_runtime_profile("Epoch.Runtime", "Epoch.Perf", runtime_profile);
 
             const bool smoke = smoke_mode();
-            const std::uint64_t max_frames = smoke ? 3u : ~0ull;
+            const std::uint64_t max_frames = smoke
+                ? (epochnamespace::core::cli::capture_requested ? 180u : 3u)
+                : ~0ull;
 
             constexpr std::uint64_t FPS_PRINT_EVERY = 10;
             constexpr double WARMUP_SECONDS = 7.0;

@@ -1,4 +1,4 @@
-Epoch Spine Roadmap
+﻿Epoch Spine Roadmap
 ==================
 
 Objective
@@ -20,14 +20,14 @@ Execution plan
 
 Phase 1 - Spine consolidation
 -----------------------------
-- [x] Keep `aengine.core.logger` syntax stable everywhere.
-- [x] Move timing ownership under `core.time` while preserving `aengine.core.time` call shapes.
+- [x] Keep `core.logger` syntax stable everywhere.
+- [x] Move timing ownership under `core.time` while preserving `core.timer` call shapes.
 - [x] Audit duplicated ownership boundaries before deleting anything.
 
 Phase 1 notes
 -------------
 - Legacy logging and timing entry points still compile unchanged across engine, editor, scenes, and backend modules.
-- Canonical timing ownership lives under `core.time`, while the old `aengine.core.time` facade remains the compatibility surface.
+- Canonical timing ownership lives under `core.time`, while the old `core.timer` facade remains the compatibility surface.
 - Runtime/perf selection is now part of the active spine path; broader context adoption should continue in Phase 2 instead of forcing premature deletions.
 
 Phase 2 - Runtime and platform stabilization
@@ -40,20 +40,21 @@ Phase 2 - Runtime and platform stabilization
 Phase 2 notes
 -------------
 - Platform policy now owns updater-shell backend choice, source snapshot archive type, parented-window support, and the single-context preference used by runtime/perf decisions.
-- Runtime/perf startup now logs through `aengine.core.logger` while continuing to use `core.time` as the canonical timing owner.
-- `runtime.cpp` and `epoch.engine` now consume the same shared `epoch.platform.runtime` frame-profile path instead of maintaining separate capability/perf/logging decisions.
+- Runtime/perf startup now logs through `core.logger` while continuing to use `core.time` as the canonical timing owner.
+- `runtime.cpp` and `epoch.engine` now consume the same shared `platform.runtime` frame-profile path instead of maintaining separate capability/perf/logging decisions.
 - The retired legacy archive has been collapsed into active ownership plus `Engine/docs/legacy_feature_map.md`, so further spine work should land directly in Epoch-owned modules instead of parking code in archive folders.
+- Active module/file naming is being normalized to one-period families like `core.*`, `context.*`, `platform.*`, `render.*`, and backend surfaces such as `vulkan.*`, with multi-dot legacy names being retired instead of preserved as a second spine.
 
 Phase 3 - Renderer direction
 ----------------------------
 - [ ] Reshape the renderer around reusable frame data instead of a monolithic final-frame pass chain.
 - [ ] Formalize visibility, surface, lighting, temporal, and presentation boundaries.
 - [ ] Keep current backends working while making room for sparse lighting and reconstruction.
-- [ ] Move engine/context pacing further through the `epoch.perf.select` path instead of backend-local throttling folklore.
+- [ ] Move engine/context pacing further through the `perf.select` path instead of backend-local throttling folklore.
 
 Phase 3 notes
 -------------
-- `epoch.platform.budgets::FramePolicy` now carries explicit lighting, temporal-history, and vendor-neutral reconstruction intent so the renderer can evolve toward visibility -> surface -> lighting -> temporal -> reconstruction -> present without hard-wiring one AI vendor path.
+- `platform.budgets::FramePolicy` now carries explicit lighting, temporal-history, and vendor-neutral reconstruction intent so the renderer can evolve toward visibility -> surface -> lighting -> temporal -> reconstruction -> present without hard-wiring one AI vendor path.
 - The shared runtime frame-profile now exposes renderer-facing policy data directly to engine consumers, which keeps context/runtime selection moving toward the spine instead of backend-local folklore.
 
 Phase 4 - Tooling and smoke coverage
@@ -69,3 +70,4 @@ Acceptance criteria
 - Existing engine/game logging syntax still compiles unchanged.
 - Renderer docs reflect the actual forward direction: lighting and temporal data first, AI reconstruction later.
 - No fake cleanup that breaks the engine just to look modern.
+

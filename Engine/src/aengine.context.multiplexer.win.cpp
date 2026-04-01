@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
  *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
  *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
@@ -28,7 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- // aengine.context.multiplexer.win.cpp  (TU implementation; NOT a module partition)
+ // context.multiplexer.win.cpp  (TU implementation; NOT a module partition)
  //
 
 #include <include/aengine.config.hpp>
@@ -69,32 +69,32 @@
 #endif
 
 import aengine.platform;
-import autility.string.converter;
+import utility.string_converter;
 
 import aengine.cli;
-import aengine.core.context;
-import aengine.core.logger;
+import core.context;
+import core.logger;
 
-import aengine.context.commandqueue;
-import aengine.context.multiplexer;
-import aengine.context.type;
-import aengine.context.window;
+import context.commandqueue;
+import context.multiplexer;
+import context.type;
+import context.window;
 import aengine.telemetry;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-import acontext.opengl.context;
+import opengl.context;
 #endif
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-import acontext.softrenderer.context;
+import software.context;
 #endif
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-import acontext.sfml.context;
+import sfml.context;
 #endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-import acontext.raylib.context;
+import raylib.context;
 #endif
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-import acontext.sdl.context;
+import sdl.context;
 #endif
 
 #if defined(_WIN32)

@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
  *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
  *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
@@ -30,7 +30,7 @@
  ***********************************************/
 module;
 
-// aengine.context.cpp  (module implementation unit for aengine.core.context)
+// aengine.context.cpp  (module implementation unit for core.context)
 
 #include <include/aengine.config.hpp> // macros only - must stay in the global module fragment
 
@@ -50,27 +50,27 @@ module;
 #include <utility>
 #include <vector>
 
-module aengine.core.context;
+module core.context;
 
 import aengine.platform;
 
  import aengine.input;
- import aengine.context.type;
- import aengine.context.commandqueue;
- import aengine.core.logger;
+ import context.type;
+ import context.commandqueue;
+ import core.logger;
  import aengine.gui;
- //import aengine.context.window;
- import aengine.context.multiplexer;
+ //import context.window;
+ import context.multiplexer;
 
- import aatlas.manager;
- import aatlas.texture;
- import aimage.loader;
+ import atlas.manager;
+ import atlas.texture;
+ import image.loader;
  import aatomicfunction;
 
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
-import acontext.vulkan.context;
-//import acontext.vulkan.context:renderer;
-//import acontext.vulkan.context:texture;
+import vulkan.context;
+//import vulkan.context:renderer;
+//import vulkan.context:texture;
 #endif
 
 #ifdef EPOCH_USING_DIRECTX
@@ -79,8 +79,8 @@ import "adirectxrenderer.hpp";
 import "adirectxtextures.hpp";
 #endif
 #ifdef EPOCH_USING_SFML
-import acontext.sfml.context;
-import acontext.sfml.textures;
+import sfml.context;
+import sfml.textures;
 #endif
 #ifdef EPOCH_USING_CUSTOM
 import "acustomcontext.hpp";
@@ -89,23 +89,23 @@ import "acustomtextures.hpp";
 #endif
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-import acontext.opengl.context;
-import acontext.opengl.textures;
+import opengl.context;
+import opengl.textures;
 #endif
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-import acontext.sdl.context;
-import acontext.sdl.textures;
+import sdl.context;
+import sdl.textures;
 #endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-import acontext.raylib.context;
-import acontext.raylib.renderer;
-import acontext.raylib.state;
+import raylib.context;
+import raylib.renderer;
+import raylib.state;
 #endif
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-import acontext.softrenderer.context;
+import software.context;
 #endif
 #if defined(EPOCH_USING_NOOP_HEADLESS)
-import acontext.noop.context;
+import noop.context;
 #endif
 
 namespace
@@ -354,6 +354,7 @@ namespace
             std::string windowTitle{};
             if (ctx->windowData)
                 windowTitle = ctx->windowData->titleNarrow;
+#if defined(_WIN32)
             (void)epochnamespace::sfmlcontext::sfml_initialize(
                 ctx,
                 reinterpret_cast<HWND>(native),
@@ -362,6 +363,16 @@ namespace
                 ctx->onResize,
                 windowTitle
             );
+#else
+            (void)epochnamespace::sfmlcontext::sfml_initialize(
+                ctx,
+                native,
+                w,
+                h,
+                ctx->onResize,
+                windowTitle
+            );
+#endif
         }
         catch (const std::exception& e) {
             epochnamespace::logger::get(kLogSfml).logf(

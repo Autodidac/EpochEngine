@@ -31,4 +31,4 @@
 module;
 export module aengine.cli;
 
-export import aengine.core.commandline;
+export import core.commandline;

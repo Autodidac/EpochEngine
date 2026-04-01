@@ -36,7 +36,7 @@ module;
 
 export module aimageatlaswriter;
 
-import aimage.writer;
+import image.writer;
 
 export namespace epochnamespace::atlaswriter
 {

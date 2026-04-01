@@ -50,12 +50,12 @@ export module aecs;
 // These MUST already be real modules.
 // No textual includes remain.
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-import aecs.entitycomponentmanager;   // ComponentStorage + add/get/has/remove
+import ecs.entitycomponentmanager;   // ComponentStorage + add/get/has/remove
 import aengine.eventsystem;              // events::push_event
-import aengine.core.logger;                   // Logger, LogLevel
-import aengine.core.time;               // time::Timer, time helpers
-import aecs.entityhistory;            // EntityID, history tracking
-import aecs.storage;               // ComponentStorage
+import core.logger;                   // Logger, LogLevel
+import core.timer;               // time::Timer, time helpers
+import ecs.entityhistory;            // EntityID, history tracking
+import ecs.storage;               // ComponentStorage
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 namespace epochnamespace::ecs

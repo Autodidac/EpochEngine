@@ -40,7 +40,7 @@
 //#include "aengine.hpp"
 
 import epochengine; // import the module
-import aengine.core.logger;
+import core.logger;
 
 #define RAYLIB_STATIC
 

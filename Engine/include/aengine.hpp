@@ -41,7 +41,7 @@
 #include "aengine.config.hpp" // for engine/backend configuration macros
 
 //export import aengine.platform;
-//export import aengine.engine_components;
+//export import engine.components;
 //export import aengine.renderers;
 //export import aengine.menu;
 //export import aengine.input;

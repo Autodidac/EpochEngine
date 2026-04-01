@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -242,7 +242,7 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.engine_components.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.components.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.handles.ixx">
@@ -287,163 +287,163 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\acellularsim.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.allocator.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.allocator.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.atomicfunction.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.atomicfunction.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.commandline.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.commandline.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.codeinspector.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.codeinspector.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.filewatch.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.filewatch.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.time.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.timer.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.logger.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.logger.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.utilities.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.utilities.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.types.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.types.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimageatlaswriter.ixx">
       <Filter>Module Files\ixx\textures</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimage.loader.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.loader.ixx">
       <Filter>Module Files\ixx\textures</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimage.writer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.writer.ixx">
       <Filter>Module Files\ixx\textures</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atexture.ixx">
       <Filter>Module Files\ixx\textures</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aatlas.manager.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atlas.manager.ixx">
       <Filter>Module Files\ixx\textures\atlas</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aatlas.texture.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atlas.texture.ixx">
       <Filter>Module Files\ixx\textures\atlas</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aspriteregistry.ixx">
       <Filter>Module Files\ixx\textures\sprite</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asprite.pool.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sprite.pool.ixx">
       <Filter>Module Files\ixx\textures\sprite</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aspritehandle.ixx">
       <Filter>Module Files\ixx\textures\sprite</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.renderer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.renderer.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.textures.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.textures.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sdl.context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\sdl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sdl.renderer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.renderer.ixx">
       <Filter>Module Files\ixx\core\context\backends\sdl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sdl.state.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.state.ixx">
       <Filter>Module Files\ixx\core\context\backends\sdl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sdl.textures.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.textures.ixx">
       <Filter>Module Files\ixx\core\context\backends\sdl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.textures.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.textures.ixx">
       <Filter>Module Files\ixx\core\context\backends\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.state.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.state.ixx">
       <Filter>Module Files\ixx\core\context\backends\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.renderer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.renderer.ixx">
       <Filter>Module Files\ixx\core\context\backends\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.quad.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.quad.ixx">
       <Filter>Module Files\ixx\core\context\backends\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.softrenderer.context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aopenglfreetype.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.platform.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.platform.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.quad.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.quad.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.input.ixx">
       <Filter>Module Files\ixx\core\input</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.commandqueue.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.commandqueue.ixx">
       <Filter>Module Files\ixx\core\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.control.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.control.ixx">
       <Filter>Module Files\ixx\core\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.multiplexer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.multiplexer.ixx">
       <Filter>Module Files\ixx\core\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.type.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.type.ixx">
       <Filter>Module Files\ixx\core\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.noop.context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\noop.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\noop</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sfml.context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\sfml</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sfml.renderer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.renderer.ixx">
       <Filter>Module Files\ixx\core\context\backends\sfml</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sfml.state.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.state.ixx">
       <Filter>Module Files\ixx\core\context\backends\sfml</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.sfml.textures.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.textures.ixx">
       <Filter>Module Files\ixx\core\context\backends\sfml</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.components.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.components.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.internal_private.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.internal_private.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.storage.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.storage.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aentity.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.system.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.system.ixx">
       <Filter>Module Files\ixx\updater</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.config.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx">
       <Filter>Module Files\ixx\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.ixx">
       <Filter>Module Files\ixx\updater</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.tools.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.tools.ixx">
       <Filter>Module Files\ixx\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascene.ixx">
@@ -455,13 +455,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascenesnapshot.ixx">
       <Filter>Module Files\ixx\scene</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\autility.string.converter.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.string_converter.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ampmcboundedqueue.ixx">
       <Filter>Module Files\ixx\core\multithreading</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.scripting.compiler.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scripting.compiler.ixx">
       <Filter>Module Files\ixx\scripting</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aplatformpump.ixx">
@@ -476,25 +476,25 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.gui.ixx">
       <Filter>Module Files\ixx\gui</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.taskgraph.dotsystem.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\taskgraph.dotsystem.ixx">
       <Filter>Module Files\ixx\core\multithreading</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\amipmapatlas.ixx">
       <Filter>Module Files\ixx\textures\atlas</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\afont.renderer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\font.renderer.ixx">
       <Filter>Module Files\ixx\textures\font</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.input.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.input.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.gui.menu.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.menu.ixx">
       <Filter>Module Files\ixx\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\anet.ixx">
       <Filter>Module Files\ixx\core\networking</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.opengl.state.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.state.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascripting.system.ixx">
@@ -506,31 +506,31 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.bindings.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.window.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.window.ixx">
       <Filter>Module Files\ixx\core\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.textures.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.textures.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aopengltriangle.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.state.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.state.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.renderer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.renderer.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.telemetry.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.context.win.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.raylib.api.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.context.platform.utils.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.platform_utils.ixx">
       <Filter>Module Files\ixx\core\context</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\agamecore.ixx">
@@ -545,28 +545,28 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\editor_launcher.ascript.cpp">
       <Filter>Source Files\external scripts</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.entitycomponentmanager.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.entitycomponentmanager.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.entityhistory.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.entityhistory.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.eventsystem.ixx">
       <Filter>Module Files\ixx\events</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.core.context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.context.ixx">
       <Filter>Module Files\ixx\core\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.platform.device.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.platform_device.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\crossplatform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.platform.dispatcher.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.platform_dispatcher.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\crossplatform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.platform.instance.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.platform_instance.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\crossplatform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.platform.loader.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.platform_loader.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\crossplatform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aeditor.cpp">
@@ -593,73 +593,73 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.win.cpp">
       <Filter>Source Files\core\crossplatform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.saveload.system.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\saveload.system.ixx">
       <Filter>Module Files\ixx\events</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.event.movement.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\event.movement.ixx">
       <Filter>Module Files\ixx\events</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aeditor.ixx">
       <Filter>Module Files\ixx\gui</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.quad.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.quad.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\geometry</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.triangle.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.triangle.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\geometry</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.meshcube.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.meshcube.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\geometry</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.camera.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.camera.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\camera</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-api_unit.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_api_unit.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-api.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_api.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-runtime.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_runtime.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-shared_context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_shared_context.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-commands.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_commands.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-depth.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_depth.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-descriptor.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_descriptor.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-device.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_device.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-instance.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_instance.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-memory.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_memory.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-renderer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_renderer.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-shader_pipeline.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_shader_pipeline.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-swapchain.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_swapchain.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-texture.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_texture.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-window.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_window.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.diagnostics.ixx">
@@ -668,13 +668,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epochengine.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-buffers.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_buffers.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acontext.vulkan.context-shared_vk.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_shared_vk.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.raylib.bridge.cpp">
@@ -728,7 +728,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.time.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.assets.streaming.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\assets.streaming.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.ecs.ixx">
@@ -740,43 +740,43 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.events.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.perf.select.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.select.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.perf.tier.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.tier.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.budgets.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.budgets.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.capabilities.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.capabilities.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.context.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.context.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.platform.window.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.window.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.preview_grid.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.bindings.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.bindings.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.device.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.device.null.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_null.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.graph.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.graph.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.streaming.feedback.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.streaming_feedback.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.render.visibility.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.visibility.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.systems.ixx">
@@ -847,3 +847,4 @@
     </ClCompile>
   </ItemGroup>
 </Project>
+

@@ -54,10 +54,10 @@ module;
 
 export module ascripting.system;
 
-import aengine.scripting.compiler;
+import scripting.compiler;
 import aengine.cli;
 import aengine.systems;
-import aengine.taskgraph.dotsystem;
+import taskgraph.dotsystem;
 
 
 namespace epochnamespace::scripting

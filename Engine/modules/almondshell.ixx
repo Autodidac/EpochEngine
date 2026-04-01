@@ -5,19 +5,19 @@ export module epochengine;
 //export import aengine;
 // export import other public-facing modules if you want:
 // export import aengine.gui;
-// export import aengine.core.context;
+// export import core.context;
 // primary modules
 
-import aengine.core.context;
+import core.context;
 
-import aatlas.manager;
-import aatlas.texture;
+import atlas.manager;
+import atlas.texture;
 import aspriteregistry;
 import atexture;
 import ascripting.system;
-import aengine.taskgraph.dotsystem;
-import aengine.updater.system;
-import acontext.opengl.context;
+import taskgraph.dotsystem;
+import updater.system;
+import opengl.context;
 
 // application modules
 import aapplicationmodule;

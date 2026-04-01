@@ -30,7 +30,7 @@
  ***********************************************/
  //// acontext.vulkan.platform.context.cpp
 //
-// This file MUST be a module implementation unit for `acontext.vulkan.context`
+// This file MUST be a module implementation unit for `vulkan.context`
 // because it defines `epochnamespace::vulkancontext::Application` methods.
 //
 // It also MUST be the single TU that provides:
@@ -39,11 +39,11 @@
 //
 // If you keep vulkan.hpp in the module interface BMI, the safest way to guarantee
 // the dispatch storage exists is to include vulkan.hpp textually here (with the
-// same config macros) before `module acontext.vulkan.context;`.
+// same config macros) before `module vulkan.context;`.
 //
 // -----------------------------------------------------------------------------
 //
-// NOTE: No `import acontext.vulkan.context;` here. This file *is* that module.
+// NOTE: No `import vulkan.context;` here. This file *is* that module.
 //
 
 module;
@@ -108,7 +108,7 @@ module;
 // -----------------------------------------------------------------------------
 // Now enter the named module (implementation unit)
 // -----------------------------------------------------------------------------
-module acontext.vulkan.context;
+module vulkan.context;
 
 import :window;
 import :instance;
@@ -121,15 +121,15 @@ import :texture;
 import :descriptor;
 import :commands;
 
-import aengine.context.commandqueue;
-import aengine.core.context;
-import aengine.core.logger;
+import context.commandqueue;
+import core.context;
+import core.logger;
 import aengine.gui;
 import aengine.input;
 import :shared_vk;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-import acontext.opengl.platform;
+import opengl.platform;
 #endif
 
 // -----------------------------------------------------------------------------

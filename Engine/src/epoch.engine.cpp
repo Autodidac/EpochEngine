@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -35,12 +35,12 @@ module;
 
 module epoch.engine;
 
-import aengine.core.logger;
+import core.logger;
 import core.format;
 import core.error;
-import epoch.platform.window;
-import epoch.platform.context;
-import epoch.platform.runtime;
+import platform.window;
+import platform.context;
+import platform.runtime;
 
 namespace epoch
 {

@@ -1,4 +1,8 @@
-﻿/************************************************
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+
+module;
+
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -41,20 +45,14 @@
  // If you truly need Win32 types here, include raylib.h first and then include
  // your minimal Win32 shims that undef/avoid collisions.
 
-#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-
 #include <raylib.h>
 
-// Import the module interface (exports declarations).
-import acontext.raylib.api;
+module raylib.api;
 
 namespace epochnamespace::raylib_api
 {
-    // ------------------------------------------------------------
-    // Constants
-    // ------------------------------------------------------------
     const Color raywhite = Color{ ::RAYWHITE.r, ::RAYWHITE.g, ::RAYWHITE.b, ::RAYWHITE.a };
-    const Color white = Color{ ::WHITE.r,    ::WHITE.g,    ::WHITE.b,    ::WHITE.a };
+    const Color white = Color{ ::WHITE.r, ::WHITE.g, ::WHITE.b, ::WHITE.a };
 
     const unsigned int flag_msaa_4x_hint = ::FLAG_MSAA_4X_HINT;
     const unsigned int flag_vsync_hint = ::FLAG_VSYNC_HINT;
@@ -117,14 +115,9 @@ namespace epochnamespace::raylib_api
 
     const int pixelformat_rgba8 = ::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
 
-    // ------------------------------------------------------------
-    // Conversions (mirror-struct <-> raylib struct)
-    // ------------------------------------------------------------
     static ::Color to_rl(Color c) { return ::Color{ c.r, c.g, c.b, c.a }; }
-
     static ::Vector2 to_rl(Vector2 v) { return ::Vector2{ v.x, v.y }; }
     static Vector2 from_rl(::Vector2 v) { return Vector2{ v.x, v.y }; }
-
     static ::Rectangle to_rl(Rectangle r) { return ::Rectangle{ r.x, r.y, r.width, r.height }; }
 
     static ::Texture2D to_rl(Texture2D t)
@@ -178,9 +171,6 @@ namespace epochnamespace::raylib_api
         return out;
     }
 
-    // ------------------------------------------------------------
-    // Functions
-    // ------------------------------------------------------------
     void set_config_flags(unsigned int flags) { ::SetConfigFlags(flags); }
     void set_trace_log_level(int level) { ::SetTraceLogLevel(level); }
     void init_window(int w, int h, const char* title) { ::InitWindow(w, h, title); }
@@ -209,10 +199,10 @@ namespace epochnamespace::raylib_api
     void set_target_fps(int fps) { ::SetTargetFPS(fps); }
     void set_window_title(const char* title) { ::SetWindowTitle(title); }
 
-    bool  is_key_down(int k) { return ::IsKeyDown(k); }
-    bool  is_mouse_button_down(int b) { return ::IsMouseButtonDown(b); }
-    int   get_mouse_x() { return ::GetMouseX(); }
-    int   get_mouse_y() { return ::GetMouseY(); }
+    bool is_key_down(int k) { return ::IsKeyDown(k); }
+    bool is_mouse_button_down(int b) { return ::IsMouseButtonDown(b); }
+    int get_mouse_x() { return ::GetMouseX(); }
+    int get_mouse_y() { return ::GetMouseY(); }
     float get_mouse_wheel_move() { return ::GetMouseWheelMove(); }
     Vector2 get_mouse_position() { return from_rl(::GetMousePosition()); }
     void set_mouse_offset(int ox, int oy) { ::SetMouseOffset(ox, oy); }
@@ -222,6 +212,23 @@ namespace epochnamespace::raylib_api
     {
         ::Image rlImg = to_rl(img);
         return from_rl(::LoadTextureFromImage(rlImg));
+    }
+
+    Image load_image_from_screen()
+    {
+        const ::Image image = ::LoadImageFromScreen();
+        return Image{
+            image.data,
+            image.width,
+            image.height,
+            image.mipmaps,
+            image.format
+        };
+    }
+
+    void unload_image(const Image& img)
+    {
+        ::UnloadImage(to_rl(img));
     }
 
     void unload_texture(const Texture2D& tex) { ::UnloadTexture(to_rl(tex)); }
@@ -239,6 +246,6 @@ namespace epochnamespace::raylib_api
     {
         ::DrawTexturePro(to_rl(tex), to_rl(src), to_rl(dst), to_rl(origin), rotation, to_rl(tint));
     }
-} // namespace epochnamespace::raylib_api
+}
 
 #endif

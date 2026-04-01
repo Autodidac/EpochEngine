@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.28)
+﻿cmake_minimum_required(VERSION 3.28)
 
 if(CMAKE_VERSION VERSION_LESS 3.29)
-    # CMake 3.27ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ3.28 require the experimental dyndep scanner to emit BMI rules.
+    # CMake 3.27ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“3.28 require the experimental dyndep scanner to emit BMI rules.
     set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP 1)
 endif()
 
@@ -450,7 +450,7 @@ if(EPOCH_VULKAN_ACTIVE)
             src/acontext.vulkan.platform.context.cpp
             src/acontext.vulkan.platform.descriptors.cpp
             src/acontext.vulkan.dispatch_storage.cpp
-            modules/acontext.vulkan.context-api_unit.ixx
+            modules/vulkan.context_api_unit.ixx
         )
     endif()
 endif()
@@ -462,14 +462,14 @@ elseif(WIN32)
     target_link_libraries(epoch PRIVATE opengl32)
 endif()
 
-if(EPOCH_OPENGL_ACTIVE OR EPOCH_RAYLIB_ACTIVE OR EPOCH_SDL_ACTIVE)
+if(EPOCH_OPENGL_ACTIVE OR EPOCH_SDL_ACTIVE)
     set(EPOCH_GLAD_NEED_HEADERS ON)
 else()
     set(EPOCH_GLAD_NEED_HEADERS OFF)
 endif()
 
 set(EPOCH_GLAD_SHOULD_LINK OFF)
-if(EPOCH_OPENGL_ACTIVE OR EPOCH_SDL_ACTIVE OR EPOCH_RAYLIB_ACTIVE)
+if(EPOCH_OPENGL_ACTIVE OR EPOCH_SDL_ACTIVE)
     set(EPOCH_GLAD_SHOULD_LINK ON)
 endif()
 
@@ -534,30 +534,30 @@ function(epoch_exclude_modules list_var regex_pattern)
 endfunction()
 
 if(NOT EPOCH_RAYLIB_ACTIVE)
-    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.raylib\.]])
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])raylib\.]])
 endif()
 
 if(NOT EPOCH_SDL_ACTIVE)
-    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.sdl\.]])
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])sdl\.]])
 endif()
 
 if(NOT EPOCH_SFML_ACTIVE)
-    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.sfml\.]])
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])sfml\.]])
 endif()
 
 if(NOT EPOCH_VULKAN_ACTIVE)
-    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.vulkan\.]])
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])vulkan\.]])
 endif()
 
-epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.vulkan\.context-api_unit\.ixx$]])
+epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])vulkan\.context_api_unit\.ixx$]])
 epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])almondshell\.ixx$]])
 
 if(NOT EPOCH_OPENGL_ACTIVE)
-    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.opengl\.]])
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])opengl\.]])
 endif()
 
 if(NOT EPOCH_SOFTWARE_RENDERER_ACTIVE)
-    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])acontext\.softrenderer\.]])
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])software\.]])
 endif()
 
 if(NOT WIN32)
@@ -664,3 +664,4 @@ if(DOXYGEN_FOUND)
 else()
     message(STATUS "Doxygen not found; the 'docs' target will be skipped.")
 endif()
+

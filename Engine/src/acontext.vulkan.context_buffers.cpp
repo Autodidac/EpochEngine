@@ -28,7 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-// modules/acontext.vulkan.context-buffers.cpp   (or .ixx)
+// modules/vulkan.context-buffers.cpp   (or .ixx)
 // Partition implementation unit
 // ============================================================================
 
@@ -47,7 +47,7 @@ module;
 #include <cstring>
 #include <stdexcept>
 
-module acontext.vulkan.context;
+module vulkan.context;
 
 import :buffers;
 import :shared_vk;

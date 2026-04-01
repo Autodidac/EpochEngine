@@ -39,7 +39,7 @@ module;
 
 export module aengine.gui;
 
-import aengine.core.context;
+import core.context;
 import aspritehandle;
 
 namespace epochnamespace::gui

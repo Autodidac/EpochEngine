@@ -36,7 +36,7 @@ module;
 
 export module aengine.telemetry;
 
-import aengine.context.type;
+import context.type;
 
 export namespace epochnamespace::telemetry
 {

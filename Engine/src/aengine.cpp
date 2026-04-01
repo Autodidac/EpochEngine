@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
  *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
  *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
@@ -88,18 +88,18 @@ import aengine.cli;
 import aengine.version;
 import aengine.updater;
 import aengine.input;
-import aengine.engine_components;
+import engine.components;
 
-import aengine.context.multiplexer;
-import aengine.context.type;
-import aengine.core.context;
-import aengine.core.logger;
-import aengine.core.time;
+import context.multiplexer;
+import context.type;
+import core.context;
+import core.logger;
+import core.timer;
 
 import aengine.gui;
-import aengine.gui.menu;
+import gui.menu;
 import aeditor;
-import epoch.render.preview_grid;
+import render.preview_grid;
 
 import ascene;
 
@@ -118,20 +118,20 @@ import asandsim;
 import acellularsim;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-import acontext.opengl.context;
+import opengl.context;
 #endif
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-import acontext.softrenderer.context;
+import software.context;
 #endif
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-import acontext.sdl.context;
+import sdl.context;
 #endif
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-import acontext.sfml.context;
+import sfml.context;
 #endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-import acontext.raylib.context;
-import acontext.raylib.state;
+import raylib.context;
+import raylib.state;
 #endif
 
 namespace input = epochnamespace::input;
@@ -200,6 +200,13 @@ namespace epochnamespace::core
     [[nodiscard]] inline std::uint64_t smoke_frame_budget() noexcept
     {
         return cli::smoke_requested ? 300u : (std::numeric_limits<std::uint64_t>::max)();
+    }
+
+    [[nodiscard]] inline auto smoke_shutdown_delay() noexcept
+    {
+        return cli::capture_requested
+            ? std::chrono::milliseconds(650)
+            : std::chrono::milliseconds(100);
     }
 
     struct TextureUploadTask
@@ -1770,7 +1777,7 @@ namespace epochnamespace::core
 
                 if (epochnamespace::core::cli::smoke_requested)
                 {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    std::this_thread::sleep_for(smoke_shutdown_delay());
                     mgr.StopAll();
                     return 0;
                 }
@@ -1840,7 +1847,7 @@ namespace epochnamespace::core
 
                 if (epochnamespace::core::cli::smoke_requested)
                 {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    std::this_thread::sleep_for(smoke_shutdown_delay());
                     mgr.StopAll();
                     return 0;
                 }

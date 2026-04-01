@@ -72,20 +72,20 @@ export module atetrislike;
  // atetrislike.hpp
 
 import ascene;
-import aengine.core.logger;
-import aengine.core.time;
+import core.logger;
+import core.timer;
 import aspriteregistry;
 import atexture;
 import aengine.input;
 import agamecore;
-import aatlas.manager;
-import aatlas.texture;
-import aimage.loader;
+import atlas.manager;
+import atlas.texture;
+import image.loader;
 import aspritehandle;
-import asprite.pool;
+import sprite.pool;
 import aplatformpump;
-import aengine.core.context;
-import aengine.context.window;
+import core.context;
+import context.window;
 
 namespace epochnamespace::tetrislike
 {

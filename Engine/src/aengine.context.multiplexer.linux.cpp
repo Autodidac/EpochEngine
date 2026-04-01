@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
  *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
  *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
@@ -29,7 +29,7 @@
  *                                              *
  ***********************************************/
 
-// aengine.context.multiplexer.linux.cpp
+// context.multiplexer.linux.cpp
 
 module;
 
@@ -39,7 +39,7 @@ module;
 #include <include/aengine.config.hpp> // for EPOCH_USING Macros
 
 // If GLAD is enabled on Linux, it must come before the GLX headers.
-#if (defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)) || defined(EPOCH_USING_RAYLIB) || defined(EPOCH_USING_SDL)
+#if (defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)) || defined(EPOCH_USING_SDL)
 #   include <glad/glad.h>
 #endif
 
@@ -73,39 +73,39 @@ module;
 #include <utility>
 #include <vector>
 
-module aengine.context.multiplexer;
+module context.multiplexer;
 
 // ---- engine interfaces/types (modules you already own) ----
-import aengine.core.context;          // Context, InitializeAllContexts(), CloneContext(), g_backends, etc.
-import aengine.core.logger;
-import aengine.context.window;        // WindowData
-import aengine.context.type;          // ContextType
-import aengine.core.commandline;
+import core.context;          // Context, InitializeAllContexts(), CloneContext(), g_backends, etc.
+import core.logger;
+import context.window;        // WindowData
+import context.type;          // ContextType
+import core.commandline;
 import aengine.input;
 import aengine.cli;
 import aengine.telemetry;
 
 // ---- helpers ----
-import autility.string.converter;     // epochnamespace::text::narrow_utf8
+import utility.string_converter;     // epochnamespace::text::narrow_utf8
 
 // ---- backends (only referenced when enabled) ----
 #   if defined(EPOCH_USING_OPENGL)
-import acontext.opengl.context;       // epochnamespace::openglcontext::opengl_initialize
+import opengl.context;       // epochnamespace::openglcontext::opengl_initialize
 #   endif
-#   if defined(EPOCH_USING_OPENGL) || defined(EPOCH_USING_RAYLIB) || defined(EPOCH_USING_SDL)
-import acontext.opengl.platform;      // epochnamespace::openglcontext::PlatformGL::get_proc_address
+#   if defined(EPOCH_USING_OPENGL) || defined(EPOCH_USING_SDL)
+import opengl.platform;      // epochnamespace::openglcontext::PlatformGL::get_proc_address
 #   endif
 #   if defined(EPOCH_USING_RAYLIB)
-import acontext.raylib.context;       // epochnamespace::raylibcontext::raylib_initialize
+import raylib.context;       // epochnamespace::raylibcontext::raylib_initialize
 #   endif
 #   if defined(EPOCH_USING_SDL)
-import acontext.sdl.context;          // epochnamespace::sdlcontext::sdl_initialize
+import sdl.context;          // epochnamespace::sdlcontext::sdl_initialize
 #   endif
 #   if defined(EPOCH_USING_SFML)
-import acontext.sfml.context;         // epochnamespace::sfmlcontext::sfml_initialize
+import sfml.context;         // epochnamespace::sfmlcontext::sfml_initialize
 #   endif
 #   if defined(EPOCH_USING_SOFTWARE_RENDERER)
-import acontext.softrenderer.context; // epochnamespace::anativecontext::softrenderer_initialize
+import software.context; // epochnamespace::anativecontext::softrenderer_initialize
 #   endif
 
 namespace epochnamespace::platform
@@ -1526,7 +1526,7 @@ namespace
         {
             glXMakeCurrent(localDisplay, xwin, glxCtx);
 
-#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) || defined(EPOCH_USING_RAYLIB) || defined(EPOCH_USING_SDL)
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) || defined(EPOCH_USING_SDL)
             static std::atomic<bool> gladInitialized{ false };
             if (!gladInitialized.load(std::memory_order_acquire))
             {

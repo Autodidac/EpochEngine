@@ -35,7 +35,7 @@ module;
 
 export module aeditor;
 
-import aengine.core.context;
+import core.context;
 import aengine.gui;
 
 namespace epochnamespace

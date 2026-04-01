@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -48,10 +48,10 @@ module;
 // If stb_truetype.h uses STBTT_STATIC, define it in the header or here (optional).
 // #define STBTT_STATIC
 
-module afont.renderer;
+module font.renderer;
 
-import aatlas.manager;
-import aatlas.texture;
+import atlas.manager;
+import atlas.texture;
 
 namespace epochnamespace::font
 {

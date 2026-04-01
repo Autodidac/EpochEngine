@@ -32,9 +32,9 @@ module;
 
 export module aengine.updater;
 
-export import aengine.updater.system; // Primary updater implementation module
-export import aengine.updater.config;
-export import aengine.updater.tools;
+export import updater.system; // Primary updater implementation module
+export import updater.config;
+export import updater.tools;
 
 namespace epochnamespace::updater
 {

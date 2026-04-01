@@ -46,8 +46,8 @@ module;
 
 export module aengine.diagnostics;
 
-import aengine.context.type;
-import aengine.core.logger;
+import context.type;
+import core.logger;
 import aengine.telemetry;
 
 // epochengine diagnostics helpers

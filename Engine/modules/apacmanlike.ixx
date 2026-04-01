@@ -46,22 +46,22 @@ export module apacmanlike;
 // ------------------------------------------------------------
 // Epoch engine / project modules
 // ------------------------------------------------------------
-import aengine.core.context;      // core::Context
-import aengine.context.window;    // core::WindowData
+import core.context;      // core::Context
+import context.window;    // core::WindowData
 import aengine.input;             // input::Key
 import agamecore;                 // grid helpers
-import aatlas.manager;            // atlas manager + registry
-import aatlas.texture;            // TextureAtlas
-import aimage.loader;             // a_loadImage / ImageData
+import atlas.manager;            // atlas manager + registry
+import atlas.texture;            // TextureAtlas
+import image.loader;             // a_loadImage / ImageData
 import aspritehandle;             // SpriteHandle
-import asprite.pool;              // spritepool
+import sprite.pool;              // spritepool
 import ascene;                    // scene::Scene
 
 // ------------------------------------------------------------
 // Engine feature modules
 // ------------------------------------------------------------
-import aengine.core.time;         // timing::Timer
-import aengine.core.logger;       // logger::Logger
+import core.timer;         // timing::Timer
+import core.logger;       // logger::Logger
 
 // ------------------------------------------------------------
 // C++ standard library modules

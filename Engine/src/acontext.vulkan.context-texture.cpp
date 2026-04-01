@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
  *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
  *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
@@ -28,10 +28,10 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-// src/acontext.vulkan.context-texture.cpp
-// acontext.vulkan.context:texture
+// src/vulkan.context-texture.cpp
+// vulkan.context:texture
 // Vulkan texture upload (PPM -> RGBA8 -> staging buffer -> vkImage)
-// Uses aengine.core.logger (per-system + console) via logger::get(...).log(...)
+// Uses core.logger (per-system + console) via logger::get(...).log(...)
 // (Does not require logger::infof/errorf exports.)
 // ============================================================================
 
@@ -56,14 +56,14 @@ module;
 #include <utility>
 #include <vector>
 
-module acontext.vulkan.context;
+module vulkan.context;
 
 import :texture;
-import aengine.core.logger;
+import core.logger;
 import aengine.cli;
-import autility.string.converter;
-import aimage.loader;
-import aatlas.texture;
+import utility.string_converter;
+import image.loader;
+import atlas.texture;
 import :shared_vk;
 
 namespace epochnamespace::vulkancontext

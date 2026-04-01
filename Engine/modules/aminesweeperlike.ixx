@@ -51,22 +51,22 @@ export module aminesweeperlike;
 // Epoch engine / project modules
 // ------------------------------------------------------------
 import aplatformpump;             // aplatformpump.hpp
-import aengine.core.context;      // Context (core)
-import aengine.context.window;    // WindowData
+import core.context;      // Context (core)
+import context.window;    // WindowData
 import aengine.input;             // input
 import agamecore;                 // grid helpers
-import aatlas.manager;            // atlas manager
-import aatlas.texture;            // TextureAtlas
-import aimage.loader;             // a_loadImage / ImageData
+import atlas.manager;            // atlas manager
+import atlas.texture;            // TextureAtlas
+import image.loader;             // a_loadImage / ImageData
 import aspritehandle;             // SpriteHandle
-import asprite.pool;              // spritepool
+import sprite.pool;              // spritepool
 import ascene;                    // scene::Scene
 
 // ------------------------------------------------------------
 // Engine feature modules
 // ------------------------------------------------------------
-import aengine.core.time;
-import aengine.core.logger;
+import core.timer;
+import core.logger;
 
 // ------------------------------------------------------------
 // C++ standard library modules

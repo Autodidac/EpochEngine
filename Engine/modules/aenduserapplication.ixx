@@ -38,7 +38,7 @@ export module aenduserapplication;
 //import aengine.context;
 //import aeventsystem;
 ////import "ainput.hpp";
-//import aengine.core.time;
+//import core.timer;
 //
 //namespace epochnamespace::app
 //{
