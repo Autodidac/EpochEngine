@@ -560,8 +560,7 @@ export namespace epochnamespace::sdlcontext
             if (sdlcontext.parent)
                 PostMessage(sdlcontext.parent, WM_SIZE, 0, MAKELPARAM(width, height));
 
-            ::ShowWindow(hostWnd, SW_HIDE);
-            ::DestroyWindow(hostWnd);
+            ::ShowWindow(hostWnd, SW_SHOWNA);
         }
 #endif
 

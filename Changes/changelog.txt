@@ -1,4 +1,9 @@
-# Epoch Changelog
+﻿# Epoch Changelog
+
+## [v0.83.51]
+- Kept the Windows multi-context host visible for docked SDL and SFML panes so backend child windows no longer disappear behind the editor host during local smoke runs.
+- Improved Windows host/child handle matching in the multiplexer so resize, enqueue, cleanup, and dock layout logic follow the real live pane handle instead of only the original host HWND.
+- Documented the asset-bearing output-folder launch path for multi-context smoke tests so local editor runs match the runtime asset layout used by the docked backends.
 
 ## [v0.83.4]
 - Rolled `main` forward after the packaged `0.83.3` updater-shell release so the public binary can demonstrate the live fallback path into the newer source revision with the repaired runtime-version comparison.
@@ -71,7 +76,7 @@
 - Refreshed the active release surfaces for the repaired `0.82.41` runtime drop.
 
 ## [v0.82.40]
-- Routed updater status back through Epoch logging with sanitized updater messages so the commandline pane stops showing the raw `♪◙` newline artifacts.
+- Routed updater status back through Epoch logging with sanitized updater messages so the commandline pane stops showing the raw `â™ªâ—™` newline artifacts.
 - Kept the newer-source fallback intact so a confirmed update still rebuilds from source when no newer packaged runtime exists.
 - Refreshed the active release surfaces for the repaired updater runtime drop.
 
@@ -247,10 +252,11 @@
 - Added the v0.72.9 release notes to keep the published metadata in sync.
 
 ## [v0.72.8]
-- Converted additional legacy headers into module partitions so atlas utilities (`aatlasmanager.hpp`, `aatlastexture.hpp`) now expose `import aatlas.manager;` / `import aatlas.texture;`, the CLI surface is mirrored via `import acommandline;`, ECS mirrors (`import aentity.*`) stay in sync, and umbrella aggregates mirror the legacy include surface.
+- Converted additional legacy headers into module partitions so atlas utilities (`aatlasmanager.hpp`, `aatlastexture.hpp`) now expose `import atlas.manager;` / `import atlas.texture;`, the CLI surface is mirrored via `import acommandline;`, ECS mirrors (`import aentity.*`) stay in sync, and umbrella aggregates mirror the legacy include surface.
 - Synced version metadata and documentation to advertise v0.72.8 with the refreshed import surface.
 - Confirmed updater/configuration guidance pulls version strings from the runtime helpers so launch manifests match v0.72.8.
 
 ## Older releases
 - Historical release notes remain in `Changes/release_notes_v*.md`.
 - The older pre-rebrand release history has been preserved, but the public docs now use Epoch branding consistently.
+

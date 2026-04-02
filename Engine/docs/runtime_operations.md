@@ -24,6 +24,9 @@ workflow instead of preserving the older citation-heavy snapshot docs.
 
 - The engine logger is the preferred way to tag subsystem output.
 - Keep backend-specific noise behind subsystem names so multi-context runs stay readable.
+- Repeated identical startup/error lines should collapse instead of flooding the
+  console; one tagged line per repeated condition is the goal, with backend
+  detail still carried in the subsystem tag and source location.
 - For release/version reporting, prefer the shared version helpers instead of
   duplicating hard-coded version strings.
 
@@ -38,6 +41,8 @@ workflow instead of preserving the older citation-heavy snapshot docs.
 ## Troubleshooting checklist
 
 - Verify the expected context/render macros are enabled.
+- Launch Windows smoke tests from `x64/Debug/` or `x64/Release/` so the editor
+  host and docked backend panes share the colocated runtime assets.
 - Use fresh build directories when changing compilers, module scanning flags, or
   backend combinations.
 - If reload behavior becomes inconsistent, check script diagnostics first, then

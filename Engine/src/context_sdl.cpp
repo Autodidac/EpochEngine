@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <string>
 
@@ -29,11 +30,14 @@ import context.multiplexer;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import aengine.gui;
 import aengine.input;
+import atlas.manager;
 import atlas.texture;
 import context.commandqueue;
 import core.logger;
 import image.loader;
+import render.preview_grid;
 import sdl.renderer;
+import sdl.state;
 import sdl.textures;
 
 namespace
@@ -76,18 +80,109 @@ namespace
         ctx->is_mouse_button_down = [](epochnamespace::input::MouseButton button) { return epochnamespace::input::is_mouse_button_down(button); };
     }
 
-    void request_host_shutdown(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
+    [[nodiscard]] Uint8 to_sdl_channel(float value) noexcept
     {
-        s_running = false;
-        if (ctx && ctx->windowData)
-            ctx->windowData->set_should_close(true);
-#if defined(_WIN32)
-        HWND closeTarget = s_childWindow;
-        if (!closeTarget || ::IsWindow(closeTarget) == FALSE)
-            closeTarget = s_hostWindow;
-        if (closeTarget && ::IsWindow(closeTarget) != FALSE)
-            ::PostMessageW(closeTarget, WM_CLOSE, 0, 0);
-#endif
+        const float scaled = (std::clamp)(value, 0.0f, 1.0f) * 255.0f;
+        return static_cast<Uint8>(scaled);
+    }
+
+    [[nodiscard]] bool project_preview_vertex(
+        const epochnamespace::previewgrid::Mat4& mvp,
+        const epochnamespace::previewgrid::Vec3& position,
+        const epochnamespace::core::RenderViewport& viewport,
+        float& outX,
+        float& outY) noexcept
+    {
+        const auto clip = epochnamespace::previewgrid::transform_point(mvp, position);
+        if (clip.w <= 1.0e-4f)
+            return false;
+
+        const float invW = 1.0f / clip.w;
+        const float ndcX = clip.x * invW;
+        const float ndcY = clip.y * invW;
+        if (!std::isfinite(ndcX) || !std::isfinite(ndcY))
+            return false;
+
+        outX = static_cast<float>(viewport.x)
+            + ((ndcX * 0.5f) + 0.5f) * static_cast<float>(viewport.width);
+        outY = static_cast<float>(viewport.y)
+            + ((-ndcY * 0.5f) + 0.5f) * static_cast<float>(viewport.height);
+        return true;
+    }
+
+    void render_scene_preview(const std::shared_ptr<epochnamespace::core::Context>& ctx)
+    {
+        if (!ctx || !s_renderer)
+            return;
+
+        const auto viewport = ctx->scene_viewport();
+        if (!viewport.valid() || ctx->scene_preview_mode() != epochnamespace::core::ScenePreviewMode::Editor)
+            return;
+
+        SDL_Rect clipRect{ viewport.x, viewport.y, viewport.width, viewport.height };
+        (void)SDL_SetRenderClipRect(s_renderer, &clipRect);
+
+        const auto clearColor = epochnamespace::previewgrid::kClearColor;
+        const SDL_FRect background{
+            static_cast<float>(viewport.x),
+            static_cast<float>(viewport.y),
+            static_cast<float>(viewport.width),
+            static_cast<float>(viewport.height)
+        };
+
+        (void)SDL_SetRenderDrawColor(
+            s_renderer,
+            to_sdl_channel(clearColor[0]),
+            to_sdl_channel(clearColor[1]),
+            to_sdl_channel(clearColor[2]),
+            to_sdl_channel(clearColor[3]));
+        (void)SDL_RenderFillRect(s_renderer, &background);
+
+        const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
+        const float aspect = viewport.height > 0
+            ? (viewport.width / static_cast<float>(viewport.height))
+            : 1.0f;
+        const auto proj = epochnamespace::previewgrid::perspective(
+            camera.fovRadians,
+            aspect,
+            camera.nearPlane,
+            camera.farPlane);
+        const auto view = epochnamespace::previewgrid::look_at(
+            camera.eye,
+            camera.target,
+            camera.up);
+        const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
+        const auto vertices = epochnamespace::previewgrid::grid_vertices();
+        const auto indices = epochnamespace::previewgrid::grid_indices();
+
+        for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+        {
+            const auto firstIndex = static_cast<std::size_t>(indices[i]);
+            const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
+            if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
+                continue;
+
+            float ax = 0.0f;
+            float ay = 0.0f;
+            float bx = 0.0f;
+            float by = 0.0f;
+            if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, ax, ay)
+                || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, bx, by))
+            {
+                continue;
+            }
+
+            const auto color = vertices[firstIndex].color;
+            (void)SDL_SetRenderDrawColor(
+                s_renderer,
+                to_sdl_channel(color.x),
+                to_sdl_channel(color.y),
+                to_sdl_channel(color.z),
+                255u);
+            (void)SDL_RenderLine(s_renderer, ax, ay, bx, by);
+        }
+
+        (void)SDL_SetRenderClipRect(s_renderer, nullptr);
     }
 
     void refresh_dimensions(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
@@ -102,29 +197,42 @@ namespace
                 s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
             }
         }
-        else
-#endif
+        else if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
+        {
+            RECT client{};
+            if (::GetClientRect(s_hostWindow, &client))
+            {
+                s_width = (std::max)(1, static_cast<int>(client.right - client.left));
+                s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
+            }
+        }
+#else
         if (s_window)
-            SDL_GetWindowSize(s_window, &s_width, &s_height);
-
-        s_width = (std::max)(1, s_width);
-        s_height = (std::max)(1, s_height);
+        {
+            int w = 0;
+            int h = 0;
+            SDL_GetWindowSize(s_window, &w, &h);
+            s_width = (std::max)(1, w);
+            s_height = (std::max)(1, h);
+        }
+#endif
 
         if (ctx)
         {
             ctx->width = s_width;
             ctx->height = s_height;
-            ctx->virtualWidth = s_width;
-            ctx->virtualHeight = s_height;
             ctx->framebufferWidth = s_width;
             ctx->framebufferHeight = s_height;
             if (ctx->windowData)
             {
                 ctx->windowData->sdl_window = s_window;
-                ctx->windowData->width = s_width;
-                ctx->windowData->height = s_height;
+                ctx->windowData->set_size(s_width, s_height);
             }
         }
+
+        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        state.window.sdl_window = s_window;
+        state.set_dimensions(s_width, s_height);
     }
 
     void sync_docked_child_size(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
@@ -133,7 +241,16 @@ namespace
         if (!s_hostWindow || !s_childWindow
             || ::IsWindow(s_hostWindow) == FALSE
             || ::IsWindow(s_childWindow) == FALSE)
+        {
             return;
+        }
+
+        HWND childParent = ::GetParent(s_childWindow);
+        if (childParent && childParent != s_hostWindow)
+        {
+            refresh_dimensions(ctx);
+            return;
+        }
 
         RECT client{};
         if (!::GetClientRect(s_hostWindow, &client))
@@ -154,13 +271,26 @@ namespace
             width,
             height,
             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-        refresh_dimensions(ctx);
 
+        if (s_window)
+            SDL_SetWindowSize(s_window, width, height);
+
+        refresh_dimensions(ctx);
         if (ctx && ctx->onResize)
             ctx->onResize(width, height);
 #else
         (void)ctx;
 #endif
+    }
+
+    void request_host_shutdown(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
+    {
+        s_running = false;
+        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        state.running = false;
+        state.mark_should_close(true);
+        if (ctx && ctx->windowData)
+            ctx->windowData->set_should_close(true);
     }
 
     void sdl_initialize_adapter()
@@ -169,6 +299,7 @@ namespace
         if (!ctx)
             return;
 
+        ctx->init_failed = false;
         s_width = (std::max)(1, ctx->width);
         s_height = (std::max)(1, ctx->height);
 
@@ -176,153 +307,169 @@ namespace
         s_hostWindow = ctx->get_hwnd();
 #endif
 
-        if (!s_running)
+        if (static_cast<int>(SDL_Init(SDL_INIT_VIDEO)) < 0)
         {
-            if (SDL_WasInit(SDL_INIT_VIDEO) == 0 && static_cast<int>(SDL_Init(SDL_INIT_VIDEO)) < 0)
-            {
-                epochnamespace::logger::error("SDL", std::string("SDL_Init failed: ") + SDL_GetError());
-                return;
-            }
-
-            SDL_PropertiesID props = SDL_CreateProperties();
-            if (!props)
-            {
-                epochnamespace::logger::error("SDL", std::string("SDL_CreateProperties failed: ") + SDL_GetError());
-                return;
-            }
-
-            SDL_SetStringProperty(
-                props,
-                SDL_PROP_WINDOW_CREATE_TITLE_STRING,
-                ctx->backendName.empty() ? "SDL" : ctx->backendName.c_str());
-            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, s_width);
-            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, s_height);
-            SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
-
-            s_window = SDL_CreateWindowWithProperties(props);
-            SDL_DestroyProperties(props);
-            if (!s_window)
-            {
-                epochnamespace::logger::error("SDL", std::string("SDL_CreateWindowWithProperties failed: ") + SDL_GetError());
-                return;
-            }
-
-            s_renderer = SDL_CreateRenderer(s_window, nullptr);
-            if (!s_renderer)
-            {
-                epochnamespace::logger::error("SDL", std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
-                SDL_DestroyWindow(s_window);
-                s_window = nullptr;
-                return;
-            }
-
-#if defined(_WIN32)
-            SDL_PropertiesID windowProps = SDL_GetWindowProperties(s_window);
-            if (!windowProps)
-            {
-                epochnamespace::logger::error("SDL", std::string("SDL_GetWindowProperties failed: ") + SDL_GetError());
-                SDL_DestroyRenderer(s_renderer);
-                SDL_DestroyWindow(s_window);
-                s_renderer = nullptr;
-                s_window = nullptr;
-                return;
-            }
-
-            s_childWindow = static_cast<HWND>(
-                SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-            if (!s_childWindow)
-            {
-                epochnamespace::logger::error("SDL", "Failed to retrieve SDL HWND");
-                SDL_DestroyRenderer(s_renderer);
-                SDL_DestroyWindow(s_window);
-                s_renderer = nullptr;
-                s_window = nullptr;
-                return;
-            }
-
-            if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
-            {
-                ::SetParent(s_childWindow, s_hostWindow);
-
-                LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
-                style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
-                style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
-                ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-
-                epochnamespace::core::MakeDockable(s_childWindow, s_hostWindow);
-
-                RECT client{};
-                ::GetClientRect(s_hostWindow, &client);
-                s_width = (std::max)(1, static_cast<int>(client.right - client.left));
-                s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
-
-                ::SetWindowPos(
-                    s_childWindow,
-                    nullptr,
-                    0,
-                    0,
-                    s_width,
-                    s_height,
-                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-
-                ::ShowWindow(s_hostWindow, SW_SHOWNA);
-            }
-#endif
-
-            epochnamespace::sdlcontext::init_renderer(s_renderer);
-            s_running = true;
-        }
-
-        if (!s_window || !s_renderer)
+            ctx->init_failed = true;
+            epochnamespace::logger::error("SDL", std::string("SDL_Init failed: ") + SDL_GetError());
             return;
-
-        if (ctx)
-        {
-#if defined(_WIN32)
-            const HWND liveWindow = s_childWindow ? s_childWindow : s_hostWindow;
-            ctx->hwnd = liveWindow;
-            ctx->native_window = liveWindow;
-#endif
-            if (ctx->windowData)
-            {
-                ctx->windowData->sdl_window = s_window;
-#if defined(_WIN32)
-                ctx->windowData->hwnd = liveWindow;
-                ctx->windowData->host_hwnd = s_hostWindow;
-                ctx->windowData->hwndChild = s_childWindow;
-                ctx->windowData->hdc = nullptr;
-#endif
-            }
         }
+
+        const std::string title = (ctx->windowData && !ctx->windowData->titleNarrow.empty())
+            ? ctx->windowData->titleNarrow
+            : (ctx->backendName.empty() ? "SDL" : ctx->backendName);
+
+        SDL_PropertiesID props = SDL_CreateProperties();
+        if (!props)
+        {
+            ctx->init_failed = true;
+            epochnamespace::logger::error("SDL", std::string("SDL_CreateProperties failed: ") + SDL_GetError());
+            SDL_Quit();
+            return;
+        }
+
+        SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title.c_str());
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, s_width);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, s_height);
+        SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
+
+        s_window = SDL_CreateWindowWithProperties(props);
+        SDL_DestroyProperties(props);
+        if (!s_window)
+        {
+            ctx->init_failed = true;
+            epochnamespace::logger::error("SDL", std::string("SDL_CreateWindowWithProperties failed: ") + SDL_GetError());
+            SDL_Quit();
+            return;
+        }
+
+        s_renderer = SDL_CreateRenderer(s_window, nullptr);
+        if (!s_renderer)
+        {
+            ctx->init_failed = true;
+            epochnamespace::logger::error("SDL", std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
+            SDL_DestroyWindow(s_window);
+            s_window = nullptr;
+            SDL_Quit();
+            return;
+        }
+
+        epochnamespace::sdlcontext::init_renderer(s_renderer);
+        epochnamespace::sdltextures::sdl_renderer = s_renderer;
+
+#if defined(_WIN32)
+        SDL_PropertiesID windowProps = SDL_GetWindowProperties(s_window);
+        if (!windowProps)
+        {
+            ctx->init_failed = true;
+            epochnamespace::logger::error("SDL", std::string("SDL_GetWindowProperties failed: ") + SDL_GetError());
+            SDL_DestroyRenderer(s_renderer);
+            SDL_DestroyWindow(s_window);
+            s_renderer = nullptr;
+            s_window = nullptr;
+            SDL_Quit();
+            return;
+        }
+
+        s_childWindow = static_cast<HWND>(
+            SDL_GetPointerProperty(windowProps, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+        if (!s_childWindow)
+        {
+            ctx->init_failed = true;
+            epochnamespace::logger::error("SDL", "Failed to retrieve SDL HWND");
+            SDL_DestroyRenderer(s_renderer);
+            SDL_DestroyWindow(s_window);
+            s_renderer = nullptr;
+            s_window = nullptr;
+            SDL_Quit();
+            return;
+        }
+
+        if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
+        {
+            ::SetParent(s_childWindow, s_hostWindow);
+
+            LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
+            style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
+            style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+            ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
+
+            epochnamespace::core::MakeDockable(s_childWindow, s_hostWindow);
+
+            RECT client{};
+            ::GetClientRect(s_hostWindow, &client);
+            s_width = (std::max)(1, static_cast<int>(client.right - client.left));
+            s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
+
+            ::SetWindowPos(
+                s_childWindow,
+                nullptr,
+                0,
+                0,
+                s_width,
+                s_height,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+            ::ShowWindow(s_hostWindow, SW_SHOWNA);
+        }
+#endif
 
         refresh_dimensions(ctx);
-        sync_docked_child_size(ctx);
+        if (ctx->windowData)
+        {
+#if defined(_WIN32)
+            ctx->windowData->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+            ctx->windowData->host_hwnd = s_hostWindow;
+            ctx->windowData->hwndChild = s_childWindow;
+#endif
+            ctx->windowData->sdl_window = s_window;
+            ctx->windowData->set_size(s_width, s_height);
+        }
+
+        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        state.window.sdl_window = s_window;
+        state.set_dimensions(s_width, s_height);
+        state.mark_should_close(false);
+        state.renderFaulted = false;
+        state.running = true;
 
 #if defined(_WIN32)
-        HWND focusWindow = s_childWindow ? s_childWindow : s_hostWindow;
-        if (focusWindow && ::IsWindow(focusWindow) != FALSE)
-            ::SetFocus(focusWindow);
+        ctx->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+        ctx->native_window = s_childWindow ? s_childWindow : s_hostWindow;
 #endif
+
+        s_running = true;
+        SDL_ShowWindow(s_window);
+        epochnamespace::atlasmanager::register_backend_uploader(
+            epochnamespace::core::ContextType::SDL,
+            [](const epochnamespace::TextureAtlas& atlas)
+            {
+                epochnamespace::sdltextures::ensure_uploaded(atlas);
+            });
     }
 
     void sdl_cleanup_adapter()
     {
-        s_running = false;
+        epochnamespace::atlasmanager::unregister_backend_uploader(epochnamespace::core::ContextType::SDL);
+        epochnamespace::sdltextures::clear_gpu_atlases();
+        epochnamespace::sdltextures::sdl_renderer = nullptr;
 
+        s_running = false;
+        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        state.running = false;
+        state.renderFaulted = false;
+        state.mark_should_close(false);
+        state.window.sdl_window = nullptr;
         if (s_renderer)
         {
             SDL_DestroyRenderer(s_renderer);
             s_renderer = nullptr;
         }
-
         if (s_window)
         {
             SDL_DestroyWindow(s_window);
             s_window = nullptr;
         }
-
-        if (SDL_WasInit(SDL_INIT_VIDEO) != 0)
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        SDL_Quit();
 
 #if defined(_WIN32)
         s_hostWindow = nullptr;
@@ -337,6 +484,10 @@ namespace
         epochnamespace::core::CommandQueue& queue)
     {
         if (!ctx || !s_running || !s_window || !s_renderer)
+            return false;
+
+        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        if (state.renderFaulted || state.shouldClose || state.window.get_should_close())
             return false;
 
 #if defined(_WIN32)
@@ -364,11 +515,28 @@ namespace
         sync_docked_child_size(ctx);
         refresh_dimensions(ctx);
 
-        epochnamespace::sdlcontext::begin_frame();
+        state.window.sdl_window = s_window;
+        state.set_dimensions(s_width, s_height);
+        state.running = s_running;
+
+        const auto clearColor = epochnamespace::core::clear_color_for_context(epochnamespace::core::ContextType::SDL);
+        (void)SDL_SetRenderDrawColor(
+            s_renderer,
+            to_sdl_channel(clearColor[0]),
+            to_sdl_channel(clearColor[1]),
+            to_sdl_channel(clearColor[2]),
+            to_sdl_channel(clearColor[3]));
         SDL_RenderClear(s_renderer);
+
+        epochnamespace::atlasmanager::process_pending_uploads(epochnamespace::core::ContextType::SDL);
+        render_scene_preview(ctx);
         (void)queue.drain();
         (void)epochnamespace::gui::render_deferred_batch(ctx.get());
         epochnamespace::sdlcontext::end_frame();
+        if (state.renderFaulted)
+        {
+            return false;
+        }
         return s_running;
     }
 }
@@ -397,4 +565,5 @@ namespace epochnamespace::core::detail
         AddContextForBackend(ContextType::SDL, std::move(ctx));
     }
 }
+
 #endif

@@ -259,6 +259,32 @@ namespace
             ::ReleaseDC(window->hwnd, window->hdc);
     }
 
+    [[nodiscard]] inline HWND primary_window_handle(const epochnamespace::core::WindowData* window) noexcept
+    {
+        if (!window)
+            return nullptr;
+
+        if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+            return window->hwnd;
+        if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+            return window->hwndChild;
+        if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+            return window->host_hwnd;
+
+        return window->hwnd ? window->hwnd : (window->hwndChild ? window->hwndChild : window->host_hwnd);
+    }
+
+    [[nodiscard]] inline bool matches_window_handle(
+        const epochnamespace::core::WindowData* window,
+        HWND hwnd) noexcept
+    {
+        return window
+            && hwnd
+            && (window->hwnd == hwnd
+                || window->hwndChild == hwnd
+                || window->host_hwnd == hwnd);
+    }
+
     [[nodiscard]] inline bool thread_finished(std::thread& thread) noexcept
     {
         if (!thread.joinable()) return true;
@@ -353,7 +379,7 @@ namespace epochnamespace::core
     {
         std::scoped_lock lock(windowsMutex);
         auto it = std::find_if(windows.begin(), windows.end(),
-            [hwnd](const std::unique_ptr<WindowData>& w) { return w && w->hwnd == hwnd; });
+            [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
         return (it != windows.end()) ? it->get() : nullptr;
     }
 
@@ -361,7 +387,7 @@ namespace epochnamespace::core
     {
         std::scoped_lock lock(windowsMutex);
         auto it = std::find_if(windows.begin(), windows.end(),
-            [hwnd](const std::unique_ptr<WindowData>& w) { return w && w->hwnd == hwnd; });
+            [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
         return (it != windows.end()) ? it->get() : nullptr;
     }
 
@@ -400,7 +426,7 @@ namespace epochnamespace::core
     {
         std::scoped_lock lock(windowsMutex);
         auto it = std::find_if(windows.begin(), windows.end(),
-            [hwnd](const std::unique_ptr<WindowData>& w) { return w && w->hwnd == hwnd; });
+            [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
         if (it != windows.end()) (*it)->EnqueueCommand(std::move(cmd));
     }
 
@@ -1106,7 +1132,7 @@ namespace epochnamespace::core
         {
             std::scoped_lock lock(windowsMutex);
             auto it = std::find_if(windows.begin(), windows.end(),
-                [hwnd](const std::unique_ptr<WindowData>& w) { return w && w->hwnd == hwnd; });
+                [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
             if (it == windows.end()) return;
 
             window = it->get();
@@ -1130,8 +1156,8 @@ namespace epochnamespace::core
 
             if (!resizeCallback && window->onResize) resizeCallback = window->onResize;
 
-            if (window->hwnd)
-                windowId = reinterpret_cast<std::uintptr_t>(window->hwnd);
+            if (const HWND liveHwnd = primary_window_handle(window))
+                windowId = reinterpret_cast<std::uintptr_t>(liveHwnd);
         }
 
         if (window)
@@ -1201,7 +1227,7 @@ namespace epochnamespace::core
         {
             std::scoped_lock lock(windowsMutex);
             auto it = std::find_if(windows.begin(), windows.end(),
-                [hwnd](const std::unique_ptr<WindowData>& w) { return w && w->hwnd == hwnd; });
+                [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
             if (it == windows.end()) return;
 
             (*it)->running = false;
@@ -1210,7 +1236,10 @@ namespace epochnamespace::core
             {
                 auto ctx = typed_context((*it)->context);
                 if (ctx->windowData == it->get()) ctx->windowData = nullptr;
-                if (ctx->hwnd == hwnd)
+                if (ctx->hwnd == hwnd
+                    || ctx->hwnd == (*it)->hwnd
+                    || ctx->hwnd == (*it)->hwndChild
+                    || ctx->hwnd == (*it)->host_hwnd)
                 {
                     ctx->hwnd = nullptr;
                     ctx->hdc = nullptr;
@@ -1224,13 +1253,24 @@ namespace epochnamespace::core
         }
 
         auto& threads = Threads();
-        if (threads.contains(hwnd))
+        HWND threadKey = hwnd;
+        if (!threads.contains(threadKey) && removed)
+        {
+            if (removed->host_hwnd && threads.contains(removed->host_hwnd))
+                threadKey = removed->host_hwnd;
+            else if (removed->hwndChild && threads.contains(removed->hwndChild))
+                threadKey = removed->hwndChild;
+            else if (removed->hwnd && threads.contains(removed->hwnd))
+                threadKey = removed->hwnd;
+        }
+
+        if (threads.contains(threadKey))
         {
             PendingWindowCleanup pending{};
-            pending.hwnd = hwnd;
-            pending.thread = std::move(threads[hwnd]);
+            pending.hwnd = threadKey;
+            pending.thread = std::move(threads[threadKey]);
             pending.window = std::move(removed);
-            threads.erase(hwnd);
+            threads.erase(threadKey);
             g_pendingCleanups.emplace_back(std::move(pending));
         }
         else
@@ -1285,10 +1325,11 @@ namespace epochnamespace::core
         dockedWindows.reserve(windows.size());
         for (auto& win : windows)
         {
-            if (!win || !win->hwnd || ::IsWindow(win->hwnd) == FALSE)
+            const HWND liveHwnd = primary_window_handle(win.get());
+            if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
                 continue;
 
-            if (::GetParent(win->hwnd) != parent)
+            if (::GetParent(liveHwnd) != parent)
                 continue;
 
             dockedWindows.push_back(win.get());
@@ -1339,10 +1380,14 @@ namespace epochnamespace::core
             const int r = static_cast<int>(i) / cols;
 
             WindowData& win = *dockedWindows[i];
-            ::SetWindowPos(win.hwnd, nullptr, c * cw, r * ch, cw, ch,
+            const HWND liveHwnd = primary_window_handle(&win);
+            if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
+                continue;
+
+            ::SetWindowPos(liveHwnd, nullptr, c * cw, r * ch, cw, ch,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
-            HandleResize(win.hwnd, cw, ch);
+            HandleResize(liveHwnd, cw, ch);
         }
     }
 
@@ -1392,7 +1437,7 @@ namespace epochnamespace::core
         struct ResetGuard { ~ResetGuard() { MultiContextManager::SetCurrent(nullptr); } } resetGuard;
 
         // Raylib must be created+initialized on the SAME thread that will render it.
-		// it is passed the HWND from outside, but it creates its own internal windowing context.
+        // SDL/SFML use their registered backend lifecycle directly.
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         if (ctx->type == ContextType::RayLib)
         {

@@ -248,6 +248,8 @@ namespace epochnamespace::gui
         {
             return ctx
                 && (ctx->type == core::ContextType::Software
+                    || ctx->type == core::ContextType::SDL
+                    || ctx->type == core::ContextType::SFML
                     || ctx->type == core::ContextType::RayLib
                     || ctx->type == core::ContextType::Vulkan);
         }

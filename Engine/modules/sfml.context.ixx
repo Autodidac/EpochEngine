@@ -497,7 +497,7 @@ export namespace epochnamespace::sfmlcontext
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
             if (hostWnd && hostWnd != sfmlcontext.hwnd && ::IsWindow(hostWnd) != FALSE)
-                ShowWindow(hostWnd, SW_HIDE);
+                ShowWindow(hostWnd, SW_SHOWNA);
 
             if (sfmlcontext.onResize)
                 sfmlcontext.onResize(width, height);

@@ -26,6 +26,10 @@ x64/Release/
 Those binary folders also carry runtime assets, so launching from the binary
 directory is the safest default for local testing.
 
+For Windows multi-context smoke tests, prefer launching directly from
+`x64/Debug/` or `x64/Release/` so docked SDL/SFML/Vulkan panes see the same
+asset set as the main editor host.
+
 ---
 
 # What Epoch provides
