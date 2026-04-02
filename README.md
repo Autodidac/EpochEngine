@@ -309,24 +309,24 @@ Useful entry points:
 Version:
 
 ```text
-v0.82.51
+v0.83.51
 ```
 
 Highlights:
 
-- `0.82.51` keeps `main` ahead of the packaged `0.82.50` updater release so
-  the repo remains the next source target during post-release testing.
-- The packaged updater now captures native `vcpkg` and `MSBuild` output in log
-  files instead of dumping raw tool junk into the live console.
-- The sample projects now resolve Vulkan, GLM, and SFML through repo-relative
-  vcpkg paths instead of hardcoded machine-local directories.
-- Source updates stay visible by default and can still be run silently on
-  demand by setting `EPOCH_UPDATER_SILENT=1`.
+- `0.83.51` keeps the repo/source surface aligned with the current Windows
+  docked-backend stabilization pass.
+- The Windows multiplexer now tracks host and child HWNDs together, which keeps
+  resize, enqueue, cleanup, and dock layout work aimed at the real live pane.
+- SDL and SFML dock hosts now stay visible during local smoke runs, and the
+  README/docs now call out the asset-bearing output-folder launch path for
+  multi-context testing.
+- Historical per-version release notes are now collated into
+  [Changes/release_notes_archive.md](Changes/release_notes_archive.md) instead
+  of only living as scattered version markdown files.
 - Detailed release history lives in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
   current version notes under [Changes/](Changes/).
-- The launcher now owns projects, games, and tool entry points instead of
-  overloading the editor command surface.
 - The editor now behaves more like a real desktop tool, with `File`, `Edit`,
   `Scene`, `Command`, and `Help` menus across the top bar.
 - The shared scene/base color now tracks the darker Vulkan palette across the
