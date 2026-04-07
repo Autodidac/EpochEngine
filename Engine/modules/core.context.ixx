@@ -329,7 +329,13 @@ namespace epochnamespace::core
         #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
             const auto has_focus = [this]() noexcept
             {
-                const HWND focused = ::GetFocus();
+                HWND focused = nullptr;
+                GUITHREADINFO guiInfo{};
+                guiInfo.cbSize = sizeof(guiInfo);
+                if (::GetGUIThreadInfo(0, &guiInfo))
+                    focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
+                if (!focused)
+                    focused = ::GetFocus();
                 if (!focused)
                     return false;
 
@@ -360,7 +366,13 @@ namespace epochnamespace::core
         #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
             const auto has_focus = [this]() noexcept
             {
-                const HWND focused = ::GetFocus();
+                HWND focused = nullptr;
+                GUITHREADINFO guiInfo{};
+                guiInfo.cbSize = sizeof(guiInfo);
+                if (::GetGUIThreadInfo(0, &guiInfo))
+                    focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
+                if (!focused)
+                    focused = ::GetFocus();
                 if (!focused)
                     return false;
 
@@ -432,7 +444,13 @@ namespace epochnamespace::core
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
             const auto has_focus = [this]() noexcept
             {
-                const HWND focused = ::GetFocus();
+                HWND focused = nullptr;
+                GUITHREADINFO guiInfo{};
+                guiInfo.cbSize = sizeof(guiInfo);
+                if (::GetGUIThreadInfo(0, &guiInfo))
+                    focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
+                if (!focused)
+                    focused = ::GetFocus();
                 if (!focused)
                     return false;
 
@@ -472,7 +490,13 @@ namespace epochnamespace::core
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
             const auto has_focus = [this]() noexcept
             {
-                const HWND focused = ::GetFocus();
+                HWND focused = nullptr;
+                GUITHREADINFO guiInfo{};
+                guiInfo.cbSize = sizeof(guiInfo);
+                if (::GetGUIThreadInfo(0, &guiInfo))
+                    focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
+                if (!focused)
+                    focused = ::GetFocus();
                 if (!focused)
                     return false;
 

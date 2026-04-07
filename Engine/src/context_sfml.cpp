@@ -419,7 +419,7 @@ namespace
                 s_height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-            ::ShowWindow(s_hostWindow, SW_SHOWNA);
+            ::ShowWindow(s_hostWindow, SW_HIDE);
         }
 
         if (!s_window->setActive(true))
@@ -432,7 +432,7 @@ namespace
         s_glContext = ::wglGetCurrentContext();
         (void)s_window->setActive(false);
 
-        ctx->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+        ctx->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
         ctx->hdc = s_hdc;
         ctx->hglrc = s_glContext;
         ctx->native_window = s_childWindow ? s_childWindow : s_hostWindow;
@@ -447,7 +447,7 @@ namespace
         {
             ctx->windowData->sfml_window = s_window.get();
 #if defined(_WIN32)
-            ctx->windowData->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+            ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
             ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
             ctx->windowData->hdc = s_hdc;
