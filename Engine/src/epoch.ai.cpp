@@ -808,7 +808,10 @@ namespace epoch::ai
             body += "{";
             body += "\"model\":\"" + json_escape(model) + "\",";
             body += "\"system_prompt\":\"" + json_escape(system_prompt) + "\",";
-            body += "\"input\":\"" + json_escape(input) + "\"";
+            body += "\"input\":\"" + json_escape(input) + "\",";
+            body += "\"reasoning\":\"off\",";
+            body += "\"max_output_tokens\":128,";
+            body += "\"store\":false";
             body += "}";
 
             try
