@@ -616,25 +616,24 @@ namespace epochnamespace::previewgrid
             return out;
 
         const Vec3 hit = add(camera.eye, scale(ray, hitDistance));
-        const float markerSize = (std::max)(0.18f, camera_distance_for(ctxKey) * 0.035f);
-        const float markerHeight = 0.035f;
+        const float markerSize = (std::max)(0.14f, camera_distance_for(ctxKey) * 0.028f);
+        const float markerHeight = 0.006f;
 
         const auto make_vertex = [](Vec3 position, Vec3 color) noexcept
         {
             return Vertex{ .position = position, .color = color };
         };
 
-        const Vec3 rayColor{ 0.88f, 0.78f, 0.32f };
         const Vec3 markerColor{ 0.99f, 0.89f, 0.34f };
 
-        out[0] = make_vertex(camera.eye, rayColor);
-        out[1] = make_vertex({ hit.x, markerHeight, hit.z }, rayColor);
-        out[2] = make_vertex({ hit.x - markerSize, markerHeight, hit.z }, markerColor);
-        out[3] = make_vertex({ hit.x + markerSize, markerHeight, hit.z }, markerColor);
-        out[4] = make_vertex({ hit.x, markerHeight, hit.z - markerSize }, markerColor);
-        out[5] = make_vertex({ hit.x, markerHeight, hit.z + markerSize }, markerColor);
-        out[6] = make_vertex({ hit.x, markerHeight, hit.z }, markerColor);
-        out[7] = make_vertex({ hit.x, markerHeight + markerSize * 0.75f, hit.z }, markerColor);
+        out[0] = make_vertex({ hit.x - markerSize, markerHeight, hit.z }, markerColor);
+        out[1] = make_vertex({ hit.x + markerSize, markerHeight, hit.z }, markerColor);
+        out[2] = make_vertex({ hit.x, markerHeight, hit.z - markerSize }, markerColor);
+        out[3] = make_vertex({ hit.x, markerHeight, hit.z + markerSize }, markerColor);
+        out[4] = make_vertex({ hit.x - markerSize * 0.6f, markerHeight, hit.z - markerSize * 0.6f }, markerColor);
+        out[5] = make_vertex({ hit.x + markerSize * 0.6f, markerHeight, hit.z + markerSize * 0.6f }, markerColor);
+        out[6] = make_vertex({ hit.x - markerSize * 0.6f, markerHeight, hit.z + markerSize * 0.6f }, markerColor);
+        out[7] = make_vertex({ hit.x + markerSize * 0.6f, markerHeight, hit.z - markerSize * 0.6f }, markerColor);
         return out;
     }
 

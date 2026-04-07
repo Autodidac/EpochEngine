@@ -1,5 +1,6 @@
 ﻿# Epoch Changelog
 
+
 ## [v0.83.53]
 - Added editor viewport drag-pan so held left mouse movement now slides the preview focus while wheel zoom and right-drag orbit remain active.
 - Added a shared camera look-hit marker derived from the center view ray and projected it through the active preview backends so the current focus spot is visible in-editor.
@@ -272,3 +273,7 @@
 - Historical release notes remain in `Changes/release_notes_v*.md`.
 - The older pre-rebrand release history has been preserved, but the public docs now use Epoch branding consistently.
 
+## [v0.83.54]
+- Wired Win32 child-window wheel and text/key messages back into the editor GUI path so docked editor contexts can finally deliver wheel zoom and live AI chat input instead of relying on dead plumbing.
+- Flattened the preview look-hit marker onto the grid plane and removed the floating camera-to-hit indicator so the center-look spot reads like an editor targeting aid instead of a hovering false collision.
+- Replaced the placeholder asset/actions shell with real editor entity controls for adding meshes, lights, spawns, duplicating the current selection, deleting the current selection, and sending a live scene prompt into the AI panel.

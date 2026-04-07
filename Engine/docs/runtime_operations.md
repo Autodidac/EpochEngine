@@ -45,7 +45,19 @@ workflow instead of preserving the older citation-heavy snapshot docs.
 - Mouse wheel zooms the editor preview camera in and out.
 - The preview should show a visible look-hit marker where the center camera ray
   intersects the grid, which makes it easier to read the active focus spot
-  during multi-context runs.
+  during multi-context runs without a floating false-collision marker.
+
+## Editor runtime surfaces
+
+- The editor should expose real scene/entity actions from the live UI instead of
+  placeholder logging buttons.
+- The current asset/outliner path is expected to support adding meshes, lights,
+  spawns, duplicating the current selection, and deleting the current
+  selection.
+- The AI chat panel depends on the same runtime input plumbing as the rest of
+  the GUI. On Windows docked contexts, wheel/key/text messages must be routed
+  from the child HWNDs into the GUI event queue or the chat/input surfaces will
+  look present but behave dead.
 
 ## Troubleshooting checklist
 

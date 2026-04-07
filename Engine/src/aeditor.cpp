@@ -363,6 +363,137 @@ namespace epochnamespace
                 push_editor_log(state, std::string("[project] Loaded ") + state.projectName + ".");
         }
 
+        [[nodiscard]] std::string make_entity_name(const EditorState& state, std::string_view base)
+        {
+            std::size_t ordinal = 1;
+            for (const auto& entity : state.entities)
+            {
+                if (entity.name.starts_with(base))
+                    ++ordinal;
+            }
+
+            return std::format("{}_{:02}", base, ordinal);
+        }
+
+        [[nodiscard]] std::array<float, 3> next_entity_position(const EditorState& state, float baseY = 0.5f)
+        {
+            const float offset = static_cast<float>(state.entities.size() % 5u) * 1.35f;
+            return {
+                -2.7f + offset,
+                baseY,
+                1.6f - static_cast<float>((state.entities.size() / 5u) % 4u) * 1.15f
+            };
+        }
+
+        void add_entity(EditorState& state, std::string_view archetype)
+        {
+            EditorEntity entity{};
+            if (archetype == "cube")
+            {
+                entity.name = make_entity_name(state, "StaticMesh");
+                entity.type = "StaticMesh";
+                entity.category = "Gameplay";
+                entity.position = next_entity_position(state, 0.5f);
+            }
+            else if (archetype == "light")
+            {
+                entity.name = make_entity_name(state, "PointLight");
+                entity.type = "Light";
+                entity.category = "Lighting";
+                entity.position = next_entity_position(state, 2.4f);
+            }
+            else if (archetype == "spawn")
+            {
+                entity.name = make_entity_name(state, "PlayerStart");
+                entity.type = "Spawn";
+                entity.category = "Gameplay";
+                entity.position = next_entity_position(state, 0.0f);
+            }
+            else if (archetype == "camera")
+            {
+                entity.name = make_entity_name(state, "PreviewCamera");
+                entity.type = "Camera";
+                entity.category = "Gameplay";
+                entity.position = next_entity_position(state, 1.8f);
+                entity.rotation = { -18.0f, 0.0f, 0.0f };
+            }
+            else
+            {
+                return;
+            }
+
+            state.entities.push_back(std::move(entity));
+            state.selectedEntity = state.entities.empty() ? 0u : (state.entities.size() - 1u);
+            push_editor_log(
+                state,
+                std::string("[entity] Added ")
+                + state.entities[state.selectedEntity].name
+                + " ["
+                + state.entities[state.selectedEntity].type
+                + "].");
+        }
+
+        void duplicate_selected_entity(EditorState& state)
+        {
+            if (state.entities.empty())
+            {
+                push_editor_log(state, "[entity] Nothing selected to duplicate.");
+                return;
+            }
+
+            const std::size_t selectedIndex = (std::min)(state.selectedEntity, state.entities.size() - 1u);
+            EditorEntity duplicate = state.entities[selectedIndex];
+            duplicate.name = make_entity_name(state, duplicate.name + "_Copy");
+            duplicate.position[0] += 0.85f;
+            duplicate.position[2] -= 0.55f;
+            state.entities.push_back(std::move(duplicate));
+            state.selectedEntity = state.entities.size() - 1u;
+            push_editor_log(state, std::string("[entity] Duplicated ") + state.entities[selectedIndex].name + ".");
+        }
+
+        void delete_selected_entity(EditorState& state)
+        {
+            if (state.entities.empty())
+            {
+                push_editor_log(state, "[entity] Nothing selected to delete.");
+                return;
+            }
+
+            const std::size_t selectedIndex = (std::min)(state.selectedEntity, state.entities.size() - 1u);
+            const std::string name = state.entities[selectedIndex].name;
+            state.entities.erase(state.entities.begin() + static_cast<std::ptrdiff_t>(selectedIndex));
+
+            if (state.entities.empty())
+                state.selectedEntity = 0u;
+            else if (selectedIndex >= state.entities.size())
+                state.selectedEntity = state.entities.size() - 1u;
+            else
+                state.selectedEntity = selectedIndex;
+
+            push_editor_log(state, std::string("[entity] Deleted ") + name + ".");
+        }
+
+        [[nodiscard]] std::string build_ai_scene_prompt(const EditorState& state)
+        {
+            if (state.entities.empty())
+                return std::string("Summarize the current Epoch editor scene and suggest one useful next step.");
+
+            const std::size_t selectedIndex = (std::min)(state.selectedEntity, state.entities.size() - 1u);
+            const auto& entity = state.entities[selectedIndex];
+            const std::string positionText = std::format(
+                "({:.1f}, {:.1f}, {:.1f})",
+                entity.position[0],
+                entity.position[1],
+                entity.position[2]);
+            return std::format(
+                "In Epoch editor, project '{}' has {} entities. Selected entity is '{}' of type '{}' at {}. Suggest one concrete next edit and one gameplay follow-up.",
+                state.projectName,
+                state.entities.size(),
+                entity.name,
+                entity.type,
+                positionText);
+        }
+
         void handle_scene_tool(EditorState& state, std::string_view toolId)
         {
             if (toolId == "focus_selection")
@@ -647,6 +778,8 @@ namespace epochnamespace
             return result;
 
         auto& editor = editor_state_for(ctx);
+        auto& chat = chat_state_for(ctx);
+        chat.pump();
 
         const float w = static_cast<float>(ctx->get_width_safe());
         const float h = static_cast<float>(ctx->get_height_safe());
@@ -678,6 +811,18 @@ namespace epochnamespace
         {
             result.command = command;
             result.command_argument.assign(argument.begin(), argument.end());
+        };
+
+        auto submit_ai_prompt = [&](std::string prompt, std::string_view logLine)
+        {
+            if (chat.pending)
+            {
+                push_editor_log(editor, "[ai] Chat is still processing the previous request.");
+                return;
+            }
+
+            chat.submit(std::move(prompt));
+            push_editor_log(editor, std::string(logLine));
         };
 
         gui::begin_window("", toolbar_pos, toolbar_size);
@@ -742,9 +887,9 @@ namespace epochnamespace
 
         const std::string editor_tab = "Editor Mode";
         const std::string runtime_tab = "Run Game";
-        const std::string renderer_tab = "Renderer";
-        const std::string systems_tab = "Systems";
-        const std::string console_tab = "AI Console";
+        const std::string add_cube_tab = "Add Cube";
+        const std::string add_light_tab = "Add Light";
+        const std::string ask_ai_tab = "Ask AI";
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(std::string("[") + editor_tab + "]", { 180.0f, tab_h }))
@@ -760,18 +905,18 @@ namespace epochnamespace
         tab_x += 156.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(renderer_tab, { 164.0f, tab_h }))
-            push_editor_log(editor, std::string("[renderer] Active backend: ") + renderer_name(ctx) + ".");
+        if (gui::button(add_cube_tab, { 164.0f, tab_h }))
+            add_entity(editor, "cube");
         tab_x += 164.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(systems_tab, { 164.0f, tab_h }))
-            push_editor_log(editor, "[systems] Systems tab shell is reserved for upcoming engine surfaces.");
+        if (gui::button(add_light_tab, { 164.0f, tab_h }))
+            add_entity(editor, "light");
         tab_x += 164.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(console_tab, { 180.0f, tab_h }))
-            push_editor_log(editor, "[console] AI console remains docked in the lower-right panel.");
+        if (gui::button(ask_ai_tab, { 180.0f, tab_h }))
+            submit_ai_prompt(build_ai_scene_prompt(editor), "[ai] Asked for scene guidance.");
 
         gui::end_window();
 
@@ -807,6 +952,16 @@ namespace epochnamespace
         gui::label(std::string("Scene: ") + editor.activeWorld);
         gui::label(std::string("Project Root: ") + editor.projectPath);
         gui::label(std::string("Entities: ") + std::to_string(editor.entities.size()));
+        if (gui::button("+ Cube", { 92.0f, 26.0f }))
+            add_entity(editor, "cube");
+        if (gui::button("+ Light", { 92.0f, 26.0f }))
+            add_entity(editor, "light");
+        if (gui::button("+ Spawn", { 92.0f, 26.0f }))
+            add_entity(editor, "spawn");
+        if (gui::button("Duplicate", { 92.0f, 26.0f }))
+            duplicate_selected_entity(editor);
+        if (gui::button("Delete", { 92.0f, 26.0f }))
+            delete_selected_entity(editor);
         for (std::size_t i = 0; i < editor.entities.size(); ++i)
         {
             const auto& entity = editor.entities[i];
@@ -847,7 +1002,7 @@ namespace epochnamespace
         gui::label(std::string("Preview Camera: ") + preview_camera_name(ctx));
         gui::label(std::string("Preview Zoom: ") + preview_zoom_text(ctx));
         gui::label(std::string("Editor Script: ") + editor.activeScript);
-        gui::label("Viewport Input: RMB orbit  |  Wheel zoom");
+        gui::label("Viewport Input: LMB pan  |  RMB orbit  |  Wheel zoom");
         gui::end_window();
 
         result.scene_viewport = gui::scene_viewport("Perspective", viewport_pos, viewport_size);
@@ -875,13 +1030,11 @@ namespace epochnamespace
         gui::label(std::string("[info] Preview mode: ") + std::string(preview_mode_name(editor.previewMode)));
         gui::label(std::string("[info] Camera mode: ") + preview_camera_name(ctx));
         gui::label(std::string("[info] Zoom: ") + preview_zoom_text(ctx));
+        gui::label("[info] Viewport input: LMB pan | RMB orbit | Wheel zoom");
         gui::label(std::string("[info] Active script: ") + editor.activeScript);
         for (const auto& line : editor.logLines)
             gui::label(line);
         gui::end_window();
-
-        auto& chat = chat_state_for(ctx);
-        chat.pump();
 
         gui::ConsoleWindowOptions opts{
             .title = "AI Chat",
@@ -936,20 +1089,22 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Asset", TopMenu::Asset, { 248.0f, 178.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Asset", TopMenu::Asset, { 248.0f, 212.0f }, [&](gui::Vec2 pos)
         {
-            menu_item("Run Active Script", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
-                emit_command(EditorCommand::RunScript, editor.activeScript);
-                push_editor_log(editor, std::string("[asset] Script run requested for '") + editor.activeScript + "'.");
+            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
+                add_entity(editor, "cube");
             });
-            menu_item("Focus Current Level", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
-                handle_scene_tool(editor, "focus_selection");
+            menu_item("Add Light", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
+                add_entity(editor, "light");
             });
-            menu_item("Log Project Path", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
-                push_editor_log(editor, std::string("[asset] Project root: ") + editor.projectPath);
+            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
+                add_entity(editor, "spawn");
             });
-            menu_item("Log Active Script", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
-                push_editor_log(editor, std::string("[asset] Active script: ") + editor.activeScript);
+            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
+                duplicate_selected_entity(editor);
+            });
+            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
+                delete_selected_entity(editor);
             });
         });
 

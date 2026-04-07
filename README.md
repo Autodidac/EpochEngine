@@ -310,15 +310,19 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.53
+v0.83.54
 ```
 
 Highlights:
 
-- `0.83.53` adds held left-drag panning in the editor viewport on top of the
-  existing right-drag orbit and wheel zoom controls.
-- The preview now shows a visible look-hit marker where the center camera ray
-  meets the grid, making the current focus spot readable in multi-context runs.
+- `0.83.54` wires real Win32 wheel and text/key events back into the docked
+  editor GUI path, which restores wheel zoom and gives the AI chat a live input
+  route instead of the dead placeholder behavior.
+- The preview look-hit marker now sits on the grid plane as a proper targeting
+  cross instead of hovering above the scene with a false camera-to-hit stem.
+- The editor now exposes real entity controls for adding meshes, lights, and
+  spawns, plus duplicating or deleting the current selection from the active UI
+  surfaces instead of logging placeholder actions.
 - The software renderer now tracks camera revisions directly and reduces
   repeated telemetry churn so it spends less time redrawing stale editor frames.
 - The refreshed 4K six-context editor proof above was captured from the real

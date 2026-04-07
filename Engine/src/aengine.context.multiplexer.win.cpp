@@ -75,6 +75,8 @@ import utility.string_converter;
 import aengine.cli;
 import core.context;
 import core.logger;
+import aengine.gui;
+import aengine.input;
 
 import context.commandqueue;
 import context.multiplexer;
@@ -96,6 +98,85 @@ import raylib.context;
 
 namespace
 {
+    [[nodiscard]] inline epochnamespace::gui::Vec2 client_mouse_position(
+        HWND hwnd,
+        LPARAM lParam,
+        bool screenCoordinates = false) noexcept
+    {
+        POINT pt{
+            GET_X_LPARAM(lParam),
+            GET_Y_LPARAM(lParam)
+        };
+
+        if (screenCoordinates)
+            ::ScreenToClient(hwnd, &pt);
+
+        return {
+            static_cast<float>(pt.x),
+            static_cast<float>(pt.y)
+        };
+    }
+
+    inline void push_gui_mouse_event(
+        HWND hwnd,
+        epochnamespace::gui::EventType type,
+        LPARAM lParam,
+        bool screenCoordinates = false) noexcept
+    {
+        epochnamespace::gui::push_input(epochnamespace::gui::InputEvent{
+            .type = type,
+            .mouse_pos = client_mouse_position(hwnd, lParam, screenCoordinates)
+        });
+    }
+
+    inline void push_gui_key_event(int key) noexcept
+    {
+        epochnamespace::gui::push_input(epochnamespace::gui::InputEvent{
+            .type = epochnamespace::gui::EventType::KeyDown,
+            .key = key
+        });
+    }
+
+    [[nodiscard]] inline std::string utf8_from_codepoint(char32_t codepoint) noexcept
+    {
+        std::string out{};
+        if (codepoint <= 0x7Fu)
+        {
+            out.push_back(static_cast<char>(codepoint));
+        }
+        else if (codepoint <= 0x7FFu)
+        {
+            out.push_back(static_cast<char>(0xC0u | ((codepoint >> 6) & 0x1Fu)));
+            out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        }
+        else if (codepoint <= 0xFFFFu)
+        {
+            out.push_back(static_cast<char>(0xE0u | ((codepoint >> 12) & 0x0Fu)));
+            out.push_back(static_cast<char>(0x80u | ((codepoint >> 6) & 0x3Fu)));
+            out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        }
+        else if (codepoint <= 0x10FFFFu)
+        {
+            out.push_back(static_cast<char>(0xF0u | ((codepoint >> 18) & 0x07u)));
+            out.push_back(static_cast<char>(0x80u | ((codepoint >> 12) & 0x3Fu)));
+            out.push_back(static_cast<char>(0x80u | ((codepoint >> 6) & 0x3Fu)));
+            out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        }
+        return out;
+    }
+
+    inline void push_gui_text_event(char32_t codepoint) noexcept
+    {
+        const std::string utf8 = utf8_from_codepoint(codepoint);
+        if (utf8.empty())
+            return;
+
+        epochnamespace::gui::push_input(epochnamespace::gui::InputEvent{
+            .type = epochnamespace::gui::EventType::TextInput,
+            .text = utf8
+        });
+    }
+
     [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> typed_context(
         const epochnamespace::core::OpaqueContextHandle& opaque) noexcept
     {
@@ -1667,6 +1748,7 @@ namespace epochnamespace::core
         {
         case WM_LBUTTONDOWN:
         {
+            push_gui_mouse_event(hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
             if (!is_dock_drag_hotspot(hwnd, lParam))
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
@@ -1684,6 +1766,7 @@ namespace epochnamespace::core
 
         case WM_MOUSEMOVE:
         {
+            push_gui_mouse_event(hwnd, epochnamespace::gui::EventType::MouseMove, lParam);
             if (!drag.dragging || drag.draggedWindow != hwnd)
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
@@ -1794,6 +1877,7 @@ namespace epochnamespace::core
         }
 
         case WM_LBUTTONUP:
+            push_gui_mouse_event(hwnd, epochnamespace::gui::EventType::MouseUp, lParam);
             if (drag.dragging && drag.draggedWindow == hwnd)
             {
                 const HWND originalParent = drag.originalParent;
@@ -1807,6 +1891,24 @@ namespace epochnamespace::core
                 return 0;
             }
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+        case WM_MOUSEWHEEL:
+            epochnamespace::input::mouseWheel.fetch_add(
+                GET_WHEEL_DELTA_WPARAM(wParam),
+                std::memory_order_relaxed);
+            push_gui_mouse_event(hwnd, epochnamespace::gui::EventType::MouseMove, lParam, true);
+            return 0;
+
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            push_gui_key_event(static_cast<int>(wParam));
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+        case WM_CHAR:
+        case WM_SYSCHAR:
+            if (wParam >= 0x20u || wParam == 13u || wParam == 8u)
+                push_gui_text_event(static_cast<char32_t>(wParam));
+            return 0;
 
         case WM_DROPFILES:
             if (HWND p = ::GetParent(hwnd))
