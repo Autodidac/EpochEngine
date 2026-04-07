@@ -98,6 +98,8 @@ export namespace epochnamespace::openglpreview
 
     inline void destroy_scene_preview_pipeline(epochnamespace::openglstate::OpenGL4State& state) noexcept
     {
+        if (state.sceneMarkerVbo && glIsBuffer(state.sceneMarkerVbo)) glDeleteBuffers(1, &state.sceneMarkerVbo);
+        if (state.sceneMarkerVao && glIsVertexArray(state.sceneMarkerVao)) glDeleteVertexArrays(1, &state.sceneMarkerVao);
         if (state.sceneEbo && glIsBuffer(state.sceneEbo)) glDeleteBuffers(1, &state.sceneEbo);
         if (state.sceneVbo && glIsBuffer(state.sceneVbo)) glDeleteBuffers(1, &state.sceneVbo);
         if (state.sceneVao && glIsVertexArray(state.sceneVao)) glDeleteVertexArrays(1, &state.sceneVao);
@@ -108,11 +110,18 @@ export namespace epochnamespace::openglpreview
         state.sceneVao = 0;
         state.sceneVbo = 0;
         state.sceneEbo = 0;
+        state.sceneMarkerVao = 0;
+        state.sceneMarkerVbo = 0;
     }
 
     inline bool ensure_scene_preview_pipeline(epochnamespace::openglstate::OpenGL4State& state)
     {
-        if (state.sceneShader && state.sceneVao && state.sceneVbo && state.sceneEbo)
+        if (state.sceneShader
+            && state.sceneVao
+            && state.sceneVbo
+            && state.sceneEbo
+            && state.sceneMarkerVao
+            && state.sceneMarkerVbo)
             return true;
 
         destroy_scene_preview_pipeline(state);
@@ -222,6 +231,33 @@ void main() {
             reinterpret_cast<void*>(offsetof(epochnamespace::previewgrid::Vertex, color)));
         glBindVertexArray(0);
 
+        glGenVertexArrays(1, &state.sceneMarkerVao);
+        glGenBuffers(1, &state.sceneMarkerVbo);
+        glBindVertexArray(state.sceneMarkerVao);
+        glBindBuffer(GL_ARRAY_BUFFER, state.sceneMarkerVbo);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(sizeof(epochnamespace::previewgrid::Vertex) * 8u),
+            nullptr,
+            GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(
+            0,
+            3,
+            GL_FLOAT,
+            GL_FALSE,
+            static_cast<GLsizei>(sizeof(epochnamespace::previewgrid::Vertex)),
+            reinterpret_cast<void*>(offsetof(epochnamespace::previewgrid::Vertex, position)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(
+            1,
+            3,
+            GL_FLOAT,
+            GL_FALSE,
+            static_cast<GLsizei>(sizeof(epochnamespace::previewgrid::Vertex)),
+            reinterpret_cast<void*>(offsetof(epochnamespace::previewgrid::Vertex, color)));
+        glBindVertexArray(0);
+
         state.sceneMvpLoc = glGetUniformLocation(state.sceneShader, "uMvp");
         return state.sceneShader != 0 && state.sceneMvpLoc >= 0;
     }
@@ -273,6 +309,20 @@ void main() {
                 static_cast<GLsizei>(epochnamespace::previewgrid::grid_indices().size()),
                 GL_UNSIGNED_INT,
                 nullptr);
+
+            const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx);
+            const auto markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx);
+            if (markerCount >= 2 && state.sceneMarkerVao && state.sceneMarkerVbo)
+            {
+                glBindVertexArray(state.sceneMarkerVao);
+                glBindBuffer(GL_ARRAY_BUFFER, state.sceneMarkerVbo);
+                glBufferData(
+                    GL_ARRAY_BUFFER,
+                    static_cast<GLsizeiptr>(markerCount * sizeof(markerVertices[0])),
+                    markerVertices.data(),
+                    GL_DYNAMIC_DRAW);
+                glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(markerCount));
+            }
             glBindVertexArray(0);
             glUseProgram(0);
         }

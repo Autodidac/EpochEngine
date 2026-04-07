@@ -83,10 +83,15 @@ export namespace epochnamespace::anativecontext
         std::vector<std::uint32_t> sceneFramebuffer{};
         bool frameValid{ false };
         std::uint64_t lastGuiGeneration{ 0 };
+        std::uint64_t lastCameraRevision{ 0 };
         epochnamespace::core::RenderViewport lastSceneViewport{};
         std::uint8_t lastPreviewMode{
             static_cast<std::uint8_t>(epochnamespace::core::ScenePreviewMode::None)
         };
+        int lastTelemetryWidth{ 0 };
+        int lastTelemetryHeight{ 0 };
+        std::size_t lastTelemetryBufferLength{ 0 };
+        std::int64_t lastTelemetryCommandDepth{ -1 };
 
         struct MouseState
         {

@@ -1007,6 +1007,7 @@ namespace epochnamespace::core
         {
             gui::Vec2 last_mouse{};
             bool looking = false;
+            bool panning = false;
         };
 
         thread_local std::unordered_map<Context*, PreviewLookState> g_preview_look_states{};
@@ -1405,6 +1406,15 @@ namespace epochnamespace::core
                                         mouseDeltaX * kMouseSensitivity,
                                         -mouseDeltaY * kMouseSensitivity);
                                 }
+                                else if (mouse_left_down && !mouse_right_down && look_state.panning)
+                                {
+                                    const float mouseDeltaX = mouse_pos.x - look_state.last_mouse.x;
+                                    const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
+                                    epochnamespace::previewgrid::pan_camera_drag(
+                                        ctx.get(),
+                                        mouseDeltaX,
+                                        -mouseDeltaY);
+                                }
 
                                 if (wheelDelta != 0)
                                 {
@@ -1425,12 +1435,14 @@ namespace epochnamespace::core
 
                                 look_state.last_mouse = mouse_pos;
                                 look_state.looking = mouse_right_down;
+                                look_state.panning = mouse_left_down && !mouse_right_down;
                             }
                             else
                             {
                                 auto& look_state = g_preview_look_states[ctx.get()];
                                 look_state.last_mouse = mouse_pos;
                                 look_state.looking = false;
+                                look_state.panning = false;
                             }
 
                             switch (editor_frame.command)

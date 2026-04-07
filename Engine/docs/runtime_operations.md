@@ -38,6 +38,15 @@ workflow instead of preserving the older citation-heavy snapshot docs.
 - Vulkan should still be treated as experimental unless you are actively
   finishing that path.
 
+## Editor viewport controls
+
+- Right-drag orbits the editor preview camera.
+- Left-drag pans the preview focus across the grid plane.
+- Mouse wheel zooms the editor preview camera in and out.
+- The preview should show a visible look-hit marker where the center camera ray
+  intersects the grid, which makes it easier to read the active focus spot
+  during multi-context runs.
+
 ## Troubleshooting checklist
 
 - Verify the expected context/render macros are enabled.

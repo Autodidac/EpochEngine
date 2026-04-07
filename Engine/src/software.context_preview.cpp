@@ -182,6 +182,29 @@ namespace epochnamespace::anativecontext::detail
                 static_cast<int>(std::lround(by)),
                 pack_color(color.x, color.y, color.z, 1.0f));
         }
+
+        const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(&ctx);
+        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(&ctx);
+        for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+        {
+            float ax = 0.0f;
+            float ay = 0.0f;
+            float bx = 0.0f;
+            float by = 0.0f;
+            if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, ax, ay)
+                || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, bx, by))
+            {
+                continue;
+            }
+
+            const auto color = markerVertices[i].color;
+            draw_line(
+                static_cast<int>(std::lround(ax)),
+                static_cast<int>(std::lround(ay)),
+                static_cast<int>(std::lround(bx)),
+                static_cast<int>(std::lround(by)),
+                pack_color(color.x, color.y, color.z, 1.0f));
+        }
     }
 
     bool same_viewport(const core::RenderViewport& lhs, const core::RenderViewport& rhs) noexcept

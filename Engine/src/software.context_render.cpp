@@ -16,6 +16,7 @@ import software.state;
 import aengine.diagnostics;
 import aengine.gui;
 import aengine.telemetry;
+import render.preview_grid;
 
 namespace epochnamespace::anativecontext
 {
@@ -51,13 +52,19 @@ namespace epochnamespace::anativecontext
         diagnostics::FrameTiming frameTimer{ ctx.type, windowId, "Software" };
         const auto viewport = ctx.scene_viewport();
         const auto previewMode = ctx.scene_preview_mode();
+        const std::uint64_t cameraRevision =
+            previewMode == core::ScenePreviewMode::Editor
+            ? epochnamespace::previewgrid::camera_revision_for(&ctx)
+            : 0;
         const std::uint64_t guiGeneration = epochnamespace::gui::deferred_batch_generation(&ctx);
-        const bool hasPendingCommands = queue.depth() != 0;
+        const std::int64_t commandDepth = static_cast<std::int64_t>(queue.depth());
+        const bool hasPendingCommands = commandDepth != 0;
         const bool sceneDirty =
             !sr.frameValid
             || hasPendingCommands
             || !detail::same_viewport(viewport, sr.lastSceneViewport)
-            || static_cast<std::uint8_t>(previewMode) != sr.lastPreviewMode;
+            || static_cast<std::uint8_t>(previewMode) != sr.lastPreviewMode
+            || cameraRevision != sr.lastCameraRevision;
         const bool guiDirty =
             !sr.frameValid
             || guiGeneration != sr.lastGuiGeneration;
@@ -81,26 +88,42 @@ namespace epochnamespace::anativecontext
                 | std::uint32_t(clearB);
             std::fill(sr.framebuffer.begin(), sr.framebuffer.end(), packedColor);
 
-            telemetry::emit_gauge(
-                "renderer.framebuffer.size",
-                static_cast<std::int64_t>(sr.width),
-                telemetry::RendererTelemetryTags{ ctx.type, windowId, "width" });
-            telemetry::emit_gauge(
-                "renderer.framebuffer.size",
-                static_cast<std::int64_t>(sr.height),
-                telemetry::RendererTelemetryTags{ ctx.type, windowId, "height" });
-            telemetry::emit_gauge(
-                "renderer.framebuffer.size",
-                static_cast<std::int64_t>(sr.framebuffer.size()),
-                telemetry::RendererTelemetryTags{ ctx.type, windowId, "buffer_length" });
+            if (sr.lastTelemetryWidth != sr.width)
+            {
+                telemetry::emit_gauge(
+                    "renderer.framebuffer.size",
+                    static_cast<std::int64_t>(sr.width),
+                    telemetry::RendererTelemetryTags{ ctx.type, windowId, "width" });
+                sr.lastTelemetryWidth = sr.width;
+            }
+            if (sr.lastTelemetryHeight != sr.height)
+            {
+                telemetry::emit_gauge(
+                    "renderer.framebuffer.size",
+                    static_cast<std::int64_t>(sr.height),
+                    telemetry::RendererTelemetryTags{ ctx.type, windowId, "height" });
+                sr.lastTelemetryHeight = sr.height;
+            }
+            if (sr.lastTelemetryBufferLength != sr.framebuffer.size())
+            {
+                telemetry::emit_gauge(
+                    "renderer.framebuffer.size",
+                    static_cast<std::int64_t>(sr.framebuffer.size()),
+                    telemetry::RendererTelemetryTags{ ctx.type, windowId, "buffer_length" });
+                sr.lastTelemetryBufferLength = sr.framebuffer.size();
+            }
 #endif
 
             detail::render_scene_preview(ctx);
 
-            telemetry::emit_gauge(
-                "renderer.command_queue.depth",
-                static_cast<std::int64_t>(queue.depth()),
-                telemetry::RendererTelemetryTags{ ctx.type, windowId });
+            if (sr.lastTelemetryCommandDepth != commandDepth)
+            {
+                telemetry::emit_gauge(
+                    "renderer.command_queue.depth",
+                    commandDepth,
+                    telemetry::RendererTelemetryTags{ ctx.type, windowId });
+                sr.lastTelemetryCommandDepth = commandDepth;
+            }
             queue.drain();
             sr.sceneFramebuffer = sr.framebuffer;
         }
@@ -118,6 +141,7 @@ namespace epochnamespace::anativecontext
             }
 
             sr.lastGuiGeneration = guiGeneration;
+            sr.lastCameraRevision = cameraRevision;
             sr.lastSceneViewport = viewport;
             sr.lastPreviewMode = static_cast<std::uint8_t>(previewMode);
             sr.frameValid = true;

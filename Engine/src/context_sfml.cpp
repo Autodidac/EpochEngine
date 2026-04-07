@@ -209,6 +209,34 @@ namespace
         if (lines.getVertexCount() > 0)
             s_window->draw(lines, renderStates);
 
+        const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
+        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get());
+        if (markerCount > 0)
+        {
+            sf::VertexArray markerLines(sf::PrimitiveType::Lines);
+            for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+            {
+                sf::Vector2f a{};
+                sf::Vector2f b{};
+                if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, a)
+                    || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, b))
+                {
+                    continue;
+                }
+
+                a.x -= static_cast<float>(viewport.x);
+                a.y -= static_cast<float>(viewport.y);
+                b.x -= static_cast<float>(viewport.x);
+                b.y -= static_cast<float>(viewport.y);
+
+                markerLines.append(sf::Vertex(a, to_sfml_color(markerVertices[i].color)));
+                markerLines.append(sf::Vertex(b, to_sfml_color(markerVertices[i].color)));
+            }
+
+            if (markerLines.getVertexCount() > 0)
+                s_window->draw(markerLines, renderStates);
+        }
+
         s_window->setView(previousView);
     }
 

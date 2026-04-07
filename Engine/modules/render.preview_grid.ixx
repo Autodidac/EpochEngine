@@ -6,6 +6,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <mutex>
 #include <shared_mutex>
 #include <span>
@@ -206,6 +207,7 @@ namespace epochnamespace::previewgrid
             float yawDegrees = -135.0f;
             float pitchDegrees = -28.0f;
             float distance = 13.5f;
+            std::uint64_t revision = 1;
         };
 
         export inline std::unordered_map<const void*, CameraRigState, PtrHash> g_cameraRigs{};
@@ -250,6 +252,30 @@ namespace epochnamespace::previewgrid
                 std::sin(pitchRadians),
                 std::cos(pitchRadians) * std::sin(yawRadians)
             });
+        }
+
+        [[nodiscard]] inline Vec3 flat_forward_from_angles(float yawDegrees, float pitchDegrees) noexcept
+        {
+            Vec3 flatForward = normalize(forward_from_angles(yawDegrees, pitchDegrees));
+            flatForward.y = 0.0f;
+            flatForward = normalize(flatForward);
+            if (dot(flatForward, flatForward) <= 1.0e-6f)
+                flatForward = { 0.0f, 0.0f, -1.0f };
+            return flatForward;
+        }
+
+        [[nodiscard]] inline Vec3 right_from_angles(float yawDegrees, float pitchDegrees) noexcept
+        {
+            const Vec3 worldUp{ 0.0f, 1.0f, 0.0f };
+            return normalize(cross(flat_forward_from_angles(yawDegrees, pitchDegrees), worldUp));
+        }
+
+        inline void touch_rig(CameraRigState& rig) noexcept
+        {
+            if (rig.revision == (std::numeric_limits<std::uint64_t>::max)())
+                rig.revision = 1;
+            else
+                ++rig.revision;
         }
 
         [[nodiscard]] inline Camera camera_from_rig(const CameraRigState& rig) noexcept
@@ -396,7 +422,11 @@ namespace epochnamespace::previewgrid
             return;
 
         std::unique_lock lock(detail::g_cameraRigMutex);
-        detail::g_cameraRigs[ctxKey] = detail::make_default_rig(mode);
+        auto& rig = detail::ensure_rig(ctxKey);
+        const std::uint64_t nextRevision =
+            rig.revision == (std::numeric_limits<std::uint64_t>::max)() ? 1 : (rig.revision + 1);
+        rig = detail::make_default_rig(mode);
+        rig.revision = nextRevision;
     }
 
     export inline void reset_camera(const void* ctxKey) noexcept
@@ -407,6 +437,7 @@ namespace epochnamespace::previewgrid
         std::unique_lock lock(detail::g_cameraRigMutex);
         auto& rig = detail::ensure_rig(ctxKey);
         rig = detail::make_default_rig(rig.mode);
+        detail::touch_rig(rig);
     }
 
     export [[nodiscard]] inline float camera_distance_for(const void* ctxKey) noexcept
@@ -431,7 +462,44 @@ namespace epochnamespace::previewgrid
         if (rig.mode == CameraMode::FPS)
             return;
 
+        const float oldDistance = rig.distance;
         rig.distance = (std::clamp)(rig.distance - amount, 2.5f, 48.0f);
+        if (rig.distance != oldDistance)
+            detail::touch_rig(rig);
+    }
+
+    export [[nodiscard]] inline std::uint64_t camera_revision_for(const void* ctxKey) noexcept
+    {
+        if (!ctxKey)
+            return 0;
+
+        std::shared_lock lock(detail::g_cameraRigMutex);
+        const auto it = detail::g_cameraRigs.find(ctxKey);
+        return it != detail::g_cameraRigs.end() ? it->second.revision : 0;
+    }
+
+    export inline void pan_camera_drag(
+        const void* ctxKey,
+        float deltaRightPixels,
+        float deltaForwardPixels) noexcept
+    {
+        if (!ctxKey)
+            return;
+
+        if (deltaRightPixels == 0.0f && deltaForwardPixels == 0.0f)
+            return;
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        auto& rig = detail::ensure_rig(ctxKey);
+        if (rig.mode == CameraMode::FPS)
+            return;
+
+        const Vec3 right = detail::right_from_angles(rig.yawDegrees, rig.pitchDegrees);
+        const Vec3 forward = detail::flat_forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
+        const float dragScale = (std::max)(0.010f, rig.distance * 0.0125f);
+        rig.focus = add(rig.focus, scale(right, deltaRightPixels * dragScale));
+        rig.focus = add(rig.focus, scale(forward, deltaForwardPixels * dragScale));
+        detail::touch_rig(rig);
     }
 
     export inline void cleanup_context(const void* ctxKey) noexcept
@@ -474,15 +542,22 @@ namespace epochnamespace::previewgrid
         std::unique_lock lock(detail::g_cameraRigMutex);
         auto& rig = detail::ensure_rig(ctxKey);
 
+        if (moveForward == 0.0f
+            && moveRight == 0.0f
+            && moveUp == 0.0f
+            && yawInput == 0.0f
+            && pitchInput == 0.0f)
+        {
+            return;
+        }
+
         const float lookSpeed = rig.mode == CameraMode::FPS ? 105.0f : 92.0f;
         rig.yawDegrees += yawInput * lookSpeed * dt;
         rig.pitchDegrees = (std::clamp)(rig.pitchDegrees + pitchInput * lookSpeed * dt, -80.0f, 80.0f);
 
         const Vec3 worldUp{ 0.0f, 1.0f, 0.0f };
         const Vec3 forward = detail::forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
-        Vec3 flatForward = normalize({ forward.x, 0.0f, forward.z });
-        if (dot(flatForward, flatForward) <= 1.0e-6f)
-            flatForward = { 0.0f, 0.0f, -1.0f };
+        const Vec3 flatForward = detail::flat_forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
         const Vec3 right = normalize(cross(flatForward, worldUp));
 
         if (rig.mode == CameraMode::FPS)
@@ -492,6 +567,7 @@ namespace epochnamespace::previewgrid
             rig.position = add(rig.position, scale(flatForward, moveForward * kMoveSpeed * dt));
             rig.position = add(rig.position, scale(right, moveRight * kMoveSpeed * dt));
             rig.position = add(rig.position, scale(worldUp, moveUp * kVerticalSpeed * dt));
+            detail::touch_rig(rig);
             return;
         }
 
@@ -500,6 +576,7 @@ namespace epochnamespace::previewgrid
         rig.focus = add(rig.focus, scale(right, moveRight * kPanSpeed * dt));
         rig.focus = add(rig.focus, scale(worldUp, moveUp * kPanSpeed * dt));
         rig.distance = (std::clamp)(rig.distance - moveForward * kDollySpeed * dt, 2.5f, 48.0f);
+        detail::touch_rig(rig);
     }
 
     export inline void look_camera(
@@ -517,6 +594,59 @@ namespace epochnamespace::previewgrid
         auto& rig = detail::ensure_rig(ctxKey);
         rig.yawDegrees += yawDeltaDegrees;
         rig.pitchDegrees = (std::clamp)(rig.pitchDegrees + pitchDeltaDegrees, -80.0f, 80.0f);
+        detail::touch_rig(rig);
+    }
+
+    export [[nodiscard]] inline std::array<Vertex, 8> look_marker_vertices_for(const void* ctxKey) noexcept
+    {
+        std::array<Vertex, 8> out{};
+        if (!ctxKey)
+            return out;
+
+        const auto camera = camera_for(ctxKey);
+        const Vec3 ray = normalize(subtract(camera.target, camera.eye));
+        if (!std::isfinite(ray.x) || !std::isfinite(ray.y) || !std::isfinite(ray.z))
+            return out;
+
+        if (std::abs(ray.y) <= 1.0e-4f)
+            return out;
+
+        const float hitDistance = (0.0f - camera.eye.y) / ray.y;
+        if (!(hitDistance > 0.0f) || !std::isfinite(hitDistance))
+            return out;
+
+        const Vec3 hit = add(camera.eye, scale(ray, hitDistance));
+        const float markerSize = (std::max)(0.18f, camera_distance_for(ctxKey) * 0.035f);
+        const float markerHeight = 0.035f;
+
+        const auto make_vertex = [](Vec3 position, Vec3 color) noexcept
+        {
+            return Vertex{ .position = position, .color = color };
+        };
+
+        const Vec3 rayColor{ 0.88f, 0.78f, 0.32f };
+        const Vec3 markerColor{ 0.99f, 0.89f, 0.34f };
+
+        out[0] = make_vertex(camera.eye, rayColor);
+        out[1] = make_vertex({ hit.x, markerHeight, hit.z }, rayColor);
+        out[2] = make_vertex({ hit.x - markerSize, markerHeight, hit.z }, markerColor);
+        out[3] = make_vertex({ hit.x + markerSize, markerHeight, hit.z }, markerColor);
+        out[4] = make_vertex({ hit.x, markerHeight, hit.z - markerSize }, markerColor);
+        out[5] = make_vertex({ hit.x, markerHeight, hit.z + markerSize }, markerColor);
+        out[6] = make_vertex({ hit.x, markerHeight, hit.z }, markerColor);
+        out[7] = make_vertex({ hit.x, markerHeight + markerSize * 0.75f, hit.z }, markerColor);
+        return out;
+    }
+
+    export [[nodiscard]] inline std::size_t look_marker_vertex_count_for(const void* ctxKey) noexcept
+    {
+        const auto vertices = look_marker_vertices_for(ctxKey);
+        for (const auto& vertex : vertices)
+        {
+            if (vertex.position.x != 0.0f || vertex.position.y != 0.0f || vertex.position.z != 0.0f)
+                return vertices.size();
+        }
+        return 0u;
     }
 
     export [[nodiscard]] inline std::span<const Vertex> grid_vertices() noexcept

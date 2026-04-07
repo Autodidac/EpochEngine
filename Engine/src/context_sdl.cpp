@@ -182,6 +182,30 @@ namespace
             (void)SDL_RenderLine(s_renderer, ax, ay, bx, by);
         }
 
+        const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
+        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get());
+        for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+        {
+            float ax = 0.0f;
+            float ay = 0.0f;
+            float bx = 0.0f;
+            float by = 0.0f;
+            if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, ax, ay)
+                || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, bx, by))
+            {
+                continue;
+            }
+
+            const auto color = markerVertices[i].color;
+            (void)SDL_SetRenderDrawColor(
+                s_renderer,
+                to_sdl_channel(color.x),
+                to_sdl_channel(color.y),
+                to_sdl_channel(color.z),
+                255u);
+            (void)SDL_RenderLine(s_renderer, ax, ay, bx, by);
+        }
+
         (void)SDL_SetRenderClipRect(s_renderer, nullptr);
     }
 

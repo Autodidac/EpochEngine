@@ -448,6 +448,24 @@ namespace epochnamespace::raylibcontext
                     to_raylib_color(vertices[firstIndex].color));
             }
 
+            const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
+            const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get());
+            for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+            {
+                epochnamespace::raylib_api::Vector2 a{};
+                epochnamespace::raylib_api::Vector2 b{};
+                if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, a)
+                    || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, b))
+                {
+                    continue;
+                }
+
+                epochnamespace::raylib_api::draw_line_v(
+                    a,
+                    b,
+                    to_raylib_color(markerVertices[i].color));
+            }
+
             epochnamespace::raylib_api::end_scissor_mode();
         }
 

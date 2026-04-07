@@ -69,10 +69,10 @@ These README captures are editor/source proofs, not updater-shell screenshots.
 If a packaged bootstrap release looks older than these, it has not caught up to
 the current source/editor state yet.
 
-Windows editor multi-context chrome refresh, source `v0.83.52`:
+Windows editor six-context camera/control refresh, source `v0.83.53`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08352.png" alt="Epoch Windows editor multi-context chrome refresh" width="1400" />
+  <img src="Images/readme/windows-multicontext-editor-v08353.png" alt="Epoch Windows editor six-context camera/control refresh" width="1400" />
 </p>
 
 ---
@@ -310,23 +310,21 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.52
+v0.83.53
 ```
 
 Highlights:
 
-- `0.83.52` aligns the Windows resource move into `Engine/resource/` across the
-  repo surface instead of only inside the MSVC project.
-- The editor shell now uses a leaner dark menu strip with `File`, `Edit`,
-  `Asset`, `Window`, `Tools`, and `Help`, plus mode/system tabs instead of fake
-  project placeholders.
-- The scene preview camera now supports wheel zoom in editor mode on top of the
-  existing orbit/FPS controls.
-- The refreshed multicontext editor proof above was captured from the real
+- `0.83.53` adds held left-drag panning in the editor viewport on top of the
+  existing right-drag orbit and wheel zoom controls.
+- The preview now shows a visible look-hit marker where the center camera ray
+  meets the grid, making the current focus spot readable in multi-context runs.
+- The software renderer now tracks camera revisions directly and reduces
+  repeated telemetry churn so it spends less time redrawing stale editor frames.
+- The refreshed 4K six-context editor proof above was captured from the real
   asset-bearing `x64/Debug` runtime so it matches the current local launch path.
-- Source layout is now documented as `include/`, `modules/`, `src/`, and
-  `resource/`, keeping Windows resources separate from both implementation code
-  and module interfaces.
+- The repo still keeps Windows resources under `Engine/resource/`, separate
+  from both implementation code and module interfaces.
 - Detailed release history lives in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
   current version notes under [Changes/](Changes/).

@@ -1,5 +1,11 @@
 ﻿# Epoch Changelog
 
+## [v0.83.53]
+- Added editor viewport drag-pan so held left mouse movement now slides the preview focus while wheel zoom and right-drag orbit remain active.
+- Added a shared camera look-hit marker derived from the center view ray and projected it through the active preview backends so the current focus spot is visible in-editor.
+- Tightened software preview invalidation and telemetry churn by tracking camera revisions directly and only re-emitting software framebuffer gauges when their values actually change.
+- Captured a fresh 4K six-context editor proof from the asset-bearing local runtime for the README.
+
 ## [v0.83.52]
 - Aligned the Windows resource move into `Engine/resource/` at the repo/build level, including the CMake resource path and the active Visual Studio shared-item surface.
 - Refreshed the editor chrome toward a proper tool-style shell with `File`, `Edit`, `Asset`, `Window`, `Tools`, and `Help` plus mode/system tabs instead of fake project placeholders.

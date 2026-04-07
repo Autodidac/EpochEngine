@@ -144,6 +144,8 @@ export namespace epochnamespace::openglstate
         GLuint sceneVao = 0;
         GLuint sceneVbo = 0;
         GLuint sceneEbo = 0;
+        GLuint sceneMarkerVao = 0;
+        GLuint sceneMarkerVbo = 0;
     };
 
     // header-dominant style: single TU-safe in C++20+ modules
