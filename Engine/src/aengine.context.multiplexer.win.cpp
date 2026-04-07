@@ -76,7 +76,6 @@ import aengine.cli;
 import core.context;
 import core.logger;
 import aengine.gui;
-import aengine.input;
 
 import context.commandqueue;
 import context.multiplexer;
@@ -118,20 +117,29 @@ namespace
     }
 
     inline void push_gui_mouse_event(
+        const epochnamespace::core::Context* ctx,
         HWND hwnd,
         epochnamespace::gui::EventType type,
         LPARAM lParam,
+        int wheelDelta = 0,
         bool screenCoordinates = false) noexcept
     {
-        epochnamespace::gui::push_input(epochnamespace::gui::InputEvent{
+        if (!ctx)
+            return;
+
+        epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
             .type = type,
-            .mouse_pos = client_mouse_position(hwnd, lParam, screenCoordinates)
+            .mouse_pos = client_mouse_position(hwnd, lParam, screenCoordinates),
+            .wheel_delta = wheelDelta
         });
     }
 
-    inline void push_gui_key_event(int key) noexcept
+    inline void push_gui_key_event(const epochnamespace::core::Context* ctx, int key) noexcept
     {
-        epochnamespace::gui::push_input(epochnamespace::gui::InputEvent{
+        if (!ctx)
+            return;
+
+        epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
             .type = epochnamespace::gui::EventType::KeyDown,
             .key = key
         });
@@ -165,13 +173,16 @@ namespace
         return out;
     }
 
-    inline void push_gui_text_event(char32_t codepoint) noexcept
+    inline void push_gui_text_event(const epochnamespace::core::Context* ctx, char32_t codepoint) noexcept
     {
+        if (!ctx)
+            return;
+
         const std::string utf8 = utf8_from_codepoint(codepoint);
         if (utf8.empty())
             return;
 
-        epochnamespace::gui::push_input(epochnamespace::gui::InputEvent{
+        epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
             .type = epochnamespace::gui::EventType::TextInput,
             .text = utf8
         });
@@ -188,6 +199,7 @@ namespace
     // TU-owned globals.
     std::unordered_map<HWND, std::thread> g_threads;
     epochnamespace::core::DragState       g_drag;
+    epochnamespace::core::MultiContextManager* g_activeManager = nullptr;
     struct PendingWindowCleanup
     {
         HWND hwnd{};
@@ -248,6 +260,80 @@ namespace
     {
         Undock = 1,
     };
+
+    [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> resolve_gui_context_for_hwnd(HWND hwnd) noexcept
+    {
+        auto* mgr = g_activeManager;
+        if (!mgr)
+            return {};
+
+        if (auto* win = mgr->findWindowByHWND(hwnd))
+            return typed_context(win->context);
+
+        return {};
+    }
+
+    inline void forward_gui_input_message(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
+    {
+        const auto ctx = resolve_gui_context_for_hwnd(hwnd);
+        if (!ctx)
+            return;
+
+        switch (msg)
+        {
+        case WM_LBUTTONDOWN:
+            ::SetFocus(hwnd);
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
+            break;
+        case WM_MOUSEMOVE:
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseMove, lParam);
+            break;
+        case WM_LBUTTONUP:
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam);
+            break;
+        case WM_MOUSEWHEEL:
+            push_gui_mouse_event(
+                ctx.get(),
+                hwnd,
+                epochnamespace::gui::EventType::MouseWheel,
+                lParam,
+                GET_WHEEL_DELTA_WPARAM(wParam),
+                true);
+            break;
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            push_gui_key_event(ctx.get(), static_cast<int>(wParam));
+            break;
+        case WM_CHAR:
+        case WM_SYSCHAR:
+            if (wParam >= 0x20u || wParam == 13u || wParam == 8u)
+                push_gui_text_event(ctx.get(), static_cast<char32_t>(wParam));
+            break;
+        default:
+            break;
+        }
+    }
+
+    LRESULT CALLBACK BackendInputProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR)
+    {
+        switch (msg)
+        {
+        case WM_CHAR:
+        case WM_SYSCHAR:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return 0;
+        case WM_LBUTTONDOWN:
+        case WM_MOUSEMOVE:
+        case WM_LBUTTONUP:
+        case WM_MOUSEWHEEL:
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        default:
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        }
+    }
 
 
     LRESULT CALLBACK DockableProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR dw)
@@ -314,6 +400,7 @@ namespace
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
         {
+            forward_gui_input_message(hwnd, msg, wp, lp);
             const auto& dragState = epochnamespace::core::Drag();
             const bool continueDrag = dragState.dragging && dragState.draggedWindow == hwnd;
             const bool dragStart = (msg == WM_LBUTTONDOWN) && is_dock_drag_hotspot(hwnd, lp);
@@ -321,6 +408,17 @@ namespace
                 return epochnamespace::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
         }
+
+        case WM_MOUSEWHEEL:
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+
+        case WM_CHAR:
+        case WM_SYSCHAR:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return 0;
         }
 
         return DefSubclassProc(hwnd, msg, wp, lp);
@@ -406,6 +504,14 @@ namespace epochnamespace::core
         (void)hwnd;
         (void)parent;
 #endif
+    }
+
+    void MultiContextManager::AttachBackendInputBridge(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        (void)::SetWindowSubclass(hwnd, BackendInputProc, 2, 0);
     }
 
     namespace backend
@@ -661,6 +767,7 @@ namespace epochnamespace::core
         uiThreadId = ::GetCurrentThreadId();
         running.store(true, std::memory_order_release);
         s_activeInstance = this;
+        g_activeManager = this;
 
         RegisterParentClass(hInst, L"EpochParent");
         RegisterChildClass(hInst, L"EpochChild");
@@ -1089,6 +1196,7 @@ namespace epochnamespace::core
         if (!hwnd) return;
 
         s_activeInstance = this;
+        g_activeManager = this;
 
         if (!hdc) hdc = ::GetDC(hwnd);
 
@@ -1501,6 +1609,7 @@ namespace epochnamespace::core
         g_pendingCleanups.clear();
 
         if (s_activeInstance == this) s_activeInstance = nullptr;
+        if (g_activeManager == this) g_activeManager = nullptr;
     }
 
     void MultiContextManager::RenderLoop(WindowData& win)
@@ -1736,6 +1845,17 @@ namespace epochnamespace::core
     LRESULT CALLBACK MultiContextManager::ChildProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
         static DragState& drag = Drag();
+        const auto resolveGuiContext = [hwnd]() -> std::shared_ptr<epochnamespace::core::Context>
+        {
+            auto* mgr = s_activeInstance;
+            if (!mgr)
+                return {};
+
+            if (auto* win = mgr->findWindowByHWND(hwnd))
+                return typed_context(win->context);
+
+            return {};
+        };
 
         if (msg == WM_NCCREATE)
         {
@@ -1748,7 +1868,9 @@ namespace epochnamespace::core
         {
         case WM_LBUTTONDOWN:
         {
-            push_gui_mouse_event(hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
+            ::SetFocus(hwnd);
+            const auto ctx = resolveGuiContext();
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
             if (!is_dock_drag_hotspot(hwnd, lParam))
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
@@ -1766,7 +1888,8 @@ namespace epochnamespace::core
 
         case WM_MOUSEMOVE:
         {
-            push_gui_mouse_event(hwnd, epochnamespace::gui::EventType::MouseMove, lParam);
+            const auto ctx = resolveGuiContext();
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseMove, lParam);
             if (!drag.dragging || drag.draggedWindow != hwnd)
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
@@ -1877,7 +2000,9 @@ namespace epochnamespace::core
         }
 
         case WM_LBUTTONUP:
-            push_gui_mouse_event(hwnd, epochnamespace::gui::EventType::MouseUp, lParam);
+        {
+            const auto ctx = resolveGuiContext();
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam);
             if (drag.dragging && drag.draggedWindow == hwnd)
             {
                 const HWND originalParent = drag.originalParent;
@@ -1891,24 +2016,37 @@ namespace epochnamespace::core
                 return 0;
             }
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        }
 
         case WM_MOUSEWHEEL:
-            epochnamespace::input::mouseWheel.fetch_add(
+        {
+            const auto ctx = resolveGuiContext();
+            push_gui_mouse_event(
+                ctx.get(),
+                hwnd,
+                epochnamespace::gui::EventType::MouseWheel,
+                lParam,
                 GET_WHEEL_DELTA_WPARAM(wParam),
-                std::memory_order_relaxed);
-            push_gui_mouse_event(hwnd, epochnamespace::gui::EventType::MouseMove, lParam, true);
+                true);
             return 0;
+        }
 
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
-            push_gui_key_event(static_cast<int>(wParam));
+        {
+            const auto ctx = resolveGuiContext();
+            push_gui_key_event(ctx.get(), static_cast<int>(wParam));
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        }
 
         case WM_CHAR:
         case WM_SYSCHAR:
+        {
+            const auto ctx = resolveGuiContext();
             if (wParam >= 0x20u || wParam == 13u || wParam == 8u)
-                push_gui_text_event(static_cast<char32_t>(wParam));
+                push_gui_text_event(ctx.get(), static_cast<char32_t>(wParam));
             return 0;
+        }
 
         case WM_DROPFILES:
             if (HWND p = ::GetParent(hwnd))

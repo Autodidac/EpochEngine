@@ -157,6 +157,7 @@ namespace epochnamespace::core
         static LRESULT CALLBACK ParentProc(HWND, UINT, WPARAM, LPARAM);
         static LRESULT CALLBACK ChildProc(HWND, UINT, WPARAM, LPARAM);
         void HandleDropFiles(HWND, HDROP);
+        static void AttachBackendInputBridge(HWND hwnd) noexcept;
 
         static ATOM RegisterParentClass(HINSTANCE, LPCWSTR);
         static ATOM RegisterChildClass(HINSTANCE, LPCWSTR);

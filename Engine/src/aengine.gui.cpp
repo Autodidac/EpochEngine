@@ -212,6 +212,8 @@ namespace epochnamespace::gui
         static std::mutex g_uploadMutex{};
         static std::unordered_map<const void*, DeferredDrawBatch, PtrHash> g_deferredDrawBatches{};
         static std::mutex g_deferredBatchMutex{};
+        static std::unordered_map<const void*, std::vector<InputEvent>, PtrHash> g_contextPendingEvents{};
+        static std::mutex g_contextPendingEventsMutex{};
         static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextMouseDownStates{};
         static thread_local std::unordered_map<const void*, const void*, PtrHash> g_contextActiveWidgets{};
 
@@ -230,6 +232,7 @@ namespace epochnamespace::gui
             bool justReleased = false;
             bool insideWindow = false;
             bool justPressed = false;
+            int mouseWheelDelta = 0;
 
             std::optional<WidgetBounds> lastButtonBounds{};
 
@@ -1085,8 +1088,8 @@ namespace epochnamespace::gui
 
         static void draw_caret(float x, float y, float height)
         {
-            const float caretWidth = (std::max)(1.0f, space_advance(kFontScale) * 0.1f);
-            draw_sprite(g_resources.buttonActive, x, y, caretWidth, height);
+            const float caretWidth = (std::max)(1.0f, space_advance(kFontScale) * 0.08f);
+            draw_sprite(g_resources.textFieldActive, x, y, caretWidth, height);
         }
 
         static void reset_frame()
@@ -1197,9 +1200,32 @@ namespace epochnamespace::gui
         g_pendingEvents.push_back(e);
     }
 
+    void push_input_for_context(const core::Context* ctx, const InputEvent& e) noexcept
+    {
+        if (!ctx)
+        {
+            push_input(e);
+            return;
+        }
+
+        std::scoped_lock lock(g_contextPendingEventsMutex);
+        g_contextPendingEvents[ctx].push_back(e);
+    }
+
+    int consume_mouse_wheel_delta() noexcept
+    {
+        const int delta = g_frame.mouseWheelDelta;
+        g_frame.mouseWheelDelta = 0;
+        return delta;
+    }
+
     void cleanup_context(const core::Context* ctx) noexcept
     {
         forget_upload_state(ctx);
+        {
+            std::scoped_lock lock(g_contextPendingEventsMutex);
+            g_contextPendingEvents.erase(ctx);
+        }
         std::scoped_lock lock(g_deferredBatchMutex);
         g_deferredDrawBatches.erase(ctx);
         g_contextMouseDownStates.erase(ctx);
@@ -1260,7 +1286,7 @@ namespace epochnamespace::gui
         while (g_frame.caretTimer >= kCaretBlinkPeriod)
             g_frame.caretTimer -= kCaretBlinkPeriod;
 
-        g_frame.caretVisible = (g_frame.caretTimer < (kCaretBlinkPeriod * 0.5f));
+        g_frame.caretVisible = true;
 
         bool prevMouseDown = g_frame.mouseDown;
         if (rawCtx)
@@ -1270,12 +1296,23 @@ namespace epochnamespace::gui
         }
         bool currentMouseDown = mouse_down;
         Vec2 currentMousePos = mouse_pos;
+        g_frame.mouseWheelDelta = 0;
 
         g_frame.events.clear();
         if (!g_pendingEvents.empty())
         {
             g_frame.events.insert(g_frame.events.end(), g_pendingEvents.begin(), g_pendingEvents.end());
             g_pendingEvents.clear();
+        }
+
+        if (rawCtx)
+        {
+            std::scoped_lock lock(g_contextPendingEventsMutex);
+            if (const auto it = g_contextPendingEvents.find(rawCtx); it != g_contextPendingEvents.end() && !it->second.empty())
+            {
+                g_frame.events.insert(g_frame.events.end(), it->second.begin(), it->second.end());
+                it->second.clear();
+            }
         }
 
         for (const auto& evt : g_frame.events)
@@ -1285,6 +1322,10 @@ namespace epochnamespace::gui
             case EventType::MouseMove: currentMousePos = evt.mouse_pos; break;
             case EventType::MouseDown: currentMouseDown = true;  currentMousePos = evt.mouse_pos; break;
             case EventType::MouseUp:   currentMouseDown = false; currentMousePos = evt.mouse_pos; break;
+            case EventType::MouseWheel:
+                currentMousePos = evt.mouse_pos;
+                g_frame.mouseWheelDelta += evt.wheel_delta;
+                break;
             default: break;
             }
         }
@@ -1311,6 +1352,7 @@ namespace epochnamespace::gui
         g_frame.events.clear();
         g_frame.justPressed = false;
         g_frame.justReleased = false;
+        g_frame.mouseWheelDelta = 0;
     }
 
     void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept

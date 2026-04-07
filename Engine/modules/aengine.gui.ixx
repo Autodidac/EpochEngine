@@ -67,6 +67,7 @@ namespace epochnamespace::gui
         MouseMove,
         MouseDown,
         MouseUp,
+        MouseWheel,
         KeyDown,
         KeyUp,
         TextInput
@@ -76,6 +77,7 @@ namespace epochnamespace::gui
     {
         EventType type{ EventType::None };
         Vec2 mouse_pos{};
+        int wheel_delta{};
         int key{};
         std::string text{};
     };
@@ -118,6 +120,8 @@ namespace epochnamespace::gui
     };
 
     export void push_input(const InputEvent& e) noexcept;
+    export void push_input_for_context(const core::Context* ctx, const InputEvent& e) noexcept;
+    export int consume_mouse_wheel_delta() noexcept;
     export void cleanup_context(const core::Context* ctx) noexcept;
     export bool render_deferred_batch(core::Context* ctx) noexcept;
     export std::uint64_t deferred_batch_generation(const core::Context* ctx) noexcept;

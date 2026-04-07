@@ -1379,7 +1379,7 @@ namespace epochnamespace::core
                                 && mouse_in_scene)
                             {
                                 auto& look_state = g_preview_look_states[ctx.get()];
-                                const int wheelDelta = epochnamespace::input::mouseWheel.exchange(0, std::memory_order_relaxed);
+                                const int wheelDelta = epochnamespace::gui::consume_mouse_wheel_delta();
                                 const float forwardInput =
                                     (ctx->is_key_held_safe(epochnamespace::input::Key::W) ? 1.0f : 0.0f)
                                     - (ctx->is_key_held_safe(epochnamespace::input::Key::S) ? 1.0f : 0.0f);

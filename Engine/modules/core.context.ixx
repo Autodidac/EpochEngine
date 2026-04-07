@@ -326,11 +326,63 @@ namespace epochnamespace::core
 
         bool is_key_held_safe(input::Key k) const noexcept
         {
+        #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            const auto has_focus = [this]() noexcept
+            {
+                const HWND focused = ::GetFocus();
+                if (!focused)
+                    return false;
+
+                if (hwnd && focused == hwnd)
+                    return true;
+
+                if (windowData)
+                {
+                    if (windowData->hwndChild && (focused == windowData->hwndChild || ::IsChild(windowData->hwndChild, focused)))
+                        return true;
+                    if (windowData->host_hwnd && (focused == windowData->host_hwnd || ::IsChild(windowData->host_hwnd, focused)))
+                        return true;
+                    if (windowData->hwnd && (focused == windowData->hwnd || ::IsChild(windowData->hwnd, focused)))
+                        return true;
+                }
+
+                return false;
+            };
+
+            if ((hwnd || windowData) && !has_focus())
+                return false;
+        #endif
             return is_key_held ? is_key_held(k) : false;
         }
 
         bool is_key_down_safe(input::Key k) const noexcept
         {
+        #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            const auto has_focus = [this]() noexcept
+            {
+                const HWND focused = ::GetFocus();
+                if (!focused)
+                    return false;
+
+                if (hwnd && focused == hwnd)
+                    return true;
+
+                if (windowData)
+                {
+                    if (windowData->hwndChild && (focused == windowData->hwndChild || ::IsChild(windowData->hwndChild, focused)))
+                        return true;
+                    if (windowData->host_hwnd && (focused == windowData->host_hwnd || ::IsChild(windowData->host_hwnd, focused)))
+                        return true;
+                    if (windowData->hwnd && (focused == windowData->hwnd || ::IsChild(windowData->hwnd, focused)))
+                        return true;
+                }
+
+                return false;
+            };
+
+            if ((hwnd || windowData) && !has_focus())
+                return false;
+        #endif
             return is_key_down ? is_key_down(k) : false;
         }
 
@@ -378,7 +430,29 @@ namespace epochnamespace::core
         bool is_mouse_button_held_safe(input::MouseButton b) const noexcept
         {
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-            if (get_hwnd() != nullptr)
+            const auto has_focus = [this]() noexcept
+            {
+                const HWND focused = ::GetFocus();
+                if (!focused)
+                    return false;
+
+                if (hwnd && focused == hwnd)
+                    return true;
+
+                if (windowData)
+                {
+                    if (windowData->hwndChild && (focused == windowData->hwndChild || ::IsChild(windowData->hwndChild, focused)))
+                        return true;
+                    if (windowData->host_hwnd && (focused == windowData->host_hwnd || ::IsChild(windowData->host_hwnd, focused)))
+                        return true;
+                    if (windowData->hwnd && (focused == windowData->hwnd || ::IsChild(windowData->hwnd, focused)))
+                        return true;
+                }
+
+                return false;
+            };
+
+            if (get_hwnd() != nullptr && has_focus())
             {
                 const int vk =
                     (b == input::MouseButton::MouseLeft) ? VK_LBUTTON :
@@ -396,7 +470,29 @@ namespace epochnamespace::core
         bool is_mouse_button_down_safe(input::MouseButton b) const noexcept
         {
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-            if (get_hwnd() != nullptr)
+            const auto has_focus = [this]() noexcept
+            {
+                const HWND focused = ::GetFocus();
+                if (!focused)
+                    return false;
+
+                if (hwnd && focused == hwnd)
+                    return true;
+
+                if (windowData)
+                {
+                    if (windowData->hwndChild && (focused == windowData->hwndChild || ::IsChild(windowData->hwndChild, focused)))
+                        return true;
+                    if (windowData->host_hwnd && (focused == windowData->host_hwnd || ::IsChild(windowData->host_hwnd, focused)))
+                        return true;
+                    if (windowData->hwnd && (focused == windowData->hwnd || ::IsChild(windowData->hwnd, focused)))
+                        return true;
+                }
+
+                return false;
+            };
+
+            if (get_hwnd() != nullptr && has_focus())
             {
                 const int vk =
                     (b == input::MouseButton::MouseLeft) ? VK_LBUTTON :

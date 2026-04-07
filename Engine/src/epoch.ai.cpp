@@ -639,6 +639,95 @@ namespace epoch::ai
                 return {};
 
             std::string last;
+            std::string lastReasoning;
+
+            auto extract_last_quoted_after = [&](std::string_view text, std::string_view marker) -> std::string
+            {
+                const std::size_t markerPos = text.rfind(marker);
+                if (markerPos == std::string_view::npos)
+                    return {};
+
+                std::size_t pos = markerPos + marker.size();
+                std::string found{};
+                while (true)
+                {
+                    const std::size_t open = text.find('"', pos);
+                    if (open == std::string_view::npos)
+                        break;
+
+                    std::string raw;
+                    bool closed = false;
+                    for (std::size_t i = open + 1; i < text.size(); ++i)
+                    {
+                        const char c = text[i];
+                        if (c == '"' && text[i - 1] != '\\')
+                        {
+                            const std::string candidate = trim(json_unescape(raw));
+                            if (!candidate.empty())
+                                found = candidate;
+                            pos = i + 1;
+                            closed = true;
+                            break;
+                        }
+                        raw.push_back(c);
+                    }
+
+                    if (!closed)
+                        break;
+                }
+
+                return found;
+            };
+
+            auto reasoning_fallback = [&](std::string_view reasoning) -> std::string
+            {
+                static constexpr std::string_view markers[] = {
+                    "Final Selection:",
+                    "Final selection:",
+                    "Final Answer:",
+                    "Final answer:",
+                    "Answer:"
+                };
+
+                for (const auto marker : markers)
+                {
+                    if (const std::string extracted = extract_last_quoted_after(reasoning, marker); !extracted.empty())
+                        return extracted;
+                }
+
+                std::string bestLine{};
+                std::size_t start = 0;
+                while (start < reasoning.size())
+                {
+                    std::size_t end = reasoning.find('\n', start);
+                    if (end == std::string_view::npos)
+                        end = reasoning.size();
+
+                    std::string line = trim(reasoning.substr(start, end - start));
+                    while (!line.empty() && (line.front() == '*' || line.front() == '-' || line.front() == '"' || line.front() == '>'))
+                    {
+                        line.erase(line.begin());
+                        line = trim(line);
+                    }
+                    while (!line.empty() && (line.back() == '"' || line.back() == '.' || line.back() == ':'))
+                        line.pop_back();
+                    line = trim(line);
+
+                    if (!line.empty() && line.find("Analyze the Request") == std::string::npos
+                        && line.find("Determine the appropriate response") == std::string::npos
+                        && line.find("Drafting the response") == std::string::npos
+                        && line.find("Check constraints") == std::string::npos
+                        && line.find("Final Selection") == std::string::npos
+                        && line.find("Final Answer") == std::string::npos)
+                    {
+                        bestLine = line;
+                    }
+
+                    start = (end < reasoning.size()) ? end + 1 : reasoning.size();
+                }
+
+                return bestLine;
+            };
 
             // scan items by looking for "type":"message"
             std::size_t pos = arr_pos;
@@ -647,11 +736,31 @@ namespace epoch::ai
                 std::size_t type_pos = find_str(sv, "\"type\"", pos);
                 if (type_pos == std::string_view::npos) break;
 
-                std::size_t msg_pos = find_str(sv, "\"message\"", type_pos);
-                if (msg_pos == std::string_view::npos) { pos = type_pos + 6; continue; }
+                std::size_t type_colon = find_str(sv, ":", type_pos);
+                if (type_colon == std::string_view::npos) break;
 
-                std::size_t content_key = find_str(sv, "\"content\"", msg_pos);
-                if (content_key == std::string_view::npos) { pos = msg_pos + 9; continue; }
+                std::size_t type_q = type_colon + 1;
+                while (type_q < sv.size() && (sv[type_q] == ' ' || sv[type_q] == '\t' || sv[type_q] == '\r' || sv[type_q] == '\n')) ++type_q;
+                if (type_q >= sv.size() || sv[type_q] != '"') { pos = type_colon + 1; continue; }
+                ++type_q;
+
+                std::string rawType;
+                std::size_t itemEnd = type_q;
+                for (std::size_t i = type_q; i < sv.size(); ++i)
+                {
+                    const char c = sv[i];
+                    if (c == '"' && sv[i - 1] != '\\')
+                    {
+                        itemEnd = i + 1;
+                        break;
+                    }
+                    rawType.push_back(c);
+                }
+
+                const std::string itemType = trim(json_unescape(rawType));
+
+                std::size_t content_key = find_str(sv, "\"content\"", itemEnd);
+                if (content_key == std::string_view::npos) { pos = itemEnd; continue; }
 
                 std::size_t colon = find_str(sv, ":", content_key);
                 if (colon == std::string_view::npos) { pos = content_key + 9; continue; }
@@ -676,9 +785,14 @@ namespace epoch::ai
                 }
 
                 std::string text = trim(json_unescape(raw));
-                if (!text.empty())
+                if (itemType == "message" && !text.empty())
                     last = std::move(text);
+                else if (itemType == "reasoning" && !text.empty())
+                    lastReasoning = std::move(text);
             }
+
+            if (last.empty() && !lastReasoning.empty())
+                last = reasoning_fallback(lastReasoning);
 
             return last;
         }
