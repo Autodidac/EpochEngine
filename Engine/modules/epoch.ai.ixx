@@ -76,7 +76,7 @@ export namespace epoch::ai
         {
             std::string backend = "lmstudio_chat";     // currently only lmstudio_chat
             std::string endpoint = "http://localhost:1234"; // base or full
-            std::string model = "arliai_glm-4.5-air-derestricted";
+            std::string model{};
             std::size_t best_of = 1;
         };
 

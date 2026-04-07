@@ -89,6 +89,29 @@ namespace epoch::ai
             return endpoint + "/api/v1/chat";
         }
 
+        static std::string normalize_model_list_endpoint(std::string endpoint)
+        {
+            rstrip_slashes(endpoint);
+
+            constexpr std::string_view suffixes[] = {
+                "/api/v1/chat",
+                "/v1/chat/completions",
+                "/v1/models"
+            };
+
+            for (const auto suffix : suffixes)
+            {
+                if (ends_with(endpoint, suffix))
+                {
+                    endpoint.resize(endpoint.size() - suffix.size());
+                    rstrip_slashes(endpoint);
+                    break;
+                }
+            }
+
+            return endpoint + "/v1/models";
+        }
+
         static std::string trim(std::string_view s)
         {
             auto is_ws = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -303,6 +326,94 @@ namespace epoch::ai
             WinHttpCloseHandle(hSession);
             return resp;
         }
+
+        static std::string winhttp_get_json(const std::string& url, const std::vector<std::pair<std::string, std::string>>& headers)
+        {
+            const auto u = crack_url(url);
+
+            HINTERNET hSession = WinHttpOpen(L"EpochAI/1.0",
+                WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+            if (!hSession) throw std::runtime_error("WinHTTP: WinHttpOpen failed");
+
+            HINTERNET hConnect = WinHttpConnect(hSession, u.host.c_str(), u.port, 0);
+            if (!hConnect)
+            {
+                WinHttpCloseHandle(hSession);
+                throw std::runtime_error("WinHTTP: WinHttpConnect failed");
+            }
+
+            DWORD flags = u.secure ? WINHTTP_FLAG_SECURE : 0;
+            HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", u.path.c_str(),
+                nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+            if (!hRequest)
+            {
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                throw std::runtime_error("WinHTTP: WinHttpOpenRequest failed");
+            }
+
+            std::wstring hdr = L"Accept: application/json\r\n";
+            for (const auto& [k, v] : headers)
+            {
+                int wk = MultiByteToWideChar(CP_UTF8, 0, k.c_str(), (int)k.size(), nullptr, 0);
+                int wv = MultiByteToWideChar(CP_UTF8, 0, v.c_str(), (int)v.size(), nullptr, 0);
+                if (wk <= 0 || wv <= 0) continue;
+                std::wstring ws_k((std::size_t)wk, L'\0');
+                std::wstring ws_v((std::size_t)wv, L'\0');
+                MultiByteToWideChar(CP_UTF8, 0, k.c_str(), (int)k.size(), ws_k.data(), wk);
+                MultiByteToWideChar(CP_UTF8, 0, v.c_str(), (int)v.size(), ws_v.data(), wv);
+                hdr += ws_k;
+                hdr += L": ";
+                hdr += ws_v;
+                hdr += L"\r\n";
+            }
+
+            (void)WinHttpAddRequestHeaders(hRequest, hdr.c_str(), (DWORD)hdr.size(),
+                WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE);
+
+            BOOL ok = WinHttpSendRequest(hRequest,
+                WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                WINHTTP_NO_REQUEST_DATA, 0,
+                0, 0);
+
+            if (!ok)
+            {
+                WinHttpCloseHandle(hRequest);
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                throw std::runtime_error("WinHTTP: WinHttpSendRequest failed");
+            }
+
+            if (!WinHttpReceiveResponse(hRequest, nullptr))
+            {
+                WinHttpCloseHandle(hRequest);
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                throw std::runtime_error("WinHTTP: WinHttpReceiveResponse failed");
+            }
+
+            std::string resp;
+            for (;;)
+            {
+                DWORD avail = 0;
+                if (!WinHttpQueryDataAvailable(hRequest, &avail))
+                    break;
+                if (avail == 0) break;
+
+                std::string buf(avail, '\0');
+                DWORD read = 0;
+                if (!WinHttpReadData(hRequest, buf.data(), avail, &read))
+                    break;
+                buf.resize(read);
+                resp += buf;
+            }
+
+            WinHttpCloseHandle(hRequest);
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            return resp;
+        }
 #endif
 
 #if !defined(_WIN32) && defined(EPOCH_HAS_CURL)
@@ -371,7 +482,142 @@ namespace epoch::ai
 
             return resp;
         }
+
+        static std::string http_get_json(const std::string& url,
+            const std::vector<std::pair<std::string, std::string>>& headers)
+        {
+            CURL* curl = curl_easy_init();
+            if (!curl)
+                throw std::runtime_error("CURL: curl_easy_init failed");
+
+            std::string resp;
+            struct curl_slist* request_headers = nullptr;
+            request_headers = curl_slist_append(request_headers, "Accept: application/json");
+
+            for (const auto& [k, v] : headers)
+            {
+                std::string hdr = k;
+                hdr += ": ";
+                hdr += v;
+                request_headers = curl_slist_append(request_headers, hdr.c_str());
+            }
+
+            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, request_headers);
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
+            curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+
+            const CURLcode code = curl_easy_perform(curl);
+            if (code != CURLE_OK)
+            {
+                const std::string err = std::string("CURL: curl_easy_perform failed: ") + curl_easy_strerror(code);
+                curl_slist_free_all(request_headers);
+                curl_easy_cleanup(curl);
+                throw std::runtime_error(err);
+            }
+
+            long http_status = 0;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+
+            curl_slist_free_all(request_headers);
+            curl_easy_cleanup(curl);
+
+            if (http_status < 200 || http_status >= 300)
+            {
+                std::ostringstream oss;
+                oss << "CURL: HTTP status " << http_status;
+                throw std::runtime_error(oss.str());
+            }
+
+            return resp;
+        }
 #endif
+
+        static std::vector<std::string> extract_openai_model_ids(const std::string& response)
+        {
+            std::vector<std::string> ids{};
+            std::string_view sv{ response };
+            std::size_t pos = 0;
+
+            while (true)
+            {
+                pos = sv.find("\"id\"", pos);
+                if (pos == std::string_view::npos)
+                    break;
+
+                std::size_t colon = sv.find(':', pos + 4);
+                if (colon == std::string_view::npos)
+                    break;
+
+                std::size_t q = colon + 1;
+                while (q < sv.size() && std::isspace(static_cast<unsigned char>(sv[q])) != 0)
+                    ++q;
+                if (q >= sv.size() || sv[q] != '"')
+                {
+                    pos = colon + 1;
+                    continue;
+                }
+
+                ++q;
+                std::string raw;
+                for (std::size_t i = q; i < sv.size(); ++i)
+                {
+                    const char c = sv[i];
+                    if (c == '"' && (i == q || sv[i - 1] != '\\'))
+                    {
+                        pos = i + 1;
+                        break;
+                    }
+                    raw.push_back(c);
+                }
+
+                std::string id = trim(json_unescape(raw));
+                if (!id.empty()
+                    && std::find(ids.begin(), ids.end(), id) == ids.end())
+                {
+                    ids.push_back(std::move(id));
+                }
+            }
+
+            return ids;
+        }
+
+        static std::vector<std::string> fetch_detected_models(const std::string& endpoint)
+        {
+            const std::string modelsEndpoint = normalize_model_list_endpoint(endpoint);
+            try
+            {
+#if defined(_WIN32)
+                const std::string response = winhttp_get_json(modelsEndpoint, {});
+#elif defined(EPOCH_HAS_CURL)
+                const std::string response = http_get_json(modelsEndpoint, {});
+#else
+                (void)modelsEndpoint;
+                core::log::error("ai", "Model detection failed: no HTTP transport is configured.");
+                return {};
+#endif
+                return extract_openai_model_ids(response);
+            }
+            catch (const std::exception& ex)
+            {
+                std::string msg = "Model detection failed: ";
+                msg += ex.what();
+                core::log::warn("ai", epoch::string_view{msg.data(), msg.size()});
+                return {};
+            }
+        }
+
+        static std::string resolve_model_name(const std::string& endpoint, std::string requested)
+        {
+            auto detected = fetch_detected_models(endpoint);
+
+            if (!detected.empty())
+                return detected.front();
+
+            return requested;
+        }
 
         static std::string extract_lmstudio_message_content(const std::string& response)
         {
@@ -498,6 +744,13 @@ namespace epoch::ai
             core::log::info("ai", "Bot backend is not lmstudio_chat; only lmstudio_chat is implemented here.");
 
         m_endpoint_full = normalize_lmstudio_native_chat_endpoint(m_cfg.endpoint);
+        m_cfg.model = resolve_model_name(m_cfg.endpoint, m_cfg.model);
+        if (!m_cfg.model.empty())
+        {
+            std::string msg = "Bot model: ";
+            msg += m_cfg.model;
+            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+        }
     }
 
     BotReply Bot::submit(std::string_view user_input)
@@ -556,7 +809,7 @@ namespace epoch::ai
         g_bot = new Bot({
             .backend = "lmstudio_chat",
             .endpoint = "http://localhost:1234",
-            .model = "arliai_glm-4.5-air-derestricted",
+            .model = {},
             .best_of = 1
         });
 
