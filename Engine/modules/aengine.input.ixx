@@ -232,6 +232,32 @@ namespace epochnamespace::input
         }
     }
 
+    export inline void inject_virtual_key_event(int vk, bool down)
+    {
+        if (!vk)
+            return;
+
+        std::unique_lock lock(g_inputMutex);
+        for (std::uint16_t k = 0; k < Key::Count; ++k)
+        {
+            if (map_key_to_vk(static_cast<Key>(k)) != vk)
+                continue;
+
+            const bool wasDown = keyDown.test(k);
+            if (down)
+            {
+                if (!wasDown)
+                    keyPressed.set(k);
+                keyDown.set(k);
+            }
+            else
+            {
+                keyDown.reset(k);
+            }
+            return;
+        }
+    }
+
     // --------------------------------------------------------
     // Per-frame polling
     // --------------------------------------------------------

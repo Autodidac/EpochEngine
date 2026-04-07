@@ -76,6 +76,7 @@ import aengine.cli;
 import core.context;
 import core.logger;
 import aengine.gui;
+import aengine.input;
 
 import context.commandqueue;
 import context.multiplexer;
@@ -186,6 +187,68 @@ namespace
             .type = epochnamespace::gui::EventType::TextInput,
             .text = utf8
         });
+    }
+
+    [[nodiscard]] inline std::string utf8_from_key_message(WPARAM wParam, LPARAM lParam) noexcept
+    {
+        BYTE keyState[256]{};
+        if (!::GetKeyboardState(keyState))
+            return {};
+
+        if ((::GetKeyState(VK_CONTROL) & 0x8000) != 0)
+            return {};
+
+        constexpr int kBufferSize = 8;
+        WCHAR translated[kBufferSize]{};
+        const UINT scanCode = static_cast<UINT>((lParam >> 16) & 0xFFu);
+        const int count = ::ToUnicode(
+            static_cast<UINT>(wParam),
+            scanCode,
+            keyState,
+            translated,
+            kBufferSize,
+            0);
+        if (count <= 0)
+            return {};
+
+        std::string utf8{};
+        for (int i = 0; i < count; ++i)
+            utf8 += utf8_from_codepoint(static_cast<char32_t>(translated[i]));
+        return utf8;
+    }
+
+    inline void push_gui_text_from_key_message(
+        const epochnamespace::core::Context* ctx,
+        WPARAM wParam,
+        LPARAM lParam) noexcept
+    {
+        if (!ctx)
+            return;
+
+        switch (wParam)
+        {
+        case VK_BACK:
+        case VK_RETURN:
+        case VK_ESCAPE:
+        case VK_TAB:
+            return;
+        default:
+            break;
+        }
+
+        const std::string utf8 = utf8_from_key_message(wParam, lParam);
+        if (utf8.empty())
+            return;
+
+        epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
+            .type = epochnamespace::gui::EventType::TextInput,
+            .text = utf8
+        });
+    }
+
+    inline void inject_input_key_event(WPARAM wParam, bool down) noexcept
+    {
+        epochnamespace::input::inject_virtual_key_event(static_cast<int>(wParam), down);
     }
 
     [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> typed_context(
@@ -320,16 +383,26 @@ namespace
         {
         case WM_CHAR:
         case WM_SYSCHAR:
-            forward_gui_input_message(hwnd, msg, wp, lp);
             return 0;
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            inject_input_key_event(wp, false);
+            return DefSubclassProc(hwnd, msg, wp, lp);
         case WM_LBUTTONDOWN:
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
         case WM_MOUSEWHEEL:
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
             forward_gui_input_message(hwnd, msg, wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        {
+            const auto ctx = resolve_gui_context_for_hwnd(hwnd);
+            inject_input_key_event(wp, true);
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            push_gui_text_from_key_message(ctx.get(), wp, lp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        }
         default:
             return DefSubclassProc(hwnd, msg, wp, lp);
         }
@@ -410,15 +483,27 @@ namespace
         }
 
         case WM_MOUSEWHEEL:
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
             forward_gui_input_message(hwnd, msg, wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
 
         case WM_CHAR:
         case WM_SYSCHAR:
-            forward_gui_input_message(hwnd, msg, wp, lp);
             return 0;
+
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            inject_input_key_event(wp, false);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        {
+            const auto guiCtx = resolve_gui_context_for_hwnd(hwnd);
+            inject_input_key_event(wp, true);
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            push_gui_text_from_key_message(guiCtx.get(), wp, lp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        }
         }
 
         return DefSubclassProc(hwnd, msg, wp, lp);
@@ -2035,9 +2120,15 @@ namespace epochnamespace::core
         case WM_SYSKEYDOWN:
         {
             const auto ctx = resolveGuiContext();
+            inject_input_key_event(wParam, true);
             push_gui_key_event(ctx.get(), static_cast<int>(wParam));
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
         }
+
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            inject_input_key_event(wParam, false);
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
         case WM_CHAR:
         case WM_SYSCHAR:

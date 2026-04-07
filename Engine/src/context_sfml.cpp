@@ -419,7 +419,7 @@ namespace
                 s_height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-            ::ShowWindow(s_hostWindow, SW_HIDE);
+            ::ShowWindow(s_hostWindow, SW_SHOWNA);
         }
 
         if (!s_window->setActive(true))
@@ -432,10 +432,10 @@ namespace
         s_glContext = ::wglGetCurrentContext();
         (void)s_window->setActive(false);
 
-        ctx->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
+        ctx->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
         ctx->hdc = s_hdc;
         ctx->hglrc = s_glContext;
-        ctx->native_window = s_childWindow ? s_childWindow : s_hostWindow;
+        ctx->native_window = s_hostWindow ? s_hostWindow : s_childWindow;
         ctx->native_drawable = s_hdc;
         ctx->native_gl_context = s_glContext;
 #endif
@@ -447,7 +447,7 @@ namespace
         {
             ctx->windowData->sfml_window = s_window.get();
 #if defined(_WIN32)
-            ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
+            ctx->windowData->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
             ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
             ctx->windowData->hdc = s_hdc;
@@ -462,7 +462,7 @@ namespace
         state.running = true;
 
 #if defined(_WIN32)
-        const HWND focusWindow = s_childWindow ? s_childWindow : s_hostWindow;
+        const HWND focusWindow = s_hostWindow ? s_hostWindow : s_childWindow;
         if (focusWindow && ::IsWindow(focusWindow) != FALSE)
         {
             ::SetFocus(focusWindow);
