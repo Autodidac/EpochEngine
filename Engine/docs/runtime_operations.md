@@ -43,6 +43,8 @@ workflow instead of preserving the older citation-heavy snapshot docs.
 - Verify the expected context/render macros are enabled.
 - Launch Windows smoke tests from `x64/Debug/` or `x64/Release/` so the editor
   host and docked backend panes share the colocated runtime assets.
+- Keep Windows `.rc`, icon, and resource headers under `Engine/resource/` so
+  MSVC and CMake stay aligned on the same resource root.
 - Use fresh build directories when changing compilers, module scanning flags, or
   backend combinations.
 - If reload behavior becomes inconsistent, check script diagnostics first, then

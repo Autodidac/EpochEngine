@@ -83,7 +83,7 @@ set(EPOCH_SOURCES
 if(WIN32)
     list(APPEND EPOCH_SOURCES
         src/aengine.context.multiplexer.win.cpp
-        src/WinResource.rc
+        resource/WinResource.rc
     )
 elseif(UNIX AND NOT APPLE)
     list(APPEND EPOCH_SOURCES

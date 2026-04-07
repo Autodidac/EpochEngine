@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -34,19 +34,11 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.script_api.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\main.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\_epoch.stl_types.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_bot.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_service.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_types.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\pch.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\resource.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="$(MSBuildThisFileDirectory)src\icon.ico">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </Image>
   </ItemGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\frag.spv">
@@ -61,22 +53,19 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)resource\WinResource.aps" />
     <None Include="$(MSBuildThisFileDirectory)src\scripts\rotate_all_entities.ascript.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>
-    <None Include="$(MSBuildThisFileDirectory)src\WinResource.aps" />
     <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="$(MSBuildThisFileDirectory)src\WinResource.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\a2048like.ixx" />
@@ -155,9 +144,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\agamecore.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.gui.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimageatlaswriter.ixx" />
-  <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.loader.ixx" />
-  <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.writer.ixx" />
-  <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.state.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.loader.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.writer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.state.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epochengine.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\amatch3like.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aminesweeperlike.ixx" />
@@ -423,5 +412,10 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="$(MSBuildThisFileDirectory)resource\icon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="$(MSBuildThisFileDirectory)resource\WinResource.rc" />
+  </ItemGroup>
 </Project>
-

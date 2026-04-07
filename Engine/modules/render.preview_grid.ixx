@@ -409,6 +409,31 @@ namespace epochnamespace::previewgrid
         rig = detail::make_default_rig(rig.mode);
     }
 
+    export [[nodiscard]] inline float camera_distance_for(const void* ctxKey) noexcept
+    {
+        if (!ctxKey)
+            return detail::make_default_rig(CameraMode::Editor).distance;
+
+        std::shared_lock lock(detail::g_cameraRigMutex);
+        const auto it = detail::g_cameraRigs.find(ctxKey);
+        if (it == detail::g_cameraRigs.end())
+            return detail::make_default_rig(CameraMode::Editor).distance;
+        return it->second.mode == CameraMode::FPS ? 0.0f : it->second.distance;
+    }
+
+    export inline void zoom_camera(const void* ctxKey, float amount) noexcept
+    {
+        if (!ctxKey || amount == 0.0f)
+            return;
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        auto& rig = detail::ensure_rig(ctxKey);
+        if (rig.mode == CameraMode::FPS)
+            return;
+
+        rig.distance = (std::clamp)(rig.distance - amount, 2.5f, 48.0f);
+    }
+
     export inline void cleanup_context(const void* ctxKey) noexcept
     {
         if (!ctxKey)

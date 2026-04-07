@@ -5,6 +5,7 @@
 |   |-- include/          active public headers
 |   |-- modules/          C++23 module interfaces
 |   |-- src/              runtime and backend implementation files
+|   |-- resource/         Windows resources, icon, rc, and resource headers
 |   |-- docs/             current engine documentation
 |   |-- examples/         sample launcher and assets
 |   |-- build.sh / run.sh / install.sh / clean.sh

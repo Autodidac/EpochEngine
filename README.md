@@ -14,6 +14,7 @@ The active engine lives in:
 Engine/src/
 Engine/include/
 Engine/modules/
+Engine/resource/
 ```
 
 with prebuilt MSVC runtime binaries commonly landing in:
@@ -68,10 +69,10 @@ These README captures are editor/source proofs, not updater-shell screenshots.
 If a packaged bootstrap release looks older than these, it has not caught up to
 the current source/editor state yet.
 
-Windows editor multi-context dev test mode, source `v0.83.41`:
+Windows editor multi-context chrome refresh, source `v0.83.52`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08341.png" alt="Epoch Windows editor multi-context dev test mode" width="1400" />
+  <img src="Images/readme/windows-multicontext-editor-v08352.png" alt="Epoch Windows editor multi-context chrome refresh" width="1400" />
 </p>
 
 ---
@@ -105,8 +106,8 @@ WSL/Linux note:
 Engine/
 ```
 
-Engine code, build configuration, examples, docs, assets, and editor/runtime
-systems.
+Engine code, build configuration, resources, examples, docs, assets, and
+editor/runtime systems.
 
 ```text
 x64/
@@ -309,36 +310,26 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.51
+v0.83.52
 ```
 
 Highlights:
 
-- `0.83.51` keeps the repo/source surface aligned with the current Windows
-  docked-backend stabilization pass.
-- The Windows multiplexer now tracks host and child HWNDs together, which keeps
-  resize, enqueue, cleanup, and dock layout work aimed at the real live pane.
-- SDL and SFML dock hosts now stay visible during local smoke runs, and the
-  README/docs now call out the asset-bearing output-folder launch path for
-  multi-context testing.
-- Historical per-version release notes are now collated into
-  [Changes/release_notes_archive.md](Changes/release_notes_archive.md) instead
-  of only living as scattered version markdown files.
+- `0.83.52` aligns the Windows resource move into `Engine/resource/` across the
+  repo surface instead of only inside the MSVC project.
+- The editor shell now uses a leaner dark menu strip with `File`, `Edit`,
+  `Asset`, `Window`, `Tools`, and `Help`, plus mode/system tabs instead of fake
+  project placeholders.
+- The scene preview camera now supports wheel zoom in editor mode on top of the
+  existing orbit/FPS controls.
+- The refreshed multicontext editor proof above was captured from the real
+  asset-bearing `x64/Debug` runtime so it matches the current local launch path.
+- Source layout is now documented as `include/`, `modules/`, `src/`, and
+  `resource/`, keeping Windows resources separate from both implementation code
+  and module interfaces.
 - Detailed release history lives in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
   current version notes under [Changes/](Changes/).
-- The editor now behaves more like a real desktop tool, with `File`, `Edit`,
-  `Scene`, `Command`, and `Help` menus across the top bar.
-- The shared scene/base color now tracks the darker Vulkan palette across the
-  active backends instead of diverging by renderer.
-- SFML now docks ahead of Vulkan in the parent grid, and its shared preview is
-  clipped back into the scene viewport instead of bleeding into the GUI.
-- Scene preview switching now lets the editor move between `Editor` and `None`
-  preview modes without leaving the current session.
-- The in-app update action is now confirmation-gated before it can replace
-  binaries and restart the session.
-- The current local launch/test baseline is still `x64/Debug` or `x64/Release`
-  so colocated runtime assets resolve exactly as the binaries expect.
 
 Changelog:
 

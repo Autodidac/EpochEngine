@@ -154,23 +154,17 @@
     <Filter Include="Header Files\ai">
       <UniqueIdentifier>{a0192b66-e6b7-44c3-8805-79830528079d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Headers Shared">
-      <UniqueIdentifier>{af3b92cc-68fd-46b6-a5f7-6c6712deeca5}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Module Files\ixx\core\context\backends\wasm">
       <UniqueIdentifier>{455fc2e8-5801-4987-a20c-5b0bcbec252c}</UniqueIdentifier>
     </Filter>
     <Filter Include="Module Files\ixx\core\context\backends\android">
       <UniqueIdentifier>{bc2651df-2a35-47a7-a063-1724928131b6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="include">
+      <UniqueIdentifier>{af3b92cc-68fd-46b6-a5f7-6c6712deeca5}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\pch.h">
-      <Filter>Resource Files</Filter>
-    </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\resource.h">
-      <Filter>Resource Files</Filter>
-    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\aframework.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -211,18 +205,16 @@
       <Filter>Header Files\ai</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\app_api.h">
-      <Filter>Headers Shared</Filter>
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h">
+      <Filter>Resource Files</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h">
+      <Filter>Resource Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="$(MSBuildThisFileDirectory)src\icon.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)src\WinResource.aps">
-      <Filter>Resource Files</Filter>
-    </None>
     <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
       <Filter>Resource Files</Filter>
     </None>
@@ -235,11 +227,9 @@
     <None Include="$(MSBuildThisFileDirectory)src\scripts\rotate_all_entities.ascript.cpp">
       <Filter>Source Files\external scripts</Filter>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="$(MSBuildThisFileDirectory)src\WinResource.rc">
+    <None Include="$(MSBuildThisFileDirectory)resource\WinResource.aps">
       <Filter>Resource Files</Filter>
-    </ResourceCompile>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.components.ixx">
@@ -920,5 +910,15 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="$(MSBuildThisFileDirectory)resource\icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="$(MSBuildThisFileDirectory)resource\WinResource.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

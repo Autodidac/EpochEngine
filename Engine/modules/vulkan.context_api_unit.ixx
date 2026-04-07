@@ -46,7 +46,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-module vulkan.context;
+export module vulkan.context;
 
 import :api;            // brings in declarations for vulkan_* funcs
 import :shared_vk; // brings in per-context Application registry helpers

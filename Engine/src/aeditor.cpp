@@ -77,8 +77,9 @@ namespace epochnamespace
             None = 0,
             File,
             Edit,
-            Scene,
-            Command,
+            Asset,
+            Window,
+            Tools,
             Help
         };
 
@@ -472,6 +473,17 @@ namespace epochnamespace
             return std::format("({:.1f}, {:.1f}, {:.1f})", value[0], value[1], value[2]);
         }
 
+        [[nodiscard]] std::string ellipsize(std::string_view text, std::size_t max_chars)
+        {
+            if (text.size() <= max_chars)
+                return std::string(text);
+
+            if (max_chars <= 3)
+                return std::string(text.substr(0, max_chars));
+
+            return std::string(text.substr(0, max_chars - 3)) + "...";
+        }
+
         [[nodiscard]] std::string_view preview_mode_name(core::ScenePreviewMode mode) noexcept
         {
             switch (mode)
@@ -488,6 +500,14 @@ namespace epochnamespace
                 return "Editor";
             return std::string(epochnamespace::previewgrid::camera_mode_name(
                 epochnamespace::previewgrid::camera_mode_for(ctx.get())));
+        }
+
+        [[nodiscard]] std::string preview_zoom_text(const std::shared_ptr<core::Context>& ctx)
+        {
+            if (!ctx)
+                return "13.5";
+
+            return std::format("{:.1f}", epochnamespace::previewgrid::camera_distance_for(ctx.get()));
         }
 
         AiChat& chat_state_for(const std::shared_ptr<core::Context>& ctx)
@@ -631,7 +651,7 @@ namespace epochnamespace
         const float w = static_cast<float>(ctx->get_width_safe());
         const float h = static_cast<float>(ctx->get_height_safe());
 
-        const float toolbar_h = 116.0f;
+        const float toolbar_h = 98.0f;
         const float bottom_h = (std::max)(220.0f, h * 0.24f);
         const float left_w = (std::max)(280.0f, w * 0.2f);
         const float right_w = (std::max)(320.0f, w * 0.22f);
@@ -660,10 +680,10 @@ namespace epochnamespace
             result.command_argument.assign(argument.begin(), argument.end());
         };
 
-        gui::begin_window("Epoch Editor", toolbar_pos, toolbar_size);
-        const float toolbar_button_y = toolbar_pos.y + 30.0f;
-        const float toolbar_button_h = 28.0f;
-        float toolbar_x = toolbar_pos.x + 8.0f;
+        gui::begin_window("", toolbar_pos, toolbar_size);
+        const float toolbar_button_y = toolbar_pos.y + 10.0f;
+        const float toolbar_button_h = 24.0f;
+        float toolbar_x = toolbar_pos.x + 88.0f;
 
         struct TopMenuButton
         {
@@ -673,13 +693,17 @@ namespace epochnamespace
             float x{};
         };
 
-        std::array<TopMenuButton, 5> topMenus{{
-            { TopMenu::File, "File", 84.0f, 0.0f },
-            { TopMenu::Edit, "Edit", 84.0f, 0.0f },
-            { TopMenu::Scene, "Scene", 96.0f, 0.0f },
-            { TopMenu::Command, "Command", 126.0f, 0.0f },
-            { TopMenu::Help, "Help", 88.0f, 0.0f }
+        std::array<TopMenuButton, 6> topMenus{{
+            { TopMenu::File, "File", 68.0f, 0.0f },
+            { TopMenu::Edit, "Edit", 68.0f, 0.0f },
+            { TopMenu::Asset, "Asset", 76.0f, 0.0f },
+            { TopMenu::Window, "Window", 92.0f, 0.0f },
+            { TopMenu::Tools, "Tools", 76.0f, 0.0f },
+            { TopMenu::Help, "Help", 72.0f, 0.0f }
         }};
+
+        gui::set_cursor({ 16.0f, toolbar_pos.y + 14.0f });
+        gui::label("Epoch");
 
         for (auto& item : topMenus)
         {
@@ -693,26 +717,61 @@ namespace epochnamespace
             toolbar_x += item.width + 6.0f;
         }
 
-        gui::set_cursor({ toolbar_x + 18.0f, toolbar_button_y + 5.0f });
-        if (gui::button("Run", { 96.0f, toolbar_button_h }))
+        const float run_button_x = (std::max)(toolbar_pos.x + 16.0f, w - 104.0f);
+        gui::set_cursor({ run_button_x - 24.0f, toolbar_button_y });
+        if (gui::button("Run Script", { 112.0f, toolbar_button_h }))
         {
             emit_command(EditorCommand::RunScript, editor.activeScript);
             push_editor_log(editor, std::string("[script] Run requested for '") + editor.activeScript + "'.");
         }
-        toolbar_x += 112.0f;
-        gui::set_cursor({ toolbar_x + 18.0f, toolbar_button_y + 5.0f });
+
+        const float status_x = (std::max)(toolbar_x + 12.0f, run_button_x - 480.0f);
+        gui::set_cursor({ status_x, toolbar_button_y + 4.0f });
         gui::wrapped_label(
-            std::string("Version: ") + epochnamespace::GetEngineDisplayString()
-            + "  |  Project: " + editor.projectName
-            + "  |  Renderer: " + renderer_name(ctx)
-            + "  |  Preview: " + std::string(preview_mode_name(editor.previewMode))
-            + "  |  Camera: " + preview_camera_name(ctx)
-            + "  |  Script: " + editor.activeScript,
-            (std::max)(240.0f, w - (toolbar_x + 34.0f)));
-        gui::set_cursor({ 14.0f, toolbar_pos.y + 78.0f });
-        gui::wrapped_label(
-            "Launcher owns projects and games. Editor menus focus on file, scene, commands, and help.",
-            (std::max)(240.0f, w - 28.0f));
+            std::string("v") + epochnamespace::GetEngineVersionString()
+            + "  |  " + renderer_name(ctx)
+            + "  |  " + std::string(preview_mode_name(editor.previewMode))
+            + "  |  " + preview_camera_name(ctx)
+            + "  |  Zoom " + preview_zoom_text(ctx),
+            (std::max)(180.0f, run_button_x - status_x - 12.0f));
+
+        const float tab_y = toolbar_pos.y + 48.0f;
+        const float tab_h = 34.0f;
+        const float tab_gap = 8.0f;
+        float tab_x = 16.0f;
+
+        const std::string editor_tab = "Editor Mode";
+        const std::string runtime_tab = "Run Game";
+        const std::string renderer_tab = "Renderer";
+        const std::string systems_tab = "Systems";
+        const std::string console_tab = "AI Console";
+
+        gui::set_cursor({ tab_x, tab_y });
+        if (gui::button(std::string("[") + editor_tab + "]", { 180.0f, tab_h }))
+            push_editor_log(editor, "[editor] Editor mode is active.");
+        tab_x += 180.0f + tab_gap;
+
+        gui::set_cursor({ tab_x, tab_y });
+        if (gui::button(runtime_tab, { 156.0f, tab_h }))
+        {
+            emit_command(EditorCommand::RunGame, "sandsim");
+            push_editor_log(editor, "[runtime] Launching default game run.");
+        }
+        tab_x += 156.0f + tab_gap;
+
+        gui::set_cursor({ tab_x, tab_y });
+        if (gui::button(renderer_tab, { 164.0f, tab_h }))
+            push_editor_log(editor, std::string("[renderer] Active backend: ") + renderer_name(ctx) + ".");
+        tab_x += 164.0f + tab_gap;
+
+        gui::set_cursor({ tab_x, tab_y });
+        if (gui::button(systems_tab, { 164.0f, tab_h }))
+            push_editor_log(editor, "[systems] Systems tab shell is reserved for upcoming engine surfaces.");
+        tab_x += 164.0f + tab_gap;
+
+        gui::set_cursor({ tab_x, tab_y });
+        if (gui::button(console_tab, { 180.0f, tab_h }))
+            push_editor_log(editor, "[console] AI console remains docked in the lower-right panel.");
 
         gui::end_window();
 
@@ -762,7 +821,7 @@ namespace epochnamespace
         }
         gui::end_window();
 
-        gui::begin_window("Details", details_pos, details_size);
+        gui::begin_window("Inspector", details_pos, details_size);
         const std::size_t selectedIndex = editor.entities.empty()
             ? 0u
             : (std::min)(editor.selectedEntity, editor.entities.size() - 1u);
@@ -786,10 +845,12 @@ namespace epochnamespace
         gui::label(std::string("Helpers Visible: ") + (editor.helpersVisible ? "true" : "false"));
         gui::label(std::string("Preview Mode: ") + std::string(preview_mode_name(editor.previewMode)));
         gui::label(std::string("Preview Camera: ") + preview_camera_name(ctx));
+        gui::label(std::string("Preview Zoom: ") + preview_zoom_text(ctx));
         gui::label(std::string("Editor Script: ") + editor.activeScript);
+        gui::label("Viewport Input: RMB orbit  |  Wheel zoom");
         gui::end_window();
 
-        result.scene_viewport = gui::scene_viewport("Scene View", viewport_pos, viewport_size);
+        result.scene_viewport = gui::scene_viewport("Perspective", viewport_pos, viewport_size);
         ctx->set_scene_preview_mode(editor.previewMode);
         ctx->set_scene_viewport(core::RenderViewport{
             static_cast<int>((std::max)(0.0f, result.scene_viewport.position.x)),
@@ -805,7 +866,7 @@ namespace epochnamespace
         const gui::Vec2 chat_pos{ left_bottom_w, bottom_pos.y };
         const gui::Vec2 chat_size{ (std::max)(0.0f, w - left_bottom_w), bottom_h };
 
-        gui::begin_window("Output Log", log_pos, log_size);
+        gui::begin_window("Output", log_pos, log_size);
         gui::label(std::string("[info] Scene viewport: ")
             + std::to_string(static_cast<int>(result.scene_viewport.size.x))
             + "x"
@@ -813,6 +874,7 @@ namespace epochnamespace
         gui::label(std::string("[info] Active renderer: ") + renderer_name(ctx));
         gui::label(std::string("[info] Preview mode: ") + std::string(preview_mode_name(editor.previewMode)));
         gui::label(std::string("[info] Camera mode: ") + preview_camera_name(ctx));
+        gui::label(std::string("[info] Zoom: ") + preview_zoom_text(ctx));
         gui::label(std::string("[info] Active script: ") + editor.activeScript);
         for (const auto& line : editor.logLines)
             gui::label(line);
@@ -874,44 +936,63 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Scene", TopMenu::Scene, { 220.0f, 212.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Asset", TopMenu::Asset, { 248.0f, 178.0f }, [&](gui::Vec2 pos)
         {
-            menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
-                editor.previewMode = core::ScenePreviewMode::Editor;
-                push_editor_log(editor, "[scene] Preview mode set to Editor.");
+            menu_item("Run Active Script", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
+                emit_command(EditorCommand::RunScript, editor.activeScript);
+                push_editor_log(editor, std::string("[asset] Script run requested for '") + editor.activeScript + "'.");
             });
-            menu_item("Preview: None", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
-                editor.previewMode = core::ScenePreviewMode::None;
-                push_editor_log(editor, "[scene] Preview mode set to None.");
+            menu_item("Focus Current Level", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
+                handle_scene_tool(editor, "focus_selection");
             });
-            menu_item("Camera: Editor", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
-                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
-                push_editor_log(editor, "[scene] Camera mode set to Editor.");
+            menu_item("Log Project Path", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
+                push_editor_log(editor, std::string("[asset] Project root: ") + editor.projectPath);
             });
-            menu_item("Camera: FPS", { pos.x + 12.0f, pos.y + 116.0f }, 192.0f, [&]() {
-                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::FPS);
-                push_editor_log(editor, "[scene] Camera mode set to FPS.");
-            });
-            menu_item("Reset Preview Camera", { pos.x + 12.0f, pos.y + 150.0f }, 192.0f, [&]() {
-                epochnamespace::previewgrid::reset_camera(ctx.get());
-                push_editor_log(editor, "[scene] Preview camera reset.");
+            menu_item("Log Active Script", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
+                push_editor_log(editor, std::string("[asset] Active script: ") + editor.activeScript);
             });
         });
 
-        open_dropdown("Command", TopMenu::Command, { 260.0f, 144.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Window", TopMenu::Window, { 244.0f, 178.0f }, [&](gui::Vec2 pos)
         {
-            menu_item("Run Script", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
-                emit_command(EditorCommand::RunScript, editor.activeScript);
-                push_editor_log(editor, std::string("[command] Script run requested for '") + editor.activeScript + "'.");
+            menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 216.0f, [&]() {
+                editor.previewMode = core::ScenePreviewMode::Editor;
+                push_editor_log(editor, "[window] Preview mode set to Editor.");
             });
-            menu_item("Update to Latest...", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
+            menu_item("Preview: None", { pos.x + 12.0f, pos.y + 48.0f }, 216.0f, [&]() {
+                editor.previewMode = core::ScenePreviewMode::None;
+                push_editor_log(editor, "[window] Preview mode set to None.");
+            });
+            menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 82.0f }, 216.0f, [&]() {
+                handle_scene_tool(editor, "focus_selection");
+            });
+            menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 116.0f }, 216.0f, [&]() {
+                handle_scene_tool(editor, "toggle_helpers");
+            });
+        });
+
+        open_dropdown("Tools", TopMenu::Tools, { 260.0f, 212.0f }, [&](gui::Vec2 pos)
+        {
+            menu_item("Camera: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
+                push_editor_log(editor, "[tools] Camera mode set to Editor.");
+            });
+            menu_item("Camera: FPS", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::FPS);
+                push_editor_log(editor, "[tools] Camera mode set to FPS.");
+            });
+            menu_item("Reset Preview Camera", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
+                epochnamespace::previewgrid::reset_camera(ctx.get());
+                push_editor_log(editor, "[tools] Preview camera reset.");
+            });
+            menu_item("Run Script", { pos.x + 12.0f, pos.y + 116.0f }, 228.0f, [&]() {
+                emit_command(EditorCommand::RunScript, editor.activeScript);
+                push_editor_log(editor, std::string("[tools] Script run requested for '") + editor.activeScript + "'.");
+            });
+            menu_item("Update to Latest...", { pos.x + 12.0f, pos.y + 150.0f }, 228.0f, [&]() {
                 editor.showUpdateConfirmModal = true;
                 editor.showSourceUpdateConfirmModal = false;
-                push_editor_log(editor, "[command] Latest update requested. Awaiting confirmation.");
-            });
-            menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
-                emit_command(EditorCommand::OpenLauncher);
-                push_editor_log(editor, "[command] Launcher requested.");
+                push_editor_log(editor, "[tools] Latest update requested. Awaiting confirmation.");
             });
         });
 
