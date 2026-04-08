@@ -82,6 +82,8 @@ Expected smoke behavior:
 - no `workspace/ai/*` checkpoints, compiled models, or caches show up as
   staged Git changes
 - `qwen/qwen3.5-9b` is the current fast local helper baseline when loaded
+- if the first detected helper model is changed locally, keep using the first
+  `/v1/models` entry instead of provoking extra model loads during smoke runs
 
 ## Systems/graph checks
 

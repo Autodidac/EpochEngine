@@ -58,18 +58,18 @@ Phase 1 - Spine foundation
 
 Phase 2 - Project-driven runtime and tool shell
 -----------------------------------------------
-- [ ] Replace fake editor launch paths with real project/scene play from the
+- [x] Replace fake editor launch paths with real project/scene play from the
       active project.
-- [ ] Turn `Run Game` into project play/testing instead of a permanent built-in
+- [x] Turn `Run Game` into project play/testing instead of a permanent built-in
       sample-game launcher.
 - [ ] Move built-in sample games behind project templates or script entries.
 - [ ] Finish the project shell in `aeditor.scene.cpp` so project profiles,
       script profiles, runtime scene ids, and seed entities live in the scene
       layer instead of scattered editor state.
-- [ ] Add the first real project creation flow that duplicates the engine-owned
+- [x] Add the first real project creation flow that duplicates the engine-owned
       source/layout into either a game project or a software/tool project the
       way Unity or Unreal would for games and a creative IDE would for tools.
-- [ ] Add a proper scripting/project dock that shows scripts, source paths,
+- [x] Add a proper scripting/project dock that shows scripts, source paths,
       build/run actions, and compile/load diagnostics.
 - [ ] Make sure the project shell can target both playable scenes and software
       runtime surfaces so Epoch stays a creative software platform, not only a
@@ -136,9 +136,9 @@ Phase 6 - Automation, capture, and documentation loop
 
 Current push priorities
 -----------------------
-1. Finish the project-runtime seam and project/script docks.
+1. Finish the remaining project-runtime seam and generated project/profile flow.
 2. Keep the Systems workspace growing into a real frame/task graph tool.
-3. Tighten the two-role AI capture/training path.
+3. Tighten the two-role AI capture/training path and MCP-driven curation loop.
 4. Keep hardware support broad by default and opt-in for heavier features.
 5. Use docs as the steering surface so future AI-driven work can move quickly
    without losing the intended design.

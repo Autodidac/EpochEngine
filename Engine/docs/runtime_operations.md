@@ -16,12 +16,18 @@ the same engine-owned path.
 
 - the editor should play the active project and scene, not a hardcoded sample
   game menu
+- `Play Project` should reject non-project scene ids from the editor path so the
+  live shell cannot quietly fall back to built-in sample launches
 - built-in sample games should move behind project templates or script actions
 - the long-term target is a Unity/Unreal-style project shell generated from
   duplicated engine source/layout
 - that project shell should support both game projects and software/tool
   projects so Epoch remains a creative software platform as well as a game
   engine
+- the first generated shell flow should create a real on-disk project root,
+  manifest, world file, script stub, and README for both game and tool projects
+- an editor/project launcher profile is valid here as a prestep for choosing
+  projects, contexts, settings, and future automation flows
 - `aeditor.scene.cpp` should own project profiles, script profiles, runtime
   scene ids, and seed entities
 - `aeditor.cpp` should act as the live shell over that scene/project data, not
@@ -35,6 +41,8 @@ the same engine-owned path.
   engine/project build; it is not a text-macro or string-eval layer
 - the scripting/project dock should expose script lists, source paths, run/build
   actions, and compile/load diagnostics
+- build diagnostics can start as honest source-path validation and loader
+  reporting, then grow into fuller project/script compile diagnostics
 - hot reload remains a development feature and needs smoke coverage instead of
   trust
 

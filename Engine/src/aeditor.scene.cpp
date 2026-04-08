@@ -37,7 +37,9 @@ module;
 #include <cassert>
 #include <cstdint>
 #include <deque>
+#include <filesystem>
 #include <functional>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -881,52 +883,106 @@ inline bool apply_ai_ops(CommandBus& bus, std::span<const AiOp> ops, std::string
 
 namespace
 {
+    namespace fs = std::filesystem;
+
     using epochnamespace::EditorProjectProfile;
+    using epochnamespace::EditorProjectCreationResult;
+    using epochnamespace::EditorProjectKind;
     using epochnamespace::EditorSceneSeedEntity;
+    using epochnamespace::EditorScriptBuildResult;
     using epochnamespace::EditorScriptProfile;
 
-    constexpr std::array<EditorProjectProfile, 3> kProjectProfiles{{
+    constexpr std::array<EditorProjectProfile, 4> kProjectProfiles{{
         {
+            EditorProjectKind::Game,
             "sandbox",
             "Sandbox",
+            "Projects/Sandbox",
             "Projects/Sandbox/scene.epoch",
             "PersistentLevel",
             "project:sandbox",
+            "Projects/Sandbox/project.epoch.json",
+            "game-project",
             "rotate_all_entities",
             "General-purpose sandbox for editor, runtime, and renderer iteration."
         },
         {
+            EditorProjectKind::Game,
             "platformer",
             "PlatformerDemo",
+            "Projects/PlatformerDemo",
             "Projects/PlatformerDemo/worlds/platformer.epoch",
             "Platformer_Main",
             "project:platformer",
+            "Projects/PlatformerDemo/project.epoch.json",
+            "game-project",
             "editor_launcher",
             "Gameplay test profile for movement, camera tuning, and encounter scripting."
         },
         {
-            "puzzle",
-            "PuzzleLab",
-            "Projects/PuzzleLab/worlds/puzzle.epoch",
-            "Puzzle_Testbed",
-            "project:puzzle",
+            EditorProjectKind::Game,
+            "projectlauncher",
+            "ProjectLauncher",
+            "Projects/ProjectLauncher",
+            "Projects/ProjectLauncher/worlds/launcher.epoch",
+            "LauncherWorkspace",
+            "project:projectlauncher",
+            "Projects/ProjectLauncher/project.epoch.json",
+            "tool-project",
             "editor_launcher",
-            "Logic-heavy project profile for interaction, puzzle flow, and scripted events."
+            "Editor-facing launcher profile for project selection, context setup, settings, and future engine automation."
+        },
+        {
+            EditorProjectKind::Tool,
+            "softwarestudio",
+            "SoftwareStudio",
+            "Projects/SoftwareStudio",
+            "Projects/SoftwareStudio/worlds/tool.epoch",
+            "ToolWorkspace",
+            "project:softwarestudio",
+            "Projects/SoftwareStudio/project.epoch.json",
+            "tool-project",
+            "tool_bootstrap",
+            "Software and tool development profile for workflow automation, dashboards, and editor-facing utilities."
         }
     }};
 
-    constexpr std::array<EditorScriptProfile, 2> kScriptProfiles{{
+    constexpr std::array<EditorScriptProfile, 4> kScriptProfiles{{
         {
             "rotate_all_entities",
             "Rotate All Entities",
             "Engine/src/scripts/rotate_all_entities.ascript.cpp",
+            "Validate source path and script host bindings",
+            "Rotate current editor scene entities",
+            "Checks for a present script source file before using the active engine host to reload it.",
             "Simple validation script for host callbacks against the current editor scene."
         },
         {
             "editor_launcher",
             "Editor Launcher",
             "Engine/src/scripts/editor_launcher.ascript.cpp",
+            "Validate source path and launcher bindings",
+            "Bootstrap editor project shell actions",
+            "Confirms the bootstrap script exists and is loadable through the engine-owned script host.",
             "Project bootstrap script surface for future game templates and play flows."
+        },
+        {
+            "game_bootstrap",
+            "Game Bootstrap",
+            "Projects/Templates/GameProject/scripts/game_bootstrap.ascript.cpp",
+            "Validate project game bootstrap source",
+            "Prime a generated game project scene/runtime shell",
+            "Expected in generated game projects; create a new project shell if missing.",
+            "Starter script surface for generated game projects."
+        },
+        {
+            "tool_bootstrap",
+            "Tool Bootstrap",
+            "Projects/Templates/ToolProject/scripts/tool_bootstrap.ascript.cpp",
+            "Validate project tool bootstrap source",
+            "Prime a generated software/tool project shell",
+            "Expected in generated tool projects; create a new project shell if missing.",
+            "Starter script surface for generated software and utility projects."
         }
     }};
 
@@ -955,17 +1011,59 @@ namespace
         };
     }
 
-    [[nodiscard]] std::vector<EditorSceneSeedEntity> puzzle_seed_entities()
+    [[nodiscard]] std::vector<EditorSceneSeedEntity> project_launcher_seed_entities()
     {
         return {
-            { "PuzzleWorld", "Level", "World" },
-            { "OverviewCamera", "Camera", "Gameplay", { 0.0f, 7.0f, 9.0f }, { -38.0f, 0.0f, 0.0f } },
+            { "LauncherWorkspace", "Level", "World" },
+            { "OverviewCamera", "Camera", "Editor", { 0.0f, 6.0f, 9.0f }, { -34.0f, 0.0f, 0.0f } },
             { "KeyLight", "Light", "Lighting", { 1.5f, 5.5f, 2.0f }, { -40.0f, 25.0f, 0.0f } },
-            { "PuzzleGrid", "Grid", "Gameplay", { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 6.0f, 1.0f, 6.0f } },
-            { "SlidingBoard", "PuzzleBoard", "Gameplay", { 0.0f, 0.5f, 0.0f } },
-            { "HintTerminal", "Interactable", "Gameplay", { -2.5f, 0.0f, 1.5f } },
-            { "GoalSocket", "Target", "Gameplay", { 2.5f, 0.0f, -1.5f } }
+            { "ProjectTray", "LauncherPanel", "Editor", { -2.0f, 0.0f, 1.5f } },
+            { "ContextTray", "LauncherPanel", "Editor", { 2.0f, 0.0f, 1.5f } },
+            { "SettingsTray", "LauncherPanel", "Editor", { 0.0f, 0.0f, -1.5f } }
         };
+    }
+
+    [[nodiscard]] std::vector<EditorSceneSeedEntity> software_seed_entities()
+    {
+        return {
+            { "ToolWorkspace", "Level", "World" },
+            { "EditorCamera", "Camera", "Editor", { 0.0f, 4.5f, 9.0f }, { -28.0f, 0.0f, 0.0f } },
+            { "KeyLight", "Light", "Lighting", { 2.0f, 6.5f, 2.0f }, { -34.0f, 35.0f, 0.0f } },
+            { "UiShell", "ToolWindow", "Software", { 0.0f, 0.0f, 0.0f } },
+            { "ScriptConsole", "Console", "Software", { -2.0f, 0.0f, 1.0f } },
+            { "TaskBoard", "TaskGraph", "Software", { 2.0f, 0.0f, -1.0f } }
+        };
+    }
+
+    [[nodiscard]] const EditorScriptProfile* find_script_profile(std::string_view script_id) noexcept
+    {
+        for (const auto& script : kScriptProfiles)
+            if (script.id == script_id)
+                return &script;
+        return nullptr;
+    }
+
+    [[nodiscard]] static bool write_text_file(const fs::path& path, std::string_view text)
+    {
+        std::error_code ec;
+        fs::create_directories(path.parent_path(), ec);
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return false;
+        out.write(text.data(), static_cast<std::streamsize>(text.size()));
+        return static_cast<bool>(out);
+    }
+
+    [[nodiscard]] static std::string next_generated_project_name(EditorProjectKind kind)
+    {
+        const std::string prefix = kind == EditorProjectKind::Tool ? "ToolProject" : "GameProject";
+        for (int ordinal = 1; ordinal < 1000; ++ordinal)
+        {
+            const std::string candidate = prefix + (ordinal < 10 ? "0" : "") + std::to_string(ordinal);
+            if (!fs::exists(fs::path("Projects") / candidate))
+                return candidate;
+        }
+        return prefix + "_overflow";
     }
 }
 
@@ -998,8 +1096,10 @@ namespace epochnamespace
     {
         if (project_id == "platformer")
             return platformer_seed_entities();
-        if (project_id == "puzzle")
-            return puzzle_seed_entities();
+        if (project_id == "projectlauncher")
+            return project_launcher_seed_entities();
+        if (project_id == "softwarestudio")
+            return software_seed_entities();
         return sandbox_seed_entities();
     }
 
@@ -1008,5 +1108,130 @@ namespace epochnamespace
         if (const auto* profile = editor_find_project_profile(project_id))
             return profile->runtime_scene_id;
         return editor_default_project_profile().runtime_scene_id;
+    }
+
+    std::string_view editor_project_kind_name(EditorProjectKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case EditorProjectKind::Tool:
+            return "Software / Tool";
+        case EditorProjectKind::Game:
+        default:
+            return "Game";
+        }
+    }
+
+    EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind)
+    {
+        const std::string projectName = next_generated_project_name(kind);
+        const std::string projectId = projectName;
+        const fs::path root = fs::path("Projects") / projectName;
+        const fs::path worlds = root / "worlds";
+        const fs::path scripts = root / "scripts";
+        const fs::path source = root / "source";
+        const fs::path assets = root / "assets";
+        const fs::path manifest = root / "project.epoch.json";
+        const fs::path readme = root / "README.md";
+        const fs::path worldFile = worlds / (kind == EditorProjectKind::Tool ? "tool.epoch" : "main.epoch");
+        const fs::path scriptFile = scripts / (kind == EditorProjectKind::Tool ? "tool_bootstrap.ascript.cpp" : "game_bootstrap.ascript.cpp");
+        const std::string scriptId = kind == EditorProjectKind::Tool ? "tool_bootstrap" : "game_bootstrap";
+        const std::string sceneName = kind == EditorProjectKind::Tool ? "ToolWorkspace" : "PersistentLevel";
+        const std::string templateFamily = kind == EditorProjectKind::Tool ? "tool-project" : "game-project";
+
+        std::error_code ec;
+        fs::create_directories(worlds, ec);
+        fs::create_directories(scripts, ec);
+        fs::create_directories(source, ec);
+        fs::create_directories(assets, ec);
+        if (ec)
+        {
+            return {
+                false,
+                projectId,
+                root.string(),
+                "Failed to create project shell directories."
+            };
+        }
+
+        const std::string manifestText =
+            "{\n"
+            "  \"engine\": \"epoch\",\n"
+            "  \"id\": \"" + projectId + "\",\n"
+            "  \"display_name\": \"" + projectName + "\",\n"
+            "  \"kind\": \"" + std::string(kind == EditorProjectKind::Tool ? "tool" : "game") + "\",\n"
+            "  \"template_family\": \"" + templateFamily + "\",\n"
+            "  \"scene\": \"" + worldFile.generic_string() + "\",\n"
+            "  \"default_script\": \"" + scriptId + "\",\n"
+            "  \"support_tier\": \"baseline\"\n"
+            "}\n";
+
+        const std::string readmeText =
+            "# " + projectName + "\n\n"
+            "Generated by the Epoch editor project shell flow.\n\n"
+            "- Kind: " + std::string(kind == EditorProjectKind::Tool ? "Software / Tool" : "Game") + "\n"
+            "- Scene: " + worldFile.filename().string() + "\n"
+            "- Script: " + scriptFile.filename().string() + "\n";
+
+        const std::string worldText =
+            "scene \"" + sceneName + "\"\n"
+            "{\n"
+            "    kind \"" + std::string(kind == EditorProjectKind::Tool ? "tool" : "game") + "\"\n"
+            "    support_tier \"baseline\"\n"
+            "}\n";
+
+        const std::string scriptText =
+            "#include <include/epoch.script_api.h>\n\n"
+            "extern \"C\" bool EpochScriptEntry(EpochScriptHost* host)\n"
+            "{\n"
+            "    if (!host || !host->log)\n"
+            "        return false;\n"
+            "    host->log(host->user_data, \""
+            + std::string(kind == EditorProjectKind::Tool
+                ? "Tool bootstrap placeholder: connect software workflow here."
+                : "Game bootstrap placeholder: connect gameplay startup here.")
+            + "\");\n"
+            "    return true;\n"
+            "}\n";
+
+        const bool ok =
+            write_text_file(manifest, manifestText)
+            && write_text_file(readme, readmeText)
+            && write_text_file(worldFile, worldText)
+            && write_text_file(scriptFile, scriptText);
+
+        return {
+            ok,
+            projectId,
+            root.string(),
+            ok
+                ? "Created project shell at " + root.string()
+                : "Failed to write one or more generated project files."
+        };
+    }
+
+    EditorScriptBuildResult editor_build_script(std::string_view script_name)
+    {
+        const auto* profile = find_script_profile(script_name);
+        if (!profile)
+            return { false, "Unknown script profile." };
+
+        const fs::path sourcePath{ profile->source_path };
+        std::error_code ec;
+        if (!fs::exists(sourcePath, ec) || ec)
+        {
+            return {
+                false,
+                "Missing script source: " + sourcePath.generic_string() + ". " + std::string(profile->diagnostic_hint)
+            };
+        }
+
+        const auto size = fs::file_size(sourcePath, ec);
+        return {
+            !ec,
+            !ec
+                ? "Validated " + sourcePath.generic_string() + " (" + std::to_string(size) + " bytes). " + std::string(profile->build_action)
+                : "Validated source path but could not read file size for " + sourcePath.generic_string() + "."
+        };
     }
 }

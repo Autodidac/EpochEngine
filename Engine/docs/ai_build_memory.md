@@ -47,7 +47,7 @@ changes.
 3. Launch from `x64/Debug/`
 4. Confirm the selected helper model is logged
    - use the first model returned by `/v1/models` so validation does not
-     trigger extra model loads
+      trigger extra model loads
 5. Submit at least one editor prompt and one C++ prompt
 6. Confirm the reply is visible in the AI dock
 7. Confirm raw/staged JSONL capture is updated
@@ -67,6 +67,15 @@ Current validated fast helper baseline:
 
 Stronger local helpers can be used when loaded, but the fast baseline is still
 useful for repeated smoke passes.
+
+Use local helpers aggressively for:
+
+- drafted reasoning on roadmap and architecture steps
+- code-outline drafts for bounded editor/runtime subsystems
+- documentation rewrites and smoke-prompt refinement
+
+Then refine the result locally and keep compile/build proof as the final source
+of truth.
 
 ## Commit memory
 

@@ -1599,6 +1599,15 @@ namespace epochnamespace::core
                                 ctx_running = true;
                                 break;
                             case epochnamespace::EditorCommand::RunGame:
+                                if (!editor_frame.command_argument.starts_with("project:"))
+                                {
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::Error,
+                                        std::source_location::current(),
+                                        "Editor rejected non-project play target '{}'.",
+                                        editor_frame.command_argument);
+                                    break;
+                                }
                                 begin_scene(editor_frame.command_argument, SessionMode::Editor);
                                 break;
                             case epochnamespace::EditorCommand::RunScript:

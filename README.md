@@ -56,6 +56,9 @@ asset set as the main editor host.
 - Project-driven workflow that routes projects into the editor and scene play
   into runtime mode, instead of treating the editor as a loose debug shell or a
   permanent launcher for sample games.
+- A real project shell direction with editor-first launcher profiles plus the
+  first generated game-project and software/tool-project shell flow, so Epoch
+  can bootstrap work the way a serious engine or creative IDE should.
 - A software-development path alongside the game path, so the same engine shell
   can generate and run creative tools, editors, and application-style projects
   instead of pretending every project is only a game.

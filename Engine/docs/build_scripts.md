@@ -151,7 +151,14 @@ Use the helper model for:
 - editor-context smoke prompts
 - dataset cleanup suggestions
 - roadmap/doc phrasing assistance
+- drafted reasoning and code-outline assistance for bounded engine tasks
 - validating that EpochBot receives visible answers through the engine path
+
+When the helper returns mostly reasoning text or stalls:
+
+- keep the first-detected model rule intact
+- use the helper for bounded drafting, not as a blocker for compile-critical work
+- prefer refining small helper drafts locally over waiting on long monolithic answers
 
 ## Related docs
 

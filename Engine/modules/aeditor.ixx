@@ -53,6 +53,12 @@ namespace epochnamespace
         Systems
     };
 
+    export enum class EditorProjectKind : unsigned char
+    {
+        Game = 0,
+        Tool
+    };
+
     export enum class EditorCommand : unsigned char
     {
         None = 0,
@@ -75,11 +81,15 @@ namespace epochnamespace
 
     export struct EditorProjectProfile
     {
+        EditorProjectKind kind{ EditorProjectKind::Game };
         std::string_view id{};
         std::string_view display_name{};
+        std::string_view root_path{};
         std::string_view scene_path{};
         std::string_view world_name{};
         std::string_view runtime_scene_id{};
+        std::string_view manifest_path{};
+        std::string_view template_family{};
         std::string_view default_script{};
         std::string_view description{};
     };
@@ -89,7 +99,24 @@ namespace epochnamespace
         std::string_view id{};
         std::string_view display_name{};
         std::string_view source_path{};
+        std::string_view build_action{};
+        std::string_view run_action{};
+        std::string_view diagnostic_hint{};
         std::string_view description{};
+    };
+
+    export struct EditorProjectCreationResult
+    {
+        bool succeeded{ false };
+        std::string project_id{};
+        std::string root_path{};
+        std::string summary{};
+    };
+
+    export struct EditorScriptBuildResult
+    {
+        bool succeeded{ false };
+        std::string summary{};
     };
 
     export struct EditorSceneSeedEntity
@@ -114,6 +141,9 @@ namespace epochnamespace
     export [[nodiscard]] std::span<const EditorScriptProfile> editor_script_profiles() noexcept;
     export [[nodiscard]] std::vector<EditorSceneSeedEntity> editor_seed_entities_for_project(std::string_view project_id);
     export [[nodiscard]] std::string_view editor_runtime_scene_for_project(std::string_view project_id) noexcept;
+    export [[nodiscard]] std::string_view editor_project_kind_name(EditorProjectKind kind) noexcept;
+    export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind);
+    export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);
 
     export void cleanup_chat_context(const core::Context* ctx);
     export void shutdown_chat_system();

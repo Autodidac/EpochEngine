@@ -1,6 +1,13 @@
 ﻿# Epoch Changelog
 
 
+## [v0.83.64]
+- Turned the editor shell further into a real project-driven runtime surface: project play now stays project-only from the editor path, and the Project dock exposes project kind, root, manifest, template family, runtime target, and generated shell status instead of a thin fake launcher strip.
+- Added the first generated project shell flow for both game and software/tool projects in `aeditor.scene.cpp`, writing a real project root, manifest, world file, script stub, and README under `Projects/`.
+- Expanded the Scripts dock so it now shows source, build action, run action, and honest validation/load diagnostics instead of only a thin run button.
+- Replaced the old `PuzzleLab` profile with a launcher-oriented `ProjectLauncher` profile so the editor/project shell stays centered on contexts, settings, project flow, and future automation instead of a stray puzzle testbed.
+- Updated the roadmap and build/runtime/smoke/AI docs so the automation loop now explicitly reflects generated project shells, project-only editor play, bounded helper-model drafting, and the first-detected LM Studio model rule.
+
 ## [v0.83.63]
 - Rewrote the roadmap around the real current direction: project-driven runtime, modular editor workspaces, frame/task graph tooling in the Systems surface, broad automatic hardware support, and explicit support tiers for heavier optional backend/libs.
 - Corrected the AI docs from the mistaken three-role wording to the intended two-role engine model: internal EpochBot plus the local MCP/control layer, while local LM Studio models remain development helpers outside the engine runtime role count.

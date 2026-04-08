@@ -215,10 +215,16 @@ namespace epochnamespace
             TopMenu openMenu{ TopMenu::None };
             std::string projectId{ "sandbox" };
             std::string projectName{ "Sandbox" };
-            std::string projectPath{ "Projects/Sandbox/scene.epoch" };
+            std::string projectRoot{ "Projects/Sandbox" };
+            std::string projectScenePath{ "Projects/Sandbox/scene.epoch" };
+            std::string projectManifest{ "Projects/Sandbox/project.epoch.json" };
+            std::string projectTemplate{ "game-project" };
+            std::string projectKind{ "Game" };
             std::string activeScript{ "rotate_all_entities" };
             std::string activeRuntimeScene{ "project:sandbox" };
             std::string activeWorld{ "PersistentLevel" };
+            std::string projectStatus{ "Project shell ready." };
+            std::string scriptBuildStatus{ "Select a script to validate or run." };
             std::vector<EditorEntity> entities{};
             std::size_t selectedEntity{ 0 };
             std::vector<std::string> logLines{};
@@ -481,10 +487,16 @@ namespace epochnamespace
             state.helpersVisible = true;
             state.projectId = std::string(profile->id);
             state.projectName = std::string(profile->display_name);
-            state.projectPath = std::string(profile->scene_path);
+            state.projectRoot = std::string(profile->root_path);
+            state.projectScenePath = std::string(profile->scene_path);
+            state.projectManifest = std::string(profile->manifest_path);
+            state.projectTemplate = std::string(profile->template_family);
+            state.projectKind = std::string(editor_project_kind_name(profile->kind));
             state.activeWorld = std::string(profile->world_name);
             state.activeScript = std::string(profile->default_script);
             state.activeRuntimeScene = std::string(profile->runtime_scene_id);
+            state.projectStatus = std::string("Loaded project shell at ") + state.projectRoot + ".";
+            state.scriptBuildStatus = "Select a script to validate or run.";
 
             state.entities.clear();
             for (const auto& seed : editor_seed_entities_for_project(profile->id))
@@ -510,6 +522,16 @@ namespace epochnamespace
                     + " -> "
                     + state.activeRuntimeScene
                     + ".");
+        }
+
+        [[nodiscard]] const EditorScriptProfile* active_script_profile(const EditorState& state) noexcept
+        {
+            for (const auto& script : editor_script_profiles())
+            {
+                if (script.id == state.activeScript)
+                    return &script;
+            }
+            return nullptr;
         }
 
         [[nodiscard]] std::string make_entity_name(const EditorState& state, std::string_view base)
@@ -1036,8 +1058,8 @@ namespace epochnamespace
 
         const std::string editor_tab = "Editor Mode";
         const std::string runtime_tab = "Play Project";
-        const std::string add_cube_tab = "Add Cube";
-        const std::string add_light_tab = "Add Light";
+        const std::string scripts_tab = "Run Script";
+        const std::string project_tab = "Project Shell";
         const std::string ask_ai_tab = "Ask AI";
 
         gui::set_cursor({ tab_x, tab_y });
@@ -1058,13 +1080,17 @@ namespace epochnamespace
         tab_x += 156.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(add_cube_tab, { 164.0f, tab_h }))
-            add_entity(editor, "cube");
+        if (gui::button(scripts_tab, { 164.0f, tab_h }))
+        {
+            emit_command(EditorCommand::RunScript, editor.activeScript);
+            push_editor_log(editor, std::string("[script] Run requested for '") + editor.activeScript + "'.");
+            editor.workspaceTab = EditorWorkspaceTab::Scripts;
+        }
         tab_x += 164.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(add_light_tab, { 164.0f, tab_h }))
-            add_entity(editor, "light");
+        if (gui::button(project_tab, { 164.0f, tab_h }))
+            editor.workspaceTab = EditorWorkspaceTab::Project;
         tab_x += 164.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
@@ -1103,7 +1129,7 @@ namespace epochnamespace
 
         gui::begin_window("World Outliner", outliner_pos, outliner_size);
         gui::label(std::string("Scene: ") + editor.activeWorld);
-        gui::label(std::string("Project Root: ") + editor.projectPath);
+        gui::label(std::string("Project Root: ") + editor.projectRoot);
         gui::label(std::string("Entities: ") + std::to_string(editor.entities.size()));
         if (gui::button("+ Cube", { 92.0f, 26.0f }))
             add_entity(editor, "cube");
@@ -1194,11 +1220,17 @@ namespace epochnamespace
             if (!activeProfile)
                 activeProfile = &editor_default_project_profile();
 
-            gui::property_row("[project] Active", activeProfile->display_name.data());
-            gui::property_row("[project] Scene", activeProfile->scene_path.data());
-            gui::property_row("[project] World", activeProfile->world_name.data());
-            gui::property_row("[project] Runtime", activeProfile->runtime_scene_id.data());
-            gui::wrapped_label(activeProfile->description.data(), (std::max)(180.0f, log_size.x - 24.0f));
+            gui::property_row("[project] Active", activeProfile->display_name);
+            gui::property_row("[project] Kind", editor.projectKind);
+            gui::property_row("[project] Root", editor.projectRoot);
+            gui::property_row("[project] Scene", editor.projectScenePath);
+            gui::property_row("[project] World", activeProfile->world_name);
+            gui::property_row("[project] Runtime", activeProfile->runtime_scene_id);
+            gui::property_row("[project] Manifest", editor.projectManifest);
+            gui::property_row("[project] Template", editor.projectTemplate);
+            gui::property_row("[project] Default script", activeProfile->default_script);
+            gui::wrapped_label(activeProfile->description, (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(editor.projectStatus, (std::max)(180.0f, log_size.x - 24.0f));
 
             for (const auto& profile : editor_project_profiles())
             {
@@ -1217,14 +1249,34 @@ namespace epochnamespace
                 emit_command(EditorCommand::RunGame, editor.activeRuntimeScene);
                 push_editor_log(editor, std::string("[project] Play requested for ") + editor.projectName + ".");
             }
+            if (gui::button("Create Game Project Shell", { 220.0f, 30.0f }))
+            {
+                const auto created = editor_create_project_shell(EditorProjectKind::Game);
+                editor.projectStatus = created.summary;
+                push_editor_log(editor, std::string("[project] ") + created.summary);
+            }
+            if (gui::button("Create Tool Project Shell", { 220.0f, 30.0f }))
+            {
+                const auto created = editor_create_project_shell(EditorProjectKind::Tool);
+                editor.projectStatus = created.summary;
+                push_editor_log(editor, std::string("[project] ") + created.summary);
+            }
             break;
         }
         case EditorWorkspaceTab::Scripts:
         {
             gui::property_row("[script] Active", editor.activeScript);
+            if (const auto* activeScript = active_script_profile(editor))
+            {
+                gui::property_row("[script] Source", activeScript->source_path);
+                gui::property_row("[script] Build", activeScript->build_action);
+                gui::property_row("[script] Run", activeScript->run_action);
+                gui::property_row("[script] Hint", activeScript->diagnostic_hint);
+            }
             gui::wrapped_label(
-                "Scripts compile with the engine/project and use the editor host API for callbacks.",
+                "Scripts compile with the engine/project and use the editor host API for callbacks. This dock now exposes the real source path, the validation/build action, and the runtime action for the selected script.",
                 (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(editor.scriptBuildStatus, (std::max)(180.0f, log_size.x - 24.0f));
 
             for (const auto& script : editor_script_profiles())
             {
@@ -1234,10 +1286,22 @@ namespace epochnamespace
                 if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
                 {
                     editor.activeScript = std::string(script.id);
+                    editor.scriptBuildStatus = std::string("Selected script source: ") + std::string(script.source_path);
                     push_editor_log(editor, std::string("[script] Selected ") + editor.activeScript + ".");
                 }
-                gui::property_row("  source", script.source_path.data());
-                gui::wrapped_label(script.description.data(), (std::max)(160.0f, log_size.x - 36.0f));
+                gui::property_row("  source", script.source_path);
+                gui::wrapped_label(script.description, (std::max)(160.0f, log_size.x - 36.0f));
+            }
+
+            if (gui::button("Build Selected Script", { 180.0f, 30.0f }))
+            {
+                const auto build = editor_build_script(editor.activeScript);
+                editor.scriptBuildStatus = build.summary;
+                push_editor_log(
+                    editor,
+                    std::string("[script] ")
+                    + (build.succeeded ? "Validation passed. " : "Validation failed. ")
+                    + build.summary);
             }
 
             if (gui::button("Run Selected Script", { 180.0f, 30.0f }))
@@ -1274,7 +1338,7 @@ namespace epochnamespace
                     .tool = "scene-guidance",
                     .prompt = build_ai_scene_prompt(editor),
                     .normalized_output = epoch::ai::active_provider_summary(),
-                    .source_path = editor.projectPath
+                    .source_path = editor.projectRoot
                 });
                 push_editor_log(editor, "[ai] Captured MCP training snapshot.");
             }
