@@ -76,6 +76,8 @@ Expected smoke behavior:
 - the selected helper model is logged
 - the helper path should use the first model returned by `/v1/models` unless a
   future explicit selector is added
+- local helper drafting for docs/code/review is encouraged, but runtime parity
+  testing should still stay on the first detected model
 - the AI dock returns a visible reply
 - raw capture lands in `workspace/auto_train.jsonl`
 - MCP/control snapshots can land in `workspace/mcp_capture.jsonl`
@@ -84,6 +86,8 @@ Expected smoke behavior:
 - `qwen/qwen3.5-9b` is the current fast local helper baseline when loaded
 - if the first detected helper model is changed locally, keep using the first
   `/v1/models` entry instead of provoking extra model loads during smoke runs
+- when driving local Qwen helpers directly, prefer `reasoning: "off"` because
+  unsupported reasoning settings can silently fall back and waste output budget
 
 ## Systems/graph checks
 
@@ -93,6 +97,8 @@ Expected smoke behavior:
 - graph pan/zoom must work for wide surfaces
 - the displayed diagnostics should reinforce the compatibility baseline and
   support-tier strategy instead of hiding them in separate docs only
+- black or empty software captures are not valid proof; they should trigger
+  deeper investigation or a different honest capture path
 
 ## Commit pattern memory
 

@@ -1,6 +1,12 @@
 ﻿# Epoch Changelog
 
 
+## [v0.83.65]
+- Turned the Systems workspace into a more honest Phase 3 tooling surface by rendering wider engine-generated frame/task graph textures in the dock, adding reusable inline pan/zoom controls, surfacing a first support-tier diagnostic strip for Baseline, Standard, and Extended runtime targets, and hiding SDL/SFML placeholder dock hosts until their real backend child is ready.
+- Tightened the shared GUI layer so dock content uses a real inner content region with stronger padding, narrower available-width calculations, and text/image visibility checks that stop wrapped labels from bleeding into neighboring panes such as the Perspective viewport.
+- Kept the hardware guidance visible in-editor and in docs: the default compatibility target remains 6-core / GTX 1660 Ti-era desktops plus modern Linux laptops, while heavier renderer/lib support stays a project-level opt-in.
+- Strengthened the smoke/docs loop around local helper usage and proof discipline: use the first detected LM Studio model for runtime parity, lean on local helpers for bounded drafts, launch only from asset-bearing output folders, and treat black software captures as invalid proof rather than a successful screenshot.
+
 ## [v0.83.64]
 - Turned the editor shell further into a real project-driven runtime surface: project play now stays project-only from the editor path, and the Project dock exposes project kind, root, manifest, template family, runtime target, and generated shell status instead of a thin fake launcher strip.
 - Added the first generated project shell flow for both game and software/tool projects in `aeditor.scene.cpp`, writing a real project root, manifest, world file, script stub, and README under `Projects/`.

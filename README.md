@@ -74,8 +74,10 @@ asset set as the main editor host.
   task-graph-backed asynchronous work scheduling.
 - Diagnostics, renderer telemetry, runtime logging, and updater plumbing as
   first-class engine systems.
-- A Systems surface that is explicitly moving toward frame-graph, task-graph,
-  and multithreaded engine tooling rather than staying a fake placeholder.
+- A Systems workspace that now renders engine-generated frame/task graph
+  textures with pan/zoom controls and support-tier diagnostics, and is
+  explicitly moving toward deeper multithreaded renderer tooling instead of
+  staying a fake placeholder.
 - Broad automatic hardware support as a first-class target, centered on
   6-core / GTX 1660 Ti-era desktops and modern Linux laptops by default, with
   heavier backend/lib support exposed as project-level opt-in tiers.

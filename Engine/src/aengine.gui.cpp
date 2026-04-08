@@ -74,14 +74,14 @@ namespace epochnamespace::gui
     using Context = epochnamespace::core::Context;
 
     constexpr const char* kAtlasName = "__agui_builtin";
-    constexpr float       kContentPadding = 1.0f;
+    constexpr float       kContentPadding = 8.0f;
     constexpr float       kDefaultFontSizePt = 18.0f;
     constexpr float       kFontScale = 1.0f;
     constexpr float       kTitleScale = 1.1f;
     constexpr float       kLineSpacingFactor = 0.15f;
     constexpr float       kLetterSpacingFactor = 0.0f;
     constexpr float       kBoxInnerPadding = 6.0f;
-    constexpr float       kTitleBarPadding = 6.0f;
+    constexpr float       kTitleBarPadding = 8.0f;
     constexpr float       kCaretBlinkPeriod = 1.0f;
     constexpr int         kTabSpaces = 4;
     constexpr const char* kDefaultFontName = "__agui_default_font";
@@ -236,6 +236,8 @@ namespace epochnamespace::gui
             Vec2 cursor{};
             Vec2 origin{};
             Vec2 windowSize{};
+            Vec2 contentMin{};
+            Vec2 contentMax{};
             Vec2 mousePos{};
 
             bool mouseDown = false;
@@ -257,6 +259,44 @@ namespace epochnamespace::gui
 
         static thread_local FrameState g_frame{};
         static thread_local std::vector<InputEvent> g_pendingEvents{};
+
+        [[nodiscard]] static bool rects_intersect(
+            float ax,
+            float ay,
+            float aw,
+            float ah,
+            float bx,
+            float by,
+            float bw,
+            float bh) noexcept
+        {
+            return ax < bx + bw
+                && ax + aw > bx
+                && ay < by + bh
+                && ay + ah > by;
+        }
+
+        [[nodiscard]] static bool has_content_clip() noexcept
+        {
+            return g_frame.insideWindow
+                && g_frame.contentMax.x > g_frame.contentMin.x
+                && g_frame.contentMax.y > g_frame.contentMin.y;
+        }
+
+        [[nodiscard]] static float content_right() noexcept
+        {
+            return has_content_clip() ? g_frame.contentMax.x : (g_frame.origin.x + g_frame.windowSize.x);
+        }
+
+        [[nodiscard]] static float content_bottom() noexcept
+        {
+            return has_content_clip() ? g_frame.contentMax.y : (g_frame.origin.y + g_frame.windowSize.y);
+        }
+
+        [[nodiscard]] static float content_available_width(float cursorX) noexcept
+        {
+            return (std::max)(8.0f, content_right() - cursorX);
+        }
 
         [[nodiscard]] static bool uses_deferred_gui_batch(const core::Context* ctx) noexcept
         {
@@ -646,6 +686,19 @@ namespace epochnamespace::gui
             if (!ctx)
                 return;
 
+            if (has_content_clip())
+            {
+                if (!rects_intersect(
+                    x, y, w, h,
+                    g_frame.contentMin.x,
+                    g_frame.contentMin.y,
+                    g_frame.contentMax.x - g_frame.contentMin.x,
+                    g_frame.contentMax.y - g_frame.contentMin.y))
+                {
+                    return;
+                }
+            }
+
             if (ctx->windowData && g_frame.ctxShared)
             {
                 g_frame.queuedDraws.push_back(QueuedSpriteDraw{
@@ -994,7 +1047,11 @@ namespace epochnamespace::gui
             if (!g_frame.ctx || !g_resources.font.asset)
                 return 0.0f;
 
-            const float effectiveWidth = (std::max)(space_advance(scale), width);
+            const float clipLeft = has_content_clip() ? g_frame.contentMin.x : x;
+            const float clipTop = has_content_clip() ? g_frame.contentMin.y : y;
+            const float clipRight = has_content_clip() ? g_frame.contentMax.x : (x + width);
+            const float clipBottom = has_content_clip() ? g_frame.contentMax.y : (y + 100000.0f);
+            const float effectiveWidth = (std::max)(space_advance(scale), (std::min)(width, clipRight - x));
             const float lineAdvance = line_advance_amount(scale);
             const float ascent = baseline_offset(scale);
             const float baseHeight = base_line_height(scale);
@@ -1011,6 +1068,8 @@ namespace epochnamespace::gui
                     penX = x;
                     baseline += lineAdvance;
                     ++lines;
+                    if (baseline - ascent > clipBottom)
+                        break;
                     continue;
                 }
 
@@ -1037,6 +1096,8 @@ namespace epochnamespace::gui
                         penX = x;
                         baseline += lineAdvance;
                         ++lines;
+                        if (baseline - ascent > clipBottom)
+                            break;
                         i = runEnd - 1;
                         continue;
                     }
@@ -1054,6 +1115,8 @@ namespace epochnamespace::gui
                         penX = x;
                         baseline += lineAdvance;
                         ++lines;
+                        if (baseline - ascent > clipBottom)
+                            break;
                     }
                 }
 
@@ -1064,6 +1127,8 @@ namespace epochnamespace::gui
                     penX = x;
                     baseline += lineAdvance;
                     ++lines;
+                    if (baseline - ascent > clipBottom)
+                        break;
                 }
 
                 if (ch != ' ' && ch != '\t')
@@ -1076,7 +1141,15 @@ namespace epochnamespace::gui
                         {
                             const float offsetX = glyph->offset_px.x * scale;
                             const float offsetY = glyph->offset_px.y * scale;
-                            draw_sprite(glyph->handle, penX + offsetX, baseline + offsetY, drawW, drawH);
+                            const float drawX = penX + offsetX;
+                            const float drawY = baseline + offsetY;
+                            if (drawX >= clipLeft
+                                && drawY >= clipTop
+                                && drawX + drawW <= clipRight
+                                && drawY + drawH <= clipBottom)
+                            {
+                                draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
+                            }
                         }
                     }
                 }
@@ -1093,6 +1166,10 @@ namespace epochnamespace::gui
             if (!g_frame.ctx || !g_resources.font.asset)
                 return;
 
+            const float clipLeft = has_content_clip() ? g_frame.contentMin.x : x;
+            const float clipTop = has_content_clip() ? g_frame.contentMin.y : y;
+            const float clipRight = has_content_clip() ? g_frame.contentMax.x : (x + measure_text_width(text, scale));
+            const float clipBottom = has_content_clip() ? g_frame.contentMax.y : (y + line_advance_amount(scale));
             const float anchorX = indent.value_or(x);
             float penX = anchorX;
             float baseline = y + baseline_offset(scale);
@@ -1116,12 +1193,22 @@ namespace epochnamespace::gui
                         const float drawH = glyph->size_px.y * scale;
                         const float offsetX = glyph->offset_px.x * scale;
                         const float offsetY = glyph->offset_px.y * scale;
-                        draw_sprite(glyph->handle, penX + offsetX, baseline + offsetY, drawW, drawH);
+                        const float drawX = penX + offsetX;
+                        const float drawY = baseline + offsetY;
+                        if (drawX >= clipLeft
+                            && drawY >= clipTop
+                            && drawX + drawW <= clipRight
+                            && drawY + drawH <= clipBottom)
+                        {
+                            draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
+                        }
                     }
                 }
 
                 const auto next = next_drawable_char(text, i);
                 penX += glyph_advance_with_kerning(static_cast<unsigned char>(ch), next, scale);
+                if (penX > clipRight)
+                    return;
             }
         }
 
@@ -1136,6 +1223,8 @@ namespace epochnamespace::gui
             g_frame.cursor = {};
             g_frame.origin = {};
             g_frame.windowSize = {};
+            g_frame.contentMin = {};
+            g_frame.contentMax = {};
             g_frame.insideWindow = false;
             g_frame.lastButtonBounds.reset();
         }
@@ -1404,6 +1493,8 @@ namespace epochnamespace::gui
         g_frame.origin = position;
         g_frame.windowSize = size;
         g_frame.insideWindow = true;
+        g_frame.contentMin = position;
+        g_frame.contentMax = { position.x + size.x, position.y + size.y };
 
         draw_sprite(g_resources.windowBackground, position.x, position.y, size.x, size.y);
 
@@ -1418,12 +1509,23 @@ namespace epochnamespace::gui
             draw_text_line(title, position.x + kContentPadding, titleTextY, kTitleScale);
         }
 
-        set_cursor({ position.x + kContentPadding, position.y + titleBarHeight + kContentPadding });
+        g_frame.contentMin = {
+            position.x + kContentPadding,
+            position.y + titleBarHeight + kContentPadding
+        };
+        g_frame.contentMax = {
+            position.x + (std::max)(kContentPadding, size.x - kContentPadding),
+            position.y + (std::max)(titleBarHeight + kContentPadding, size.y - kContentPadding)
+        };
+
+        set_cursor(g_frame.contentMin);
     }
 
     void end_window() noexcept
     {
         g_frame.insideWindow = false;
+        g_frame.contentMin = {};
+        g_frame.contentMax = {};
     }
 
     WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept
@@ -1650,9 +1752,7 @@ namespace epochnamespace::gui
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return;
 
-        const float availableWidth = (std::max)(
-            space_advance(kFontScale),
-            (g_frame.origin.x + g_frame.windowSize.x - kContentPadding) - g_frame.cursor.x);
+        const float availableWidth = content_available_width(g_frame.cursor.x);
         const float wrapWidth = width > 0.0f
             ? (std::max)(space_advance(kFontScale), width)
             : availableWidth;
@@ -1671,9 +1771,7 @@ namespace epochnamespace::gui
         if (!g_frame.insideWindow || !g_frame.ctx) return;
 
         const Vec2 pos = g_frame.cursor;
-        const float availableWidth = (std::max)(
-            space_advance(kFontScale),
-            (g_frame.origin.x + g_frame.windowSize.x - kContentPadding) - g_frame.cursor.x);
+        const float availableWidth = content_available_width(g_frame.cursor.x);
         const float labelWidth = std::clamp(
             label_width,
             space_advance(kFontScale) * 6.0f,
@@ -1695,9 +1793,7 @@ namespace epochnamespace::gui
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return 0.0f;
 
-        const float availableWidth = (std::max)(
-            space_advance(kFontScale),
-            (g_frame.origin.x + g_frame.windowSize.x - kContentPadding) - g_frame.cursor.x);
+        const float availableWidth = content_available_width(g_frame.cursor.x);
         const float wrapWidth = width > 0.0f
             ? (std::max)(space_advance(kFontScale), width)
             : availableWidth;
@@ -1867,6 +1963,32 @@ namespace epochnamespace::gui
                 ? std::string("[") + std::string(item.label) + "]"
                 : std::string(item.label);
             if (button(label, { item.width, height }))
+                clicked = i;
+            x += (std::max)(1.0f, item.width) + gap;
+        }
+
+        set_cursor(rowStart);
+        advance_cursor({ 0.0f, (std::max)(1.0f, height) + kContentPadding });
+        return clicked;
+    }
+
+    std::optional<std::size_t> inline_button_row(
+        std::span<const InlineButtonSpec> items,
+        float height,
+        float gap) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx || items.empty())
+            return std::nullopt;
+
+        const Vec2 rowStart = g_frame.cursor;
+        std::optional<std::size_t> clicked{};
+        float x = rowStart.x;
+
+        for (std::size_t i = 0; i < items.size(); ++i)
+        {
+            const auto& item = items[i];
+            set_cursor({ x, rowStart.y });
+            if (button(item.label, { item.width, height }))
                 clicked = i;
             x += (std::max)(1.0f, item.width) + gap;
         }

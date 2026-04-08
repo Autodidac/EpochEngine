@@ -127,6 +127,12 @@ namespace epochnamespace::gui
         bool active{};
     };
 
+    export struct InlineButtonSpec
+    {
+        std::string_view label{};
+        float width{};
+    };
+
     export void push_input(const InputEvent& e) noexcept;
     export void push_input_for_context(const core::Context* ctx, const InputEvent& e) noexcept;
     export int consume_mouse_wheel_delta() noexcept;
@@ -159,6 +165,10 @@ namespace epochnamespace::gui
     export std::optional<std::size_t> segmented_button_row(
         std::span<const SegmentedButtonSpec> items,
         float height = 26.0f,
+        float gap = 6.0f) noexcept;
+    export std::optional<std::size_t> inline_button_row(
+        std::span<const InlineButtonSpec> items,
+        float height = 24.0f,
         float gap = 6.0f) noexcept;
 
     export EditBoxResult edit_box(std::string& text,

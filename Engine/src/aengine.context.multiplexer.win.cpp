@@ -1015,7 +1015,7 @@ namespace epochnamespace::core
                         L"EpochChild",
                         windowTitle.c_str(),
                         (parent
-                            ? (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
+                            ? (WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
                             : (WS_OVERLAPPEDWINDOW | WS_VISIBLE)),
                         initialX, initialY, initialWidth, initialHeight,
                         parent,
@@ -1658,8 +1658,17 @@ namespace epochnamespace::core
             if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
                 continue;
 
+            const bool deferPlaceholderShow =
+                (win.type == ContextType::SDL || win.type == ContextType::SFML)
+                && (!win.host_hwnd || ::IsWindow(win.host_hwnd) == FALSE);
+
             ::SetWindowPos(liveHwnd, nullptr, c * cw, r * ch, cw, ch,
-                SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                deferPlaceholderShow
+                ? (SWP_NOZORDER | SWP_NOACTIVATE)
+                : (SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW));
+
+            if (deferPlaceholderShow)
+                ::ShowWindow(liveHwnd, SW_HIDE);
 
             HandleResize(liveHwnd, cw, ch);
         }
@@ -2175,4 +2184,3 @@ namespace epochnamespace::core
 }
 
 #endif // _WIN32
-

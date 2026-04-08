@@ -101,6 +101,7 @@ namespace epochnamespace
             int taskPan{ 0 };
             SpriteHandle renderSurface{};
             SpriteHandle taskSurface{};
+            SpriteHandle supportSurface{};
         };
 
         [[nodiscard]] static bool is_ws_only(std::string_view s) noexcept
@@ -334,18 +335,60 @@ namespace epochnamespace
                 fill_rect(x, y, 1, h, color);
                 fill_rect(x + w - 1, y, 1, h, color);
             }
+
+            void hline(int x, int y, int w, gui::Color color, int thickness = 1) noexcept
+            {
+                fill_rect(x, y, w, thickness, color);
+            }
+
+            void vline(int x, int y, int h, gui::Color color, int thickness = 1) noexcept
+            {
+                fill_rect(x, y, thickness, h, color);
+            }
         };
+
+        [[nodiscard]] static std::string recommended_support_tier(
+            const std::shared_ptr<core::Context>& ctx,
+            std::size_t workerCount)
+        {
+            if (!ctx)
+                return "Baseline";
+
+            if (workerCount >= 10
+                && (ctx->type == core::ContextType::Vulkan
+                    || ctx->type == core::ContextType::OpenGL))
+            {
+                return "Extended";
+            }
+
+            switch (ctx->type)
+            {
+            case core::ContextType::Vulkan:
+                return workerCount >= 8 ? "Standard" : "Baseline";
+            case core::ContextType::OpenGL:
+            case core::ContextType::RayLib:
+            case core::ContextType::SFML:
+            case core::ContextType::SDL:
+                return workerCount >= 6 ? "Standard" : "Baseline";
+            case core::ContextType::Software:
+            default:
+                return "Baseline";
+            }
+        }
 
         [[nodiscard]] static SurfaceCanvas build_render_graph_surface(
             const SystemsSurfaceState& systems,
             bool expose_ai_inputs)
         {
-            constexpr int kSurfaceWidth = 560;
-            constexpr int kSurfaceHeight = 164;
+            constexpr int kSurfaceWidth = 960;
+            constexpr int kSurfaceHeight = 188;
             SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 14, 18, 24, 255 });
 
             for (int x = 0; x < kSurfaceWidth; x += 40)
                 canvas.fill_rect(x, 0, 1, kSurfaceHeight, gui::Color{ 24, 30, 39, 255 });
+
+            for (int y = 24; y < kSurfaceHeight; y += 36)
+                canvas.hline(0, y, kSurfaceWidth, gui::Color{ 20, 26, 34, 255 });
 
             struct Stage
             {
@@ -353,21 +396,29 @@ namespace epochnamespace
                 gui::Color accent{};
             };
 
-            const std::array<Stage, 6> stages{{
+            const std::array<Stage, 8> stages{{
+                { { 64, 86, 135, 255 }, { 154, 190, 255, 255 } },
                 { { 54, 92, 148, 255 }, { 135, 188, 255, 255 } },
                 { { 53, 117, 142, 255 }, { 102, 216, 255, 255 } },
                 { { 70, 132, 96, 255 }, { 124, 244, 159, 255 } },
                 { { 146, 123, 57, 255 }, { 255, 219, 112, 255 } },
                 { { 109, 84, 145, 255 }, { 203, 164, 255, 255 } },
+                { { 112, 96, 152, 255 }, { 222, 192, 255, 255 } },
                 { expose_ai_inputs ? gui::Color{ 157, 88, 112, 255 } : gui::Color{ 118, 86, 123, 255 },
                   expose_ai_inputs ? gui::Color{ 255, 171, 193, 255 } : gui::Color{ 205, 170, 216, 255 } }
             }};
 
             const int stageWidth = (std::max)(76, static_cast<int>(96.0f * systems.renderZoom));
-            const int stageHeight = 52;
-            const int gap = (std::max)(20, static_cast<int>(40.0f * systems.renderZoom));
+            const int stageHeight = 56;
+            const int gap = (std::max)(20, static_cast<int>(44.0f * systems.renderZoom));
             const int baseX = 26 - systems.renderPan;
-            const int y = (kSurfaceHeight - stageHeight) / 2;
+            const int y = 58;
+
+            canvas.fill_rect(18, 18, kSurfaceWidth - 36, 18, gui::Color{ 30, 38, 48, 255 });
+            canvas.fill_rect(18, kSurfaceHeight - 26, kSurfaceWidth - 36, 12, gui::Color{ 28, 33, 41, 255 });
+            canvas.fill_rect(18, kSurfaceHeight - 26, 120, 12, gui::Color{ 89, 110, 138, 255 });
+            canvas.fill_rect(18 + 128, kSurfaceHeight - 26, 140, 12, gui::Color{ 98, 152, 116, 255 });
+            canvas.fill_rect(18 + 276, kSurfaceHeight - 26, 180, 12, gui::Color{ 149, 122, 60, 255 });
 
             for (std::size_t i = 0; i < stages.size(); ++i)
             {
@@ -384,6 +435,8 @@ namespace epochnamespace
                 canvas.stroke_rect(x, y, stageWidth, stageHeight, stage.accent);
                 canvas.fill_rect(x + 10, y + 10, (std::max)(16, stageWidth / 4), stageHeight - 20, gui::Color{ 255, 255, 255, 32 });
                 canvas.fill_rect(x + stageWidth - 14, y + 14, 6, stageHeight - 28, stage.accent);
+                canvas.fill_rect(x + 6, y - 12, (std::max)(18, stageWidth / 3), 6, stage.accent);
+                canvas.vline(x + stageWidth / 2, y + stageHeight + 8, 18, gui::Color{ 50, 58, 72, 255 }, 2);
             }
 
             return canvas;
@@ -394,13 +447,13 @@ namespace epochnamespace
             std::size_t workerCount,
             std::size_t systemCount)
         {
-            constexpr int kSurfaceWidth = 560;
-            constexpr int kSurfaceHeight = 164;
+            constexpr int kSurfaceWidth = 960;
+            constexpr int kSurfaceHeight = 188;
             SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 16, 16, 20, 255 });
 
             const int laneCount = (std::clamp)(static_cast<int>(workerCount == 0 ? 4 : workerCount), 2, 6);
             const int laneGap = 8;
-            const int laneHeight = (kSurfaceHeight - 22 - laneGap * (laneCount - 1)) / laneCount;
+            const int laneHeight = (kSurfaceHeight - 34 - laneGap * (laneCount - 1)) / laneCount;
             const int baseX = 26 - systems.taskPan;
             const int taskWidth = (std::max)(34, static_cast<int>(56.0f * systems.taskZoom));
             const int taskGap = (std::max)(10, static_cast<int>(18.0f * systems.taskZoom));
@@ -415,19 +468,66 @@ namespace epochnamespace
 
             for (int lane = 0; lane < laneCount; ++lane)
             {
-                const int y = 14 + lane * (laneHeight + laneGap);
+                const int y = 20 + lane * (laneHeight + laneGap);
                 canvas.fill_rect(0, y + laneHeight / 2, kSurfaceWidth, 2, gui::Color{ 38, 42, 52, 255 });
                 canvas.fill_rect(4, y, 8, laneHeight, gui::Color{ 72, 76, 92, 255 });
 
-                const int blocks = 3 + static_cast<int>((systemCount + static_cast<std::size_t>(lane)) % 3u);
+                const int blocks = 5 + static_cast<int>((systemCount + static_cast<std::size_t>(lane)) % 4u);
                 for (int block = 0; block < blocks; ++block)
                 {
                     const int x = baseX + block * (taskWidth + taskGap) + lane * 18;
                     const gui::Color fill = taskColors[(static_cast<std::size_t>(block) + static_cast<std::size_t>(lane)) % taskColors.size()];
                     canvas.fill_rect(x, y + 3, taskWidth, laneHeight - 6, fill);
                     canvas.stroke_rect(x, y + 3, taskWidth, laneHeight - 6, gui::Color{ 255, 255, 255, 42 });
+                    if (block != 0)
+                        canvas.fill_rect(x - taskGap + taskGap / 2 - 1, y + laneHeight / 2 - 2, taskGap + 2, 4, gui::Color{ 58, 65, 79, 255 });
                 }
             }
+
+            for (int x = 18; x < kSurfaceWidth; x += 96)
+                canvas.vline(x, 0, kSurfaceHeight, gui::Color{ 28, 31, 40, 255 });
+
+            return canvas;
+        }
+
+        [[nodiscard]] static SurfaceCanvas build_support_tier_surface(
+            std::string_view activeTier,
+            bool prefersSoftwareFallback)
+        {
+            constexpr int kSurfaceWidth = 960;
+            constexpr int kSurfaceHeight = 108;
+            SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 15, 18, 24, 255 });
+
+            struct TierCard
+            {
+                gui::Color fill{};
+                gui::Color accent{};
+                int x{};
+                int w{};
+                bool active{};
+            };
+
+            const std::array<TierCard, 3> cards{{
+                { { 54, 92, 148, 255 }, { 135, 188, 255, 255 }, 22, 282, activeTier == "Baseline" },
+                { { 70, 132, 96, 255 }, { 124, 244, 159, 255 }, 338, 282, activeTier == "Standard" },
+                { { 146, 123, 57, 255 }, { 255, 219, 112, 255 }, 654, 282, activeTier == "Extended" }
+            }};
+
+            for (const auto& card : cards)
+            {
+                const int y = 18;
+                const int h = 72;
+                canvas.fill_rect(card.x, y, card.w, h, card.fill);
+                canvas.stroke_rect(card.x, y, card.w, h, card.active ? card.accent : gui::Color{ 255, 255, 255, 30 });
+                canvas.fill_rect(card.x + 12, y + 12, 42, h - 24, gui::Color{ 255, 255, 255, 28 });
+                if (card.active)
+                    canvas.fill_rect(card.x + card.w - 14, y + 10, 8, h - 20, card.accent);
+            }
+
+            if (prefersSoftwareFallback)
+                canvas.fill_rect(22, 92, 220, 6, gui::Color{ 174, 124, 89, 255 });
+            else
+                canvas.fill_rect(22, 92, 220, 6, gui::Color{ 95, 174, 127, 255 });
 
             return canvas;
         }
@@ -1383,16 +1483,12 @@ namespace epochnamespace
                 std::thread::hardware_concurrency() > 0
                 ? static_cast<std::size_t>(std::thread::hardware_concurrency())
                 : std::size_t{ 6 });
+            const std::string supportTier = recommended_support_tier(ctx, workerCount);
             const float contentWidth = (std::max)(180.0f, log_size.x - 24.0f);
             const float graphGap = 12.0f;
             const float graphWidth = (std::max)(180.0f, (contentWidth - graphGap) * 0.5f);
-            const float graphHeight = 132.0f;
-
-            auto control_button = [&](float x, float y, std::string_view label, float width) -> bool
-            {
-                gui::set_cursor({ x, y });
-                return gui::button(label, { width, 24.0f });
-            };
+            const float graphHeight = 156.0f;
+            const float supportHeight = 72.0f;
 
             gui::property_row("[systems] Renderer", renderer_name(ctx));
             gui::property_row("[systems] Preview camera", preview_camera_name(ctx));
@@ -1400,6 +1496,7 @@ namespace epochnamespace
             gui::property_row("[systems] Registered systems", std::to_string(orderedSystems.size));
             gui::property_row("[systems] Worker lanes", std::to_string(workerCount));
             gui::property_row("[systems] Compatibility target", "6-core / 1660 Ti-era desktop and modern Linux laptops by default");
+            gui::property_row("[systems] Support tier", supportTier);
             gui::property_row("[systems] Render path", "visibility -> surface -> lighting -> temporal -> reconstruction -> present");
             gui::wrapped_label(
                 "The Systems workspace now shows engine-generated graph surfaces with pan/zoom controls. The long-term target is broad automatic hardware support with explicit developer opt-in tiers for heavier backend/libs instead of making every game pay for every integration.",
@@ -1413,6 +1510,9 @@ namespace epochnamespace
                 editor.systems,
                 workerCount,
                 orderedSystems.size);
+            const auto supportCanvas = build_support_tier_surface(
+                supportTier,
+                ctx && ctx->type == core::ContextType::Software);
 
             editor.systems.renderSurface = gui::register_runtime_surface(
                 "systems-render-graph",
@@ -1424,6 +1524,11 @@ namespace epochnamespace
                 std::span<const std::uint8_t>(taskCanvas.pixels.data(), taskCanvas.pixels.size()),
                 static_cast<std::uint32_t>(taskCanvas.width),
                 static_cast<std::uint32_t>(taskCanvas.height));
+            editor.systems.supportSurface = gui::register_runtime_surface(
+                "systems-support-tier",
+                std::span<const std::uint8_t>(supportCanvas.pixels.data(), supportCanvas.pixels.size()),
+                static_cast<std::uint32_t>(supportCanvas.width),
+                static_cast<std::uint32_t>(supportCanvas.height));
 
             const float leftX = systemsOrigin.x;
             const float rightX = systemsOrigin.x + graphWidth + graphGap;
@@ -1433,14 +1538,24 @@ namespace epochnamespace
 
             gui::set_cursor({ leftX, titleY });
             gui::label("Render / Frame Graph");
-            if (control_button(leftX, controlsY, "-", 28.0f))
-                editor.systems.renderZoom = (std::max)(0.75f, editor.systems.renderZoom - 0.2f);
-            if (control_button(leftX + 34.0f, controlsY, "+", 28.0f))
-                editor.systems.renderZoom = (std::min)(2.0f, editor.systems.renderZoom + 0.2f);
-            if (control_button(leftX + 70.0f, controlsY, "<", 28.0f))
-                editor.systems.renderPan = (std::max)(0, editor.systems.renderPan - 48);
-            if (control_button(leftX + 104.0f, controlsY, ">", 28.0f))
-                editor.systems.renderPan += 48;
+            gui::set_cursor({ leftX, controlsY });
+            const std::array renderButtons{
+                gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
+                gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
+                gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
+                gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
+            };
+            if (const auto action = gui::inline_button_row(renderButtons, 24.0f, 6.0f))
+            {
+                switch (*action)
+                {
+                case 0: editor.systems.renderPan = (std::max)(0, editor.systems.renderPan - 64); break;
+                case 1: editor.systems.renderZoom = (std::max)(0.75f, editor.systems.renderZoom - 0.2f); break;
+                case 2: editor.systems.renderZoom = (std::min)(2.0f, editor.systems.renderZoom + 0.2f); break;
+                case 3: editor.systems.renderPan += 64; break;
+                default: break;
+                }
+            }
             gui::set_cursor({ leftX, imageY });
             if (editor.systems.renderSurface.is_valid())
                 gui::image(editor.systems.renderSurface, { graphWidth, graphHeight });
@@ -1449,24 +1564,44 @@ namespace epochnamespace
 
             gui::set_cursor({ rightX, titleY });
             gui::label("Task / Thread Graph");
-            if (control_button(rightX, controlsY, "-", 28.0f))
-                editor.systems.taskZoom = (std::max)(0.75f, editor.systems.taskZoom - 0.2f);
-            if (control_button(rightX + 34.0f, controlsY, "+", 28.0f))
-                editor.systems.taskZoom = (std::min)(2.0f, editor.systems.taskZoom + 0.2f);
-            if (control_button(rightX + 70.0f, controlsY, "<", 28.0f))
-                editor.systems.taskPan = (std::max)(0, editor.systems.taskPan - 48);
-            if (control_button(rightX + 104.0f, controlsY, ">", 28.0f))
-                editor.systems.taskPan += 48;
+            gui::set_cursor({ rightX, controlsY });
+            const std::array taskButtons{
+                gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
+                gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
+                gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
+                gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
+            };
+            if (const auto action = gui::inline_button_row(taskButtons, 24.0f, 6.0f))
+            {
+                switch (*action)
+                {
+                case 0: editor.systems.taskPan = (std::max)(0, editor.systems.taskPan - 64); break;
+                case 1: editor.systems.taskZoom = (std::max)(0.75f, editor.systems.taskZoom - 0.2f); break;
+                case 2: editor.systems.taskZoom = (std::min)(2.0f, editor.systems.taskZoom + 0.2f); break;
+                case 3: editor.systems.taskPan += 64; break;
+                default: break;
+                }
+            }
             gui::set_cursor({ rightX, imageY });
             if (editor.systems.taskSurface.is_valid())
                 gui::image(editor.systems.taskSurface, { graphWidth, graphHeight });
             else
                 gui::wrapped_label("Task graph surface unavailable.", graphWidth);
 
-            gui::set_cursor({ systemsOrigin.x, imageY + graphHeight + 10.0f });
+            const float supportY = imageY + graphHeight + 10.0f;
+            gui::set_cursor({ systemsOrigin.x, supportY });
+            gui::label("Hardware / Support Tiers");
+            gui::set_cursor({ systemsOrigin.x, supportY + gui::line_height() + 4.0f });
+            if (editor.systems.supportSurface.is_valid())
+                gui::image(editor.systems.supportSurface, { contentWidth, supportHeight });
+            else
+                gui::wrapped_label("Support tier surface unavailable.", contentWidth);
+
+            gui::set_cursor({ systemsOrigin.x, supportY + gui::line_height() + 4.0f + supportHeight + 10.0f });
             gui::property_row("[systems] Render stages", "Capture | Visibility | Surface | Lighting | Temporal | Present");
             gui::property_row("[systems] Task lanes", "Input | Systems | Scripts | AI | Output");
             gui::property_row("[systems] Lib strategy", "auto on capable hardware; developer can trim support tiers per game");
+            gui::property_row("[systems] Tier policy", "Baseline by default, Standard on stronger 6-core+ GPUs/CPUs, Extended only by project opt-in");
             for (auto* system : orderedSystems)
             {
                 const auto name = system->name();

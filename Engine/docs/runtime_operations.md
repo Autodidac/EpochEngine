@@ -48,14 +48,16 @@ the same engine-owned path.
 
 ## Systems workspace direction
 
-- `Systems` is the future tooling surface for:
+- `Systems` is now the active tooling surface for:
   - frame graph / render graph
   - task graph / multithreading
   - pacing / perf select
   - diagnostics
-- graph views should render as engine-generated textures inside the docked UI
-- graph views must support pan/zoom and remain clipped when they are wider than
-  the available panel
+- graph views render as engine-generated textures inside the docked UI
+- graph views support pan/zoom and remain clipped when they are wider than the
+  available panel
+- support-tier diagnostics should stay visible beside renderer stage flow and
+  worker-count information so compatibility policy is visible in the editor
 - this surface should help unify renderer/backend behavior instead of becoming
   another debug text dump
 
@@ -132,6 +134,8 @@ not by hardcoded editor-only tab strips that cannot scale.
 - verify the expected backend/config macros are enabled
 - launch Windows smoke tests from `x64/Debug/` or `x64/Release/`
 - prefer engine-owned capture output over ad hoc desktop grabs
+- treat black or invalid software captures as failed proof that needs
+  investigation, not as a successful screenshot
 - keep Windows resources under `Engine/resource/`
 - keep local compiled AI artifacts out of the repo
 - when investigating backend issues, prefer backend-local fixes over broad

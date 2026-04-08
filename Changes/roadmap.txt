@@ -20,7 +20,8 @@ Guiding rules
    - internal EpochBot inside the engine
    - local MCP/control bots that can both operate the engine and train EpochBot
 4. External local LLMs such as LM Studio are development helpers for testing,
-   curation, evaluation, and acceleration. They are not a third engine AI role.
+   curation, evaluation, screenshot review, documentation drafting, and
+   acceleration. They are not a third engine AI role.
 5. Git stores repo-safe text artifacts such as JSON, JSONL, manifests, evals,
    prompts, schemas, and docs. Weights, checkpoints, compiled local models, and
    caches stay local or ship through releases only.
@@ -79,13 +80,17 @@ Phase 2 - Project-driven runtime and tool shell
 
 Phase 3 - Systems workspace and renderer tooling
 ------------------------------------------------
-- [ ] Turn `Systems` into a real engine tooling surface, not placeholder text.
-- [ ] Render frame graph / render graph views as engine-generated textures
+- [x] Turn `Systems` into a real engine tooling surface instead of placeholder
+      text by rendering live graph textures and support diagnostics inside the
+      editor shell.
+- [x] Render frame graph / render graph views as engine-generated textures
       inside the docked UI.
-- [ ] Render task graph / threading views beside them with pan/zoom and clipped
+- [x] Render task graph / threading views beside them with pan/zoom and clipped
       layout behavior for long-wide graphs.
-- [ ] Surface pacing, perf select, renderer stage flow, worker counts, and
-      compatibility tier info directly in the Systems workspace.
+- [x] Surface renderer stage flow, worker counts, and compatibility tier info
+      directly in the Systems workspace.
+- [ ] Add deeper pacing/perf-select controls and diagnostics on top of the
+      current graph and tier surfaces.
 - [ ] Keep the renderer moving toward:
       visibility -> surface -> lighting -> temporal -> reconstruction -> present
 - [ ] Use this tooling to guide future renderer work across OpenGL, Vulkan,

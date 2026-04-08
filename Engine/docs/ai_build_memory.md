@@ -73,9 +73,14 @@ Use local helpers aggressively for:
 - drafted reasoning on roadmap and architecture steps
 - code-outline drafts for bounded editor/runtime subsystems
 - documentation rewrites and smoke-prompt refinement
+- screenshot/layout review when the helper supports multimodal analysis
 
 Then refine the result locally and keep compile/build proof as the final source
 of truth.
+
+If a local multimodal helper returns its useful answer in `reasoning_content`
+while `content` is blank, treat that as a tooling/parsing issue in the helper
+path rather than assuming the model had nothing useful to say.
 
 ## Commit memory
 

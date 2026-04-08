@@ -90,6 +90,10 @@ External local LLMs such as LM Studio are development helpers. They are useful
 for testing, curation, evaluation, and speeding up documentation/build work,
 but they are not a third engine runtime role.
 
+Future automated passes should use available local helpers aggressively for
+draft reasoning, documentation, screenshot review, and bounded code sketches
+before spending main-model tokens on the final implementation path.
+
 Git-safe AI assets live under:
 
 - `Engine/ai/datasets/curated/`
@@ -114,6 +118,10 @@ Git-safe staging capture paths include:
 automatic curated truth. Review them, delete bad or outdated samples when the
 training direction changes, and only then promote intentional records into
 `Engine/ai/datasets/curated/` or `Engine/ai/evals/`.
+
+When using local Qwen helpers through LM Studio, prefer the supported
+`reasoning: "off"` mode for fast drafting instead of unsupported reasoning
+levels.
 
 ## Hardware support strategy
 
