@@ -379,7 +379,7 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.69
+v0.83.70
 ```
 
 Highlights:
@@ -387,14 +387,20 @@ Highlights:
   from the asset-bearing `x64/Debug` runtime, and it remains the current honest
   public proof until a newer validated image replaces it.
 - The project shell now pushes the embedded-engine path further into reality by
-  generating an `epoch.project.cmake` fragment and using include fallback logic
-  so `Engine/include/` is a first-class path for generated projects.
+  generating an `epoch.project.cmake` fragment, using include fallback logic,
+  and treating `Engine/include/` as a first-class path for generated projects.
 - The Systems workspace now exposes deeper time-spine pacing state, including
   the live step budget and the max-steps-per-frame clamp alongside the existing
   fixed-step, accumulator, and simulated-time diagnostics.
+- The shared preview marker now prefers the real center camera ray against the
+  grid plane before any editor-focus fallback, so the visible look spot stays
+  closer to the honest camera hit instead of drifting with projected focus.
 - The Windows parented multicontext path continues converging on real backend
   child-surface ownership, with SDL/SFML pushed further onto the visible child
   window path and helper-host cleanup tightened during dock layout.
+- The AI workspace now promotes staged MCP/control snapshots into curated
+  datasets too, instead of leaving that part of the two-role training loop as
+  documentation-only.
 - The roadmap is now GitHub-ready markdown at
   [Changes/roadmap.md](Changes/roadmap.md), and it explicitly tracks naming
   cleanup debt, the six-month 2D priority track, the time-system spine, the

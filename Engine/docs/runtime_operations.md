@@ -76,10 +76,16 @@ the same engine-owned path.
 - the same child-surface truth should continue converging across Raylib and the
   other active parented backends so helper hosts do not linger visibly in the
   fitted grid
+- when validating Win32 parented multicontext behavior, a live window-tree probe
+  should show the real backend child classes as visible pane owners and helper
+  `EpochChild` wrappers hidden for the parented child-window backends
 - time diagnostics should show the shared simulation clock state: pause/resume,
   scale, fixed-step cadence, accumulator, and simulated time
 - time diagnostics should also show the current frame step budget and the
   max-steps-per-frame clamp so pacing policy is visible, not implied
+- the shared preview marker should follow the real center camera ray to the grid
+  plane before any editor-focus fallback, so the visible look spot matches the
+  actual view direction more honestly
 - this surface should help unify renderer/backend behavior instead of becoming
   another debug text dump
 

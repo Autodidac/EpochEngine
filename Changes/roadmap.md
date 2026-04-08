@@ -148,7 +148,7 @@ These remain support-tier or project-opt-in work, not the default baseline.
       the scene layer instead of scattered editor state.
 - [x] Add the first project creation flow that duplicates the engine-owned
       shell into either a game project or a software/tool project.
-- [ ] Support both generated-project modes explicitly:
+- [x] Support both generated-project modes explicitly:
       duplicated engine source/layout and static engine compilation through the
       exported `Engine/include/` surface when a project embeds the engine.
 - [x] Make the include-surface/static-engine path first-class in generated
@@ -179,6 +179,8 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [ ] Keep parented multicontext behavior honest: the real backend child surface
       owns rendering/input, and the visible pane should not degrade into fake
       extra dock wrappers or misleading nested windows.
+- [ ] Keep the shared preview marker honest by deriving the visible ground-hit
+      spot from the real center camera ray before any editor-focus fallback.
 - [ ] Tighten multicontext terminology so file names, modules, and docs stop
       describing the parented backend grid with ambiguous legacy terms such as
       `multiplexer` when clearer Epoch-aligned ownership names are ready.
@@ -265,6 +267,8 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - Use the first two models as helper drafting pools when available.
 - Fill up to four parallel drafting lanes per helper model when there is enough
   separable work.
+- Prefer the native LM Studio `/api/v1/chat` helper path with the same
+  `system_prompt` and `input` request shape the engine already uses.
 - Keep the first detected model as the only runtime-parity/in-engine smoke
   model.
 - If a helper returns blank `content` but useful `reasoning_content`, harvest

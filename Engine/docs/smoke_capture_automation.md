@@ -37,6 +37,12 @@ When the pass is multicontext-specific, validate:
   wrappers
 - no backend should leave a visible helper host behind once the real child
   surface owns the pane
+- for Win32 parented multicontext checks, keep a temporary live window-tree
+  probe handy so the proof can explicitly show visible backend child classes and
+  hidden helper wrappers
+- do not treat `--smoke --capture` as valid pane proof if the run exits before
+  backend child takeover settles; fall back to a bounded stable `--editor` run
+  and confirm the visible child classes directly
 - backend palette parity when clear colors should match
 - Systems workspace graph clipping and pan/zoom behavior
 - Systems time controls and pacing diagnostics when the pass touches the shared
@@ -104,6 +110,8 @@ Expected smoke behavior:
 - when two helper models are loaded, helper-first passes can use up to four
   parallel drafting prompts per model for planning/review work, while the engine
   runtime itself still stays on the first detected model for parity
+- prefer the native LM Studio `/api/v1/chat` helper path so offloaded drafts and
+  the engine runtime share the same request/response shape
 - if a helper returns blank `content` but useful `reasoning_content`, harvest
   that output for drafting/review instead of discarding the helper pass
 

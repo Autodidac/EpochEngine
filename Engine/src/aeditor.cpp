@@ -1500,16 +1500,28 @@ namespace epochnamespace
                 "Raw chat captures land in workspace/auto_train.jsonl as Git-safe staging data, MCP interaction snapshots land in workspace/mcp_capture.jsonl, curated JSON/JSONL stays in Engine/ai/, and outdated local checkpoints/models/caches should be deleted during training pivots when they no longer match the active data or control model.",
                 (std::max)(180.0f, log_size.x - 24.0f));
 
-            if (gui::button("Capture MCP Snapshot", { 220.0f, 30.0f }))
-            {
-                epoch::ai::append_mcp_capture(epoch::ai::McpCaptureRecord{
+            const auto currentMcpRecord = [&]() {
+                return epoch::ai::McpCaptureRecord{
                     .server = "editor",
                     .tool = "scene-guidance",
                     .prompt = build_ai_scene_prompt(editor),
                     .normalized_output = epoch::ai::active_provider_summary(),
-                    .source_path = editor.projectRoot
-                });
+                    .source_path = editor.projectScenePath.empty() ? editor.projectRoot : editor.projectScenePath
+                };
+            };
+
+            if (gui::button("Capture MCP Snapshot", { 220.0f, 30.0f }))
+            {
+                epoch::ai::append_mcp_capture(currentMcpRecord());
                 push_editor_log(editor, "[ai] Captured MCP training snapshot.");
+            }
+
+            if (gui::button("Promote MCP Snapshot", { 220.0f, 30.0f }))
+            {
+                const bool ok = epoch::ai::promote_mcp_capture_record(currentMcpRecord(), "epoch_mcp_curated");
+                push_editor_log(editor, ok
+                    ? "[ai] Promoted MCP snapshot into Engine/ai/datasets/curated."
+                    : "[ai] Failed to promote MCP snapshot.");
             }
 
             if (gui::button("Promote Scene Eval", { 220.0f, 30.0f }))

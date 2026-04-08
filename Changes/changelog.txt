@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.83.70]
+- Corrected the shared preview look marker so it prefers the real center camera ray against the grid plane before falling back to projected editor focus, which makes the visible target spot more honest across the active backends.
+- Extended the two-role AI curation path with an MCP snapshot promotion helper and editor action, so staged scene-guidance captures can now move into `Engine/ai/datasets/curated` instead of stopping at local workspace staging.
+- Tightened the generated project shell language and launcher-facing project wording so embedded-engine/bootstrap flows read like live project work instead of placeholders or demo-era leftovers.
+- Updated the roadmap, README, runtime/build/smoke docs, and AI build memory to reflect the native LM Studio helper endpoint shape, the now-explicit dual generated-project modes, and the continuing marker/child-surface cleanup work.
+
 ## [v0.83.69]
 - Pushed the generated project shell further into the real embedded-engine path by emitting an `epoch.project.cmake` fragment, documenting `Engine/include/` as the public include root, and teaching generated script stubs to fall back cleanly between the normalized and legacy script API include paths.
 - Deepened the shared time spine in the Systems workspace by surfacing the live frame step budget and the max-steps-per-frame clamp beside the existing fixed-step, accumulator, simulated-time, and time-scale diagnostics.

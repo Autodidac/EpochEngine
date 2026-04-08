@@ -1245,8 +1245,8 @@ namespace epochnamespace
             "        return false;\n"
             "    host->log(host->user_data, \""
             + std::string(kind == EditorProjectKind::Tool
-                ? "Tool bootstrap placeholder: connect software workflow here."
-                : "Game bootstrap placeholder: connect gameplay startup here.")
+                ? "Tool bootstrap entry ready: connect software workflow here."
+                : "Game bootstrap entry ready: connect gameplay startup here.")
             + "\");\n"
             "    return true;\n"
             "}\n";

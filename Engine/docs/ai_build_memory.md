@@ -86,6 +86,11 @@ model as the in-engine/runtime parity baseline.
 That helper-first check should happen at the start of a phase, not as an
 afterthought once source edits are already underway.
 
+When possible, send helper drafts through LM Studio's native `/api/v1/chat`
+shape with `system_prompt`, `input`, `reasoning: "off"`, and bounded output
+tokens so the helper path mirrors the engine-owned oracle path instead of
+diverging onto a different chat protocol.
+
 If a local multimodal helper returns its useful answer in `reasoning_content`
 while `content` is blank, treat that as a tooling/parsing issue in the helper
 path rather than assuming the model had nothing useful to say.

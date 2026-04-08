@@ -1261,6 +1261,39 @@ namespace epoch::ai
         return append_jsonl_line(datasetFile, oss.str());
     }
 
+    bool promote_mcp_capture_record(const McpCaptureRecord& record, std::string_view dataset_name)
+    {
+        std::string source = record.server;
+        if (!record.tool.empty())
+        {
+            if (!source.empty())
+                source += ":";
+            source += record.tool;
+        }
+        if (!record.source_path.empty())
+        {
+            if (!source.empty())
+                source += ":";
+            source += record.source_path;
+        }
+
+        std::vector<std::string> tags{
+            "mcp-capture",
+            slugify(record.server),
+            slugify(record.tool)
+        };
+        if (!record.source_path.empty())
+            tags.push_back("scene-guidance");
+
+        return promote_dataset_record(DatasetRecord{
+            .prompt = record.prompt,
+            .answer = record.normalized_output,
+            .source = std::move(source),
+            .role = "assistant",
+            .tags = std::move(tags)
+        }, dataset_name);
+    }
+
     bool promote_eval_case(const EvalCase& record, std::string_view suite_name)
     {
         const std::string fileName = slugify(suite_name) + "-" + slugify(record.name) + ".json";

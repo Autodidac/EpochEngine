@@ -119,6 +119,10 @@ for roadmap phrasing, code-shape proposals, doc rewrites, screenshot review,
 bounded subsystem design, and changelog drafting before integrating the final
 answer locally.
 
+When possible, route helper drafting through the native LM Studio
+`/api/v1/chat` endpoint with the same `system_prompt` and `input` shape the
+engine already uses, so helper behavior and runtime parity do not drift apart.
+
 Git-safe AI assets live under:
 
 - `Engine/ai/datasets/curated/`
