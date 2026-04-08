@@ -28,9 +28,12 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+module;
+
  // Engine/src/aengine.editor_scene.cpp
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <deque>
@@ -58,6 +61,8 @@ static inline void AERR(std::string_view s)
     std::println(stderr, "{}", s);
 }
 
+
+module aeditor;
 
 namespace epochnamespace::editor
 {
@@ -873,3 +878,135 @@ inline bool apply_ai_ops(CommandBus& bus, std::span<const AiOp> ops, std::string
     }
 
 } // namespace epochnamespace::editor
+
+namespace
+{
+    using epochnamespace::EditorProjectProfile;
+    using epochnamespace::EditorSceneSeedEntity;
+    using epochnamespace::EditorScriptProfile;
+
+    constexpr std::array<EditorProjectProfile, 3> kProjectProfiles{{
+        {
+            "sandbox",
+            "Sandbox",
+            "Projects/Sandbox/scene.epoch",
+            "PersistentLevel",
+            "project:sandbox",
+            "rotate_all_entities",
+            "General-purpose sandbox for editor, runtime, and renderer iteration."
+        },
+        {
+            "platformer",
+            "PlatformerDemo",
+            "Projects/PlatformerDemo/worlds/platformer.epoch",
+            "Platformer_Main",
+            "project:platformer",
+            "editor_launcher",
+            "Gameplay test profile for movement, camera tuning, and encounter scripting."
+        },
+        {
+            "puzzle",
+            "PuzzleLab",
+            "Projects/PuzzleLab/worlds/puzzle.epoch",
+            "Puzzle_Testbed",
+            "project:puzzle",
+            "editor_launcher",
+            "Logic-heavy project profile for interaction, puzzle flow, and scripted events."
+        }
+    }};
+
+    constexpr std::array<EditorScriptProfile, 2> kScriptProfiles{{
+        {
+            "rotate_all_entities",
+            "Rotate All Entities",
+            "Engine/src/scripts/rotate_all_entities.ascript.cpp",
+            "Simple validation script for host callbacks against the current editor scene."
+        },
+        {
+            "editor_launcher",
+            "Editor Launcher",
+            "Engine/src/scripts/editor_launcher.ascript.cpp",
+            "Project bootstrap script surface for future game templates and play flows."
+        }
+    }};
+
+    [[nodiscard]] std::vector<EditorSceneSeedEntity> sandbox_seed_entities()
+    {
+        return {
+            { "PersistentLevel", "Level", "World" },
+            { "EditorCamera", "Camera", "Editor", { 0.0f, 1.5f, 5.0f } },
+            { "DirectionalLight", "Light", "Lighting", { 2.0f, 4.0f, 1.0f }, { -35.0f, 45.0f, 0.0f } },
+            { "WorldGrid", "Helper", "Editor", { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 10.0f, 1.0f, 10.0f }, true, true },
+            { "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } },
+            { "PlayerStart", "Spawn", "Gameplay", { 0.0f, 0.0f, -2.0f } }
+        };
+    }
+
+    [[nodiscard]] std::vector<EditorSceneSeedEntity> platformer_seed_entities()
+    {
+        return {
+            { "PlatformerLevel", "Level", "World" },
+            { "GameplayCamera", "Camera", "Gameplay", { 0.0f, 3.0f, 8.0f }, { -18.0f, 0.0f, 0.0f } },
+            { "SkyLight", "Light", "Lighting", { 3.0f, 6.0f, 2.0f }, { -25.0f, 35.0f, 0.0f } },
+            { "GroundPlane", "StaticMesh", "Gameplay", { 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 16.0f, 1.0f, 4.0f } },
+            { "PlayerStart", "Spawn", "Gameplay", { -4.0f, 0.0f, 0.0f } },
+            { "MovingPlatform_A", "Mover", "Gameplay", { 1.5f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 2.5f, 0.4f, 1.0f } },
+            { "CoinArc", "CollectibleSet", "Gameplay", { 4.0f, 2.5f, 0.0f } }
+        };
+    }
+
+    [[nodiscard]] std::vector<EditorSceneSeedEntity> puzzle_seed_entities()
+    {
+        return {
+            { "PuzzleWorld", "Level", "World" },
+            { "OverviewCamera", "Camera", "Gameplay", { 0.0f, 7.0f, 9.0f }, { -38.0f, 0.0f, 0.0f } },
+            { "KeyLight", "Light", "Lighting", { 1.5f, 5.5f, 2.0f }, { -40.0f, 25.0f, 0.0f } },
+            { "PuzzleGrid", "Grid", "Gameplay", { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 6.0f, 1.0f, 6.0f } },
+            { "SlidingBoard", "PuzzleBoard", "Gameplay", { 0.0f, 0.5f, 0.0f } },
+            { "HintTerminal", "Interactable", "Gameplay", { -2.5f, 0.0f, 1.5f } },
+            { "GoalSocket", "Target", "Gameplay", { 2.5f, 0.0f, -1.5f } }
+        };
+    }
+}
+
+namespace epochnamespace
+{
+    std::span<const EditorProjectProfile> editor_project_profiles() noexcept
+    {
+        return { kProjectProfiles.data(), kProjectProfiles.size() };
+    }
+
+    const EditorProjectProfile& editor_default_project_profile() noexcept
+    {
+        return kProjectProfiles.front();
+    }
+
+    const EditorProjectProfile* editor_find_project_profile(std::string_view project_id) noexcept
+    {
+        for (const auto& profile : kProjectProfiles)
+            if (profile.id == project_id)
+                return &profile;
+        return nullptr;
+    }
+
+    std::span<const EditorScriptProfile> editor_script_profiles() noexcept
+    {
+        return { kScriptProfiles.data(), kScriptProfiles.size() };
+    }
+
+    std::vector<EditorSceneSeedEntity> editor_seed_entities_for_project(std::string_view project_id)
+    {
+        if (project_id == "platformer")
+            return platformer_seed_entities();
+        if (project_id == "puzzle")
+            return puzzle_seed_entities();
+        return sandbox_seed_entities();
+    }
+
+    std::string_view editor_runtime_scene_for_project(std::string_view project_id) noexcept
+    {
+        if (const auto* profile = editor_find_project_profile(project_id))
+            return profile->runtime_scene_id;
+        return editor_default_project_profile().runtime_scene_id;
+    }
+}

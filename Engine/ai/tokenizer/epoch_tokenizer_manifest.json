@@ -1,0 +1,6 @@
+{
+  "id": "epoch-tokenizer",
+  "format": "placeholder",
+  "vocab_source": "planned",
+  "note": "Tokenizer assets are repo-safe. Trained weights are local-only or release-only."
+}

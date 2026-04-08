@@ -1,0 +1,10 @@
+{
+  "id": "lmstudio-teacher-oracle",
+  "display_name": "LM Studio Teacher/Oracle",
+  "provider": "lmstudio-oracle",
+  "endpoint": "http://localhost:1234",
+  "model_selection": "first-detected",
+  "repo_safe_manifest": true,
+  "local_weights_only": true,
+  "status": "active"
+}

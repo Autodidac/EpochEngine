@@ -56,6 +56,11 @@ module;
 
 module epoch.ai;
 
+import ai.runtime;
+import ai.dataset;
+import ai.train;
+import ai.mcp;
+import ai.eval;
 import core.log;
 
 namespace epoch::ai
@@ -63,6 +68,9 @@ namespace epoch::ai
     namespace
     {
         Bot* g_bot = nullptr;
+        ProviderMode g_providerMode = ProviderMode::LmStudioOracle;
+        std::string g_selectedModel{};
+        std::string g_selectedEndpoint{ "http://localhost:1234" };
 
         static bool ends_with(std::string_view s, std::string_view suf)
         {
@@ -862,6 +870,9 @@ namespace epoch::ai
 
         m_endpoint_full = normalize_lmstudio_native_chat_endpoint(m_cfg.endpoint);
         m_cfg.model = resolve_model_name(m_cfg.endpoint, m_cfg.model);
+        g_providerMode = ProviderMode::LmStudioOracle;
+        g_selectedEndpoint = m_cfg.endpoint;
+        g_selectedModel = m_cfg.model;
         if (!m_cfg.model.empty())
         {
             std::string msg = "Bot model: ";
@@ -931,6 +942,21 @@ namespace epoch::ai
         });
 
         core::log::info("ai", "Bot initialized");
+        {
+            std::string msg = "AI provider: ";
+            msg += active_provider_summary();
+            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+        }
+        {
+            std::string msg = "AI endpoint: ";
+            msg += g_selectedEndpoint;
+            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+        }
+        {
+            std::string msg = "AI raw capture path: ";
+            msg += local_capture_jsonl_path();
+            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+        }
     }
 
     void shutdown_bot()
@@ -951,14 +977,113 @@ namespace epoch::ai
 #endif
     }
 
+    std::string curated_datasets_root()
+    {
+        return "Engine/ai/datasets/curated";
+    }
+
+    std::string evals_root()
+    {
+        return "Engine/ai/evals";
+    }
+
+    std::string tokenizer_root()
+    {
+        return "Engine/ai/tokenizer";
+    }
+
+    std::string prompts_root()
+    {
+        return "Engine/ai/prompts";
+    }
+
+    std::string manifests_root()
+    {
+        return "Engine/ai/manifests";
+    }
+
+    std::string local_capture_jsonl_path()
+    {
+        return default_workspace_root() + "/auto_train.jsonl";
+    }
+
+    std::string local_checkpoint_root()
+    {
+        return default_workspace_root() + "/ai/checkpoints";
+    }
+
+    std::string local_model_root()
+    {
+        return default_workspace_root() + "/ai/models";
+    }
+
+    std::string local_cache_root()
+    {
+        return default_workspace_root() + "/ai/cache";
+    }
+
+    ProviderMode current_provider_mode() noexcept
+    {
+        return g_providerMode;
+    }
+
+    std::string active_model_name()
+    {
+        return g_selectedModel;
+    }
+
+    std::string active_provider_summary()
+    {
+        std::string summary = std::string(provider_mode_name(g_providerMode));
+        if (!g_selectedModel.empty())
+        {
+            summary += " :: ";
+            summary += g_selectedModel;
+        }
+        return summary;
+    }
+
+    ModelManifest active_model_manifest()
+    {
+        ModelManifest manifest{};
+        manifest.id = g_selectedModel;
+        manifest.display_name = g_selectedModel.empty() ? std::string("LM Studio teacher/oracle") : g_selectedModel;
+        manifest.provider = g_providerMode;
+        manifest.endpoint = g_selectedEndpoint;
+        manifest.manifest_path = manifests_root() + "/teacher_oracle_lmstudio.json";
+        manifest.tokenizer_path = tokenizer_root() + "/epoch_tokenizer_manifest.json";
+        manifest.repo_safe_manifest = true;
+        manifest.local_weights_only = true;
+        manifest.available = !g_selectedModel.empty();
+        return manifest;
+    }
+
+    TrainingPaths default_training_paths()
+    {
+        return TrainingPaths{
+            .workspace_root = default_workspace_root(),
+            .local_capture_jsonl = local_capture_jsonl_path(),
+            .checkpoint_root = local_checkpoint_root(),
+            .model_root = local_model_root(),
+            .cache_root = local_cache_root(),
+            .curated_dataset_root = curated_datasets_root()
+        };
+    }
+
     void append_training_sample(std::string_view prompt, std::string_view answer, std::string_view source)
     {
-        const std::string ws = default_workspace_root();
-        const std::filesystem::path dir = std::filesystem::path(ws) / "datasets";
+        const TrainingPaths paths = default_training_paths();
+        const std::filesystem::path workspaceDir = paths.workspace_root;
+        const std::filesystem::path checkpointDir = paths.checkpoint_root;
+        const std::filesystem::path modelDir = paths.model_root;
+        const std::filesystem::path cacheDir = paths.cache_root;
         std::error_code ec;
-        std::filesystem::create_directories(dir, ec);
+        std::filesystem::create_directories(workspaceDir, ec);
+        std::filesystem::create_directories(checkpointDir, ec);
+        std::filesystem::create_directories(modelDir, ec);
+        std::filesystem::create_directories(cacheDir, ec);
 
-        const std::filesystem::path file = dir / "auto_train.jsonl";
+        const std::filesystem::path file = paths.local_capture_jsonl;
 
         std::ostringstream oss;
         oss << "{";
@@ -978,6 +1103,14 @@ namespace epoch::ai
         {
             std::fwrite(oss.str().data(), 1, oss.str().size(), f);
             std::fclose(f);
+            static bool loggedCapturePath = false;
+            if (!loggedCapturePath)
+            {
+                loggedCapturePath = true;
+                std::string msg = "AI appended local training capture: ";
+                msg += file.string();
+                core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+            }
         }
     }
 std::string send_to_bot(const std::string& user_text)

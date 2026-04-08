@@ -1,0 +1,16 @@
+[
+  {
+    "name": "project_edit_suggestion",
+    "project_id": "sandbox",
+    "scene_id": "project:sandbox",
+    "prompt": "In Epoch editor, project 'Sandbox' has 6 entities. Suggest one concrete next edit and one gameplay follow-up.",
+    "expected_contains": "project"
+  },
+  {
+    "name": "cpp_module_guidance",
+    "project_id": "sandbox",
+    "scene_id": "project:sandbox",
+    "prompt": "Explain why mixed C++23 module units should use module; before legacy includes.",
+    "expected_contains": "module"
+  }
+]

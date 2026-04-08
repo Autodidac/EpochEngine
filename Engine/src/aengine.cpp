@@ -1017,6 +1017,151 @@ namespace epochnamespace::core
             std::vector<std::shared_ptr<epochnamespace::core::Context>>
         >;
 
+        class ProjectPlayScene final : public epochnamespace::scene::Scene
+        {
+        public:
+            explicit ProjectPlayScene(std::string_view project_id)
+                : m_projectId(project_id)
+            {
+                const auto* profile = epochnamespace::editor_find_project_profile(project_id);
+                if (!profile)
+                    profile = &epochnamespace::editor_default_project_profile();
+
+                m_projectId = std::string(profile->id);
+                m_projectName = std::string(profile->display_name);
+                m_scenePath = std::string(profile->scene_path);
+                m_worldName = std::string(profile->world_name);
+                m_scriptName = std::string(profile->default_script);
+                m_description = std::string(profile->description);
+            }
+
+            void load() override
+            {
+                Scene::load();
+            }
+
+            bool frame(std::shared_ptr<epochnamespace::core::Context> ctx, epochnamespace::core::WindowData*) override
+            {
+                if (!ctx)
+                    return false;
+
+                if (ctx->is_key_down_safe(input::Key::Escape))
+                    return false;
+
+                const auto now = timing::Clock::now();
+                float dt = 0.0f;
+                if (m_hasLastFrame)
+                    dt = std::chrono::duration<float>(now - m_lastFrame).count();
+                m_lastFrame = now;
+                m_hasLastFrame = true;
+
+                int mx = 0;
+                int my = 0;
+                ctx->get_mouse_position_safe(mx, my);
+                const gui::Vec2 mouse_pos{
+                    static_cast<float>(mx),
+                    static_cast<float>(my)
+                };
+
+                const bool mouse_left_down =
+                    ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseLeft);
+                const bool mouse_right_down =
+                    ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseRight);
+
+                const int width = ctx->get_width_safe();
+                const int height = ctx->get_height_safe();
+                ctx->clear_safe();
+                ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                ctx->set_scene_viewport({ 0, 0, width, height });
+
+                gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
+
+                const int wheelDelta = epochnamespace::gui::consume_mouse_wheel_delta();
+                const float forwardInput =
+                    (ctx->is_key_held_safe(epochnamespace::input::Key::W) ? 1.0f : 0.0f)
+                    - (ctx->is_key_held_safe(epochnamespace::input::Key::S) ? 1.0f : 0.0f);
+                const float rightInput =
+                    (ctx->is_key_held_safe(epochnamespace::input::Key::D) ? 1.0f : 0.0f)
+                    - (ctx->is_key_held_safe(epochnamespace::input::Key::A) ? 1.0f : 0.0f);
+                const float upInput =
+                    (ctx->is_key_held_safe(epochnamespace::input::Key::E) ? 1.0f : 0.0f)
+                    - (ctx->is_key_held_safe(epochnamespace::input::Key::Q) ? 1.0f : 0.0f);
+                const float yawInput =
+                    (ctx->is_key_held_safe(epochnamespace::input::Key::Right) ? 1.0f : 0.0f)
+                    - (ctx->is_key_held_safe(epochnamespace::input::Key::Left) ? 1.0f : 0.0f);
+                const float pitchInput =
+                    (ctx->is_key_held_safe(epochnamespace::input::Key::Up) ? 1.0f : 0.0f)
+                    - (ctx->is_key_held_safe(epochnamespace::input::Key::Down) ? 1.0f : 0.0f);
+
+                if (mouse_right_down && m_looking)
+                {
+                    const float mouseDeltaX = mouse_pos.x - m_lastMouse.x;
+                    const float mouseDeltaY = mouse_pos.y - m_lastMouse.y;
+                    constexpr float kMouseSensitivity = 0.20f;
+                    epochnamespace::previewgrid::look_camera(
+                        ctx.get(),
+                        mouseDeltaX * kMouseSensitivity,
+                        -mouseDeltaY * kMouseSensitivity);
+                }
+                else if (mouse_left_down && !mouse_right_down && m_panning)
+                {
+                    const float mouseDeltaX = mouse_pos.x - m_lastMouse.x;
+                    const float mouseDeltaY = mouse_pos.y - m_lastMouse.y;
+                    epochnamespace::previewgrid::pan_camera_drag(
+                        ctx.get(),
+                        mouseDeltaX,
+                        -mouseDeltaY);
+                }
+
+                if (wheelDelta != 0)
+                {
+                    constexpr float kWheelZoomStep = 1.3f;
+                    epochnamespace::previewgrid::zoom_camera(
+                        ctx.get(),
+                        (static_cast<float>(wheelDelta) / 120.0f) * kWheelZoomStep);
+                }
+
+                epochnamespace::previewgrid::step_camera(
+                    ctx.get(),
+                    dt,
+                    forwardInput,
+                    rightInput,
+                    upInput,
+                    yawInput,
+                    pitchInput);
+
+                m_lastMouse = mouse_pos;
+                m_looking = mouse_right_down;
+                m_panning = mouse_left_down && !mouse_right_down;
+
+                gui::begin_window("Project Runtime", { 24.0f, 24.0f }, { 430.0f, 210.0f });
+                gui::label(std::string("Project: ") + m_projectName);
+                gui::label(std::string("World: ") + m_worldName);
+                gui::label(std::string("Scene: ") + m_scenePath);
+                gui::label(std::string("Script: ") + m_scriptName);
+                gui::wrapped_label(m_description, 390.0f);
+                gui::wrapped_label("Esc returns to the editor. Use LMB pan, RMB orbit, wheel zoom, and WASD/QE for play-preview navigation.", 390.0f);
+                gui::end_window();
+
+                gui::end_frame();
+                ctx->present_safe();
+                return true;
+            }
+
+        private:
+            std::string m_projectId{};
+            std::string m_projectName{};
+            std::string m_scenePath{};
+            std::string m_worldName{};
+            std::string m_scriptName{};
+            std::string m_description{};
+            gui::Vec2 m_lastMouse{};
+            timing::Clock::time_point m_lastFrame{};
+            bool m_hasLastFrame{ false };
+            bool m_looking{ false };
+            bool m_panning{ false };
+        };
+
         [[nodiscard]] std::vector<ContextGroup> collect_backend_contexts_shared()
         {
             std::vector<ContextGroup> snapshot;
@@ -1042,6 +1187,8 @@ namespace epochnamespace::core
 
         [[nodiscard]] std::unique_ptr<epochnamespace::scene::Scene> make_scene_from_id(std::string_view scene_id)
         {
+            if (scene_id.starts_with("project:"))
+                return std::make_unique<ProjectPlayScene>(scene_id.substr(8));
             if (scene_id == "snake")
                 return std::make_unique<epochnamespace::snakelike::SnakeLikeScene>();
             if (scene_id == "tetris")

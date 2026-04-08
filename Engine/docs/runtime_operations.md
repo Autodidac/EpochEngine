@@ -19,6 +19,8 @@ workflow instead of preserving the older citation-heavy snapshot docs.
   failures as explicit diagnostics instead of silent stalls.
 - Treat hot reload as an active development feature, not a release guarantee:
   it is powerful, but it still benefits from targeted smoke coverage.
+- Engine-owned compiled scripting means project/game logic compiles with the
+  engine/project build; it is not a fake text-macro or string-eval layer.
 
 ## Logging
 
@@ -58,6 +60,8 @@ workflow instead of preserving the older citation-heavy snapshot docs.
   the GUI. On Windows docked contexts, wheel/key/text messages must be routed
   from the child HWNDs into the GUI event queue or the chat/input surfaces will
   look present but behave dead.
+- The workspace shell is moving toward `Project`, `Scripts`, `AI`, `Systems`,
+  and `Output` tabs instead of scattered one-off debug windows.
 
 ## Project-system direction
 
@@ -68,6 +72,17 @@ workflow instead of preserving the older citation-heavy snapshot docs.
 - The longer-term target is a Unity/Unreal-style project shell generated from a
   duplicated engine source/layout, so game projects can own scripts, assets,
   and runtime behavior without pretending they are editor internals.
+- The current first step is project-driven play targets such as `project:sandbox`
+  instead of hardwired sample-game ids.
+
+## AI runtime direction
+
+- `epoch.ai` is the current bridge and router between three roles:
+  embedded tiny model, MCP operating layer, and LM Studio teacher/oracle.
+- Curated AI artifacts belong in `Engine/ai/`; raw capture and checkpoints stay
+  under local `workspace/` paths.
+- The AI dock should show the active provider/model, not hide where responses
+  are coming from.
 
 ## Troubleshooting checklist
 
@@ -79,6 +94,8 @@ workflow instead of preserving the older citation-heavy snapshot docs.
   `smoke_capture_automation.md`.
 - Keep Windows `.rc`, icon, and resource headers under `Engine/resource/` so
   MSVC and CMake stay aligned on the same resource root.
+- Keep AI checkpoints and raw captures out of the repo; if they appear in
+  `git status`, treat that as a workflow bug.
 - Use fresh build directories when changing compilers, module scanning flags, or
   backend combinations.
 - If reload behavior becomes inconsistent, check script diagnostics first, then
@@ -92,5 +109,7 @@ workflow instead of preserving the older citation-heavy snapshot docs.
   and entity widgets.
 - `aeditor.scene.cpp` already contains a separate editor-scene and command-bus
   implementation.
-- The next honest editor step is to merge the live editor shell onto that scene
-  layer instead of keeping a parallel local entity list in `aeditor.cpp`.
+- Active project metadata, runtime scene ids, script profiles, and seed entities
+  should now keep moving under `aeditor.scene.cpp`, with `aeditor.cpp` acting as
+  the live shell over that scene/project layer instead of a parallel hardcoded
+  editor universe.

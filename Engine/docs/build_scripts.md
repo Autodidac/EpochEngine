@@ -79,3 +79,43 @@ When a pass changes runtime/editor/backend behavior, the current working method 
 - close live windows after validation so the next pass starts from a known state
 
 If the pass touches Linux or WSL-facing behavior, run the matching WSL build path too instead of validating Windows only.
+
+## AI asset policy
+
+Epoch now uses three AI roles:
+
+- embedded tiny Epoch model for local English + C++ assistance
+- MCP-backed operating layer for retrieval, operations, and normalized capture
+- LM Studio teacher/oracle for evals, bootstrapping, and accelerated editor help
+
+Git-safe AI assets live under:
+
+- `Engine/ai/datasets/curated/`
+- `Engine/ai/datasets/schema/`
+- `Engine/ai/evals/`
+- `Engine/ai/manifests/`
+- `Engine/ai/tokenizer/`
+- `Engine/ai/prompts/`
+
+Local-only AI outputs stay out of Git:
+
+- `workspace/auto_train.jsonl`
+- `workspace/ai/checkpoints/`
+- `workspace/ai/models/`
+- `workspace/ai/cache/`
+
+`append_training_sample(...)` writes raw local capture only. Promotion into
+curated repo datasets is a manual review step, not an automatic commit path.
+
+## LM Studio smoke notes
+
+When LM Studio is available locally, the current default is:
+
+- endpoint: `http://localhost:1234`
+- model selection: first detected entry from `/v1/models`
+- role: teacher/oracle, not the long-term embedded runtime
+
+Preferred smoke prompts:
+
+- `In Epoch editor, project 'Sandbox' has 6 entities. Suggest one concrete next edit and one gameplay follow-up.`
+- `Explain why mixed C++23 module units should use module; before legacy includes.`

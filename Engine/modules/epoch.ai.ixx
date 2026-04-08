@@ -52,6 +52,12 @@ module;
 
 export module epoch.ai;
 
+export import ai.runtime;
+export import ai.dataset;
+export import ai.train;
+export import ai.mcp;
+export import ai.eval;
+
 import core.log;
 
 export namespace epoch::ai
@@ -94,4 +100,18 @@ export namespace epoch::ai
     void append_training_sample(std::string_view prompt, std::string_view answer, std::string_view source = "win32_chat_panel");
     [[nodiscard]] std::string send_to_bot(const std::string& user_text);
     [[nodiscard]] std::string default_workspace_root();
+    [[nodiscard]] std::string curated_datasets_root();
+    [[nodiscard]] std::string evals_root();
+    [[nodiscard]] std::string tokenizer_root();
+    [[nodiscard]] std::string prompts_root();
+    [[nodiscard]] std::string manifests_root();
+    [[nodiscard]] std::string local_capture_jsonl_path();
+    [[nodiscard]] std::string local_checkpoint_root();
+    [[nodiscard]] std::string local_model_root();
+    [[nodiscard]] std::string local_cache_root();
+    [[nodiscard]] ProviderMode current_provider_mode() noexcept;
+    [[nodiscard]] std::string active_model_name();
+    [[nodiscard]] std::string active_provider_summary();
+    [[nodiscard]] ModelManifest active_model_manifest();
+    [[nodiscard]] TrainingPaths default_training_paths();
 }

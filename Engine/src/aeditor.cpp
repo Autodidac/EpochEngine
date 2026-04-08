@@ -102,11 +102,13 @@ namespace epochnamespace
             static constexpr std::size_t kMaxLines = 200;
             std::vector<std::string> lines{};
             std::string input{};
+            std::string pendingPrompt{};
             std::optional<std::future<std::string>> pending{};
 
             AiChat()
             {
-                lines.emplace_back("bot> Ready. Endpoint: http://localhost:1234");
+                epoch::ai::init_bot();
+                lines.emplace_back("bot> Ready. Provider: " + epoch::ai::active_provider_summary());
                 trim_lines();
             }
 
@@ -125,11 +127,15 @@ namespace epochnamespace
                     std::string reply = pending->get();
                     if (reply.empty()) reply = "(empty reply)";
                     lines.emplace_back("bot> " + reply);
+                    if (!pendingPrompt.empty() && reply != "(empty reply)")
+                        epoch::ai::append_training_sample(pendingPrompt, reply, "editor_ai_chat");
+                    pendingPrompt.clear();
                     trim_lines();
                 }
                 catch (const std::exception& e)
                 {
                     lines.emplace_back(std::string("bot> (error) ") + e.what());
+                    pendingPrompt.clear();
                     trim_lines();
                 }
 
@@ -149,6 +155,7 @@ namespace epochnamespace
 
                 lines.emplace_back("you> " + text);
                 trim_lines();
+                pendingPrompt = text;
 
                 pending.emplace(std::async(std::launch::async, [t = std::move(text)]() mutable {
                     return epoch::ai::send_to_bot(t);
@@ -179,19 +186,31 @@ namespace epochnamespace
             bool editorOnly{ false };
         };
 
+        enum class WorkspacePanelTab : unsigned char
+        {
+            Output = 0,
+            Project,
+            Scripts,
+            AI,
+            Systems
+        };
+
         struct EditorState
         {
             bool initialized{ false };
             TopMenu openMenu{ TopMenu::None };
+            std::string projectId{ "sandbox" };
             std::string projectName{ "Sandbox" };
             std::string projectPath{ "Projects/Sandbox/scene.epoch" };
             std::string activeScript{ "rotate_all_entities" };
+            std::string activeRuntimeScene{ "project:sandbox" };
             std::string activeWorld{ "PersistentLevel" };
             std::vector<EditorEntity> entities{};
             std::size_t selectedEntity{ 0 };
             std::vector<std::string> logLines{};
             bool helpersVisible{ true };
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
+            WorkspacePanelTab workspaceTab{ WorkspacePanelTab::Output };
             bool showAboutModal{ false };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
@@ -294,73 +313,44 @@ namespace epochnamespace
             return claimed.compare_exchange_strong(expected, true, std::memory_order_acq_rel);
         }
 
-        [[nodiscard]] std::vector<EditorEntity> sandbox_entities()
-        {
-            return {
-                { "PersistentLevel", "Level", "World" },
-                { "EditorCamera", "Camera", "Editor", { 0.0f, 1.5f, 5.0f } },
-                { "DirectionalLight", "Light", "Lighting", { 2.0f, 4.0f, 1.0f }, { -35.0f, 45.0f, 0.0f } },
-                { "WorldGrid", "Helper", "Editor", { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 10.0f, 1.0f, 10.0f }, true, true },
-                { "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } },
-                { "PlayerStart", "Spawn", "Gameplay", { 0.0f, 0.0f, -2.0f } }
-            };
-        }
-
-        [[nodiscard]] std::vector<EditorEntity> platformer_entities()
-        {
-            return {
-                { "PlatformerLevel", "Level", "World" },
-                { "GameplayCamera", "Camera", "Gameplay", { 0.0f, 3.0f, 8.0f }, { -18.0f, 0.0f, 0.0f } },
-                { "SkyLight", "Light", "Lighting", { 3.0f, 6.0f, 2.0f }, { -25.0f, 35.0f, 0.0f } },
-                { "GroundPlane", "StaticMesh", "Gameplay", { 0.0f, -0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 16.0f, 1.0f, 4.0f } },
-                { "PlayerStart", "Spawn", "Gameplay", { -4.0f, 0.0f, 0.0f } },
-                { "MovingPlatform_A", "Mover", "Gameplay", { 1.5f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 2.5f, 0.4f, 1.0f } },
-                { "CoinArc", "CollectibleSet", "Gameplay", { 4.0f, 2.5f, 0.0f } }
-            };
-        }
-
-        [[nodiscard]] std::vector<EditorEntity> puzzle_entities()
-        {
-            return {
-                { "PuzzleWorld", "Level", "World" },
-                { "OverviewCamera", "Camera", "Gameplay", { 0.0f, 7.0f, 9.0f }, { -38.0f, 0.0f, 0.0f } },
-                { "KeyLight", "Light", "Lighting", { 1.5f, 5.5f, 2.0f }, { -40.0f, 25.0f, 0.0f } },
-                { "PuzzleGrid", "Grid", "Gameplay", { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 6.0f, 1.0f, 6.0f } },
-                { "SlidingBoard", "PuzzleBoard", "Gameplay", { 0.0f, 0.5f, 0.0f } },
-                { "HintTerminal", "Interactable", "Gameplay", { -2.5f, 0.0f, 1.5f } },
-                { "GoalSocket", "Target", "Gameplay", { 2.5f, 0.0f, -1.5f } }
-            };
-        }
-
         void set_project(EditorState& state, std::string_view projectId, bool writeLog)
         {
-            state.helpersVisible = true;
+            const auto* profile = editor_find_project_profile(projectId);
+            if (!profile)
+                profile = &editor_default_project_profile();
 
-            if (projectId == "platformer")
+            state.helpersVisible = true;
+            state.projectId = std::string(profile->id);
+            state.projectName = std::string(profile->display_name);
+            state.projectPath = std::string(profile->scene_path);
+            state.activeWorld = std::string(profile->world_name);
+            state.activeScript = std::string(profile->default_script);
+            state.activeRuntimeScene = std::string(profile->runtime_scene_id);
+
+            state.entities.clear();
+            for (const auto& seed : editor_seed_entities_for_project(profile->id))
             {
-                state.projectName = "PlatformerDemo";
-                state.projectPath = "Projects/PlatformerDemo/worlds/platformer.epoch";
-                state.activeWorld = "Platformer_Main";
-                state.entities = platformer_entities();
-            }
-            else if (projectId == "puzzle")
-            {
-                state.projectName = "PuzzleLab";
-                state.projectPath = "Projects/PuzzleLab/worlds/puzzle.epoch";
-                state.activeWorld = "Puzzle_Testbed";
-                state.entities = puzzle_entities();
-            }
-            else
-            {
-                state.projectName = "Sandbox";
-                state.projectPath = "Projects/Sandbox/scene.epoch";
-                state.activeWorld = "PersistentLevel";
-                state.entities = sandbox_entities();
+                state.entities.push_back(EditorEntity{
+                    .name = std::string(seed.name),
+                    .type = std::string(seed.type),
+                    .category = std::string(seed.category),
+                    .position = seed.position,
+                    .rotation = seed.rotation,
+                    .scale = seed.scale,
+                    .visible = seed.visible,
+                    .editorOnly = seed.editor_only
+                });
             }
 
             state.selectedEntity = state.entities.empty() ? 0u : (std::min)(state.selectedEntity, state.entities.size() - 1u);
             if (writeLog)
-                push_editor_log(state, std::string("[project] Loaded ") + state.projectName + ".");
+                push_editor_log(
+                    state,
+                    std::string("[project] Loaded ")
+                    + state.projectName
+                    + " -> "
+                    + state.activeRuntimeScene
+                    + ".");
         }
 
         [[nodiscard]] std::string make_entity_name(const EditorState& state, std::string_view base)
@@ -669,7 +659,7 @@ namespace epochnamespace
                 if (ctx)
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
-                push_editor_log(it->second, "[info] Use File > Launcher for projects and games.");
+                push_editor_log(it->second, "[info] Use Project, Scripts, AI, and Systems tabs to drive scene play, scripting, and assistant work.");
                 push_editor_log(it->second, "[info] Scene viewport is owned by the active backend.");
                 if (it->second.automationCommand == EditorAutomationCommand::SmartUpdate)
                     push_editor_log(it->second, "[info] Auto command armed: smart update.");
@@ -886,7 +876,7 @@ namespace epochnamespace
         float tab_x = 16.0f;
 
         const std::string editor_tab = "Editor Mode";
-        const std::string runtime_tab = "Run Game";
+        const std::string runtime_tab = "Play Project";
         const std::string add_cube_tab = "Add Cube";
         const std::string add_light_tab = "Add Light";
         const std::string ask_ai_tab = "Ask AI";
@@ -899,8 +889,12 @@ namespace epochnamespace
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(runtime_tab, { 156.0f, tab_h }))
         {
-            emit_command(EditorCommand::RunGame, "sandsim");
-            push_editor_log(editor, "[runtime] Launching default game run.");
+            emit_command(EditorCommand::RunGame, editor.activeRuntimeScene);
+            push_editor_log(
+                editor,
+                std::string("[runtime] Launching project play target '")
+                + editor.activeRuntimeScene
+                + "'.");
         }
         tab_x += 156.0f + tab_gap;
 
@@ -1002,6 +996,7 @@ namespace epochnamespace
         gui::label(std::string("Preview Camera: ") + preview_camera_name(ctx));
         gui::label(std::string("Preview Zoom: ") + preview_zoom_text(ctx));
         gui::label(std::string("Editor Script: ") + editor.activeScript);
+        gui::label(std::string("Runtime Target: ") + editor.activeRuntimeScene);
         gui::label("Viewport Input: LMB pan  |  RMB orbit  |  Wheel zoom");
         gui::end_window();
 
@@ -1021,19 +1016,131 @@ namespace epochnamespace
         const gui::Vec2 chat_pos{ left_bottom_w, bottom_pos.y };
         const gui::Vec2 chat_size{ (std::max)(0.0f, w - left_bottom_w), bottom_h };
 
-        gui::begin_window("Output", log_pos, log_size);
-        gui::label(std::string("[info] Scene viewport: ")
-            + std::to_string(static_cast<int>(result.scene_viewport.size.x))
-            + "x"
-            + std::to_string(static_cast<int>(result.scene_viewport.size.y)));
-        gui::label(std::string("[info] Active renderer: ") + renderer_name(ctx));
-        gui::label(std::string("[info] Preview mode: ") + std::string(preview_mode_name(editor.previewMode)));
-        gui::label(std::string("[info] Camera mode: ") + preview_camera_name(ctx));
-        gui::label(std::string("[info] Zoom: ") + preview_zoom_text(ctx));
-        gui::label("[info] Viewport input: LMB pan | RMB orbit | Wheel zoom");
-        gui::label(std::string("[info] Active script: ") + editor.activeScript);
-        for (const auto& line : editor.logLines)
-            gui::label(line);
+        gui::begin_window("Workspace", log_pos, log_size);
+        const auto workspace_tab_button = [&](WorkspacePanelTab tab, std::string_view label, float width)
+        {
+            const std::string text = editor.workspaceTab == tab
+                ? std::string("[") + std::string(label) + "]"
+                : std::string(label);
+            if (gui::button(text, { width, 26.0f }))
+                editor.workspaceTab = tab;
+        };
+
+        workspace_tab_button(WorkspacePanelTab::Output, "Output", 82.0f);
+        workspace_tab_button(WorkspacePanelTab::Project, "Project", 82.0f);
+        workspace_tab_button(WorkspacePanelTab::Scripts, "Scripts", 82.0f);
+        workspace_tab_button(WorkspacePanelTab::AI, "AI", 68.0f);
+        workspace_tab_button(WorkspacePanelTab::Systems, "Systems", 90.0f);
+
+        switch (editor.workspaceTab)
+        {
+        case WorkspacePanelTab::Project:
+        {
+            const auto* activeProfile = editor_find_project_profile(editor.projectId);
+            if (!activeProfile)
+                activeProfile = &editor_default_project_profile();
+
+            gui::label(std::string("[project] Active: ") + activeProfile->display_name.data());
+            gui::label(std::string("[project] Scene: ") + activeProfile->scene_path.data());
+            gui::label(std::string("[project] World: ") + activeProfile->world_name.data());
+            gui::label(std::string("[project] Runtime: ") + activeProfile->runtime_scene_id.data());
+            gui::wrapped_label(activeProfile->description.data(), (std::max)(180.0f, log_size.x - 24.0f));
+
+            for (const auto& profile : editor_project_profiles())
+            {
+                const std::string buttonLabel =
+                    (editor.projectId == profile.id ? std::string("> ") : std::string())
+                    + std::string(profile.display_name);
+                if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
+                {
+                    set_project(editor, profile.id, true);
+                    epochnamespace::previewgrid::reset_camera(ctx.get());
+                }
+            }
+
+            if (gui::button("Play Current Project", { 180.0f, 30.0f }))
+            {
+                emit_command(EditorCommand::RunGame, editor.activeRuntimeScene);
+                push_editor_log(editor, std::string("[project] Play requested for ") + editor.projectName + ".");
+            }
+            break;
+        }
+        case WorkspacePanelTab::Scripts:
+        {
+            gui::label(std::string("[script] Active: ") + editor.activeScript);
+            gui::wrapped_label(
+                "Scripts compile with the engine/project and use the editor host API for callbacks.",
+                (std::max)(180.0f, log_size.x - 24.0f));
+
+            for (const auto& script : editor_script_profiles())
+            {
+                const std::string buttonLabel =
+                    (editor.activeScript == script.id ? std::string("> ") : std::string())
+                    + std::string(script.display_name);
+                if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
+                {
+                    editor.activeScript = std::string(script.id);
+                    push_editor_log(editor, std::string("[script] Selected ") + editor.activeScript + ".");
+                }
+                gui::label(std::string("  ") + script.source_path.data());
+                gui::wrapped_label(script.description.data(), (std::max)(160.0f, log_size.x - 36.0f));
+            }
+
+            if (gui::button("Run Selected Script", { 180.0f, 30.0f }))
+            {
+                emit_command(EditorCommand::RunScript, editor.activeScript);
+                push_editor_log(editor, std::string("[script] Run requested for '") + editor.activeScript + "'.");
+            }
+            break;
+        }
+        case WorkspacePanelTab::AI:
+        {
+            const auto manifest = epoch::ai::active_model_manifest();
+            const auto training = epoch::ai::default_training_paths();
+            gui::label(std::string("[ai] Provider: ") + std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
+            gui::label(std::string("[ai] Active model: ") + (manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name));
+            gui::label(std::string("[ai] Oracle endpoint: ") + manifest.endpoint);
+            gui::label(std::string("[ai] Oracle manifest: ") + manifest.manifest_path);
+            gui::label(std::string("[ai] Curated datasets: ") + training.curated_dataset_root);
+            gui::label(std::string("[ai] Raw capture: ") + training.local_capture_jsonl);
+            gui::label(std::string("[ai] Local models: ") + training.model_root);
+            gui::label(std::string("[ai] Checkpoints: ") + training.checkpoint_root);
+            gui::wrapped_label(
+                "Epoch now tracks three AI roles: a tiny embedded engine model, an MCP-backed operating layer for retrieval and tool use, and an LM Studio teacher/oracle for evals, bootstrapping, and live editor help.",
+                (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(
+                "Raw chat captures stay local under workspace paths and must be curated into Engine/ai/datasets/curated before they become repo training data.",
+                (std::max)(180.0f, log_size.x - 24.0f));
+            break;
+        }
+        case WorkspacePanelTab::Systems:
+            gui::label("[systems] Render graph / frame graph: planned as a first-class systems surface.");
+            gui::label("[systems] Task graph / threading: active through engine-owned async work and script jobs.");
+            gui::label(std::string("[systems] Renderer: ") + renderer_name(ctx));
+            gui::label(std::string("[systems] Preview camera: ") + preview_camera_name(ctx));
+            gui::label(std::string("[systems] Runtime target: ") + editor.activeRuntimeScene);
+            gui::label("[systems] Graph surface: next step is an engine-generated texture preview for frame/task graph output.");
+            gui::wrapped_label(
+                "This tab is the landing zone for render graph, frame graph, threading, and multi-backend diagnostics as the editor grows toward an Unreal/Godot-style systems interface.",
+                (std::max)(180.0f, log_size.x - 24.0f));
+            break;
+        case WorkspacePanelTab::Output:
+        default:
+            gui::label(std::string("[info] Scene viewport: ")
+                + std::to_string(static_cast<int>(result.scene_viewport.size.x))
+                + "x"
+                + std::to_string(static_cast<int>(result.scene_viewport.size.y)));
+            gui::label(std::string("[info] Active renderer: ") + renderer_name(ctx));
+            gui::label(std::string("[info] Preview mode: ") + std::string(preview_mode_name(editor.previewMode)));
+            gui::label(std::string("[info] Camera mode: ") + preview_camera_name(ctx));
+            gui::label(std::string("[info] Zoom: ") + preview_zoom_text(ctx));
+            gui::label("[info] Viewport input: LMB pan | RMB orbit | Wheel zoom");
+            gui::label(std::string("[info] Active script: ") + editor.activeScript);
+            gui::label(std::string("[info] Project runtime: ") + editor.activeRuntimeScene);
+            for (const auto& line : editor.logLines)
+                gui::label(line);
+            break;
+        }
         gui::end_window();
 
         gui::ConsoleWindowOptions opts{
@@ -1289,7 +1396,7 @@ namespace epochnamespace
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 22.0f });
             gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 46.0f });
-            gui::wrapped_label("Multi-backend engine/editor shell with launcher-driven projects and games.", contentWidth);
+        gui::wrapped_label("Multi-backend engine/editor shell with project-driven scene play, docked scripting, and engine-owned tools.", contentWidth);
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 86.0f });
             gui::label(std::string("Renderer: ") + renderer_name(ctx));
             gui::set_cursor({ modalPos.x + 16.0f, contentY + 110.0f });

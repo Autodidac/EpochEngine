@@ -31,6 +31,7 @@ When a pass is multicontext-specific, validate:
 - wheel zoom and camera movement
 - docked window ownership and absence of stray promoted panes
 - backend palette parity when clear colors should match
+- AI dock/provider status when the pass touches local model or oracle behavior
 
 ## Engine-owned capture flow
 
@@ -68,6 +69,28 @@ behavior, prefer the engine-owned capture path.
   isolate the regression.
 - Use a maximized or 4K-sized editor host when validating six-context layouts.
 - Keep the screenshot tied to the source version shown in the README.
+
+## AI smoke prompts
+
+When LM Studio is running locally, use at least one editor-context prompt and
+one C++/engine prompt:
+
+- `In Epoch editor, project 'Sandbox' has 6 entities. Suggest one concrete next edit and one gameplay follow-up.`
+- `Explain why mixed C++23 module units should use module; before legacy includes.`
+
+Expected smoke behavior:
+
+- the selected model is logged
+- the AI dock returns a visible reply
+- raw capture is written only to `workspace/auto_train.jsonl`
+- no `workspace/ai/*` checkpoints or models show up as staged Git changes
+
+## Systems/graph checks
+
+- The `Systems` tab should remain the landing zone for frame graph, task graph,
+  and threading surfaces.
+- If the graph view is rendered as a generated texture, verify it stays clipped
+  to the dock and does not escape the layout when the graph is wide.
 
 ## Commit pattern memory
 

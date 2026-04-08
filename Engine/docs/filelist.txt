@@ -9,6 +9,7 @@ Public headers
 
 Primary module families
 - `core.*`, `context.*`, `platform.*`, `render.*`, `perf.*`, `updater.*` spine/runtime ownership
+- `ai.*` tiny-model runtime, dataset, training, eval, and MCP-adapter planning surfaces
 - `opengl.*`, `sdl.*`, `raylib.*`, `sfml.*`, `software.*`, `vulkan.*`, `noop.context` backend/context integrations
 - `ecs.*` and `aentity.*` ECS surfaces
 - `atlas.*`, sprite, image, texture, and GUI support
@@ -36,6 +37,7 @@ Great renaming conversions
 Examples and tooling
 - `Engine/examples/ConsoleApplication1/`
 - `Engine/build.sh`, `Engine/run.sh`, `Engine/install.sh`, `Engine/clean.sh`
+- `Engine/ai/` curated AI datasets, schemas, evals, manifests, and prompts
 
 Migration notes
 - `Engine/docs/legacy_feature_map.md` legacy-to-active feature ownership map

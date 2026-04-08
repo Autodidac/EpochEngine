@@ -239,6 +239,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.path.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.string.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.time.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.runtime.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.dataset.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.train.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.eval.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.ai.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\assets.streaming.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.ecs.ixx" />

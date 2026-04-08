@@ -5,11 +5,11 @@
 **Epoch Engine** is a professional **C++23 game engine and creative software
 platform** for building games, editors, tools, pipelines, and real-time
 interactive systems from a single modern codebase. It combines a
-modules-first architecture, integrated AI tooling, custom UI powered by an
+modules-first architecture, a three-role AI spine, custom UI powered by an
 automated texture-atlas system, built-in C++23 scripting that compiles with
 the engine and project, multi-context rendering, launcher + editor
-workflows, and a runtime built around engine projects and scenes instead of
-being stitched together from external middleware.
+workflows, and a project-driven runtime built around engine projects and
+scenes instead of being stitched together from external middleware.
 
 The active engine lives in:
 
@@ -18,6 +18,7 @@ Engine/src/
 Engine/include/
 Engine/modules/
 Engine/resource/
+Engine/ai/
 ```
 
 with prebuilt MSVC runtime binaries commonly landing in:
@@ -43,12 +44,18 @@ asset set as the main editor host.
   configurations through the active `EPOCH_*` runtime macros. See
   [configuration flags](Engine/docs/aengineconfig_flags.md) and
   [runtime operations](Engine/docs/runtime_operations.md).
+- Three distinct AI roles under one engine-owned surface: a tiny embedded Epoch
+  model for local assistance, an MCP-backed operating layer for retrieval and
+  structured tool work, and an LM Studio teacher/oracle path for evals,
+  bootstrapping, and accelerated editor help.
 - Multi-context, multi-backend runtime orchestration across OpenGL, Vulkan,
   SDL3, Raylib, SFML, software, and noop/headless paths.
-- Launcher-first workflow that routes projects into the editor and games into
-  scene/runtime mode, instead of treating the editor as a loose debug shell.
+- Project-driven workflow that routes projects into the editor and scene play
+  into runtime mode, instead of treating the editor as a loose debug shell or a
+  permanent launcher for sample games.
 - Desktop-style editor workflow with scene preview control, command surfaces,
-  and backend-aware fallback behavior.
+  project/scripts/systems/AI workspace tabs, and backend-aware fallback
+  behavior.
 - Custom GUI, sprite, and text pipelines built on the engine's own automated
   texture/atlas system rather than copied independently into each backend.
 - ECS-style systems, scene plumbing, gameplay modules, and engine-owned runtime
@@ -58,6 +65,8 @@ asset set as the main editor host.
   task-graph-backed asynchronous work scheduling.
 - Diagnostics, renderer telemetry, runtime logging, and updater plumbing as
   first-class engine systems.
+- A Systems surface that is explicitly moving toward frame-graph, task-graph,
+  and multithreaded engine tooling rather than staying a fake placeholder.
 - Cross-platform build freedom: Visual Studio, MSBuild, CMake presets, VS Code,
   shell-script workflows, and multiple compiler families across Windows, Linux,
   and macOS.
@@ -111,6 +120,13 @@ Engine/
 
 Engine code, build configuration, resources, examples, docs, assets, and
 editor/runtime systems.
+
+```text
+Engine/ai/
+```
+
+Repo-safe AI datasets, schemas, evals, manifests, tokenizer metadata, and
+prompt templates. Raw captures, checkpoints, and model weights stay local.
 
 ```text
 x64/

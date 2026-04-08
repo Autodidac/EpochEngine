@@ -23,6 +23,7 @@ Use this index to jump to the current docs set for the active engine tree under
 
 - `runtime_operations.md` - launcher, scripting, logging, and runtime workflow.
 - `aengineconfig_flags.md` - build/config macros, support status, and cautions.
+- `ai_build_memory.md` - AI storage policy, smoke prompts, and build/test memory.
 
 ## Architecture and backend status
 

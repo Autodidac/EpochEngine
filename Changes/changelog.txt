@@ -1,6 +1,12 @@
 ﻿# Epoch Changelog
 
 
+## [v0.83.61]
+- Finished the first honest project-runtime seam by moving project profiles, script profiles, runtime scene ids, and seed entities under `aeditor.scene.cpp`, while the live editor shell in `aeditor.cpp` now drives `Project`, `Scripts`, `AI`, `Systems`, and `Output` workspaces on top of that data.
+- Added the first repo-safe `Engine/ai/` content layout for curated datasets, schemas, evals, manifests, tokenizer metadata, and prompt templates, while tightening the local-only policy for raw capture and checkpoint/model paths under `workspace/`.
+- Expanded `epoch.ai` into the first explicit three-role AI surface: embedded tiny-model planning types, MCP operation capture types, and the active LM Studio teacher/oracle bridge with visible provider/model metadata.
+- Documented the working AI/build/smoke method in `Engine/docs/ai_build_memory.md`, refreshed README/runtime/build/smoke docs for the new policy, and collapsed the old loose `release_notes_v*.md` files behind the existing collated history surfaces.
+
 ## [v0.83.60]
 - Tightened SDL and SFML docking by stripping leftover top-level extended window styles after `SetParent`, which keeps their docked panes from behaving like stray promoted child windows.
 - Collated the loose `release_notes_v*.md` files into `Changes/release_notes_version_series_collated.md` and collated the post-`v0.83.0` live work log into `Changes/post_v0_83_work_collated.md`.

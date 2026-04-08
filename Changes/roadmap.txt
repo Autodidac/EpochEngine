@@ -37,6 +37,7 @@ Phase 2 - Runtime and platform stabilization
 - [ ] Verify that editor and game runtimes can consume the same core services without dragging each other around.
 - [ ] Keep Windows and Linux build paths in sync instead of fixing one platform at a time.
 - [ ] Replace editor-side built-in sample-game launching with real project/scene play flow.
+- [ ] Land the three-role AI spine: embedded tiny model, MCP operating layer, and LM Studio teacher/oracle.
 
 Phase 2 notes
 -------------
@@ -47,6 +48,8 @@ Phase 2 notes
 - The retired legacy archive has been collapsed into active ownership plus `Engine/docs/legacy_feature_map.md`, so further spine work should land directly in Epoch-owned modules instead of parking code in archive folders.
 - Active module/file naming is being normalized to one-period families like `core.*`, `context.*`, `platform.*`, `render.*`, and backend surfaces such as `vulkan.*`, with multi-dot legacy names being retired instead of preserved as a second spine.
 - The editor still carries a hard-wired built-in sample-game route; the intended replacement is project/scene play from duplicated engine-source project shells, not a permanent in-editor mini-game menu.
+- The live editor shell is now expected to center on `Project`, `Scripts`, `AI`, `Systems`, and `Output` workspaces instead of scattered helper panels.
+- AI data policy must stay split: curated repo-safe datasets/manifests/evals in `Engine/ai/`, raw captures and checkpoints in local `workspace/` paths only.
 
 Phase 3 - Renderer direction
 ----------------------------
@@ -54,11 +57,13 @@ Phase 3 - Renderer direction
 - [ ] Formalize visibility, surface, lighting, temporal, and presentation boundaries.
 - [ ] Keep current backends working while making room for sparse lighting and reconstruction.
 - [ ] Move engine/context pacing further through the `perf.select` path instead of backend-local throttling folklore.
+- [ ] Surface frame graph/task graph/multithreading tooling through the Systems workspace without breaking the editor shell.
 
 Phase 3 notes
 -------------
 - `platform.budgets::FramePolicy` now carries explicit lighting, temporal-history, and vendor-neutral reconstruction intent so the renderer can evolve toward visibility -> surface -> lighting -> temporal -> reconstruction -> present without hard-wiring one AI vendor path.
 - The shared runtime frame-profile now exposes renderer-facing policy data directly to engine consumers, which keeps context/runtime selection moving toward the spine instead of backend-local folklore.
+- The Systems workspace should eventually render frame-graph and task-graph views as engine-generated surfaces inside the editor, even when those graphs are too wide for a single pane.
 
 Phase 4 - Tooling and smoke coverage
 ------------------------------------
