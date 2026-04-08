@@ -156,11 +156,11 @@ These remain support-tier or project-opt-in work, not the default baseline.
       supported as duplicated-source projects.
 - [x] Add a real scripting/project dock with scripts, source paths, build/run
       actions, and compile/load diagnostics.
-- [ ] Keep the launcher/project shell centered on projects, contexts, settings,
-      and future automation instead of legacy demo/game menus.
+- [x] Keep the launcher/project shell centered on projects, contexts, settings,
+      updates, and future automation instead of legacy demo/game menus.
 - [ ] Keep the live shell organized around `Project`, `Scripts`, `Systems`,
       `AI`, and `Output` workspaces backed by reusable GUI controls.
-- [ ] Keep a professional 2D project path visible and honest instead of falling
+- [x] Keep a professional 2D project path visible and honest instead of falling
       back to stale sample-profile naming.
 
 ## Phase 3 - Systems Workspace and Renderer Tooling
@@ -176,10 +176,10 @@ These remain support-tier or project-opt-in work, not the default baseline.
       top of the current graph surfaces.
 - [ ] Use this surface to converge backend behavior across OpenGL, Vulkan,
       software, SDL, SFML, and Raylib instead of letting them drift.
-- [ ] Keep parented multicontext behavior honest: the real backend child surface
+- [x] Keep parented multicontext behavior honest: the real backend child surface
       owns rendering/input, and the visible pane should not degrade into fake
       extra dock wrappers or misleading nested windows.
-- [ ] Keep the shared preview marker honest by deriving the visible ground-hit
+- [x] Keep the shared preview marker honest by deriving the visible ground-hit
       spot from the real center camera ray before any editor-focus fallback.
 - [ ] Tighten multicontext terminology so file names, modules, and docs stop
       describing the parented backend grid with ambiguous legacy terms such as
@@ -267,8 +267,9 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - Use the first two models as helper drafting pools when available.
 - Fill up to four parallel drafting lanes per helper model when there is enough
   separable work.
-- Prefer the native LM Studio `/api/v1/chat` helper path with the same
-  `system_prompt` and `input` request shape the engine already uses.
+- Prefer the LM Studio `/v1/responses` helper path for direct drafting, with
+  `input` payloads and `reasoning.effort = none` so the helper returns usable
+  text instead of wasting budget on hidden chains.
 - Keep the first detected model as the only runtime-parity/in-engine smoke
   model.
 - If a helper returns blank `content` but useful `reasoning_content`, harvest

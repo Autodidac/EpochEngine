@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.83.71]
+- Flattened the launcher into one direct-entry project/tool surface: visible launcher flow now centers on project opening, clean editor launch, contexts/settings, updates, and quit, without the old `Projects/Games/Tools` panel stack or puzzle/game-facing shell.
+- Tightened the Win32 parented multicontext grid so layout now operates on the HWND that actually owns the dock slot at that moment, which makes SDL/SFML child takeover transitions more honest during resize/maximize passes instead of skipping panes when the backend child is alive but not yet the parented slot owner.
+- Stabilized the shared preview marker by reusing the last honest grid-plane hit before falling back to editor focus, reducing the old camera-follow drift when the center ray goes temporarily parallel to the grid.
+- Fixed the docked Raylib child resize path so a maximized parented grid no longer reintroduces top-level chrome-sized growth and push the visible `GLFW30` pane past its slot.
+- Revalidated the real asset-bearing Windows path: `Debug|x64` and `Release|x64` both rebuilt cleanly, a maximized six-context editor run held the visible `GLFW30`, `SDL_app`, `SFML_Window`, `Vulkan`, `OpenGL`, and `Software` panes with hidden wrapper hosts, and an early visible `SFML_Window` close no longer killed the parent editor.
+- Updated the README proof, roadmap, runtime/build/smoke docs, and AI build memory to reflect the flattened launcher scope, the parent-aware dock-slot rule, the docked-child resize contract, and the helper-first LM Studio workflow using `/v1/responses` plus `reasoning.effort = none` for direct drafting.
+
 ## [v0.83.70]
 - Corrected the shared preview look marker so it prefers the real center camera ray against the grid plane before falling back to projected editor focus, which makes the visible target spot more honest across the active backends.
 - Extended the two-role AI curation path with an MCP snapshot promotion helper and editor action, so staged scene-guidance captures can now move into `Engine/ai/datasets/curated` instead of stopping at local workspace staging.

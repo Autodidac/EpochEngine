@@ -197,6 +197,7 @@ namespace epochnamespace::raylibcontext
 
             st.parent = dockParent ? dockParent : parent;
             st.hwnd = raylibHwnd;
+            st.dockedChildWindow = st.parent && st.parent != raylibHwnd;
 
             if (st.parent && st.parent != raylibHwnd)
             {
@@ -608,7 +609,34 @@ namespace epochnamespace::raylibcontext
                 state.width = static_cast<unsigned>(clampedW);
                 state.height = static_cast<unsigned>(clampedH);
 
-                //   (void)raylib_make_current();
+#if defined(_WIN32)
+                if (state.hwnd && ::IsWindow(state.hwnd) != FALSE)
+                {
+                    POINT origin{ 0, 0 };
+                    if (const HWND resizeParent = ::GetParent(state.hwnd);
+                        resizeParent && ::IsWindow(resizeParent) != FALSE)
+                    {
+                        RECT currentRect{};
+                        if (::GetWindowRect(state.hwnd, &currentRect))
+                        {
+                            origin = { currentRect.left, currentRect.top };
+                            ::ScreenToClient(resizeParent, &origin);
+                        }
+                    }
+
+                    ::SetWindowPos(
+                        state.hwnd,
+                        nullptr,
+                        origin.x,
+                        origin.y,
+                        clampedW,
+                        clampedH,
+                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                }
+#endif
+
+                if (!state.dockedChildWindow)
+                    epochnamespace::raylib_api::set_window_size(clampedW, clampedH);
                 if (state.userResize)
                     state.userResize(clampedW, clampedH);
             };

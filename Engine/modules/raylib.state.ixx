@@ -89,6 +89,7 @@ namespace epochnamespace::raylibstate
 #endif
 
         bool ownsDC = false;
+        bool dockedChildWindow = false;
 
         // Owning engine context + thread
         epochnamespace::core::Context* owner_ctx = nullptr;

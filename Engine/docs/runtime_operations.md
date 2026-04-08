@@ -35,6 +35,12 @@ the same engine-owned path.
   supported path instead of a roadmap-only promise
 - an editor/project launcher profile is valid here as a prestep for choosing
   projects, contexts, settings, and future automation flows
+- that launcher should stay flat and direct: project entry, clean editor launch,
+  contexts/settings, updates, and quit belong there; layered game/puzzle menus
+  do not
+- the launcher may open project demos directly or preload a project before the
+  editor, but it should not drift back into multiple menu layers or become a
+  fake game shell
 - `aeditor.scene.cpp` should own project profiles, script profiles, runtime
   scene ids, and seed entities
 - `aeditor.cpp` should act as the live shell over that scene/project data, not
@@ -79,6 +85,15 @@ the same engine-owned path.
 - when validating Win32 parented multicontext behavior, a live window-tree probe
   should show the real backend child classes as visible pane owners and helper
   `EpochChild` wrappers hidden for the parented child-window backends
+- maximize/restore validation should keep using the pane owner that is actually
+  parented into the grid slot at that moment, not a stale abstract "primary"
+  HWND that may still be mid-takeover
+- child-docked backends should consume the grid/`WM_SIZE` dimensions as the
+  authoritative resize request; avoid feeding stale child rects back into the
+  same resize path
+- once a backend is docked as a child pane, do not reapply top-level backend
+  window-size APIs that can silently restore window chrome semantics and break
+  the parented slot geometry
 - time diagnostics should show the shared simulation clock state: pause/resume,
   scale, fixed-step cadence, accumulator, and simulated time
 - time diagnostics should also show the current frame step budget and the
@@ -183,6 +198,9 @@ Data rules:
 - helper-first passes should check `/v1/models` at the start of a phase, use
   the first two models as drafting pools when available, and keep the first
   detected model as the only runtime-parity/in-engine smoke model
+- for direct helper drafting, use LM Studio `/v1/responses` with `input`
+  payloads and `reasoning.effort = none` to keep local helper output fast and
+  visible
 
 ## Procedural/time-node direction
 

@@ -561,6 +561,37 @@ namespace
         return window->hwnd ? window->hwnd : (window->hwndChild ? window->hwndChild : window->host_hwnd);
     }
 
+    [[nodiscard]] inline HWND dock_slot_handle(
+        const epochnamespace::core::WindowData* window,
+        HWND dockParent) noexcept
+    {
+        if (!window || !dockParent || ::IsWindow(dockParent) == FALSE)
+            return nullptr;
+
+        if (window->hwndChild
+            && ::IsWindow(window->hwndChild) != FALSE
+            && ::GetParent(window->hwndChild) == dockParent)
+        {
+            return window->hwndChild;
+        }
+
+        if (window->host_hwnd
+            && ::IsWindow(window->host_hwnd) != FALSE
+            && ::GetParent(window->host_hwnd) == dockParent)
+        {
+            return window->host_hwnd;
+        }
+
+        if (window->hwnd
+            && ::IsWindow(window->hwnd) != FALSE
+            && ::GetParent(window->hwnd) == dockParent)
+        {
+            return window->hwnd;
+        }
+
+        return nullptr;
+    }
+
     [[nodiscard]] inline bool matches_window_handle(
         const epochnamespace::core::WindowData* window,
         HWND hwnd) noexcept
@@ -1430,7 +1461,8 @@ namespace epochnamespace::core
 
         int clampedWidth = clamp_positive(width);
         int clampedHeight = clamp_positive(height);
-        backend::ResolveClientSize(hwnd, clampedWidth, clampedHeight);
+        if (clampedWidth <= 1 || clampedHeight <= 1)
+            backend::ResolveClientSize(hwnd, clampedWidth, clampedHeight);
 
         std::function<void(int, int)> resizeCallback;
         core::ContextType contextType = core::ContextType::None;
@@ -1633,11 +1665,8 @@ namespace epochnamespace::core
         dockedWindows.reserve(windows.size());
         for (auto& win : windows)
         {
-            const HWND liveHwnd = primary_window_handle(win.get());
+            const HWND liveHwnd = dock_slot_handle(win.get(), parent);
             if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
-                continue;
-
-            if (::GetParent(liveHwnd) != parent)
                 continue;
 
             dockedWindows.push_back(win.get());
@@ -1688,20 +1717,24 @@ namespace epochnamespace::core
             const int r = static_cast<int>(i) / cols;
 
             WindowData& win = *dockedWindows[i];
-            const HWND liveHwnd = primary_window_handle(&win);
+            const HWND liveHwnd = dock_slot_handle(&win, parent);
             if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
                 continue;
 
-            const bool deferPlaceholderShow =
+            const bool usingHiddenHostPlaceholder =
                 (win.type == ContextType::SDL || win.type == ContextType::SFML)
-                && (!win.host_hwnd || ::IsWindow(win.host_hwnd) == FALSE);
+                && win.host_hwnd
+                && liveHwnd == win.host_hwnd
+                && (!win.hwndChild
+                    || ::IsWindow(win.hwndChild) == FALSE
+                    || ::GetParent(win.hwndChild) != parent);
 
             ::SetWindowPos(liveHwnd, nullptr, c * cw, r * ch, cw, ch,
-                deferPlaceholderShow
+                usingHiddenHostPlaceholder
                 ? (SWP_NOZORDER | SWP_NOACTIVATE)
                 : (SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW));
 
-            if (deferPlaceholderShow)
+            if (usingHiddenHostPlaceholder)
                 ::ShowWindow(liveHwnd, SW_HIDE);
 
             if (win.host_hwnd

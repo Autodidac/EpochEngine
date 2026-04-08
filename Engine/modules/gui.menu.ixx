@@ -107,19 +107,8 @@ export namespace epochnamespace::menu
 
     struct MenuOverlay
     {
-        enum class LauncherPanel : unsigned char
-        {
-            Projects = 0,
-            Games,
-            Tools
-        };
-
         std::vector<ChoiceDescriptor> descriptors;
         std::size_t selection = 0;
-        LauncherPanel activePanel = LauncherPanel::Projects;
-        std::size_t projectSelection = 0;
-        std::size_t gameSelection = 0;
-        std::size_t toolSelection = 0;
 
         bool prevUp = false, prevDown = false, prevLeft = false,
             prevRight = false, prevEnter = false;
@@ -145,31 +134,13 @@ export namespace epochnamespace::menu
         float layoutWidth = 0.0f;
         float layoutHeight = 0.0f;
 
-        static constexpr std::array kProjectChoices = {
+        static constexpr std::array kLauncherChoices = {
             ChoiceDescriptor{ Choice::ProjectSandbox, "Sandbox Project", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::ProjectPlatformer, "Platformer Project", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::ProjectTwoDStudio, "2D Studio", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::OpenEditor, "Project Launcher", { 256.0f, 96.0f } }
-        };
-
-        static constexpr std::array kGameChoices = {
-            ChoiceDescriptor{ Choice::Snake, "Snake", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Tetris, "Tetris", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Pacman, "Pacman", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Frogger, "Frogger", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Sokoban, "Sokoban", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Minesweep, "Minesweeper", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Puzzle, "Sliding Puzzle", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Bejeweled, "Bejeweled", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Fourty, "2048", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Sandsim, "Sand Sim", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Cellular, "Cellular", { 256.0f, 96.0f } }
-        };
-
-        static constexpr std::array kToolChoices = {
-            ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Settings, "Settings", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::About, "About Epoch", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::OpenEditor, "Open Clean Editor", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Settings, "Contexts + Settings", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::UpdateLatest, "Update Epoch", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::Exit, "Quit", { 256.0f, 96.0f } }
         };
 
@@ -204,63 +175,22 @@ export namespace epochnamespace::menu
             return value == "smart-update";
         }
 
-        std::size_t& selection_for_panel(LauncherPanel panel) noexcept
+        static constexpr std::string_view launcher_title() noexcept
         {
-            switch (panel)
-            {
-            case LauncherPanel::Projects: return projectSelection;
-            case LauncherPanel::Games: return gameSelection;
-            case LauncherPanel::Tools: return toolSelection;
-            default: return projectSelection;
-            }
+            return "Project Launcher";
         }
 
-        static constexpr std::string_view panel_title(LauncherPanel panel) noexcept
+        static constexpr std::string_view launcher_hint() noexcept
         {
-            switch (panel)
-            {
-            case LauncherPanel::Projects: return "Projects";
-            case LauncherPanel::Games: return "Games";
-            case LauncherPanel::Tools: return "Tools";
-            default: return "Projects";
-            }
+            return "Open project demos directly, preload a project, jump into a clean editor workspace, adjust contexts and settings, or run updates without the old layered game/puzzle shell.";
         }
 
-        static constexpr std::string_view panel_hint(LauncherPanel panel) noexcept
+        void refresh_launcher_descriptors()
         {
-            switch (panel)
-            {
-            case LauncherPanel::Projects: return "Choose a project and jump into the editor.";
-            case LauncherPanel::Games: return "Launch playable scenes from the shared launcher.";
-            case LauncherPanel::Tools: return "Open the editor, inspect info, or end the session.";
-            default: return "";
-            }
-        }
-
-        void activate_panel(LauncherPanel panel)
-        {
-            activePanel = panel;
             descriptors.clear();
-
-            const auto append = [&](const auto& source)
-            {
-                descriptors.reserve(source.size());
-                for (const auto& item : source)
-                    descriptors.push_back(item);
-            };
-
-            switch (activePanel)
-            {
-            case LauncherPanel::Projects: append(kProjectChoices); break;
-            case LauncherPanel::Games: append(kGameChoices); break;
-            case LauncherPanel::Tools: append(kToolChoices); break;
-            }
-
-            selection = selection_for_panel(activePanel);
-            if (!descriptors.empty())
-                selection = (std::min)(selection, descriptors.size() - 1);
-            else
-                selection = 0;
+            descriptors.reserve(kLauncherChoices.size());
+            for (const auto& item : kLauncherChoices)
+                descriptors.push_back(item);
 
             cachedWidth = -1;
             cachedHeight = -1;
@@ -380,10 +310,6 @@ export namespace epochnamespace::menu
                 for (const auto& item : kUpdaterShellChoices)
                     descriptors.push_back(item);
 
-                activePanel = LauncherPanel::Tools;
-                projectSelection = 0;
-                gameSelection = 0;
-                toolSelection = 0;
                 selection = 0;
                 prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
 
@@ -395,13 +321,9 @@ export namespace epochnamespace::menu
                 return;
             }
 
-            activePanel = LauncherPanel::Projects;
-            projectSelection = 0;
-            gameSelection = 0;
-            toolSelection = 0;
             selection = 0;
             prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
-            activate_panel(activePanel);
+            refresh_launcher_descriptors();
 
             const int w = ctx ? ctx->get_width_safe() : cachedWidth;
             const int h = ctx ? ctx->get_height_safe() : cachedHeight;
@@ -488,19 +410,32 @@ export namespace epochnamespace::menu
             if (totalItems == 0 || cachedPositions.size() != size_t(totalItems))
                 return std::nullopt;
 
-            if (upPressed && !prevUp)
-            {
-                const auto next = static_cast<int>(activePanel) == 0 ? 2 : static_cast<int>(activePanel) - 1;
-                activate_panel(static_cast<LauncherPanel>(next));
-            }
-            if (downPressed && !prevDown)
-            {
-                const auto next = (static_cast<int>(activePanel) + 1) % 3;
-                activate_panel(static_cast<LauncherPanel>(next));
-            }
-
             if (selection >= size_t(totalItems))
                 selection = size_t(totalItems - 1);
+
+            const auto move_vertical = [&](int delta)
+            {
+                if (totalItems <= 0 || columns <= 0 || rows <= 0)
+                    return;
+
+                const int current = static_cast<int>(selection);
+                const int currentColumn = current % columns;
+                int nextRow = (current / columns) + delta;
+                if (nextRow < 0)
+                    nextRow = rows - 1;
+                else if (nextRow >= rows)
+                    nextRow = 0;
+
+                int candidate = nextRow * columns + currentColumn;
+                while (candidate >= totalItems && nextRow > 0)
+                {
+                    --nextRow;
+                    candidate = nextRow * columns + currentColumn;
+                }
+
+                selection = static_cast<std::size_t>(
+                    std::clamp(candidate, 0, totalItems - 1));
+            };
 
            // const bool flipVertical = ctx && ctx ->type == core::ContextType::OpenGL;
 
@@ -541,7 +476,9 @@ export namespace epochnamespace::menu
                 }
             }
 
-            if (leftPressed && !prevLeft)  selection = (selection == 0) ? totalItems - 1 : selection - 1;
+            if (upPressed && !prevUp) move_vertical(-1);
+            if (downPressed && !prevDown) move_vertical(+1);
+            if (leftPressed && !prevLeft) selection = (selection == 0) ? totalItems - 1 : selection - 1;
             if (rightPressed && !prevRight) selection = (selection + 1) % totalItems;
             if (!upPressed && !downPressed && !leftPressed && !rightPressed && hover >= 0)
                 selection = hover;
@@ -551,33 +488,12 @@ export namespace epochnamespace::menu
 
             gui::begin_window(title, framePosition, frameSize);
 
-            constexpr float panelButtonWidth = 128.0f;
-            constexpr float panelButtonHeight = 30.0f;
-            constexpr float panelGap = 8.0f;
-            float panelX = framePosition.x + 16.0f;
-            const float panelY = framePosition.y + 14.0f;
-
-            const auto draw_panel_button = [&](LauncherPanel panel)
-            {
-                gui::set_cursor({ panelX, panelY });
-                std::string label = std::string(panel_title(panel));
-                if (activePanel == panel)
-                    label = "> " + label;
-                if (gui::button(label, { panelButtonWidth, panelButtonHeight }))
-                    activate_panel(panel);
-                panelX += panelButtonWidth + panelGap;
-            };
-
-            draw_panel_button(LauncherPanel::Projects);
-            draw_panel_button(LauncherPanel::Games);
-            draw_panel_button(LauncherPanel::Tools);
-
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 52.0f });
             gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 72.0f });
-            gui::label(std::string("Launcher: ") + std::string(panel_title(activePanel)));
+            gui::label(std::string("Launcher: ") + std::string(launcher_title()));
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 92.0f });
-            gui::wrapped_label(panel_hint(activePanel), frameSize.x - 32.0f);
+            gui::wrapped_label(launcher_hint(), frameSize.x - 32.0f);
 
             std::optional<Choice> chosen{};
             for (int i = 0; i < totalItems; ++i) {
@@ -589,7 +505,6 @@ export namespace epochnamespace::menu
 
                 if (gui::button(label, descriptors[i].size)) {
                     selection = size_t(i);
-                    selection_for_panel(activePanel) = selection;
                     chosen = descriptors[i].choice;
                 }
             }
@@ -598,10 +513,7 @@ export namespace epochnamespace::menu
 
             if (chosen) return chosen;
             if (enterPressed && !prevEnter)
-            {
-                selection_for_panel(activePanel) = selection;
                 return descriptors[selection].choice;
-            }
 
             prevEnter = enterPressed;
             return std::nullopt;
@@ -714,10 +626,6 @@ export namespace epochnamespace::menu
             rows = 0;
             layoutOriginX = layoutOriginY = 0.f;
             layoutWidth = layoutHeight = 0.f;
-            activePanel = LauncherPanel::Projects;
-            projectSelection = 0;
-            gameSelection = 0;
-            toolSelection = 0;
             selection = 0;
             prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
             autoCommandConsumed = false;

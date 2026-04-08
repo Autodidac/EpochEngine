@@ -130,10 +130,10 @@ the current source/editor state yet.
   behavior changes enough to make the older image misleading.
 - Capture from an asset-bearing `x64/Debug/` or `x64/Release/` launch only.
 
-Windows editor six-context multicontext proof, source `v0.83.68`:
+Windows editor six-context multicontext proof, source `v0.83.71`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08368.png" alt="Epoch Windows editor six-context multicontext proof" width="1400" />
+  <img src="Images/readme/windows-multicontext-editor-v08371.png" alt="Epoch Windows editor six-context multicontext proof" width="1400" />
 </p>
 
 ---
@@ -379,13 +379,14 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.70
+v0.83.71
 ```
 
 Highlights:
-- The README proof above is still the real `v0.83.68` six-context live capture
-  from the asset-bearing `x64/Debug` runtime, and it remains the current honest
-  public proof until a newer validated image replaces it.
+- The README proof above is now the real `v0.83.71` six-context live capture
+  from an asset-bearing maximized `x64/Debug` editor run, with the visible
+  `GLFW30`, `SDL_app`, `SFML_Window`, `Vulkan`, `OpenGL`, and `Software` panes
+  present and the helper wrappers hidden.
 - The project shell now pushes the embedded-engine path further into reality by
   generating an `epoch.project.cmake` fragment, using include fallback logic,
   and treating `Engine/include/` as a first-class path for generated projects.
@@ -393,11 +394,15 @@ Highlights:
   the live step budget and the max-steps-per-frame clamp alongside the existing
   fixed-step, accumulator, and simulated-time diagnostics.
 - The shared preview marker now prefers the real center camera ray against the
-  grid plane before any editor-focus fallback, so the visible look spot stays
-  closer to the honest camera hit instead of drifting with projected focus.
+  grid plane, then reuses the last honest grid hit before any editor-focus
+  fallback, so the visible look spot stays closer to the actual view direction
+  instead of drifting with camera-follow bias.
 - The Windows parented multicontext path continues converging on real backend
-  child-surface ownership, with SDL/SFML pushed further onto the visible child
-  window path and helper-host cleanup tightened during dock layout.
+  child-surface ownership, with the dock grid now sizing whichever HWND really
+  owns the parented slot at that moment, the docked Raylib child staying pinned
+  to its real slot after maximize, early `SFML_Window` close no longer killing
+  the parent editor, and the flat launcher replacing the old
+  `Projects/Games/Tools` layered shell.
 - The AI workspace now promotes staged MCP/control snapshots into curated
   datasets too, instead of leaving that part of the two-role training loop as
   documentation-only.

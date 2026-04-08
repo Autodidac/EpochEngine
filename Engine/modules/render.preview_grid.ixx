@@ -211,6 +211,7 @@ namespace epochnamespace::previewgrid
         };
 
         export inline std::unordered_map<const void*, CameraRigState, PtrHash> g_cameraRigs{};
+        export inline std::unordered_map<const void*, Vec3, PtrHash> g_lastMarkerHits{};
         inline std::shared_mutex g_cameraRigMutex{};
 
         [[nodiscard]] inline CameraRigState make_editor_rig() noexcept
@@ -475,6 +476,7 @@ namespace epochnamespace::previewgrid
 
         std::unique_lock lock(detail::g_cameraRigMutex);
         detail::g_cameraRigs.erase(ctxKey);
+        detail::g_lastMarkerHits.erase(ctxKey);
     }
 
     export [[nodiscard]] inline Camera camera_for(const void* ctxKey) noexcept
@@ -596,6 +598,17 @@ namespace epochnamespace::previewgrid
         if (!hasHit)
         {
             std::shared_lock lock(detail::g_cameraRigMutex);
+            if (const auto lastHit = detail::g_lastMarkerHits.find(ctxKey);
+                lastHit != detail::g_lastMarkerHits.end())
+            {
+                hit = lastHit->second;
+                hasHit = std::isfinite(hit.x) && std::isfinite(hit.z);
+            }
+        }
+
+        if (!hasHit)
+        {
+            std::shared_lock lock(detail::g_cameraRigMutex);
             const auto it = detail::g_cameraRigs.find(ctxKey);
             if (it != detail::g_cameraRigs.end() && it->second.mode == CameraMode::Editor)
             {
@@ -606,6 +619,11 @@ namespace epochnamespace::previewgrid
 
         if (!hasHit)
             return out;
+
+        {
+            std::unique_lock lock(detail::g_cameraRigMutex);
+            detail::g_lastMarkerHits[ctxKey] = hit;
+        }
 
         const float markerSize = (std::max)(0.14f, markerDistance * 0.028f);
         const float markerHeight = 0.001f;

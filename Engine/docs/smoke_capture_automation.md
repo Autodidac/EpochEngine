@@ -37,6 +37,12 @@ When the pass is multicontext-specific, validate:
   wrappers
 - no backend should leave a visible helper host behind once the real child
   surface owns the pane
+- for resize/maximize regressions, verify the grid is operating on the HWND that
+  actually owns the dock slot at that moment and then perform at least one early
+  child-close check without killing the parent editor
+- for Raylib/SDL/SFML parented panes, compare the visible child rect against the
+  intended slot rect after maximize; do not sign off if a docked child silently
+  grows beyond the slot
 - for Win32 parented multicontext checks, keep a temporary live window-tree
   probe handy so the proof can explicitly show visible backend child classes and
   hidden helper wrappers
@@ -81,6 +87,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - if the engine-owned software capture path is black or otherwise invalid, use
   an honest asset-bearing desktop capture from `x64/Debug` or `x64/Release`
   instead of publishing a misleading proof image
+- if a supposedly valid proof still shows fake wrapper ownership, oversized
+  child rects, or an early maximize crash, do not update the README screenshot
+  yet
 
 ## AI smoke prompts
 
@@ -105,13 +114,14 @@ Expected smoke behavior:
 - `qwen/qwen3.5-9b` is the current fast local helper baseline when loaded
 - if the first detected helper model is changed locally, keep using the first
   `/v1/models` entry instead of provoking extra model loads during smoke runs
-- when driving local Qwen helpers directly, prefer `reasoning: "off"` because
-  unsupported reasoning settings can silently fall back and waste output budget
+- when driving local Qwen helpers directly, prefer `/v1/responses` with
+  `reasoning.effort = none` so helper output stays visible and does not waste
+  output budget on hidden reasoning
 - when two helper models are loaded, helper-first passes can use up to four
   parallel drafting prompts per model for planning/review work, while the engine
   runtime itself still stays on the first detected model for parity
-- prefer the native LM Studio `/api/v1/chat` helper path so offloaded drafts and
-  the engine runtime share the same request/response shape
+- prefer LM Studio `/v1/responses` for offloaded helper drafts, while keeping
+  the engine runtime itself on the first detected local model for parity
 - if a helper returns blank `content` but useful `reasoning_content`, harvest
   that output for drafting/review instead of discarding the helper pass
 

@@ -91,6 +91,43 @@ The generated project shell now emits an `epoch.project.cmake` fragment and
 uses `__has_include` fallback for the script API so embedded-engine projects can
 prefer `Engine/include/` without instantly breaking older include-root setups.
 
+Launcher scope for that shell should stay flat and direct:
+
+- open project demos directly
+- preload or reopen projects
+- open a clean editor
+- adjust contexts/settings
+- run updates
+- quit cleanly
+
+Do not drift back into layered `Games/Tools/Puzzle` menu stacks when the real
+goal is a project/editor/bootstrap surface.
+
+## Multicontext regression contract
+
+When a pass touches parented Win32 multicontext behavior, prove these rules
+before finishing:
+
+- the parented grid lays out the HWND that actually owns the slot at that
+  moment, not a stale abstract primary handle
+- the visible backend pane for child-window backends is the real child surface:
+  `GLFW30` for Raylib, `SDL_app` for SDL, and `SFML_Window` for SFML
+- helper `EpochChild` hosts for those backends stay hidden once takeover is
+  complete
+- after maximize, the visible child rect matches the intended slot rect instead
+  of silently growing beyond it
+- closing one visible child pane early must not kill the parent editor
+- a proof run must come from `x64/Debug` or `x64/Release` with assets present
+
+Two specific implementation rules should stay written down because they have
+already regressed:
+
+- do not re-query a stale child `GetClientRect(...)` and overwrite the explicit
+  size the grid or `WM_SIZE` handler just asked for
+- do not call top-level backend window-size APIs on a child-docked backend after
+  it has been reparented into the grid, or the backend can reintroduce
+  top-level chrome-sized growth and break maximize stability
+
 ## AI asset policy
 
 Epoch currently documents two engine AI runtime roles:
@@ -119,9 +156,9 @@ for roadmap phrasing, code-shape proposals, doc rewrites, screenshot review,
 bounded subsystem design, and changelog drafting before integrating the final
 answer locally.
 
-When possible, route helper drafting through the native LM Studio
-`/api/v1/chat` endpoint with the same `system_prompt` and `input` shape the
-engine already uses, so helper behavior and runtime parity do not drift apart.
+When possible, route direct helper drafting through LM Studio `/v1/responses`
+with `input` payloads and `reasoning.effort = none`, so helper output stays
+fast, visible, and easy to integrate without provoking hidden reasoning churn.
 
 Git-safe AI assets live under:
 
@@ -148,9 +185,9 @@ automatic curated truth. Review them, delete bad or outdated samples when the
 training direction changes, and only then promote intentional records into
 `Engine/ai/datasets/curated/` or `Engine/ai/evals/`.
 
-When using local Qwen helpers through LM Studio, prefer the supported
-`reasoning: "off"` mode for fast drafting instead of unsupported reasoning
-levels.
+When using local Qwen helpers through LM Studio direct responses, prefer
+`reasoning.effort = none` for fast drafting instead of settings that fall back
+to reasoning-heavy output.
 
 ## Hardware support strategy
 

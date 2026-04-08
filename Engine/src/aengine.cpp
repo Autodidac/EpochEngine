@@ -1799,14 +1799,14 @@ namespace epochnamespace::core
                                 {
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
-                                        "Launcher settings selected.",
+                                        "Launcher contexts/settings selected.",
                                         std::source_location::current());
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::About)
                                 {
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
-                                        "Epoch launcher routes projects into the editor and games into scene mode.",
+                                        "Epoch launcher now routes direct project entry, clean editor launch, updates, and settings without the old game-menu shell.",
                                         std::source_location::current());
                                 }
                                 else
