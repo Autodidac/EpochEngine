@@ -59,11 +59,15 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - use the real editor, not the updater shell, for README proofs
 - prefer a full multicontext frame when validating layout changes
 - if only one backend is under investigation, capture that backend directly
-- use a maximized or 4K-sized editor host when validating six-context layouts
+- prefer the fitted parented multicontext host so six-context layouts stay
+  visible on normal desktop work areas instead of drifting off-screen
 - keep the screenshot tied to the source version shown in the README
 - refresh the README multicontext proof at least every 10th feature version, or
   sooner whenever visible renderer color, layout, or docking behavior changes
   enough that the existing proof is misleading
+- if the engine-owned software capture path is black or otherwise invalid, use
+  an honest asset-bearing desktop capture from `x64/Debug` or `x64/Release`
+  instead of publishing a misleading proof image
 
 ## AI smoke prompts
 

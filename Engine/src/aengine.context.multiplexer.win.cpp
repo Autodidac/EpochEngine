@@ -519,14 +519,33 @@ namespace
             ::wglDeleteContext(window->glContext);
         }
 #endif
-        if (window && window->hdc && window->hwnd)
-            ::ReleaseDC(window->hwnd, window->hdc);
+        if (window && window->hdc)
+        {
+            HWND releaseTarget = nullptr;
+            if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+                releaseTarget = window->hwndChild;
+            else if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+                releaseTarget = window->hwnd;
+            else if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+                releaseTarget = window->host_hwnd;
+
+            if (releaseTarget)
+                ::ReleaseDC(releaseTarget, window->hdc);
+        }
     }
 
     [[nodiscard]] inline HWND primary_window_handle(const epochnamespace::core::WindowData* window) noexcept
     {
         if (!window)
             return nullptr;
+
+        if ((window->type == epochnamespace::core::ContextType::SDL
+                || window->type == epochnamespace::core::ContextType::SFML)
+            && window->host_hwnd
+            && ::IsWindow(window->host_hwnd) != FALSE)
+        {
+            return window->host_hwnd;
+        }
 
         if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
             return window->hwndChild;
@@ -535,6 +554,10 @@ namespace
         if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
             return window->host_hwnd;
 
+        if ((window->type == epochnamespace::core::ContextType::SDL
+                || window->type == epochnamespace::core::ContextType::SFML)
+            && window->host_hwnd)
+            return window->host_hwnd;
         return window->hwndChild ? window->hwndChild : (window->hwnd ? window->hwnd : window->host_hwnd);
     }
 
@@ -865,11 +888,28 @@ namespace epochnamespace::core
             int cols = 1, rows = 1;
             while (cols * rows < totalRequested) (cols <= rows ? ++cols : ++rows);
 
-            const int cellW = (totalRequested == 1) ? cli::window_width : 1277;
-            const int cellH = (totalRequested == 1) ? cli::window_height : 1277;
+            int clientW = cli::window_width;
+            int clientH = cli::window_height;
 
-            const int clientW = cols * cellW;
-            const int clientH = rows * cellH;
+            if (totalRequested > 1)
+            {
+                RECT workArea{};
+                constexpr int kMargin = 24;
+                if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0))
+                {
+                    clientW = (std::max)(
+                        960,
+                        static_cast<int>(workArea.right - workArea.left) - (kMargin * 2));
+                    clientH = (std::max)(
+                        720,
+                        static_cast<int>(workArea.bottom - workArea.top) - (kMargin * 2));
+                }
+                else
+                {
+                    clientW = cols * 640;
+                    clientH = rows * 360;
+                }
+            }
 
             RECT want{ 0, 0, clientW, clientH };
             const DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN;
@@ -1179,15 +1219,9 @@ namespace epochnamespace::core
                         epochnamespace::logger::get(kLogSys).logf(
                             epochnamespace::logger::LogLevel::INFO,
                             std::source_location::current(),
-                            "Initializing Software renderer for hwnd={}",
+                            "Deferring Software init to render thread. host={}",
                             static_cast<void*>(hwnd));
 #endif
-                        epochnamespace::anativecontext::softrenderer_initialize(
-                            ctx,
-                            hwnd,
-                            ctx->width,
-                            ctx->height,
-                            w ? w->onResize : nullptr);
                         break;
 #endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
@@ -1883,19 +1917,7 @@ namespace epochnamespace::core
                     if (!win)
                         continue;
 
-                    HWND closeTarget = nullptr;
-                    if (::IsWindow(win->hwnd) != FALSE)
-                    {
-                        closeTarget = win->hwnd;
-                    }
-                    else if (::IsWindow(win->hwndChild) != FALSE)
-                    {
-                        closeTarget = win->hwndChild;
-                    }
-                    else if (::IsWindow(win->host_hwnd) != FALSE)
-                    {
-                        closeTarget = win->host_hwnd;
-                    }
+                    HWND closeTarget = primary_window_handle(win.get());
 
                     if (!is_docked_child(closeTarget))
                         continue;

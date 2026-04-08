@@ -38,7 +38,6 @@ module;
 
 #include <array>
 #include <cstdint>
-#include <span>
 #include <vector>
 
 #ifndef EPOCH_USING_VULKAN
@@ -56,56 +55,65 @@ namespace epochnamespace::vulkancontext
     using Vertex = Application::Vertex;
 
     // Keep data local to this partition (NOT exported as symbols)
-    [[nodiscard]] inline const std::vector<Vertex>& kCubeVertices() noexcept
+    [[nodiscard]] inline std::vector<Vertex> build_preview_vertices(
+        const epochnamespace::core::Context* ctx)
     {
-        static const std::vector<Vertex> vertices = []()
+        std::vector<Vertex> out{};
+        const auto source = epochnamespace::previewgrid::grid_vertices();
+        const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx);
+        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx);
+        out.reserve(source.size() + markerCount);
+
+        for (const auto& vertex : source)
         {
-            std::vector<Vertex> out{};
-            const auto source = epochnamespace::previewgrid::grid_vertices();
-            out.reserve(source.size());
+            out.push_back(Vertex{
+                { vertex.position.x, vertex.position.y, vertex.position.z },
+                { vertex.color.x, vertex.color.y, vertex.color.z },
+                { 0.0f, 0.0f }
+            });
+        }
 
-            for (const auto& vertex : source)
-            {
-                out.push_back(Vertex{
-                    { vertex.position.x, vertex.position.y, vertex.position.z },
-                    { vertex.color.x, vertex.color.y, vertex.color.z },
-                    { 0.0f, 0.0f }
-                });
-            }
-
-            return out;
-        }();
-
-        return vertices;
-    }
-
-    [[nodiscard]] inline const std::vector<std::uint16_t>& kCubeIndices() noexcept
-    {
-        static const std::vector<std::uint16_t> indices = []()
+        for (std::size_t i = 0; i < markerCount; ++i)
         {
-            std::vector<std::uint16_t> out{};
-            const auto source = epochnamespace::previewgrid::grid_indices();
-            out.reserve(source.size());
+            out.push_back(Vertex{
+                { markerVertices[i].position.x, markerVertices[i].position.y, markerVertices[i].position.z },
+                { markerVertices[i].color.x, markerVertices[i].color.y, markerVertices[i].color.z },
+                { 0.0f, 0.0f }
+            });
+        }
 
-            for (const auto index : source)
-                out.push_back(static_cast<std::uint16_t>(index));
+        return out;
+    }
 
+    [[nodiscard]] inline std::vector<std::uint16_t> build_preview_indices(
+        const epochnamespace::core::Context* ctx)
+    {
+        std::vector<std::uint16_t> out{};
+        const auto source = epochnamespace::previewgrid::grid_indices();
+        out.reserve(source.size() + 8u);
+
+        for (const auto index : source)
+            out.push_back(static_cast<std::uint16_t>(index));
+
+        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx);
+        if (markerCount == 0)
             return out;
-        }();
 
-        return indices;
+        const std::uint16_t baseVertex =
+            static_cast<std::uint16_t>(epochnamespace::previewgrid::grid_vertices().size());
+        for (std::uint16_t i = 0; i < static_cast<std::uint16_t>(markerCount); ++i)
+            out.push_back(static_cast<std::uint16_t>(baseVertex + i));
+
+        return out;
     }
 
-    // Exported accessors (cheap, BMI-safe)
-    export std::span<const Vertex> cube_vertices() noexcept
+    export std::vector<Vertex> preview_vertices_for(const epochnamespace::core::Context* ctx)
     {
-        const auto& vertices = kCubeVertices();
-        return { vertices.data(), vertices.size() };
+        return build_preview_vertices(ctx);
     }
 
-    export std::span<const std::uint16_t> cube_indices() noexcept
+    export std::vector<std::uint16_t> preview_indices_for(const epochnamespace::core::Context* ctx)
     {
-        const auto& indices = kCubeIndices();
-        return { indices.data(), indices.size() };
+        return build_preview_indices(ctx);
     }
 }

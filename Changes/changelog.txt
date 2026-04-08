@@ -1,6 +1,14 @@
 ﻿# Epoch Changelog
 
 
+## [v0.83.67]
+- Removed the fake shared preview wireframe-box clutter from the common preview mesh so the camera look marker is no longer visually fighting placeholder geometry across the non-Vulkan backends.
+- Corrected the SDL/SFML multicontext ownership path around the Win32 multiplexer host/container model instead of treating the backend child HWND as the dock pane itself, and moved those child HWNDs onto the dedicated backend input bridge instead of the full dockable wrapper.
+- Added the first dynamic Vulkan preview-marker path by rebuilding the tiny preview mesh when the shared preview camera revision changes, so Vulkan can follow the same live look-hit indicator concept as the other editor preview backends.
+- Stopped double-initializing the Software backend inside the Win32 multiplexer and made the parented multicontext host auto-fit the desktop work area, which restored an honest six-context Windows editor proof on normal displays.
+- Updated the roadmap, README, runtime docs, and build docs so the project/scripting phase now explicitly supports both duplicated engine-source projects and static engine compilation through `Engine/include/`.
+- Added naming convergence to the steering docs as explicit debt: legacy `aengine*`/orphan naming and misleading labels such as `multiplexer` are now part of the planned professional cleanup instead of being treated as harmless background drift.
+
 ## [v0.83.65]
 - Turned the Systems workspace into a more honest Phase 3 tooling surface by rendering wider engine-generated frame/task graph textures in the dock, adding reusable inline pan/zoom controls, surfacing a first support-tier diagnostic strip for Baseline, Standard, and Extended runtime targets, and hiding SDL/SFML placeholder dock hosts until their real backend child is ready.
 - Tightened the shared GUI layer so dock content uses a real inner content region with stronger padding, narrower available-width calculations, and text/image visibility checks that stop wrapped labels from bleeding into neighboring panes such as the Perspective viewport.

@@ -57,7 +57,7 @@ namespace epochnamespace::vulkancontext
 {
     void Application::createVertexBuffer()
     {
-        const auto vertices = cube_vertices();
+        const auto vertices = preview_vertices_for(bound_context());
         if (vertices.empty())
             throw std::runtime_error("[ Vulkan ] - No vertex data available.");
 
@@ -94,7 +94,7 @@ namespace epochnamespace::vulkancontext
 
     void Application::createIndexBuffer()
     {
-        const auto indices = cube_indices();
+        const auto indices = preview_indices_for(bound_context());
         if (indices.empty())
             throw std::runtime_error("[ Vulkan ] - No index data available.");
 

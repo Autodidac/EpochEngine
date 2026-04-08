@@ -60,6 +60,9 @@ asset set as the main editor host.
 - A real project shell direction with editor-first launcher profiles plus the
   first generated game-project and software/tool-project shell flow, so Epoch
   can bootstrap work the way a serious engine or creative IDE should.
+- Generated project shells are expected to support both duplicated engine-source
+  layouts and static engine integration through `Engine/include/` when a
+  project compiles the engine directly into its own source tree.
 - A software-development path alongside the game path, so the same engine shell
   can generate and run creative tools, editors, and application-style projects
   instead of pretending every project is only a game.
@@ -98,6 +101,9 @@ asset set as the main editor host.
   and macOS.
 - Module-first public engine surface centered around active C++23 modules and
   the exported [epochengine module](Engine/modules/epochengine.ixx).
+- Naming is still converging. Legacy/orphan names from older `aengine*` eras
+  remain transitional debt, and the roadmap now treats consistent professional
+  module/file naming as a real cleanup track instead of leaving it implicit.
 
 ---
 
@@ -110,10 +116,10 @@ least every 10th feature version, or sooner whenever visible renderer color,
 docking, context visibility, or layout behavior changes enough to make the old
 proof misleading.
 
-Windows editor six-context camera/control refresh, source `v0.83.63`:
+Windows editor six-context multicontext proof, source `v0.83.67`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08363.png" alt="Epoch Windows editor six-context camera/control refresh" width="1400" />
+  <img src="Images/readme/windows-multicontext-editor-v08367.png" alt="Epoch Windows editor six-context multicontext proof" width="1400" />
 </p>
 
 ---
@@ -359,15 +365,20 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.63
+v0.83.67
 ```
 
 Highlights:
-- The Systems workspace is now being documented and wired as a real engine
-  tooling surface for frame/task graph work instead of a fake placeholder pane.
-- The AI surface is corrected around the actual two-role engine model:
-  internal EpochBot plus the local MCP/control layer, while
-  `qwen/qwen3.5-9b` is the current validated external development helper.
+- The Windows parented multicontext host now auto-fits the desktop work area so
+  the honest six-context editor proof can stay visible on normal hardware
+  instead of drifting off-screen.
+- SDL, SFML, Vulkan, Raylib, OpenGL, and Software are all back in the fitted
+  editor proof with the shared position marker visible again and the fake
+  preview placeholder boxes removed.
+- The project/scripting direction is now documented around both generated
+  engine-source projects and the static engine-include path, while naming debt
+  such as legacy `aengine*`/`multiplexer` labels is explicitly part of the
+  cleanup roadmap.
 - JSON and JSONL training data remain Git-safe and curatable in-repo, while
   checkpoints, compiled local models, and caches stay local-only.
 - The roadmap now treats 6-core / 1660 Ti-era desktops and modern Linux

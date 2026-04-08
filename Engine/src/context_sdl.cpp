@@ -427,7 +427,7 @@ namespace
             exStyle |= WS_EX_NOPARENTNOTIFY;
             ::SetWindowLongPtrW(s_childWindow, GWL_EXSTYLE, exStyle);
 
-            epochnamespace::core::MakeDockable(s_childWindow, s_hostWindow);
+            epochnamespace::core::MultiContextManager::AttachBackendInputBridge(s_childWindow);
 
             RECT client{};
             ::GetClientRect(s_hostWindow, &client);
@@ -443,7 +443,11 @@ namespace
                 s_height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
+            SDL_ShowWindow(s_window);
+            ::ShowWindow(s_childWindow, SW_SHOWNA);
             ::ShowWindow(s_hostWindow, SW_SHOWNA);
+            if (const HWND dockParent = ::GetParent(s_hostWindow))
+                ::PostMessageW(dockParent, WM_SIZE, 0, MAKELPARAM(s_width, s_height));
         }
 
 #endif
@@ -452,8 +456,11 @@ namespace
         if (ctx->windowData)
         {
 #if defined(_WIN32)
-            ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
-            ctx->windowData->host_hwnd = s_hostWindow;
+            const HWND primaryWindow = (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
+                ? s_hostWindow
+                : s_childWindow;
+            ctx->windowData->hwnd = primaryWindow;
+            ctx->windowData->host_hwnd = primaryWindow ? primaryWindow : s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
 #endif
             ctx->windowData->sdl_window = s_window;
@@ -468,12 +475,14 @@ namespace
         state.running = true;
 
 #if defined(_WIN32)
-        ctx->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
-        ctx->native_window = s_childWindow ? s_childWindow : s_hostWindow;
+        const HWND primaryWindow = (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
+            ? s_hostWindow
+            : s_childWindow;
+        ctx->hwnd = primaryWindow;
+        ctx->native_window = s_childWindow ? s_childWindow : primaryWindow;
 #endif
 
         s_running = true;
-        SDL_ShowWindow(s_window);
         epochnamespace::atlasmanager::register_backend_uploader(
             epochnamespace::core::ContextType::SDL,
             [](const epochnamespace::TextureAtlas& atlas)

@@ -79,6 +79,14 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 If a pass touches Linux or WSL behavior, validate the matching Linux build path
 too instead of pretending Windows proof is enough.
 
+Generated project shells should keep two honest integration modes working:
+
+- duplicated engine source/layout projects
+- static engine compilation through the exported `Engine/include/` surface
+
+Do not document only one path if the project/scripting shell is supposed to
+support both.
+
 ## AI asset policy
 
 Epoch currently documents two engine AI runtime roles:

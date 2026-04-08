@@ -345,36 +345,6 @@ namespace epochnamespace::previewgrid
                     out.indices.push_back(second);
                 };
 
-                auto push_box = [&](Vec3 center, Vec3 halfExtent, Vec3 color)
-                {
-                    const std::array<Vec3, 8> corners{{
-                        { center.x - halfExtent.x, center.y - halfExtent.y, center.z - halfExtent.z },
-                        { center.x + halfExtent.x, center.y - halfExtent.y, center.z - halfExtent.z },
-                        { center.x + halfExtent.x, center.y - halfExtent.y, center.z + halfExtent.z },
-                        { center.x - halfExtent.x, center.y - halfExtent.y, center.z + halfExtent.z },
-                        { center.x - halfExtent.x, center.y + halfExtent.y, center.z - halfExtent.z },
-                        { center.x + halfExtent.x, center.y + halfExtent.y, center.z - halfExtent.z },
-                        { center.x + halfExtent.x, center.y + halfExtent.y, center.z + halfExtent.z },
-                        { center.x - halfExtent.x, center.y + halfExtent.y, center.z + halfExtent.z }
-                    }};
-
-                    constexpr std::array<std::array<int, 2>, 12> edges{{
-                        { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
-                        { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
-                        { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
-                    }};
-
-                    for (const auto& edge : edges)
-                    {
-                        const auto& a = corners[static_cast<std::size_t>(edge[0])];
-                        const auto& b = corners[static_cast<std::size_t>(edge[1])];
-                        push_line(
-                            a.x, a.y, a.z,
-                            b.x, b.y, b.z,
-                            color.x, color.y, color.z);
-                    }
-                };
-
                 constexpr int kHalfExtent = 12;
                 for (int line = -kHalfExtent; line <= kHalfExtent; ++line)
                 {
@@ -395,10 +365,6 @@ namespace epochnamespace::previewgrid
                 push_line(0.0f, 0.02f, 0.0f, 3.5f, 0.02f, 0.0f, 0.95f, 0.30f, 0.28f);
                 push_line(0.0f, 0.02f, 0.0f, 0.0f, 3.5f, 0.0f, 0.28f, 0.92f, 0.40f);
                 push_line(0.0f, 0.02f, 0.0f, 0.0f, 0.02f, 3.5f, 0.33f, 0.58f, 0.98f);
-
-                push_box({ 0.0f, 0.55f, 0.0f }, { 0.55f, 0.55f, 0.55f }, { 0.88f, 0.90f, 0.95f });
-                push_box({ 3.0f, 0.45f, -1.6f }, { 1.25f, 0.45f, 1.0f }, { 0.76f, 0.82f, 0.95f });
-                push_box({ -2.6f, 1.05f, 2.1f }, { 0.55f, 1.05f, 0.55f }, { 0.95f, 0.80f, 0.58f });
                 return out;
             }();
 

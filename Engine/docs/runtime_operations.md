@@ -11,6 +11,8 @@ the same engine-owned path.
 - desktop example wiring still lives under `Engine/examples/ConsoleApplication1/`
 - multicontext behavior depends on the active runtime/config macros documented
   in `aengineconfig_flags.md`
+- the Windows parented multicontext host should fit the active desktop work area
+  by default so the full context matrix remains visible on baseline hardware
 
 ## Project-driven runtime direction
 
@@ -21,6 +23,8 @@ the same engine-owned path.
 - built-in sample games should move behind project templates or script actions
 - the long-term target is a Unity/Unreal-style project shell generated from
   duplicated engine source/layout
+- that same shell must also support the static-compile path where a project
+  embeds the engine directly and consumes the exported `Engine/include/` surface
 - that project shell should support both game projects and software/tool
   projects so Epoch remains a creative software platform as well as a game
   engine
@@ -39,6 +43,9 @@ the same engine-owned path.
   project
 - engine-owned compiled scripting means project/game logic compiles with the
   engine/project build; it is not a text-macro or string-eval layer
+- the scripting/project phase must account for both integration modes:
+  duplicated engine-source projects and static engine builds that include the
+  engine surface from `Engine/include/`
 - the scripting/project dock should expose script lists, source paths, run/build
   actions, and compile/load diagnostics
 - build diagnostics can start as honest source-path validation and loader
@@ -59,10 +66,20 @@ the same engine-owned path.
   available panel
 - support-tier diagnostics should stay visible beside renderer stage flow and
   worker-count information so compatibility policy is visible in the editor
+- docked backend hosts should present one clean pane per active context; nested
+  backend render surfaces are implementation detail, not user-facing dock panes
 - time diagnostics should show the shared simulation clock state: pause/resume,
   scale, fixed-step cadence, accumulator, and simulated time
 - this surface should help unify renderer/backend behavior instead of becoming
   another debug text dump
+
+## Naming and structure direction
+
+- legacy `aengine*` naming and older catch-all labels such as `multiplexer`
+  should be treated as transitional debt, not as the final public structure
+- when a subsystem is touched, file names, module names, and exported surfaces
+  should move toward consistent professional ownership instead of growing more
+  orphan naming
 
 ## Time-system spine
 

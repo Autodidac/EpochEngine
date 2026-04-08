@@ -127,7 +127,8 @@ namespace epochnamespace::vulkancontext
         bool hasSceneViewport = false;
         bool editorPreview = false;
 
-        if (const auto* ctx = bound_context())
+        const auto* ctx = bound_context();
+        if (ctx)
         {
             editorPreview = ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor;
             const auto sceneViewport = ctx->scene_viewport();
@@ -142,6 +143,17 @@ namespace epochnamespace::vulkancontext
         }
 
         const bool renderScenePreview = editorPreview && hasSceneViewport && indexCount > 0;
+        if (renderScenePreview && ctx)
+        {
+            const std::uint64_t previewRevision =
+                epochnamespace::previewgrid::camera_revision_for(ctx);
+            if (previewRevision != previewGeometryRevision)
+            {
+                createVertexBuffer();
+                createIndexBuffer();
+                previewGeometryRevision = previewRevision;
+            }
+        }
 
         if (renderScenePreview)
         {

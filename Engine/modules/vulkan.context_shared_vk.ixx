@@ -188,6 +188,7 @@ namespace epochnamespace::vulkancontext
         bool stopRenderingRequested = false;
 
         std::thread::id renderThreadId{};
+        std::uint64_t previewGeometryRevision = 0;
 
         vk::UniqueInstance instance;
         vk::DebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
@@ -394,8 +395,8 @@ namespace epochnamespace::vulkancontext
         std::unordered_map<const epochnamespace::core::Context*, GuiContextState> guiContexts{};
     };
 
-    export std::span<const Application::Vertex> cube_vertices() noexcept;
-    export std::span<const std::uint16_t>       cube_indices()  noexcept;
+    export std::vector<Application::Vertex> preview_vertices_for(const epochnamespace::core::Context* ctx);
+    export std::vector<std::uint16_t>       preview_indices_for(const epochnamespace::core::Context* ctx);
 
     export Application& bind_vulkan_app(const std::shared_ptr<epochnamespace::core::Context>& ctx);
     export Application* try_get_vulkan_app(const epochnamespace::core::Context* ctx) noexcept;

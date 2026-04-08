@@ -15,19 +15,23 @@ Guiding rules
    scripting, tooling, AI, and runtime travel through one spine.
 2. The UI stays modular. Reusable GUI controls belong in shared GUI layers, not
    in hardcoded editor-only strips.
-3. Epoch is a time-based engine in the simulation sense:
+3. Naming must keep converging toward professional consistency. Legacy orphan
+   names such as old `aengine*`-style units and misleading labels like
+   `multiplexer` should be treated as transitional until files, modules, and
+   exported surfaces match one coherent engine structure.
+4. Epoch is a time-based engine in the simulation sense:
    fixed-step ownership, frame pacing, pause/resume, time scaling, single-step,
    and future replay/timeline hooks.
-4. AI has two in-engine roles only:
-   - internal EpochBot
-   - local MCP/control bots that can both operate the engine and train EpochBot
-5. External local LLMs such as LM Studio are development helpers for drafting,
+5. AI has two in-engine roles only:
+    - internal EpochBot
+    - local MCP/control bots that can both operate the engine and train EpochBot
+6. External local LLMs such as LM Studio are development helpers for drafting,
    evaluation, screenshot review, bounded design help, and acceleration. They
    are not a third runtime AI role.
-6. Git stores repo-safe text artifacts such as JSON, JSONL, schemas, manifests,
+7. Git stores repo-safe text artifacts such as JSON, JSONL, schemas, manifests,
    evals, prompts, and docs. Weights, checkpoints, compiled models, and caches
    stay local or ship through releases only.
-7. Validation must happen from asset-bearing output folders and must clean up
+8. Validation must happen from asset-bearing output folders and must clean up
    windows, stray logs, and bad-folder output afterward.
 
 Compatibility target
@@ -82,6 +86,9 @@ Phase 2 - Project-driven runtime and tool shell
       layer instead of scattered editor state.
 - [x] Add the first project creation flow that duplicates the engine-owned
       shell into either a game project or a software/tool project.
+- [ ] Support both generated-project modes explicitly:
+      duplicated engine source/layout and static engine compilation through the
+      exported `Engine/include/` surface when a project embeds the engine.
 - [x] Add a real scripting/project dock with scripts, source paths, build/run
       actions, and compile/load diagnostics.
 - [ ] Keep the launcher/project shell centered on projects, contexts, settings,
@@ -142,6 +149,9 @@ Phase 6 - UI and editor maturity
       Epoch remains a creative software platform as well as a game engine.
 - [ ] Keep backend child-window ownership and docking clean across all active
       contexts.
+- [ ] Keep the parented multicontext shell auto-fitted to the desktop work area
+      by default so the honest context matrix stays visible on baseline
+      hardware.
 
 Phase 7 - Procedural world and time-node authoring
 --------------------------------------------------
@@ -171,6 +181,8 @@ Phase 8 - Automation, capture, and documentation loop
 Current push priorities
 -----------------------
 1. Finish the remaining project-shell seams and generated project/profile flow.
+   Naming cleanup for transitional legacy units/files belongs here too whenever
+   an area is already being touched.
 2. Keep the Systems workspace growing into a real renderer/runtime tooling
    surface.
 3. Continue carrying the new time spine deeper into runtime and scene
