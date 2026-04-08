@@ -30,6 +30,7 @@
  ***********************************************/
 module;
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <string>
@@ -178,6 +179,71 @@ export namespace epoch::core::time
         double dt_seconds() const noexcept
         {
             return static_cast<double>(dt_ns) * 1e-9;
+        }
+    };
+
+    struct simulation_stats
+    {
+        std::uint64_t frame_index = 0;
+        std::uint64_t simulated_steps = 0;
+        double real_dt_seconds = 0.0;
+        double scaled_dt_seconds = 0.0;
+        double fixed_dt_seconds = 1.0 / 60.0;
+        double accumulator_seconds = 0.0;
+        double simulated_seconds = 0.0;
+        double time_scale = 1.0;
+        bool paused = false;
+        std::uint32_t max_steps_per_frame = 8;
+    };
+
+    struct simulation_clock
+    {
+        frame_clock frame{};
+        double fixed_dt_seconds = 1.0 / 60.0;
+        double accumulator_seconds = 0.0;
+        double simulated_seconds = 0.0;
+        double real_dt_seconds = 0.0;
+        double scaled_dt_seconds = 0.0;
+        double time_scale = 1.0;
+        std::uint64_t simulated_steps = 0;
+        std::uint32_t max_steps_per_frame = 8;
+        bool paused = false;
+        bool step_once_requested = false;
+
+        void start() noexcept;
+        void tick(double real_dt_override = -1.0) noexcept;
+
+        [[nodiscard]] std::uint32_t step_budget() const noexcept;
+        void consume_steps(std::uint32_t count) noexcept;
+
+        void set_paused(bool value) noexcept { paused = value; }
+        void toggle_pause() noexcept { paused = !paused; }
+        void request_single_step() noexcept { step_once_requested = true; }
+
+        void set_time_scale(double value) noexcept
+        {
+            time_scale = (std::clamp)(value, 0.0, 8.0);
+        }
+
+        void set_fixed_dt_seconds(double value) noexcept
+        {
+            fixed_dt_seconds = (std::clamp)(value, 1.0 / 240.0, 1.0 / 15.0);
+        }
+
+        [[nodiscard]] simulation_stats stats() const noexcept
+        {
+            return simulation_stats{
+                .frame_index = frame.frame_index,
+                .simulated_steps = simulated_steps,
+                .real_dt_seconds = real_dt_seconds,
+                .scaled_dt_seconds = scaled_dt_seconds,
+                .fixed_dt_seconds = fixed_dt_seconds,
+                .accumulator_seconds = accumulator_seconds,
+                .simulated_seconds = simulated_seconds,
+                .time_scale = time_scale,
+                .paused = paused,
+                .max_steps_per_frame = max_steps_per_frame
+            };
         }
     };
 }

@@ -51,6 +51,7 @@ the same engine-owned path.
 - `Systems` is now the active tooling surface for:
   - frame graph / render graph
   - task graph / multithreading
+  - time-system diagnostics and controls
   - pacing / perf select
   - diagnostics
 - graph views render as engine-generated textures inside the docked UI
@@ -58,8 +59,26 @@ the same engine-owned path.
   available panel
 - support-tier diagnostics should stay visible beside renderer stage flow and
   worker-count information so compatibility policy is visible in the editor
+- time diagnostics should show the shared simulation clock state: pause/resume,
+  scale, fixed-step cadence, accumulator, and simulated time
 - this surface should help unify renderer/backend behavior instead of becoming
   another debug text dump
+
+## Time-system spine
+
+- Epoch is time-based in the simulation sense, not in an extra-dimensions sense
+- the first shared time spine lives under `core.time`
+- the first milestone is:
+  - fixed-step accumulation
+  - pause / resume
+  - time scaling
+  - single-step
+  - shared stats for editor/runtime/systems visibility
+- future work should route scene play, scripting, pacing, and later
+  timeline/replay behavior through that shared clock ownership instead of
+  inventing parallel timing systems
+- Systems is the first live editor home for this information before fuller
+  timeline/replay tooling exists
 
 ## Hardware support strategy
 
@@ -76,6 +95,18 @@ the same engine-owned path.
 
 Epoch should prefer broad automatic support with explicit opt-in for heavier
 features over forcing every integration on every machine.
+
+## Renderer direction
+
+- prioritize the GPU-driven baseline first:
+  visibility -> surface -> lighting -> temporal -> reconstruction -> present
+- use frame/task graph guidance and temporal history/reconstruction as the main
+  planning surface
+- keep heavier paths such as ray tracing, path tracing, mesh shaders, virtual
+  shadowing, sparse-resource-heavy flows, and similar techniques behind
+  Standard/Extended tiers or explicit project opt-in
+- keep backend convergence visible in the Systems workspace so OpenGL, Vulkan,
+  software, SDL, SFML, and Raylib do not drift without tooling feedback
 
 ## Logging
 
@@ -115,6 +146,15 @@ Data rules:
   `workspace/ai/` paths
 - outdated or bad training data should be deleted or replaced when the training
   direction changes
+
+## Procedural/time-node direction
+
+- the later procedural authoring phase should cover SpeedTree-like modular
+  vegetation/world generation plus time-node authoring
+- treat O2L as a later integration source for that phase when the code is in
+  the workspace
+- do not block the current time-system or Systems milestones on O2L being
+  present now
 
 ## Editor shell direction
 

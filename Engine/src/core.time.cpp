@@ -34,6 +34,7 @@
 
 module;
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -107,5 +108,67 @@ namespace epoch::core::time
         dt_ns = t - last_ns;
         last_ns = t;
         ++frame_index;
+    }
+
+    void simulation_clock::start() noexcept
+    {
+        frame.start();
+        accumulator_seconds = 0.0;
+        simulated_seconds = 0.0;
+        real_dt_seconds = 0.0;
+        scaled_dt_seconds = 0.0;
+        simulated_steps = 0;
+        step_once_requested = false;
+    }
+
+    void simulation_clock::tick(double real_dt_override) noexcept
+    {
+        if (frame.last_ns == 0)
+            frame.start();
+        else
+            frame.tick();
+
+        real_dt_seconds = real_dt_override >= 0.0 ? real_dt_override : frame.dt_seconds();
+        if (real_dt_seconds < 0.0)
+            real_dt_seconds = 0.0;
+
+        if (paused)
+        {
+            scaled_dt_seconds = 0.0;
+            if (step_once_requested)
+                accumulator_seconds += fixed_dt_seconds;
+        }
+        else
+        {
+            scaled_dt_seconds = real_dt_seconds * time_scale;
+            accumulator_seconds += scaled_dt_seconds;
+        }
+
+        const double max_accumulator = fixed_dt_seconds * static_cast<double>((std::max)(max_steps_per_frame, 1u));
+        accumulator_seconds = (std::clamp)(accumulator_seconds, 0.0, max_accumulator);
+    }
+
+    std::uint32_t simulation_clock::step_budget() const noexcept
+    {
+        if (fixed_dt_seconds <= 0.0)
+            return 0;
+
+        const auto requested = static_cast<std::uint32_t>(accumulator_seconds / fixed_dt_seconds);
+        return (std::min)(requested, (std::max)(max_steps_per_frame, 1u));
+    }
+
+    void simulation_clock::consume_steps(std::uint32_t count) noexcept
+    {
+        if (count == 0 || fixed_dt_seconds <= 0.0)
+        {
+            step_once_requested = false;
+            return;
+        }
+
+        const double consumed = fixed_dt_seconds * static_cast<double>(count);
+        accumulator_seconds = (std::max)(0.0, accumulator_seconds - consumed);
+        simulated_seconds += consumed;
+        simulated_steps += count;
+        step_once_requested = false;
     }
 }

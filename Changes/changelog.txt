@@ -319,3 +319,9 @@
 - Wired Win32 child-window wheel and text/key messages back into the editor GUI path so docked editor contexts can finally deliver wheel zoom and live AI chat input instead of relying on dead plumbing.
 - Flattened the preview look-hit marker onto the grid plane and removed the floating camera-to-hit indicator so the center-look spot reads like an editor targeting aid instead of a hovering false collision.
 - Replaced the placeholder asset/actions shell with real editor entity controls for adding meshes, lights, spawns, duplicating the current selection, deleting the current selection, and sending a live scene prompt into the AI panel.
+## [v0.83.66]
+- Rewrote the roadmap around the approved phase order: project/runtime shell, Systems renderer tooling, a new dedicated time-system spine, the two-role AI training spine, UI/editor maturity, later procedural world and time-node authoring, and the automation/capture loop.
+- Added the first shared simulation-clock ownership to `core.time`, including fixed-step accumulation, pause/resume, time scaling, single-step support, and editor-facing stats that can travel through the engine instead of living as per-backend guesswork.
+- Surfaced the new time-spine state in the editor Systems workspace beside the existing render/task graph surfaces, widened the generated graph textures for broader tooling coverage, and kept the compatibility-tier guidance visible alongside the new pacing/time diagnostics.
+- Continued the project/runtime cleanup by removing one more hardcoded sample-launch branch from the older editor loop and keeping the project-driven play path centered on real scene ids.
+- Updated README, runtime/build/smoke/AI docs around the time-based engine direction, the GPU-driven baseline renderer plan, the later SpeedTree-like procedural/node authoring phase with future O2L integration, and the helper-first workflow that can use up to four parallel prompts per loaded local helper model.

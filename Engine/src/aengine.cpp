@@ -94,6 +94,7 @@ import context.multiplexer;
 import context.type;
 import core.context;
 import core.logger;
+import core.time;
 import core.timer;
 
 import aengine.gui;
@@ -259,6 +260,8 @@ namespace epochnamespace::core
         constexpr std::string_view kEngineLog = "Engine.Runtime";
         constexpr std::string_view kEditorLog = "Engine.Editor";
 
+        [[nodiscard]] std::unique_ptr<epochnamespace::scene::Scene> make_scene_from_id(std::string_view scene_id);
+
         template <typename PumpFunc>
         int RunEditorInterfaceLoop(MultiContextManager& mgr, PumpFunc&& pump_events)
         {
@@ -391,31 +394,24 @@ namespace epochnamespace::core
                                         label);
                                 };
 
-                            auto launch_requested_game = [&](std::string_view game_id)
-                                {
-                                    if (game_id == "snake")
-                                        begin_scene([] { return std::make_unique<epochnamespace::snakelike::SnakeLikeScene>(); }, "Snake");
-                                    else if (game_id == "tetris")
-                                        begin_scene([] { return std::make_unique<epochnamespace::tetrislike::TetrisLikeScene>(); }, "Tetris");
-                                    else if (game_id == "frogger")
-                                        begin_scene([] { return std::make_unique<epochnamespace::froggerlike::FroggerLikeScene>(); }, "Frogger");
-                                    else if (game_id == "pacman")
-                                        begin_scene([] { return std::make_unique<epochnamespace::pacmanlike::PacmanLikeScene>(); }, "Pacman");
-                                    else if (game_id == "sokoban")
-                                        begin_scene([] { return std::make_unique<epochnamespace::sokobanlike::SokobanLikeScene>(); }, "Sokoban");
-                                    else if (game_id == "bejeweled")
-                                        begin_scene([] { return std::make_unique<epochnamespace::match3like::Match3LikeScene>(); }, "Match-3");
-                                    else if (game_id == "puzzle")
-                                        begin_scene([] { return std::make_unique<epochnamespace::slidinglike::SlidingPuzzleLikeScene>(); }, "Sliding Puzzle");
-                                    else if (game_id == "minesweep")
-                                        begin_scene([] { return std::make_unique<epochnamespace::minesweeperlike::MinesweeperLikeScene>(); }, "Minesweeper");
-                                    else if (game_id == "fourty")
-                                        begin_scene([] { return std::make_unique<epochnamespace::a2048like::A2048LikeScene>(); }, "2048");
-                                    else if (game_id == "sandsim")
-                                        begin_scene([] { return std::make_unique<epochnamespace::sandsim::SandSimScene>(); }, "Sand Sim");
-                                    else if (game_id == "cellular")
-                                        begin_scene([] { return std::make_unique<epochnamespace::cellularsim::CellularSimScene>(); }, "Cellular");
-                                };
+                            auto launch_requested_game = [&](std::string_view scene_id)
+                                 {
+                                    if (auto scene = make_scene_from_id(scene_id))
+                                    {
+                                        auto label = std::string(scene_id);
+                                        begin_scene(
+                                            [captured = std::move(scene)]() mutable { return std::move(captured); },
+                                            label.c_str());
+                                    }
+                                    else
+                                    {
+                                        logger::get(kEditorLog).logf(
+                                            logger::LogLevel::Error,
+                                            std::source_location::current(),
+                                            "Editor rejected unknown play target '{}'.",
+                                            scene_id);
+                                    }
+                                 };
 
                             if (state == EditorSceneState::Editor)
                             {
@@ -1001,6 +997,7 @@ namespace epochnamespace::core
             std::unique_ptr<epochnamespace::scene::Scene> active_scene{};
             timing::Clock::time_point last_frame{};
             bool has_last_frame{ false };
+            epoch::core::time::simulation_clock simulation{};
         };
 
         struct PreviewLookState
@@ -1469,9 +1466,44 @@ namespace epochnamespace::core
                         if (session.has_last_frame)
                             dt = std::chrono::duration<float>(now - session.last_frame).count();
                         session.last_frame = now;
+                        if (!session.has_last_frame)
+                            session.simulation.start();
                         session.has_last_frame = true;
 
                         bool ctx_running = win->running;
+
+                        auto tick_time_spine = [&]()
+                        {
+                            const auto control = epochnamespace::editor_time_control(ctx.get());
+                            session.simulation.set_paused(control.paused);
+                            session.simulation.set_time_scale(control.time_scale);
+                            session.simulation.set_fixed_dt_seconds(control.fixed_dt_seconds);
+                            session.simulation.tick(dt);
+
+                            const auto stepBudget = session.simulation.step_budget();
+                            if (stepBudget > 0)
+                                session.simulation.consume_steps(stepBudget);
+                            if (control.step_once)
+                                epochnamespace::editor_consume_time_step_request(ctx.get());
+                        };
+
+                        auto publish_time_snapshot = [&]()
+                        {
+                            const auto stats = session.simulation.stats();
+                            epochnamespace::editor_set_time_snapshot(ctx.get(), epochnamespace::EditorTimeSnapshot{
+                                .frame_index = stats.frame_index,
+                                .simulated_steps = stats.simulated_steps,
+                                .real_dt_seconds = stats.real_dt_seconds,
+                                .scaled_dt_seconds = stats.scaled_dt_seconds,
+                                .fixed_dt_seconds = stats.fixed_dt_seconds,
+                                .accumulator_seconds = stats.accumulator_seconds,
+                                .simulated_seconds = stats.simulated_seconds,
+                                .time_scale = stats.time_scale,
+                                .paused = stats.paused
+                            });
+                        };
+
+                        tick_time_spine();
 
                         auto begin_scene = [&](std::string_view scene_id, SessionMode return_mode)
                         {
@@ -1512,6 +1544,7 @@ namespace epochnamespace::core
                             ctx->clear_safe();
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             const auto editor_frame = epochnamespace::editor_run(ctx);
+                            publish_time_snapshot();
 
                             const auto viewport = editor_frame.scene_viewport;
                             const bool mouse_in_scene =

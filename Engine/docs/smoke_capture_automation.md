@@ -34,6 +34,8 @@ When the pass is multicontext-specific, validate:
 - docked window ownership and absence of stray promoted panes
 - backend palette parity when clear colors should match
 - Systems workspace graph clipping and pan/zoom behavior
+- Systems time controls and pacing diagnostics when the pass touches the shared
+  time spine
 
 ## Engine-owned capture flow
 
@@ -88,6 +90,9 @@ Expected smoke behavior:
   `/v1/models` entry instead of provoking extra model loads during smoke runs
 - when driving local Qwen helpers directly, prefer `reasoning: "off"` because
   unsupported reasoning settings can silently fall back and waste output budget
+- when two helper models are loaded, helper-first passes can use up to four
+  parallel drafting prompts per model for planning/review work, while the engine
+  runtime itself still stays on the first detected model for parity
 
 ## Systems/graph checks
 
@@ -95,6 +100,8 @@ Expected smoke behavior:
   threading surfaces
 - generated graph textures must stay clipped to the dock layout
 - graph pan/zoom must work for wide surfaces
+- fixed-step/time diagnostics should remain visible when the time spine is in
+  scope
 - the displayed diagnostics should reinforce the compatibility baseline and
   support-tier strategy instead of hiding them in separate docs only
 - black or empty software captures are not valid proof; they should trigger

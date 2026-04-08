@@ -31,6 +31,7 @@
 module;
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
@@ -131,6 +132,27 @@ namespace epochnamespace
         bool editor_only{ false };
     };
 
+    export struct EditorTimeSnapshot
+    {
+        std::uint64_t frame_index = 0;
+        std::uint64_t simulated_steps = 0;
+        double real_dt_seconds = 0.0;
+        double scaled_dt_seconds = 0.0;
+        double fixed_dt_seconds = 1.0 / 60.0;
+        double accumulator_seconds = 0.0;
+        double simulated_seconds = 0.0;
+        double time_scale = 1.0;
+        bool paused = false;
+    };
+
+    export struct EditorTimeControl
+    {
+        bool paused = false;
+        bool step_once = false;
+        double fixed_dt_seconds = 1.0 / 60.0;
+        double time_scale = 1.0;
+    };
+
     export EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx);
     export void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id);
     export void editor_reset_transient_ui(const core::Context* ctx);
@@ -144,6 +166,9 @@ namespace epochnamespace
     export [[nodiscard]] std::string_view editor_project_kind_name(EditorProjectKind kind) noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind);
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);
+    export void editor_set_time_snapshot(const core::Context* ctx, const EditorTimeSnapshot& snapshot);
+    export [[nodiscard]] EditorTimeControl editor_time_control(const core::Context* ctx);
+    export void editor_consume_time_step_request(const core::Context* ctx);
 
     export void cleanup_chat_context(const core::Context* ctx);
     export void shutdown_chat_system();

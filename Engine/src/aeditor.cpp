@@ -230,6 +230,8 @@ namespace epochnamespace
             std::size_t selectedEntity{ 0 };
             std::vector<std::string> logLines{};
             bool helpersVisible{ true };
+            EditorTimeSnapshot timeSnapshot{};
+            EditorTimeControl timeControl{};
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ EditorWorkspaceTab::Output };
             bool showAboutModal{ false };
@@ -287,6 +289,23 @@ namespace epochnamespace
             constexpr std::size_t kMaxLogLines = 10;
             if (state.logLines.size() > kMaxLogLines)
                 state.logLines.erase(state.logLines.begin(), state.logLines.begin() + static_cast<std::ptrdiff_t>(state.logLines.size() - kMaxLogLines));
+        }
+
+        [[nodiscard]] static std::string format_ms(double seconds)
+        {
+            return std::format("{:.2f} ms", seconds * 1000.0);
+        }
+
+        [[nodiscard]] static std::string format_seconds(double seconds)
+        {
+            return std::format("{:.2f} s", seconds);
+        }
+
+        [[nodiscard]] static std::string format_rate(double dt_seconds)
+        {
+            if (dt_seconds <= 0.0)
+                return "0 Hz";
+            return std::format("{:.0f} Hz", 1.0 / dt_seconds);
         }
 
         struct SurfaceCanvas
@@ -380,7 +399,7 @@ namespace epochnamespace
             const SystemsSurfaceState& systems,
             bool expose_ai_inputs)
         {
-            constexpr int kSurfaceWidth = 960;
+            constexpr int kSurfaceWidth = 1280;
             constexpr int kSurfaceHeight = 188;
             SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 14, 18, 24, 255 });
 
@@ -447,7 +466,7 @@ namespace epochnamespace
             std::size_t workerCount,
             std::size_t systemCount)
         {
-            constexpr int kSurfaceWidth = 960;
+            constexpr int kSurfaceWidth = 1280;
             constexpr int kSurfaceHeight = 188;
             SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 16, 16, 20, 255 });
 
@@ -936,12 +955,15 @@ namespace epochnamespace
             {
                 it->second.initialized = true;
                 it->second.automationCommand = read_editor_automation_command();
+                it->second.timeControl.fixed_dt_seconds = 1.0 / 60.0;
+                it->second.timeControl.time_scale = 1.0;
                 set_project(it->second, "sandbox", false);
                 if (ctx)
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
                 push_editor_log(it->second, "[info] Use the Project, Scripts, AI, Systems, and Output workspaces to drive scene play, scripting, and assistant work.");
                 push_editor_log(it->second, "[info] Scene viewport is owned by the active backend.");
+                push_editor_log(it->second, "[info] Systems now tracks the shared simulation-time spine for pacing and fixed-step diagnostics.");
                 if (it->second.automationCommand == EditorAutomationCommand::SmartUpdate)
                     push_editor_log(it->second, "[info] Auto command armed: smart update.");
                 else if (it->second.automationCommand == EditorAutomationCommand::SourceUpdate)
@@ -1009,6 +1031,46 @@ namespace epochnamespace
         it->second.previewMode = core::ScenePreviewMode::Editor;
         epochnamespace::previewgrid::set_camera_mode(ctx, epochnamespace::previewgrid::CameraMode::Editor);
         epochnamespace::previewgrid::reset_camera(ctx);
+    }
+
+    void editor_set_time_snapshot(const core::Context* ctx, const EditorTimeSnapshot& snapshot)
+    {
+        if (!ctx)
+            return;
+
+        auto& storage = editor_storage();
+        std::scoped_lock lock(storage.mutex);
+        const auto it = storage.states.find(ctx);
+        if (it == storage.states.end())
+            return;
+
+        auto& state = it->second;
+        state.timeSnapshot = snapshot;
+    }
+
+    EditorTimeControl editor_time_control(const core::Context* ctx)
+    {
+        if (!ctx)
+            return {};
+
+        auto& storage = editor_storage();
+        std::scoped_lock lock(storage.mutex);
+        const auto it = storage.states.find(ctx);
+        return it == storage.states.end() ? EditorTimeControl{} : it->second.timeControl;
+    }
+
+    void editor_consume_time_step_request(const core::Context* ctx)
+    {
+        if (!ctx)
+            return;
+
+        auto& storage = editor_storage();
+        std::scoped_lock lock(storage.mutex);
+        const auto it = storage.states.find(ctx);
+        if (it == storage.states.end())
+            return;
+
+        it->second.timeControl.step_once = false;
     }
 
     bool editor_run_script(const core::Context* ctx, std::string_view script_name)
@@ -1500,6 +1562,55 @@ namespace epochnamespace
             gui::property_row("[systems] Render path", "visibility -> surface -> lighting -> temporal -> reconstruction -> present");
             gui::wrapped_label(
                 "The Systems workspace now shows engine-generated graph surfaces with pan/zoom controls. The long-term target is broad automatic hardware support with explicit developer opt-in tiers for heavier backend/libs instead of making every game pay for every integration.",
+                (std::max)(180.0f, log_size.x - 24.0f));
+            gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running");
+            gui::property_row("[time] Frame dt", format_ms(editor.timeSnapshot.real_dt_seconds));
+            gui::property_row("[time] Scaled dt", format_ms(editor.timeSnapshot.scaled_dt_seconds));
+            gui::property_row(
+                "[time] Fixed step",
+                std::string(format_ms(editor.timeSnapshot.fixed_dt_seconds)) + " / " + format_rate(editor.timeSnapshot.fixed_dt_seconds));
+            gui::property_row("[time] Simulated", format_seconds(editor.timeSnapshot.simulated_seconds));
+            gui::property_row("[time] Accumulator", format_ms(editor.timeSnapshot.accumulator_seconds));
+            gui::property_row("[time] Step count", std::to_string(editor.timeSnapshot.simulated_steps));
+
+            const std::array timeButtons{
+                gui::InlineButtonSpec{ .label = editor.timeControl.paused ? "Resume" : "Pause", .width = 74.0f },
+                gui::InlineButtonSpec{ .label = "Step", .width = 52.0f },
+                gui::InlineButtonSpec{ .label = "0.5x", .width = 48.0f },
+                gui::InlineButtonSpec{ .label = "1x", .width = 42.0f },
+                gui::InlineButtonSpec{ .label = "2x", .width = 42.0f }
+            };
+            if (const auto action = gui::inline_button_row(timeButtons, 24.0f, 6.0f))
+            {
+                switch (*action)
+                {
+                case 0: editor.timeControl.paused = !editor.timeControl.paused; break;
+                case 1: editor.timeControl.step_once = true; break;
+                case 2: editor.timeControl.time_scale = 0.5; break;
+                case 3: editor.timeControl.time_scale = 1.0; break;
+                case 4: editor.timeControl.time_scale = 2.0; break;
+                default: break;
+                }
+            }
+
+            const std::array cadenceButtons{
+                gui::InlineButtonSpec{ .label = "30 Hz", .width = 56.0f },
+                gui::InlineButtonSpec{ .label = "60 Hz", .width = 56.0f },
+                gui::InlineButtonSpec{ .label = "120 Hz", .width = 64.0f }
+            };
+            if (const auto action = gui::inline_button_row(cadenceButtons, 24.0f, 6.0f))
+            {
+                switch (*action)
+                {
+                case 0: editor.timeControl.fixed_dt_seconds = 1.0 / 30.0; break;
+                case 1: editor.timeControl.fixed_dt_seconds = 1.0 / 60.0; break;
+                case 2: editor.timeControl.fixed_dt_seconds = 1.0 / 120.0; break;
+                default: break;
+                }
+            }
+
+            gui::wrapped_label(
+                "Epoch is now formalizing a shared time spine here first: fixed-step accumulation, pause/resume, time scaling, and single-step controls are owned by the engine instead of being scattered ad hoc across contexts.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             const auto systemsOrigin = gui::cursor_position();
 

@@ -94,6 +94,12 @@ Future automated passes should use available local helpers aggressively for
 draft reasoning, documentation, screenshot review, and bounded code sketches
 before spending main-model tokens on the final implementation path.
 
+When two local helper models are loaded, supervisor passes should treat them as
+two helper pools with up to four parallel drafting lanes each. Use those lanes
+for roadmap phrasing, code-shape proposals, doc rewrites, screenshot review,
+bounded subsystem design, and changelog drafting before integrating the final
+answer locally.
+
 Git-safe AI assets live under:
 
 - `Engine/ai/datasets/curated/`
@@ -161,6 +167,14 @@ Use the helper model for:
 - roadmap/doc phrasing assistance
 - drafted reasoning and code-outline assistance for bounded engine tasks
 - validating that EpochBot receives visible answers through the engine path
+
+If two helper models are loaded:
+
+- use the first two `/v1/models` entries for helper drafting work
+- fan out up to four concurrent prompts per model when the local server supports
+  it
+- keep the first detected model as the only runtime-parity/in-engine smoke model
+  so the engine does not provoke extra model loads during testing
 
 When the helper returns mostly reasoning text or stalls:
 

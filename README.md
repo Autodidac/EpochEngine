@@ -8,9 +8,10 @@ interactive systems from a single modern codebase. It combines a
 modules-first architecture, two engine AI runtime roles under one
 engine-owned surface, custom UI powered by an automated texture-atlas
 system, built-in C++23 scripting that compiles with the engine and project,
-multi-context rendering, launcher + editor workflows, and a project-driven
-runtime built around engine projects and scenes instead of being stitched
-together from external middleware.
+multi-context rendering, launcher + editor workflows, a project-driven
+runtime built around engine projects and scenes, and a shared time-system
+spine that treats simulation pacing, pause/resume, scaling, and stepping as
+first-class engine ownership instead of ad hoc per-backend behavior.
 
 The active engine lives in:
 
@@ -62,6 +63,10 @@ asset set as the main editor host.
 - A software-development path alongside the game path, so the same engine shell
   can generate and run creative tools, editors, and application-style projects
   instead of pretending every project is only a game.
+- A time-based engine direction in the simulation sense, with fixed-step
+  ownership, pacing diagnostics, pause/resume, time scaling, single-step
+  control, and future replay/timeline hooks being folded into the core engine
+  instead of left to one-off subsystems.
 - Desktop-style editor workflow with scene preview control, command surfaces,
   a modular workspace shell for project/scripts/systems/AI/output docks, and
   backend-aware fallback behavior.
@@ -75,12 +80,19 @@ asset set as the main editor host.
 - Diagnostics, renderer telemetry, runtime logging, and updater plumbing as
   first-class engine systems.
 - A Systems workspace that now renders engine-generated frame/task graph
-  textures with pan/zoom controls and support-tier diagnostics, and is
-  explicitly moving toward deeper multithreaded renderer tooling instead of
-  staying a fake placeholder.
+  textures with pan/zoom controls, support-tier diagnostics, and the first
+  shared time-spine diagnostics, and is explicitly moving toward deeper
+  multithreaded renderer tooling instead of staying a fake placeholder.
 - Broad automatic hardware support as a first-class target, centered on
   6-core / GTX 1660 Ti-era desktops and modern Linux laptops by default, with
   heavier backend/lib support exposed as project-level opt-in tiers.
+- A modern but practical renderer direction: GPU-driven baseline first,
+  centered on visibility -> surface -> lighting -> temporal ->
+  reconstruction -> present, with heavier techniques kept behind support tiers
+  or explicit project opt-in.
+- A later procedural world and time-node authoring phase for SpeedTree-like
+  modular asset/world workflows, with future O2L integration documented as a
+  source for that phase instead of a current dependency.
 - Cross-platform build freedom: Visual Studio, MSBuild, CMake presets, VS Code,
   shell-script workflows, and multiple compiler families across Windows, Linux,
   and macOS.
@@ -95,7 +107,8 @@ These README captures are editor/source proofs, not updater-shell screenshots.
 If a packaged bootstrap release looks older than these, it has not caught up to
 the current source/editor state yet. The multicontext proof should refresh at
 least every 10th feature version, or sooner whenever visible renderer color,
-docking, or layout behavior changes enough to make the old proof misleading.
+docking, context visibility, or layout behavior changes enough to make the old
+proof misleading.
 
 Windows editor six-context camera/control refresh, source `v0.83.63`:
 
