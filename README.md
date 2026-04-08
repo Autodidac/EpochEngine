@@ -6,10 +6,10 @@
 platform** for building games, editors, tools, pipelines, and real-time
 interactive systems from a single modern codebase. It combines a
 modules-first architecture, integrated AI tooling, custom UI powered by an
-automated texture-atlas system, engine-owned compiled scripting,
-multi-context rendering, launcher + editor workflows, and a project-driven
-runtime designed for full engine-level ownership instead of middleware
-assembly.
+automated texture-atlas system, built-in C++23 scripting that compiles with
+the engine and project, multi-context rendering, launcher + editor
+workflows, and a runtime built around engine projects and scenes instead of
+being stitched together from external middleware.
 
 The active engine lives in:
 
@@ -53,9 +53,9 @@ asset set as the main editor host.
   texture/atlas system rather than copied independently into each backend.
 - ECS-style systems, scene plumbing, gameplay modules, and engine-owned runtime
   state.
-- Engine-owned compiled scripting with editor-triggered run actions, a host API
-  for runtime/editor callbacks, and task-graph-backed asynchronous work
-  scheduling.
+- Built-in C++23 scripting that compiles as part of the engine/project, with
+  editor-triggered run actions, a host API for runtime/editor callbacks, and
+  task-graph-backed asynchronous work scheduling.
 - Diagnostics, renderer telemetry, runtime logging, and updater plumbing as
   first-class engine systems.
 - Cross-platform build freedom: Visual Studio, MSBuild, CMake presets, VS Code,
