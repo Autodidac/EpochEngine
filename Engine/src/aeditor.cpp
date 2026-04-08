@@ -51,6 +51,7 @@ module;
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -59,11 +60,13 @@ module aeditor;
 
 import aengine.gui;
 import aengine.version;
+import aspritehandle;
 import core.context;
 import context.type;
 import aengine.input;
 import ascripting.system;
 import epoch.ai;
+import epoch.systems;
 import render.preview_grid;
 
 namespace epochnamespace
@@ -88,6 +91,16 @@ namespace epochnamespace
             None = 0,
             SmartUpdate,
             SourceUpdate
+        };
+
+        struct SystemsSurfaceState
+        {
+            float renderZoom{ 1.0f };
+            float taskZoom{ 1.0f };
+            int renderPan{ 0 };
+            int taskPan{ 0 };
+            SpriteHandle renderSurface{};
+            SpriteHandle taskSurface{};
         };
 
         [[nodiscard]] static bool is_ws_only(std::string_view s) noexcept
@@ -174,6 +187,16 @@ namespace epochnamespace
             }
         };
 
+        [[nodiscard]] static std::string last_chat_line_with_prefix(const AiChat& chat, std::string_view prefix)
+        {
+            for (auto it = chat.lines.rbegin(); it != chat.lines.rend(); ++it)
+            {
+                if (it->rfind(prefix, 0) == 0)
+                    return it->substr(prefix.size());
+            }
+            return {};
+        }
+
         struct EditorEntity
         {
             std::string name{};
@@ -207,6 +230,7 @@ namespace epochnamespace
             bool showSourceUpdateConfirmModal{ false };
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
+            SystemsSurfaceState systems{};
         };
 
         struct ContextPtrHash
@@ -256,6 +280,150 @@ namespace epochnamespace
             constexpr std::size_t kMaxLogLines = 10;
             if (state.logLines.size() > kMaxLogLines)
                 state.logLines.erase(state.logLines.begin(), state.logLines.begin() + static_cast<std::ptrdiff_t>(state.logLines.size() - kMaxLogLines));
+        }
+
+        struct SurfaceCanvas
+        {
+            int width = 0;
+            int height = 0;
+            std::vector<std::uint8_t> pixels{};
+
+            SurfaceCanvas(int w, int h, gui::Color clear)
+                : width(w)
+                , height(h)
+                , pixels(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u, 0)
+            {
+                fill_rect(0, 0, width, height, clear);
+            }
+
+            void set_pixel(int x, int y, gui::Color color) noexcept
+            {
+                if (x < 0 || y < 0 || x >= width || y >= height)
+                    return;
+
+                const std::size_t idx = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width)
+                    + static_cast<std::size_t>(x)) * 4u;
+                pixels[idx + 0] = color.r;
+                pixels[idx + 1] = color.g;
+                pixels[idx + 2] = color.b;
+                pixels[idx + 3] = color.a;
+            }
+
+            void fill_rect(int x, int y, int w, int h, gui::Color color) noexcept
+            {
+                const int x0 = (std::max)(0, x);
+                const int y0 = (std::max)(0, y);
+                const int x1 = (std::min)(width, x + w);
+                const int y1 = (std::min)(height, y + h);
+
+                for (int py = y0; py < y1; ++py)
+                    for (int px = x0; px < x1; ++px)
+                        set_pixel(px, py, color);
+            }
+
+            void stroke_rect(int x, int y, int w, int h, gui::Color color) noexcept
+            {
+                fill_rect(x, y, w, 1, color);
+                fill_rect(x, y + h - 1, w, 1, color);
+                fill_rect(x, y, 1, h, color);
+                fill_rect(x + w - 1, y, 1, h, color);
+            }
+        };
+
+        [[nodiscard]] static SurfaceCanvas build_render_graph_surface(
+            const SystemsSurfaceState& systems,
+            bool expose_ai_inputs)
+        {
+            constexpr int kSurfaceWidth = 560;
+            constexpr int kSurfaceHeight = 164;
+            SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 14, 18, 24, 255 });
+
+            for (int x = 0; x < kSurfaceWidth; x += 40)
+                canvas.fill_rect(x, 0, 1, kSurfaceHeight, gui::Color{ 24, 30, 39, 255 });
+
+            struct Stage
+            {
+                gui::Color fill{};
+                gui::Color accent{};
+            };
+
+            const std::array<Stage, 6> stages{{
+                { { 54, 92, 148, 255 }, { 135, 188, 255, 255 } },
+                { { 53, 117, 142, 255 }, { 102, 216, 255, 255 } },
+                { { 70, 132, 96, 255 }, { 124, 244, 159, 255 } },
+                { { 146, 123, 57, 255 }, { 255, 219, 112, 255 } },
+                { { 109, 84, 145, 255 }, { 203, 164, 255, 255 } },
+                { expose_ai_inputs ? gui::Color{ 157, 88, 112, 255 } : gui::Color{ 118, 86, 123, 255 },
+                  expose_ai_inputs ? gui::Color{ 255, 171, 193, 255 } : gui::Color{ 205, 170, 216, 255 } }
+            }};
+
+            const int stageWidth = (std::max)(76, static_cast<int>(96.0f * systems.renderZoom));
+            const int stageHeight = 52;
+            const int gap = (std::max)(20, static_cast<int>(40.0f * systems.renderZoom));
+            const int baseX = 26 - systems.renderPan;
+            const int y = (kSurfaceHeight - stageHeight) / 2;
+
+            for (std::size_t i = 0; i < stages.size(); ++i)
+            {
+                const int x = baseX + static_cast<int>(i) * (stageWidth + gap);
+                const auto& stage = stages[i];
+
+                if (i != 0)
+                {
+                    const int prevCenter = x - gap + gap / 2;
+                    canvas.fill_rect(prevCenter - 1, y + stageHeight / 2 - 3, gap + 2, 6, gui::Color{ 56, 63, 82, 255 });
+                }
+
+                canvas.fill_rect(x, y, stageWidth, stageHeight, stage.fill);
+                canvas.stroke_rect(x, y, stageWidth, stageHeight, stage.accent);
+                canvas.fill_rect(x + 10, y + 10, (std::max)(16, stageWidth / 4), stageHeight - 20, gui::Color{ 255, 255, 255, 32 });
+                canvas.fill_rect(x + stageWidth - 14, y + 14, 6, stageHeight - 28, stage.accent);
+            }
+
+            return canvas;
+        }
+
+        [[nodiscard]] static SurfaceCanvas build_task_graph_surface(
+            const SystemsSurfaceState& systems,
+            std::size_t workerCount,
+            std::size_t systemCount)
+        {
+            constexpr int kSurfaceWidth = 560;
+            constexpr int kSurfaceHeight = 164;
+            SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 16, 16, 20, 255 });
+
+            const int laneCount = (std::clamp)(static_cast<int>(workerCount == 0 ? 4 : workerCount), 2, 6);
+            const int laneGap = 8;
+            const int laneHeight = (kSurfaceHeight - 22 - laneGap * (laneCount - 1)) / laneCount;
+            const int baseX = 26 - systems.taskPan;
+            const int taskWidth = (std::max)(34, static_cast<int>(56.0f * systems.taskZoom));
+            const int taskGap = (std::max)(10, static_cast<int>(18.0f * systems.taskZoom));
+
+            const std::array<gui::Color, 5> taskColors{{
+                { 86, 142, 255, 255 },
+                { 90, 193, 142, 255 },
+                { 249, 190, 76, 255 },
+                { 198, 116, 255, 255 },
+                { 255, 118, 150, 255 }
+            }};
+
+            for (int lane = 0; lane < laneCount; ++lane)
+            {
+                const int y = 14 + lane * (laneHeight + laneGap);
+                canvas.fill_rect(0, y + laneHeight / 2, kSurfaceWidth, 2, gui::Color{ 38, 42, 52, 255 });
+                canvas.fill_rect(4, y, 8, laneHeight, gui::Color{ 72, 76, 92, 255 });
+
+                const int blocks = 3 + static_cast<int>((systemCount + static_cast<std::size_t>(lane)) % 3u);
+                for (int block = 0; block < blocks; ++block)
+                {
+                    const int x = baseX + block * (taskWidth + taskGap) + lane * 18;
+                    const gui::Color fill = taskColors[(static_cast<std::size_t>(block) + static_cast<std::size_t>(lane)) % taskColors.size()];
+                    canvas.fill_rect(x, y + 3, taskWidth, laneHeight - 6, fill);
+                    canvas.stroke_rect(x, y + 3, taskWidth, laneHeight - 6, gui::Color{ 255, 255, 255, 42 });
+                }
+            }
+
+            return canvas;
         }
 
         [[nodiscard]] EditorAutomationCommand read_editor_automation_command() noexcept
@@ -1084,32 +1252,166 @@ namespace epochnamespace
             const auto manifest = epoch::ai::active_model_manifest();
             const auto training = epoch::ai::default_training_paths();
             gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
-            gui::property_row("[ai] Active model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
-            gui::property_row("[ai] Oracle endpoint", manifest.endpoint);
-            gui::property_row("[ai] Oracle manifest", manifest.manifest_path);
+            gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
+            gui::property_row("[ai] Local endpoint", manifest.endpoint);
+            gui::property_row("[ai] MCP/control manifest", manifest.manifest_path);
             gui::property_row("[ai] Curated datasets", training.curated_dataset_root);
             gui::property_row("[ai] Raw capture", training.local_capture_jsonl);
+            gui::property_row("[ai] MCP capture", training.mcp_capture_jsonl);
             gui::property_row("[ai] Local models", training.model_root);
             gui::property_row("[ai] Checkpoints", training.checkpoint_root);
             gui::wrapped_label(
-                "Epoch now tracks three AI roles: a tiny embedded engine model, an MCP-backed operating layer for retrieval and tool use, and an LM Studio teacher/oracle for evals, bootstrapping, and live editor help.",
+                "Epoch now tracks two intentional engine AI roles: the internal Epoch bot, and a local MCP/control layer that can both steer the engine and teach the bot while the engine is built and operated.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
-                "Raw chat captures land in workspace/auto_train.jsonl as Git-safe staging data and can be curated into Engine/ai/datasets/curated, while compiled checkpoints/models/caches stay local-only.",
+                "Raw chat captures land in workspace/auto_train.jsonl as Git-safe staging data, MCP interaction snapshots land in workspace/mcp_capture.jsonl, curated JSON/JSONL stays in Engine/ai/, and outdated local checkpoints/models/caches should be deleted during training pivots when they no longer match the active data or control model.",
                 (std::max)(180.0f, log_size.x - 24.0f));
+
+            if (gui::button("Capture MCP Snapshot", { 220.0f, 30.0f }))
+            {
+                epoch::ai::append_mcp_capture(epoch::ai::McpCaptureRecord{
+                    .server = "editor",
+                    .tool = "scene-guidance",
+                    .prompt = build_ai_scene_prompt(editor),
+                    .normalized_output = epoch::ai::active_provider_summary(),
+                    .source_path = editor.projectPath
+                });
+                push_editor_log(editor, "[ai] Captured MCP training snapshot.");
+            }
+
+            if (gui::button("Promote Scene Eval", { 220.0f, 30.0f }))
+            {
+                const bool ok = epoch::ai::promote_eval_case(epoch::ai::EvalCase{
+                    .name = editor.projectId + "-scene-guidance",
+                    .prompt = build_ai_scene_prompt(editor),
+                    .expected_contains = editor.projectName,
+                    .project_id = editor.projectId,
+                    .scene_id = editor.activeRuntimeScene
+                });
+                push_editor_log(editor, ok
+                    ? "[ai] Promoted scene eval into Engine/ai/evals."
+                    : "[ai] Failed to promote scene eval.");
+            }
+
+            if (gui::button("Promote Latest Chat Pair", { 220.0f, 30.0f }))
+            {
+                const std::string latestPrompt = last_chat_line_with_prefix(chat, "you> ");
+                const std::string latestReply = last_chat_line_with_prefix(chat, "bot> ");
+                const bool ok = !latestPrompt.empty() && !latestReply.empty()
+                    && latestReply != "(empty reply)"
+                    && epoch::ai::promote_dataset_record(epoch::ai::DatasetRecord{
+                        .prompt = latestPrompt,
+                        .answer = latestReply,
+                        .source = "editor_ai_chat_curated",
+                        .role = "assistant",
+                        .tags = { editor.projectId, editor.activeRuntimeScene, "editor-chat" }
+                    }, "epoch_editor_curated");
+                push_editor_log(editor, ok
+                    ? "[ai] Promoted latest chat pair into Engine/ai/datasets/curated."
+                    : "[ai] No valid chat pair available to curate.");
+            }
             break;
         }
         case EditorWorkspaceTab::Systems:
-            gui::property_row("[systems] Render graph", "planned as a first-class systems surface");
-            gui::property_row("[systems] Task graph", "active through engine-owned async work and script jobs");
+        {
+            const auto orderedSystems = epoch::systems::Registry::instance().ordered_systems();
+            const std::size_t workerCount = (std::max)(std::size_t{ 1 },
+                std::thread::hardware_concurrency() > 0
+                ? static_cast<std::size_t>(std::thread::hardware_concurrency())
+                : std::size_t{ 6 });
+            const float contentWidth = (std::max)(180.0f, log_size.x - 24.0f);
+            const float graphGap = 12.0f;
+            const float graphWidth = (std::max)(180.0f, (contentWidth - graphGap) * 0.5f);
+            const float graphHeight = 132.0f;
+
+            auto control_button = [&](float x, float y, std::string_view label, float width) -> bool
+            {
+                gui::set_cursor({ x, y });
+                return gui::button(label, { width, 24.0f });
+            };
+
             gui::property_row("[systems] Renderer", renderer_name(ctx));
             gui::property_row("[systems] Preview camera", preview_camera_name(ctx));
             gui::property_row("[systems] Runtime target", editor.activeRuntimeScene);
-            gui::property_row("[systems] Graph surface", "next step is an engine-generated texture preview for frame/task graph output");
+            gui::property_row("[systems] Registered systems", std::to_string(orderedSystems.size));
+            gui::property_row("[systems] Worker lanes", std::to_string(workerCount));
+            gui::property_row("[systems] Compatibility target", "6-core / 1660 Ti-era desktop and modern Linux laptops by default");
+            gui::property_row("[systems] Render path", "visibility -> surface -> lighting -> temporal -> reconstruction -> present");
             gui::wrapped_label(
-                "This tab is the landing zone for render graph, frame graph, threading, and multi-backend diagnostics as the editor grows toward an Unreal/Godot-style systems interface.",
+                "The Systems workspace now shows engine-generated graph surfaces with pan/zoom controls. The long-term target is broad automatic hardware support with explicit developer opt-in tiers for heavier backend/libs instead of making every game pay for every integration.",
                 (std::max)(180.0f, log_size.x - 24.0f));
+            const auto systemsOrigin = gui::cursor_position();
+
+            const auto renderCanvas = build_render_graph_surface(
+                editor.systems,
+                epoch::ai::current_provider_mode() == epoch::ai::ProviderMode::McpOperations);
+            const auto taskCanvas = build_task_graph_surface(
+                editor.systems,
+                workerCount,
+                orderedSystems.size);
+
+            editor.systems.renderSurface = gui::register_runtime_surface(
+                "systems-render-graph",
+                std::span<const std::uint8_t>(renderCanvas.pixels.data(), renderCanvas.pixels.size()),
+                static_cast<std::uint32_t>(renderCanvas.width),
+                static_cast<std::uint32_t>(renderCanvas.height));
+            editor.systems.taskSurface = gui::register_runtime_surface(
+                "systems-task-graph",
+                std::span<const std::uint8_t>(taskCanvas.pixels.data(), taskCanvas.pixels.size()),
+                static_cast<std::uint32_t>(taskCanvas.width),
+                static_cast<std::uint32_t>(taskCanvas.height));
+
+            const float leftX = systemsOrigin.x;
+            const float rightX = systemsOrigin.x + graphWidth + graphGap;
+            const float titleY = systemsOrigin.y + 6.0f;
+            const float controlsY = titleY + gui::line_height() + 4.0f;
+            const float imageY = controlsY + 30.0f;
+
+            gui::set_cursor({ leftX, titleY });
+            gui::label("Render / Frame Graph");
+            if (control_button(leftX, controlsY, "-", 28.0f))
+                editor.systems.renderZoom = (std::max)(0.75f, editor.systems.renderZoom - 0.2f);
+            if (control_button(leftX + 34.0f, controlsY, "+", 28.0f))
+                editor.systems.renderZoom = (std::min)(2.0f, editor.systems.renderZoom + 0.2f);
+            if (control_button(leftX + 70.0f, controlsY, "<", 28.0f))
+                editor.systems.renderPan = (std::max)(0, editor.systems.renderPan - 48);
+            if (control_button(leftX + 104.0f, controlsY, ">", 28.0f))
+                editor.systems.renderPan += 48;
+            gui::set_cursor({ leftX, imageY });
+            if (editor.systems.renderSurface.is_valid())
+                gui::image(editor.systems.renderSurface, { graphWidth, graphHeight });
+            else
+                gui::wrapped_label("Render graph surface unavailable.", graphWidth);
+
+            gui::set_cursor({ rightX, titleY });
+            gui::label("Task / Thread Graph");
+            if (control_button(rightX, controlsY, "-", 28.0f))
+                editor.systems.taskZoom = (std::max)(0.75f, editor.systems.taskZoom - 0.2f);
+            if (control_button(rightX + 34.0f, controlsY, "+", 28.0f))
+                editor.systems.taskZoom = (std::min)(2.0f, editor.systems.taskZoom + 0.2f);
+            if (control_button(rightX + 70.0f, controlsY, "<", 28.0f))
+                editor.systems.taskPan = (std::max)(0, editor.systems.taskPan - 48);
+            if (control_button(rightX + 104.0f, controlsY, ">", 28.0f))
+                editor.systems.taskPan += 48;
+            gui::set_cursor({ rightX, imageY });
+            if (editor.systems.taskSurface.is_valid())
+                gui::image(editor.systems.taskSurface, { graphWidth, graphHeight });
+            else
+                gui::wrapped_label("Task graph surface unavailable.", graphWidth);
+
+            gui::set_cursor({ systemsOrigin.x, imageY + graphHeight + 10.0f });
+            gui::property_row("[systems] Render stages", "Capture | Visibility | Surface | Lighting | Temporal | Present");
+            gui::property_row("[systems] Task lanes", "Input | Systems | Scripts | AI | Output");
+            gui::property_row("[systems] Lib strategy", "auto on capable hardware; developer can trim support tiers per game");
+            for (auto* system : orderedSystems)
+            {
+                const auto name = system->name();
+                gui::property_row(
+                    "  system",
+                    std::string(name.data ? name.data : "", name.size));
+            }
             break;
+        }
         case EditorWorkspaceTab::Output:
         default:
             gui::property_row("[info] Scene viewport", std::string(std::to_string(static_cast<int>(result.scene_viewport.size.x))

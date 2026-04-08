@@ -1,6 +1,13 @@
 ﻿# Epoch Changelog
 
 
+## [v0.83.63]
+- Rewrote the roadmap around the real current direction: project-driven runtime, modular editor workspaces, frame/task graph tooling in the Systems surface, broad automatic hardware support, and explicit support tiers for heavier optional backend/libs.
+- Corrected the AI docs from the mistaken three-role wording to the intended two-role engine model: internal EpochBot plus the local MCP/control layer, while local LM Studio models remain development helpers outside the engine runtime role count.
+- Added the explicit local MCP manifest and tightened the AI content/docs around raw capture promotion, staged JSONL policy, and deleting outdated training artifacts when the training direction changes.
+- Continued the live Systems workspace implementation with engine-generated render/task graph surfaces and reusable GUI integration, then re-verified the Windows Debug and Release example builds.
+- Refreshed the README multicontext proof at `v0.83.63` from the real 4K asset-bearing `x64/Debug` editor run after the Vulkan color/layout corrections.
+
 ## [v0.83.62]
 - Moved the editor workspace strip onto reusable GUI controls so the project/runtime shell is less hardcoded in `aeditor.cpp` and more aligned with the modular GUI direction.
 - Refocused the local AI system prompt so the LM Studio oracle teaches EpochBot inside the active project/editor context instead of behaving like a detached generic chat reply.

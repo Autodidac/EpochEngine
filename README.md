@@ -5,11 +5,12 @@
 **Epoch Engine** is a professional **C++23 game engine and creative software
 platform** for building games, editors, tools, pipelines, and real-time
 interactive systems from a single modern codebase. It combines a
-modules-first architecture, a three-role AI spine, custom UI powered by an
-automated texture-atlas system, built-in C++23 scripting that compiles with
-the engine and project, multi-context rendering, launcher + editor
-workflows, and a project-driven runtime built around engine projects and
-scenes instead of being stitched together from external middleware.
+modules-first architecture, two engine AI runtime roles under one
+engine-owned surface, custom UI powered by an automated texture-atlas
+system, built-in C++23 scripting that compiles with the engine and project,
+multi-context rendering, launcher + editor workflows, and a project-driven
+runtime built around engine projects and scenes instead of being stitched
+together from external middleware.
 
 The active engine lives in:
 
@@ -44,15 +45,20 @@ asset set as the main editor host.
   configurations through the active `EPOCH_*` runtime macros. See
   [configuration flags](Engine/docs/aengineconfig_flags.md) and
   [runtime operations](Engine/docs/runtime_operations.md).
-- Three distinct AI roles under one engine-owned surface: a tiny embedded Epoch
-  model for local assistance, an MCP-backed operating layer for retrieval and
-  structured tool work, and an LM Studio teacher/oracle path that can teach the
-  in-engine assistant on the fly during evals, bootstrapping, and editor work.
+- Two engine AI runtime roles under one engine-owned surface: the internal
+  EpochBot and the local MCP/control layer that can both operate the engine and
+  train EpochBot while the engine is being used and built.
+- External local LLMs such as LM Studio are development helpers for testing,
+  evaluation, dataset cleanup, documentation acceleration, and editor/build
+  assistance. They are not a third engine runtime role.
 - Multi-context, multi-backend runtime orchestration across OpenGL, Vulkan,
   SDL3, Raylib, SFML, software, and noop/headless paths.
 - Project-driven workflow that routes projects into the editor and scene play
   into runtime mode, instead of treating the editor as a loose debug shell or a
   permanent launcher for sample games.
+- A software-development path alongside the game path, so the same engine shell
+  can generate and run creative tools, editors, and application-style projects
+  instead of pretending every project is only a game.
 - Desktop-style editor workflow with scene preview control, command surfaces,
   a modular workspace shell for project/scripts/systems/AI/output docks, and
   backend-aware fallback behavior.
@@ -67,6 +73,9 @@ asset set as the main editor host.
   first-class engine systems.
 - A Systems surface that is explicitly moving toward frame-graph, task-graph,
   and multithreaded engine tooling rather than staying a fake placeholder.
+- Broad automatic hardware support as a first-class target, centered on
+  6-core / GTX 1660 Ti-era desktops and modern Linux laptops by default, with
+  heavier backend/lib support exposed as project-level opt-in tiers.
 - Cross-platform build freedom: Visual Studio, MSBuild, CMake presets, VS Code,
   shell-script workflows, and multiple compiler families across Windows, Linux,
   and macOS.
@@ -79,12 +88,14 @@ asset set as the main editor host.
 
 These README captures are editor/source proofs, not updater-shell screenshots.
 If a packaged bootstrap release looks older than these, it has not caught up to
-the current source/editor state yet.
+the current source/editor state yet. The multicontext proof should refresh at
+least every 10th feature version, or sooner whenever visible renderer color,
+docking, or layout behavior changes enough to make the old proof misleading.
 
-Windows editor six-context camera/control refresh, source `v0.83.53`:
+Windows editor six-context camera/control refresh, source `v0.83.63`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08353.png" alt="Epoch Windows editor six-context camera/control refresh" width="1400" />
+  <img src="Images/readme/windows-multicontext-editor-v08363.png" alt="Epoch Windows editor six-context camera/control refresh" width="1400" />
 </p>
 
 ---
@@ -312,6 +323,7 @@ Useful entry points:
 
 - [Engine/docs/build_presets.md](Engine/docs/build_presets.md)
 - [Engine/docs/build_scripts.md](Engine/docs/build_scripts.md)
+- [Engine/docs/ai_build_memory.md](Engine/docs/ai_build_memory.md)
 - [Engine/docs/tools_list.md](Engine/docs/tools_list.md)
 - [Engine/docs/runtime_operations.md](Engine/docs/runtime_operations.md)
 - [Engine/docs/aengineconfig_flags.md](Engine/docs/aengineconfig_flags.md)
@@ -329,18 +341,20 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.62
+v0.83.63
 ```
 
 Highlights:
-- The editor workspace shell now runs through reusable GUI controls instead of
-  baking more tab-strip logic directly into `aeditor.cpp`.
-- The three-role AI spine is documented and landed with repo-safe `Engine/ai/`
-  content, while `qwen/qwen3.5-9b` is the current validated local oracle
-  baseline.
-- JSON and JSONL training data are now treated as Git-safe assets, while only
-  compiled checkpoints, local models, and caches remain outside normal repo
-  history.
+- The Systems workspace is now being documented and wired as a real engine
+  tooling surface for frame/task graph work instead of a fake placeholder pane.
+- The AI surface is corrected around the actual two-role engine model:
+  internal EpochBot plus the local MCP/control layer, while
+  `qwen/qwen3.5-9b` is the current validated external development helper.
+- JSON and JSONL training data remain Git-safe and curatable in-repo, while
+  checkpoints, compiled local models, and caches stay local-only.
+- The roadmap now treats 6-core / 1660 Ti-era desktops and modern Linux
+  laptops as the default automatic compatibility baseline, with heavier support
+  tiers exposed as developer opt-in choices per project.
 
 - `0.83.54` wires real Win32 wheel and text/key events back into the docked
   editor GUI path, which restores wheel zoom and gives the AI chat a live input

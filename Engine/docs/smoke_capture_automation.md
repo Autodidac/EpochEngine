@@ -1,7 +1,7 @@
 # Smoke And Capture Automation
 
-This doc records the current working method for local validation so backend/UI
-passes can be repeated without guessing.
+This doc records the working validation loop for backend, editor, AI, and
+systems passes so future automation can follow one predictable method.
 
 ## Launch root
 
@@ -10,9 +10,9 @@ For Windows editor and multicontext smoke tests, launch from:
 - `x64/Debug/`
 - `x64/Release/`
 
-Those folders carry the runtime assets used by the editor host and the docked
-backend panes. Launching from a source directory is more likely to give false
-asset/font failures.
+Those folders carry the runtime assets used by the main editor host and the
+docked backend panes. Do not launch disposable tests from source folders unless
+you are deliberately testing a broken-path scenario.
 
 ## Standard Windows validation
 
@@ -20,22 +20,22 @@ For runtime/editor/backend changes:
 
 1. Build `ConsoleApplication1 | Debug | x64`
 2. Build `ConsoleApplication1 | Release | x64`
-3. Launch the real binary from `x64/Debug/` for interactive validation
-4. Verify the intended contexts actually appear, render, and respond to input
-5. Close the live windows before finishing the pass
+3. Launch the real binary from `x64/Debug/`
+4. Verify the intended contexts appear, render, and respond to input
+5. Capture proof through the engine where possible
+6. Close live windows before finishing the pass
+7. Clean up disposable logs/captures created outside the proper runtime path
 
-When a pass is multicontext-specific, validate:
+When the pass is multicontext-specific, validate:
 
 - top-row and bottom-row context responsiveness
 - chat text input and caret behavior
 - wheel zoom and camera movement
 - docked window ownership and absence of stray promoted panes
 - backend palette parity when clear colors should match
-- AI dock/provider status when the pass touches local model or oracle behavior
+- Systems workspace graph clipping and pan/zoom behavior
 
 ## Engine-owned capture flow
-
-The engine already supports capture-driven smoke work.
 
 Available knobs:
 
@@ -50,29 +50,22 @@ Capture outputs commonly land under:
 logs/captures/
 ```
 
-Backend capture surfaces already exist for:
-
-- OpenGL
-- Software
-- SDL
-- SFML
-- RayLib
-
-When a desktop screenshot is visually misleading because of WSLg or extra-window
-behavior, prefer the engine-owned capture path.
+Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 
 ## Screenshot guidance
 
-- Use the real editor, not the updater shell, for README proofs.
-- Prefer a full multicontext frame when validating layout changes.
-- If only one backend is under investigation, capture that backend directly to
-  isolate the regression.
-- Use a maximized or 4K-sized editor host when validating six-context layouts.
-- Keep the screenshot tied to the source version shown in the README.
+- use the real editor, not the updater shell, for README proofs
+- prefer a full multicontext frame when validating layout changes
+- if only one backend is under investigation, capture that backend directly
+- use a maximized or 4K-sized editor host when validating six-context layouts
+- keep the screenshot tied to the source version shown in the README
+- refresh the README multicontext proof at least every 10th feature version, or
+  sooner whenever visible renderer color, layout, or docking behavior changes
+  enough that the existing proof is misleading
 
 ## AI smoke prompts
 
-When LM Studio is running locally, use at least one editor-context prompt and
+When a local helper model is running, use at least one editor-context prompt and
 one C++/engine prompt:
 
 - `In Epoch editor, project 'Sandbox' has 6 entities. Suggest one concrete next edit and one gameplay follow-up.`
@@ -80,22 +73,24 @@ one C++/engine prompt:
 
 Expected smoke behavior:
 
-- the selected model is logged
+- the selected helper model is logged
+- the helper path should use the first model returned by `/v1/models` unless a
+  future explicit selector is added
 - the AI dock returns a visible reply
 - raw capture lands in `workspace/auto_train.jsonl`
-- `workspace/auto_train.jsonl` can be reviewed or staged when you are actively
-  curating training data
+- MCP/control snapshots can land in `workspace/mcp_capture.jsonl`
 - no `workspace/ai/*` checkpoints, compiled models, or caches show up as
   staged Git changes
-- `qwen/qwen3.5-9b` is the current preferred local smoke baseline when that
-  model is loaded
+- `qwen/qwen3.5-9b` is the current fast local helper baseline when loaded
 
 ## Systems/graph checks
 
-- The `Systems` tab should remain the landing zone for frame graph, task graph,
-  and threading surfaces.
-- If the graph view is rendered as a generated texture, verify it stays clipped
-  to the dock and does not escape the layout when the graph is wide.
+- `Systems` must remain the landing zone for frame graph, task graph, and
+  threading surfaces
+- generated graph textures must stay clipped to the dock layout
+- graph pan/zoom must work for wide surfaces
+- the displayed diagnostics should reinforce the compatibility baseline and
+  support-tier strategy instead of hiding them in separate docs only
 
 ## Commit pattern memory
 
@@ -104,11 +99,12 @@ The working commit/push pattern is:
 - sync with `origin/main`
 - keep unrelated dirt out of the pass
 - bump `aengine.version.ixx`
-- update docs/README/changelog when the behavior is user-visible
-- use a versioned commit title such as `v0.83.60 ...`
+- update README/docs/changelog when the behavior is user-visible
+- use a versioned commit title such as `v0.83.63 ...`
 - verify builds before pushing
+- do not leave live windows or bad-folder logs behind
 
-## Next automation target
+## Automation target
 
 The next honest automation step is to script:
 
@@ -118,5 +114,5 @@ The next honest automation step is to script:
 - request engine-owned captures
 - verify expected files landed
 - close the runtime cleanly
-
-That should replace ad hoc manual screenshot passes over time.
+- optionally refresh the README proof when the version cadence or visible
+  renderer/layout changes require it

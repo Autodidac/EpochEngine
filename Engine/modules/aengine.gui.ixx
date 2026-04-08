@@ -150,6 +150,12 @@ namespace epochnamespace::gui
 
     export bool button(std::string_view label, Vec2 size) noexcept;
     export bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept;
+    export void image(const SpriteHandle& sprite, Vec2 size) noexcept;
+    export [[nodiscard]] SpriteHandle register_runtime_surface(
+        std::string_view id,
+        std::span<const std::uint8_t> rgba_pixels,
+        std::uint32_t width,
+        std::uint32_t height) noexcept;
     export std::optional<std::size_t> segmented_button_row(
         std::span<const SegmentedButtonSpec> items,
         float height = 26.0f,

@@ -106,6 +106,7 @@ export namespace epoch::ai
     [[nodiscard]] std::string prompts_root();
     [[nodiscard]] std::string manifests_root();
     [[nodiscard]] std::string local_capture_jsonl_path();
+    [[nodiscard]] std::string local_mcp_capture_jsonl_path();
     [[nodiscard]] std::string local_checkpoint_root();
     [[nodiscard]] std::string local_model_root();
     [[nodiscard]] std::string local_cache_root();
@@ -114,4 +115,7 @@ export namespace epoch::ai
     [[nodiscard]] std::string active_provider_summary();
     [[nodiscard]] ModelManifest active_model_manifest();
     [[nodiscard]] TrainingPaths default_training_paths();
+    void append_mcp_capture(const McpCaptureRecord& record);
+    [[nodiscard]] bool promote_dataset_record(const DatasetRecord& record, std::string_view dataset_name = "epoch_editor_curated");
+    [[nodiscard]] bool promote_eval_case(const EvalCase& record, std::string_view suite_name = "editor_ai_smoke");
 }

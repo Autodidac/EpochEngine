@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current public version: `v0.83.62`
+Current public version: `v0.83.63`
 
 ## Architecture highlights
 
@@ -23,6 +23,13 @@ Current public version: `v0.83.62`
   task scheduling rather than ad hoc threaded entry points, and editor-triggered
   compiled scripts now run through an explicit host API instead of a loose
   filewatch-first loop.
+- **Two-role engine AI path**: the intended runtime roles are internal
+  EpochBot and the local MCP/control layer, while external local LLMs remain
+  development helpers for testing, curation, and acceleration rather than a
+  third engine runtime role.
+- **Systems workspace direction**: the editor shell is moving toward real
+  frame/task graph surfaces rendered as engine-generated textures inside the
+  dock UI instead of placeholder text.
 - **Migration map**: formerly archived compatibility surfaces are now either
   preserved in active modules or called out explicitly in
   `Engine/docs/legacy_feature_map.md`.
@@ -31,6 +38,8 @@ Current public version: `v0.83.62`
 
 - Strong module-first organization for the active engine.
 - Broad backend coverage for desktop experimentation and tooling.
+- Clearer support target discipline around 6-core / 1660 Ti-era desktops and
+  modern Linux laptops as the default automatic compatibility baseline.
 - Good separation between active code and archived compatibility material after
   moving the legacy tree under `Engine/`.
 - Startup and shutdown behavior are getting more disciplined as backend-local

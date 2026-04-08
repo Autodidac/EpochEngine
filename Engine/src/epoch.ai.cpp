@@ -199,6 +199,80 @@ namespace epoch::ai
             return out;
         }
 
+        static std::string slugify(std::string_view input)
+        {
+            std::string out;
+            out.reserve(input.size());
+
+            bool previousWasDash = false;
+            for (const unsigned char c : input)
+            {
+                if (std::isalnum(c) != 0)
+                {
+                    out.push_back(static_cast<char>(std::tolower(c)));
+                    previousWasDash = false;
+                    continue;
+                }
+
+                if (!previousWasDash)
+                {
+                    out.push_back('-');
+                    previousWasDash = true;
+                }
+            }
+
+            while (!out.empty() && out.front() == '-')
+                out.erase(out.begin());
+            while (!out.empty() && out.back() == '-')
+                out.pop_back();
+
+            if (out.empty())
+                out = "record";
+
+            return out;
+        }
+
+        static bool append_jsonl_line(const std::filesystem::path& file, const std::string& line)
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(file.parent_path(), ec);
+
+            FILE* handle = nullptr;
+#if defined(_WIN32)
+            if (0 != fopen_s(&handle, file.string().c_str(), "ab"))
+                return false;
+#else
+            handle = std::fopen(file.string().c_str(), "ab");
+            if (!handle)
+                return false;
+#endif
+
+            const std::string payload = line + "\n";
+            const bool ok = std::fwrite(payload.data(), 1, payload.size(), handle) == payload.size();
+            std::fclose(handle);
+            return ok;
+        }
+
+        static bool write_text_file(const std::filesystem::path& file, const std::string& contents)
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(file.parent_path(), ec);
+
+            FILE* handle = nullptr;
+#if defined(_WIN32)
+            if (0 != fopen_s(&handle, file.string().c_str(), "wb"))
+                return false;
+#else
+            handle = std::fopen(file.string().c_str(), "wb");
+            if (!handle)
+                return false;
+#endif
+
+            const bool ok = std::fwrite(contents.data(), 1, contents.size(), handle) == contents.size();
+            std::fclose(handle);
+            return ok;
+        }
+
 #if defined(_WIN32)
         struct WinHttpUrl
         {
@@ -893,7 +967,8 @@ namespace epoch::ai
             " - Do not mimic the user's bad grammar.\n"
             " - Do not include hidden reasoning.\n"
             " - Stay grounded in the current Epoch editor/project context.\n"
-            " - Act like a teaching oracle for EpochBot: prefer concrete editor, scene, engine, and C++ guidance that can teach the in-engine assistant what to do next.\n"
+            " - Prefer concrete editor, scene, engine, and C++ guidance that teaches the internal Epoch bot what to do next.\n"
+            " - The local MCP/control layer can teach and steer EpochBot while it operates; keep responses useful for that training loop instead of acting like a generic assistant.\n"
             " - When suggesting project or file work, keep it relevant to the active engine/runtime context instead of drifting into generic setup advice.\n";
 
         // Best-of with a fast accept to reduce latency.
@@ -960,6 +1035,11 @@ namespace epoch::ai
             msg += local_capture_jsonl_path();
             core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
         }
+        {
+            std::string msg = "AI MCP capture path: ";
+            msg += local_mcp_capture_jsonl_path();
+            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+        }
     }
 
     void shutdown_bot()
@@ -1010,6 +1090,11 @@ namespace epoch::ai
         return default_workspace_root() + "/auto_train.jsonl";
     }
 
+    std::string local_mcp_capture_jsonl_path()
+    {
+        return default_workspace_root() + "/mcp_capture.jsonl";
+    }
+
     std::string local_checkpoint_root()
     {
         return default_workspace_root() + "/ai/checkpoints";
@@ -1050,14 +1135,30 @@ namespace epoch::ai
     {
         ModelManifest manifest{};
         manifest.id = g_selectedModel;
-        manifest.display_name = g_selectedModel.empty() ? std::string("LM Studio teacher/oracle") : g_selectedModel;
         manifest.provider = g_providerMode;
         manifest.endpoint = g_selectedEndpoint;
-        manifest.manifest_path = manifests_root() + "/teacher_oracle_lmstudio.json";
         manifest.tokenizer_path = tokenizer_root() + "/epoch_tokenizer_manifest.json";
         manifest.repo_safe_manifest = true;
         manifest.local_weights_only = true;
         manifest.available = !g_selectedModel.empty();
+
+        switch (g_providerMode)
+        {
+        case ProviderMode::EmbeddedTiny:
+            manifest.display_name = g_selectedModel.empty() ? std::string("Embedded EpochBot") : g_selectedModel;
+            manifest.manifest_path = manifests_root() + "/embedded_tiny_epoch.json";
+            break;
+        case ProviderMode::McpOperations:
+            manifest.display_name = g_selectedModel.empty() ? std::string("Local MCP control/training bot") : g_selectedModel;
+            manifest.manifest_path = manifests_root() + "/local_mcp_control.json";
+            break;
+        case ProviderMode::LmStudioOracle:
+        default:
+            manifest.display_name = g_selectedModel.empty() ? std::string("LM Studio development helper") : g_selectedModel;
+            manifest.manifest_path = manifests_root() + "/teacher_oracle_lmstudio.json";
+            break;
+        }
+
         return manifest;
     }
 
@@ -1066,10 +1167,12 @@ namespace epoch::ai
         return TrainingPaths{
             .workspace_root = default_workspace_root(),
             .local_capture_jsonl = local_capture_jsonl_path(),
+            .mcp_capture_jsonl = local_mcp_capture_jsonl_path(),
             .checkpoint_root = local_checkpoint_root(),
             .model_root = local_model_root(),
             .cache_root = local_cache_root(),
-            .curated_dataset_root = curated_datasets_root()
+            .curated_dataset_root = curated_datasets_root(),
+            .eval_root = evals_root()
         };
     }
 
@@ -1094,18 +1197,8 @@ namespace epoch::ai
         oss << "\"answer\":\"" << json_escape(answer) << "\",";
         oss << "\"source\":\"" << json_escape(source) << "\"";
         oss << "}\n";
-
-        // Append (best-effort)
-        FILE* f = nullptr;
-#if defined(_WIN32)
-        if (0 == fopen_s(&f, file.string().c_str(), "ab"))
-#else
-        f = std::fopen(file.string().c_str(), "ab");
-        if (f)
-#endif
+        if (append_jsonl_line(file, trim(oss.str())))
         {
-            std::fwrite(oss.str().data(), 1, oss.str().size(), f);
-            std::fclose(f);
             static bool loggedCapturePath = false;
             if (!loggedCapturePath)
             {
@@ -1116,12 +1209,92 @@ namespace epoch::ai
             }
         }
     }
-std::string send_to_bot(const std::string& user_text)
+
+    void append_mcp_capture(const McpCaptureRecord& record)
+    {
+        const TrainingPaths paths = default_training_paths();
+        const std::filesystem::path file = paths.mcp_capture_jsonl;
+
+        std::ostringstream oss;
+        oss << "{";
+        oss << "\"server\":\"" << json_escape(record.server) << "\",";
+        oss << "\"tool\":\"" << json_escape(record.tool) << "\",";
+        oss << "\"prompt\":\"" << json_escape(record.prompt) << "\",";
+        oss << "\"normalized_output\":\"" << json_escape(record.normalized_output) << "\",";
+        oss << "\"source_path\":\"" << json_escape(record.source_path) << "\"";
+        oss << "}";
+
+        if (append_jsonl_line(file, oss.str()))
+        {
+            static bool loggedCapturePath = false;
+            if (!loggedCapturePath)
+            {
+                loggedCapturePath = true;
+                std::string msg = "AI appended MCP capture: ";
+                msg += file.string();
+                core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+            }
+        }
+    }
+
+    bool promote_dataset_record(const DatasetRecord& record, std::string_view dataset_name)
+    {
+        const std::filesystem::path datasetFile =
+            std::filesystem::path(curated_datasets_root()) / (slugify(dataset_name) + ".jsonl");
+
+        std::ostringstream oss;
+        oss << "{";
+        oss << "\"prompt\":\"" << json_escape(record.prompt) << "\",";
+        oss << "\"answer\":\"" << json_escape(record.answer) << "\",";
+        oss << "\"source\":\"" << json_escape(record.source) << "\",";
+        oss << "\"role\":\"" << json_escape(record.role) << "\",";
+        oss << "\"tags\":[";
+        for (std::size_t i = 0; i < record.tags.size(); ++i)
+        {
+            if (i != 0)
+                oss << ",";
+            oss << "\"" << json_escape(record.tags[i]) << "\"";
+        }
+        oss << "]";
+        oss << "}";
+
+        return append_jsonl_line(datasetFile, oss.str());
+    }
+
+    bool promote_eval_case(const EvalCase& record, std::string_view suite_name)
+    {
+        const std::string fileName = slugify(suite_name) + "-" + slugify(record.name) + ".json";
+        const std::filesystem::path evalFile = std::filesystem::path(evals_root()) / fileName;
+
+        std::ostringstream oss;
+        oss << "{\n";
+        oss << "  \"suite\": \"" << json_escape(suite_name) << "\",\n";
+        oss << "  \"name\": \"" << json_escape(record.name) << "\",\n";
+        oss << "  \"prompt\": \"" << json_escape(record.prompt) << "\",\n";
+        oss << "  \"expected_contains\": \"" << json_escape(record.expected_contains) << "\",\n";
+        oss << "  \"project_id\": \"" << json_escape(record.project_id) << "\",\n";
+        oss << "  \"scene_id\": \"" << json_escape(record.scene_id) << "\"\n";
+        oss << "}\n";
+
+        return write_text_file(evalFile, oss.str());
+    }
+
+    std::string send_to_bot(const std::string& user_text)
     {
         if (!g_bot) init_bot();
         if (!g_bot) return {};
 
         const auto reply = g_bot->submit(user_text);
+        if (!reply.text.empty())
+        {
+            append_mcp_capture(McpCaptureRecord{
+                .server = "local-lmstudio",
+                .tool = "chat",
+                .prompt = user_text,
+                .normalized_output = reply.text,
+                .source_path = active_model_manifest().manifest_path
+            });
+        }
         return reply.text;
     }
 }

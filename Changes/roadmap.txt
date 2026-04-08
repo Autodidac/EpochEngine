@@ -1,86 +1,156 @@
-﻿Epoch Spine Roadmap
-==================
+Epoch Engine Roadmap
+====================
 
-Objective
----------
-Converge Epoch onto one reusable cross-platform spine while preserving the old
-timing and logging behavior that already works across the engine, editor, and
-game code.
+Mission
+-------
+Build Epoch into a professional engine and creative software platform with one
+engine-owned runtime, one modular editor shell, real game-project generation,
+real software-project generation, a custom atlas-driven UI pipeline, and broad
+automatic hardware support instead of a pile of disconnected demos or
+middleware wrappers.
 
-Immediate spine priorities
+Guiding rules
+-------------
+1. The engine owns the workflow: project creation, editing, play/run,
+   scripting, tooling, AI, and runtime should all travel through the same
+   spine.
+2. The UI must stay modular. Reusable GUI controls belong in the shared GUI
+   layer, not as hardcoded editor-only strips.
+3. AI has two runtime roles only:
+   - internal EpochBot inside the engine
+   - local MCP/control bots that can both operate the engine and train EpochBot
+4. External local LLMs such as LM Studio are development helpers for testing,
+   curation, evaluation, and acceleration. They are not a third engine AI role.
+5. Git stores repo-safe text artifacts such as JSON, JSONL, manifests, evals,
+   prompts, schemas, and docs. Weights, checkpoints, compiled local models, and
+   caches stay local or ship through releases only.
+6. Validation must happen from asset-bearing output folders and must clean up
+   live windows/log clutter afterward.
+
+Compatibility target
+--------------------
+- Default automatic support target:
+  - 6-core desktop CPU class
+  - GTX 1660 Ti-era GPU class
+  - modern Linux laptop/desktop environments
+- Goal:
+  - sensible defaults that run across mixed Windows/Linux hardware without
+    demanding every optional graphics/runtime library on every machine
+- Support tiers:
+  - Baseline tier:
+    software + stable graphics backends, moderate memory footprint, editor-first
+  - Standard tier:
+    OpenGL/Vulkan-capable hardware with full editor/runtime tooling
+  - Extended tier:
+    heavier backend/libs, richer rendering paths, larger caches, more optional
+    tooling that game developers can enable per project
+- The roadmap should keep backward and forward compatibility in mind for laptops
+  and mid-range desktops, with project-level opt-in for heavier features rather
+  than forcing them globally.
+
+Phase 1 - Spine foundation
 --------------------------
-1. Keep public engine syntax stable while moving ownership under canonical Epoch core services.
-2. Treat time as a reusable frame-data service, not an editor-only helper.
-3. Push rendering architecture toward:
-   visibility -> surface data -> lighting -> temporal history -> reconstruction -> present.
-4. Keep AI work vendor-neutral and optional; the engine should prepare data for reconstruction rather than hard-wire a single upscaler.
+- [x] Preserve the working logging/timing behavior while moving ownership into
+      canonical core services.
+- [x] Keep the engine running through one shared runtime/perf/logging spine.
+- [x] Normalize active module/file ownership instead of growing a second naming
+      mess beside Epoch.
 
-Execution plan
---------------
+Phase 2 - Project-driven runtime and tool shell
+-----------------------------------------------
+- [ ] Replace fake editor launch paths with real project/scene play from the
+      active project.
+- [ ] Turn `Run Game` into project play/testing instead of a permanent built-in
+      sample-game launcher.
+- [ ] Move built-in sample games behind project templates or script entries.
+- [ ] Finish the project shell in `aeditor.scene.cpp` so project profiles,
+      script profiles, runtime scene ids, and seed entities live in the scene
+      layer instead of scattered editor state.
+- [ ] Add the first real project creation flow that duplicates the engine-owned
+      source/layout into either a game project or a software/tool project the
+      way Unity or Unreal would for games and a creative IDE would for tools.
+- [ ] Add a proper scripting/project dock that shows scripts, source paths,
+      build/run actions, and compile/load diagnostics.
+- [ ] Make sure the project shell can target both playable scenes and software
+      runtime surfaces so Epoch stays a creative software platform, not only a
+      game launcher/editor.
+- [ ] Keep the live editor shell centered on reusable workspaces:
+      `Project`, `Scripts`, `Systems`, `AI`, and `Output`.
 
-Phase 1 - Spine consolidation
------------------------------
-- [x] Keep `core.logger` syntax stable everywhere.
-- [x] Move timing ownership under `core.time` while preserving `core.timer` call shapes.
-- [x] Audit duplicated ownership boundaries before deleting anything.
+Phase 3 - Systems workspace and renderer tooling
+------------------------------------------------
+- [ ] Turn `Systems` into a real engine tooling surface, not placeholder text.
+- [ ] Render frame graph / render graph views as engine-generated textures
+      inside the docked UI.
+- [ ] Render task graph / threading views beside them with pan/zoom and clipped
+      layout behavior for long-wide graphs.
+- [ ] Surface pacing, perf select, renderer stage flow, worker counts, and
+      compatibility tier info directly in the Systems workspace.
+- [ ] Keep the renderer moving toward:
+      visibility -> surface -> lighting -> temporal -> reconstruction -> present
+- [ ] Use this tooling to guide future renderer work across OpenGL, Vulkan,
+      software, SDL, SFML, and Raylib instead of letting backends drift.
 
-Phase 1 notes
--------------
-- Legacy logging and timing entry points still compile unchanged across engine, editor, scenes, and backend modules.
-- Canonical timing ownership lives under `core.time`, while the old `core.timer` facade remains the compatibility surface.
-- Runtime/perf selection is now part of the active spine path; broader context adoption should continue in Phase 2 instead of forcing premature deletions.
-
-Phase 2 - Runtime and platform stabilization
---------------------------------------------
-- [ ] Keep runtime startup/shutdown honest across OpenGL, SDL, Raylib, SFML, software, and Vulkan.
-- [ ] Finish window/context ownership in the Epoch platform layer.
-- [ ] Verify that editor and game runtimes can consume the same core services without dragging each other around.
-- [ ] Keep Windows and Linux build paths in sync instead of fixing one platform at a time.
-- [ ] Replace editor-side built-in sample-game launching with real project/scene play flow.
-- [ ] Land the three-role AI spine: embedded tiny model, MCP operating layer, and LM Studio teacher/oracle.
-
-Phase 2 notes
--------------
-- Platform policy now owns updater-shell backend choice, source snapshot archive type, parented-window support, and the single-context preference used by runtime/perf decisions.
-- Runtime/perf startup now logs through `core.logger` while continuing to use `core.time` as the canonical timing owner.
-- Active runtime console chatter is being folded into `core.logger`/`core.log`, while summary-style diagnostics now default into the same sink instead of bypassing it through raw `std::cout`.
-- `runtime.cpp` and `epoch.engine` now consume the same shared `platform.runtime` frame-profile path instead of maintaining separate capability/perf/logging decisions.
-- The retired legacy archive has been collapsed into active ownership plus `Engine/docs/legacy_feature_map.md`, so further spine work should land directly in Epoch-owned modules instead of parking code in archive folders.
-- Active module/file naming is being normalized to one-period families like `core.*`, `context.*`, `platform.*`, `render.*`, and backend surfaces such as `vulkan.*`, with multi-dot legacy names being retired instead of preserved as a second spine.
-- The editor still carries a hard-wired built-in sample-game route; the intended replacement is project/scene play from duplicated engine-source project shells, not a permanent in-editor mini-game menu.
-- The live editor shell is now expected to center on `Project`, `Scripts`, `AI`, `Systems`, and `Output` workspaces backed by reusable GUI controls instead of scattered helper panels.
-- AI data policy must stay split: curated repo-safe datasets/manifests/evals in `Engine/ai/`, Git-safe staging captures such as `workspace/auto_train.jsonl`, and compiled checkpoints/models/caches in local `workspace/ai/` paths only.
-
-Phase 3 - Renderer direction
-----------------------------
-- [ ] Reshape the renderer around reusable frame data instead of a monolithic final-frame pass chain.
-- [ ] Formalize visibility, surface, lighting, temporal, and presentation boundaries.
-- [ ] Keep current backends working while making room for sparse lighting and reconstruction.
-- [ ] Move engine/context pacing further through the `perf.select` path instead of backend-local throttling folklore.
-- [ ] Surface frame graph/task graph/multithreading tooling through the Systems workspace without breaking the editor shell.
-
-Phase 3 notes
--------------
-- `platform.budgets::FramePolicy` now carries explicit lighting, temporal-history, and vendor-neutral reconstruction intent so the renderer can evolve toward visibility -> surface -> lighting -> temporal -> reconstruction -> present without hard-wiring one AI vendor path.
-- The shared runtime frame-profile now exposes renderer-facing policy data directly to engine consumers, which keeps context/runtime selection moving toward the spine instead of backend-local folklore.
-- The Systems workspace should eventually render frame-graph and task-graph views as engine-generated surfaces inside the editor, even when those graphs are too wide for a single pane.
-
-Phase 4 - Tooling and smoke coverage
+Phase 4 - Two-role AI training spine
 ------------------------------------
-- [ ] Improve scripted build/test/package flows.
-- [ ] Keep docs and smoke harnesses runnable locally.
-- [ ] Capture backend regressions without pretending experimental paths are stable.
-- [ ] Keep updater-shell build artifacts isolated from normal developer build trees.
+- [ ] Keep only two engine AI runtime roles:
+      internal EpochBot and local MCP/control bots.
+- [ ] Let the local MCP/control layer both operate the engine and feed the
+      training loop for EpochBot.
+- [ ] Treat `append_training_sample()` and MCP capture as raw/staged data, then
+      promote curated records into `Engine/ai/datasets/curated/` and
+      `Engine/ai/evals/`.
+- [ ] Document and support deleting outdated or bad training artifacts when the
+      training direction changes, instead of preserving stale AI behavior.
+- [ ] Keep repo-safe AI assets under `Engine/ai/` and local compiled artifacts
+      under `workspace/ai/`.
+- [ ] Use external local LLMs only as development helpers for testing,
+      evaluation, dataset cleanup, and acceleration of the build/docs workflow.
 
-Phase 4 notes
--------------
-- Engine-owned frame capture already exists across multiple backends; the next tooling step is to make the documented smoke/capture workflow the default validation path instead of relying on ad hoc desktop screenshots.
-- The build/test/docs method now needs to preserve commit discipline too: sync with `origin/main`, keep unrelated dirt out of the pass, validate from asset-bearing output folders, and close live windows after capture.
+Phase 5 - UI and editor maturity
+--------------------------------
+- [ ] Replace ad hoc editor-only tab logic with a full modular GUI workspace
+      system backed by shared controls and the atlas-driven UI pipeline.
+- [ ] Add a better project browser, script browser, AI panel, output surface,
+      and systems tooling that feels closer to Unreal/Godot than a debug shell.
+- [ ] Support application/tool-style editor projects alongside game projects so
+      the same shell can build creative software with custom UI, systems, and
+      runtime panels.
+- [ ] Expand the docks to cover project workflows, scripting workflows, engine
+      systems, and scene/runtime control without introducing extra unmanaged
+      child windows.
+- [ ] Keep context ownership and docking clean across all backends.
+
+Phase 6 - Automation, capture, and documentation loop
+-----------------------------------------------------
+- [ ] Make engine-owned smoke/capture validation the default proof path.
+- [ ] Always build from the repo root and launch from asset-bearing output
+      folders such as `x64/Debug/` or `x64/Release/`.
+- [ ] Avoid stray logs and bad-folder runs; clean temporary capture/debug output
+      when it was only created for a disposable validation pass.
+- [ ] Refresh the README multicontext screenshot automatically every 10th
+      feature version, or earlier whenever renderer layout/palette/visible
+      docking behavior changes enough that the existing proof is misleading.
+- [ ] Keep docs strict enough that future automation can follow the build,
+      launch, test, capture, commit, and push loop without improvising.
+
+Current push priorities
+-----------------------
+1. Finish the project-runtime seam and project/script docks.
+2. Keep the Systems workspace growing into a real frame/task graph tool.
+3. Tighten the two-role AI capture/training path.
+4. Keep hardware support broad by default and opt-in for heavier features.
+5. Use docs as the steering surface so future AI-driven work can move quickly
+   without losing the intended design.
 
 Acceptance criteria
 -------------------
-- One canonical Epoch timing owner.
-- Existing engine/game logging syntax still compiles unchanged.
-- Renderer docs reflect the actual forward direction: lighting and temporal data first, AI reconstruction later.
-- No fake cleanup that breaks the engine just to look modern.
-
+- The editor runs projects and scenes honestly instead of pretending through
+  sample launchers.
+- The Systems workspace shows real graph/tooling surfaces.
+- The AI path is documented and implemented as two engine runtime roles only.
+- Repo-safe training data is easy to curate and compiled AI artifacts stay out
+  of normal history.
+- The engine remains usable across the target hardware baseline with project
+  opt-in for heavier support tiers.
+- The docs and smoke loop are strong enough to guide future automated passes.

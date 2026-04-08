@@ -1,7 +1,8 @@
 # Build Scripts
 
-The helper scripts live in `Engine/`. They are optional, but they are the
-fastest way to get a repeatable local build.
+The helper scripts under `Engine/` are optional, but they are still the fastest
+repeatable path for local builds when you want the tree, output folders, and
+docs flow to stay predictable.
 
 ## `build.sh`
 
@@ -13,10 +14,11 @@ Run from `Engine/`:
 
 What it does:
 
-- Configures with `-S "$SCRIPT_DIR"` and an out-of-tree build under `Engine/Bin/`.
-- Enables module scanning flags.
-- Tries to discover `VCPKG_ROOT` automatically unless `--no-vcpkg` is used.
-- Builds the target and generates API docs when Doxygen is available.
+- configures from the `Engine/` source root
+- builds into out-of-tree locations under `Engine/Bin/`
+- enables module scanning flags
+- attempts to discover `VCPKG_ROOT` unless `--no-vcpkg` is used
+- generates docs when Doxygen is available
 
 Examples:
 
@@ -33,8 +35,8 @@ cd Engine
 ./run.sh [gcc|clang] [Debug|Release] [-- <runtime args>]
 ```
 
-The script launches the `epoch` runtime from the matching `Engine/Bin/...`
-output directory.
+This launches the `epoch` runtime from the matching `Engine/Bin/...` output
+directory.
 
 ## `install.sh`
 
@@ -43,7 +45,7 @@ cd Engine
 ./install.sh [gcc|clang] [Debug|Release]
 ```
 
-Installs to `Engine/built/bin/<Compiler>-<Config>`.
+Installs into `Engine/built/bin/<Compiler>-<Config>`.
 
 ## `clean.sh`
 
@@ -59,34 +61,34 @@ Removes:
 - `Engine/built/`
 - top-level CMake cache/state under `Engine/`
 
-## Related docs
-
-- `build_presets.md`
-- `runtime_operations.md`
-- `smoke_capture_automation.md`
-- `tools_list.md`
-
 ## Commit and test discipline
 
-When a pass changes runtime/editor/backend behavior, the current working method is:
+When a pass changes runtime, editor, backend, AI, or capture behavior:
 
-- sync with `origin/main` before starting if the local branch has drifted
-- keep unrelated dirty files out of the commit instead of rolling them into a "cleanup" blob
-- bump the source version in `Engine/modules/aengine.version.ixx`
-- use versioned commit titles such as `v0.83.60 ...`
+- sync with `origin/main` if the local branch has drifted
+- keep unrelated dirt out of the commit
+- bump `Engine/modules/aengine.version.ixx`
+- use a versioned commit title such as `v0.83.63 ...`
 - rebuild `ConsoleApplication1` in both `Debug|x64` and `Release|x64`
-- launch from the asset-bearing `x64/Debug/` or `x64/Release/` runtime, not from a source folder
-- close live windows after validation so the next pass starts from a known state
+- launch from the asset-bearing `x64/Debug/` or `x64/Release/` runtime, not
+  from a source folder
+- close live windows after validation
+- avoid disposable runs from bad folders that leave stray logs or captures in
+  the wrong place
 
-If the pass touches Linux or WSL-facing behavior, run the matching WSL build path too instead of validating Windows only.
+If a pass touches Linux or WSL behavior, validate the matching Linux build path
+too instead of pretending Windows proof is enough.
 
 ## AI asset policy
 
-Epoch now uses three AI roles:
+Epoch currently documents two engine AI runtime roles:
 
-- embedded tiny Epoch model for local English + C++ assistance
-- MCP-backed operating layer for retrieval, operations, and normalized capture
-- LM Studio teacher/oracle for evals, bootstrapping, and on-the-fly teaching of EpochBot during editor/runtime work
+- internal EpochBot inside the engine/editor/runtime
+- local MCP/control bots that can operate the engine and also train EpochBot
+
+External local LLMs such as LM Studio are development helpers. They are useful
+for testing, curation, evaluation, and speeding up documentation/build work,
+but they are not a third engine runtime role.
 
 Git-safe AI assets live under:
 
@@ -97,30 +99,64 @@ Git-safe AI assets live under:
 - `Engine/ai/tokenizer/`
 - `Engine/ai/prompts/`
 
-Compiled AI outputs stay out of Git:
+Local-only compiled AI artifacts stay out of Git:
 
 - `workspace/ai/checkpoints/`
 - `workspace/ai/models/`
 - `workspace/ai/cache/`
 
-JSON and JSONL training data are repo-safe. `append_training_sample(...)`
-writes into `workspace/auto_train.jsonl` as a staging capture file that can be
-reviewed, committed, or promoted into `Engine/ai/datasets/curated/` instead of
-being treated like a binary artifact.
+Git-safe staging capture paths include:
 
-## LM Studio smoke notes
+- `workspace/auto_train.jsonl`
+- `workspace/mcp_capture.jsonl`
 
-When LM Studio is available locally, the current default is:
+`append_training_sample(...)` and MCP capture writes are raw/staging data, not
+automatic curated truth. Review them, delete bad or outdated samples when the
+training direction changes, and only then promote intentional records into
+`Engine/ai/datasets/curated/` or `Engine/ai/evals/`.
 
-- endpoint: `http://localhost:1234`
-- model selection: first detected entry from `/v1/models`
-- role: teacher/oracle, not the long-term embedded runtime
+## Hardware support strategy
 
-Current validated local oracle baseline:
+The default compatibility target is:
 
-- `qwen/qwen3.5-9b`
+- 6-core desktop CPU class
+- GTX 1660 Ti-era GPU class
+- modern Linux laptop/desktop environments
 
-Preferred smoke prompts:
+Support strategy:
 
-- `In Epoch editor, project 'Sandbox' has 6 entities. Suggest one concrete next edit and one gameplay follow-up.`
-- `Explain why mixed C++23 module units should use module; before legacy includes.`
+- baseline tier:
+  stable editor/runtime path with broad reach
+- standard tier:
+  full OpenGL/Vulkan-capable hardware path
+- extended tier:
+  heavier backend/libs/features that developers explicitly opt into per project
+
+The point is broad automatic support first, not making every game carry every
+integration by default.
+
+## LM Studio development-helper notes
+
+When a local helper model is available:
+
+- endpoint is usually `http://localhost:1234`
+- model selection is currently first-detected from `/v1/models` so the engine
+  does not provoke extra model loads
+- validated fast helper baseline is `qwen/qwen3.5-9b`
+- stronger local helpers such as Gemma can be used for drafting, evaluation,
+  and smoke prompts when available
+
+Use the helper model for:
+
+- editor-context smoke prompts
+- dataset cleanup suggestions
+- roadmap/doc phrasing assistance
+- validating that EpochBot receives visible answers through the engine path
+
+## Related docs
+
+- `build_presets.md`
+- `runtime_operations.md`
+- `smoke_capture_automation.md`
+- `ai_build_memory.md`
+- `tools_list.md`

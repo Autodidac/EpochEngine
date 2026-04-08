@@ -179,8 +179,19 @@ namespace epochnamespace::gui
             font::FontRenderer fontRenderer{};
         };
 
+        struct CachedRuntimeSurface
+        {
+            SpriteHandle handle{};
+            std::uint64_t contentHash = 0;
+            std::uint32_t width = 0;
+            std::uint32_t height = 0;
+            std::uint32_t version = 0;
+        };
+
         static GuiResources g_resources{};
         static std::mutex g_resourceMutex{};
+        static std::unordered_map<std::string, CachedRuntimeSurface> g_runtimeSurfaceCache{};
+        static std::mutex g_runtimeSurfaceCacheMutex{};
         static bool g_missingFontPathWarningLogged = false;
         static bool g_failedFontLoadWarningLogged = false;
         static bool g_missingFontAssetWarningLogged = false;
@@ -301,6 +312,34 @@ namespace epochnamespace::gui
                 pixels[idx + 3] = a;
             }
             return pixels;
+        }
+
+        [[nodiscard]] static std::uint64_t hash_surface_pixels(
+            std::span<const std::uint8_t> pixels,
+            std::uint32_t width,
+            std::uint32_t height) noexcept
+        {
+            constexpr std::uint64_t kFnvOffset = 1469598103934665603ull;
+            constexpr std::uint64_t kFnvPrime = 1099511628211ull;
+
+            std::uint64_t hash = kFnvOffset;
+            auto mix = [&](std::uint64_t value) noexcept
+            {
+                hash ^= value;
+                hash *= kFnvPrime;
+            };
+
+            mix(width);
+            mix(height);
+            mix(pixels.size());
+
+            for (const auto byte : pixels)
+            {
+                hash ^= byte;
+                hash *= kFnvPrime;
+            }
+
+            return hash;
         }
 
         [[nodiscard]] static SpriteHandle add_sprite(
@@ -1508,6 +1547,71 @@ namespace epochnamespace::gui
         advance_cursor({ 0.0f, height + kContentPadding });
 
         return hovered && g_frame.justPressed;
+    }
+
+    void image(const SpriteHandle& sprite, Vec2 size) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx) return;
+
+        const Vec2 pos = g_frame.cursor;
+        const float width = (std::max)(static_cast<float>(size.x), 1.0f);
+        const float height = (std::max)(static_cast<float>(size.y), 1.0f);
+
+        draw_sprite(sprite, pos.x, pos.y, width, height);
+        advance_cursor({ 0.0f, height + kContentPadding });
+    }
+
+    SpriteHandle register_runtime_surface(
+        std::string_view id,
+        std::span<const std::uint8_t> rgba_pixels,
+        std::uint32_t width,
+        std::uint32_t height) noexcept
+    {
+        if (id.empty() || rgba_pixels.empty() || width == 0 || height == 0)
+            return {};
+
+        try
+        {
+            ensure_resources();
+        }
+        catch (...)
+        {
+            return {};
+        }
+
+        std::lock_guard cacheLock(g_runtimeSurfaceCacheMutex);
+
+        const std::string key{ id };
+        const std::uint64_t contentHash = hash_surface_pixels(rgba_pixels, width, height);
+        auto& entry = g_runtimeSurfaceCache[key];
+
+        if (entry.handle.is_valid()
+            && entry.contentHash == contentHash
+            && entry.width == width
+            && entry.height == height)
+        {
+            return entry.handle;
+        }
+
+        if (!g_resources.atlas)
+            return {};
+
+        std::vector<std::uint8_t> pixels(rgba_pixels.begin(), rgba_pixels.end());
+        std::string spriteName = "__agui/runtime_surface/" + key + "/" + std::to_string(entry.version + 1u);
+
+        try
+        {
+            entry.handle = add_sprite(*g_resources.atlas, spriteName, pixels, width, height);
+            entry.contentHash = contentHash;
+            entry.width = width;
+            entry.height = height;
+            entry.version += 1u;
+            return entry.handle;
+        }
+        catch (...)
+        {
+            return {};
+        }
     }
 
     std::optional<WidgetBounds> last_button_bounds() noexcept
