@@ -19,15 +19,15 @@ Repo-safe:
 - `Engine/ai/tokenizer/`
 - `Engine/ai/prompts/`
 
-Local-only:
+Compiled/local-only:
 
-- `workspace/auto_train.jsonl`
 - `workspace/ai/checkpoints/`
 - `workspace/ai/models/`
 - `workspace/ai/cache/`
 
-`append_training_sample(...)` is raw local capture. It does not directly create
-curated repo training data.
+`workspace/auto_train.jsonl` is a raw staging capture file. It does not
+directly create curated repo training data, but it is still repo-safe JSONL and
+can be committed intentionally during dataset curation.
 
 ## Working smoke pattern
 
@@ -47,6 +47,10 @@ curated repo training data.
 - `In Epoch editor, project 'Sandbox' has 6 entities. Suggest one concrete next edit and one gameplay follow-up.`
 - `Explain why mixed C++23 module units should use module; before legacy includes.`
 - `Summarize the current project runtime target and the active script in one short answer.`
+
+Current validated local oracle baseline:
+
+- `qwen/qwen3.5-9b`
 
 ## Commit memory
 

@@ -186,15 +186,6 @@ namespace epochnamespace
             bool editorOnly{ false };
         };
 
-        enum class WorkspacePanelTab : unsigned char
-        {
-            Output = 0,
-            Project,
-            Scripts,
-            AI,
-            Systems
-        };
-
         struct EditorState
         {
             bool initialized{ false };
@@ -210,7 +201,7 @@ namespace epochnamespace
             std::vector<std::string> logLines{};
             bool helpersVisible{ true };
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
-            WorkspacePanelTab workspaceTab{ WorkspacePanelTab::Output };
+            EditorWorkspaceTab workspaceTab{ EditorWorkspaceTab::Output };
             bool showAboutModal{ false };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
@@ -659,7 +650,7 @@ namespace epochnamespace
                 if (ctx)
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
-                push_editor_log(it->second, "[info] Use Project, Scripts, AI, and Systems tabs to drive scene play, scripting, and assistant work.");
+                push_editor_log(it->second, "[info] Use the Project, Scripts, AI, Systems, and Output workspaces to drive scene play, scripting, and assistant work.");
                 push_editor_log(it->second, "[info] Scene viewport is owned by the active backend.");
                 if (it->second.automationCommand == EditorAutomationCommand::SmartUpdate)
                     push_editor_log(it->second, "[info] Auto command armed: smart update.");
@@ -1017,33 +1008,28 @@ namespace epochnamespace
         const gui::Vec2 chat_size{ (std::max)(0.0f, w - left_bottom_w), bottom_h };
 
         gui::begin_window("Workspace", log_pos, log_size);
-        const auto workspace_tab_button = [&](WorkspacePanelTab tab, std::string_view label, float width)
-        {
-            const std::string text = editor.workspaceTab == tab
-                ? std::string("[") + std::string(label) + "]"
-                : std::string(label);
-            if (gui::button(text, { width, 26.0f }))
-                editor.workspaceTab = tab;
-        };
-
-        workspace_tab_button(WorkspacePanelTab::Output, "Output", 82.0f);
-        workspace_tab_button(WorkspacePanelTab::Project, "Project", 82.0f);
-        workspace_tab_button(WorkspacePanelTab::Scripts, "Scripts", 82.0f);
-        workspace_tab_button(WorkspacePanelTab::AI, "AI", 68.0f);
-        workspace_tab_button(WorkspacePanelTab::Systems, "Systems", 90.0f);
+        const std::array<gui::SegmentedButtonSpec, 5> workspaceTabs{{
+            { "Output", 82.0f, editor.workspaceTab == EditorWorkspaceTab::Output },
+            { "Project", 82.0f, editor.workspaceTab == EditorWorkspaceTab::Project },
+            { "Scripts", 82.0f, editor.workspaceTab == EditorWorkspaceTab::Scripts },
+            { "AI", 68.0f, editor.workspaceTab == EditorWorkspaceTab::AI },
+            { "Systems", 90.0f, editor.workspaceTab == EditorWorkspaceTab::Systems }
+        }};
+        if (const auto selected = gui::segmented_button_row(workspaceTabs))
+            editor.workspaceTab = static_cast<EditorWorkspaceTab>(*selected);
 
         switch (editor.workspaceTab)
         {
-        case WorkspacePanelTab::Project:
+        case EditorWorkspaceTab::Project:
         {
             const auto* activeProfile = editor_find_project_profile(editor.projectId);
             if (!activeProfile)
                 activeProfile = &editor_default_project_profile();
 
-            gui::label(std::string("[project] Active: ") + activeProfile->display_name.data());
-            gui::label(std::string("[project] Scene: ") + activeProfile->scene_path.data());
-            gui::label(std::string("[project] World: ") + activeProfile->world_name.data());
-            gui::label(std::string("[project] Runtime: ") + activeProfile->runtime_scene_id.data());
+            gui::property_row("[project] Active", activeProfile->display_name.data());
+            gui::property_row("[project] Scene", activeProfile->scene_path.data());
+            gui::property_row("[project] World", activeProfile->world_name.data());
+            gui::property_row("[project] Runtime", activeProfile->runtime_scene_id.data());
             gui::wrapped_label(activeProfile->description.data(), (std::max)(180.0f, log_size.x - 24.0f));
 
             for (const auto& profile : editor_project_profiles())
@@ -1065,9 +1051,9 @@ namespace epochnamespace
             }
             break;
         }
-        case WorkspacePanelTab::Scripts:
+        case EditorWorkspaceTab::Scripts:
         {
-            gui::label(std::string("[script] Active: ") + editor.activeScript);
+            gui::property_row("[script] Active", editor.activeScript);
             gui::wrapped_label(
                 "Scripts compile with the engine/project and use the editor host API for callbacks.",
                 (std::max)(180.0f, log_size.x - 24.0f));
@@ -1082,7 +1068,7 @@ namespace epochnamespace
                     editor.activeScript = std::string(script.id);
                     push_editor_log(editor, std::string("[script] Selected ") + editor.activeScript + ".");
                 }
-                gui::label(std::string("  ") + script.source_path.data());
+                gui::property_row("  source", script.source_path.data());
                 gui::wrapped_label(script.description.data(), (std::max)(160.0f, log_size.x - 36.0f));
             }
 
@@ -1093,50 +1079,49 @@ namespace epochnamespace
             }
             break;
         }
-        case WorkspacePanelTab::AI:
+        case EditorWorkspaceTab::AI:
         {
             const auto manifest = epoch::ai::active_model_manifest();
             const auto training = epoch::ai::default_training_paths();
-            gui::label(std::string("[ai] Provider: ") + std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
-            gui::label(std::string("[ai] Active model: ") + (manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name));
-            gui::label(std::string("[ai] Oracle endpoint: ") + manifest.endpoint);
-            gui::label(std::string("[ai] Oracle manifest: ") + manifest.manifest_path);
-            gui::label(std::string("[ai] Curated datasets: ") + training.curated_dataset_root);
-            gui::label(std::string("[ai] Raw capture: ") + training.local_capture_jsonl);
-            gui::label(std::string("[ai] Local models: ") + training.model_root);
-            gui::label(std::string("[ai] Checkpoints: ") + training.checkpoint_root);
+            gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
+            gui::property_row("[ai] Active model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
+            gui::property_row("[ai] Oracle endpoint", manifest.endpoint);
+            gui::property_row("[ai] Oracle manifest", manifest.manifest_path);
+            gui::property_row("[ai] Curated datasets", training.curated_dataset_root);
+            gui::property_row("[ai] Raw capture", training.local_capture_jsonl);
+            gui::property_row("[ai] Local models", training.model_root);
+            gui::property_row("[ai] Checkpoints", training.checkpoint_root);
             gui::wrapped_label(
                 "Epoch now tracks three AI roles: a tiny embedded engine model, an MCP-backed operating layer for retrieval and tool use, and an LM Studio teacher/oracle for evals, bootstrapping, and live editor help.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
-                "Raw chat captures stay local under workspace paths and must be curated into Engine/ai/datasets/curated before they become repo training data.",
+                "Raw chat captures land in workspace/auto_train.jsonl as Git-safe staging data and can be curated into Engine/ai/datasets/curated, while compiled checkpoints/models/caches stay local-only.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             break;
         }
-        case WorkspacePanelTab::Systems:
-            gui::label("[systems] Render graph / frame graph: planned as a first-class systems surface.");
-            gui::label("[systems] Task graph / threading: active through engine-owned async work and script jobs.");
-            gui::label(std::string("[systems] Renderer: ") + renderer_name(ctx));
-            gui::label(std::string("[systems] Preview camera: ") + preview_camera_name(ctx));
-            gui::label(std::string("[systems] Runtime target: ") + editor.activeRuntimeScene);
-            gui::label("[systems] Graph surface: next step is an engine-generated texture preview for frame/task graph output.");
+        case EditorWorkspaceTab::Systems:
+            gui::property_row("[systems] Render graph", "planned as a first-class systems surface");
+            gui::property_row("[systems] Task graph", "active through engine-owned async work and script jobs");
+            gui::property_row("[systems] Renderer", renderer_name(ctx));
+            gui::property_row("[systems] Preview camera", preview_camera_name(ctx));
+            gui::property_row("[systems] Runtime target", editor.activeRuntimeScene);
+            gui::property_row("[systems] Graph surface", "next step is an engine-generated texture preview for frame/task graph output");
             gui::wrapped_label(
                 "This tab is the landing zone for render graph, frame graph, threading, and multi-backend diagnostics as the editor grows toward an Unreal/Godot-style systems interface.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             break;
-        case WorkspacePanelTab::Output:
+        case EditorWorkspaceTab::Output:
         default:
-            gui::label(std::string("[info] Scene viewport: ")
-                + std::to_string(static_cast<int>(result.scene_viewport.size.x))
+            gui::property_row("[info] Scene viewport", std::string(std::to_string(static_cast<int>(result.scene_viewport.size.x))
                 + "x"
-                + std::to_string(static_cast<int>(result.scene_viewport.size.y)));
-            gui::label(std::string("[info] Active renderer: ") + renderer_name(ctx));
-            gui::label(std::string("[info] Preview mode: ") + std::string(preview_mode_name(editor.previewMode)));
-            gui::label(std::string("[info] Camera mode: ") + preview_camera_name(ctx));
-            gui::label(std::string("[info] Zoom: ") + preview_zoom_text(ctx));
-            gui::label("[info] Viewport input: LMB pan | RMB orbit | Wheel zoom");
-            gui::label(std::string("[info] Active script: ") + editor.activeScript);
-            gui::label(std::string("[info] Project runtime: ") + editor.activeRuntimeScene);
+                + std::to_string(static_cast<int>(result.scene_viewport.size.y))));
+            gui::property_row("[info] Active renderer", renderer_name(ctx));
+            gui::property_row("[info] Preview mode", std::string(preview_mode_name(editor.previewMode)));
+            gui::property_row("[info] Camera mode", preview_camera_name(ctx));
+            gui::property_row("[info] Zoom", preview_zoom_text(ctx));
+            gui::property_row("[info] Viewport input", "LMB pan | RMB orbit | Wheel zoom");
+            gui::property_row("[info] Active script", editor.activeScript);
+            gui::property_row("[info] Project runtime", editor.activeRuntimeScene);
             for (const auto& line : editor.logLines)
                 gui::label(line);
             break;

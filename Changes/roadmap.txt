@@ -48,8 +48,8 @@ Phase 2 notes
 - The retired legacy archive has been collapsed into active ownership plus `Engine/docs/legacy_feature_map.md`, so further spine work should land directly in Epoch-owned modules instead of parking code in archive folders.
 - Active module/file naming is being normalized to one-period families like `core.*`, `context.*`, `platform.*`, `render.*`, and backend surfaces such as `vulkan.*`, with multi-dot legacy names being retired instead of preserved as a second spine.
 - The editor still carries a hard-wired built-in sample-game route; the intended replacement is project/scene play from duplicated engine-source project shells, not a permanent in-editor mini-game menu.
-- The live editor shell is now expected to center on `Project`, `Scripts`, `AI`, `Systems`, and `Output` workspaces instead of scattered helper panels.
-- AI data policy must stay split: curated repo-safe datasets/manifests/evals in `Engine/ai/`, raw captures and checkpoints in local `workspace/` paths only.
+- The live editor shell is now expected to center on `Project`, `Scripts`, `AI`, `Systems`, and `Output` workspaces backed by reusable GUI controls instead of scattered helper panels.
+- AI data policy must stay split: curated repo-safe datasets/manifests/evals in `Engine/ai/`, Git-safe staging captures such as `workspace/auto_train.jsonl`, and compiled checkpoints/models/caches in local `workspace/ai/` paths only.
 
 Phase 3 - Renderer direction
 ----------------------------

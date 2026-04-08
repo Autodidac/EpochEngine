@@ -86,7 +86,7 @@ Epoch now uses three AI roles:
 
 - embedded tiny Epoch model for local English + C++ assistance
 - MCP-backed operating layer for retrieval, operations, and normalized capture
-- LM Studio teacher/oracle for evals, bootstrapping, and accelerated editor help
+- LM Studio teacher/oracle for evals, bootstrapping, and on-the-fly teaching of EpochBot during editor/runtime work
 
 Git-safe AI assets live under:
 
@@ -97,15 +97,16 @@ Git-safe AI assets live under:
 - `Engine/ai/tokenizer/`
 - `Engine/ai/prompts/`
 
-Local-only AI outputs stay out of Git:
+Compiled AI outputs stay out of Git:
 
-- `workspace/auto_train.jsonl`
 - `workspace/ai/checkpoints/`
 - `workspace/ai/models/`
 - `workspace/ai/cache/`
 
-`append_training_sample(...)` writes raw local capture only. Promotion into
-curated repo datasets is a manual review step, not an automatic commit path.
+JSON and JSONL training data are repo-safe. `append_training_sample(...)`
+writes into `workspace/auto_train.jsonl` as a staging capture file that can be
+reviewed, committed, or promoted into `Engine/ai/datasets/curated/` instead of
+being treated like a binary artifact.
 
 ## LM Studio smoke notes
 
@@ -114,6 +115,10 @@ When LM Studio is available locally, the current default is:
 - endpoint: `http://localhost:1234`
 - model selection: first detected entry from `/v1/models`
 - role: teacher/oracle, not the long-term embedded runtime
+
+Current validated local oracle baseline:
+
+- `qwen/qwen3.5-9b`
 
 Preferred smoke prompts:
 

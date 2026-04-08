@@ -1515,6 +1515,11 @@ namespace epochnamespace::gui
         return g_frame.lastButtonBounds;
     }
 
+    Vec2 cursor_position() noexcept
+    {
+        return g_frame.cursor;
+    }
+
     float line_height() noexcept
     {
         try { ensure_resources(); }
@@ -1555,6 +1560,31 @@ namespace epochnamespace::gui
             wrapWidth,
             kFontScale);
         advance_cursor({ 0.0f, drawnHeight });
+    }
+
+    void property_row(std::string_view labelText, std::string_view valueText, float label_width) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx) return;
+
+        const Vec2 pos = g_frame.cursor;
+        const float availableWidth = (std::max)(
+            space_advance(kFontScale),
+            (g_frame.origin.x + g_frame.windowSize.x - kContentPadding) - g_frame.cursor.x);
+        const float labelWidth = std::clamp(
+            label_width,
+            space_advance(kFontScale) * 6.0f,
+            (std::max)(space_advance(kFontScale) * 6.0f, availableWidth * 0.55f));
+        const float gap = 10.0f;
+        const float valueX = pos.x + labelWidth + gap;
+        const float valueWidth = (std::max)(space_advance(kFontScale), availableWidth - labelWidth - gap);
+
+        draw_text_line(labelText, pos.x, pos.y, kFontScale);
+
+        const float valueHeight = valueText.empty()
+            ? line_advance_amount(kFontScale)
+            : draw_wrapped_text(valueText, valueX, pos.y, valueWidth, kFontScale);
+
+        advance_cursor({ 0.0f, (std::max)(line_advance_amount(kFontScale), valueHeight) });
     }
 
     float wrapped_text_height(std::string_view text, float width) noexcept
@@ -1711,6 +1741,35 @@ namespace epochnamespace::gui
 
         advance_cursor({ 0.0f, height + kContentPadding });
         return result;
+    }
+
+    std::optional<std::size_t> segmented_button_row(
+        std::span<const SegmentedButtonSpec> items,
+        float height,
+        float gap) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx || items.empty())
+            return std::nullopt;
+
+        const Vec2 rowStart = g_frame.cursor;
+        std::optional<std::size_t> clicked{};
+        float x = rowStart.x;
+
+        for (std::size_t i = 0; i < items.size(); ++i)
+        {
+            const auto& item = items[i];
+            set_cursor({ x, rowStart.y });
+            const std::string label = item.active
+                ? std::string("[") + std::string(item.label) + "]"
+                : std::string(item.label);
+            if (button(label, { item.width, height }))
+                clicked = i;
+            x += (std::max)(1.0f, item.width) + gap;
+        }
+
+        set_cursor(rowStart);
+        advance_cursor({ 0.0f, (std::max)(1.0f, height) + kContentPadding });
+        return clicked;
     }
 
     void text_box(std::string_view text, Vec2 size) noexcept

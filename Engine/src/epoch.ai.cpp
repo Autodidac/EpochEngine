@@ -891,7 +891,10 @@ namespace epoch::ai
             " - Reply with correct English grammar.\n"
             " - Capitalize the first letter of the response.\n"
             " - Do not mimic the user's bad grammar.\n"
-            " - Do not include hidden reasoning.\n";
+            " - Do not include hidden reasoning.\n"
+            " - Stay grounded in the current Epoch editor/project context.\n"
+            " - Act like a teaching oracle for EpochBot: prefer concrete editor, scene, engine, and C++ guidance that can teach the in-engine assistant what to do next.\n"
+            " - When suggesting project or file work, keep it relevant to the active engine/runtime context instead of drifting into generic setup advice.\n";
 
         // Best-of with a fast accept to reduce latency.
         constexpr double kFastAcceptScore = 0.25; // placeholder (no scorer yet; kept for interface parity)

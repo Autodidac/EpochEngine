@@ -1,9 +1,15 @@
 ﻿# Epoch Changelog
 
 
+## [v0.83.62]
+- Moved the editor workspace strip onto reusable GUI controls so the project/runtime shell is less hardcoded in `aeditor.cpp` and more aligned with the modular GUI direction.
+- Refocused the local AI system prompt so the LM Studio oracle teaches EpochBot inside the active project/editor context instead of behaving like a detached generic chat reply.
+- Corrected the AI data policy: JSON/JSONL training data stays Git-safe, `workspace/auto_train.jsonl` is now documented as a staging capture path, and only compiled checkpoints/models/caches remain local-only.
+- Refreshed README, runtime, smoke, and build docs around the modular workspace shell and the validated local oracle baseline `qwen/qwen3.5-9b`.
+
 ## [v0.83.61]
 - Finished the first honest project-runtime seam by moving project profiles, script profiles, runtime scene ids, and seed entities under `aeditor.scene.cpp`, while the live editor shell in `aeditor.cpp` now drives `Project`, `Scripts`, `AI`, `Systems`, and `Output` workspaces on top of that data.
-- Added the first repo-safe `Engine/ai/` content layout for curated datasets, schemas, evals, manifests, tokenizer metadata, and prompt templates, while tightening the local-only policy for raw capture and checkpoint/model paths under `workspace/`.
+- Added the first repo-safe `Engine/ai/` content layout for curated datasets, schemas, evals, manifests, tokenizer metadata, and prompt templates, while tightening the local-only policy for compiled checkpoint/model paths under `workspace/ai/`.
 - Expanded `epoch.ai` into the first explicit three-role AI surface: embedded tiny-model planning types, MCP operation capture types, and the active LM Studio teacher/oracle bridge with visible provider/model metadata.
 - Documented the working AI/build/smoke method in `Engine/docs/ai_build_memory.md`, refreshed README/runtime/build/smoke docs for the new policy, and collapsed the old loose `release_notes_v*.md` files behind the existing collated history surfaces.
 

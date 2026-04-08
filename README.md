@@ -46,16 +46,16 @@ asset set as the main editor host.
   [runtime operations](Engine/docs/runtime_operations.md).
 - Three distinct AI roles under one engine-owned surface: a tiny embedded Epoch
   model for local assistance, an MCP-backed operating layer for retrieval and
-  structured tool work, and an LM Studio teacher/oracle path for evals,
-  bootstrapping, and accelerated editor help.
+  structured tool work, and an LM Studio teacher/oracle path that can teach the
+  in-engine assistant on the fly during evals, bootstrapping, and editor work.
 - Multi-context, multi-backend runtime orchestration across OpenGL, Vulkan,
   SDL3, Raylib, SFML, software, and noop/headless paths.
 - Project-driven workflow that routes projects into the editor and scene play
   into runtime mode, instead of treating the editor as a loose debug shell or a
   permanent launcher for sample games.
 - Desktop-style editor workflow with scene preview control, command surfaces,
-  project/scripts/systems/AI workspace tabs, and backend-aware fallback
-  behavior.
+  a modular workspace shell for project/scripts/systems/AI/output docks, and
+  backend-aware fallback behavior.
 - Custom GUI, sprite, and text pipelines built on the engine's own automated
   texture/atlas system rather than copied independently into each backend.
 - ECS-style systems, scene plumbing, gameplay modules, and engine-owned runtime
@@ -329,17 +329,18 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.60
+v0.83.62
 ```
 
 Highlights:
-- The engine UI stack is documented as a custom automated texture/atlas system,
-  not a borrowed generic UI layer.
-- Smoke/capture automation is now documented as a first-class local workflow,
-  including asset-bearing launch rules, capture flags, validation targets, and
-  window cleanup expectations.
-- Versioned release-note history and post-`v0.83.0` work are each collated into
-  single archive files under `Changes/`.
+- The editor workspace shell now runs through reusable GUI controls instead of
+  baking more tab-strip logic directly into `aeditor.cpp`.
+- The three-role AI spine is documented and landed with repo-safe `Engine/ai/`
+  content, while `qwen/qwen3.5-9b` is the current validated local oracle
+  baseline.
+- JSON and JSONL training data are now treated as Git-safe assets, while only
+  compiled checkpoints, local models, and caches remain outside normal repo
+  history.
 
 - `0.83.54` wires real Win32 wheel and text/key events back into the docked
   editor GUI path, which restores wheel zoom and gives the AI chat a live input

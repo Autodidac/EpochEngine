@@ -61,7 +61,8 @@ workflow instead of preserving the older citation-heavy snapshot docs.
   from the child HWNDs into the GUI event queue or the chat/input surfaces will
   look present but behave dead.
 - The workspace shell is moving toward `Project`, `Scripts`, `AI`, `Systems`,
-  and `Output` tabs instead of scattered one-off debug windows.
+  and `Output` docks backed by reusable GUI controls instead of scattered
+  one-off debug windows or editor-local button strips.
 
 ## Project-system direction
 
@@ -79,8 +80,11 @@ workflow instead of preserving the older citation-heavy snapshot docs.
 
 - `epoch.ai` is the current bridge and router between three roles:
   embedded tiny model, MCP operating layer, and LM Studio teacher/oracle.
-- Curated AI artifacts belong in `Engine/ai/`; raw capture and checkpoints stay
-  under local `workspace/` paths.
+- The LM Studio oracle is not just a reply provider; it is intended to teach
+  the in-engine assistant how to operate the editor/runtime path on the fly.
+- Curated AI artifacts belong in `Engine/ai/`; `workspace/auto_train.jsonl` is
+  a Git-safe staging capture path, while checkpoints, compiled models, and
+  caches stay under local `workspace/ai/` paths.
 - The AI dock should show the active provider/model, not hide where responses
   are coming from.
 
@@ -94,8 +98,9 @@ workflow instead of preserving the older citation-heavy snapshot docs.
   `smoke_capture_automation.md`.
 - Keep Windows `.rc`, icon, and resource headers under `Engine/resource/` so
   MSVC and CMake stay aligned on the same resource root.
-- Keep AI checkpoints and raw captures out of the repo; if they appear in
-  `git status`, treat that as a workflow bug.
+- Keep AI checkpoints, compiled models, and caches out of the repo; staged
+  JSON/JSONL training captures are acceptable when they are intentionally being
+  curated into the training corpus.
 - Use fresh build directories when changing compilers, module scanning flags, or
   backend combinations.
 - If reload behavior becomes inconsistent, check script diagnostics first, then

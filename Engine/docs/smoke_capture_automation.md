@@ -82,8 +82,13 @@ Expected smoke behavior:
 
 - the selected model is logged
 - the AI dock returns a visible reply
-- raw capture is written only to `workspace/auto_train.jsonl`
-- no `workspace/ai/*` checkpoints or models show up as staged Git changes
+- raw capture lands in `workspace/auto_train.jsonl`
+- `workspace/auto_train.jsonl` can be reviewed or staged when you are actively
+  curating training data
+- no `workspace/ai/*` checkpoints, compiled models, or caches show up as
+  staged Git changes
+- `qwen/qwen3.5-9b` is the current preferred local smoke baseline when that
+  model is loaded
 
 ## Systems/graph checks
 

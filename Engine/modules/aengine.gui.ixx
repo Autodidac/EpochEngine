@@ -33,6 +33,7 @@ module;
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -119,6 +120,13 @@ namespace epochnamespace::gui
         bool send_clicked{};
     };
 
+    export struct SegmentedButtonSpec
+    {
+        std::string_view label{};
+        float width{};
+        bool active{};
+    };
+
     export void push_input(const InputEvent& e) noexcept;
     export void push_input_for_context(const core::Context* ctx, const InputEvent& e) noexcept;
     export int consume_mouse_wheel_delta() noexcept;
@@ -142,6 +150,10 @@ namespace epochnamespace::gui
 
     export bool button(std::string_view label, Vec2 size) noexcept;
     export bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept;
+    export std::optional<std::size_t> segmented_button_row(
+        std::span<const SegmentedButtonSpec> items,
+        float height = 26.0f,
+        float gap = 6.0f) noexcept;
 
     export EditBoxResult edit_box(std::string& text,
         Vec2 size,
@@ -154,10 +166,12 @@ namespace epochnamespace::gui
 
     export void label(std::string_view text) noexcept;
     export void wrapped_label(std::string_view text, float width = 0.0f) noexcept;
+    export void property_row(std::string_view label, std::string_view value, float label_width = 152.0f) noexcept;
     export float wrapped_text_height(std::string_view text, float width = 0.0f) noexcept;
 
     export float line_height() noexcept;
     export float glyph_width() noexcept;
+    export Vec2 cursor_position() noexcept;
 
     export std::optional<WidgetBounds> last_button_bounds() noexcept;
 }

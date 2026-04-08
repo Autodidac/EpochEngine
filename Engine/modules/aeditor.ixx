@@ -44,6 +44,15 @@ import aengine.gui;
 
 namespace epochnamespace
 {
+    export enum class EditorWorkspaceTab : unsigned char
+    {
+        Output = 0,
+        Project,
+        Scripts,
+        AI,
+        Systems
+    };
+
     export enum class EditorCommand : unsigned char
     {
         None = 0,
