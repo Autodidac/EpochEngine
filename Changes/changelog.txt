@@ -1,6 +1,11 @@
 ﻿# Epoch Changelog
 
 
+## [v0.83.59]
+- Restored SDL and SFML dock takeover ownership so the real backend child window remains the active pane after docking settles, while the placeholder host stays available only as the container.
+- Unified Vulkan clear color with the shared context palette so Vulkan no longer drifts visually from the other editor backends.
+- Pulled the uploaded `botface.html` into repo history, then restored the cleaner UTF-8 working copy on top so the worktree and GitHub stay aligned without preserving the broken encoded variant.
+
 ## [v0.83.53]
 - Added editor viewport drag-pan so held left mouse movement now slides the preview focus while wheel zoom and right-drag orbit remain active.
 - Added a shared camera look-hit marker derived from the center view ray and projected it through the active preview backends so the current focus spot is visible in-editor.

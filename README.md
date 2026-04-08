@@ -310,7 +310,7 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.54
+v0.83.59
 ```
 
 Highlights:

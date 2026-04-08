@@ -528,14 +528,14 @@ namespace
         if (!window)
             return nullptr;
 
-        if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
-            return window->hwnd;
         if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
             return window->hwndChild;
+        if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+            return window->hwnd;
         if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
             return window->host_hwnd;
 
-        return window->hwnd ? window->hwnd : (window->hwndChild ? window->hwndChild : window->host_hwnd);
+        return window->hwndChild ? window->hwndChild : (window->hwnd ? window->hwnd : window->host_hwnd);
     }
 
     [[nodiscard]] inline bool matches_window_handle(

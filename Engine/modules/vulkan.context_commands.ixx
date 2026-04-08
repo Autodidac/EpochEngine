@@ -103,7 +103,8 @@ namespace epochnamespace::vulkancontext
             throw std::runtime_error("[ Vulkan ] - CommandBuffer::begin failed.");
 #if EPOCH_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
-        const auto frameClearColor = epochnamespace::previewgrid::kClearColor;
+        const auto frameClearColor = epochnamespace::core::clear_color_for_context(
+            epochnamespace::core::ContextType::Vulkan);
         const std::array<float, 4> sceneClearColor = frameClearColor;
         clearValues[0].setColor(vk::ClearColorValue{ frameClearColor });
         clearValues[1].setDepthStencil(vk::ClearDepthStencilValue{ 1.0f, 0 });
