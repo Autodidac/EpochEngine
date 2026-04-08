@@ -59,11 +59,24 @@ workflow instead of preserving the older citation-heavy snapshot docs.
   from the child HWNDs into the GUI event queue or the chat/input surfaces will
   look present but behave dead.
 
+## Project-system direction
+
+- Editor-side `Run Game` is intended to become scene/game testing from the
+  current project, not a permanent launcher for built-in sample games.
+- Built-in sample games should gradually move behind project scripts or example
+  project templates instead of remaining hard-wired editor destinations.
+- The longer-term target is a Unity/Unreal-style project shell generated from a
+  duplicated engine source/layout, so game projects can own scripts, assets,
+  and runtime behavior without pretending they are editor internals.
+
 ## Troubleshooting checklist
 
 - Verify the expected context/render macros are enabled.
 - Launch Windows smoke tests from `x64/Debug/` or `x64/Release/` so the editor
   host and docked backend panes share the colocated runtime assets.
+- Prefer engine-owned capture output over ad hoc desktop grabs when validating
+  backend/editor rendering. The supported flow is documented in
+  `smoke_capture_automation.md`.
 - Keep Windows `.rc`, icon, and resource headers under `Engine/resource/` so
   MSVC and CMake stay aligned on the same resource root.
 - Use fresh build directories when changing compilers, module scanning flags, or
@@ -72,3 +85,12 @@ workflow instead of preserving the older citation-heavy snapshot docs.
   task-graph saturation, then backend context health.
 - When investigating backend issues, prefer backend-local fixes over broad
   multiplexer behavior changes unless you have proven the shared layer is at fault.
+
+## Current editor/runtime seam
+
+- `aeditor.cpp` still owns the live editor shell/UI state for projects, AI chat,
+  and entity widgets.
+- `aeditor.scene.cpp` already contains a separate editor-scene and command-bus
+  implementation.
+- The next honest editor step is to merge the live editor shell onto that scene
+  layer instead of keeping a parallel local entity list in `aeditor.cpp`.

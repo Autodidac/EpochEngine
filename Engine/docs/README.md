@@ -15,6 +15,7 @@ Use this index to jump to the current docs set for the active engine tree under
 
 - `build_presets.md` - CMake preset names and baseline commands.
 - `build_scripts.md` - `build.sh`, `run.sh`, `install.sh`, and `clean.sh`.
+- `smoke_capture_automation.md` - local build, launch, screenshot, and commit discipline for reproducible editor/backend validation.
 - `tools_list.md` - required and optional tooling.
 - `wsl_vcpkg_setup.md` - WSL-oriented setup notes.
 

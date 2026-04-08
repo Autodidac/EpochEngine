@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current public version: `v0.82.51`
+Current public version: `v0.83.60`
 
 ## Architecture highlights
 
@@ -14,8 +14,9 @@ Current public version: `v0.82.51`
   backend-owned windows, command queues, and render-thread work.
 - **Backend stack**: OpenGL, SDL, Raylib, SFML, software, and noop/headless are
   all represented in the active engine tree; Vulkan remains experimental.
-- **Atlas-driven UI/rendering**: atlas upload, sprite submission, and GUI layout
-  are shared concerns across the active render paths.
+- **Custom UI on automated texture/atlas plumbing**: GUI layout, atlas upload,
+  sprite submission, and font/text rendering are engine-owned systems shared
+  across the active render paths.
 - **Launcher/editor split**: project and game entry now live in the launcher,
   while the editor uses a more traditional desktop-style menu flow.
 - **Task graph + scripting**: reload and background work are funneled through

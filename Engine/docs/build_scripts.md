@@ -62,4 +62,20 @@ Removes:
 ## Related docs
 
 - `build_presets.md`
+- `runtime_operations.md`
+- `smoke_capture_automation.md`
 - `tools_list.md`
+
+## Commit and test discipline
+
+When a pass changes runtime/editor/backend behavior, the current working method is:
+
+- sync with `origin/main` before starting if the local branch has drifted
+- keep unrelated dirty files out of the commit instead of rolling them into a "cleanup" blob
+- bump the source version in `Engine/modules/aengine.version.ixx`
+- use versioned commit titles such as `v0.83.60 ...`
+- rebuild `ConsoleApplication1` in both `Debug|x64` and `Release|x64`
+- launch from the asset-bearing `x64/Debug/` or `x64/Release/` runtime, not from a source folder
+- close live windows after validation so the next pass starts from a known state
+
+If the pass touches Linux or WSL-facing behavior, run the matching WSL build path too instead of validating Windows only.

@@ -1,6 +1,11 @@
 ﻿# Epoch Changelog
 
 
+## [v0.83.60]
+- Tightened SDL and SFML docking by stripping leftover top-level extended window styles after `SetParent`, which keeps their docked panes from behaving like stray promoted child windows.
+- Collated the loose `release_notes_v*.md` files into `Changes/release_notes_version_series_collated.md` and collated the post-`v0.83.0` live work log into `Changes/post_v0_83_work_collated.md`.
+- Documented the current commit/test/capture method in `Engine/docs/smoke_capture_automation.md`, refreshed the build/runtime docs around that workflow, and corrected the public wording so the GUI stack is described as a custom automated texture/atlas system.
+
 ## [v0.83.59]
 - Restored SDL and SFML dock takeover ownership so the real backend child window remains the active pane after docking settles, while the placeholder host stays available only as the container.
 - Unified Vulkan clear color with the shared context palette so Vulkan no longer drifts visually from the other editor backends.

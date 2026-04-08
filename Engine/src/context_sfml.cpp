@@ -403,6 +403,16 @@ namespace
             style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
 
+            LONG_PTR exStyle = ::GetWindowLongPtrW(s_childWindow, GWL_EXSTYLE);
+            exStyle &= ~static_cast<LONG_PTR>(
+                WS_EX_APPWINDOW
+                | WS_EX_WINDOWEDGE
+                | WS_EX_CLIENTEDGE
+                | WS_EX_DLGMODALFRAME
+                | WS_EX_TOPMOST);
+            exStyle |= WS_EX_NOPARENTNOTIFY;
+            ::SetWindowLongPtrW(s_childWindow, GWL_EXSTYLE, exStyle);
+
             epochnamespace::core::MakeDockable(s_childWindow, s_hostWindow);
 
             RECT client{};

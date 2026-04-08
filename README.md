@@ -2,11 +2,14 @@
 
 # Epoch - Creative Software And Game Engine
 
-**Epoch Engine** is a **world-class, modules-first, AI-enabled C++23 game
-engine** built for serious real-time tooling: internal engine bootstrap,
-multi-context rendering, launcher + editor workflow, atlas-driven UI,
-engine-owned compiled scripting, and a runtime that can drive multiple
-backends at once without giving up engine-level control.
+**Epoch Engine** is a professional **C++23 game engine and creative software
+platform** for building games, editors, tools, pipelines, and real-time
+interactive systems from a single modern codebase. It combines a
+modules-first architecture, integrated AI tooling, custom UI powered by an
+automated texture-atlas system, engine-owned compiled scripting,
+multi-context rendering, launcher + editor workflows, and a project-driven
+runtime designed for full engine-level ownership instead of middleware
+assembly.
 
 The active engine lives in:
 
@@ -46,8 +49,8 @@ asset set as the main editor host.
   scene/runtime mode, instead of treating the editor as a loose debug shell.
 - Desktop-style editor workflow with scene preview control, command surfaces,
   and backend-aware fallback behavior.
-- Atlas-driven GUI, sprite, and text pipelines shared across the runtime rather
-  than copied independently into each backend.
+- Custom GUI, sprite, and text pipelines built on the engine's own automated
+  texture/atlas system rather than copied independently into each backend.
 - ECS-style systems, scene plumbing, gameplay modules, and engine-owned runtime
   state.
 - Engine-owned compiled scripting with editor-triggered run actions, a host API
@@ -310,10 +313,17 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.59
+v0.83.60
 ```
 
 Highlights:
+- The engine UI stack is documented as a custom automated texture/atlas system,
+  not a borrowed generic UI layer.
+- Smoke/capture automation is now documented as a first-class local workflow,
+  including asset-bearing launch rules, capture flags, validation targets, and
+  window cleanup expectations.
+- Versioned release-note history and post-`v0.83.0` work are each collated into
+  single archive files under `Changes/`.
 
 - `0.83.54` wires real Win32 wheel and text/key events back into the docked
   editor GUI path, which restores wheel zoom and gives the AI chat a live input

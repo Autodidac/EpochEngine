@@ -36,6 +36,7 @@ Phase 2 - Runtime and platform stabilization
 - [ ] Finish window/context ownership in the Epoch platform layer.
 - [ ] Verify that editor and game runtimes can consume the same core services without dragging each other around.
 - [ ] Keep Windows and Linux build paths in sync instead of fixing one platform at a time.
+- [ ] Replace editor-side built-in sample-game launching with real project/scene play flow.
 
 Phase 2 notes
 -------------
@@ -45,6 +46,7 @@ Phase 2 notes
 - `runtime.cpp` and `epoch.engine` now consume the same shared `platform.runtime` frame-profile path instead of maintaining separate capability/perf/logging decisions.
 - The retired legacy archive has been collapsed into active ownership plus `Engine/docs/legacy_feature_map.md`, so further spine work should land directly in Epoch-owned modules instead of parking code in archive folders.
 - Active module/file naming is being normalized to one-period families like `core.*`, `context.*`, `platform.*`, `render.*`, and backend surfaces such as `vulkan.*`, with multi-dot legacy names being retired instead of preserved as a second spine.
+- The editor still carries a hard-wired built-in sample-game route; the intended replacement is project/scene play from duplicated engine-source project shells, not a permanent in-editor mini-game menu.
 
 Phase 3 - Renderer direction
 ----------------------------
@@ -64,6 +66,11 @@ Phase 4 - Tooling and smoke coverage
 - [ ] Keep docs and smoke harnesses runnable locally.
 - [ ] Capture backend regressions without pretending experimental paths are stable.
 - [ ] Keep updater-shell build artifacts isolated from normal developer build trees.
+
+Phase 4 notes
+-------------
+- Engine-owned frame capture already exists across multiple backends; the next tooling step is to make the documented smoke/capture workflow the default validation path instead of relying on ad hoc desktop screenshots.
+- The build/test/docs method now needs to preserve commit discipline too: sync with `origin/main`, keep unrelated dirt out of the pass, validate from asset-bearing output folders, and close live windows after capture.
 
 Acceptance criteria
 -------------------
