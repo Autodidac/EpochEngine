@@ -541,24 +541,24 @@ namespace
 
         if ((window->type == epochnamespace::core::ContextType::SDL
                 || window->type == epochnamespace::core::ContextType::SFML)
-            && window->host_hwnd
-            && ::IsWindow(window->host_hwnd) != FALSE)
+            && window->hwndChild
+            && ::IsWindow(window->hwndChild) != FALSE)
         {
-            return window->host_hwnd;
+            return window->hwndChild;
         }
 
-        if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
-            return window->hwndChild;
         if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
             return window->hwnd;
+        if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+            return window->hwndChild;
         if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
             return window->host_hwnd;
 
         if ((window->type == epochnamespace::core::ContextType::SDL
                 || window->type == epochnamespace::core::ContextType::SFML)
-            && window->host_hwnd)
-            return window->host_hwnd;
-        return window->hwndChild ? window->hwndChild : (window->hwnd ? window->hwnd : window->host_hwnd);
+            && window->hwndChild)
+            return window->hwndChild;
+        return window->hwnd ? window->hwnd : (window->hwndChild ? window->hwndChild : window->host_hwnd);
     }
 
     [[nodiscard]] inline bool matches_window_handle(

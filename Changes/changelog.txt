@@ -1,5 +1,11 @@
-﻿# Epoch Changelog
+# Epoch Changelog
 
+## [v0.83.68]
+- Reworked the Windows SDL/SFML parented multicontext ownership path so the real backend child surface is the visible pane target, while the helper host stays hidden implementation detail instead of surfacing as a fake dock wrapper.
+- Corrected the shared preview look marker so editor mode now anchors the marker to the true grid-plane focus spot instead of letting it drift above the floor or follow the camera awkwardly through an elevated orbit target.
+- Replaced the stale launcher-side Puzzle Lab path with a real 2D Studio project profile and routed the generic editor-open launcher action into the honest ProjectLauncher shell instead of a vague default editor jump.
+- Promoted the roadmap into GitHub-ready markdown at Changes/roadmap.md, kept Changes/roadmap.txt as a compatibility breadcrumb, and folded in the current steering priorities: multicontext child-window truth, include-surface static compilation, the six-month 2D priority track, helper-first local LLM drafting, naming cleanup, and the procedural/time-node future phase.
+- Tightened the runtime/build/smoke docs around the same truths: phase-start helper availability checks, real backend child-window ownership, honest multicontext screenshot rules, and the markdown roadmap as the canonical steering surface.
 
 ## [v0.83.67]
 - Removed the fake shared preview wireframe-box clutter from the common preview mesh so the camera look marker is no longer visually fighting placeholder geometry across the non-Vulkan backends.
@@ -139,7 +145,7 @@
 - Refreshed the active release surfaces for the repaired `0.82.41` runtime drop.
 
 ## [v0.82.40]
-- Routed updater status back through Epoch logging with sanitized updater messages so the commandline pane stops showing the raw `â™ªâ—™` newline artifacts.
+- Routed updater status back through Epoch logging with sanitized updater messages so the commandline pane stops showing the raw `♪◙` newline artifacts.
 - Kept the newer-source fallback intact so a confirmed update still rebuilds from source when no newer packaged runtime exists.
 - Refreshed the active release surfaces for the repaired updater runtime drop.
 
@@ -333,3 +339,4 @@
 - Surfaced the new time-spine state in the editor Systems workspace beside the existing render/task graph surfaces, widened the generated graph textures for broader tooling coverage, and kept the compatibility-tier guidance visible alongside the new pacing/time diagnostics.
 - Continued the project/runtime cleanup by removing one more hardcoded sample-launch branch from the older editor loop and keeping the project-driven play path centered on real scene ids.
 - Updated README, runtime/build/smoke/AI docs around the time-based engine direction, the GPU-driven baseline renderer plan, the later SpeedTree-like procedural/node authoring phase with future O2L integration, and the helper-first workflow that can use up to four parallel prompts per loaded local helper model.
+

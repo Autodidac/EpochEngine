@@ -60,6 +60,10 @@ asset set as the main editor host.
 - A real project shell direction with editor-first launcher profiles plus the
   first generated game-project and software/tool-project shell flow, so Epoch
   can bootstrap work the way a serious engine or creative IDE should.
+- An explicit 2D production track inside that project shell direction, so the
+  launcher/editor path can serve side-scrollers, top-down games, UI-heavy work,
+  and faster solo-developer iteration without falling back to fake sample
+  labels.
 - Generated project shells are expected to support both duplicated engine-source
   layouts and static engine integration through `Engine/include/` when a
   project compiles the engine directly into its own source tree.
@@ -86,6 +90,9 @@ asset set as the main editor host.
   textures with pan/zoom controls, support-tier diagnostics, and the first
   shared time-spine diagnostics, and is explicitly moving toward deeper
   multithreaded renderer tooling instead of staying a fake placeholder.
+- A parented multicontext path that is supposed to expose one honest pane per
+  active backend, with real backend child surfaces owning render/input instead
+  of fake dock wrappers leaking into the visible layout.
 - Broad automatic hardware support as a first-class target, centered on
   6-core / GTX 1660 Ti-era desktops and modern Linux laptops by default, with
   heavier backend/lib support exposed as project-level opt-in tiers.
@@ -111,15 +118,22 @@ asset set as the main editor host.
 
 These README captures are editor/source proofs, not updater-shell screenshots.
 If a packaged bootstrap release looks older than these, it has not caught up to
-the current source/editor state yet. The multicontext proof should refresh at
-least every 10th feature version, or sooner whenever visible renderer color,
-docking, context visibility, or layout behavior changes enough to make the old
-proof misleading.
+the current source/editor state yet.
 
-Windows editor six-context multicontext proof, source `v0.83.67`:
+- A valid six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
+  `Vulkan`, `OpenGL`, and `Software`.
+- Parent/helper host windows must stay hidden once the real backend child
+  surface takes ownership of the visible pane.
+- Black or empty software captures do not count as proof.
+- Refresh the multicontext proof at least every 10th feature version, or
+  sooner whenever renderer color, docking, context visibility, or layout
+  behavior changes enough to make the older image misleading.
+- Capture from an asset-bearing `x64/Debug/` or `x64/Release/` launch only.
+
+Windows editor six-context multicontext proof, source `v0.83.68`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08367.png" alt="Epoch Windows editor six-context multicontext proof" width="1400" />
+  <img src="Images/readme/windows-multicontext-editor-v08368.png" alt="Epoch Windows editor six-context multicontext proof" width="1400" />
 </p>
 
 ---
@@ -365,40 +379,25 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.67
+v0.83.68
 ```
 
 Highlights:
-- The Windows parented multicontext host now auto-fits the desktop work area so
-  the honest six-context editor proof can stay visible on normal hardware
-  instead of drifting off-screen.
-- SDL, SFML, Vulkan, Raylib, OpenGL, and Software are all back in the fitted
-  editor proof with the shared position marker visible again and the fake
-  preview placeholder boxes removed.
-- The project/scripting direction is now documented around both generated
-  engine-source projects and the static engine-include path, while naming debt
-  such as legacy `aengine*`/`multiplexer` labels is explicitly part of the
-  cleanup roadmap.
-- JSON and JSONL training data remain Git-safe and curatable in-repo, while
-  checkpoints, compiled local models, and caches stay local-only.
-- The roadmap now treats 6-core / 1660 Ti-era desktops and modern Linux
-  laptops as the default automatic compatibility baseline, with heavier support
-  tiers exposed as developer opt-in choices per project.
-
-- `0.83.54` wires real Win32 wheel and text/key events back into the docked
-  editor GUI path, which restores wheel zoom and gives the AI chat a live input
-  route instead of the dead placeholder behavior.
-- The preview look-hit marker now sits on the grid plane as a proper targeting
-  cross instead of hovering above the scene with a false camera-to-hit stem.
-- The editor now exposes real entity controls for adding meshes, lights, and
-  spawns, plus duplicating or deleting the current selection from the active UI
-  surfaces instead of logging placeholder actions.
-- The software renderer now tracks camera revisions directly and reduces
-  repeated telemetry churn so it spends less time redrawing stale editor frames.
-- The refreshed 4K six-context editor proof above was captured from the real
-  asset-bearing `x64/Debug` runtime so it matches the current local launch path.
-- The repo still keeps Windows resources under `Engine/resource/`, separate
-  from both implementation code and module interfaces.
+- The README proof above is now a real `v0.83.68` six-context live capture from
+  the asset-bearing `x64/Debug` runtime, with `Raylib`, `SDL`, `SFML`,
+  `Vulkan`, `OpenGL`, and `Software` all visible in one honest fitted grid.
+- The Windows parented multicontext path now leans harder on the real backend
+  child surfaces for the visible pane while helper hosts stay hidden
+  implementation detail instead of surfacing as fake dock wrappers.
+- The shared editor look marker is now anchored to the grid-plane focus spot in
+  editor mode, so the visible position indicator behaves like a real look-hit
+  target instead of hovering with the camera.
+- The project/scripting direction explicitly covers both duplicated engine
+  source projects and static engine integration through `Engine/include/`.
+- The roadmap is now GitHub-ready markdown at
+  [Changes/roadmap.md](Changes/roadmap.md), and it explicitly tracks naming
+  cleanup debt, the six-month 2D priority track, the time-system spine, and the
+  later procedural/time-node authoring phase.
 - Detailed release history lives in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
   current version notes under [Changes/](Changes/).
@@ -409,7 +408,7 @@ Changelog:
 
 Roadmap:
 
-[Changes/roadmap.txt](Changes/roadmap.txt)
+[Changes/roadmap.md](Changes/roadmap.md)
 
 ---
 

@@ -16,6 +16,7 @@ Changes/release_notes_v0.72.8.md	Markdown documentation.
 Changes/release_notes_v0.72.9.md	Markdown documentation.
 Changes/release_notes_v0.81.23.md	Markdown documentation.
 Changes/release_notes_v0.82.001.md	Markdown documentation.
+Changes/roadmap.md	Markdown documentation.
 Changes/roadmap.txt	Text documentation.
 code_file_manifest.txt	Text documentation.
 cpp.md	Markdown documentation.

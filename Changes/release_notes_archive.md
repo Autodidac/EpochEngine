@@ -16,7 +16,7 @@ This file consolidates older versioned release-note markdowns. New releases cont
 - Crash reporting hooks have not landed yet, so crashes must be reproduced locally with a debugger attached.
 
 ## Roadmap Alignment
-This release ticks off the Phase 5 documentation task to "Draft release notes summarising new features, known issues, and roadmap alignment" from `Changes/roadmap.txt`.
+This release ticks off the Phase 5 documentation task to "Draft release notes summarising new features, known issues, and roadmap alignment" from `Changes/roadmap.md`.
 
 ---
 

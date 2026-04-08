@@ -102,6 +102,13 @@ Future automated passes should use available local helpers aggressively for
 draft reasoning, documentation, screenshot review, and bounded code sketches
 before spending main-model tokens on the final implementation path.
 
+At the start of each phase:
+
+- probe `/v1/models`
+- use the first two detected models as helper drafting pools when available
+- keep the first detected model as the only runtime-parity/in-engine smoke
+  model
+
 When two local helper models are loaded, supervisor passes should treat them as
 two helper pools with up to four parallel drafting lanes each. Use those lanes
 for roadmap phrasing, code-shape proposals, doc rewrites, screenshot review,
@@ -196,4 +203,5 @@ When the helper returns mostly reasoning text or stalls:
 - `runtime_operations.md`
 - `smoke_capture_automation.md`
 - `ai_build_memory.md`
+- `../../Changes/roadmap.md`
 - `tools_list.md`

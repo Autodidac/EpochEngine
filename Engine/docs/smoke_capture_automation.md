@@ -29,9 +29,12 @@ For runtime/editor/backend changes:
 When the pass is multicontext-specific, validate:
 
 - top-row and bottom-row context responsiveness
+- all six expected contexts are visibly present when the layout is meant to be a
+  six-context proof
 - chat text input and caret behavior
 - wheel zoom and camera movement
-- docked window ownership and absence of stray promoted panes
+- docked child-window ownership and absence of stray promoted panes or fake host
+  wrappers
 - backend palette parity when clear colors should match
 - Systems workspace graph clipping and pan/zoom behavior
 - Systems time controls and pacing diagnostics when the pass touches the shared
@@ -58,6 +61,8 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 
 - use the real editor, not the updater shell, for README proofs
 - prefer a full multicontext frame when validating layout changes
+- a multicontext proof is only valid when every intended pane is present and no
+  backend is replaced by a fake wrapper or black/empty surface
 - if only one backend is under investigation, capture that backend directly
 - prefer the fitted parented multicontext host so six-context layouts stay
   visible on normal desktop work areas instead of drifting off-screen
@@ -118,6 +123,7 @@ The working commit/push pattern is:
 - sync with `origin/main`
 - keep unrelated dirt out of the pass
 - bump `aengine.version.ixx`
+- keep `Changes/roadmap.md` current when the steering surface changes
 - update README/docs/changelog when the behavior is user-visible
 - use a versioned commit title such as `v0.83.63 ...`
 - verify builds before pushing

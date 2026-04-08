@@ -83,6 +83,9 @@ use the first two `/v1/models` entries as two drafting pools and can fan out up
 to four parallel prompts per model for bounded tasks. Keep the first detected
 model as the in-engine/runtime parity baseline.
 
+That helper-first check should happen at the start of a phase, not as an
+afterthought once source edits are already underway.
+
 If a local multimodal helper returns its useful answer in `reasoning_content`
 while `content` is blank, treat that as a tooling/parsing issue in the helper
 path rather than assuming the model had nothing useful to say.

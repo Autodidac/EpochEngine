@@ -80,7 +80,7 @@ export namespace epochnamespace::menu
         OpenEditor,
         ProjectSandbox,
         ProjectPlatformer,
-        ProjectPuzzle,
+        ProjectTwoDStudio,
         Snake, Tetris, Pacman, Frogger, Sokoban,
         Minesweep, Puzzle, Bejeweled, Fourty,
         Sandsim, Cellular, Settings, About, Exit
@@ -148,8 +148,8 @@ export namespace epochnamespace::menu
         static constexpr std::array kProjectChoices = {
             ChoiceDescriptor{ Choice::ProjectSandbox, "Sandbox Project", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::ProjectPlatformer, "Platformer Demo", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::ProjectPuzzle, "Puzzle Lab", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 256.0f, 96.0f } }
+            ChoiceDescriptor{ Choice::ProjectTwoDStudio, "2D Studio", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::OpenEditor, "Project Launcher", { 256.0f, 96.0f } }
         };
 
         static constexpr std::array kGameChoices = {

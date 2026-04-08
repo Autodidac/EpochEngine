@@ -217,7 +217,7 @@ namespace epochnamespace::previewgrid
         {
             return CameraRigState{
                 .mode = CameraMode::Editor,
-                .focus{ 0.0f, 0.75f, 0.0f },
+                .focus{ 0.0f, 0.0f, 0.0f },
                 .position{ 0.0f, 1.8f, 6.0f },
                 .yawDegrees = -135.0f,
                 .pitchDegrees = -28.0f,
@@ -570,19 +570,42 @@ namespace epochnamespace::previewgrid
             return out;
 
         const auto camera = camera_for(ctxKey);
-        const Vec3 ray = normalize(subtract(camera.target, camera.eye));
-        if (!std::isfinite(ray.x) || !std::isfinite(ray.y) || !std::isfinite(ray.z))
+        Vec3 hit{};
+        float markerDistance = camera_distance_for(ctxKey);
+        bool hasHit = false;
+
+        {
+            std::shared_lock lock(detail::g_cameraRigMutex);
+            const auto it = detail::g_cameraRigs.find(ctxKey);
+            if (it != detail::g_cameraRigs.end() && it->second.mode == CameraMode::Editor)
+            {
+                hit = { it->second.focus.x, 0.0f, it->second.focus.z };
+                markerDistance = it->second.distance;
+                hasHit = std::isfinite(hit.x) && std::isfinite(hit.z);
+            }
+        }
+
+        if (!hasHit)
+        {
+            const Vec3 ray = normalize(subtract(camera.target, camera.eye));
+            if (!std::isfinite(ray.x) || !std::isfinite(ray.y) || !std::isfinite(ray.z))
+                return out;
+
+            if (std::abs(ray.y) <= 1.0e-4f)
+                return out;
+
+            const float hitDistance = (0.0f - camera.eye.y) / ray.y;
+            if (!(hitDistance > 0.0f) || !std::isfinite(hitDistance))
+                return out;
+
+            hit = add(camera.eye, scale(ray, hitDistance));
+            hasHit = true;
+        }
+
+        if (!hasHit)
             return out;
 
-        if (std::abs(ray.y) <= 1.0e-4f)
-            return out;
-
-        const float hitDistance = (0.0f - camera.eye.y) / ray.y;
-        if (!(hitDistance > 0.0f) || !std::isfinite(hitDistance))
-            return out;
-
-        const Vec3 hit = add(camera.eye, scale(ray, hitDistance));
-        const float markerSize = (std::max)(0.14f, camera_distance_for(ctxKey) * 0.028f);
+        const float markerSize = (std::max)(0.14f, markerDistance * 0.028f);
         const float markerHeight = 0.006f;
 
         const auto make_vertex = [](Vec3 position, Vec3 color) noexcept

@@ -892,7 +892,7 @@ namespace
     using epochnamespace::EditorScriptBuildResult;
     using epochnamespace::EditorScriptProfile;
 
-    constexpr std::array<EditorProjectProfile, 4> kProjectProfiles{{
+    constexpr std::array<EditorProjectProfile, 5> kProjectProfiles{{
         {
             EditorProjectKind::Game,
             "sandbox",
@@ -918,6 +918,19 @@ namespace
             "game-project",
             "editor_launcher",
             "Gameplay test profile for movement, camera tuning, and encounter scripting."
+        },
+        {
+            EditorProjectKind::Game,
+            "twodstudio",
+            "TwoDStudio",
+            "Projects/TwoDStudio",
+            "Projects/TwoDStudio/worlds/twod.epoch",
+            "TwoD_Main",
+            "project:twodstudio",
+            "Projects/TwoDStudio/project.epoch.json",
+            "game-2d-project",
+            "game_bootstrap",
+            "2D-focused game profile for side-scrollers, top-down prototypes, UI-driven games, and the six-month 2D priority track."
         },
         {
             EditorProjectKind::Game,
@@ -1011,6 +1024,18 @@ namespace
         };
     }
 
+    [[nodiscard]] std::vector<EditorSceneSeedEntity> twod_seed_entities()
+    {
+        return {
+            { "TwoDLevel", "Level", "World" },
+            { "Camera2D", "Camera", "Gameplay", { 0.0f, 7.5f, 0.0f }, { -90.0f, 0.0f, 0.0f } },
+            { "KeyLight", "Light", "Lighting", { 0.0f, 6.0f, 2.0f }, { -45.0f, 0.0f, 0.0f } },
+            { "TileLayer", "TileMap", "Gameplay", { 0.0f, 0.0f, 0.0f } },
+            { "PlayerSpawn", "Spawn", "Gameplay", { -4.0f, 0.0f, 0.0f } },
+            { "ParallaxRoot", "LayerRoot", "Gameplay", { 0.0f, 0.0f, -2.0f } }
+        };
+    }
+
     [[nodiscard]] std::vector<EditorSceneSeedEntity> project_launcher_seed_entities()
     {
         return {
@@ -1096,6 +1121,8 @@ namespace epochnamespace
     {
         if (project_id == "platformer")
             return platformer_seed_entities();
+        if (project_id == "twodstudio")
+            return twod_seed_entities();
         if (project_id == "projectlauncher")
             return project_launcher_seed_entities();
         if (project_id == "softwarestudio")

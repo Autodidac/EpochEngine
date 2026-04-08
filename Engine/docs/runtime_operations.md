@@ -66,8 +66,10 @@ the same engine-owned path.
   available panel
 - support-tier diagnostics should stay visible beside renderer stage flow and
   worker-count information so compatibility policy is visible in the editor
-- docked backend hosts should present one clean pane per active context; nested
-  backend render surfaces are implementation detail, not user-facing dock panes
+- docked backend hosts should present one clean pane per active context
+- parented SDL/SFML-style backends should render into their real backend child
+  surface, while any helper host/container window remains hidden implementation
+  detail instead of a user-facing fake dock pane
 - time diagnostics should show the shared simulation clock state: pause/resume,
   scale, fixed-step cadence, accumulator, and simulated time
 - this surface should help unify renderer/backend behavior instead of becoming
@@ -163,6 +165,9 @@ Data rules:
   `workspace/ai/` paths
 - outdated or bad training data should be deleted or replaced when the training
   direction changes
+- helper-first passes should check `/v1/models` at the start of a phase, use
+  the first two models as drafting pools when available, and keep the first
+  detected model as the only runtime-parity/in-engine smoke model
 
 ## Procedural/time-node direction
 

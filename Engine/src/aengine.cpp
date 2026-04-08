@@ -1232,7 +1232,7 @@ namespace epochnamespace::core
             case Choice::OpenEditor:
             case Choice::ProjectSandbox:
             case Choice::ProjectPlatformer:
-            case Choice::ProjectPuzzle:
+            case Choice::ProjectTwoDStudio:
             case Choice::About:
             case Choice::UpdateLatest:
             case Choice::Exit:
@@ -1249,7 +1249,7 @@ namespace epochnamespace::core
             {
             case Choice::ProjectSandbox: return "sandbox";
             case Choice::ProjectPlatformer: return "platformer";
-            case Choice::ProjectPuzzle: return "puzzle";
+            case Choice::ProjectTwoDStudio: return "twodstudio";
             default: return {};
             }
         }
@@ -1786,7 +1786,7 @@ namespace epochnamespace::core
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)
                                 {
-                                    switch_all_sessions_to_editor({});
+                                    switch_all_sessions_to_editor("projectlauncher");
                                 }
                                 else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
                                 {

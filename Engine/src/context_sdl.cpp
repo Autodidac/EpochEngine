@@ -410,7 +410,18 @@ namespace
 
         if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
         {
-            ::SetParent(s_childWindow, s_hostWindow);
+            const HWND dockParent = ::GetParent(s_hostWindow);
+            const bool childOwnsGridSlot = dockParent && ::IsWindow(dockParent) != FALSE;
+            POINT childOrigin{ 0, 0 };
+            if (childOwnsGridSlot)
+            {
+                RECT hostRect{};
+                ::GetWindowRect(s_hostWindow, &hostRect);
+                childOrigin = { hostRect.left, hostRect.top };
+                ::ScreenToClient(dockParent, &childOrigin);
+            }
+
+            ::SetParent(s_childWindow, childOwnsGridSlot ? dockParent : s_hostWindow);
 
             LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
             style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
@@ -437,17 +448,17 @@ namespace
             ::SetWindowPos(
                 s_childWindow,
                 nullptr,
-                0,
-                0,
+                childOrigin.x,
+                childOrigin.y,
                 s_width,
                 s_height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
             SDL_ShowWindow(s_window);
             ::ShowWindow(s_childWindow, SW_SHOWNA);
-            ::ShowWindow(s_hostWindow, SW_SHOWNA);
-            if (const HWND dockParent = ::GetParent(s_hostWindow))
-                ::PostMessageW(dockParent, WM_SIZE, 0, MAKELPARAM(s_width, s_height));
+            ::ShowWindow(s_hostWindow, childOwnsGridSlot ? SW_HIDE : SW_SHOWNA);
+            if (const HWND layoutParent = childOwnsGridSlot ? dockParent : ::GetParent(s_hostWindow))
+                ::PostMessageW(layoutParent, WM_SIZE, 0, MAKELPARAM(s_width, s_height));
         }
 
 #endif
@@ -456,11 +467,8 @@ namespace
         if (ctx->windowData)
         {
 #if defined(_WIN32)
-            const HWND primaryWindow = (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
-                ? s_hostWindow
-                : s_childWindow;
-            ctx->windowData->hwnd = primaryWindow;
-            ctx->windowData->host_hwnd = primaryWindow ? primaryWindow : s_hostWindow;
+            ctx->windowData->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+            ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
 #endif
             ctx->windowData->sdl_window = s_window;
@@ -475,11 +483,8 @@ namespace
         state.running = true;
 
 #if defined(_WIN32)
-        const HWND primaryWindow = (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
-            ? s_hostWindow
-            : s_childWindow;
-        ctx->hwnd = primaryWindow;
-        ctx->native_window = s_childWindow ? s_childWindow : primaryWindow;
+        ctx->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+        ctx->native_window = s_childWindow ? s_childWindow : ctx->hwnd;
 #endif
 
         s_running = true;
