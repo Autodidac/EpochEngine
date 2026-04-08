@@ -957,6 +957,7 @@ namespace epochnamespace
                 it->second.automationCommand = read_editor_automation_command();
                 it->second.timeControl.fixed_dt_seconds = 1.0 / 60.0;
                 it->second.timeControl.time_scale = 1.0;
+                it->second.timeControl.max_steps_per_frame = 8;
                 set_project(it->second, "sandbox", false);
                 if (ctx)
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
@@ -1391,6 +1392,8 @@ namespace epochnamespace
             gui::property_row("[project] Manifest", editor.projectManifest);
             gui::property_row("[project] Template", editor.projectTemplate);
             gui::property_row("[project] Default script", activeProfile->default_script);
+            gui::property_row("[project] Integration", activeProfile->engine_integration_mode);
+            gui::property_row("[project] Include root", activeProfile->public_include_root);
             gui::wrapped_label(activeProfile->description, (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(editor.projectStatus, (std::max)(180.0f, log_size.x - 24.0f));
 
@@ -1416,12 +1419,16 @@ namespace epochnamespace
                 const auto created = editor_create_project_shell(EditorProjectKind::Game);
                 editor.projectStatus = created.summary;
                 push_editor_log(editor, std::string("[project] ") + created.summary);
+                if (created.succeeded)
+                    push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
             }
             if (gui::button("Create Tool Project Shell", { 220.0f, 30.0f }))
             {
                 const auto created = editor_create_project_shell(EditorProjectKind::Tool);
                 editor.projectStatus = created.summary;
                 push_editor_log(editor, std::string("[project] ") + created.summary);
+                if (created.succeeded)
+                    push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
             }
             break;
         }
@@ -1572,6 +1579,8 @@ namespace epochnamespace
             gui::property_row("[time] Simulated", format_seconds(editor.timeSnapshot.simulated_seconds));
             gui::property_row("[time] Accumulator", format_ms(editor.timeSnapshot.accumulator_seconds));
             gui::property_row("[time] Step count", std::to_string(editor.timeSnapshot.simulated_steps));
+            gui::property_row("[time] Step budget", std::to_string(editor.timeSnapshot.step_budget));
+            gui::property_row("[time] Frame step cap", std::to_string(editor.timeSnapshot.max_steps_per_frame));
 
             const std::array timeButtons{
                 gui::InlineButtonSpec{ .label = editor.timeControl.paused ? "Resume" : "Pause", .width = 74.0f },
@@ -1609,8 +1618,24 @@ namespace epochnamespace
                 }
             }
 
+            const std::array budgetButtons{
+                gui::InlineButtonSpec{ .label = "4 steps", .width = 64.0f },
+                gui::InlineButtonSpec{ .label = "8 steps", .width = 64.0f },
+                gui::InlineButtonSpec{ .label = "12 steps", .width = 72.0f }
+            };
+            if (const auto action = gui::inline_button_row(budgetButtons, 24.0f, 6.0f))
+            {
+                switch (*action)
+                {
+                case 0: editor.timeControl.max_steps_per_frame = 4; break;
+                case 1: editor.timeControl.max_steps_per_frame = 8; break;
+                case 2: editor.timeControl.max_steps_per_frame = 12; break;
+                default: break;
+                }
+            }
+
             gui::wrapped_label(
-                "Epoch is now formalizing a shared time spine here first: fixed-step accumulation, pause/resume, time scaling, and single-step controls are owned by the engine instead of being scattered ad hoc across contexts.",
+                "Epoch is now formalizing a shared time spine here first: fixed-step accumulation, pause/resume, time scaling, single-step controls, and frame step budgeting are owned by the engine instead of being scattered ad hoc across contexts.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             const auto systemsOrigin = gui::cursor_position();
 

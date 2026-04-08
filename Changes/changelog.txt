@@ -1,5 +1,12 @@
 # Epoch Changelog
 
+## [v0.83.69]
+- Pushed the generated project shell further into the real embedded-engine path by emitting an `epoch.project.cmake` fragment, documenting `Engine/include/` as the public include root, and teaching generated script stubs to fall back cleanly between the normalized and legacy script API include paths.
+- Deepened the shared time spine in the Systems workspace by surfacing the live frame step budget and the max-steps-per-frame clamp beside the existing fixed-step, accumulator, simulated-time, and time-scale diagnostics.
+- Tightened SDL/SFML window ownership to prefer the real backend child surface in context/window tracking, then forced hidden helper-host cleanup during dock layout so parented multicontext panes stay closer to one honest visible surface each.
+- Lowered the shared editor look marker onto the grid plane more honestly by removing the old elevated default focus bias and shrinking the marker hover height toward the floor.
+- Updated README, roadmap, runtime docs, build docs, smoke docs, and AI build memory so the steering surface now reflects the embedded-engine include path, helper `reasoning_content` fallback, deeper time pacing diagnostics, and the continuing multicontext child-surface cleanup.
+
 ## [v0.83.68]
 - Reworked the Windows SDL/SFML parented multicontext ownership path so the real backend child surface is the visible pane target, while the helper host stays hidden implementation detail instead of surfacing as a fake dock wrapper.
 - Corrected the shared preview look marker so editor mode now anchors the marker to the true grid-plane focus spot instead of letting it drift above the floor or follow the camera awkwardly through an elevated orbit target.

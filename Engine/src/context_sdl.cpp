@@ -467,7 +467,7 @@ namespace
         if (ctx->windowData)
         {
 #if defined(_WIN32)
-            ctx->windowData->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+            ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
             ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
 #endif
@@ -483,7 +483,7 @@ namespace
         state.running = true;
 
 #if defined(_WIN32)
-        ctx->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+        ctx->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
         ctx->native_window = s_childWindow ? s_childWindow : ctx->hwnd;
 #endif
 

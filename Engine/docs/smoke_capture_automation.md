@@ -35,6 +35,8 @@ When the pass is multicontext-specific, validate:
 - wheel zoom and camera movement
 - docked child-window ownership and absence of stray promoted panes or fake host
   wrappers
+- no backend should leave a visible helper host behind once the real child
+  surface owns the pane
 - backend palette parity when clear colors should match
 - Systems workspace graph clipping and pan/zoom behavior
 - Systems time controls and pacing diagnostics when the pass touches the shared
@@ -102,6 +104,8 @@ Expected smoke behavior:
 - when two helper models are loaded, helper-first passes can use up to four
   parallel drafting prompts per model for planning/review work, while the engine
   runtime itself still stays on the first detected model for parity
+- if a helper returns blank `content` but useful `reasoning_content`, harvest
+  that output for drafting/review instead of discarding the helper pass
 
 ## Systems/graph checks
 

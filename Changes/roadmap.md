@@ -151,7 +151,7 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [ ] Support both generated-project modes explicitly:
       duplicated engine source/layout and static engine compilation through the
       exported `Engine/include/` surface when a project embeds the engine.
-- [ ] Make the include-surface/static-engine path first-class in generated
+- [x] Make the include-surface/static-engine path first-class in generated
       project and scripting flows so embedded-engine projects stay just as
       supported as duplicated-source projects.
 - [x] Add a real scripting/project dock with scripts, source paths, build/run
@@ -190,6 +190,8 @@ These remain support-tier or project-opt-in work, not the default baseline.
       editor-facing stats as the initial time-spine milestone.
 - [x] Surface the first time diagnostics and controls through the Systems
       workspace.
+- [x] Surface frame step budget and max-steps-per-frame pacing controls through
+      the Systems workspace so pacing policy is visible instead of implied.
 - [ ] Continue wiring the time spine through runtime and scene ownership so play
       mode, scripts, and later timeline/replay features all consume one timing
       model.
@@ -265,6 +267,8 @@ These remain support-tier or project-opt-in work, not the default baseline.
   separable work.
 - Keep the first detected model as the only runtime-parity/in-engine smoke
   model.
+- If a helper returns blank `content` but useful `reasoning_content`, harvest
+  the useful output instead of discarding the helper pass.
 - Use helper models for roadmap wording, code-shape proposals, screenshot
   review, doc rewrites, bug triage, subsystem design, changelog drafting, and
   file-splitting plans before spending main-model effort on integration.

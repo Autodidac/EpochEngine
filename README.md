@@ -379,25 +379,27 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.68
+v0.83.69
 ```
 
 Highlights:
-- The README proof above is now a real `v0.83.68` six-context live capture from
-  the asset-bearing `x64/Debug` runtime, with `Raylib`, `SDL`, `SFML`,
-  `Vulkan`, `OpenGL`, and `Software` all visible in one honest fitted grid.
-- The Windows parented multicontext path now leans harder on the real backend
-  child surfaces for the visible pane while helper hosts stay hidden
-  implementation detail instead of surfacing as fake dock wrappers.
-- The shared editor look marker is now anchored to the grid-plane focus spot in
-  editor mode, so the visible position indicator behaves like a real look-hit
-  target instead of hovering with the camera.
-- The project/scripting direction explicitly covers both duplicated engine
-  source projects and static engine integration through `Engine/include/`.
+- The README proof above is still the real `v0.83.68` six-context live capture
+  from the asset-bearing `x64/Debug` runtime, and it remains the current honest
+  public proof until a newer validated image replaces it.
+- The project shell now pushes the embedded-engine path further into reality by
+  generating an `epoch.project.cmake` fragment and using include fallback logic
+  so `Engine/include/` is a first-class path for generated projects.
+- The Systems workspace now exposes deeper time-spine pacing state, including
+  the live step budget and the max-steps-per-frame clamp alongside the existing
+  fixed-step, accumulator, and simulated-time diagnostics.
+- The Windows parented multicontext path continues converging on real backend
+  child-surface ownership, with SDL/SFML pushed further onto the visible child
+  window path and helper-host cleanup tightened during dock layout.
 - The roadmap is now GitHub-ready markdown at
   [Changes/roadmap.md](Changes/roadmap.md), and it explicitly tracks naming
-  cleanup debt, the six-month 2D priority track, the time-system spine, and the
-  later procedural/time-node authoring phase.
+  cleanup debt, the six-month 2D priority track, the time-system spine, the
+  two-role AI training path, and the later procedural/time-node authoring
+  phase.
 - Detailed release history lives in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
   current version notes under [Changes/](Changes/).

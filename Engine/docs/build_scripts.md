@@ -87,6 +87,10 @@ Generated project shells should keep two honest integration modes working:
 Do not document only one path if the project/scripting shell is supposed to
 support both.
 
+The generated project shell now emits an `epoch.project.cmake` fragment and
+uses `__has_include` fallback for the script API so embedded-engine projects can
+prefer `Engine/include/` without instantly breaking older include-root setups.
+
 ## AI asset policy
 
 Epoch currently documents two engine AI runtime roles:
@@ -196,6 +200,8 @@ When the helper returns mostly reasoning text or stalls:
 - keep the first-detected model rule intact
 - use the helper for bounded drafting, not as a blocker for compile-critical work
 - prefer refining small helper drafts locally over waiting on long monolithic answers
+- if `content` is blank but `reasoning_content` contains the useful answer,
+  harvest it as helper output instead of discarding the pass
 
 ## Related docs
 

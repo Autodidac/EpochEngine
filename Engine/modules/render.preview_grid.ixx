@@ -202,7 +202,7 @@ namespace epochnamespace::previewgrid
         struct CameraRigState
         {
             CameraMode mode{ CameraMode::Editor };
-            Vec3 focus{ 0.0f, 0.75f, 0.0f };
+            Vec3 focus{ 0.0f, 0.0f, 0.0f };
             Vec3 position{ 0.0f, 1.8f, 6.0f };
             float yawDegrees = -135.0f;
             float pitchDegrees = -28.0f;
@@ -606,7 +606,7 @@ namespace epochnamespace::previewgrid
             return out;
 
         const float markerSize = (std::max)(0.14f, markerDistance * 0.028f);
-        const float markerHeight = 0.006f;
+        const float markerHeight = 0.002f;
 
         const auto make_vertex = [](Vec3 position, Vec3 color) noexcept
         {

@@ -456,7 +456,7 @@ namespace
         s_glContext = ::wglGetCurrentContext();
         (void)s_window->setActive(false);
 
-        const HWND primaryWindow = s_hostWindow ? s_hostWindow : s_childWindow;
+        const HWND primaryWindow = s_childWindow ? s_childWindow : s_hostWindow;
         ctx->hdc = s_hdc;
         ctx->hglrc = s_glContext;
         ctx->hwnd = primaryWindow;
@@ -472,7 +472,7 @@ namespace
         {
             ctx->windowData->sfml_window = s_window.get();
 #if defined(_WIN32)
-            ctx->windowData->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+            ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
             ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
             ctx->windowData->hdc = s_hdc;

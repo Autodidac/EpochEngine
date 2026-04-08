@@ -93,6 +93,8 @@ namespace epochnamespace
         std::string_view template_family{};
         std::string_view default_script{};
         std::string_view description{};
+        std::string_view engine_integration_mode{};
+        std::string_view public_include_root{};
     };
 
     export struct EditorScriptProfile
@@ -112,6 +114,8 @@ namespace epochnamespace
         std::string project_id{};
         std::string root_path{};
         std::string summary{};
+        std::string engine_integration_mode{};
+        std::string public_include_root{};
     };
 
     export struct EditorScriptBuildResult
@@ -136,6 +140,8 @@ namespace epochnamespace
     {
         std::uint64_t frame_index = 0;
         std::uint64_t simulated_steps = 0;
+        std::uint32_t step_budget = 0;
+        std::uint32_t max_steps_per_frame = 8;
         double real_dt_seconds = 0.0;
         double scaled_dt_seconds = 0.0;
         double fixed_dt_seconds = 1.0 / 60.0;
@@ -149,6 +155,7 @@ namespace epochnamespace
     {
         bool paused = false;
         bool step_once = false;
+        std::uint32_t max_steps_per_frame = 8;
         double fixed_dt_seconds = 1.0 / 60.0;
         double time_scale = 1.0;
     };

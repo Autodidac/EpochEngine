@@ -1477,6 +1477,7 @@ namespace epochnamespace::core
                             const auto control = epochnamespace::editor_time_control(ctx.get());
                             session.simulation.set_paused(control.paused);
                             session.simulation.set_time_scale(control.time_scale);
+                            session.simulation.set_max_steps_per_frame(control.max_steps_per_frame);
                             session.simulation.set_fixed_dt_seconds(control.fixed_dt_seconds);
                             session.simulation.tick(dt);
 
@@ -1493,6 +1494,8 @@ namespace epochnamespace::core
                             epochnamespace::editor_set_time_snapshot(ctx.get(), epochnamespace::EditorTimeSnapshot{
                                 .frame_index = stats.frame_index,
                                 .simulated_steps = stats.simulated_steps,
+                                .step_budget = stats.step_budget,
+                                .max_steps_per_frame = stats.max_steps_per_frame,
                                 .real_dt_seconds = stats.real_dt_seconds,
                                 .scaled_dt_seconds = stats.scaled_dt_seconds,
                                 .fixed_dt_seconds = stats.fixed_dt_seconds,

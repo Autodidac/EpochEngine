@@ -30,6 +30,9 @@ the same engine-owned path.
   engine
 - the first generated shell flow should create a real on-disk project root,
   manifest, world file, script stub, and README for both game and tool projects
+- generated embedded-engine shells should also emit an include-aware build
+  fragment and script include fallback so `Engine/include/` stays a real
+  supported path instead of a roadmap-only promise
 - an editor/project launcher profile is valid here as a prestep for choosing
   projects, contexts, settings, and future automation flows
 - `aeditor.scene.cpp` should own project profiles, script profiles, runtime
@@ -70,8 +73,13 @@ the same engine-owned path.
 - parented SDL/SFML-style backends should render into their real backend child
   surface, while any helper host/container window remains hidden implementation
   detail instead of a user-facing fake dock pane
+- the same child-surface truth should continue converging across Raylib and the
+  other active parented backends so helper hosts do not linger visibly in the
+  fitted grid
 - time diagnostics should show the shared simulation clock state: pause/resume,
   scale, fixed-step cadence, accumulator, and simulated time
+- time diagnostics should also show the current frame step budget and the
+  max-steps-per-frame clamp so pacing policy is visible, not implied
 - this surface should help unify renderer/backend behavior instead of becoming
   another debug text dump
 
@@ -93,6 +101,7 @@ the same engine-owned path.
   - time scaling
   - single-step
   - shared stats for editor/runtime/systems visibility
+  - step-budget and frame-cap pacing visibility
 - future work should route scene play, scripting, pacing, and later
   timeline/replay behavior through that shared clock ownership instead of
   inventing parallel timing systems

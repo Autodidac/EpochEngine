@@ -90,6 +90,10 @@ If a local multimodal helper returns its useful answer in `reasoning_content`
 while `content` is blank, treat that as a tooling/parsing issue in the helper
 path rather than assuming the model had nothing useful to say.
 
+The same rule applies to local Qwen helper drafting in general: if the useful
+draft landed in `reasoning_content`, harvest it and move on instead of wasting a
+phase waiting for a cleaner helper reply.
+
 ## Commit memory
 
 - sync with `origin/main` when possible

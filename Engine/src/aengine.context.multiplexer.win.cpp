@@ -1704,6 +1704,14 @@ namespace epochnamespace::core
             if (deferPlaceholderShow)
                 ::ShowWindow(liveHwnd, SW_HIDE);
 
+            if (win.host_hwnd
+                && win.host_hwnd != liveHwnd
+                && ::IsWindow(win.host_hwnd) != FALSE
+                && ::GetParent(win.host_hwnd) == parent)
+            {
+                ::ShowWindow(win.host_hwnd, SW_HIDE);
+            }
+
             HandleResize(liveHwnd, cw, ch);
         }
     }

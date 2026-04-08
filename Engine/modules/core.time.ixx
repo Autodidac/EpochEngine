@@ -186,6 +186,7 @@ export namespace epoch::core::time
     {
         std::uint64_t frame_index = 0;
         std::uint64_t simulated_steps = 0;
+        std::uint32_t step_budget = 0;
         double real_dt_seconds = 0.0;
         double scaled_dt_seconds = 0.0;
         double fixed_dt_seconds = 1.0 / 60.0;
@@ -225,6 +226,11 @@ export namespace epoch::core::time
             time_scale = (std::clamp)(value, 0.0, 8.0);
         }
 
+        void set_max_steps_per_frame(std::uint32_t value) noexcept
+        {
+            max_steps_per_frame = (std::clamp)(value, 1u, 16u);
+        }
+
         void set_fixed_dt_seconds(double value) noexcept
         {
             fixed_dt_seconds = (std::clamp)(value, 1.0 / 240.0, 1.0 / 15.0);
@@ -235,6 +241,7 @@ export namespace epoch::core::time
             return simulation_stats{
                 .frame_index = frame.frame_index,
                 .simulated_steps = simulated_steps,
+                .step_budget = step_budget(),
                 .real_dt_seconds = real_dt_seconds,
                 .scaled_dt_seconds = scaled_dt_seconds,
                 .fixed_dt_seconds = fixed_dt_seconds,

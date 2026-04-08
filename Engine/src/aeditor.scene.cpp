@@ -904,7 +904,9 @@ namespace
             "Projects/Sandbox/project.epoch.json",
             "game-project",
             "rotate_all_entities",
-            "General-purpose sandbox for editor, runtime, and renderer iteration."
+            "General-purpose sandbox for editor, runtime, and renderer iteration.",
+            "embedded-static-include or duplicated-source",
+            "Engine/include"
         },
         {
             EditorProjectKind::Game,
@@ -917,7 +919,9 @@ namespace
             "Projects/PlatformerDemo/project.epoch.json",
             "game-project",
             "editor_launcher",
-            "Gameplay test profile for movement, camera tuning, and encounter scripting."
+            "Gameplay test profile for movement, camera tuning, and encounter scripting.",
+            "embedded-static-include or duplicated-source",
+            "Engine/include"
         },
         {
             EditorProjectKind::Game,
@@ -930,7 +934,9 @@ namespace
             "Projects/TwoDStudio/project.epoch.json",
             "game-2d-project",
             "game_bootstrap",
-            "2D-focused game profile for side-scrollers, top-down prototypes, UI-driven games, and the six-month 2D priority track."
+            "2D-focused game profile for side-scrollers, top-down prototypes, UI-driven games, and the six-month 2D priority track.",
+            "embedded-static-include or duplicated-source",
+            "Engine/include"
         },
         {
             EditorProjectKind::Game,
@@ -943,7 +949,9 @@ namespace
             "Projects/ProjectLauncher/project.epoch.json",
             "tool-project",
             "editor_launcher",
-            "Editor-facing launcher profile for project selection, context setup, settings, and future engine automation."
+            "Editor-facing launcher profile for project selection, context setup, settings, and future engine automation.",
+            "embedded-static-include or duplicated-source",
+            "Engine/include"
         },
         {
             EditorProjectKind::Tool,
@@ -956,7 +964,9 @@ namespace
             "Projects/SoftwareStudio/project.epoch.json",
             "tool-project",
             "tool_bootstrap",
-            "Software and tool development profile for workflow automation, dashboards, and editor-facing utilities."
+            "Software and tool development profile for workflow automation, dashboards, and editor-facing utilities.",
+            "embedded-static-include or duplicated-source",
+            "Engine/include"
         }
     }};
 
@@ -1160,11 +1170,14 @@ namespace epochnamespace
         const fs::path assets = root / "assets";
         const fs::path manifest = root / "project.epoch.json";
         const fs::path readme = root / "README.md";
+        const fs::path cmakeFragment = root / "epoch.project.cmake";
         const fs::path worldFile = worlds / (kind == EditorProjectKind::Tool ? "tool.epoch" : "main.epoch");
         const fs::path scriptFile = scripts / (kind == EditorProjectKind::Tool ? "tool_bootstrap.ascript.cpp" : "game_bootstrap.ascript.cpp");
         const std::string scriptId = kind == EditorProjectKind::Tool ? "tool_bootstrap" : "game_bootstrap";
         const std::string sceneName = kind == EditorProjectKind::Tool ? "ToolWorkspace" : "PersistentLevel";
         const std::string templateFamily = kind == EditorProjectKind::Tool ? "tool-project" : "game-project";
+        const std::string integrationMode = "embedded-static-include or duplicated-source";
+        const std::string publicIncludeRoot = "Engine/include";
 
         std::error_code ec;
         fs::create_directories(worlds, ec);
@@ -1177,9 +1190,20 @@ namespace epochnamespace
                 false,
                 projectId,
                 root.string(),
-                "Failed to create project shell directories."
+                "Failed to create project shell directories.",
+                integrationMode,
+                publicIncludeRoot
             };
         }
+
+        const std::string scriptApiInclude =
+            "#if __has_include(<epoch.script_api.h>)\n"
+            "#  include <epoch.script_api.h>\n"
+            "#elif __has_include(<include/epoch.script_api.h>)\n"
+            "#  include <include/epoch.script_api.h>\n"
+            "#else\n"
+            "#  error \"Epoch script API header not found. Add Engine/include (preferred) or Engine/ to your include paths.\"\n"
+            "#endif\n\n";
 
         const std::string manifestText =
             "{\n"
@@ -1190,6 +1214,9 @@ namespace epochnamespace
             "  \"template_family\": \"" + templateFamily + "\",\n"
             "  \"scene\": \"" + worldFile.generic_string() + "\",\n"
             "  \"default_script\": \"" + scriptId + "\",\n"
+            "  \"engine_integration\": \"" + integrationMode + "\",\n"
+            "  \"public_include_root\": \"" + publicIncludeRoot + "\",\n"
+            "  \"build_fragment\": \"" + cmakeFragment.filename().generic_string() + "\",\n"
             "  \"support_tier\": \"baseline\"\n"
             "}\n";
 
@@ -1198,7 +1225,10 @@ namespace epochnamespace
             "Generated by the Epoch editor project shell flow.\n\n"
             "- Kind: " + std::string(kind == EditorProjectKind::Tool ? "Software / Tool" : "Game") + "\n"
             "- Scene: " + worldFile.filename().string() + "\n"
-            "- Script: " + scriptFile.filename().string() + "\n";
+            "- Script: " + scriptFile.filename().string() + "\n"
+            "- Engine integration: " + integrationMode + "\n"
+            "- Public include root: " + publicIncludeRoot + "\n"
+            "- Build fragment: " + cmakeFragment.filename().string() + "\n";
 
         const std::string worldText =
             "scene \"" + sceneName + "\"\n"
@@ -1208,7 +1238,7 @@ namespace epochnamespace
             "}\n";
 
         const std::string scriptText =
-            "#include <include/epoch.script_api.h>\n\n"
+            scriptApiInclude +
             "extern \"C\" bool EpochScriptEntry(EpochScriptHost* host)\n"
             "{\n"
             "    if (!host || !host->log)\n"
@@ -1221,11 +1251,25 @@ namespace epochnamespace
             "    return true;\n"
             "}\n";
 
+        const std::string cmakeText =
+            "cmake_minimum_required(VERSION 3.28)\n\n"
+            "# Import this fragment from a generated project when embedding Epoch.\n"
+            "function(epoch_configure_embedded_project target)\n"
+            "    if(NOT TARGET ${target})\n"
+            "        message(FATAL_ERROR \"epoch_configure_embedded_project target missing: ${target}\")\n"
+            "    endif()\n\n"
+            "    target_compile_features(${target} PRIVATE cxx_std_23)\n"
+            "    target_include_directories(${target} PRIVATE\n"
+            "        \"${CMAKE_CURRENT_LIST_DIR}/../../Engine/include\"\n"
+            "        \"${CMAKE_CURRENT_LIST_DIR}/../../Engine\")\n"
+            "endfunction()\n";
+
         const bool ok =
             write_text_file(manifest, manifestText)
             && write_text_file(readme, readmeText)
             && write_text_file(worldFile, worldText)
-            && write_text_file(scriptFile, scriptText);
+            && write_text_file(scriptFile, scriptText)
+            && write_text_file(cmakeFragment, cmakeText);
 
         return {
             ok,
@@ -1233,7 +1277,9 @@ namespace epochnamespace
             root.string(),
             ok
                 ? "Created project shell at " + root.string()
-                : "Failed to write one or more generated project files."
+                : "Failed to write one or more generated project files.",
+            integrationMode,
+            publicIncludeRoot
         };
     }
 
