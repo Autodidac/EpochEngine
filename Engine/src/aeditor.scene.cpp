@@ -50,21 +50,22 @@ module;
 #include <utility>
 #include <vector>
 
- // If you want to wire this into your engine logging, replace these.
-#include <print>
-
-static inline void ALOG(std::string_view s)
-{
-    std::println("{}", s);
-}
-
-static inline void AERR(std::string_view s)
-{
-    std::println(stderr, "{}", s);
-}
-
-
 module aeditor;
+
+import core.logger;
+
+namespace
+{
+    inline void ALOG(std::string_view s)
+    {
+        epochnamespace::logger::info("Editor.Scene", std::string(s));
+    }
+
+    inline void AERR(std::string_view s)
+    {
+        epochnamespace::logger::error("Editor.Scene", std::string(s));
+    }
+}
 
 namespace epochnamespace::editor
 {

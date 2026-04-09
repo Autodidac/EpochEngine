@@ -178,8 +178,8 @@ These remain support-tier or project-opt-in work, not the default baseline.
       software, SDL, SFML, and Raylib instead of letting them drift.
 - [x] Keep parented multicontext behavior honest: the visible pane should not
       degrade into fake extra dock wrappers or misleading nested windows. The
-      current stable rule is hosted SDL/SFML panes with real backend children
-      rendering inside them, plus a bridged visible `GLFW30` Raylib pane.
+      current stable rule is real child-surface panes for `GLFW30`, `SDL_app`,
+      and `SFML_Window`, with helper `EpochChild` hosts hidden.
 - [x] Keep the shared preview marker honest by deriving the visible ground-hit
       spot from the real center camera ray before any editor-focus fallback.
 - [ ] Tighten multicontext terminology so file names, modules, and docs stop

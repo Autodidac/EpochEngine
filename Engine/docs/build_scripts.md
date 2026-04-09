@@ -114,6 +114,9 @@ before finishing:
   `GLFW30` is still the visible Raylib pane, while SDL/SFML currently use a
   visible `EpochChild` host that owns the slot and contains the real `SDL_app`
   or `SFML_Window` child
+- current `v0.83.74` override: the stable Windows top-row contract is now the
+  real child surfaces `GLFW30`, `SDL_app`, and `SFML_Window`, with helper
+  `EpochChild` wrappers hidden
 - do not “promote” SDL/SFML backend children to direct grid-pane ownership just
   to hide the host, because that has already regressed maximize stability,
   input, and missing-pane behavior
@@ -121,6 +124,8 @@ before finishing:
   of silently growing beyond it
 - closing one visible child pane early must not kill the parent editor
 - a proof run must come from `x64/Debug` or `x64/Release` with assets present
+- if the same pass touches Linux/WSL2/WSLg behavior, document whether that path
+  was also revalidated or still needs follow-up
 
 Two specific implementation rules should stay written down because they have
 already regressed:

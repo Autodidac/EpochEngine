@@ -126,19 +126,19 @@ the current source/editor state yet.
 - A valid six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
   `Vulkan`, `OpenGL`, and `Software`.
 - Parent/helper host windows must not become stray fake panes. For the current
-  hosted SDL/SFML model, the visible `EpochChild` host may still own the pane as
-  long as the real `SDL_app` or `SFML_Window` child is alive and rendering
-  inside it honestly.
+  stable Windows parented path, the visible top-row panes are the real
+  `GLFW30`, `SDL_app`, and `SFML_Window` child surfaces, while the old
+  `EpochChild` wrappers stay hidden.
 - Black or empty software captures do not count as proof.
 - Refresh the multicontext proof at least every 10th feature version, or
   sooner whenever renderer color, docking, context visibility, or layout
   behavior changes enough to make the older image misleading.
 - Capture from an asset-bearing `x64/Debug/` or `x64/Release/` launch only.
 
-Windows editor six-context multicontext proof, source `v0.83.72`:
+Windows editor six-context multicontext proof, source `v0.83.74`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08372.png" alt="Epoch Windows editor six-context multicontext proof" width="1400" />
+  <img src="Images/readme/windows-multicontext-editor-v08374.png" alt="Epoch Windows editor six-context multicontext proof" width="1400" />
 </p>
 
 ---
@@ -384,14 +384,14 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.73
+v0.83.74
 ```
 
 Highlights:
-- The README proof above is now the real `v0.83.72` six-context live capture
+- The README proof above is now the real `v0.83.74` six-context live capture
   from an asset-bearing maximized `x64/Debug` editor run, with the visible
-  `GLFW30`, hosted `SDL`, hosted `SFML`, `Vulkan`, `OpenGL`, and `Software`
-  panes present.
+  `GLFW30`, `SDL_app`, `SFML_Window`, `Vulkan`, `OpenGL`, and `Software`
+  panes present and the fake top-row `EpochChild` wrappers hidden.
 - OpenGL and Vulkan editor previews now share the same `render.preview_grid`
   camera math, and the Vulkan scene preview now uses the same shared preview
   clear/gizmo color contract instead of drifting onto its own editor-view path.
@@ -405,12 +405,10 @@ Highlights:
   grid plane, then reuses the last honest grid hit before any editor-focus
   fallback, so the visible look spot stays closer to the actual view direction
   instead of drifting with camera-follow bias.
-- The Windows parented multicontext path continues converging on real backend
-  child-surface ownership, with SDL/SFML restored to hosted child rendering,
-  the docked Raylib child staying pinned to its real slot after maximize, early
-  `SFML_Window` close no longer killing the parent editor, and the flat launcher
-  replacing the old
-  `Projects/Games/Tools` layered shell.
+- The Windows parented multicontext path now revalidates on the real child
+  surfaces: Raylib/SDL/SFML all undock and redock cleanly in the harness, the
+  maximized six-context grid stays fitted, and an early visible `SFML_Window`
+  close still does not kill the parent editor.
 - The AI workspace now promotes staged MCP/control snapshots into curated
   datasets too, instead of leaving that part of the two-role training loop as
   documentation-only.

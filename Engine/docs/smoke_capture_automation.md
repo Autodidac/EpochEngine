@@ -51,6 +51,9 @@ When the pass is multicontext-specific, validate:
 - do not treat `--smoke --capture` as valid pane proof if the run exits before
   backend child takeover settles; fall back to a bounded stable `--editor` run
   and confirm the visible child classes directly
+- current `v0.83.74` override: the stable Windows top-row proof should show the
+  visible child panes `GLFW30`, `SDL_app`, and `SFML_Window`, not visible
+  `EpochChild` wrappers
 - backend palette parity when clear colors should match
 - Systems workspace graph clipping and pan/zoom behavior
 - Systems time controls and pacing diagnostics when the pass touches the shared
@@ -95,6 +98,10 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - if a supposedly valid proof still shows fake wrapper ownership, oversized
   child rects, or an early maximize crash, do not update the README screenshot
   yet
+- when docking/redocking is under investigation, run both single-backend and
+  full-grid parented harness passes before signing off
+- if the same pass touches Linux/WSL2/WSLg launcher or parented behavior,
+  document whether that path was actually revalidated or still needs follow-up
 
 ## AI smoke prompts
 

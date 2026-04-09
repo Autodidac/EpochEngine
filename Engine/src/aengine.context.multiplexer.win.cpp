@@ -315,6 +315,88 @@ namespace
         return x >= 0 && x < width && y >= 0 && y < hotspotHeight;
     }
 
+    [[nodiscard]] inline RECT screen_client_rect(HWND hwnd) noexcept
+    {
+        RECT clientRect{};
+        if (!hwnd || !::GetClientRect(hwnd, &clientRect))
+            return clientRect;
+
+        POINT topLeft{ 0, 0 };
+        ::ClientToScreen(hwnd, &topLeft);
+        ::OffsetRect(&clientRect, topLeft.x, topLeft.y);
+        return clientRect;
+    }
+
+    [[nodiscard]] inline bool point_in_rect(const RECT& rect, const POINT& pt) noexcept
+    {
+        return pt.x >= rect.left
+            && pt.x < rect.right
+            && pt.y >= rect.top
+            && pt.y < rect.bottom;
+    }
+
+    [[nodiscard]] inline bool should_redock_to_parent(
+        HWND parent,
+        const POINT& screenPoint,
+        const RECT& windowRect) noexcept
+    {
+        if (!parent || ::IsWindow(parent) == FALSE)
+            return false;
+
+        const RECT parentRect = screen_client_rect(parent);
+        if (point_in_rect(parentRect, screenPoint))
+            return true;
+
+        const POINT windowCenter{
+            windowRect.left + ((windowRect.right - windowRect.left) / 2),
+            windowRect.top + ((windowRect.bottom - windowRect.top) / 2)
+        };
+        return point_in_rect(parentRect, windowCenter);
+    }
+
+    inline void dock_host_window_to_parent(
+        HWND hwnd,
+        HWND parent,
+        int desiredScreenX,
+        int desiredScreenY,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!hwnd || !parent || ::IsWindow(parent) == FALSE)
+            return;
+
+        const HWND currentParent = ::GetParent(hwnd);
+        LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+        const bool needsChildStyle = (style & WS_CHILD) == 0 || (style & (WS_POPUP | WS_OVERLAPPEDWINDOW)) != 0;
+        if (needsChildStyle)
+        {
+            style &= ~(WS_POPUP | WS_OVERLAPPEDWINDOW);
+            style |= WS_CHILD;
+            ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+        }
+        if (currentParent != parent)
+            ::SetParent(hwnd, parent);
+
+        RECT parentClient{};
+        ::GetClientRect(parent, &parentClient);
+        POINT clientPos{ desiredScreenX, desiredScreenY };
+        ::ScreenToClient(parent, &clientPos);
+
+        const int maxX = (std::max)(0, static_cast<int>(parentClient.right - clientW));
+        const int maxY = (std::max)(0, static_cast<int>(parentClient.bottom - clientH));
+        clientPos.x = (std::clamp)(static_cast<int>(clientPos.x), 0, maxX);
+        clientPos.y = (std::clamp)(static_cast<int>(clientPos.y), 0, maxY);
+
+        ::SetWindowPos(
+            hwnd,
+            nullptr,
+            clientPos.x,
+            clientPos.y,
+            clientW,
+            clientH,
+            SWP_NOZORDER | SWP_NOACTIVATE | (needsChildStyle || currentParent != parent ? SWP_FRAMECHANGED : 0) | SWP_SHOWWINDOW);
+    }
+
     // Dock/undock requests must be processed on the window's owning thread.
     // GLFW/raylib windows are owned by the thread that created them (typically the render thread).
     // Cross-thread SetParent/SetWindowLongPtr/SetWindowPos can deadlock.
@@ -334,6 +416,33 @@ namespace
             return typed_context(win->context);
 
         return {};
+    }
+
+    [[nodiscard]] inline epochnamespace::core::WindowData* resolve_window_data_for_hwnd(HWND hwnd) noexcept
+    {
+        auto* mgr = g_activeManager;
+        if (!mgr)
+            return nullptr;
+
+        return mgr->findWindowByHWND(hwnd);
+    }
+
+    inline void hide_associated_host_window(
+        const epochnamespace::core::WindowData* window,
+        HWND activeHwnd,
+        HWND expectedParent) noexcept
+    {
+        if (!window || !window->host_hwnd || window->host_hwnd == activeHwnd)
+            return;
+
+        if (::IsWindow(window->host_hwnd) == FALSE)
+            return;
+
+        if (expectedParent
+            && ::GetParent(window->host_hwnd) == expectedParent)
+        {
+            ::ShowWindow(window->host_hwnd, SW_HIDE);
+        }
     }
 
     inline void forward_gui_input_message(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
@@ -381,6 +490,9 @@ namespace
     {
         switch (msg)
         {
+        case WM_MOUSEACTIVATE:
+            ::SetFocus(hwnd);
+            return MA_ACTIVATE;
         case WM_CHAR:
         case WM_SYSCHAR:
             return 0;
@@ -469,6 +581,10 @@ namespace
             return 0;
         }
 
+        case WM_MOUSEACTIVATE:
+            ::SetFocus(hwnd);
+            return MA_ACTIVATE;
+
         case WM_LBUTTONDOWN:
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
@@ -539,24 +655,11 @@ namespace
         if (!window)
             return nullptr;
 
-        if ((window->type == epochnamespace::core::ContextType::SDL
-                || window->type == epochnamespace::core::ContextType::SFML)
-            && window->host_hwnd
-            && ::IsWindow(window->host_hwnd) != FALSE)
-        {
-            return window->host_hwnd;
-        }
-
         if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
             return window->hwnd;
         if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
             return window->hwndChild;
         if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
-            return window->host_hwnd;
-
-        if ((window->type == epochnamespace::core::ContextType::SDL
-                || window->type == epochnamespace::core::ContextType::SFML)
-            && window->host_hwnd)
             return window->host_hwnd;
         return window->hwnd ? window->hwnd : (window->hwndChild ? window->hwndChild : window->host_hwnd);
     }
@@ -1722,11 +1825,15 @@ namespace epochnamespace::core
                 continue;
 
             const bool usingHiddenHostPlaceholder =
-                (win.type == ContextType::SDL || win.type == ContextType::SFML)
-                && win.host_hwnd
+                win.host_hwnd
                 && liveHwnd == win.host_hwnd
-                && (!win.hwndChild
-                    || ::IsWindow(win.hwndChild) == FALSE);
+                && (
+                    (win.hwndChild
+                        && ::IsWindow(win.hwndChild) != FALSE
+                        && ::GetParent(win.hwndChild) != parent)
+                    || ((win.type == ContextType::SDL || win.type == ContextType::SFML)
+                        && (!win.hwndChild || ::IsWindow(win.hwndChild) == FALSE))
+                );
 
             ::SetWindowPos(liveHwnd, nullptr, c * cw, r * ch, cw, ch,
                 usingHiddenHostPlaceholder
@@ -2061,8 +2168,6 @@ namespace epochnamespace::core
 
             const int newX = wndRect.left + dx;
             const int newY = wndRect.top + dy;
-            const int currentW = clamp_positive(static_cast<int>(wndRect.right - wndRect.left));
-            const int currentH = clamp_positive(static_cast<int>(wndRect.bottom - wndRect.top));
 
             RECT clientRect{};
             ::GetClientRect(hwnd, &clientRect);
@@ -2071,41 +2176,46 @@ namespace epochnamespace::core
 
             if (drag.originalParent)
             {
-                RECT prc{};
-                ::GetClientRect(drag.originalParent, &prc);
-                POINT tl{ 0,0 };
-                ::ClientToScreen(drag.originalParent, &tl);
-                ::OffsetRect(&prc, tl.x, tl.y);
-
                 int wndW = clientW;
                 int wndH = clientH;
-
-                const bool inside =
-                    newX >= prc.left && newY >= prc.top &&
-                    (newX + currentW) <= prc.right && (newY + currentH) <= prc.bottom;
+                RECT projectedRect{
+                    newX,
+                    newY,
+                    newX + (wndRect.right - wndRect.left),
+                    newY + (wndRect.bottom - wndRect.top)
+                };
+                const bool inside = should_redock_to_parent(drag.originalParent, pt, projectedRect);
 
                 if (inside)
                 {
                     if (::GetParent(hwnd) != drag.originalParent)
                     {
-                        LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
-                        style &= ~(WS_POPUP | WS_OVERLAPPEDWINDOW);
-                        style |= WS_CHILD;
-                        ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
-                        ::SetParent(hwnd, drag.originalParent);
-
-                        POINT cp{ newX, newY };
-                        ::ScreenToClient(drag.originalParent, &cp);
-                        ::SetWindowPos(hwnd, nullptr, cp.x, cp.y, wndW, wndH,
-                            SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                        dock_host_window_to_parent(
+                            hwnd,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            wndW,
+                            wndH);
+                        if (auto* mgr = s_activeInstance)
+                            mgr->HandleResize(hwnd, wndW, wndH);
                     }
                     else
                     {
-                        POINT cp{ newX, newY };
-                        ::ScreenToClient(drag.originalParent, &cp);
-                        ::SetWindowPos(hwnd, nullptr, cp.x, cp.y, 0, 0,
-                            SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+                        dock_host_window_to_parent(
+                            hwnd,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            wndW,
+                            wndH);
                     }
+
+                    hide_associated_host_window(
+                        resolve_window_data_for_hwnd(hwnd),
+                        hwnd,
+                        drag.originalParent);
+                    ::SetFocus(hwnd);
                 }
                 else
                 {
@@ -2162,10 +2272,38 @@ namespace epochnamespace::core
             if (drag.dragging && drag.draggedWindow == hwnd)
             {
                 const HWND originalParent = drag.originalParent;
+                RECT wndRect{};
+                ::GetWindowRect(hwnd, &wndRect);
                 ::ReleaseCapture();
                 drag.dragging = false;
                 drag.draggedWindow = nullptr;
                 drag.originalParent = nullptr;
+
+                if (originalParent
+                    && ::IsWindow(originalParent) != FALSE
+                    && ::GetParent(hwnd) != originalParent
+                    && should_redock_to_parent(originalParent, drag.lastMousePos, wndRect))
+                {
+                    RECT clientRect{};
+                    ::GetClientRect(hwnd, &clientRect);
+                    const int clientW = clamp_positive(static_cast<int>(clientRect.right - clientRect.left));
+                    const int clientH = clamp_positive(static_cast<int>(clientRect.bottom - clientRect.top));
+                    dock_host_window_to_parent(
+                        hwnd,
+                        originalParent,
+                        wndRect.left,
+                        wndRect.top,
+                        clientW,
+                        clientH);
+                    if (auto* mgr = s_activeInstance)
+                        mgr->HandleResize(hwnd, clientW, clientH);
+                }
+
+                hide_associated_host_window(
+                    resolve_window_data_for_hwnd(hwnd),
+                    hwnd,
+                    originalParent);
+                ::SetFocus(hwnd);
 
                 if (originalParent && ::IsWindow(originalParent) != FALSE)
                     ::PostMessageW(originalParent, WM_SIZE, 0, 0);

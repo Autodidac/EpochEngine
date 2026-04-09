@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.83.74]
+- Restored the stable top-row child-surface contract in the Windows parented multicontext editor: `GLFW30`, `SDL_app`, and `SFML_Window` are back to being the visible docked panes, while the helper `EpochChild` wrappers stay hidden instead of owning the slot.
+- Fixed the SDL/SFML dock/redock regression by making the real backend child windows dockable again, preserving focus/input on those child surfaces, and keeping the helper hosts out of the visible layout.
+- Added the first repeatable Win32 parented harness for single-backend and full-grid validation, then revalidated maximize, drag-undock-redock for Raylib/SDL/SFML, and early visible `SFML_Window` close without killing the parent editor.
+- Promoted a new honest six-context Windows proof image from the real `x64/Debug` harness run and updated the README/build/runtime/smoke docs around the actual top-row ownership contract.
+
 ## [v0.83.73]
 - Normalized the Vulkan editor scene preview onto the same shared `render.preview_grid` camera math already used by OpenGL, so the two backends stop drifting in editor view even when they render the same grid and marker data.
 - Kept the Vulkan editor preview on the shared preview camera near/far/fov contract instead of maintaining a separate GLM-only preview path, which reduces cross-backend framing mismatch in the multicontext editor.

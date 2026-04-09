@@ -61,12 +61,13 @@ changes.
 - `Explain why mixed C++23 module units should use module; before legacy includes.`
 - `Summarize the current project runtime target and the active script in one short answer.`
 
-Current validated fast helper baseline:
+Current validated helper pair:
 
+- `nvidia/nemotron-3-nano-4b`
 - `qwen/qwen3.5-9b`
 
-Stronger local helpers can be used when loaded, but the fast baseline is still
-useful for repeated smoke passes.
+`nemotron-3-nano-4b` is a good fast draft/triage helper when VRAM is tight, and
+`qwen/qwen3.5-9b` remains the stronger local screenshot/code-review helper.
 
 Use local helpers aggressively for:
 

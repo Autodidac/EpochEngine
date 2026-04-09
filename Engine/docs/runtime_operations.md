@@ -86,6 +86,9 @@ the same engine-owned path.
   should show the real backend child classes as visible pane owners and helper
   ownership honestly: visible `EpochChild` hosts for SDL/SFML with nested
   `SDL_app`/`SFML_Window` children, and a visible `GLFW30` child for Raylib
+- current `v0.83.74` override: the stable Windows top-row contract is visible
+  `GLFW30`, `SDL_app`, and `SFML_Window`, with the helper `EpochChild` wrappers
+  hidden
 - maximize/restore validation should keep using the pane owner that is actually
   parented into the grid slot at that moment, not a stale abstract "primary"
   HWND that may still be mid-takeover

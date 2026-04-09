@@ -197,7 +197,7 @@ namespace epochnamespace::raylibcontext
 
             st.parent = dockParent ? dockParent : parent;
             st.hwnd = raylibHwnd;
-            st.dockedChildWindow = st.parent && st.parent != raylibHwnd;
+            st.dockedChildWindow = false;
 
             if (st.parent && st.parent != raylibHwnd)
             {
@@ -226,8 +226,8 @@ namespace epochnamespace::raylibcontext
                     height,
                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-                epochnamespace::core::MultiContextManager::AttachBackendInputBridge(raylibHwnd);
                 epochnamespace::core::MakeDockable(raylibHwnd, st.parent);
+                ::SetFocus(raylibHwnd);
 
                 if (parent && parent != raylibHwnd && ::IsWindow(parent) != FALSE)
                     ::ShowWindow(parent, SW_HIDE);
@@ -235,11 +235,11 @@ namespace epochnamespace::raylibcontext
 
             if (ctx)
             {
-                const HWND previousHost = ctx->windowData ? ctx->windowData->hwnd : nullptr;
                 ctx->hwnd = raylibHwnd;
                 ctx->native_window = raylibHwnd;
                 if (ctx->windowData)
                 {
+                    const HWND previousHost = ctx->windowData->hwnd;
                     ctx->windowData->hwnd = raylibHwnd;
                     ctx->windowData->host_hwnd = previousHost ? previousHost : parent;
                     ctx->windowData->hwndChild = raylibHwnd;
@@ -247,8 +247,6 @@ namespace epochnamespace::raylibcontext
                 }
             }
 
-            // The multiplexer laid out the placeholder host before Raylib replaced it with a GLFW child.
-            // Ask the parent to reflow once the tracked HWND now points at the real render window.
             if (st.parent && ::IsWindow(st.parent) != FALSE)
                 ::PostMessageW(st.parent, WM_SIZE, 0, MAKELPARAM(st.width, st.height));
         }
@@ -610,34 +608,66 @@ namespace epochnamespace::raylibcontext
                 state.width = static_cast<unsigned>(clampedW);
                 state.height = static_cast<unsigned>(clampedH);
 
+                epochnamespace::raylib_api::set_window_size(clampedW, clampedH);
+
 #if defined(_WIN32)
                 if (state.hwnd && ::IsWindow(state.hwnd) != FALSE)
                 {
-                    POINT origin{ 0, 0 };
-                    if (const HWND resizeParent = ::GetParent(state.hwnd);
-                        resizeParent && ::IsWindow(resizeParent) != FALSE)
+                    if (state.parent
+                        && ::IsWindow(state.parent) != FALSE
+                        && ::GetParent(state.hwnd) != state.parent)
                     {
-                        RECT currentRect{};
-                        if (::GetWindowRect(state.hwnd, &currentRect))
-                        {
-                            origin = { currentRect.left, currentRect.top };
-                            ::ScreenToClient(resizeParent, &origin);
-                        }
+                        ::SetParent(state.hwnd, state.parent);
+                    }
+
+                    if (state.parent && ::IsWindow(state.parent) != FALSE)
+                    {
+                        LONG_PTR style = ::GetWindowLongPtrW(state.hwnd, GWL_STYLE);
+                        style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW | WS_POPUP);
+                        style |= (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
+                        ::SetWindowLongPtrW(state.hwnd, GWL_STYLE, style);
+
+                        LONG_PTR exStyle = ::GetWindowLongPtrW(state.hwnd, GWL_EXSTYLE);
+                        exStyle &= ~static_cast<LONG_PTR>(
+                            WS_EX_APPWINDOW
+                            | WS_EX_WINDOWEDGE
+                            | WS_EX_CLIENTEDGE
+                            | WS_EX_DLGMODALFRAME
+                            | WS_EX_TOPMOST);
+                        exStyle |= WS_EX_NOPARENTNOTIFY;
+                        ::SetWindowLongPtrW(state.hwnd, GWL_EXSTYLE, exStyle);
                     }
 
                     ::SetWindowPos(
                         state.hwnd,
                         nullptr,
-                        origin.x,
-                        origin.y,
+                        0,
+                        0,
                         clampedW,
                         clampedH,
-                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                        SWP_NOZORDER | SWP_NOACTIVATE | ((state.parent && ::IsWindow(state.parent) != FALSE) ? 0 : SWP_NOMOVE) | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+                    if (state.parent
+                        && ::IsWindow(state.parent) != FALSE
+                        && state.owner_ctx
+                        && state.owner_ctx->windowData
+                        && state.owner_ctx->windowData->host_hwnd
+                        && ::IsWindow(state.owner_ctx->windowData->host_hwnd) != FALSE
+                        && ::GetParent(state.owner_ctx->windowData->host_hwnd) == state.parent)
+                    {
+                        ::ShowWindow(state.owner_ctx->windowData->host_hwnd, SW_HIDE);
+                    }
                 }
 #endif
-
-                if (!state.dockedChildWindow)
-                    epochnamespace::raylib_api::set_window_size(clampedW, clampedH);
+                if (state.owner_ctx)
+                {
+                    state.owner_ctx->width = clampedW;
+                    state.owner_ctx->height = clampedH;
+                    state.owner_ctx->framebufferWidth = clampedW;
+                    state.owner_ctx->framebufferHeight = clampedH;
+                    if (state.owner_ctx->windowData)
+                        state.owner_ctx->windowData->set_size(clampedW, clampedH);
+                }
                 if (state.userResize)
                     state.userResize(clampedW, clampedH);
             };
