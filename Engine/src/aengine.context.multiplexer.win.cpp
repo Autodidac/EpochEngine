@@ -76,7 +76,6 @@ import aengine.cli;
 import core.context;
 import core.logger;
 import aengine.gui;
-import aengine.input;
 
 import context.commandqueue;
 import context.multiplexer;
@@ -189,68 +188,6 @@ namespace
         });
     }
 
-    [[nodiscard]] inline std::string utf8_from_key_message(WPARAM wParam, LPARAM lParam) noexcept
-    {
-        BYTE keyState[256]{};
-        if (!::GetKeyboardState(keyState))
-            return {};
-
-        if ((::GetKeyState(VK_CONTROL) & 0x8000) != 0)
-            return {};
-
-        constexpr int kBufferSize = 8;
-        WCHAR translated[kBufferSize]{};
-        const UINT scanCode = static_cast<UINT>((lParam >> 16) & 0xFFu);
-        const int count = ::ToUnicode(
-            static_cast<UINT>(wParam),
-            scanCode,
-            keyState,
-            translated,
-            kBufferSize,
-            0);
-        if (count <= 0)
-            return {};
-
-        std::string utf8{};
-        for (int i = 0; i < count; ++i)
-            utf8 += utf8_from_codepoint(static_cast<char32_t>(translated[i]));
-        return utf8;
-    }
-
-    inline void push_gui_text_from_key_message(
-        const epochnamespace::core::Context* ctx,
-        WPARAM wParam,
-        LPARAM lParam) noexcept
-    {
-        if (!ctx)
-            return;
-
-        switch (wParam)
-        {
-        case VK_BACK:
-        case VK_RETURN:
-        case VK_ESCAPE:
-        case VK_TAB:
-            return;
-        default:
-            break;
-        }
-
-        const std::string utf8 = utf8_from_key_message(wParam, lParam);
-        if (utf8.empty())
-            return;
-
-        epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
-            .type = epochnamespace::gui::EventType::TextInput,
-            .text = utf8
-        });
-    }
-
-    inline void inject_input_key_event(WPARAM wParam, bool down) noexcept
-    {
-        epochnamespace::input::inject_virtual_key_event(static_cast<int>(wParam), down);
-    }
-
     [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> typed_context(
         const epochnamespace::core::OpaqueContextHandle& opaque) noexcept
     {
@@ -296,6 +233,7 @@ namespace
     struct SubCtx { HWND originalParent{}; };
     constexpr wchar_t kEpochDockParentProp[] = L"EpochDockParent";
     constexpr int kDockDragStripHeight = 28;
+    static thread_local HWND g_guiInputOwner = nullptr;
 
     [[nodiscard]] inline bool is_dock_drag_hotspot(HWND hwnd, LPARAM lp) noexcept
     {
@@ -354,6 +292,14 @@ namespace
         return point_in_rect(parentRect, windowCenter);
     }
 
+    [[nodiscard]] inline bool pointer_inside_parent_client(HWND parent, const POINT& screenPoint) noexcept
+    {
+        if (!parent || ::IsWindow(parent) == FALSE)
+            return false;
+
+        return point_in_rect(screen_client_rect(parent), screenPoint);
+    }
+
     inline void dock_host_window_to_parent(
         HWND hwnd,
         HWND parent,
@@ -401,10 +347,25 @@ namespace
     // GLFW/raylib windows are owned by the thread that created them (typically the render thread).
     // Cross-thread SetParent/SetWindowLongPtr/SetWindowPos can deadlock.
     constexpr UINT WM_EPOCH_DOCKCMD = WM_APP + 0x4A11;
+    constexpr UINT WM_EPOCH_LAYOUT = WM_APP + 0x4A12;
+    constexpr wchar_t kEpochLayoutPendingProp[] = L"EpochLayoutPending";
+    constexpr wchar_t kEpochBackendBridgeProp[] = L"EpochBackendInputBridge";
     enum class DockCmd : WPARAM
     {
         Undock = 1,
     };
+
+    inline void request_parent_layout(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        if (::GetPropW(hwnd, kEpochLayoutPendingProp))
+            return;
+
+        ::SetPropW(hwnd, kEpochLayoutPendingProp, reinterpret_cast<HANDLE>(1));
+        ::PostMessageW(hwnd, WM_EPOCH_LAYOUT, 0, 0);
+    }
 
     [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> resolve_gui_context_for_hwnd(HWND hwnd) noexcept
     {
@@ -427,6 +388,56 @@ namespace
         return mgr->findWindowByHWND(hwnd);
     }
 
+    inline void remember_gui_input_owner(HWND hwnd) noexcept
+    {
+        if (hwnd && ::IsWindow(hwnd) != FALSE)
+            g_guiInputOwner = hwnd;
+    }
+
+    inline void forget_gui_input_owner(HWND hwnd) noexcept
+    {
+        if (g_guiInputOwner == hwnd)
+            g_guiInputOwner = nullptr;
+    }
+
+    [[nodiscard]] inline bool same_gui_input_surface(HWND lhs, HWND rhs) noexcept
+    {
+        if (!lhs || !rhs)
+            return false;
+
+        if (lhs == rhs)
+            return true;
+
+        auto* mgr = g_activeManager;
+        if (!mgr)
+            return false;
+
+        return mgr->findWindowByHWND(lhs) == mgr->findWindowByHWND(rhs);
+    }
+
+    [[nodiscard]] inline bool accepts_gui_keyboard_input(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return false;
+
+        if (const HWND focused = ::GetFocus();
+            focused && ::IsWindow(focused) != FALSE)
+        {
+            if (!same_gui_input_surface(focused, hwnd))
+                return false;
+
+            remember_gui_input_owner(focused);
+        }
+
+        if (!g_guiInputOwner || ::IsWindow(g_guiInputOwner) == FALSE)
+        {
+            g_guiInputOwner = hwnd;
+            return true;
+        }
+
+        return same_gui_input_surface(g_guiInputOwner, hwnd);
+    }
+
     inline void hide_associated_host_window(
         const epochnamespace::core::WindowData* window,
         HWND activeHwnd,
@@ -445,6 +456,206 @@ namespace
         }
     }
 
+    inline void restore_associated_host_window(
+        const epochnamespace::core::WindowData* window,
+        HWND parent,
+        int desiredScreenX,
+        int desiredScreenY,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!window
+            || !parent
+            || ::IsWindow(parent) == FALSE
+            || !window->host_hwnd
+            || window->host_hwnd == window->hwnd
+            || window->host_hwnd == window->hwndChild
+            || ::IsWindow(window->host_hwnd) == FALSE)
+        {
+            return;
+        }
+
+        dock_host_window_to_parent(
+            window->host_hwnd,
+            parent,
+            desiredScreenX,
+            desiredScreenY,
+            clientW,
+            clientH);
+        ::ShowWindow(window->host_hwnd, SW_HIDE);
+    }
+
+    [[nodiscard]] inline bool is_sfml_proxy_candidate(
+        const epochnamespace::core::WindowData* window) noexcept
+    {
+        return window
+            && (window->type == epochnamespace::core::ContextType::RayLib
+                || window->type == epochnamespace::core::ContextType::SFML)
+            && window->hwndChild
+            && window->host_hwnd
+            && window->hwndChild != window->host_hwnd
+            && ::IsWindow(window->hwndChild) != FALSE
+            && ::IsWindow(window->host_hwnd) != FALSE;
+    }
+
+    [[nodiscard]] inline bool backend_uses_proxy_child(epochnamespace::core::ContextType type) noexcept
+    {
+        return type == epochnamespace::core::ContextType::RayLib
+            || type == epochnamespace::core::ContextType::SDL
+            || type == epochnamespace::core::ContextType::SFML;
+    }
+
+    [[nodiscard]] inline bool is_proxy_host_hwnd(
+        const epochnamespace::core::WindowData* window,
+        HWND hwnd) noexcept
+    {
+        return window
+            && hwnd
+            && window->host_hwnd == hwnd
+            && window->hwndChild
+            && window->hwndChild != hwnd
+            && ::IsWindow(window->hwndChild) != FALSE;
+    }
+
+    [[nodiscard]] inline bool is_sfml_proxy_detached(
+        const epochnamespace::core::WindowData* window) noexcept
+    {
+        return is_sfml_proxy_candidate(window)
+            && ::GetParent(window->hwndChild) == window->host_hwnd
+            && ::GetParent(window->host_hwnd) == nullptr;
+    }
+
+    inline void apply_child_fill_layout(HWND child, HWND parent, int clientW, int clientH) noexcept
+    {
+        if (!child || !parent)
+            return;
+
+        LONG_PTR style = ::GetWindowLongPtrW(child, GWL_STYLE);
+        style &= ~(WS_POPUP | WS_OVERLAPPEDWINDOW);
+        style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+        ::SetWindowLongPtrW(child, GWL_STYLE, style);
+        if (::GetParent(child) != parent)
+            ::SetParent(child, parent);
+
+        ::SetWindowPos(
+            child,
+            nullptr,
+            0,
+            0,
+            clientW,
+            clientH,
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    }
+
+    inline void position_top_level_shell(
+        HWND hwnd,
+        int desiredClientLeft,
+        int desiredClientTop,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+        style &= ~WS_CHILD;
+        style |= WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+        ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+        if (::GetParent(hwnd) != nullptr)
+            ::SetParent(hwnd, nullptr);
+
+        const DWORD exStyle = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+        RECT adjusted{ 0, 0, clientW, clientH };
+        int hostX = desiredClientLeft;
+        int hostY = desiredClientTop;
+        int hostW = clientW;
+        int hostH = clientH;
+        if (::AdjustWindowRectEx(&adjusted, static_cast<DWORD>(style), FALSE, exStyle))
+        {
+            hostX += adjusted.left;
+            hostY += adjusted.top;
+            hostW = clamp_positive(adjusted.right - adjusted.left);
+            hostH = clamp_positive(adjusted.bottom - adjusted.top);
+        }
+
+        ::SetWindowPos(
+            hwnd,
+            nullptr,
+            hostX,
+            hostY,
+            hostW,
+            hostH,
+            SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    }
+
+    inline void undock_sfml_proxy_window(
+        epochnamespace::core::WindowData* window,
+        int desiredClientLeft,
+        int desiredClientTop,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!is_sfml_proxy_candidate(window))
+            return;
+
+        position_top_level_shell(
+            window->host_hwnd,
+            desiredClientLeft,
+            desiredClientTop,
+            clientW,
+            clientH);
+        apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+    }
+
+    inline void redock_sfml_proxy_window(
+        epochnamespace::core::WindowData* window,
+        HWND parent,
+        int desiredScreenX,
+        int desiredScreenY,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!is_sfml_proxy_candidate(window) || !parent || ::IsWindow(parent) == FALSE)
+            return;
+
+        LONG_PTR childStyle = ::GetWindowLongPtrW(window->hwndChild, GWL_STYLE);
+        childStyle &= ~(WS_POPUP | WS_OVERLAPPEDWINDOW);
+        childStyle |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+        ::SetWindowLongPtrW(window->hwndChild, GWL_STYLE, childStyle);
+        if (::GetParent(window->hwndChild) != parent)
+            ::SetParent(window->hwndChild, parent);
+
+        RECT parentClient{};
+        ::GetClientRect(parent, &parentClient);
+        POINT clientPos{ desiredScreenX, desiredScreenY };
+        ::ScreenToClient(parent, &clientPos);
+        const int maxX = (std::max)(0, static_cast<int>(parentClient.right - clientW));
+        const int maxY = (std::max)(0, static_cast<int>(parentClient.bottom - clientH));
+        clientPos.x = (std::clamp)(static_cast<int>(clientPos.x), 0, maxX);
+        clientPos.y = (std::clamp)(static_cast<int>(clientPos.y), 0, maxY);
+
+        ::SetWindowPos(
+            window->hwndChild,
+            nullptr,
+            clientPos.x,
+            clientPos.y,
+            clientW,
+            clientH,
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+        RECT childRect{};
+        ::GetWindowRect(window->hwndChild, &childRect);
+        dock_host_window_to_parent(
+            window->host_hwnd,
+            parent,
+            childRect.left,
+            childRect.top,
+            clientW,
+            clientH);
+        ::ShowWindow(window->host_hwnd, SW_HIDE);
+        ::SetFocus(window->hwndChild);
+    }
+
     inline void forward_gui_input_message(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
     {
         const auto ctx = resolve_gui_context_for_hwnd(hwnd);
@@ -454,6 +665,7 @@ namespace
         switch (msg)
         {
         case WM_LBUTTONDOWN:
+            remember_gui_input_owner(hwnd);
             ::SetFocus(hwnd);
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
             break;
@@ -474,10 +686,14 @@ namespace
             break;
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
+            if (!accepts_gui_keyboard_input(hwnd))
+                break;
             push_gui_key_event(ctx.get(), static_cast<int>(wParam));
             break;
         case WM_CHAR:
         case WM_SYSCHAR:
+            if (!accepts_gui_keyboard_input(hwnd))
+                break;
             if (wParam >= 0x20u || wParam == 13u || wParam == 8u)
                 push_gui_text_event(ctx.get(), static_cast<char32_t>(wParam));
             break;
@@ -490,31 +706,28 @@ namespace
     {
         switch (msg)
         {
-        case WM_MOUSEACTIVATE:
-            ::SetFocus(hwnd);
-            return MA_ACTIVATE;
+        case WM_SETFOCUS:
+            remember_gui_input_owner(hwnd);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        case WM_KILLFOCUS:
+            forget_gui_input_owner(hwnd);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        case WM_NCDESTROY:
+            forget_gui_input_owner(hwnd);
+            ::RemovePropW(hwnd, kEpochBackendBridgeProp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
         case WM_CHAR:
         case WM_SYSCHAR:
+            forward_gui_input_message(hwnd, msg, wp, lp);
             return 0;
-        case WM_KEYUP:
-        case WM_SYSKEYUP:
-            inject_input_key_event(wp, false);
-            return DefSubclassProc(hwnd, msg, wp, lp);
         case WM_LBUTTONDOWN:
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
         case WM_MOUSEWHEEL:
-            forward_gui_input_message(hwnd, msg, wp, lp);
-            return DefSubclassProc(hwnd, msg, wp, lp);
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
-        {
-            const auto ctx = resolve_gui_context_for_hwnd(hwnd);
-            inject_input_key_event(wp, true);
             forward_gui_input_message(hwnd, msg, wp, lp);
-            push_gui_text_from_key_message(ctx.get(), wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
-        }
         default:
             return DefSubclassProc(hwnd, msg, wp, lp);
         }
@@ -527,7 +740,14 @@ namespace
 
         switch (msg)
         {
+        case WM_SETFOCUS:
+            remember_gui_input_owner(hwnd);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        case WM_KILLFOCUS:
+            forget_gui_input_owner(hwnd);
+            return DefSubclassProc(hwnd, msg, wp, lp);
         case WM_NCDESTROY:
+            forget_gui_input_owner(hwnd);
             ::RemovePropW(hwnd, kEpochDockParentProp);
             delete ctx;
             return DefSubclassProc(hwnd, msg, wp, lp);
@@ -581,10 +801,6 @@ namespace
             return 0;
         }
 
-        case WM_MOUSEACTIVATE:
-            ::SetFocus(hwnd);
-            return MA_ACTIVATE;
-
         case WM_LBUTTONDOWN:
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
@@ -604,22 +820,13 @@ namespace
 
         case WM_CHAR:
         case WM_SYSCHAR:
+            forward_gui_input_message(hwnd, msg, wp, lp);
             return 0;
-
-        case WM_KEYUP:
-        case WM_SYSKEYUP:
-            inject_input_key_event(wp, false);
-            return DefSubclassProc(hwnd, msg, wp, lp);
 
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
-        {
-            const auto guiCtx = resolve_gui_context_for_hwnd(hwnd);
-            inject_input_key_event(wp, true);
             forward_gui_input_message(hwnd, msg, wp, lp);
-            push_gui_text_from_key_message(guiCtx.get(), wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
-        }
         }
 
         return DefSubclassProc(hwnd, msg, wp, lp);
@@ -727,6 +934,19 @@ namespace epochnamespace::core
     // ------------------------------------------------------------
     std::unordered_map<HWND, std::thread>& Threads() noexcept { return g_threads; }
     DragState& Drag() noexcept { return g_drag; }
+    MultiContextManager* GetActiveMultiContextManager() noexcept { return g_activeManager; }
+
+    void RequestActiveParentLayout() noexcept
+    {
+        if (auto* mgr = GetActiveMultiContextManager())
+        {
+            if (const HWND parentHwnd = mgr->GetParentWindow();
+                parentHwnd && ::IsWindow(parentHwnd) != FALSE)
+            {
+                request_parent_layout(parentHwnd);
+            }
+        }
+    }
 
     void MakeDockable(HWND hwnd, HWND parent)
     {
@@ -753,7 +973,16 @@ namespace epochnamespace::core
         if (!hwnd || ::IsWindow(hwnd) == FALSE)
             return;
 
-        (void)::SetWindowSubclass(hwnd, BackendInputProc, 2, 0);
+        // Dockable child panes already forward GUI input through DockableProc.
+        // Installing the bridge again on the same HWND duplicates WM_CHAR/WM_KEYDOWN.
+        if (::GetPropW(hwnd, kEpochDockParentProp))
+            return;
+
+        if (::GetPropW(hwnd, kEpochBackendBridgeProp))
+            return;
+
+        if (::SetWindowSubclass(hwnd, BackendInputProc, 2, 0))
+            ::SetPropW(hwnd, kEpochBackendBridgeProp, reinterpret_cast<HANDLE>(1));
     }
 
     namespace backend
@@ -1226,7 +1455,8 @@ namespace epochnamespace::core
                     winPtr->titleWide = windowTitle;
                     winPtr->titleNarrow = narrowTitle;
 
-                    if (parent) MakeDockable(hwnd, parent);
+                    if (parent && !backend_uses_proxy_child(type))
+                        MakeDockable(hwnd, parent);
 
                     {
                         std::scoped_lock lock(windowsMutex);
@@ -1475,7 +1705,8 @@ namespace epochnamespace::core
 #endif
 #endif
 
-        if (parentWnd) MakeDockable(hwnd, parentWnd);
+        if (parentWnd && !backend_uses_proxy_child(type))
+            MakeDockable(hwnd, parentWnd);
 
         {
             bool needInit = false;
@@ -1823,6 +2054,7 @@ namespace epochnamespace::core
             const HWND liveHwnd = dock_slot_handle(&win, parent);
             if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
                 continue;
+            const bool needsResizeCallback = win.width != cw || win.height != ch;
 
             const bool usingHiddenHostPlaceholder =
                 win.host_hwnd
@@ -1851,7 +2083,17 @@ namespace epochnamespace::core
                 ::ShowWindow(win.host_hwnd, SW_HIDE);
             }
 
-            HandleResize(liveHwnd, cw, ch);
+            if (win.host_hwnd
+                && win.host_hwnd != liveHwnd
+                && ::IsWindow(win.host_hwnd) != FALSE
+                && ::GetParent(win.host_hwnd) != parent)
+            {
+                restore_associated_host_window(&win, parent, c * cw, r * ch, cw, ch);
+            }
+
+            if (needsResizeCallback)
+                HandleResize(liveHwnd, cw, ch);
+            hide_associated_host_window(&win, liveHwnd, parent);
         }
     }
 
@@ -2023,6 +2265,12 @@ namespace epochnamespace::core
         switch (msg)
         {
         case WM_SIZE:
+            if (wParam != SIZE_MINIMIZED)
+                request_parent_layout(hwnd);
+            return 0;
+
+        case WM_EPOCH_LAYOUT:
+            ::RemovePropW(hwnd, kEpochLayoutPendingProp);
             mgr->ArrangeDockedWindowsGrid();
             return 0;
 
@@ -2099,6 +2347,7 @@ namespace epochnamespace::core
         }
 
         case WM_DESTROY:
+            ::RemovePropW(hwnd, kEpochLayoutPendingProp);
             return 0;
         }
 
@@ -2119,6 +2368,10 @@ namespace epochnamespace::core
 
             return {};
         };
+        const auto resolveWindowData = [hwnd]() noexcept -> epochnamespace::core::WindowData*
+        {
+            return resolve_window_data_for_hwnd(hwnd);
+        };
 
         if (msg == WM_NCCREATE)
         {
@@ -2129,8 +2382,21 @@ namespace epochnamespace::core
 
         switch (msg)
         {
+        case WM_SETFOCUS:
+            remember_gui_input_owner(hwnd);
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_KILLFOCUS:
+            forget_gui_input_owner(hwnd);
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_NCDESTROY:
+            forget_gui_input_owner(hwnd);
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
         case WM_LBUTTONDOWN:
         {
+            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            remember_gui_input_owner(hwnd);
             ::SetFocus(hwnd);
             const auto ctx = resolveGuiContext();
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
@@ -2151,7 +2417,11 @@ namespace epochnamespace::core
 
         case WM_MOUSEMOVE:
         {
+            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
             const auto ctx = resolveGuiContext();
+            auto* const window = resolve_window_data_for_hwnd(hwnd);
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseMove, lParam);
             if (!drag.dragging || drag.draggedWindow != hwnd)
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -2164,7 +2434,10 @@ namespace epochnamespace::core
             drag.lastMousePos = pt;
 
             RECT wndRect{};
-            ::GetWindowRect(hwnd, &wndRect);
+            HWND dragFrame = hwnd;
+            if (is_sfml_proxy_detached(window))
+                dragFrame = window->host_hwnd;
+            ::GetWindowRect(dragFrame, &wndRect);
 
             const int newX = wndRect.left + dx;
             const int newY = wndRect.top + dy;
@@ -2178,20 +2451,33 @@ namespace epochnamespace::core
             {
                 int wndW = clientW;
                 int wndH = clientH;
-                RECT projectedRect{
-                    newX,
-                    newY,
-                    newX + (wndRect.right - wndRect.left),
-                    newY + (wndRect.bottom - wndRect.top)
-                };
-                const bool inside = should_redock_to_parent(drag.originalParent, pt, projectedRect);
+                const bool inside = pointer_inside_parent_client(drag.originalParent, pt);
 
                 if (inside)
                 {
-                    if (::GetParent(hwnd) != drag.originalParent)
+                    if (is_sfml_proxy_detached(window))
+                    {
+                        redock_sfml_proxy_window(
+                            window,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            wndW,
+                            wndH);
+                        if (auto* mgr = s_activeInstance)
+                            mgr->HandleResize(hwnd, wndW, wndH);
+                    }
+                    else if (::GetParent(hwnd) != drag.originalParent)
                     {
                         dock_host_window_to_parent(
                             hwnd,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            wndW,
+                            wndH);
+                        restore_associated_host_window(
+                            window,
                             drag.originalParent,
                             newX,
                             newY,
@@ -2209,6 +2495,13 @@ namespace epochnamespace::core
                             newY,
                             wndW,
                             wndH);
+                        restore_associated_host_window(
+                            window,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            wndW,
+                            wndH);
                     }
 
                     hide_associated_host_window(
@@ -2219,7 +2512,20 @@ namespace epochnamespace::core
                 }
                 else
                 {
-                    if (::GetParent(hwnd) == drag.originalParent)
+                    if (is_sfml_proxy_candidate(window))
+                    {
+                        if (!is_sfml_proxy_detached(window))
+                        {
+                            undock_sfml_proxy_window(window, newX, newY, clientW, clientH);
+                            if (auto* mgr = s_activeInstance)
+                                mgr->HandleResize(hwnd, clientW, clientH);
+                        }
+                        else
+                        {
+                            position_top_level_shell(window->host_hwnd, newX, newY, clientW, clientH);
+                        }
+                    }
+                    else if (::GetParent(hwnd) == drag.originalParent)
                     {
                         LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
                         style &= ~WS_CHILD;
@@ -2267,13 +2573,20 @@ namespace epochnamespace::core
 
         case WM_LBUTTONUP:
         {
+            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
             const auto ctx = resolveGuiContext();
+            auto* const window = resolve_window_data_for_hwnd(hwnd);
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam);
             if (drag.dragging && drag.draggedWindow == hwnd)
             {
                 const HWND originalParent = drag.originalParent;
                 RECT wndRect{};
-                ::GetWindowRect(hwnd, &wndRect);
+                HWND releaseFrame = hwnd;
+                if (is_sfml_proxy_detached(window))
+                    releaseFrame = window->host_hwnd;
+                ::GetWindowRect(releaseFrame, &wndRect);
                 ::ReleaseCapture();
                 drag.dragging = false;
                 drag.draggedWindow = nullptr;
@@ -2281,20 +2594,40 @@ namespace epochnamespace::core
 
                 if (originalParent
                     && ::IsWindow(originalParent) != FALSE
-                    && ::GetParent(hwnd) != originalParent
+                    && ((window && is_sfml_proxy_detached(window)) || ::GetParent(hwnd) != originalParent)
                     && should_redock_to_parent(originalParent, drag.lastMousePos, wndRect))
                 {
                     RECT clientRect{};
                     ::GetClientRect(hwnd, &clientRect);
                     const int clientW = clamp_positive(static_cast<int>(clientRect.right - clientRect.left));
                     const int clientH = clamp_positive(static_cast<int>(clientRect.bottom - clientRect.top));
-                    dock_host_window_to_parent(
-                        hwnd,
-                        originalParent,
-                        wndRect.left,
-                        wndRect.top,
-                        clientW,
-                        clientH);
+                    if (window && is_sfml_proxy_detached(window))
+                    {
+                        redock_sfml_proxy_window(
+                            window,
+                            originalParent,
+                            wndRect.left,
+                            wndRect.top,
+                            clientW,
+                            clientH);
+                    }
+                    else
+                    {
+                        dock_host_window_to_parent(
+                            hwnd,
+                            originalParent,
+                            wndRect.left,
+                            wndRect.top,
+                            clientW,
+                            clientH);
+                        restore_associated_host_window(
+                            window,
+                            originalParent,
+                            wndRect.left,
+                            wndRect.top,
+                            clientW,
+                            clientH);
+                    }
                     if (auto* mgr = s_activeInstance)
                         mgr->HandleResize(hwnd, clientW, clientH);
                 }
@@ -2314,6 +2647,9 @@ namespace epochnamespace::core
 
         case WM_MOUSEWHEEL:
         {
+            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
             const auto ctx = resolveGuiContext();
             push_gui_mouse_event(
                 ctx.get(),
@@ -2328,20 +2664,26 @@ namespace epochnamespace::core
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
         {
+            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            if (!accepts_gui_keyboard_input(hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
             const auto ctx = resolveGuiContext();
-            inject_input_key_event(wParam, true);
             push_gui_key_event(ctx.get(), static_cast<int>(wParam));
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
         }
 
-        case WM_KEYUP:
-        case WM_SYSKEYUP:
-            inject_input_key_event(wParam, false);
-            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
-
         case WM_CHAR:
         case WM_SYSCHAR:
         {
+            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            if (!accepts_gui_keyboard_input(hwnd))
+                return 0;
+
             const auto ctx = resolveGuiContext();
             if (wParam >= 0x20u || wParam == 13u || wParam == 8u)
                 push_gui_text_event(ctx.get(), static_cast<char32_t>(wParam));

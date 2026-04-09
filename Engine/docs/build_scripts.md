@@ -111,17 +111,19 @@ before finishing:
 - the parented grid lays out the HWND that actually owns the slot at that
   moment, not a stale abstract primary handle
 - the visible backend pane contract is explicit:
-  `GLFW30` is still the visible Raylib pane, while SDL/SFML currently use a
-  visible `EpochChild` host that owns the slot and contains the real `SDL_app`
-  or `SFML_Window` child
-- current `v0.83.74` override: the stable Windows top-row contract is now the
-  real child surfaces `GLFW30`, `SDL_app`, and `SFML_Window`, with helper
-  `EpochChild` wrappers hidden
+  the stable Windows top-row contract is the real child surfaces `GLFW30`,
+  `SDL_app`, and `SFML_Window`, with helper `EpochChild` wrappers hidden while
+  docked
+- after a drag-undock-redock cycle, proxy `EpochChild` hosts must be reattached
+  to the parent and hidden again; a pass is not green if a helper host is left
+  floating as a top-level orphan
 - do not “promote” SDL/SFML backend children to direct grid-pane ownership just
   to hide the host, because that has already regressed maximize stability,
   input, and missing-pane behavior
 - after maximize, the visible child rect matches the intended slot rect instead
   of silently growing beyond it
+- non-maximized startup must survive the startup settle pass with the same
+  visible top-row child contract, not a briefly visible extra SDL/SFML wrapper
 - closing one visible child pane early must not kill the parent editor
 - a proof run must come from `x64/Debug` or `x64/Release` with assets present
 - if the same pass touches Linux/WSL2/WSLg behavior, document whether that path
@@ -174,8 +176,9 @@ bounded subsystem design, and changelog drafting before integrating the final
 answer locally.
 
 When possible, route direct helper drafting through LM Studio `/v1/responses`
-with `input` payloads and `reasoning.effort = none`, so helper output stays
-fast, visible, and easy to integrate without provoking hidden reasoning churn.
+or `/v1/chat/completions` with bounded output tokens. If the selected local
+model rejects an explicit reasoning setting, retry without the reasoning field
+instead of treating the helper as broken or empty.
 
 Git-safe AI assets live under:
 
@@ -202,9 +205,10 @@ automatic curated truth. Review them, delete bad or outdated samples when the
 training direction changes, and only then promote intentional records into
 `Engine/ai/datasets/curated/` or `Engine/ai/evals/`.
 
-When using local Qwen helpers through LM Studio direct responses, prefer
-`reasoning.effort = none` for fast drafting instead of settings that fall back
-to reasoning-heavy output.
+When using local helpers through LM Studio direct responses, prefer the
+lightest visible-output settings the loaded model actually accepts. For Qwen
+helpers that means disabling reasoning when supported; for non-reasoning models
+it means omitting the reasoning field entirely.
 
 ## Hardware support strategy
 

@@ -233,6 +233,26 @@ function Invoke-UndockRedock([IntPtr]$DockHandle, [IntPtr]$ParentHwnd) {
     }
 }
 
+function Get-ProxyHostProbe([IntPtr]$HostHandle, [IntPtr]$ParentHwnd) {
+    if ($HostHandle -eq [IntPtr]::Zero -or -not [EpochWin32Harness]::IsWindow($HostHandle)) {
+        return [pscustomobject]@{
+            Present = $false
+            Parent = [IntPtr]::Zero
+            Visible = $false
+            RehiddenInParent = $true
+        }
+    }
+
+    $hostParent = [EpochWin32Harness]::GetParent($HostHandle)
+    $hostVisible = [EpochWin32Harness]::IsWindowVisible($HostHandle)
+    [pscustomobject]@{
+        Present = $true
+        Parent = $hostParent
+        Visible = $hostVisible
+        RehiddenInParent = ($hostParent -eq $ParentHwnd -and -not $hostVisible)
+    }
+}
+
 function Get-FocusProbe([IntPtr]$TargetHwnd) {
     $windowPid = 0
     $threadId = [EpochWin32Harness]::GetWindowThreadProcessId($TargetHwnd, [ref]$windowPid)
@@ -351,9 +371,9 @@ try {
 
     $backendChecks = @()
     foreach ($item in @(
-        @{ Name = 'raylib'; DockHandle = $(if ($rayChild) { $rayChild.Hwnd } elseif ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($rayChild) { $rayChild.Hwnd } else { [IntPtr]::Zero }) },
-        @{ Name = 'sdl'; DockHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }) },
-        @{ Name = 'sfml'; DockHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }) }
+        @{ Name = 'raylib'; DockHandle = $(if ($rayChild) { $rayChild.Hwnd } elseif ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($rayChild) { $rayChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }) },
+        @{ Name = 'sdl'; DockHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }) },
+        @{ Name = 'sfml'; DockHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }) }
     )) {
         if ($Mode -eq 'Single' -and $item.Name -ne $Backend) { continue }
         if ($Mode -eq 'Full' -and -not [string]::IsNullOrWhiteSpace($FocusedBackend) -and $item.Name -ne $FocusedBackend) { continue }
@@ -363,10 +383,12 @@ try {
         Invoke-LeftClick -Hwnd $item.FocusHandle -ClientX 24 -ClientY 24
         Start-Sleep -Milliseconds 150
         $focus = Get-FocusProbe -TargetHwnd $item.FocusHandle
+        $proxyHost = Get-ProxyHostProbe -HostHandle $item.HostHandle -ParentHwnd $parentWindow.Hwnd
         $backendChecks += [pscustomobject]@{
             Backend = $item.Name
             Drag = $drag
             Focus = $focus
+            ProxyHost = $proxyHost
         }
 
         Start-Sleep -Milliseconds 500

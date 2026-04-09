@@ -63,11 +63,13 @@ changes.
 
 Current validated helper pair:
 
-- `nvidia/nemotron-3-nano-4b`
+- `arliai_glm-4.5-air-derestricted`
 - `qwen/qwen3.5-9b`
 
-`nemotron-3-nano-4b` is a good fast draft/triage helper when VRAM is tight, and
-`qwen/qwen3.5-9b` remains the stronger local screenshot/code-review helper.
+The exact helper pair varies with local load order, so the workflow rule is
+more important than the names: use the first two `/v1/models` entries as the
+drafting pools, and keep the first detected model as the in-engine/runtime
+parity baseline.
 
 Use local helpers aggressively for:
 
@@ -87,10 +89,15 @@ model as the in-engine/runtime parity baseline.
 That helper-first check should happen at the start of a phase, not as an
 afterthought once source edits are already underway.
 
-When possible, send direct helper drafts through LM Studio `/v1/responses`
-using `input` payloads, `reasoning.effort = none`, and bounded output tokens so
-the helper path stays fast and predictable instead of disappearing into hidden
-reasoning output.
+When possible, send direct helper drafts through LM Studio `/v1/responses` or
+`/v1/chat/completions` with bounded output tokens. If the selected model rejects
+an explicit reasoning field, retry without it instead of treating the helper
+path as broken.
+
+The engine runtime itself must follow the same rule for the first detected
+model: if a Responses API call comes back empty because the model rejects the
+reasoning configuration, retry without the reasoning field so the AI dock still
+shows a visible answer.
 
 If a local multimodal helper returns its useful answer in `reasoning_content`
 while `content` is blank, treat that as a tooling/parsing issue in the helper

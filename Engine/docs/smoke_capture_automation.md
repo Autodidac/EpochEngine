@@ -35,10 +35,13 @@ When the pass is multicontext-specific, validate:
 - wheel zoom and camera movement
 - docked child-window ownership and absence of stray promoted panes or fake host
   wrappers
-- validate the expected ownership model instead of assuming every backend should
-  hide its host:
-  SDL/SFML currently keep a visible `EpochChild` slot host with the real backend
-  child inside it, while Raylib still shows the real `GLFW30` child directly
+- validate the current parented ownership model directly:
+  the stable Windows top-row proof should show the real child panes `GLFW30`,
+  `SDL_app`, and `SFML_Window`, with helper `EpochChild` wrappers hidden while
+  docked
+- for proxy-host backends, verify the helper `EpochChild` host reattaches to the
+  parent and stays hidden after redock; do not sign off if the host remains a
+  visible or top-level orphan after the drag cycle
 - for resize/maximize regressions, verify the grid is operating on the HWND that
   actually owns the dock slot at that moment and then perform at least one early
   child-close check without killing the parent editor
@@ -51,9 +54,8 @@ When the pass is multicontext-specific, validate:
 - do not treat `--smoke --capture` as valid pane proof if the run exits before
   backend child takeover settles; fall back to a bounded stable `--editor` run
   and confirm the visible child classes directly
-- current `v0.83.74` override: the stable Windows top-row proof should show the
-  visible child panes `GLFW30`, `SDL_app`, and `SFML_Window`, not visible
-  `EpochChild` wrappers
+- if startup settle timing is under investigation, run both a normal startup
+  and a maximize pass; the same hidden-wrapper contract must survive both
 - backend palette parity when clear colors should match
 - Systems workspace graph clipping and pan/zoom behavior
 - Systems time controls and pacing diagnostics when the pass touches the shared
@@ -82,9 +84,8 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - prefer a full multicontext frame when validating layout changes
 - a multicontext proof is only valid when every intended pane is present and no
   backend is replaced by a fake wrapper or black/empty surface
-- for the current hosted SDL/SFML design, it is acceptable for the visible pane
-  owner to be `EpochChild` as long as the real `SDL_app` or `SFML_Window` child
-  is alive, visible, and rendering correctly inside it
+- do not publish a proof that still shows a visible extra SDL/SFML wrapper in
+  the top row; the docked pane should be the real child surface
 - if only one backend is under investigation, capture that backend directly
 - prefer the fitted parented multicontext host so six-context layouts stay
   visible on normal desktop work areas instead of drifting off-screen
@@ -100,6 +101,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
   yet
 - when docking/redocking is under investigation, run both single-backend and
   full-grid parented harness passes before signing off
+- treat focus-only proof as incomplete for text input:
+  the next missing automation gate is a typed-text editor smoke for AI chat and
+  other edit boxes
 - if the same pass touches Linux/WSL2/WSLg launcher or parented behavior,
   document whether that path was actually revalidated or still needs follow-up
 
@@ -119,6 +123,9 @@ Expected smoke behavior:
 - local helper drafting for docs/code/review is encouraged, but runtime parity
   testing should still stay on the first detected model
 - the AI dock returns a visible reply
+- if the first detected model rejects explicit reasoning configuration, the
+  request path should retry without the reasoning field instead of surfacing an
+  empty reply
 - raw capture lands in `workspace/auto_train.jsonl`
 - MCP/control snapshots can land in `workspace/mcp_capture.jsonl`
 - no `workspace/ai/*` checkpoints, compiled models, or caches show up as
@@ -126,9 +133,9 @@ Expected smoke behavior:
 - `qwen/qwen3.5-9b` is the current fast local helper baseline when loaded
 - if the first detected helper model is changed locally, keep using the first
   `/v1/models` entry instead of provoking extra model loads during smoke runs
-- when driving local Qwen helpers directly, prefer `/v1/responses` with
-  `reasoning.effort = none` so helper output stays visible and does not waste
-  output budget on hidden reasoning
+- when driving local helpers directly, prefer bounded `/v1/responses` or
+  `/v1/chat/completions` requests; omit explicit reasoning config when the
+  loaded model rejects it
 - when two helper models are loaded, helper-first passes can use up to four
   parallel drafting prompts per model for planning/review work, while the engine
   runtime itself still stays on the first detected model for parity

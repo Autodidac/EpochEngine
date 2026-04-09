@@ -65,6 +65,9 @@ wrappers.
 - Current steering docs in `README.md` and `Engine/docs/`
 - Deep-research PDF guidance added under `Changes/` for the six-month 2D
   priority track and solo-engine strategy
+- Renderer capability checklist from the April 2026 repo-aligned planning drop;
+  use it as a productivity map for renderer/system/tooling follow-up instead of
+  letting renderer features drift into disconnected experiments
 - Future integration source for procedural/time-node authoring:
   `O2L` code when it is actually present in the workspace
 
@@ -179,7 +182,9 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [x] Keep parented multicontext behavior honest: the visible pane should not
       degrade into fake extra dock wrappers or misleading nested windows. The
       current stable rule is real child-surface panes for `GLFW30`, `SDL_app`,
-      and `SFML_Window`, with helper `EpochChild` hosts hidden.
+      and `SFML_Window`, with helper `EpochChild` hosts hidden while docked and
+      re-hidden into the parent after redock instead of lingering as top-level
+      orphans.
 - [x] Keep the shared preview marker honest by deriving the visible ground-hit
       spot from the real center camera ray before any editor-focus fallback.
 - [ ] Tighten multicontext terminology so file names, modules, and docs stop
@@ -221,6 +226,9 @@ These remain support-tier or project-opt-in work, not the default baseline.
 
 ## Phase 6 - UI and Editor Maturity
 
+- [ ] Add a repeatable typed-text editor smoke path for AI chat and other text
+      fields so focus/caret/input regressions are caught by automation instead
+      of screenshots or click-only probes.
 - [ ] Replace remaining ad hoc editor-only layout logic with a full modular GUI
       workspace system backed by shared controls and the atlas-driven UI
       pipeline.

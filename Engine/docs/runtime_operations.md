@@ -76,19 +76,14 @@ the same engine-owned path.
 - support-tier diagnostics should stay visible beside renderer stage flow and
   worker-count information so compatibility policy is visible in the editor
 - docked backend hosts should present one clean pane per active context
-- parented SDL/SFML backends should currently keep the visible `EpochChild`
-  host as the dock/grid slot owner while the real `SDL_app` or `SFML_Window`
-  child renders inside it; treating the backend child itself as the dock pane
-  has already caused maximize and input regressions
-- Raylib currently still exposes the real `GLFW30` child as the visible pane, so
-  it must stay on the backend input bridge and keep its slot sizing honest
+- the stable Windows top-row contract is visible real child panes:
+  `GLFW30`, `SDL_app`, and `SFML_Window`
+- helper `EpochChild` wrappers are implementation detail only:
+  they stay hidden while docked and must return hidden under the parent after a
+  redock instead of lingering as floating top-level shells
 - when validating Win32 parented multicontext behavior, a live window-tree probe
   should show the real backend child classes as visible pane owners and helper
-  ownership honestly: visible `EpochChild` hosts for SDL/SFML with nested
-  `SDL_app`/`SFML_Window` children, and a visible `GLFW30` child for Raylib
-- current `v0.83.74` override: the stable Windows top-row contract is visible
-  `GLFW30`, `SDL_app`, and `SFML_Window`, with the helper `EpochChild` wrappers
-  hidden
+  wrappers hidden in the docked state
 - maximize/restore validation should keep using the pane owner that is actually
   parented into the grid slot at that moment, not a stale abstract "primary"
   HWND that may still be mid-takeover
@@ -98,6 +93,9 @@ the same engine-owned path.
 - once a backend is docked as a child pane, do not reapply top-level backend
   window-size APIs that can silently restore window chrome semantics and break
   the parented slot geometry
+- editor text-entry validation is still an active gap:
+  the shell needs a repeatable typed-text smoke for AI chat and other edit
+  boxes, not just click/focus proof
 - time diagnostics should show the shared simulation clock state: pause/resume,
   scale, fixed-step cadence, accumulator, and simulated time
 - time diagnostics should also show the current frame step budget and the
@@ -202,9 +200,9 @@ Data rules:
 - helper-first passes should check `/v1/models` at the start of a phase, use
   the first two models as drafting pools when available, and keep the first
   detected model as the only runtime-parity/in-engine smoke model
-- for direct helper drafting, use LM Studio `/v1/responses` with `input`
-  payloads and `reasoning.effort = none` to keep local helper output fast and
-  visible
+- for direct helper drafting, use LM Studio `/v1/responses` or
+  `/v1/chat/completions` with bounded output, and retry without any reasoning
+  field when the selected model rejects explicit reasoning configuration
 
 ## Procedural/time-node direction
 

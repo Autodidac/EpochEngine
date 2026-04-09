@@ -408,7 +408,9 @@ Highlights:
 - The Windows parented multicontext path now revalidates on the real child
   surfaces: Raylib/SDL/SFML all undock and redock cleanly in the harness, the
   maximized six-context grid stays fitted, and an early visible `SFML_Window`
-  close still does not kill the parent editor.
+  close still does not kill the parent editor. The helper `EpochChild` proxy
+  hosts are expected to return hidden under the parent after redock instead of
+  lingering as floating top-level wrappers.
 - The AI workspace now promotes staged MCP/control snapshots into curated
   datasets too, instead of leaving that part of the two-role training loop as
   documentation-only.

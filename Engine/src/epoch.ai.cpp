@@ -701,6 +701,64 @@ namespace epoch::ai
             return requested;
         }
 
+        static std::string extract_json_string_field_after(std::string_view sv, std::string_view field, std::size_t from = 0)
+        {
+            std::size_t key = sv.find(field, from);
+            if (key == std::string_view::npos)
+                return {};
+
+            std::size_t colon = sv.find(':', key + field.size());
+            if (colon == std::string_view::npos)
+                return {};
+
+            std::size_t q = colon + 1;
+            while (q < sv.size() && std::isspace(static_cast<unsigned char>(sv[q])) != 0)
+                ++q;
+            if (q >= sv.size() || sv[q] != '"')
+                return {};
+
+            ++q;
+            std::string raw;
+            for (std::size_t i = q; i < sv.size(); ++i)
+            {
+                const char c = sv[i];
+                if (c == '"' && (i == q || sv[i - 1] != '\\'))
+                    return trim(json_unescape(raw));
+                raw.push_back(c);
+            }
+
+            return {};
+        }
+
+        static std::string extract_json_error_message(const std::string& response)
+        {
+            std::string_view sv{ response };
+            const std::size_t errorPos = sv.find("\"error\"");
+            if (errorPos == std::string_view::npos)
+                return {};
+
+            return extract_json_string_field_after(sv, "\"message\"", errorPos);
+        }
+
+        static std::string extract_openai_choice_message_content(const std::string& response)
+        {
+            std::string_view sv{ response };
+            const std::size_t choicesPos = sv.find("\"choices\"");
+            if (choicesPos == std::string_view::npos)
+                return {};
+
+            if (const std::string direct = extract_json_string_field_after(sv, "\"content\"", choicesPos); !direct.empty())
+                return direct;
+
+            if (const std::string outputText = extract_json_string_field_after(sv, "\"text\"", choicesPos); !outputText.empty())
+                return outputText;
+
+            if (const std::string reasoning = extract_json_string_field_after(sv, "\"reasoning_content\"", choicesPos); !reasoning.empty())
+                return reasoning;
+
+            return {};
+        }
+
         static std::string extract_lmstudio_message_content(const std::string& response)
         {
             // LM Studio v1: { "output": [ { "type":"message", "content":"..." }, ... ] , ... }
@@ -876,7 +934,10 @@ namespace epoch::ai
             if (last.empty() && !lastReasoning.empty())
                 last = reasoning_fallback(lastReasoning);
 
-            return last;
+            if (!last.empty())
+                return last;
+
+            return trim(extract_openai_choice_message_content(response));
         }
 
         static std::string lmstudio_chat_complete(const std::string& endpoint_full,
@@ -885,19 +946,25 @@ namespace epoch::ai
             std::string_view input,
             const std::vector<std::pair<std::string, std::string>>& headers)
         {
-            std::string body;
-            body.reserve(256 + input.size());
-            body += "{";
-            body += "\"model\":\"" + json_escape(model) + "\",";
-            body += "\"system_prompt\":\"" + json_escape(system_prompt) + "\",";
-            body += "\"input\":\"" + json_escape(input) + "\",";
-            body += "\"reasoning\":\"off\",";
-            body += "\"max_output_tokens\":128,";
-            body += "\"store\":false";
-            body += "}";
-
-            try
+            const auto build_body = [&](bool includeReasoning) -> std::string
             {
+                std::string body;
+                body.reserve(256 + input.size());
+                body += "{";
+                body += "\"model\":\"" + json_escape(model) + "\",";
+                body += "\"system_prompt\":\"" + json_escape(system_prompt) + "\",";
+                body += "\"input\":\"" + json_escape(input) + "\",";
+                if (includeReasoning)
+                    body += "\"reasoning\":\"off\",";
+                body += "\"max_output_tokens\":128,";
+                body += "\"store\":false";
+                body += "}";
+                return body;
+            };
+
+            const auto request_once = [&](bool includeReasoning, std::string* rawResponse) -> std::string
+            {
+                const std::string body = build_body(includeReasoning);
 #if defined(_WIN32)
                 const std::string resp = winhttp_post_json(endpoint_full, body, headers);
 #elif defined(EPOCH_HAS_CURL)
@@ -908,7 +975,31 @@ namespace epoch::ai
                 core::log::error("ai", "LM Studio request failed: no non-Windows HTTP transport is configured (build with libcurl).");
                 return {};
 #endif
+                if (rawResponse)
+                    *rawResponse = resp;
                 return trim(extract_lmstudio_message_content(resp));
+            };
+
+            try
+            {
+                std::string rawResponse{};
+                std::string reply = request_once(true, &rawResponse);
+                if (!reply.empty())
+                    return reply;
+
+                const std::string error = extract_json_error_message(rawResponse);
+                if (error.find("reasoning configuration") != std::string::npos
+                    || error.find("does not expose reasoning") != std::string::npos
+                    || error.find("param\": \"reasoning\"") != std::string::npos)
+                {
+                    reply = request_once(false, &rawResponse);
+                    if (!reply.empty())
+                        return reply;
+                }
+
+                if (!error.empty())
+                    core::log::warn("ai", epoch::string_view{error.data(), error.size()});
+                return {};
             }
             catch (const std::exception& ex)
             {

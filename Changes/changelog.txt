@@ -1,5 +1,12 @@
 # Epoch Changelog
 
+## [v0.83.75]
+- Tightened the Win32 parented multicontext redock path so proxy `EpochChild` hosts are reattached and hidden after redock instead of lingering as stray top-level wrapper windows beside the real `GLFW30`, `SDL_app`, or `SFML_Window` panes.
+- Hardened the Win32 GUI input bridge around actual focus ownership by tracking `WM_SETFOCUS`/`WM_KILLFOCUS` and rejecting keyboard forwarding when the live Win32 focus is on a different pane, which reduces the editor's cross-pane text/key leakage risk.
+- Made the multicontext harness more honest by recording proxy-host state after each drag cycle, so a pass cannot claim green while a helper host is still floating outside the parent.
+- Updated the AI request path to tolerate first-detected LM Studio models that reject reasoning configuration by retrying without the `reasoning` field instead of surfacing empty replies.
+- Refreshed the roadmap and build/runtime/smoke/AI docs around the current parented-pane contract and left typed-text editor smoke explicitly open as the next missing regression gate.
+
 ## [v0.83.74]
 - Restored the stable top-row child-surface contract in the Windows parented multicontext editor: `GLFW30`, `SDL_app`, and `SFML_Window` are back to being the visible docked panes, while the helper `EpochChild` wrappers stay hidden instead of owning the slot.
 - Fixed the SDL/SFML dock/redock regression by making the real backend child windows dockable again, preserving focus/input on those child surfaces, and keeping the helper hosts out of the visible layout.
