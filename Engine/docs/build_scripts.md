@@ -133,6 +133,9 @@ already regressed:
 - for SDL/SFML hosted panes, keep the host as the grid slot owner and resize the
   real backend child inside that host instead of swapping the slot owner during
   maximize
+- in editor preview mode, keep OpenGL and Vulkan on the same shared
+  `render.preview_grid` camera/projection math instead of letting one backend
+  drift onto its own preview-camera implementation
 
 ## AI asset policy
 
@@ -155,6 +158,9 @@ At the start of each phase:
 - use the first two detected models as helper drafting pools when available
 - keep the first detected model as the only runtime-parity/in-engine smoke
   model
+- if the second detected helper is vision-capable, use it for screenshot and
+  layout review while still keeping the first detected model as the engine's
+  runtime-parity smoke target
 
 When two local helper models are loaded, supervisor passes should treat them as
 two helper pools with up to four parallel drafting lanes each. Use those lanes
@@ -241,6 +247,8 @@ If two helper models are loaded:
   it
 - keep the first detected model as the only runtime-parity/in-engine smoke model
   so the engine does not provoke extra model loads during testing
+- when only one of those helpers has reliable vision, reserve that helper for
+  screenshot/layout review instead of burning main-model tokens on image triage
 
 When the helper returns mostly reasoning text or stalls:
 

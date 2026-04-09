@@ -38,6 +38,7 @@ module;
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <cstring>
@@ -69,6 +70,20 @@ namespace epochnamespace::vulkancontext
 
     namespace
     {
+        [[nodiscard]] inline std::array<float, 4> preview_color_to_vulkan(
+            std::array<float, 4> color) noexcept
+        {
+            const auto to_linear = [](float value) noexcept
+            {
+                return std::pow((std::clamp)(value, 0.0f, 1.0f), 2.2f);
+            };
+
+            color[0] = to_linear(color[0]);
+            color[1] = to_linear(color[1]);
+            color[2] = to_linear(color[2]);
+            return color;
+        }
+
         struct GuiBatch
         {
             const TextureAtlas* atlas = nullptr;
@@ -105,7 +120,8 @@ namespace epochnamespace::vulkancontext
         std::array<vk::ClearValue, 2> clearValues{};
         const auto frameClearColor = epochnamespace::core::clear_color_for_context(
             epochnamespace::core::ContextType::Vulkan);
-        const std::array<float, 4> sceneClearColor = frameClearColor;
+        const std::array<float, 4> sceneClearColor =
+            preview_color_to_vulkan(epochnamespace::previewgrid::kClearColor);
         clearValues[0].setColor(vk::ClearColorValue{ frameClearColor });
         clearValues[1].setDepthStencil(vk::ClearDepthStencilValue{ 1.0f, 0 });
 #endif

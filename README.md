@@ -54,6 +54,9 @@ asset set as the main editor host.
   assistance. They are not a third engine runtime role.
 - Multi-context, multi-backend runtime orchestration across OpenGL, Vulkan,
   SDL3, Raylib, SFML, software, and noop/headless paths.
+- Shared editor preview math across the main scene-view backends, so OpenGL and
+  Vulkan do not drift onto subtly different framing or marker behavior while
+  preview mode is active.
 - Project-driven workflow that routes projects into the editor and scene play
   into runtime mode, instead of treating the editor as a loose debug shell or a
   permanent launcher for sample games.
@@ -381,7 +384,7 @@ Useful entry points:
 Version:
 
 ```text
-v0.83.72
+v0.83.73
 ```
 
 Highlights:
@@ -389,6 +392,9 @@ Highlights:
   from an asset-bearing maximized `x64/Debug` editor run, with the visible
   `GLFW30`, hosted `SDL`, hosted `SFML`, `Vulkan`, `OpenGL`, and `Software`
   panes present.
+- OpenGL and Vulkan editor previews now share the same `render.preview_grid`
+  camera math, and the Vulkan scene preview now uses the same shared preview
+  clear/gizmo color contract instead of drifting onto its own editor-view path.
 - The project shell now pushes the embedded-engine path further into reality by
   generating an `epoch.project.cmake` fragment, using include fallback logic,
   and treating `Engine/include/` as a first-class path for generated projects.

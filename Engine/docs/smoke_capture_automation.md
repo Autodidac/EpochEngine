@@ -129,6 +129,9 @@ Expected smoke behavior:
   the engine runtime itself on the first detected local model for parity
 - if a helper returns blank `content` but useful `reasoning_content`, harvest
   that output for drafting/review instead of discarding the helper pass
+- if the first two detected helpers split text and vision strengths, keep the
+  first model as runtime parity and use the vision-capable helper for screenshot
+  review, pane/layout checks, and color/parity triage
 
 ## Systems/graph checks
 

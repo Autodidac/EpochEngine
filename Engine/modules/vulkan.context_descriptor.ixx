@@ -60,6 +60,21 @@ import render.preview_grid;
 
 namespace epochnamespace::vulkancontext
 {
+    namespace
+    {
+        [[nodiscard]] inline glm::mat4 previewgrid_to_glm(
+            const epochnamespace::previewgrid::Mat4& source) noexcept
+        {
+            glm::mat4 out{ 1.0f };
+            for (int column = 0; column < 4; ++column)
+            {
+                for (int row = 0; row < 4; ++row)
+                    out[column][row] = source[static_cast<std::size_t>(column * 4 + row)];
+            }
+            return out;
+        }
+    }
+
     void Application::createDescriptorPool()
     {
         const std::uint32_t count = static_cast<std::uint32_t>(swapChainImages.size());
@@ -242,14 +257,32 @@ namespace epochnamespace::vulkancontext
             ? (sceneWidth / static_cast<float>(sceneHeight))
             : 1.0f;
 
-        glm::mat4 proj = glm::perspective(
-            editorPreview ? previewCamera.fovRadians : glm::radians(45.0f),
-            aspect,
-            0.1f,
-            editorPreview ? previewCamera.farPlane : 10.0f);
-        proj[1][1] *= -1.0f; // Vulkan clip space
+        if (editorPreview)
+        {
+            const auto previewProj = epochnamespace::previewgrid::perspective(
+                previewCamera.fovRadians,
+                aspect,
+                previewCamera.nearPlane,
+                previewCamera.farPlane);
+            const auto previewView = epochnamespace::previewgrid::look_at(
+                previewCamera.eye,
+                previewCamera.target,
+                previewCamera.up);
 
-        ubo.proj = proj;
+            ubo.view = previewgrid_to_glm(previewView);
+            ubo.proj = previewgrid_to_glm(previewProj);
+            ubo.proj[1][1] *= -1.0f; // Vulkan clip space
+        }
+        else
+        {
+            glm::mat4 proj = glm::perspective(
+                glm::radians(45.0f),
+                aspect,
+                0.1f,
+                10.0f);
+            proj[1][1] *= -1.0f; // Vulkan clip space
+            ubo.proj = proj;
+        }
 
         std::memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }

@@ -36,7 +36,9 @@
 
 module;
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -54,6 +56,24 @@ namespace epochnamespace::vulkancontext
 {
     using Vertex = Application::Vertex;
 
+    namespace
+    {
+        [[nodiscard]] inline float preview_color_to_vulkan(float value) noexcept
+        {
+            return std::pow((std::clamp)(value, 0.0f, 1.0f), 2.2f);
+        }
+
+        [[nodiscard]] inline std::array<float, 3> preview_color_to_vulkan(
+            const epochnamespace::previewgrid::Vec3& color) noexcept
+        {
+            return {
+                preview_color_to_vulkan(color.x),
+                preview_color_to_vulkan(color.y),
+                preview_color_to_vulkan(color.z)
+            };
+        }
+    }
+
     // Keep data local to this partition (NOT exported as symbols)
     [[nodiscard]] inline std::vector<Vertex> build_preview_vertices(
         const epochnamespace::core::Context* ctx)
@@ -66,18 +86,20 @@ namespace epochnamespace::vulkancontext
 
         for (const auto& vertex : source)
         {
+            const auto color = preview_color_to_vulkan(vertex.color);
             out.push_back(Vertex{
                 { vertex.position.x, vertex.position.y, vertex.position.z },
-                { vertex.color.x, vertex.color.y, vertex.color.z },
+                { color[0], color[1], color[2] },
                 { 0.0f, 0.0f }
             });
         }
 
         for (std::size_t i = 0; i < markerCount; ++i)
         {
+            const auto color = preview_color_to_vulkan(markerVertices[i].color);
             out.push_back(Vertex{
                 { markerVertices[i].position.x, markerVertices[i].position.y, markerVertices[i].position.z },
-                { markerVertices[i].color.x, markerVertices[i].color.y, markerVertices[i].color.z },
+                { color[0], color[1], color[2] },
                 { 0.0f, 0.0f }
             });
         }

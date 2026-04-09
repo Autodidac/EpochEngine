@@ -214,6 +214,11 @@ namespace epochnamespace::previewgrid
         export inline std::unordered_map<const void*, Vec3, PtrHash> g_lastMarkerHits{};
         inline std::shared_mutex g_cameraRigMutex{};
 
+        [[nodiscard]] inline const void* normalize_camera_key(const void* ctxKey) noexcept
+        {
+            return ctxKey ? reinterpret_cast<const void*>(static_cast<std::uintptr_t>(1)) : nullptr;
+        }
+
         [[nodiscard]] inline CameraRigState make_editor_rig() noexcept
         {
             return CameraRigState{
@@ -310,7 +315,8 @@ namespace epochnamespace::previewgrid
 
         [[nodiscard]] inline CameraRigState& ensure_rig(const void* ctxKey)
         {
-            auto [it, inserted] = g_cameraRigs.try_emplace(ctxKey, make_default_rig(CameraMode::Editor));
+            const void* const rigKey = normalize_camera_key(ctxKey);
+            auto [it, inserted] = g_cameraRigs.try_emplace(rigKey, make_default_rig(CameraMode::Editor));
             return it->second;
         }
 
@@ -375,21 +381,23 @@ namespace epochnamespace::previewgrid
 
     export [[nodiscard]] inline CameraMode camera_mode_for(const void* ctxKey) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return CameraMode::Editor;
 
         std::shared_lock lock(detail::g_cameraRigMutex);
-        const auto it = detail::g_cameraRigs.find(ctxKey);
+        const auto it = detail::g_cameraRigs.find(rigKey);
         return it != detail::g_cameraRigs.end() ? it->second.mode : CameraMode::Editor;
     }
 
     export inline void set_camera_mode(const void* ctxKey, CameraMode mode) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return;
 
         std::unique_lock lock(detail::g_cameraRigMutex);
-        auto& rig = detail::ensure_rig(ctxKey);
+        auto& rig = detail::ensure_rig(rigKey);
         const std::uint64_t nextRevision =
             rig.revision == (std::numeric_limits<std::uint64_t>::max)() ? 1 : (rig.revision + 1);
         rig = detail::make_default_rig(mode);
@@ -398,22 +406,24 @@ namespace epochnamespace::previewgrid
 
     export inline void reset_camera(const void* ctxKey) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return;
 
         std::unique_lock lock(detail::g_cameraRigMutex);
-        auto& rig = detail::ensure_rig(ctxKey);
+        auto& rig = detail::ensure_rig(rigKey);
         rig = detail::make_default_rig(rig.mode);
         detail::touch_rig(rig);
     }
 
     export [[nodiscard]] inline float camera_distance_for(const void* ctxKey) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return detail::make_default_rig(CameraMode::Editor).distance;
 
         std::shared_lock lock(detail::g_cameraRigMutex);
-        const auto it = detail::g_cameraRigs.find(ctxKey);
+        const auto it = detail::g_cameraRigs.find(rigKey);
         if (it == detail::g_cameraRigs.end())
             return detail::make_default_rig(CameraMode::Editor).distance;
         return it->second.mode == CameraMode::FPS ? 0.0f : it->second.distance;
@@ -421,11 +431,12 @@ namespace epochnamespace::previewgrid
 
     export inline void zoom_camera(const void* ctxKey, float amount) noexcept
     {
-        if (!ctxKey || amount == 0.0f)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey || amount == 0.0f)
             return;
 
         std::unique_lock lock(detail::g_cameraRigMutex);
-        auto& rig = detail::ensure_rig(ctxKey);
+        auto& rig = detail::ensure_rig(rigKey);
         if (rig.mode == CameraMode::FPS)
             return;
 
@@ -437,11 +448,12 @@ namespace epochnamespace::previewgrid
 
     export [[nodiscard]] inline std::uint64_t camera_revision_for(const void* ctxKey) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return 0;
 
         std::shared_lock lock(detail::g_cameraRigMutex);
-        const auto it = detail::g_cameraRigs.find(ctxKey);
+        const auto it = detail::g_cameraRigs.find(rigKey);
         return it != detail::g_cameraRigs.end() ? it->second.revision : 0;
     }
 
@@ -450,14 +462,15 @@ namespace epochnamespace::previewgrid
         float deltaRightPixels,
         float deltaForwardPixels) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return;
 
         if (deltaRightPixels == 0.0f && deltaForwardPixels == 0.0f)
             return;
 
         std::unique_lock lock(detail::g_cameraRigMutex);
-        auto& rig = detail::ensure_rig(ctxKey);
+        auto& rig = detail::ensure_rig(rigKey);
         if (rig.mode == CameraMode::FPS)
             return;
 
@@ -471,21 +484,19 @@ namespace epochnamespace::previewgrid
 
     export inline void cleanup_context(const void* ctxKey) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return;
-
-        std::unique_lock lock(detail::g_cameraRigMutex);
-        detail::g_cameraRigs.erase(ctxKey);
-        detail::g_lastMarkerHits.erase(ctxKey);
     }
 
     export [[nodiscard]] inline Camera camera_for(const void* ctxKey) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return kCamera;
 
         std::shared_lock lock(detail::g_cameraRigMutex);
-        const auto it = detail::g_cameraRigs.find(ctxKey);
+        const auto it = detail::g_cameraRigs.find(rigKey);
         if (it == detail::g_cameraRigs.end())
             return detail::camera_from_rig(detail::make_default_rig(CameraMode::Editor));
         return detail::camera_from_rig(it->second);
@@ -500,7 +511,8 @@ namespace epochnamespace::previewgrid
         float yawInput,
         float pitchInput) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return;
 
         const float dt = (std::clamp)(deltaTime, 0.0f, 0.05f);
@@ -508,7 +520,7 @@ namespace epochnamespace::previewgrid
             return;
 
         std::unique_lock lock(detail::g_cameraRigMutex);
-        auto& rig = detail::ensure_rig(ctxKey);
+        auto& rig = detail::ensure_rig(rigKey);
 
         if (moveForward == 0.0f
             && moveRight == 0.0f
@@ -552,14 +564,15 @@ namespace epochnamespace::previewgrid
         float yawDeltaDegrees,
         float pitchDeltaDegrees) noexcept
     {
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return;
 
         if (yawDeltaDegrees == 0.0f && pitchDeltaDegrees == 0.0f)
             return;
 
         std::unique_lock lock(detail::g_cameraRigMutex);
-        auto& rig = detail::ensure_rig(ctxKey);
+        auto& rig = detail::ensure_rig(rigKey);
         rig.yawDegrees += yawDeltaDegrees;
         rig.pitchDegrees = (std::clamp)(rig.pitchDegrees + pitchDeltaDegrees, -80.0f, 80.0f);
         detail::touch_rig(rig);
@@ -568,17 +581,18 @@ namespace epochnamespace::previewgrid
     export [[nodiscard]] inline std::array<Vertex, 8> look_marker_vertices_for(const void* ctxKey) noexcept
     {
         std::array<Vertex, 8> out{};
-        if (!ctxKey)
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
             return out;
 
-        const auto camera = camera_for(ctxKey);
+        const auto camera = camera_for(rigKey);
         Vec3 hit{};
-        float markerDistance = camera_distance_for(ctxKey);
+        float markerDistance = camera_distance_for(rigKey);
         bool hasHit = false;
 
         {
             std::shared_lock lock(detail::g_cameraRigMutex);
-            const auto it = detail::g_cameraRigs.find(ctxKey);
+            const auto it = detail::g_cameraRigs.find(rigKey);
             if (it != detail::g_cameraRigs.end())
                 markerDistance = it->second.distance;
         }
@@ -598,7 +612,7 @@ namespace epochnamespace::previewgrid
         if (!hasHit)
         {
             std::shared_lock lock(detail::g_cameraRigMutex);
-            if (const auto lastHit = detail::g_lastMarkerHits.find(ctxKey);
+            if (const auto lastHit = detail::g_lastMarkerHits.find(rigKey);
                 lastHit != detail::g_lastMarkerHits.end())
             {
                 hit = lastHit->second;
@@ -609,7 +623,7 @@ namespace epochnamespace::previewgrid
         if (!hasHit)
         {
             std::shared_lock lock(detail::g_cameraRigMutex);
-            const auto it = detail::g_cameraRigs.find(ctxKey);
+            const auto it = detail::g_cameraRigs.find(rigKey);
             if (it != detail::g_cameraRigs.end() && it->second.mode == CameraMode::Editor)
             {
                 hit = { it->second.focus.x, 0.0f, it->second.focus.z };
@@ -622,7 +636,7 @@ namespace epochnamespace::previewgrid
 
         {
             std::unique_lock lock(detail::g_cameraRigMutex);
-            detail::g_lastMarkerHits[ctxKey] = hit;
+            detail::g_lastMarkerHits[rigKey] = hit;
         }
 
         const float markerSize = (std::max)(0.14f, markerDistance * 0.028f);
