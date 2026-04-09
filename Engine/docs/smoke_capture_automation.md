@@ -35,8 +35,10 @@ When the pass is multicontext-specific, validate:
 - wheel zoom and camera movement
 - docked child-window ownership and absence of stray promoted panes or fake host
   wrappers
-- no backend should leave a visible helper host behind once the real child
-  surface owns the pane
+- validate the expected ownership model instead of assuming every backend should
+  hide its host:
+  SDL/SFML currently keep a visible `EpochChild` slot host with the real backend
+  child inside it, while Raylib still shows the real `GLFW30` child directly
 - for resize/maximize regressions, verify the grid is operating on the HWND that
   actually owns the dock slot at that moment and then perform at least one early
   child-close check without killing the parent editor
@@ -77,6 +79,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - prefer a full multicontext frame when validating layout changes
 - a multicontext proof is only valid when every intended pane is present and no
   backend is replaced by a fake wrapper or black/empty surface
+- for the current hosted SDL/SFML design, it is acceptable for the visible pane
+  owner to be `EpochChild` as long as the real `SDL_app` or `SFML_Window` child
+  is alive, visible, and rendering correctly inside it
 - if only one backend is under investigation, capture that backend directly
 - prefer the fitted parented multicontext host so six-context layouts stay
   visible on normal desktop work areas instead of drifting off-screen

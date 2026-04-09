@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.83.72]
+- Recovered the stable hosted-child top-row multicontext model: SDL and SFML now keep the visible `EpochChild` host as the dock/grid slot owner while the real `SDL_app` and `SFML_Window` children render inside it again, instead of trying to promote those backend children into direct pane ownership.
+- Kept the parented grid honest under maximize while preserving the current Raylib path: the visible `GLFW30` pane stays on the backend input bridge, SDL/SFML stop blanking the top row, and the six-context maximized editor proof is stable again from the real asset-bearing `x64/Debug` runtime.
+- Revalidated the current hosted layout with real Windows smoke: `Debug|x64` and `Release|x64` both rebuilt cleanly, a maximized six-context run held all six panes visibly, and an early visible `SFML_Window` close still did not kill the parent editor.
+- Updated the README proof plus the build/runtime/smoke docs so the multicontext memory now explicitly records the current slot-ownership rule instead of incorrectly assuming every helper host should be hidden.
+
 ## [v0.83.71]
 - Flattened the launcher into one direct-entry project/tool surface: visible launcher flow now centers on project opening, clean editor launch, contexts/settings, updates, and quit, without the old `Projects/Games/Tools` panel stack or puzzle/game-facing shell.
 - Tightened the Win32 parented multicontext grid so layout now operates on the HWND that actually owns the dock slot at that moment, which makes SDL/SFML child takeover transitions more honest during resize/maximize passes instead of skipping panes when the backend child is alive but not yet the parented slot owner.

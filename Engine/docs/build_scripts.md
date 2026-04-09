@@ -110,10 +110,13 @@ before finishing:
 
 - the parented grid lays out the HWND that actually owns the slot at that
   moment, not a stale abstract primary handle
-- the visible backend pane for child-window backends is the real child surface:
-  `GLFW30` for Raylib, `SDL_app` for SDL, and `SFML_Window` for SFML
-- helper `EpochChild` hosts for those backends stay hidden once takeover is
-  complete
+- the visible backend pane contract is explicit:
+  `GLFW30` is still the visible Raylib pane, while SDL/SFML currently use a
+  visible `EpochChild` host that owns the slot and contains the real `SDL_app`
+  or `SFML_Window` child
+- do not “promote” SDL/SFML backend children to direct grid-pane ownership just
+  to hide the host, because that has already regressed maximize stability,
+  input, and missing-pane behavior
 - after maximize, the visible child rect matches the intended slot rect instead
   of silently growing beyond it
 - closing one visible child pane early must not kill the parent editor
@@ -127,6 +130,9 @@ already regressed:
 - do not call top-level backend window-size APIs on a child-docked backend after
   it has been reparented into the grid, or the backend can reintroduce
   top-level chrome-sized growth and break maximize stability
+- for SDL/SFML hosted panes, keep the host as the grid slot owner and resize the
+  real backend child inside that host instead of swapping the slot owner during
+  maximize
 
 ## AI asset policy
 

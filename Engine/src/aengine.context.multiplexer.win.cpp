@@ -541,10 +541,10 @@ namespace
 
         if ((window->type == epochnamespace::core::ContextType::SDL
                 || window->type == epochnamespace::core::ContextType::SFML)
-            && window->hwndChild
-            && ::IsWindow(window->hwndChild) != FALSE)
+            && window->host_hwnd
+            && ::IsWindow(window->host_hwnd) != FALSE)
         {
-            return window->hwndChild;
+            return window->host_hwnd;
         }
 
         if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
@@ -556,8 +556,8 @@ namespace
 
         if ((window->type == epochnamespace::core::ContextType::SDL
                 || window->type == epochnamespace::core::ContextType::SFML)
-            && window->hwndChild)
-            return window->hwndChild;
+            && window->host_hwnd)
+            return window->host_hwnd;
         return window->hwnd ? window->hwnd : (window->hwndChild ? window->hwndChild : window->host_hwnd);
     }
 
@@ -1726,8 +1726,7 @@ namespace epochnamespace::core
                 && win.host_hwnd
                 && liveHwnd == win.host_hwnd
                 && (!win.hwndChild
-                    || ::IsWindow(win.hwndChild) == FALSE
-                    || ::GetParent(win.hwndChild) != parent);
+                    || ::IsWindow(win.hwndChild) == FALSE);
 
             ::SetWindowPos(liveHwnd, nullptr, c * cw, r * ch, cw, ch,
                 usingHiddenHostPlaceholder

@@ -76,15 +76,16 @@ the same engine-owned path.
 - support-tier diagnostics should stay visible beside renderer stage flow and
   worker-count information so compatibility policy is visible in the editor
 - docked backend hosts should present one clean pane per active context
-- parented SDL/SFML-style backends should render into their real backend child
-  surface, while any helper host/container window remains hidden implementation
-  detail instead of a user-facing fake dock pane
-- the same child-surface truth should continue converging across Raylib and the
-  other active parented backends so helper hosts do not linger visibly in the
-  fitted grid
+- parented SDL/SFML backends should currently keep the visible `EpochChild`
+  host as the dock/grid slot owner while the real `SDL_app` or `SFML_Window`
+  child renders inside it; treating the backend child itself as the dock pane
+  has already caused maximize and input regressions
+- Raylib currently still exposes the real `GLFW30` child as the visible pane, so
+  it must stay on the backend input bridge and keep its slot sizing honest
 - when validating Win32 parented multicontext behavior, a live window-tree probe
   should show the real backend child classes as visible pane owners and helper
-  `EpochChild` wrappers hidden for the parented child-window backends
+  ownership honestly: visible `EpochChild` hosts for SDL/SFML with nested
+  `SDL_app`/`SFML_Window` children, and a visible `GLFW30` child for Raylib
 - maximize/restore validation should keep using the pane owner that is actually
   parented into the grid slot at that moment, not a stale abstract "primary"
   HWND that may still be mid-takeover

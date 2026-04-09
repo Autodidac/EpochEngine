@@ -226,6 +226,7 @@ namespace epochnamespace::raylibcontext
                     height,
                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
+                epochnamespace::core::MultiContextManager::AttachBackendInputBridge(raylibHwnd);
                 epochnamespace::core::MakeDockable(raylibHwnd, st.parent);
 
                 if (parent && parent != raylibHwnd && ::IsWindow(parent) != FALSE)

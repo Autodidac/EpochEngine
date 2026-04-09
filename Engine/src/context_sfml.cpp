@@ -396,18 +396,7 @@ namespace
 
         if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
         {
-            const HWND dockParent = ::GetParent(s_hostWindow);
-            const bool childOwnsGridSlot = dockParent && ::IsWindow(dockParent) != FALSE;
-            POINT childOrigin{ 0, 0 };
-            if (childOwnsGridSlot)
-            {
-                RECT hostRect{};
-                ::GetWindowRect(s_hostWindow, &hostRect);
-                childOrigin = { hostRect.left, hostRect.top };
-                ::ScreenToClient(dockParent, &childOrigin);
-            }
-
-            ::SetParent(s_childWindow, childOwnsGridSlot ? dockParent : s_hostWindow);
+            ::SetParent(s_childWindow, s_hostWindow);
 
             LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
             style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
@@ -434,15 +423,15 @@ namespace
             ::SetWindowPos(
                 s_childWindow,
                 nullptr,
-                childOrigin.x,
-                childOrigin.y,
+                0,
+                0,
                 s_width,
                 s_height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
             ::ShowWindow(s_childWindow, SW_SHOWNA);
-            ::ShowWindow(s_hostWindow, childOwnsGridSlot ? SW_HIDE : SW_SHOWNA);
-            if (const HWND layoutParent = childOwnsGridSlot ? dockParent : ::GetParent(s_hostWindow))
+            ::ShowWindow(s_hostWindow, SW_SHOWNA);
+            if (const HWND layoutParent = ::GetParent(s_hostWindow))
                 ::PostMessageW(layoutParent, WM_SIZE, 0, MAKELPARAM(s_width, s_height));
         }
 
@@ -456,7 +445,7 @@ namespace
         s_glContext = ::wglGetCurrentContext();
         (void)s_window->setActive(false);
 
-        const HWND primaryWindow = s_childWindow ? s_childWindow : s_hostWindow;
+        const HWND primaryWindow = s_hostWindow ? s_hostWindow : s_childWindow;
         ctx->hdc = s_hdc;
         ctx->hglrc = s_glContext;
         ctx->hwnd = primaryWindow;
@@ -472,7 +461,7 @@ namespace
         {
             ctx->windowData->sfml_window = s_window.get();
 #if defined(_WIN32)
-            ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
+            ctx->windowData->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
             ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
             ctx->windowData->hdc = s_hdc;
