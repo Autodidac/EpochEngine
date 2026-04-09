@@ -92,6 +92,7 @@ import engine.components;
 
 import context.multiplexer;
 import context.type;
+import context.window;
 import core.context;
 import core.logger;
 import core.time;
@@ -1230,8 +1231,6 @@ namespace epochnamespace::core
             case Choice::Cellular: return "cellular";
             case Choice::Settings:
             case Choice::OpenEditor:
-            case Choice::ProjectSandbox:
-            case Choice::ProjectPlatformer:
             case Choice::ProjectTwoDStudio:
             case Choice::About:
             case Choice::UpdateLatest:
@@ -1247,8 +1246,6 @@ namespace epochnamespace::core
 
             switch (choice)
             {
-            case Choice::ProjectSandbox: return "sandbox";
-            case Choice::ProjectPlatformer: return "platformer";
             case Choice::ProjectTwoDStudio: return "twodstudio";
             default: return {};
             }
@@ -1806,14 +1803,15 @@ namespace epochnamespace::core
                                 {
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
-                                        "Epoch launcher now routes direct project entry, clean editor launch, updates, and settings without the old game-menu shell.",
+                                        "Epoch launcher now routes direct project entry, editor launch, updates, and settings without the old game-menu shell.",
                                         std::source_location::current());
                                 }
                                 else
                                 {
-                                    const auto scene_id = scene_id_from_choice(*choice);
-                                    if (!scene_id.empty())
-                                        begin_scene(scene_id, SessionMode::Menu);
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::INFO,
+                                        "Ignoring legacy launcher choice that is no longer part of the project-launcher surface.",
+                                        std::source_location::current());
                                 }
                             }
                             break;

@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.83.76]
+- Fixed the Linux/WSL2 updater-shell build by importing `context.window` in [aengine.cpp](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/src/aengine.cpp), which keeps the tagged source snapshot and the packaged Linux asset aligned to the same working commit.
+- Follow-up release packaging now targets matching Windows and Linux updater-shell assets from the same corrected source tag instead of shipping a Linux binary from a different commit than the public source snapshot.
+
 ## [v0.83.75]
 - Tightened the Win32 parented multicontext redock path so proxy `EpochChild` hosts are reattached and hidden after redock instead of lingering as stray top-level wrapper windows beside the real `GLFW30`, `SDL_app`, or `SFML_Window` panes.
 - Hardened the Win32 GUI input bridge around actual focus ownership by tracking `WM_SETFOCUS`/`WM_KILLFOCUS` and rejecting keyboard forwarding when the live Win32 focus is on a different pane, which reduces the editor's cross-pane text/key leakage risk.
