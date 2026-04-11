@@ -1115,8 +1115,11 @@ namespace epochnamespace
         auto& chat = chat_state_for(ctx);
         chat.pump();
 
-        const float w = static_cast<float>(ctx->get_width_safe());
-        const float h = static_cast<float>(ctx->get_height_safe());
+        // Editor GUI layout should follow the live pane client size, not the
+        // backend framebuffer size, so parented multicontext panes do not
+        // bleed across neighbors under Windows DPI scaling.
+        const float w = static_cast<float>((std::max)(1, ctx->width));
+        const float h = static_cast<float>((std::max)(1, ctx->height));
 
         const float toolbar_h = 98.0f;
         const float bottom_h = (std::max)(220.0f, h * 0.24f);

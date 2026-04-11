@@ -141,6 +141,9 @@ Windows editor fullscreen six-context multicontext proof, source `v0.83.79`:
   <img src="Images/readme/windows-multicontext-editor-v08379.png" alt="Epoch Windows editor fullscreen six-context multicontext proof" />
 </p>
 
+Open the PNG directly for native resolution when checking all six panes. GitHub's
+page scaling can make the third column and lower row harder to read at a glance.
+
 ---
 
 Windows editor backend proofs, source `v0.83.41`:

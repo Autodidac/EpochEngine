@@ -74,6 +74,51 @@ namespace
         }
 #endif
     }
+
+    void configure_windows_dpi_awareness()
+    {
+        using SetProcessDpiAwarenessContextFn = BOOL(WINAPI*)(HANDLE);
+        using SetProcessDpiAwarenessFn = HRESULT(WINAPI*)(int);
+        using SetProcessDPIAwareFn = BOOL(WINAPI*)();
+
+        if (HMODULE user32 = ::LoadLibraryW(L"user32.dll"))
+        {
+            if (auto setAwarenessContext =
+                reinterpret_cast<SetProcessDpiAwarenessContextFn>(
+                    ::GetProcAddress(user32, "SetProcessDpiAwarenessContext")))
+            {
+                if (setAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+                {
+                    ::FreeLibrary(user32);
+                    return;
+                }
+            }
+
+            if (auto setDpiAware =
+                reinterpret_cast<SetProcessDPIAwareFn>(
+                    ::GetProcAddress(user32, "SetProcessDPIAware")))
+            {
+                if (setDpiAware())
+                {
+                    ::FreeLibrary(user32);
+                    return;
+                }
+            }
+
+            ::FreeLibrary(user32);
+        }
+
+        if (HMODULE shcore = ::LoadLibraryW(L"shcore.dll"))
+        {
+            if (auto setAwareness =
+                reinterpret_cast<SetProcessDpiAwarenessFn>(
+                    ::GetProcAddress(shcore, "SetProcessDpiAwareness")))
+            {
+                (void)setAwareness(2 /* PROCESS_PER_MONITOR_DPI_AWARE */);
+            }
+            ::FreeLibrary(shcore);
+        }
+    }
 #endif
 
 }
@@ -81,6 +126,7 @@ namespace
 int main(int argc, char** argv)
 {
 #if defined(_WIN32)
+    configure_windows_dpi_awareness();
     configure_unattended_windows_error_mode();
 #endif
     try
@@ -135,4 +181,3 @@ int main(int argc, char** argv)
         return -1;
     }
 }
-

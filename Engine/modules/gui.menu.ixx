@@ -75,6 +75,24 @@ export namespace epochnamespace::menu
 {
     inline constexpr std::string_view kLogSys = "Epoch.Menu";
 
+    [[nodiscard]] inline int live_layout_width(const std::shared_ptr<core::Context>& ctx) noexcept
+    {
+        if (!ctx)
+            return 0;
+        if (ctx->width > 0)
+            return ctx->width;
+        return ctx->get_width_safe();
+    }
+
+    [[nodiscard]] inline int live_layout_height(const std::shared_ptr<core::Context>& ctx) noexcept
+    {
+        if (!ctx)
+            return 0;
+        if (ctx->height > 0)
+            return ctx->height;
+        return ctx->get_height_safe();
+    }
+
     enum class Choice {
         UpdateLatest,
         OpenEditor,
@@ -224,8 +242,8 @@ export namespace epochnamespace::menu
             int resolvedWidth = widthPixels;
             int resolvedHeight = heightPixels;
 
-            if (resolvedWidth <= 0 && ctx)  resolvedWidth = ctx->get_width_safe();
-            if (resolvedHeight <= 0 && ctx) resolvedHeight = ctx->get_height_safe();
+            if (resolvedWidth <= 0 && ctx)  resolvedWidth = live_layout_width(ctx);
+            if (resolvedHeight <= 0 && ctx) resolvedHeight = live_layout_height(ctx);
 
             cachedWidth = (std::max)(1, resolvedWidth);
             cachedHeight = (std::max)(1, resolvedHeight);
@@ -309,8 +327,8 @@ export namespace epochnamespace::menu
                 selection = 0;
                 prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
 
-                const int w = ctx ? ctx->get_width_safe() : cachedWidth;
-                const int h = ctx ? ctx->get_height_safe() : cachedHeight;
+                const int w = ctx ? live_layout_width(ctx) : cachedWidth;
+                const int h = ctx ? live_layout_height(ctx) : cachedHeight;
                 recompute_layout(ctx, w, h);
 
                 if (!initializationLogEmitted)
@@ -336,8 +354,8 @@ export namespace epochnamespace::menu
             prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
             refresh_launcher_descriptors();
 
-            const int w = ctx ? ctx->get_width_safe() : cachedWidth;
-            const int h = ctx ? ctx->get_height_safe() : cachedHeight;
+            const int w = ctx ? live_layout_width(ctx) : cachedWidth;
+            const int h = ctx ? live_layout_height(ctx) : cachedHeight;
             recompute_layout(ctx, w, h);
 
             if (!initializationLogEmitted)
@@ -421,8 +439,8 @@ export namespace epochnamespace::menu
             std::ignore = win;
             std::ignore = dt;
 
-            int currentWidth = windowSize.x > 0 ? static_cast<int>(windowSize.x) : (ctx ? ctx->get_width_safe() : cachedWidth);
-            int currentHeight = windowSize.y > 0 ? static_cast<int>(windowSize.y) : (ctx ? ctx->get_height_safe() : cachedHeight);
+            int currentWidth = windowSize.x > 0 ? static_cast<int>(windowSize.x) : (ctx ? live_layout_width(ctx) : cachedWidth);
+            int currentHeight = windowSize.y > 0 ? static_cast<int>(windowSize.y) : (ctx ? live_layout_height(ctx) : cachedHeight);
             if (currentWidth <= 0) currentWidth = cachedWidth;
             if (currentHeight <= 0) currentHeight = cachedHeight;
             if (currentWidth <= 0) currentWidth = 1;
@@ -569,8 +587,8 @@ export namespace epochnamespace::menu
             std::ignore = rightPressed;
             std::ignore = title;
 
-            int currentWidth = windowSize.x > 0 ? static_cast<int>(windowSize.x) : (ctx ? ctx->get_width_safe() : cachedWidth);
-            int currentHeight = windowSize.y > 0 ? static_cast<int>(windowSize.y) : (ctx ? ctx->get_height_safe() : cachedHeight);
+            int currentWidth = windowSize.x > 0 ? static_cast<int>(windowSize.x) : (ctx ? live_layout_width(ctx) : cachedWidth);
+            int currentHeight = windowSize.y > 0 ? static_cast<int>(windowSize.y) : (ctx ? live_layout_height(ctx) : cachedHeight);
             if (currentWidth <= 0) currentWidth = cachedWidth;
             if (currentHeight <= 0) currentHeight = cachedHeight;
             if (currentWidth <= 0) currentWidth = 1;
@@ -736,8 +754,8 @@ export namespace epochnamespace::menu
                 totalHeight + windowPadding * 2
             };
 
-            const float viewportWidth = ctx ? static_cast<float>(ctx->get_width_safe()) : 0.0f;
-            const float viewportHeight = ctx ? static_cast<float>(ctx->get_height_safe()) : 0.0f;
+            const float viewportWidth = ctx ? static_cast<float>(live_layout_width(ctx)) : 0.0f;
+            const float viewportHeight = ctx ? static_cast<float>(live_layout_height(ctx)) : 0.0f;
             constexpr float margin = 24.0f;
 
             if (viewportWidth > 0.0f && viewportHeight > 0.0f)

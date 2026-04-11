@@ -1066,8 +1066,8 @@ namespace epochnamespace::core
                 const bool mouse_right_down =
                     ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseRight);
 
-                const int width = ctx->get_width_safe();
-                const int height = ctx->get_height_safe();
+                const int width = (std::max)(1, ctx->width > 0 ? ctx->width : ctx->get_width_safe());
+                const int height = (std::max)(1, ctx->height > 0 ? ctx->height : ctx->get_height_safe());
                 ctx->clear_safe();
                 ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
                 ctx->set_scene_viewport({ 0, 0, width, height });

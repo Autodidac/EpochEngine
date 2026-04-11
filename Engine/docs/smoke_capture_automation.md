@@ -100,6 +100,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - refresh the README multicontext proof at least every 10th feature version, or
   sooner whenever visible renderer color, layout, or docking behavior changes
   enough that the existing proof is misleading
+- the current PowerShell harness screenshot is diagnostic proof, not the final
+  long-term screenshot system; the target remains an engine-owned parent-window
+  proof path for fullscreen multicontext captures
 - if the engine-owned software capture path is black or otherwise invalid, use
   an honest asset-bearing desktop capture from `x64/Debug` or `x64/Release`
   instead of publishing a misleading proof image
