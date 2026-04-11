@@ -499,6 +499,9 @@ export namespace epochnamespace::sfmlcontext
             if (hostWnd && hostWnd != sfmlcontext.hwnd && ::IsWindow(hostWnd) != FALSE)
                 ShowWindow(hostWnd, SW_SHOWNA);
 
+            if (sfmlcontext.parent && ::IsWindow(sfmlcontext.parent) != FALSE)
+                epochnamespace::core::MakeDockable(sfmlcontext.hwnd, sfmlcontext.parent);
+
             if (sfmlcontext.onResize)
                 sfmlcontext.onResize(width, height);
 

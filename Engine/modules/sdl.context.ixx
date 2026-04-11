@@ -558,6 +558,9 @@ export namespace epochnamespace::sdlcontext
                 sdlcontext.onResize(width, height);
 
             if (sdlcontext.parent)
+                epochnamespace::core::MakeDockable(sdlcontext.hwnd, sdlcontext.parent);
+
+            if (sdlcontext.parent)
                 PostMessage(sdlcontext.parent, WM_SIZE, 0, MAKELPARAM(width, height));
 
             ::ShowWindow(hostWnd, SW_SHOWNA);

@@ -125,6 +125,12 @@ namespace epochnamespace::core
         return MultiContextManager::s_activeInstance;
     }
 
+    void RequestActiveParentLayout() noexcept
+    {
+        if (auto* mgr = GetActiveMultiContextManager())
+            mgr->ArrangeDockedWindowsGrid();
+    }
+
     void HandleX11Configure(::Window window, int width, int height)
     {
         if (auto* mgr = GetActiveMultiContextManager())

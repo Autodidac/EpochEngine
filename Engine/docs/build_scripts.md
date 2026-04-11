@@ -95,13 +95,36 @@ Launcher scope for that shell should stay flat and direct:
 
 - open project demos directly
 - preload or reopen projects
-- open a clean editor
+- open the editor
 - adjust contexts/settings
 - run updates
 - quit cleanly
 
 Do not drift back into layered `Games/Tools/Puzzle` menu stacks when the real
 goal is a project/editor/bootstrap surface.
+
+## Release packaging discipline
+
+Before publishing a Windows updater-shell zip:
+
+- stage from `x64/Release/`, not from a source folder
+- copy the required backend DLLs beside `ConsoleApplication1.exe`
+- copy the full VC143 CRT payload from
+  `C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC\<version>\x64\Microsoft.VC143.CRT\`
+  into the release folder so clean Windows machines do not need a separate
+  VC++ redistributable install first
+- keep `assets/` beside the executable in the packaged folder
+- run `ConsoleApplication1.exe --version` from the staged folder before zipping
+- smoke the no-args launcher shell once before publishing so a release does not
+  ship a dead bootstrap entry path
+
+Before publishing a Linux/WSL2 asset:
+
+- rebuild from the same bumped source commit that will be tagged
+- verify the Linux package reports the same version as the tag/source archive
+- keep the packaged `linux_main.tar.gz` and the GitHub source snapshot aligned
+  to the same commit, not just the same version string
+- do not quietly reuse an older Linux artifact after source has changed
 
 ## Multicontext regression contract
 

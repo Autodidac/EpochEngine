@@ -402,54 +402,29 @@ namespace
 
         if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
         {
-            s_dockParent = ::GetParent(s_hostWindow);
-            const HWND dockTarget =
-                (s_dockParent && ::IsWindow(s_dockParent) != FALSE)
-                ? s_dockParent
-                : s_hostWindow;
-            ::SetParent(s_childWindow, dockTarget);
+            ::SetParent(s_childWindow, s_hostWindow);
 
             LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
             style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
             style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
+            epochnamespace::core::MakeDockable(s_childWindow, s_hostWindow);
 
-            LONG_PTR exStyle = ::GetWindowLongPtrW(s_childWindow, GWL_EXSTYLE);
-            exStyle &= ~static_cast<LONG_PTR>(
-                WS_EX_APPWINDOW
-                | WS_EX_WINDOWEDGE
-                | WS_EX_CLIENTEDGE
-                | WS_EX_DLGMODALFRAME
-                | WS_EX_TOPMOST);
-            exStyle |= WS_EX_NOPARENTNOTIFY;
-            ::SetWindowLongPtrW(s_childWindow, GWL_EXSTYLE, exStyle);
-
-            if (dockTarget == s_dockParent && s_dockParent && ::IsWindow(s_dockParent) != FALSE)
-                epochnamespace::core::MakeDockable(s_childWindow, s_dockParent);
-            else
-                epochnamespace::core::MultiContextManager::AttachBackendInputBridge(s_childWindow);
-
-            RECT slotRect{};
-            ::GetWindowRect(s_hostWindow, &slotRect);
-            s_width = (std::max)(1, static_cast<int>(slotRect.right - slotRect.left));
-            s_height = (std::max)(1, static_cast<int>(slotRect.bottom - slotRect.top));
-            POINT slotTopLeft{ slotRect.left, slotRect.top };
-            if (dockTarget && ::IsWindow(dockTarget) != FALSE)
-                ::ScreenToClient(dockTarget, &slotTopLeft);
+            RECT client{};
+            ::GetClientRect(s_hostWindow, &client);
+            s_width = (std::max)(1, static_cast<int>(client.right - client.left));
+            s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
 
             ::SetWindowPos(
                 s_childWindow,
                 nullptr,
-                slotTopLeft.x,
-                slotTopLeft.y,
+                0,
+                0,
                 s_width,
                 s_height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-            ::ShowWindow(s_childWindow, SW_SHOWNA);
-            ::ShowWindow(s_hostWindow, SW_HIDE);
-            if (s_dockParent && ::IsWindow(s_dockParent) != FALSE)
-                ::PostMessageW(s_dockParent, WM_SIZE, 0, MAKELPARAM(s_width, s_height));
+            ::ShowWindow(s_hostWindow, SW_SHOWNA);
         }
 
         if (!s_window->setActive(true))
@@ -465,7 +440,7 @@ namespace
         const HWND primaryWindow = s_hostWindow ? s_hostWindow : s_childWindow;
         ctx->hdc = s_hdc;
         ctx->hglrc = s_glContext;
-        ctx->hwnd = s_childWindow ? s_childWindow : primaryWindow;
+        ctx->hwnd = s_hostWindow ? s_hostWindow : primaryWindow;
         ctx->native_window = s_childWindow ? s_childWindow : s_hostWindow;
         ctx->native_drawable = s_hdc;
         ctx->native_gl_context = s_glContext;
@@ -478,7 +453,7 @@ namespace
         {
             ctx->windowData->sfml_window = s_window.get();
 #if defined(_WIN32)
-            ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
+            ctx->windowData->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
             ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
             ctx->windowData->hdc = s_hdc;

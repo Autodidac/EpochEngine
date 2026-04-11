@@ -156,12 +156,6 @@ namespace epochnamespace::vulkancontext
 
     void Application::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size)
     {
-        logger::get(kLogSys).logf(
-            logger::LogLevel::INFO,
-            std::source_location::current(),
-            "Copying {} bytes.",
-            size);
-
         vk::UniqueCommandBuffer cmd = beginSingleTimeCommands();
 
         vk::BufferCopy copyRegion{};

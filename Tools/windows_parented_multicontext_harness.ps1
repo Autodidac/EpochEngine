@@ -195,9 +195,30 @@ function Invoke-LeftClick([IntPtr]$Hwnd, [int]$ClientX, [int]$ClientY) {
     [void][EpochWin32Harness]::PostMessageW($Hwnd, $WM_LBUTTONUP, [IntPtr]::Zero, (Get-LParam $ClientX $ClientY))
 }
 
-function Invoke-UndockRedock([IntPtr]$DockHandle, [IntPtr]$ParentHwnd) {
+function Get-ParentHandleValue([IntPtr]$Hwnd) {
+    if ($Hwnd -eq [IntPtr]::Zero -or -not [EpochWin32Harness]::IsWindow($Hwnd)) {
+        return [IntPtr]::Zero
+    }
+
+    return [EpochWin32Harness]::GetParent($Hwnd)
+}
+
+function Invoke-UndockRedock(
+    [IntPtr]$DockHandle,
+    [IntPtr]$ParentHwnd,
+    [IntPtr]$ProxyHostHandle = [IntPtr]::Zero,
+    [IntPtr]$ProxyChildHandle = [IntPtr]::Zero
+) {
     $parentRect = Get-WindowRectObject $ParentHwnd
-    $beforeParent = [EpochWin32Harness]::GetParent($DockHandle)
+    $useProxyContract =
+        $ProxyHostHandle -ne [IntPtr]::Zero -and
+        $ProxyChildHandle -ne [IntPtr]::Zero -and
+        [EpochWin32Harness]::IsWindow($ProxyHostHandle) -and
+        [EpochWin32Harness]::IsWindow($ProxyChildHandle)
+
+    $beforeParent = Get-ParentHandleValue $DockHandle
+    $beforeHostParent = Get-ParentHandleValue $ProxyHostHandle
+    $beforeChildParent = Get-ParentHandleValue $ProxyChildHandle
     $startX = 20
     $startY = 10
     [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_LBUTTONDOWN, [IntPtr]$MK_LBUTTON, (Get-LParam $startX $startY))
@@ -209,8 +230,14 @@ function Invoke-UndockRedock([IntPtr]$DockHandle, [IntPtr]$ParentHwnd) {
     [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveOutside.X $moveOutside.Y))
     Start-Sleep -Milliseconds 250
 
-    $midParent = [EpochWin32Harness]::GetParent($DockHandle)
-    $midTopLevel = ($midParent -ne $ParentHwnd)
+    $midParent = Get-ParentHandleValue $DockHandle
+    $midHostParent = Get-ParentHandleValue $ProxyHostHandle
+    $midChildParent = Get-ParentHandleValue $ProxyChildHandle
+    $midTopLevel = if ($useProxyContract) {
+        $midHostParent -ne $ParentHwnd -and $midChildParent -eq $ProxyHostHandle
+    } else {
+        $midParent -ne $ParentHwnd
+    }
 
     $insideScreenX = $parentRect.Left + 60
     $insideScreenY = $parentRect.Top + 60
@@ -218,18 +245,46 @@ function Invoke-UndockRedock([IntPtr]$DockHandle, [IntPtr]$ParentHwnd) {
     [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveInside.X $moveInside.Y))
     Start-Sleep -Milliseconds 250
 
-    $lateParent = [EpochWin32Harness]::GetParent($DockHandle)
-    $lateRedocked = ($lateParent -eq $ParentHwnd)
+    $lateParent = Get-ParentHandleValue $DockHandle
+    $lateHostParent = Get-ParentHandleValue $ProxyHostHandle
+    $lateChildParent = Get-ParentHandleValue $ProxyChildHandle
+    $lateRedocked = if ($useProxyContract) {
+        $lateHostParent -eq $ParentHwnd -and $lateChildParent -eq $ProxyHostHandle
+    } else {
+        $lateParent -eq $ParentHwnd
+    }
 
     [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_LBUTTONUP, [IntPtr]::Zero, (Get-LParam $moveInside.X $moveInside.Y))
     Start-Sleep -Milliseconds 250
-    $endParent = [EpochWin32Harness]::GetParent($DockHandle)
+    $endParent = Get-ParentHandleValue $DockHandle
+    $endHostParent = Get-ParentHandleValue $ProxyHostHandle
+    $endChildParent = Get-ParentHandleValue $ProxyChildHandle
 
     [pscustomobject]@{
-        BeforeDocked = ($beforeParent -eq $ParentHwnd)
+        BeforeDocked = if ($useProxyContract) {
+            $beforeHostParent -eq $ParentHwnd -and $beforeChildParent -eq $ProxyHostHandle
+        } else {
+            $beforeParent -eq $ParentHwnd
+        }
         MidTopLevel = $midTopLevel
         LateRedocked = $lateRedocked
-        EndRedocked = ($endParent -eq $ParentHwnd)
+        EndRedocked = if ($useProxyContract) {
+            $endHostParent -eq $ParentHwnd -and $endChildParent -eq $ProxyHostHandle
+        } else {
+            $endParent -eq $ParentHwnd
+        }
+        DockHandleParentBefore = $beforeParent
+        DockHandleParentMid = $midParent
+        DockHandleParentLate = $lateParent
+        DockHandleParentEnd = $endParent
+        ProxyHostParentBefore = $beforeHostParent
+        ProxyHostParentMid = $midHostParent
+        ProxyHostParentLate = $lateHostParent
+        ProxyHostParentEnd = $endHostParent
+        ProxyChildParentBefore = $beforeChildParent
+        ProxyChildParentMid = $midChildParent
+        ProxyChildParentLate = $lateChildParent
+        ProxyChildParentEnd = $endChildParent
     }
 }
 
@@ -371,15 +426,15 @@ try {
 
     $backendChecks = @()
     foreach ($item in @(
-        @{ Name = 'raylib'; DockHandle = $(if ($rayChild) { $rayChild.Hwnd } elseif ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($rayChild) { $rayChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }) },
-        @{ Name = 'sdl'; DockHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }) },
-        @{ Name = 'sfml'; DockHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }) }
+        @{ Name = 'raylib'; DockHandle = $(if ($rayChild) { $rayChild.Hwnd } elseif ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($rayChild) { $rayChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = [IntPtr]::Zero },
+        @{ Name = 'sdl'; DockHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }) },
+        @{ Name = 'sfml'; DockHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }) }
     )) {
         if ($Mode -eq 'Single' -and $item.Name -ne $Backend) { continue }
         if ($Mode -eq 'Full' -and -not [string]::IsNullOrWhiteSpace($FocusedBackend) -and $item.Name -ne $FocusedBackend) { continue }
         if ($item.DockHandle -eq [IntPtr]::Zero) { continue }
 
-        $drag = Invoke-UndockRedock -DockHandle $item.DockHandle -ParentHwnd $parentWindow.Hwnd
+        $drag = Invoke-UndockRedock -DockHandle $item.DockHandle -ParentHwnd $parentWindow.Hwnd -ProxyHostHandle $item.HostHandle -ProxyChildHandle $item.ChildHandle
         Invoke-LeftClick -Hwnd $item.FocusHandle -ClientX 24 -ClientY 24
         Start-Sleep -Milliseconds 150
         $focus = Get-FocusProbe -TargetHwnd $item.FocusHandle

@@ -5,6 +5,10 @@
   "dependencies": [
     "asio",
     "fmt",
+    "openal-soft",
+    "joltphysics",
+
+
     "glad",
     "glm",
 

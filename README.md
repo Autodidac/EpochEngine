@@ -135,10 +135,10 @@ the current source/editor state yet.
   behavior changes enough to make the older image misleading.
 - Capture from an asset-bearing `x64/Debug/` or `x64/Release/` launch only.
 
-Windows editor six-context multicontext proof, source `v0.83.74`:
+Windows editor six-context multicontext proof, source `v0.83.78`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08374.png" alt="Epoch Windows editor six-context multicontext proof" width="1400" />
+  <img src="Images/readme/windows-multicontext-editor-v08378.png" alt="Epoch Windows editor six-context multicontext proof" width="1400" />
 </p>
 
 ---

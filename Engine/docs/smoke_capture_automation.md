@@ -26,6 +26,13 @@ For runtime/editor/backend changes:
 6. Close live windows before finishing the pass
 7. Clean up disposable logs/captures created outside the proper runtime path
 
+For release-facing passes, add two more checks:
+
+8. Launch `ConsoleApplication1.exe` once with no extra args from `x64/Release/`
+   and confirm the launcher/updater shell actually appears instead of hanging
+9. If a Windows zip is being published, verify the staged release folder carries
+   the VC143 CRT DLLs app-local before zipping
+
 When the pass is multicontext-specific, validate:
 
 - top-row and bottom-row context responsiveness
@@ -146,6 +153,17 @@ Expected smoke behavior:
 - if the first two detected helpers split text and vision strengths, keep the
   first model as runtime parity and use the vision-capable helper for screenshot
   review, pane/layout checks, and color/parity triage
+
+## Release asset checks
+
+- Windows updater-shell zips should include the app-local VC143 CRT DLL set, not
+  rely on the target machine already having the redistributable installed
+- smoke the staged packaged folder with `--version` before uploading
+- smoke the no-args launcher/updater entry path once before uploading
+- Linux/WSL2 packaged assets must report the same version as the tagged source
+  commit they were built from
+- do not publish a Linux asset rebuilt from one commit while GitHub source
+  downloads point at another
 
 ## Systems/graph checks
 

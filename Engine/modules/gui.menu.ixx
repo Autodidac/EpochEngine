@@ -78,8 +78,6 @@ export namespace epochnamespace::menu
     enum class Choice {
         UpdateLatest,
         OpenEditor,
-        ProjectSandbox,
-        ProjectPlatformer,
         ProjectTwoDStudio,
         Snake, Tetris, Pacman, Frogger, Sokoban,
         Minesweep, Puzzle, Bejeweled, Fourty,
@@ -135,10 +133,8 @@ export namespace epochnamespace::menu
         float layoutHeight = 0.0f;
 
         static constexpr std::array kLauncherChoices = {
-            ChoiceDescriptor{ Choice::ProjectSandbox, "Sandbox Project", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::ProjectPlatformer, "Platformer Project", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::ProjectTwoDStudio, "2D Studio", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::OpenEditor, "Open Clean Editor", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::Settings, "Contexts + Settings", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::UpdateLatest, "Update Epoch", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::Exit, "Quit", { 256.0f, 96.0f } }
@@ -317,6 +313,21 @@ export namespace epochnamespace::menu
                 const int h = ctx ? ctx->get_height_safe() : cachedHeight;
                 recompute_layout(ctx, w, h);
 
+                if (!initializationLogEmitted)
+                {
+                    logger::get(kLogSys.data()).log(
+                        logger::LogLevel::INFO,
+                        "Initialized updater shell with "
+                            + std::to_string(static_cast<unsigned long long>(descriptors.size()))
+                            + " entries at "
+                            + std::to_string(w)
+                            + "x"
+                            + std::to_string(h)
+                            + ".",
+                        std::source_location::current());
+                    initializationLogEmitted = true;
+                }
+
                 initialized = true;
                 return;
             }
@@ -328,6 +339,23 @@ export namespace epochnamespace::menu
             const int w = ctx ? ctx->get_width_safe() : cachedWidth;
             const int h = ctx ? ctx->get_height_safe() : cachedHeight;
             recompute_layout(ctx, w, h);
+
+            if (!initializationLogEmitted)
+            {
+                logger::get(kLogSys.data()).log(
+                    logger::LogLevel::INFO,
+                    "Initialized project launcher with "
+                        + std::to_string(static_cast<unsigned long long>(descriptors.size()))
+                        + " entries, "
+                        + std::to_string(columns)
+                        + " column(s), at "
+                        + std::to_string(w)
+                        + "x"
+                        + std::to_string(h)
+                        + ".",
+                    std::source_location::current());
+                initializationLogEmitted = true;
+            }
 
             initialized = true;
         }

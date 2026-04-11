@@ -348,11 +348,27 @@ namespace
     // Cross-thread SetParent/SetWindowLongPtr/SetWindowPos can deadlock.
     constexpr UINT WM_EPOCH_DOCKCMD = WM_APP + 0x4A11;
     constexpr UINT WM_EPOCH_LAYOUT = WM_APP + 0x4A12;
+    constexpr UINT WM_EPOCH_PROXY_DOCKCMD = WM_APP + 0x4A13;
     constexpr wchar_t kEpochLayoutPendingProp[] = L"EpochLayoutPending";
     constexpr wchar_t kEpochBackendBridgeProp[] = L"EpochBackendInputBridge";
     enum class DockCmd : WPARAM
     {
         Undock = 1,
+    };
+    enum class ProxyDockCmd : WPARAM
+    {
+        Undock = 1,
+        MoveDetached = 2,
+        Redock = 3,
+    };
+    struct ProxyDockRequest
+    {
+        HWND sourceHwnd{};
+        HWND parentHwnd{};
+        int x{};
+        int y{};
+        int width{};
+        int height{};
     };
 
     inline void request_parent_layout(HWND hwnd) noexcept
@@ -438,11 +454,29 @@ namespace
         return same_gui_input_surface(g_guiInputOwner, hwnd);
     }
 
+    [[nodiscard]] inline bool uses_visible_proxy_host(
+        const epochnamespace::core::WindowData* window) noexcept
+    {
+        return window
+            && (window->type == epochnamespace::core::ContextType::SDL
+                || window->type == epochnamespace::core::ContextType::SFML)
+            && window->hwndChild
+            && window->host_hwnd
+            && window->hwndChild != window->host_hwnd
+            && ::IsWindow(window->hwndChild) != FALSE
+            && ::IsWindow(window->host_hwnd) != FALSE;
+    }
+
+    inline void apply_child_fill_layout(HWND child, HWND parent, int clientW, int clientH) noexcept;
+
     inline void hide_associated_host_window(
         const epochnamespace::core::WindowData* window,
         HWND activeHwnd,
         HWND expectedParent) noexcept
     {
+        if (uses_visible_proxy_host(window))
+            return;
+
         if (!window || !window->host_hwnd || window->host_hwnd == activeHwnd)
             return;
 
@@ -464,6 +498,31 @@ namespace
         int clientW,
         int clientH) noexcept
     {
+        if (uses_visible_proxy_host(window))
+        {
+            if (!window
+                || !parent
+                || ::IsWindow(parent) == FALSE
+                || !window->host_hwnd
+                || !window->hwndChild
+                || ::IsWindow(window->host_hwnd) == FALSE
+                || ::IsWindow(window->hwndChild) == FALSE)
+            {
+                return;
+            }
+
+            dock_host_window_to_parent(
+                window->host_hwnd,
+                parent,
+                desiredScreenX,
+                desiredScreenY,
+                clientW,
+                clientH);
+            apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+            ::ShowWindow(window->host_hwnd, SW_SHOWNA);
+            return;
+        }
+
         if (!window
             || !parent
             || ::IsWindow(parent) == FALSE
@@ -488,14 +547,7 @@ namespace
     [[nodiscard]] inline bool is_sfml_proxy_candidate(
         const epochnamespace::core::WindowData* window) noexcept
     {
-        return window
-            && (window->type == epochnamespace::core::ContextType::RayLib
-                || window->type == epochnamespace::core::ContextType::SFML)
-            && window->hwndChild
-            && window->host_hwnd
-            && window->hwndChild != window->host_hwnd
-            && ::IsWindow(window->hwndChild) != FALSE
-            && ::IsWindow(window->host_hwnd) != FALSE;
+        return uses_visible_proxy_host(window);
     }
 
     [[nodiscard]] inline bool backend_uses_proxy_child(epochnamespace::core::ContextType type) noexcept
@@ -618,42 +670,49 @@ namespace
         if (!is_sfml_proxy_candidate(window) || !parent || ::IsWindow(parent) == FALSE)
             return;
 
-        LONG_PTR childStyle = ::GetWindowLongPtrW(window->hwndChild, GWL_STYLE);
-        childStyle &= ~(WS_POPUP | WS_OVERLAPPEDWINDOW);
-        childStyle |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
-        ::SetWindowLongPtrW(window->hwndChild, GWL_STYLE, childStyle);
-        if (::GetParent(window->hwndChild) != parent)
-            ::SetParent(window->hwndChild, parent);
-
-        RECT parentClient{};
-        ::GetClientRect(parent, &parentClient);
-        POINT clientPos{ desiredScreenX, desiredScreenY };
-        ::ScreenToClient(parent, &clientPos);
-        const int maxX = (std::max)(0, static_cast<int>(parentClient.right - clientW));
-        const int maxY = (std::max)(0, static_cast<int>(parentClient.bottom - clientH));
-        clientPos.x = (std::clamp)(static_cast<int>(clientPos.x), 0, maxX);
-        clientPos.y = (std::clamp)(static_cast<int>(clientPos.y), 0, maxY);
-
-        ::SetWindowPos(
-            window->hwndChild,
-            nullptr,
-            clientPos.x,
-            clientPos.y,
-            clientW,
-            clientH,
-            SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-
-        RECT childRect{};
-        ::GetWindowRect(window->hwndChild, &childRect);
         dock_host_window_to_parent(
             window->host_hwnd,
             parent,
-            childRect.left,
-            childRect.top,
+            desiredScreenX,
+            desiredScreenY,
             clientW,
             clientH);
-        ::ShowWindow(window->host_hwnd, SW_HIDE);
+        apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+        ::ShowWindow(window->host_hwnd, SW_SHOWNA);
         ::SetFocus(window->hwndChild);
+    }
+
+    inline void post_proxy_host_command(
+        const epochnamespace::core::WindowData* window,
+        ProxyDockCmd command,
+        HWND parent,
+        int x,
+        int y,
+        int width,
+        int height) noexcept
+    {
+        if (!is_sfml_proxy_candidate(window))
+            return;
+
+        auto* request = new (std::nothrow) ProxyDockRequest{
+            .sourceHwnd = window->hwndChild ? window->hwndChild : window->host_hwnd,
+            .parentHwnd = parent,
+            .x = x,
+            .y = y,
+            .width = width,
+            .height = height
+        };
+        if (!request)
+            return;
+
+        if (!::PostMessageW(
+            window->host_hwnd,
+            WM_EPOCH_PROXY_DOCKCMD,
+            static_cast<WPARAM>(command),
+            reinterpret_cast<LPARAM>(request)))
+        {
+            delete request;
+        }
     }
 
     inline void forward_gui_input_message(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
@@ -2062,7 +2121,8 @@ namespace epochnamespace::core
                 && (
                     (win.hwndChild
                         && ::IsWindow(win.hwndChild) != FALSE
-                        && ::GetParent(win.hwndChild) != parent)
+                        && ::GetParent(win.hwndChild) != parent
+                        && ::GetParent(win.hwndChild) != win.host_hwnd)
                     || ((win.type == ContextType::SDL || win.type == ContextType::SFML)
                         && (!win.hwndChild || ::IsWindow(win.hwndChild) == FALSE))
                 );
@@ -2091,7 +2151,7 @@ namespace epochnamespace::core
                 restore_associated_host_window(&win, parent, c * cw, r * ch, cw, ch);
             }
 
-            if (needsResizeCallback)
+            if (needsResizeCallback && !uses_visible_proxy_host(&win))
                 HandleResize(liveHwnd, cw, ch);
             hide_associated_host_window(&win, liveHwnd, parent);
         }
@@ -2399,6 +2459,7 @@ namespace epochnamespace::core
             remember_gui_input_owner(hwnd);
             ::SetFocus(hwnd);
             const auto ctx = resolveGuiContext();
+            auto* const window = resolve_window_data_for_hwnd(hwnd);
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
             if (!is_dock_drag_hotspot(hwnd, lParam))
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -2406,7 +2467,10 @@ namespace epochnamespace::core
             ::SetCapture(hwnd);
             drag.dragging = true;
             drag.draggedWindow = hwnd;
-            drag.originalParent = ::GetParent(hwnd);
+            drag.originalParent =
+                (window && is_sfml_proxy_candidate(window) && window->host_hwnd)
+                ? ::GetParent(window->host_hwnd)
+                : ::GetParent(hwnd);
             if (!drag.originalParent)
                 drag.originalParent = static_cast<HWND>(::GetPropW(hwnd, kEpochDockParentProp));
             POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
@@ -2435,7 +2499,9 @@ namespace epochnamespace::core
 
             RECT wndRect{};
             HWND dragFrame = hwnd;
-            if (is_sfml_proxy_detached(window))
+            if (is_sfml_proxy_candidate(window) && window->host_hwnd)
+                dragFrame = window->host_hwnd;
+            else if (is_sfml_proxy_detached(window))
                 dragFrame = window->host_hwnd;
             ::GetWindowRect(dragFrame, &wndRect);
 
@@ -2457,15 +2523,18 @@ namespace epochnamespace::core
                 {
                     if (is_sfml_proxy_detached(window))
                     {
-                        redock_sfml_proxy_window(
+                        post_proxy_host_command(
                             window,
+                            ProxyDockCmd::Redock,
                             drag.originalParent,
                             newX,
                             newY,
                             wndW,
                             wndH);
-                        if (auto* mgr = s_activeInstance)
-                            mgr->HandleResize(hwnd, wndW, wndH);
+                    }
+                    else if (is_sfml_proxy_candidate(window))
+                    {
+                        ::SetFocus(hwnd);
                     }
                     else if (::GetParent(hwnd) != drag.originalParent)
                     {
@@ -2516,13 +2585,25 @@ namespace epochnamespace::core
                     {
                         if (!is_sfml_proxy_detached(window))
                         {
-                            undock_sfml_proxy_window(window, newX, newY, clientW, clientH);
-                            if (auto* mgr = s_activeInstance)
-                                mgr->HandleResize(hwnd, clientW, clientH);
+                            post_proxy_host_command(
+                                window,
+                                ProxyDockCmd::Undock,
+                                drag.originalParent,
+                                newX,
+                                newY,
+                                clientW,
+                                clientH);
                         }
                         else
                         {
-                            position_top_level_shell(window->host_hwnd, newX, newY, clientW, clientH);
+                            post_proxy_host_command(
+                                window,
+                                ProxyDockCmd::MoveDetached,
+                                drag.originalParent,
+                                newX,
+                                newY,
+                                clientW,
+                                clientH);
                         }
                     }
                     else if (::GetParent(hwnd) == drag.originalParent)
@@ -2571,6 +2652,54 @@ namespace epochnamespace::core
             return 0;
         }
 
+        case WM_EPOCH_PROXY_DOCKCMD:
+        {
+            std::unique_ptr<ProxyDockRequest> request{
+                reinterpret_cast<ProxyDockRequest*>(lParam)
+            };
+            auto* const window = resolve_window_data_for_hwnd(
+                request && request->sourceHwnd ? request->sourceHwnd : hwnd);
+            if (!request || !is_sfml_proxy_candidate(window))
+                return 0;
+
+            switch (static_cast<ProxyDockCmd>(wParam))
+            {
+            case ProxyDockCmd::Undock:
+                undock_sfml_proxy_window(
+                    window,
+                    request->x,
+                    request->y,
+                    request->width,
+                    request->height);
+                if (request->parentHwnd && ::IsWindow(request->parentHwnd) != FALSE)
+                    request_parent_layout(request->parentHwnd);
+                return 0;
+
+            case ProxyDockCmd::MoveDetached:
+                position_top_level_shell(
+                    window->host_hwnd,
+                    request->x,
+                    request->y,
+                    request->width,
+                    request->height);
+                return 0;
+
+            case ProxyDockCmd::Redock:
+                redock_sfml_proxy_window(
+                    window,
+                    request->parentHwnd,
+                    request->x,
+                    request->y,
+                    request->width,
+                    request->height);
+                if (request->parentHwnd && ::IsWindow(request->parentHwnd) != FALSE)
+                    request_parent_layout(request->parentHwnd);
+                return 0;
+            }
+
+            return 0;
+        }
+
         case WM_LBUTTONUP:
         {
             if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
@@ -2603,8 +2732,9 @@ namespace epochnamespace::core
                     const int clientH = clamp_positive(static_cast<int>(clientRect.bottom - clientRect.top));
                     if (window && is_sfml_proxy_detached(window))
                     {
-                        redock_sfml_proxy_window(
+                        post_proxy_host_command(
                             window,
+                            ProxyDockCmd::Redock,
                             originalParent,
                             wndRect.left,
                             wndRect.top,
@@ -2632,10 +2762,13 @@ namespace epochnamespace::core
                         mgr->HandleResize(hwnd, clientW, clientH);
                 }
 
-                hide_associated_host_window(
-                    resolve_window_data_for_hwnd(hwnd),
-                    hwnd,
-                    originalParent);
+                if (!(window && is_sfml_proxy_candidate(window)))
+                {
+                    hide_associated_host_window(
+                        resolve_window_data_for_hwnd(hwnd),
+                        hwnd,
+                        originalParent);
+                }
                 ::SetFocus(hwnd);
 
                 if (originalParent && ::IsWindow(originalParent) != FALSE)

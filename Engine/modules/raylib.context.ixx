@@ -197,7 +197,7 @@ namespace epochnamespace::raylibcontext
 
             st.parent = dockParent ? dockParent : parent;
             st.hwnd = raylibHwnd;
-            st.dockedChildWindow = false;
+            st.dockedChildWindow = (st.parent && st.parent != raylibHwnd);
 
             if (st.parent && st.parent != raylibHwnd)
             {
@@ -247,8 +247,7 @@ namespace epochnamespace::raylibcontext
                 }
             }
 
-            if (st.parent && ::IsWindow(st.parent) != FALSE)
-                ::PostMessageW(st.parent, WM_SIZE, 0, MAKELPARAM(st.width, st.height));
+            epochnamespace::core::RequestActiveParentLayout();
         }
 
     }
@@ -613,14 +612,31 @@ namespace epochnamespace::raylibcontext
 #if defined(_WIN32)
                 if (state.hwnd && ::IsWindow(state.hwnd) != FALSE)
                 {
+                    const HWND liveParent = ::GetParent(state.hwnd);
                     if (state.parent
                         && ::IsWindow(state.parent) != FALSE
-                        && ::GetParent(state.hwnd) != state.parent)
+                        && liveParent == state.parent)
+                    {
+                        state.dockedChildWindow = true;
+                    }
+                    else if (!liveParent
+                        || (state.parent
+                            && ::IsWindow(state.parent) != FALSE
+                            && liveParent != state.parent))
+                    {
+                        state.dockedChildWindow = false;
+                    }
+
+                    if (state.dockedChildWindow
+                        && state.parent
+                        && ::IsWindow(state.parent) != FALSE
+                        && liveParent != state.parent)
                     {
                         ::SetParent(state.hwnd, state.parent);
                     }
 
-                    if (state.parent && ::IsWindow(state.parent) != FALSE)
+                    if (state.dockedChildWindow
+                        && state.parent && ::IsWindow(state.parent) != FALSE)
                     {
                         LONG_PTR style = ::GetWindowLongPtrW(state.hwnd, GWL_STYLE);
                         style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW | WS_POPUP);
@@ -637,6 +653,13 @@ namespace epochnamespace::raylibcontext
                         exStyle |= WS_EX_NOPARENTNOTIFY;
                         ::SetWindowLongPtrW(state.hwnd, GWL_EXSTYLE, exStyle);
                     }
+                    else
+                    {
+                        LONG_PTR style = ::GetWindowLongPtrW(state.hwnd, GWL_STYLE);
+                        style &= ~static_cast<LONG_PTR>(WS_CHILD);
+                        style |= static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+                        ::SetWindowLongPtrW(state.hwnd, GWL_STYLE, style);
+                    }
 
                     ::SetWindowPos(
                         state.hwnd,
@@ -645,9 +668,10 @@ namespace epochnamespace::raylibcontext
                         0,
                         clampedW,
                         clampedH,
-                        SWP_NOZORDER | SWP_NOACTIVATE | ((state.parent && ::IsWindow(state.parent) != FALSE) ? 0 : SWP_NOMOVE) | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                        SWP_NOZORDER | SWP_NOACTIVATE | ((state.dockedChildWindow && state.parent && ::IsWindow(state.parent) != FALSE) ? 0 : SWP_NOMOVE) | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-                    if (state.parent
+                    if (state.dockedChildWindow
+                        && state.parent
                         && ::IsWindow(state.parent) != FALSE
                         && state.owner_ctx
                         && state.owner_ctx->windowData

@@ -1,5 +1,12 @@
 # Epoch Changelog
 
+## [v0.83.78]
+- Fixed the Windows Release build discovery path for nested `Engine/vcpkg_installed/<triplet>/<triplet>/...` layouts by teaching both [ConsoleApplication1.vcxproj](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/examples/ConsoleApplication1/ConsoleApplication1.vcxproj) and [StaticLib1.vcxproj](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/examples/StaticLib1/StaticLib1.vcxproj) to resolve the real include/lib root before compiling.
+- Recovered the honest visible-host proxy contract for Windows SDL/SFML panes in the parented editor: the backend child now stays parented to its `EpochChild` shell while docked and undocked, proxy host moves are routed back onto the host-owning thread, and the Win32 harness now validates proxy host/child ownership instead of pretending SDL/SFML behave like raw child panes.
+- Folded in the latest launcher and platform cleanup: the launcher drops the old Sandbox/Platformer buttons in favor of `2D Studio`, `Open Editor`, settings, update, and quit; Linux gets an explicit `RequestActiveParentLayout()` seam; caret blink returns to a real blink rhythm; and Vulkan copy-buffer logging stops spamming release runs.
+- Revalidated the parented six-context editor honestly from both `x64/Debug` and `x64/Release`: full-grid harness runs survived maximize, Raylib/SDL/SFML undock-redock cycles, and early `SFML_Window` close without killing the parent editor.
+- Hardened the release packaging contract for the next updater-shell asset: the Windows zip now carries the VC143 CRT app-local instead of depending on a machine-global redistributable, the no-args launcher shell gets a direct smoke pass before publishing, and the Linux/WSL2 asset must be rebuilt from the same bumped source commit instead of drifting from the public tag.
+
 ## [v0.83.76]
 - Fixed the Linux/WSL2 updater-shell build by importing `context.window` in [aengine.cpp](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/src/aengine.cpp), which keeps the tagged source snapshot and the packaged Linux asset aligned to the same working commit.
 - Follow-up release packaging now targets matching Windows and Linux updater-shell assets from the same corrected source tag instead of shipping a Linux binary from a different commit than the public source snapshot.

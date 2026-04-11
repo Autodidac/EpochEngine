@@ -107,6 +107,9 @@ namespace epochnamespace::core
     export DragState& Drag() noexcept;
 
     export void MakeDockable(HWND hwnd, HWND parent);
+    export class MultiContextManager;
+    export MultiContextManager* GetActiveMultiContextManager() noexcept;
+    export void RequestActiveParentLayout() noexcept;
 
     export class MultiContextManager
     {
@@ -183,6 +186,8 @@ namespace epochnamespace::core
         int get_title_bar_thickness(const HWND window_handle);
 
         inline static MultiContextManager* s_activeInstance = nullptr;
+
+        friend MultiContextManager* GetActiveMultiContextManager() noexcept;
     };
 
 #elif defined(__linux__)
@@ -259,6 +264,7 @@ namespace epochnamespace::core
 
     export MultiContextManager* GetActiveMultiContextManager() noexcept;
     export void HandleX11Configure(::Window window, int width, int height);
+    export void RequestActiveParentLayout() noexcept;
 
 #else
 
@@ -301,6 +307,9 @@ namespace epochnamespace::core
     private:
         inline static const std::vector<std::unique_ptr<WindowData>> s_emptyWindows{};
     };
+
+    export inline MultiContextManager* GetActiveMultiContextManager() noexcept { return nullptr; }
+    export inline void RequestActiveParentLayout() noexcept {}
 
 #endif
 } // namespace epochnamespace::core

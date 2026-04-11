@@ -1414,7 +1414,7 @@ namespace epochnamespace::gui
         while (g_frame.caretTimer >= kCaretBlinkPeriod)
             g_frame.caretTimer -= kCaretBlinkPeriod;
 
-        g_frame.caretVisible = true;
+        g_frame.caretVisible = g_frame.caretTimer < (kCaretBlinkPeriod * 0.5f);
 
         bool prevMouseDown = g_frame.mouseDown;
         if (rawCtx)
