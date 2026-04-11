@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.83.79]
+- Bumped the public source/version state again so the next packaged release comes from a freshly versioned repo commit instead of reusing the previously published `v0.83.78` source tag.
+- Refreshed the README multicontext proof contract around a fullscreen six-context harness image so the release-facing editor screenshot matches the current source/version line and visibly carries all six backends.
+- Kept the Windows and Linux packaged assets tied to the same bumped source commit instead of letting release publication drift ahead of the repo snapshot.
+
 ## [v0.83.78]
 - Fixed the Windows Release build discovery path for nested `Engine/vcpkg_installed/<triplet>/<triplet>/...` layouts by teaching both [ConsoleApplication1.vcxproj](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/examples/ConsoleApplication1/ConsoleApplication1.vcxproj) and [StaticLib1.vcxproj](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/examples/StaticLib1/StaticLib1.vcxproj) to resolve the real include/lib root before compiling.
 - Recovered the honest visible-host proxy contract for Windows SDL/SFML panes in the parented editor: the backend child now stays parented to its `EpochChild` shell while docked and undocked, proxy host moves are routed back onto the host-owning thread, and the Win32 harness now validates proxy host/child ownership instead of pretending SDL/SFML behave like raw child panes.
