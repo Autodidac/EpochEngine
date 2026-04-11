@@ -60,7 +60,11 @@
 // -----------------------------
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -210,6 +214,210 @@ namespace epochnamespace::core
             ? std::chrono::milliseconds(650)
             : std::chrono::milliseconds(100);
     }
+
+#if defined(_WIN32)
+    [[nodiscard]] inline std::filesystem::path engine_owned_smoke_capture_path()
+    {
+        if (!cli::capture_requested)
+            return {};
+
+        const auto root = cli::capture_output_root();
+        std::error_code ec{};
+        std::filesystem::create_directories(root, ec);
+        return root / std::format("{}-parented-grid.bmp", cli::capture_output_stem());
+    }
+
+    [[nodiscard]] inline bool write_top_down_bgra_as_bmp(
+        const std::filesystem::path& filepath,
+        const std::vector<std::uint8_t>& pixels,
+        const int width,
+        const int height) noexcept
+    {
+        if (width <= 0 || height <= 0 || pixels.size() < static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u)
+            return false;
+
+        const int rowBytes = width * 3;
+        const int padSize = (4 - (rowBytes % 4)) % 4;
+        const int stride = rowBytes + padSize;
+
+        std::vector<std::uint8_t> bmpData(static_cast<std::size_t>(stride) * static_cast<std::size_t>(height), 0);
+        for (int y = 0; y < height; ++y)
+        {
+            const int srcY = height - 1 - y;
+            const auto* srcRow = pixels.data() + static_cast<std::size_t>(srcY) * static_cast<std::size_t>(width) * 4u;
+            auto* dstRow = bmpData.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride);
+
+            for (int x = 0; x < width; ++x)
+            {
+                const auto srcIndex = static_cast<std::size_t>(x) * 4u;
+                dstRow[x * 3 + 0] = srcRow[srcIndex + 0];
+                dstRow[x * 3 + 1] = srcRow[srcIndex + 1];
+                dstRow[x * 3 + 2] = srcRow[srcIndex + 2];
+            }
+        }
+
+        std::uint8_t fileHeader[14] = {
+            'B','M',
+            0,0,0,0,
+            0,0,
+            0,0,
+            54,0,0,0
+        };
+
+        std::uint8_t infoHeader[40] = {
+            40,0,0,0,
+            0,0,0,0,
+            0,0,0,0,
+            1,0,
+            24,0,
+            0,0,0,0,
+            0,0,0,0,
+            0,0,0,0,
+            0,0,0,0,
+            0,0,0,0,
+            0,0,0,0
+        };
+
+        const std::uint32_t fileSize = 54u + static_cast<std::uint32_t>(bmpData.size());
+        std::memcpy(&fileHeader[2], &fileSize, 4);
+        std::memcpy(&infoHeader[4], &width, 4);
+        std::memcpy(&infoHeader[8], &height, 4);
+
+        std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
+        if (!out)
+            return false;
+
+        out.write(reinterpret_cast<const char*>(fileHeader), sizeof(fileHeader));
+        out.write(reinterpret_cast<const char*>(infoHeader), sizeof(infoHeader));
+        out.write(reinterpret_cast<const char*>(bmpData.data()), static_cast<std::streamsize>(bmpData.size()));
+        return out.good();
+    }
+
+    [[nodiscard]] inline bool capture_client_window_to_bmp(HWND hwnd, const std::filesystem::path& filepath) noexcept
+    {
+        if (!hwnd)
+            return false;
+
+        RECT clientRect{};
+        if (!::GetClientRect(hwnd, &clientRect))
+            return false;
+
+        const int width = clientRect.right - clientRect.left;
+        const int height = clientRect.bottom - clientRect.top;
+        if (width <= 0 || height <= 0)
+            return false;
+
+        POINT clientOrigin{};
+        if (!::ClientToScreen(hwnd, &clientOrigin))
+            return false;
+
+        const HDC screenDc = ::GetDC(nullptr);
+        if (!screenDc)
+            return false;
+
+        HDC memoryDc = ::CreateCompatibleDC(screenDc);
+        if (!memoryDc)
+        {
+            ::ReleaseDC(nullptr, screenDc);
+            return false;
+        }
+
+        BITMAPINFO bitmapInfo{};
+        bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bitmapInfo.bmiHeader.biWidth = width;
+        bitmapInfo.bmiHeader.biHeight = -height;
+        bitmapInfo.bmiHeader.biPlanes = 1;
+        bitmapInfo.bmiHeader.biBitCount = 32;
+        bitmapInfo.bmiHeader.biCompression = BI_RGB;
+
+        void* bits = nullptr;
+        const HBITMAP bitmap = ::CreateDIBSection(screenDc, &bitmapInfo, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!bitmap || !bits)
+        {
+            if (bitmap)
+                ::DeleteObject(bitmap);
+            ::DeleteDC(memoryDc);
+            ::ReleaseDC(nullptr, screenDc);
+            return false;
+        }
+
+        const HGDIOBJ previous = ::SelectObject(memoryDc, bitmap);
+        ::PatBlt(memoryDc, 0, 0, width, height, BLACKNESS);
+        const bool copied = ::BitBlt(
+            memoryDc,
+            0,
+            0,
+            width,
+            height,
+            screenDc,
+            clientOrigin.x,
+            clientOrigin.y,
+            SRCCOPY | CAPTUREBLT) != FALSE;
+
+        std::vector<std::uint8_t> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u, 0);
+        if (copied)
+            std::memcpy(pixels.data(), bits, pixels.size());
+
+        if (previous)
+            ::SelectObject(memoryDc, previous);
+        ::DeleteObject(bitmap);
+        ::DeleteDC(memoryDc);
+        ::ReleaseDC(nullptr, screenDc);
+
+        return copied && write_top_down_bgra_as_bmp(filepath, pixels, width, height);
+    }
+
+    inline void prepare_parent_window_for_engine_capture(epochnamespace::core::MultiContextManager& mgr) noexcept
+    {
+        if (!cli::capture_requested)
+            return;
+
+        const HWND parentWindow = mgr.GetParentWindow();
+        if (!parentWindow)
+            return;
+
+        RECT workArea{};
+        if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0))
+        {
+            ::ShowWindow(parentWindow, SW_RESTORE);
+            ::SetWindowPos(
+                parentWindow,
+                HWND_TOP,
+                workArea.left,
+                workArea.top,
+                workArea.right - workArea.left,
+                workArea.bottom - workArea.top,
+                SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+        }
+
+        ::BringWindowToTop(parentWindow);
+        ::SetForegroundWindow(parentWindow);
+        ::SetActiveWindow(parentWindow);
+        mgr.ArrangeDockedWindowsGrid();
+        ::UpdateWindow(parentWindow);
+        ::RedrawWindow(parentWindow, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+    }
+
+    inline void capture_parent_window_if_requested(
+        epochnamespace::core::MultiContextManager& mgr,
+        const std::string_view logSystem) noexcept
+    {
+        if (!cli::capture_requested)
+            return;
+
+        const HWND parentWindow = mgr.GetParentWindow();
+        const auto capturePath = engine_owned_smoke_capture_path();
+        if (!parentWindow || capturePath.empty())
+            return;
+
+        const bool captured = capture_client_window_to_bmp(parentWindow, capturePath);
+        logger::get(std::string(logSystem)).log(
+            captured ? logger::LogLevel::INFO : logger::LogLevel::WARN,
+            std::string(captured ? "Captured engine-owned parent window proof to " : "Failed engine-owned parent window proof capture at ")
+                + capturePath.string(),
+            std::source_location::current());
+    }
+#endif
 
     struct TextureUploadTask
     {
@@ -1302,8 +1510,10 @@ namespace epochnamespace::core
             std::unordered_map<Context*, ContextSession> sessions;
             bool running = true;
             bool deferred_updater_shell_update = false;
+            bool smoke_capture_taken = false;
             std::uint64_t frame_count = 0;
             const std::uint64_t smoke_max_frames = smoke_frame_budget();
+            const std::uint64_t smoke_capture_frame = cli::smoke_requested ? 90u : 0u;
             auto pump = std::forward<PumpFunc>(pump_events);
 
             while (running)
@@ -1890,6 +2100,18 @@ namespace epochnamespace::core
                     running = false;
                 }
 
+                if (cli::smoke_requested && !smoke_capture_taken && frame_count >= smoke_capture_frame)
+                {
+#if defined(_WIN32)
+                    prepare_parent_window_for_engine_capture(mgr);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+                    capture_parent_window_if_requested(
+                        mgr,
+                        startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog);
+#endif
+                    smoke_capture_taken = true;
+                }
+
                 std::this_thread::sleep_for(std::chrono::milliseconds(16));
             }
 
@@ -1986,12 +2208,9 @@ namespace epochnamespace::core
                 mgr.StartRenderThreads();
                 mgr.ArrangeDockedWindowsGrid();
 
-                if (epochnamespace::core::cli::smoke_requested)
-                {
-                    std::this_thread::sleep_for(smoke_shutdown_delay());
-                    mgr.StopAll();
-                    return 0;
-                }
+#if defined(_WIN32)
+                prepare_parent_window_for_engine_capture(mgr);
+#endif
 
                 auto pump = []() -> bool
                     {
@@ -2153,14 +2372,11 @@ namespace epochnamespace::core
             input::designate_polling_thread_to_current();
 
             mgr.StartRenderThreads();
-                mgr.ArrangeDockedWindowsGrid();
+            mgr.ArrangeDockedWindowsGrid();
 
-                if (epochnamespace::core::cli::smoke_requested)
-                {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                    mgr.StopAll();
-                   // return 0;
-                }
+#if defined(_WIN32)
+            prepare_parent_window_for_engine_capture(mgr);
+#endif
 
             auto pump = []() -> bool
                 {
@@ -2229,14 +2445,7 @@ namespace epochnamespace::core
             input::designate_polling_thread_to_current();
 
             mgr.StartRenderThreads();
-                mgr.ArrangeDockedWindowsGrid();
-
-                if (epochnamespace::core::cli::smoke_requested)
-                {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                    mgr.StopAll();
-                    return;
-                }
+            mgr.ArrangeDockedWindowsGrid();
 
             auto pump = []() -> bool
                 {
