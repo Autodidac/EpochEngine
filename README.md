@@ -120,6 +120,8 @@ asset set as the main editor host.
 # In action
 
 These README captures are source-state proofs, not updater-shell screenshots.
+The current six-context proof is promoted from engine-generated capture outputs
+so the repo image stays aligned with the real editor/runtime state.
 If a packaged bootstrap release looks older than these, it has not caught up to
 the current source/editor state yet.
 
@@ -135,10 +137,10 @@ the current source/editor state yet.
   behavior changes enough to make the older image misleading.
 - Capture from an asset-bearing `x64/Debug/` or `x64/Release/` launch only.
 
-Windows fullscreen six-context multicontext proof, source `v0.83.79`:
+Windows fullscreen six-context multicontext proof, source `v0.83.80`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08379.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
+  <img src="Images/readme/windows-multicontext-editor-v08380.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
 </p>
 
 Open the PNG directly for native resolution when checking all six panes. GitHub's

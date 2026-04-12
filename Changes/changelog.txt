@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.83.80]
+- Bumped the public source/version state again so the repo finally advances with the screenshot/runtime pass instead of leaving the source behind the latest multicontext work.
+- Moved the Windows multicontext proof path further into the engine itself: smoke capture now forces parented capture runs onto fullscreen-sized window defaults, promotes the parent window to the foreground/topmost path before capture, and grabs the full parent window rectangle instead of relying on harness desktop shots.
+- Reset the README proof away from the incorrect launcher-facing image so the next promoted multicontext screenshot can honestly target the fullscreen editor shell instead of a smaller non-editor fallback.
+- Fixed the fullscreen parented editor proof so the middle OpenGL slot no longer collapses into the stale square-sized viewport during capture; the promoted README image now comes from the engine-owned fullscreen capture outputs for `v0.83.80`.
+
 ## [v0.83.79]
 - Bumped the public source/version state again so the next packaged release comes from a freshly versioned repo commit instead of reusing the previously published `v0.83.78` source tag.
 - Refreshed the README multicontext proof contract around a fullscreen six-context harness image so the release-facing editor screenshot matches the current source/version line and visibly carries all six backends.

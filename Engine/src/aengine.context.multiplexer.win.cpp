@@ -2151,7 +2151,7 @@ namespace epochnamespace::core
                 restore_associated_host_window(&win, parent, c * cw, r * ch, cw, ch);
             }
 
-            if (needsResizeCallback && !uses_visible_proxy_host(&win))
+            if (needsResizeCallback)
                 HandleResize(liveHwnd, cw, ch);
             hide_associated_host_window(&win, liveHwnd, parent);
         }

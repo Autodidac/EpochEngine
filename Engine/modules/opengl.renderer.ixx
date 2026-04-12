@@ -187,9 +187,14 @@ export namespace epochnamespace::openglrenderer
     inline void begin_frame()
     {
 #if EPOCH_USE_CLEAR_COLOR
+        auto& glState = renderer_gl_state_with_pipeline();
         const auto color = core::clear_color_for_context(core::ContextType::OpenGL);
         glClearColor(color[0], color[1], color[2], color[3]);
-        glViewport(0, 0, core::cli::window_width, core::cli::window_height);
+        glViewport(
+            0,
+            0,
+            (std::max)(1, static_cast<int>(glState.width)),
+            (std::max)(1, static_cast<int>(glState.height)));
         glClear(GL_COLOR_BUFFER_BIT);
 #endif
     }

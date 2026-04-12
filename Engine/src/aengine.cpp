@@ -61,6 +61,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <format>
@@ -205,7 +206,10 @@ namespace epochnamespace::core
 
     [[nodiscard]] inline std::uint64_t smoke_frame_budget() noexcept
     {
-        return cli::smoke_requested ? 300u : (std::numeric_limits<std::uint64_t>::max)();
+        if (!cli::smoke_requested)
+            return (std::numeric_limits<std::uint64_t>::max)();
+
+        return cli::capture_requested ? 900u : 300u;
     }
 
     [[nodiscard]] inline auto smoke_shutdown_delay() noexcept
@@ -216,6 +220,22 @@ namespace epochnamespace::core
     }
 
 #if defined(_WIN32)
+    inline void apply_fullscreen_capture_window_defaults() noexcept
+    {
+        if (!cli::capture_requested)
+            return;
+
+        const int screenWidth = ::GetSystemMetrics(SM_CXSCREEN);
+        const int screenHeight = ::GetSystemMetrics(SM_CYSCREEN);
+        if (screenWidth <= 0 || screenHeight <= 0)
+            return;
+
+        cli::window_width = screenWidth;
+        cli::window_height = screenHeight;
+        cli::window_width_overridden = true;
+        cli::window_height_overridden = true;
+    }
+
     [[nodiscard]] inline std::filesystem::path engine_owned_smoke_capture_path()
     {
         if (!cli::capture_requested)
@@ -293,22 +313,18 @@ namespace epochnamespace::core
         return out.good();
     }
 
-    [[nodiscard]] inline bool capture_client_window_to_bmp(HWND hwnd, const std::filesystem::path& filepath) noexcept
+    [[nodiscard]] inline bool capture_window_to_bmp(HWND hwnd, const std::filesystem::path& filepath) noexcept
     {
         if (!hwnd)
             return false;
 
-        RECT clientRect{};
-        if (!::GetClientRect(hwnd, &clientRect))
+        RECT windowRect{};
+        if (!::GetWindowRect(hwnd, &windowRect))
             return false;
 
-        const int width = clientRect.right - clientRect.left;
-        const int height = clientRect.bottom - clientRect.top;
+        const int width = windowRect.right - windowRect.left;
+        const int height = windowRect.bottom - windowRect.top;
         if (width <= 0 || height <= 0)
-            return false;
-
-        POINT clientOrigin{};
-        if (!::ClientToScreen(hwnd, &clientOrigin))
             return false;
 
         const HDC screenDc = ::GetDC(nullptr);
@@ -350,8 +366,8 @@ namespace epochnamespace::core
             width,
             height,
             screenDc,
-            clientOrigin.x,
-            clientOrigin.y,
+            windowRect.left,
+            windowRect.top,
             SRCCOPY | CAPTUREBLT) != FALSE;
 
         std::vector<std::uint8_t> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u, 0);
@@ -377,25 +393,263 @@ namespace epochnamespace::core
             return;
 
         RECT workArea{};
-        if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0))
+        MONITORINFO monitorInfo{};
+        monitorInfo.cbSize = sizeof(MONITORINFO);
+        const HMONITOR monitor = ::MonitorFromWindow(parentWindow, MONITOR_DEFAULTTONEAREST);
+        if (monitor && ::GetMonitorInfoW(monitor, &monitorInfo))
         {
-            ::ShowWindow(parentWindow, SW_RESTORE);
-            ::SetWindowPos(
-                parentWindow,
-                HWND_TOP,
-                workArea.left,
-                workArea.top,
-                workArea.right - workArea.left,
-                workArea.bottom - workArea.top,
-                SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+            workArea = monitorInfo.rcMonitor;
+        }
+        else if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0))
+        {
         }
 
+        ::ShowWindow(parentWindow, SW_RESTORE);
+        ::SetWindowPos(
+            parentWindow,
+            HWND_TOPMOST,
+            workArea.left,
+            workArea.top,
+            workArea.right - workArea.left,
+            workArea.bottom - workArea.top,
+            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
         ::BringWindowToTop(parentWindow);
         ::SetForegroundWindow(parentWindow);
         ::SetActiveWindow(parentWindow);
         mgr.ArrangeDockedWindowsGrid();
         ::UpdateWindow(parentWindow);
         ::RedrawWindow(parentWindow, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+    }
+
+    [[nodiscard]] inline HWND capture_dock_slot_handle(
+        const epochnamespace::core::WindowData* window,
+        HWND dockParent) noexcept
+    {
+        if (!window || !dockParent || ::IsWindow(dockParent) == FALSE)
+            return nullptr;
+
+        if (window->hwndChild
+            && ::IsWindow(window->hwndChild) != FALSE
+            && ::GetParent(window->hwndChild) == dockParent)
+        {
+            return window->hwndChild;
+        }
+
+        if (window->host_hwnd
+            && ::IsWindow(window->host_hwnd) != FALSE
+            && ::GetParent(window->host_hwnd) == dockParent)
+        {
+            return window->host_hwnd;
+        }
+
+        if (window->hwnd
+            && ::IsWindow(window->hwnd) != FALSE
+            && ::GetParent(window->hwnd) == dockParent)
+        {
+            return window->hwnd;
+        }
+
+        return nullptr;
+    }
+
+    [[nodiscard]] inline int capture_dock_order(
+        const epochnamespace::core::WindowData* window) noexcept
+    {
+        switch (window ? window->type : epochnamespace::core::ContextType::None)
+        {
+        case epochnamespace::core::ContextType::RayLib: return 0;
+        case epochnamespace::core::ContextType::SDL: return 1;
+        case epochnamespace::core::ContextType::SFML: return 2;
+        case epochnamespace::core::ContextType::Vulkan: return 3;
+        case epochnamespace::core::ContextType::OpenGL: return 4;
+        case epochnamespace::core::ContextType::Software: return 5;
+        default: return 99;
+        }
+    }
+
+    inline void force_parent_window_capture_layout(
+        epochnamespace::core::MultiContextManager& mgr) noexcept
+    {
+        const HWND parentWindow = mgr.GetParentWindow();
+        if (!parentWindow || ::IsWindow(parentWindow) == FALSE)
+            return;
+
+        std::vector<epochnamespace::core::WindowData*> dockedWindows;
+        dockedWindows.reserve(mgr.GetWindows().size());
+        for (const auto& ownedWindow : mgr.GetWindows())
+        {
+            auto* window = ownedWindow.get();
+            if (!window)
+                continue;
+
+            if (const HWND liveHwnd = capture_dock_slot_handle(window, parentWindow);
+                liveHwnd && ::IsWindow(liveHwnd) != FALSE)
+            {
+                dockedWindows.push_back(window);
+            }
+        }
+
+        if (dockedWindows.empty())
+            return;
+
+        std::stable_sort(
+            dockedWindows.begin(),
+            dockedWindows.end(),
+            [](const auto* lhs, const auto* rhs)
+            {
+                return capture_dock_order(lhs) < capture_dock_order(rhs);
+            });
+
+        RECT clientRect{};
+        if (!::GetClientRect(parentWindow, &clientRect))
+            return;
+
+        const int clientW = (std::max)(1, static_cast<int>(clientRect.right - clientRect.left));
+        const int clientH = (std::max)(1, static_cast<int>(clientRect.bottom - clientRect.top));
+
+        int cols = 1;
+        int rows = 1;
+        const int total = static_cast<int>(dockedWindows.size());
+        while (cols * rows < total)
+            (cols <= rows ? ++cols : ++rows);
+
+        const int cellW = (std::max)(1, clientW / cols);
+        const int cellH = (std::max)(1, clientH / rows);
+
+        for (std::size_t i = 0; i < dockedWindows.size(); ++i)
+        {
+            auto* window = dockedWindows[i];
+            const HWND liveHwnd = capture_dock_slot_handle(window, parentWindow);
+            if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
+                continue;
+
+            const int column = static_cast<int>(i) % cols;
+            const int row = static_cast<int>(i) / cols;
+            ::SetWindowPos(
+                liveHwnd,
+                nullptr,
+                column * cellW,
+                row * cellH,
+                cellW,
+                cellH,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            if (window->context)
+            {
+                if (auto liveContext = std::reinterpret_pointer_cast<epochnamespace::core::Context>(window->context))
+                {
+                    liveContext->width = cellW;
+                    liveContext->height = cellH;
+                }
+            }
+            mgr.HandleResize(liveHwnd, cellW, cellH);
+            ::UpdateWindow(liveHwnd);
+            ::RedrawWindow(
+                liveHwnd,
+                nullptr,
+                nullptr,
+                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+            if (window->hwndChild
+                && window->hwndChild != liveHwnd
+                && ::IsWindow(window->hwndChild) != FALSE)
+            {
+                ::UpdateWindow(window->hwndChild);
+                ::RedrawWindow(
+                    window->hwndChild,
+                    nullptr,
+                    nullptr,
+                    RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+            }
+        }
+
+        ::UpdateWindow(parentWindow);
+        ::RedrawWindow(parentWindow, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+    }
+
+    [[nodiscard]] inline bool parent_window_capture_layout_ready(
+        epochnamespace::core::MultiContextManager& mgr) noexcept
+    {
+        const HWND parentWindow = mgr.GetParentWindow();
+        if (!parentWindow || ::IsWindow(parentWindow) == FALSE)
+            return false;
+
+        RECT clientRect{};
+        if (!::GetClientRect(parentWindow, &clientRect))
+            return false;
+
+        const int clientW = static_cast<int>(clientRect.right - clientRect.left);
+        const int clientH = static_cast<int>(clientRect.bottom - clientRect.top);
+        if (clientW <= 1 || clientH <= 1)
+            return false;
+
+        std::vector<const epochnamespace::core::WindowData*> dockedWindows;
+        dockedWindows.reserve(mgr.GetWindows().size());
+        for (const auto& ownedWindow : mgr.GetWindows())
+        {
+            const auto* window = ownedWindow.get();
+            if (!window)
+                continue;
+
+            if (const HWND liveHwnd = capture_dock_slot_handle(window, parentWindow);
+                liveHwnd && ::IsWindow(liveHwnd) != FALSE)
+            {
+                dockedWindows.push_back(window);
+            }
+        }
+
+        if (dockedWindows.empty())
+            return false;
+
+        std::stable_sort(
+            dockedWindows.begin(),
+            dockedWindows.end(),
+            [](const auto* lhs, const auto* rhs)
+            {
+                return capture_dock_order(lhs) < capture_dock_order(rhs);
+            });
+
+        int cols = 1;
+        int rows = 1;
+        const int total = static_cast<int>(dockedWindows.size());
+        while (cols * rows < total)
+            (cols <= rows ? ++cols : ++rows);
+
+        const int cellW = (std::max)(1, clientW / cols);
+        const int cellH = (std::max)(1, clientH / rows);
+        constexpr int kSizeTolerance = 96;
+        constexpr int kPositionTolerance = 96;
+
+        for (std::size_t i = 0; i < dockedWindows.size(); ++i)
+        {
+            const auto* window = dockedWindows[i];
+            const HWND liveHwnd = capture_dock_slot_handle(window, parentWindow);
+            if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
+                return false;
+
+            RECT liveRect{};
+            if (!::GetWindowRect(liveHwnd, &liveRect))
+                return false;
+
+            POINT topLeft{ liveRect.left, liveRect.top };
+            if (!::ScreenToClient(parentWindow, &topLeft))
+                return false;
+
+            const int liveW = static_cast<int>(liveRect.right - liveRect.left);
+            const int liveH = static_cast<int>(liveRect.bottom - liveRect.top);
+            const int column = static_cast<int>(i) % cols;
+            const int row = static_cast<int>(i) / cols;
+            const int expectedX = column * cellW;
+            const int expectedY = row * cellH;
+
+            if ((std::abs)(liveW - cellW) > kSizeTolerance
+                || (std::abs)(liveH - cellH) > kSizeTolerance
+                || (std::abs)(topLeft.x - expectedX) > kPositionTolerance
+                || (std::abs)(topLeft.y - expectedY) > kPositionTolerance)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     inline void capture_parent_window_if_requested(
@@ -410,7 +664,7 @@ namespace epochnamespace::core
         if (!parentWindow || capturePath.empty())
             return;
 
-        const bool captured = capture_client_window_to_bmp(parentWindow, capturePath);
+        const bool captured = capture_window_to_bmp(parentWindow, capturePath);
         logger::get(std::string(logSystem)).log(
             captured ? logger::LogLevel::INFO : logger::LogLevel::WARN,
             std::string(captured ? "Captured engine-owned parent window proof to " : "Failed engine-owned parent window proof capture at ")
@@ -1511,9 +1765,17 @@ namespace epochnamespace::core
             bool running = true;
             bool deferred_updater_shell_update = false;
             bool smoke_capture_taken = false;
+            bool smoke_capture_armed = false;
             std::uint64_t frame_count = 0;
             const std::uint64_t smoke_max_frames = smoke_frame_budget();
-            const std::uint64_t smoke_capture_frame = cli::smoke_requested ? 90u : 0u;
+            const std::uint64_t smoke_capture_frame =
+                cli::smoke_requested
+                ? (cli::capture_requested ? 420u : 30u)
+                : 0u;
+            const std::uint64_t smoke_capture_settle_frames =
+                cli::capture_requested ? 90u : 0u;
+            const std::uint64_t smoke_capture_fallback_frames =
+                cli::capture_requested ? 150u : 0u;
             auto pump = std::forward<PumpFunc>(pump_events);
 
             while (running)
@@ -2103,13 +2365,35 @@ namespace epochnamespace::core
                 if (cli::smoke_requested && !smoke_capture_taken && frame_count >= smoke_capture_frame)
                 {
 #if defined(_WIN32)
-                    prepare_parent_window_for_engine_capture(mgr);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(120));
-                    capture_parent_window_if_requested(
-                        mgr,
-                        startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog);
+                    if (!smoke_capture_armed)
+                    {
+                        prepare_parent_window_for_engine_capture(mgr);
+                        smoke_capture_armed = true;
+                    }
+
+                    force_parent_window_capture_layout(mgr);
+                    const bool layoutReady = parent_window_capture_layout_ready(mgr);
+                    const bool readyToCapture =
+                        frame_count >= (smoke_capture_frame + smoke_capture_settle_frames)
+                        && layoutReady;
+                    const bool fallbackCapture =
+                        frame_count >= (smoke_capture_frame + smoke_capture_fallback_frames);
+                    if (readyToCapture || fallbackCapture)
+                    {
+                        if (!layoutReady)
+                        {
+                            logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
+                                logger::LogLevel::WARN,
+                                "Parented capture layout did not fully settle before proof capture; writing the best available fullscreen parent frame.",
+                                std::source_location::current());
+                        }
+
+                        capture_parent_window_if_requested(
+                            mgr,
+                            startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog);
+                        smoke_capture_taken = true;
+                    }
 #endif
-                    smoke_capture_taken = true;
                 }
 
                 std::this_thread::sleep_for(std::chrono::milliseconds(16));
@@ -2184,6 +2468,7 @@ namespace epochnamespace::core
 
                 HINSTANCE hi = hInstance ? hInstance : GetModuleHandleW(nullptr);
 
+                apply_fullscreen_capture_window_defaults();
                 const auto launch_cfg = resolve_legacy_launch_config();
 
                 const bool ok = mgr.Initialize(
@@ -2347,6 +2632,7 @@ namespace epochnamespace::core
 
             const HINSTANCE hi = GetModuleHandleW(nullptr);
 
+            apply_fullscreen_capture_window_defaults();
             const auto launch_cfg = resolve_legacy_launch_config();
 
                 const bool ok = mgr.Initialize(
