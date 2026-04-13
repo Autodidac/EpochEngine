@@ -602,23 +602,23 @@ namespace epochnamespace::gui
                 g_resources.atlas = &atlas;
 
                 g_resources.windowBackground = add_sprite(atlas, "__agui/window_bg",
-                    make_solid_pixels(0x33, 0x35, 0x38, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x2B, 0x31, 0x39, 0xFF, 8, 8), 8, 8);
                 g_resources.buttonNormal = add_sprite(atlas, "__agui/button_normal",
-                    make_solid_pixels(0x5B, 0x5F, 0x66, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x56, 0x60, 0x6B, 0xFF, 8, 8), 8, 8);
                 g_resources.buttonHover = add_sprite(atlas, "__agui/button_hover",
-                    make_solid_pixels(0x76, 0x7C, 0x85, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x6B, 0x78, 0x86, 0xFF, 8, 8), 8, 8);
                 g_resources.buttonActive = add_sprite(atlas, "__agui/button_active",
-                    make_solid_pixels(0x94, 0x9A, 0xA3, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x88, 0x97, 0xA7, 0xFF, 8, 8), 8, 8);
                 g_resources.textField = add_sprite(atlas, "__agui/text_field",
-                    make_solid_pixels(0x2B, 0x2E, 0x33, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x22, 0x27, 0x2E, 0xFF, 8, 8), 8, 8);
                 g_resources.textFieldActive = add_sprite(atlas, "__agui/text_field_active",
-                    make_solid_pixels(0x3A, 0x3E, 0x45, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x2E, 0x36, 0x40, 0xFF, 8, 8), 8, 8);
                 g_resources.panelBackground = add_sprite(atlas, "__agui/panel_bg",
-                    make_solid_pixels(0x27, 0x29, 0x2E, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x1D, 0x22, 0x29, 0xFF, 8, 8), 8, 8);
                 g_resources.consoleBackground = add_sprite(atlas, "__agui/console_bg",
-                    make_solid_pixels(0x1F, 0x21, 0x26, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x17, 0x1C, 0x22, 0xFF, 8, 8), 8, 8);
                 g_resources.titleBar = add_sprite(atlas, "__agui/title_bar",
-                    make_solid_pixels(0x22, 0x24, 0x28, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x1F, 0x27, 0x30, 0xFF, 8, 8), 8, 8);
 
                 g_resources.atlasBuilt = true;
             }

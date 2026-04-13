@@ -44,6 +44,7 @@ module;
 #include <chrono>
 #include <cstdlib>
 #include <cstddef>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <future>
@@ -225,6 +226,7 @@ namespace epochnamespace
             std::string activeRuntimeScene{ "project:sandbox" };
             std::string activeWorld{ "PersistentLevel" };
             std::string projectStatus{ "Project shell ready." };
+            std::string projectBuildStatus{ "Build Project creates a repo-local child executable for generated shells." };
             std::string scriptBuildStatus{ "Select a script to validate or run." };
             std::vector<EditorEntity> entities{};
             std::size_t selectedEntity{ 0 };
@@ -587,6 +589,24 @@ namespace epochnamespace
             trace << message << '\n';
         }
 
+        [[nodiscard]] std::string read_requested_editor_project_id() noexcept
+        {
+#if defined(_WIN32)
+            char* raw = nullptr;
+            std::size_t raw_size = 0;
+            if (_dupenv_s(&raw, &raw_size, "EPOCH_EDITOR_PROJECT_ID") != 0 || raw == nullptr)
+                return {};
+
+            std::string value{ raw };
+            std::free(raw);
+            return value;
+#else
+            if (const char* const raw = std::getenv("EPOCH_EDITOR_PROJECT_ID"))
+                return std::string{ raw };
+            return {};
+#endif
+        }
+
         [[nodiscard]] bool try_claim_editor_automation_command(EditorAutomationCommand command) noexcept
         {
             if (command == EditorAutomationCommand::None)
@@ -615,6 +635,7 @@ namespace epochnamespace
             state.activeScript = std::string(profile->default_script);
             state.activeRuntimeScene = std::string(profile->runtime_scene_id);
             state.projectStatus = std::string("Loaded project shell at ") + state.projectRoot + ".";
+            state.projectBuildStatus = "Build Project creates a repo-local child executable for generated shells.";
             state.scriptBuildStatus = "Select a script to validate or run.";
 
             state.entities.clear();
@@ -931,6 +952,39 @@ namespace epochnamespace
             return std::format("{:.1f}", epochnamespace::previewgrid::camera_distance_for(ctx.get()));
         }
 
+        [[nodiscard]] std::filesystem::path project_entry_source_path(std::string_view projectRoot)
+        {
+            return std::filesystem::path{ projectRoot } / "source" / "main.cpp";
+        }
+
+        [[nodiscard]] std::filesystem::path project_windows_build_script_path(std::string_view projectRoot)
+        {
+            return std::filesystem::path{ projectRoot } / "build_project.ps1";
+        }
+
+        [[nodiscard]] std::filesystem::path project_windows_vcxproj_path(std::string_view projectRoot)
+        {
+            const std::filesystem::path root{ projectRoot };
+            return root / (root.filename().string() + ".vcxproj");
+        }
+
+        [[nodiscard]] std::filesystem::path project_output_exe_path(std::string_view projectRoot)
+        {
+            const std::filesystem::path root{ projectRoot };
+            return root / "bin" / "windows" / "Debug" / "x64" / (root.filename().string() + ".exe");
+        }
+
+        [[nodiscard]] std::filesystem::path project_build_log_path(std::string_view projectRoot)
+        {
+            return std::filesystem::path{ projectRoot } / "build" / "logs" / "build-Debug-x64.log";
+        }
+
+        [[nodiscard]] std::string display_project_path(const std::filesystem::path& path)
+        {
+            std::error_code ec;
+            return std::filesystem::absolute(path, ec).lexically_normal().generic_string();
+        }
+
         AiChat& chat_state_for(const std::shared_ptr<core::Context>& ctx)
         {
             auto& storage = chat_storage();
@@ -958,13 +1012,19 @@ namespace epochnamespace
                 it->second.timeControl.fixed_dt_seconds = 1.0 / 60.0;
                 it->second.timeControl.time_scale = 1.0;
                 it->second.timeControl.max_steps_per_frame = 8;
-                set_project(it->second, "sandbox", false);
+                const std::string requestedProjectId = read_requested_editor_project_id();
+                if (!requestedProjectId.empty() && editor_find_project_profile(requestedProjectId))
+                    set_project(it->second, requestedProjectId, false);
+                else
+                    set_project(it->second, "sandbox", false);
                 if (ctx)
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
                 push_editor_log(it->second, "[info] Use the Project, Scripts, AI, Systems, and Output workspaces to drive scene play, scripting, and assistant work.");
                 push_editor_log(it->second, "[info] Scene viewport is owned by the active backend.");
                 push_editor_log(it->second, "[info] Systems now tracks the shared simulation-time spine for pacing and fixed-step diagnostics.");
+                if (!requestedProjectId.empty() && it->second.projectId == requestedProjectId)
+                    push_editor_log(it->second, std::string("[project] Preloaded active project from environment: ") + requestedProjectId + ".");
                 if (it->second.automationCommand == EditorAutomationCommand::SmartUpdate)
                     push_editor_log(it->second, "[info] Auto command armed: smart update.");
                 else if (it->second.automationCommand == EditorAutomationCommand::SourceUpdate)
@@ -1079,6 +1139,15 @@ namespace epochnamespace
         if (!ctx)
             return false;
 
+        std::string projectRoot{};
+        {
+            auto& storage = editor_storage();
+            std::scoped_lock lock(storage.mutex);
+            const auto it = storage.states.find(ctx);
+            if (it != storage.states.end())
+                projectRoot = it->second.projectRoot;
+        }
+
         scripting::ScriptLoadReport report;
         EpochScriptHost host{
             .user_data = const_cast<core::Context*>(ctx),
@@ -1086,13 +1155,19 @@ namespace epochnamespace
             .rotate_all_entities_yaw = &script_rotate_all_entities_yaw_callback
         };
 
-        const bool ok = scripting::load_or_reload_script(std::string(script_name), &host, &report);
+        const std::string sourcePath = editor_resolve_script_source_path(script_name, projectRoot);
+        const bool ok = scripting::load_or_reload_script(
+            std::filesystem::path{ sourcePath },
+            script_name,
+            &host,
+            &report);
 
         auto& storage = editor_storage();
         std::scoped_lock lock(storage.mutex);
         const auto it = storage.states.find(ctx);
         if (it != storage.states.end())
         {
+            push_editor_log(it->second, std::string("[script] Source path: ") + sourcePath);
             for (const auto& message : report.messages())
                 push_editor_log(it->second, message);
             push_editor_log(
@@ -1386,6 +1461,12 @@ namespace epochnamespace
             if (!activeProfile)
                 activeProfile = &editor_default_project_profile();
 
+            const std::filesystem::path entrySource = project_entry_source_path(editor.projectRoot);
+            const std::filesystem::path buildScript = project_windows_build_script_path(editor.projectRoot);
+            const std::filesystem::path projectFile = project_windows_vcxproj_path(editor.projectRoot);
+            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+            const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
+
             gui::property_row("[project] Active", activeProfile->display_name);
             gui::property_row("[project] Kind", editor.projectKind);
             gui::property_row("[project] Root", editor.projectRoot);
@@ -1395,10 +1476,17 @@ namespace epochnamespace
             gui::property_row("[project] Manifest", editor.projectManifest);
             gui::property_row("[project] Template", editor.projectTemplate);
             gui::property_row("[project] Default script", activeProfile->default_script);
+            gui::property_row("[project] Script source", editor_resolve_script_source_path(activeProfile->default_script, editor.projectRoot));
             gui::property_row("[project] Integration", activeProfile->engine_integration_mode);
             gui::property_row("[project] Include root", activeProfile->public_include_root);
+            gui::property_row("[project] Entry source", display_project_path(entrySource));
+            gui::property_row("[project] Build script", display_project_path(buildScript));
+            gui::property_row("[project] Windows project", display_project_path(projectFile));
+            gui::property_row("[project] Debug output", display_project_path(outputExe));
+            gui::property_row("[project] Build log", display_project_path(buildLog));
             gui::wrapped_label(activeProfile->description, (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(editor.projectStatus, (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(editor.projectBuildStatus, (std::max)(180.0f, log_size.x - 24.0f));
 
             for (const auto& profile : editor_project_profiles())
             {
@@ -1417,13 +1505,32 @@ namespace epochnamespace
                 emit_command(EditorCommand::RunGame, editor.activeRuntimeScene);
                 push_editor_log(editor, std::string("[project] Play requested for ") + editor.projectName + ".");
             }
+            if (gui::button("Build Active Project", { 220.0f, 30.0f }))
+            {
+                const auto build = editor_build_project(editor.projectRoot);
+                editor.projectBuildStatus = build.summary;
+                push_editor_log(
+                    editor,
+                    std::string("[project] ")
+                    + (build.succeeded ? "Build passed. " : "Build failed. ")
+                    + build.summary);
+                if (!build.output_path.empty())
+                    push_editor_log(editor, std::string("[project] Output: ") + build.output_path);
+                if (!build.log_path.empty())
+                    push_editor_log(editor, std::string("[project] Log: ") + build.log_path);
+            }
             if (gui::button("Create Game Project Shell", { 220.0f, 30.0f }))
             {
                 const auto created = editor_create_project_shell(EditorProjectKind::Game);
                 editor.projectStatus = created.summary;
                 push_editor_log(editor, std::string("[project] ") + created.summary);
                 if (created.succeeded)
+                {
                     push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
+                    set_project(editor, created.project_id, true);
+                    editor.projectStatus = created.summary + " Active project loaded.";
+                    epochnamespace::previewgrid::reset_camera(ctx.get());
+                }
             }
             if (gui::button("Create Tool Project Shell", { 220.0f, 30.0f }))
             {
@@ -1431,16 +1538,22 @@ namespace epochnamespace
                 editor.projectStatus = created.summary;
                 push_editor_log(editor, std::string("[project] ") + created.summary);
                 if (created.succeeded)
+                {
                     push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
+                    set_project(editor, created.project_id, true);
+                    editor.projectStatus = created.summary + " Active project loaded.";
+                    epochnamespace::previewgrid::reset_camera(ctx.get());
+                }
             }
             break;
         }
         case EditorWorkspaceTab::Scripts:
         {
+            const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
             gui::property_row("[script] Active", editor.activeScript);
+            gui::property_row("[script] Source", activeScriptSource);
             if (const auto* activeScript = active_script_profile(editor))
             {
-                gui::property_row("[script] Source", activeScript->source_path);
                 gui::property_row("[script] Build", activeScript->build_action);
                 gui::property_row("[script] Run", activeScript->run_action);
                 gui::property_row("[script] Hint", activeScript->diagnostic_hint);
@@ -1455,19 +1568,20 @@ namespace epochnamespace
                 const std::string buttonLabel =
                     (editor.activeScript == script.id ? std::string("> ") : std::string())
                     + std::string(script.display_name);
+                const std::string resolvedSource = editor_resolve_script_source_path(script.id, editor.projectRoot);
                 if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
                 {
                     editor.activeScript = std::string(script.id);
-                    editor.scriptBuildStatus = std::string("Selected script source: ") + std::string(script.source_path);
+                    editor.scriptBuildStatus = std::string("Selected script source: ") + resolvedSource;
                     push_editor_log(editor, std::string("[script] Selected ") + editor.activeScript + ".");
                 }
-                gui::property_row("  source", script.source_path);
+                gui::property_row("  source", resolvedSource);
                 gui::wrapped_label(script.description, (std::max)(160.0f, log_size.x - 36.0f));
             }
 
             if (gui::button("Build Selected Script", { 180.0f, 30.0f }))
             {
-                const auto build = editor_build_script(editor.activeScript);
+                const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
                 editor.scriptBuildStatus = build.summary;
                 push_editor_log(
                     editor,

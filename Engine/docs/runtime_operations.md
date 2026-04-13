@@ -24,15 +24,22 @@ the same engine-owned path.
 - the long-term target is a Unity/Unreal-style project shell generated from
   duplicated engine source/layout
 - that same shell must also support the static-compile path where a project
-  embeds the engine directly and consumes the exported `Engine/include/` surface
+  embeds the engine directly and consumes the active engine surface from
+  `Engine/include/`, `Engine/modules/`, `Engine/src/`,
+  `Engine/src/scripts/`, and `Engine/resource/`
 - that project shell should support both game projects and software/tool
   projects so Epoch remains a creative software platform as well as a game
   engine
 - the first generated shell flow should create a real on-disk project root,
   manifest, world file, script stub, and README for both game and tool projects
-- generated embedded-engine shells should also emit an include-aware build
-  fragment and script include fallback so `Engine/include/` stays a real
-  supported path instead of a roadmap-only promise
+- generated non-template `Projects/**/project.epoch.json` manifests should be
+  discovered back into the live editor project list so the shell generation
+  path immediately feeds real project selection and play
+- a newly created project shell should become the active editor project instead
+  of forcing the user to restart or manually stitch a second fake load path
+- generated embedded-engine shells should emit a child project file, a build
+  script, a build fragment, and script include fallback so the full engine
+  surface stays real instead of roadmap-only promise text
 - an editor/project launcher profile is valid here as a prestep for choosing
   projects, contexts, settings, and future automation flows
 - that launcher should stay flat and direct: project entry, clean editor launch,
@@ -53,12 +60,17 @@ the same engine-owned path.
 - engine-owned compiled scripting means project/game logic compiles with the
   engine/project build; it is not a text-macro or string-eval layer
 - the scripting/project phase must account for both integration modes:
-  duplicated engine-source projects and static engine builds that include the
-  engine surface from `Engine/include/`
+  duplicated engine-source projects and embedded-engine builds that include the
+  engine surface from `Engine/include/`, `Engine/modules/`, `Engine/src/`,
+  `Engine/src/scripts/`, and `Engine/resource/`
 - the scripting/project dock should expose script lists, source paths, run/build
   actions, and compile/load diagnostics
-- build diagnostics can start as honest source-path validation and loader
-  reporting, then grow into fuller project/script compile diagnostics
+- script source resolution should prefer the active project's local `scripts/`
+  folder before falling back to template or engine-owned script roots, so the
+  dock and editor run actions operate on the real generated project shell
+- build diagnostics should now cover the generated child-project build path too:
+  entry source, generated project file, build script, build log, and expected
+  output executable should all be visible from the Project workspace
 - hot reload remains a development feature and needs smoke coverage instead of
   trust
 

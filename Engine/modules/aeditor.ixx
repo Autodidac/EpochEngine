@@ -124,6 +124,14 @@ namespace epochnamespace
         std::string summary{};
     };
 
+    export struct EditorProjectBuildResult
+    {
+        bool succeeded{ false };
+        std::string summary{};
+        std::string output_path{};
+        std::string log_path{};
+    };
+
     export struct EditorSceneSeedEntity
     {
         std::string_view name{};
@@ -173,6 +181,9 @@ namespace epochnamespace
     export [[nodiscard]] std::string_view editor_project_kind_name(EditorProjectKind kind) noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind);
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);
+    export [[nodiscard]] EditorProjectBuildResult editor_build_project(std::string_view project_root);
+    [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name, std::string_view project_root);
+    [[nodiscard]] std::string editor_resolve_script_source_path(std::string_view script_name, std::string_view project_root = {});
     export void editor_set_time_snapshot(const core::Context* ctx, const EditorTimeSnapshot& snapshot);
     export [[nodiscard]] EditorTimeControl editor_time_control(const core::Context* ctx);
     export void editor_consume_time_step_request(const core::Context* ctx);

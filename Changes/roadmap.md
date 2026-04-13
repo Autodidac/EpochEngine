@@ -151,14 +151,21 @@ These remain support-tier or project-opt-in work, not the default baseline.
       the scene layer instead of scattered editor state.
 - [x] Add the first project creation flow that duplicates the engine-owned
       shell into either a game project or a software/tool project.
+- [x] Discover generated non-template project manifests into the live project
+      list so newly created shells become selectable/playable editor projects
+      instead of write-only folders on disk.
 - [x] Support both generated-project modes explicitly:
-      duplicated engine source/layout and static engine compilation through the
-      exported `Engine/include/` surface when a project embeds the engine.
-- [x] Make the include-surface/static-engine path first-class in generated
-      project and scripting flows so embedded-engine projects stay just as
-      supported as duplicated-source projects.
+      duplicated engine source/layout and embedded-engine compilation through
+      `Engine/include/`, `Engine/modules/`, `Engine/src/`,
+      `Engine/src/scripts/`, and `Engine/resource/`.
+- [x] Make the embedded-engine/static path first-class in generated project and
+      scripting flows so headers, modules, source, scripting, and resources all
+      stay supported instead of treating `Engine/include/` as the whole story.
 - [x] Add a real scripting/project dock with scripts, source paths, build/run
       actions, and compile/load diagnostics.
+- [x] Prefer project-local script sources for generated projects while keeping
+      template and engine-script fallbacks available, so the dock can validate
+      and run the script that actually belongs to the active project shell.
 - [x] Keep the launcher/project shell centered on projects, contexts, settings,
       updates, and future automation instead of legacy demo/game menus.
 - [ ] Keep the live shell organized around `Project`, `Scripts`, `Systems`,
@@ -222,7 +229,8 @@ These remain support-tier or project-opt-in work, not the default baseline.
       under `workspace/ai/`.
 - [ ] Detect local helper availability at the start of a phase, then use the
       first two `/v1/models` entries as helper drafting pools when the operator
-      has approved helper-first mode.
+      has approved helper-first mode; the current workstation baseline is two
+      loaded helper models with four parallel lanes each.
 
 ## Phase 6 - UI and Editor Maturity
 
@@ -271,11 +279,11 @@ These remain support-tier or project-opt-in work, not the default baseline.
 
 - At the start of a phase, detect local helper availability through
   `/v1/models`.
-- Ask whether helper-first mode should be used if that preference has not
-  already been made explicit by the operator.
-- Use the first two models as helper drafting pools when available.
-- Fill up to four parallel drafting lanes per helper model when there is enough
-  separable work.
+- Ask whether helper-first mode should be used only if that preference or
+  helper allow-list has not already been made explicit by the operator.
+- Use the first two loaded models as helper drafting pools when available.
+- For the current `9900X` + `5800` workstation target, prefer two helper
+  models with four parallel lanes each for eight total drafting lanes.
 - Prefer the LM Studio `/v1/responses` helper path for direct drafting, with
   `input` payloads and `reasoning.effort = none` so the helper returns usable
   text instead of wasting budget on hidden chains.
@@ -289,7 +297,8 @@ These remain support-tier or project-opt-in work, not the default baseline.
 
 ## Current Push Priorities
 
-1. Finish the remaining project-shell seams and generated project/profile flow.
+1. Add automation smoke that creates/selects a generated project shell through
+   the live editor and proves the honest game/tool creation loop end to end.
 2. Keep the Systems workspace growing into a real renderer/runtime tooling
    surface.
 3. Continue carrying the time spine deeper into runtime and scene ownership.

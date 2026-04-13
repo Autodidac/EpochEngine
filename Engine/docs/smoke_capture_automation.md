@@ -97,6 +97,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - prefer the fitted parented multicontext host so six-context layouts stay
   visible on normal desktop work areas instead of drifting off-screen
 - keep the screenshot tied to the source version shown in the README
+- refresh smaller backend proof crops from the latest validated fullscreen
+  six-context source proof instead of leaving older per-backend README images
+  behind after layout or palette changes
 - refresh the README multicontext proof at least every 10th feature version, or
   sooner whenever visible renderer color, layout, or docking behavior changes
   enough that the existing proof is misleading
@@ -140,15 +143,18 @@ Expected smoke behavior:
 - MCP/control snapshots can land in `workspace/mcp_capture.jsonl`
 - no `workspace/ai/*` checkpoints, compiled models, or caches show up as
   staged Git changes
-- `qwen/qwen3.5-9b` is the current fast local helper baseline when loaded
 - if the first detected helper model is changed locally, keep using the first
   `/v1/models` entry instead of provoking extra model loads during smoke runs
 - when driving local helpers directly, prefer bounded `/v1/responses` or
   `/v1/chat/completions` requests; omit explicit reasoning config when the
   loaded model rejects it
-- when two helper models are loaded, helper-first passes can use up to four
-  parallel drafting prompts per model for planning/review work, while the engine
-  runtime itself still stays on the first detected model for parity
+- probe `/v1/models` at the start of a phase, respect any already-stated
+  helper-use preference, and only ask which loaded models are allowed when that
+  allow-list is not already clear
+- for the current `9900X` + `5800` workstation target, prefer two loaded helper
+  models with up to four parallel drafting prompts per model for eight total
+  helper lanes, while the engine runtime itself still stays on the first
+  detected model for parity
 - prefer LM Studio `/v1/responses` for offloaded helper drafts, while keeping
   the engine runtime itself on the first detected local model for parity
 - if a helper returns blank `content` but useful `reasoning_content`, harvest

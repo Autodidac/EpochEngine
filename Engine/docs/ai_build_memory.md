@@ -81,10 +81,14 @@ Use local helpers aggressively for:
 Then refine the result locally and keep compile/build proof as the final source
 of truth.
 
-When two local helper models are loaded, helper-first supervisor passes should
-use the first two `/v1/models` entries as two drafting pools and can fan out up
-to four parallel prompts per model for bounded tasks. Keep the first detected
-model as the in-engine/runtime parity baseline.
+At the start of a phase, probe `/v1/models`, respect any already-stated helper
+preference from the operator, and only ask which loaded models are allowed if
+that allow-list is not already clear.
+
+For the current `9900X` + `5800` workstation target, helper-first supervisor
+passes should prefer two loaded helper models with up to four parallel prompts
+per model for eight total drafting lanes. Keep the first detected model as the
+in-engine/runtime parity baseline.
 
 That helper-first check should happen at the start of a phase, not as an
 afterthought once source edits are already underway.

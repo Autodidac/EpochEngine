@@ -1956,12 +1956,20 @@ namespace epochnamespace::core
     {
         std::unique_ptr<WindowData> removed;
         bool should_quit = false;
+        HWND layoutParent = nullptr;
 
         {
             std::scoped_lock lock(windowsMutex);
             auto it = std::find_if(windows.begin(), windows.end(),
                 [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
             if (it == windows.end()) return;
+
+            if ((*it)->host_hwnd && ::IsWindow((*it)->host_hwnd) != FALSE)
+                layoutParent = ::GetParent((*it)->host_hwnd);
+            if (!layoutParent && (*it)->hwndChild && ::IsWindow((*it)->hwndChild) != FALSE)
+                layoutParent = ::GetParent((*it)->hwndChild);
+            if (!layoutParent && (*it)->hwnd && ::IsWindow((*it)->hwnd) != FALSE)
+                layoutParent = ::GetParent((*it)->hwnd);
 
             (*it)->running = false;
 
@@ -2012,6 +2020,19 @@ namespace epochnamespace::core
         }
 
         CleanupFinishedWindows();
+
+        if (!should_quit)
+        {
+            if ((!layoutParent || ::IsWindow(layoutParent) == FALSE)
+                && GetParentWindow()
+                && ::IsWindow(GetParentWindow()) != FALSE)
+            {
+                layoutParent = GetParentWindow();
+            }
+
+            if (layoutParent && ::IsWindow(layoutParent) != FALSE)
+                request_parent_layout(layoutParent);
+        }
 
         if (should_quit)
         {

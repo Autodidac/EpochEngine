@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.83.82]
+- Turned the generated project shell further into a real child-build surface: the Project workspace now exposes entry source, generated project file, build script, build log, expected Debug output, and an explicit `Build Active Project` action.
+- Tightened generated embedded-engine project wording and metadata around the real engine surface instead of only `Engine/include/`: headers, modules, source, scripting, and resources are now treated as part of the honest child-project path.
+- Hardened project-local script compilation by adding broader project and repo engine include-root discovery, so generated project scripts no longer rely on one fragile include assumption.
+- Fixed a parented Win32 grid follow-up seam by requesting relayout after pane removal, which helps the first-slot collapse case stop leaving stale gaps after a docked window disappears.
+- Refreshed the README current snapshot, tightened the public engine pitch, and regenerated the smaller Windows backend proof images from the latest fullscreen six-context source proof instead of leaving those README crops on stale older images.
+- Revalidated the modified source with `StaticLib1 | Debug | x64` and `ConsoleApplication1 | Release | x64` before continuing the next project-shell/game-making pass.
+
+## [v0.83.81]
+- Turned generated project shells into live editor/runtime data instead of leaving them as write-only files: the editor now discovers non-template `Projects/**/project.epoch.json` manifests at runtime and surfaces them through the existing project-profile path.
+- Tightened the game/tool creation loop so a newly created project shell becomes the active editor project immediately, with its runtime target and seed scene state loaded instead of stopping at file generation.
+- Made the scripting/project dock more honest for generated projects by resolving project-local `scripts/*.ascript.cpp` sources before falling back to template/engine paths, and by running scripts from explicit resolved source paths rather than assuming everything lives under `Engine/src/scripts`.
+- Rebuilt `ConsoleApplication1` in `Debug|x64` and `Release|x64` and rechecked a bounded asset-bearing Debug launch through the existing parented harness after the project-shell/script changes landed.
+
 ## [v0.83.80]
 - Bumped the public source/version state again so the repo finally advances with the screenshot/runtime pass instead of leaving the source behind the latest multicontext work.
 - Moved the Windows multicontext proof path further into the engine itself: smoke capture now forces parented capture runs onto fullscreen-sized window defaults, promotes the parent window to the foreground/topmost path before capture, and grabs the full parent window rectangle instead of relying on harness desktop shots.

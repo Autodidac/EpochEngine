@@ -13,6 +13,15 @@ runtime built around engine projects and scenes, and a shared time-system
 spine that treats simulation pacing, pause/resume, scaling, and stepping as
 first-class engine ownership instead of ad hoc per-backend behavior.
 
+<p align="left">
+  <img src="https://img.shields.io/badge/Project--Driven_Runtime-1F6F78?style=for-the-badge" alt="Project-driven runtime" />
+  <img src="https://img.shields.io/badge/Custom_UI_Texture--Atlas_System-405C8A?style=for-the-badge" alt="Custom UI powered by an automated texture-atlas system" />
+  <img src="https://img.shields.io/badge/Compiled_C%2B%2B23_Scripting-8A5C2F?style=for-the-badge" alt="Compiled C++23 scripting" />
+  <img src="https://img.shields.io/badge/Multicontext_Tooling-486B4A?style=for-the-badge" alt="Multicontext tooling" />
+  <img src="https://img.shields.io/badge/Time--System_Spine-7A4A4A?style=for-the-badge" alt="Time-system spine" />
+  <img src="https://img.shields.io/badge/AI--Assisted_Engine_Ops-5A4D86?style=for-the-badge" alt="AI-assisted engine operations" />
+</p>
+
 The active engine lives in:
 
 ```text
@@ -41,79 +50,34 @@ asset set as the main editor host.
 
 # What Epoch provides
 
-- Internalized engine bootstrap and entry-point flexibility. Epoch can own the
-  desktop startup path itself or be embedded with handled/headless entry
-  configurations through the active `EPOCH_*` runtime macros. See
-  [configuration flags](Engine/docs/aengineconfig_flags.md) and
-  [runtime operations](Engine/docs/runtime_operations.md).
-- Two engine AI runtime roles under one engine-owned surface: the internal
-  EpochBot and the local MCP/control layer that can both operate the engine and
-  train EpochBot while the engine is being used and built.
-- External local LLMs such as LM Studio are development helpers for testing,
-  evaluation, dataset cleanup, documentation acceleration, and editor/build
-  assistance. They are not a third engine runtime role.
-- Multi-context, multi-backend runtime orchestration across OpenGL, Vulkan,
-  SDL3, Raylib, SFML, software, and noop/headless paths.
-- Shared editor preview math across the main scene-view backends, so OpenGL and
-  Vulkan do not drift onto subtly different framing or marker behavior while
-  preview mode is active.
-- Project-driven workflow that routes projects into the editor and scene play
-  into runtime mode, instead of treating the editor as a loose debug shell or a
-  permanent launcher for sample games.
-- A real project shell direction with editor-first launcher profiles plus the
-  first generated game-project and software/tool-project shell flow, so Epoch
-  can bootstrap work the way a serious engine or creative IDE should.
-- An explicit 2D production track inside that project shell direction, so the
-  launcher/editor path can serve side-scrollers, top-down games, UI-heavy work,
-  and faster solo-developer iteration without falling back to fake sample
-  labels.
-- Generated project shells are expected to support both duplicated engine-source
-  layouts and static engine integration through `Engine/include/` when a
-  project compiles the engine directly into its own source tree.
-- A software-development path alongside the game path, so the same engine shell
-  can generate and run creative tools, editors, and application-style projects
-  instead of pretending every project is only a game.
-- A time-based engine direction in the simulation sense, with fixed-step
-  ownership, pacing diagnostics, pause/resume, time scaling, single-step
-  control, and future replay/timeline hooks being folded into the core engine
-  instead of left to one-off subsystems.
-- Desktop-style editor workflow with scene preview control, command surfaces,
-  a modular workspace shell for project/scripts/systems/AI/output docks, and
-  backend-aware fallback behavior.
-- Custom GUI, sprite, and text pipelines built on the engine's own automated
-  texture/atlas system rather than copied independently into each backend.
-- ECS-style systems, scene plumbing, gameplay modules, and engine-owned runtime
-  state.
-- Built-in C++23 scripting that compiles as part of the engine/project, with
-  editor-triggered run actions, a host API for runtime/editor callbacks, and
-  task-graph-backed asynchronous work scheduling.
-- Diagnostics, renderer telemetry, runtime logging, and updater plumbing as
-  first-class engine systems.
-- A Systems workspace that now renders engine-generated frame/task graph
-  textures with pan/zoom controls, support-tier diagnostics, and the first
-  shared time-spine diagnostics, and is explicitly moving toward deeper
-  multithreaded renderer tooling instead of staying a fake placeholder.
-- A parented multicontext path that is supposed to expose one honest pane per
-  active backend, with real backend child surfaces owning render/input instead
-  of fake dock wrappers leaking into the visible layout.
-- Broad automatic hardware support as a first-class target, centered on
-  6-core / GTX 1660 Ti-era desktops and modern Linux laptops by default, with
-  heavier backend/lib support exposed as project-level opt-in tiers.
-- A modern but practical renderer direction: GPU-driven baseline first,
-  centered on visibility -> surface -> lighting -> temporal ->
-  reconstruction -> present, with heavier techniques kept behind support tiers
-  or explicit project opt-in.
-- A later procedural world and time-node authoring phase for SpeedTree-like
-  modular asset/world workflows, with future O2L integration documented as a
-  source for that phase instead of a current dependency.
-- Cross-platform build freedom: Visual Studio, MSBuild, CMake presets, VS Code,
-  shell-script workflows, and multiple compiler families across Windows, Linux,
-  and macOS.
-- Module-first public engine surface centered around active C++23 modules and
-  the exported [epochengine module](Engine/modules/epochengine.ixx).
-- Naming is still converging. Legacy/orphan names from older `aengine*` eras
-  remain transitional debt, and the roadmap now treats consistent professional
-  module/file naming as a real cleanup track instead of leaving it implicit.
+- A project-driven runtime shell that creates, selects, builds, and plays real
+  game or software projects instead of trapping the editor in fake sample flows.
+- An embedded-engine project path that is being shaped around headers, modules,
+  source, scripting, and resources together so generated child builds can
+  graduate into honest standalone work.
+- Custom UI, text, and workspace tooling built on Epoch's own automated
+  texture-atlas system instead of delegating editor behavior to middleware UI.
+- Engine-owned C++23 compiled scripting with project-local source resolution,
+  host callbacks, validation/build actions, and runtime execution from the live
+  editor shell.
+- Multicontext backend orchestration across OpenGL, Vulkan, SDL3, Raylib, SFML,
+  software, and headless/noop paths, with shared preview math keeping scene
+  framing closer across the visible renderers.
+- A Systems workspace that is becoming a real tooling surface for frame/task
+  graph views, support-tier diagnostics, pacing visibility, and deeper
+  renderer/runtime instrumentation.
+- A time-based engine spine that owns fixed-step simulation, frame pacing,
+  pause/resume, scaling, single-step control, and future replay/timeline hooks
+  instead of leaving timing scattered across backends.
+- Two intentional in-engine AI roles, the internal EpochBot and the local
+  MCP/control layer, with external local LLMs used as development helpers for
+  drafting, testing, evaluation, and documentation acceleration.
+- Broad hardware support aimed at 6-core / GTX 1660 Ti-era desktops and modern
+  Linux laptops by default, with heavier renderer features and extra libs kept
+  behind explicit support tiers or project opt-in.
+- Cross-platform build freedom through Visual Studio, MSBuild, CMake presets,
+  VS Code, shell scripts, and a module-first C++23 public surface that is still
+  being cleaned up toward more professional naming.
 
 ---
 
@@ -148,7 +112,8 @@ page scaling can make the third column and lower row harder to read at a glance.
 
 ---
 
-Windows editor backend proofs, source `v0.83.41`:
+Windows backend proof crops, refreshed from the latest fullscreen six-context
+source proof:
 
 <p align="center">
   <img src="Images/readme/windows-opengl.png" alt="Epoch Windows OpenGL editor proof" width="32%" />
@@ -386,30 +351,30 @@ Useful entry points:
 
 # Current snapshot
 
-Version:
-
-```text
-v0.83.74
-```
+<p align="left">
+  <img src="https://img.shields.io/badge/Current_Source-v0.83.82-1F7A4C?style=for-the-badge" alt="Current source v0.83.82" />
+  <img src="https://img.shields.io/badge/Project_Shell-Child_Builds_Wired-2C6A8A?style=for-the-badge" alt="Child builds wired" />
+  <img src="https://img.shields.io/badge/README-Backend_Proofs_Refreshed-7A5A2F?style=for-the-badge" alt="Backend proofs refreshed" />
+</p>
 
 Highlights:
-- The README proof above is now the real `v0.83.74` six-context live capture
-  from an asset-bearing maximized `x64/Debug` editor run, with the visible
-  `GLFW30`, `SDL_app`, `SFML_Window`, `Vulkan`, `OpenGL`, and `Software`
-  panes present and the fake top-row `EpochChild` wrappers hidden.
-- OpenGL and Vulkan editor previews now share the same `render.preview_grid`
-  camera math, and the Vulkan scene preview now uses the same shared preview
-  clear/gizmo color contract instead of drifting onto its own editor-view path.
-- The project shell now pushes the embedded-engine path further into reality by
-  generating an `epoch.project.cmake` fragment, using include fallback logic,
-  and treating `Engine/include/` as a first-class path for generated projects.
-- The Systems workspace now exposes deeper time-spine pacing state, including
-  the live step budget and the max-steps-per-frame clamp alongside the existing
-  fixed-step, accumulator, and simulated-time diagnostics.
-- The shared preview marker now prefers the real center camera ray against the
-  grid plane, then reuses the last honest grid hit before any editor-focus
-  fallback, so the visible look spot stays closer to the actual view direction
-  instead of drifting with camera-follow bias.
+- The source tree is now on `v0.83.82`, so the public snapshot finally matches
+  the current generated-project and editor-shell work instead of lagging behind
+  older proof text.
+- The Project workspace now exposes a real child-build path for generated
+  shells, including entry source, project file, build script, build log, and
+  expected Debug output executable.
+- Generated child projects are now framed around headers, modules, source,
+  scripting, and resources together, and the editor can preload the requested
+  generated project directly on boot.
+- Project-local script compilation now searches project and repo engine surfaces
+  more honestly instead of assuming a single fragile include root.
+- The Win32 parented multicontext path now requests a grid relayout after pane
+  removal, which tightens the first-slot collapse case the older layout was
+  leaving behind.
+- The shared GUI palette has moved off the flat gray look toward a richer dark
+  slate treatment, and the smaller Windows backend proof images have been
+  refreshed from the current fullscreen six-context source proof.
 - The Windows parented multicontext path now revalidates on the real child
   surfaces: Raylib/SDL/SFML all undock and redock cleanly in the harness, the
   maximized six-context grid stays fitted, and an early visible `SFML_Window`

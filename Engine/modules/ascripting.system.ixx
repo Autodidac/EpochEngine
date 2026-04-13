@@ -254,19 +254,57 @@ namespace epochnamespace::scripting
 
             return fs::absolute(exeDir / ".." / ".." / "Engine" / "src" / "scripts", ec).lexically_normal();
         }
+
+        [[nodiscard]] inline std::string script_binary_stem(const std::filesystem::path& source_path)
+        {
+            const std::string filename = source_path.filename().string();
+            constexpr std::string_view suffix = ".ascript.cpp";
+            if (std::string_view(filename).ends_with(suffix))
+                return filename.substr(0, filename.size() - suffix.size());
+            return source_path.stem().string();
+        }
+
+        [[nodiscard]] inline std::filesystem::path compiled_library_path(const std::filesystem::path& source_path)
+        {
+            const std::string stem = script_binary_stem(source_path);
+#ifdef _WIN32
+            return source_path.parent_path() / (stem + ".dll");
+#else
+            return source_path.parent_path() / ("lib" + stem + ".so");
+#endif
+        }
     }
+
+    inline Task do_load_script(
+        const std::filesystem::path& sourcePath,
+        std::string_view logicalScriptName,
+        ScriptScheduler& scheduler,
+        EpochScriptHost* host,
+        ScriptLoadReport& report);
 
     inline Task do_load_script(const std::string& scriptName, ScriptScheduler& scheduler, EpochScriptHost* host, ScriptLoadReport& report)
     {
+        return do_load_script(
+            detail::resolve_scripts_root() / (scriptName + ".ascript.cpp"),
+            scriptName,
+            scheduler,
+            host,
+            report);
+    }
+
+    inline Task do_load_script(
+        const std::filesystem::path& sourcePath,
+        std::string_view logicalScriptName,
+        ScriptScheduler& scheduler,
+        EpochScriptHost* host,
+        ScriptLoadReport& report)
+    {
         try
         {
-            const std::filesystem::path scriptsRoot = detail::resolve_scripts_root();
-            const std::filesystem::path sourcePath = scriptsRoot / (scriptName + ".ascript.cpp");
-#ifdef _WIN32
-            const std::filesystem::path dllPath = scriptsRoot / (scriptName + ".dll");
-#else
-            const std::filesystem::path dllPath = scriptsRoot / ("lib" + scriptName + ".so");
-#endif
+            const std::string scriptName = logicalScriptName.empty()
+                ? detail::script_binary_stem(sourcePath)
+                : std::string(logicalScriptName);
+            const std::filesystem::path dllPath = detail::compiled_library_path(sourcePath);
 
             report.scheduled.store(true, std::memory_order_relaxed);
             report.log_info("Scheduling script reload for '" + scriptName + "'.");
@@ -404,6 +442,43 @@ namespace epochnamespace::scripting
         }
     }
 
+    export bool load_or_reload_script(
+        const std::filesystem::path& sourcePath,
+        std::string_view logicalScriptName,
+        ScriptScheduler& scheduler,
+        EpochScriptHost* host,
+        ScriptLoadReport* reportPtr = nullptr)
+    {
+        ScriptLoadReport fallbackReport;
+        ScriptLoadReport& report = reportPtr ? *reportPtr : fallbackReport;
+        report.reset();
+
+        try
+        {
+            Task t = do_load_script(sourcePath, logicalScriptName, scheduler, host, report);
+
+            auto node = std::make_unique<taskgraph::Node>(std::move(t));
+            const std::string nodeLabel = logicalScriptName.empty()
+                ? detail::script_binary_stem(sourcePath)
+                : std::string(logicalScriptName);
+            node->Label = "script:" + nodeLabel;
+            scheduler.AddNode(std::move(node));
+
+            scheduler.Execute();
+            scheduler.WaitAll();
+            scheduler.PruneFinished();
+
+            return report.succeeded();
+        }
+        catch (const std::exception& e)
+        {
+            const std::string message = std::string("[script] Scheduling exception: ") + e.what();
+            logger::error("Scripting", message);
+            report.log_error(message);
+            return false;
+        }
+    }
+
     export bool load_or_reload_script(const std::string& scriptName, ScriptScheduler& scheduler, ScriptLoadReport* reportPtr = nullptr)
     {
         return load_or_reload_script(scriptName, scheduler, nullptr, reportPtr);
@@ -416,6 +491,19 @@ namespace epochnamespace::scripting
             : std::size_t{ 4 });
         taskgraph::TaskGraph scheduler(workerCount);
         return load_or_reload_script(scriptName, scheduler, host, reportPtr);
+    }
+
+    export bool load_or_reload_script(
+        const std::filesystem::path& sourcePath,
+        std::string_view logicalScriptName,
+        EpochScriptHost* host,
+        ScriptLoadReport* reportPtr = nullptr)
+    {
+        const std::size_t workerCount = (std::max)(std::size_t{ 1 }, std::thread::hardware_concurrency() > 0
+            ? static_cast<std::size_t>(std::thread::hardware_concurrency())
+            : std::size_t{ 4 });
+        taskgraph::TaskGraph scheduler(workerCount);
+        return load_or_reload_script(sourcePath, logicalScriptName, scheduler, host, reportPtr);
     }
 
     export TaskGraphStressReport run_taskgraph_reload_stress_test(const TaskGraphStressConfig& config)

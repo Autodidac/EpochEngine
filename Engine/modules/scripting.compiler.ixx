@@ -34,6 +34,7 @@ module;
 #include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <span>
 #include <source_location>
 #include <string>
 #include <vector>
@@ -102,26 +103,97 @@ namespace epochnamespace::compiler
             const std::filesystem::path& input) noexcept
         {
             std::error_code ec;
-            std::vector<std::filesystem::path> candidates{
-                input.parent_path().parent_path().parent_path() / "include",
-                std::filesystem::current_path(ec) / "Engine" / "include",
-                std::filesystem::current_path(ec) / "include"
+            auto is_epoch_repo_root = [&](const std::filesystem::path& root) noexcept {
+                return std::filesystem::exists(root / "Engine" / "include" / "epoch.script_api.h", ec)
+                    || std::filesystem::exists(root / "Engine" / "include" / "aengine.hpp", ec);
             };
+
+            auto ascend_to_repo_root = [&](std::filesystem::path probe) noexcept {
+                probe = std::filesystem::absolute(probe, ec).lexically_normal();
+                if (std::filesystem::is_regular_file(probe, ec))
+                    probe = probe.parent_path();
+
+                for (int depth = 0; depth < 10 && !probe.empty(); ++depth)
+                {
+                    if (is_epoch_repo_root(probe))
+                        return probe;
+
+                    const auto parent = probe.parent_path();
+                    if (parent == probe)
+                        break;
+                    probe = parent;
+                }
+
+                return std::filesystem::path{};
+            };
+
+            std::vector<std::filesystem::path> candidates{};
+            const auto push_candidate = [&](const std::filesystem::path& candidate) {
+                if (candidate.empty())
+                    return;
+
+                const auto absolute = std::filesystem::absolute(candidate, ec).lexically_normal();
+                if (!std::filesystem::exists(absolute, ec))
+                    return;
+
+                if (std::find(candidates.begin(), candidates.end(), absolute) == candidates.end())
+                    candidates.push_back(absolute);
+            };
+
+            push_candidate(input.parent_path());
+            push_candidate(input.parent_path().parent_path() / "include");
+            push_candidate(input.parent_path().parent_path() / "source");
+
+            if (const auto repoRoot = ascend_to_repo_root(input); !repoRoot.empty())
+            {
+                push_candidate(repoRoot / "Engine" / "include");
+                push_candidate(repoRoot / "Engine");
+            }
+
+            push_candidate(std::filesystem::current_path(ec) / "Engine" / "include");
+            push_candidate(std::filesystem::current_path(ec) / "Engine");
+            push_candidate(std::filesystem::current_path(ec) / "include");
 
             for (const auto& candidate : candidates)
             {
-                if (!candidate.empty() && std::filesystem::exists(candidate))
-                    return std::filesystem::absolute(candidate, ec).lexically_normal();
+                if (std::filesystem::exists(candidate, ec))
+                    return candidate;
             }
 
             return (input.parent_path().parent_path().parent_path() / "include").lexically_normal();
+        }
+
+        [[nodiscard]] inline std::vector<std::filesystem::path> resolve_include_roots(
+            const std::filesystem::path& input) noexcept
+        {
+            std::error_code ec;
+            std::vector<std::filesystem::path> includeRoots{};
+
+            const auto push_candidate = [&](const std::filesystem::path& candidate) {
+                if (candidate.empty())
+                    return;
+
+                const auto absolute = std::filesystem::absolute(candidate, ec).lexically_normal();
+                if (!std::filesystem::exists(absolute, ec))
+                    return;
+
+                if (std::find(includeRoots.begin(), includeRoots.end(), absolute) == includeRoots.end())
+                    includeRoots.push_back(absolute);
+            };
+
+            push_candidate(input.parent_path());
+            push_candidate(input.parent_path().parent_path() / "include");
+            push_candidate(input.parent_path().parent_path() / "source");
+            push_candidate(resolve_engine_include_root(input));
+
+            return includeRoots;
         }
 
         [[nodiscard]] inline std::string describe_command(
             const std::filesystem::path& compilerPath,
             const std::filesystem::path& input,
             const std::filesystem::path& output,
-            const std::filesystem::path& includeRoot)
+            std::span<const std::filesystem::path> includeRoots)
         {
             std::vector<std::string> clangArgs = {
                 quote_arg(compilerPath.string()),
@@ -129,11 +201,13 @@ namespace epochnamespace::compiler
                 "-shared",
                 quote_arg(input.string()),
                 "-o", quote_arg(output.string()),
-                "-I" + quote_arg(includeRoot.string()),
                 "-fno-rtti",
                 "-fno-exceptions",
                 "-O2"
             };
+
+            for (const auto& includeRoot : includeRoots)
+                clangArgs.push_back("-I" + quote_arg(includeRoot.string()));
 
             std::string cmd;
             for (const auto& arg : clangArgs)
@@ -146,7 +220,7 @@ namespace epochnamespace::compiler
             const std::filesystem::path& compilerPath,
             const std::filesystem::path& input,
             const std::filesystem::path& output,
-            const std::filesystem::path& includeRoot)
+            std::span<const std::filesystem::path> includeRoots)
         {
             std::vector<std::wstring> args{
                 compilerPath.wstring(),
@@ -155,11 +229,13 @@ namespace epochnamespace::compiler
                 input.wstring(),
                 L"-o",
                 output.wstring(),
-                L"-I" + includeRoot.wstring(),
                 L"-fno-rtti",
                 L"-fno-exceptions",
                 L"-O2"
             };
+
+            for (const auto& includeRoot : includeRoots)
+                args.push_back(L"-I" + includeRoot.wstring());
 
             std::vector<const wchar_t*> argv;
             argv.reserve(args.size() + 1);
@@ -199,9 +275,9 @@ namespace epochnamespace::compiler
             const std::filesystem::path& compilerPath,
             const std::filesystem::path& input,
             const std::filesystem::path& output,
-            const std::filesystem::path& includeRoot)
+            std::span<const std::filesystem::path> includeRoots)
         {
-            const std::string cmd = describe_command(compilerPath, input, output, includeRoot);
+            const std::string cmd = describe_command(compilerPath, input, output, includeRoots);
             const int result = std::system(cmd.c_str());
             if (result != 0)
             {
@@ -215,13 +291,13 @@ namespace epochnamespace::compiler
 
     export bool compile_script_to_dll(const std::filesystem::path& input, const std::filesystem::path& output) {
         const auto compilerPath = detail::resolve_clangxx();
-        const auto includeRoot = detail::resolve_engine_include_root(input);
+        const auto includeRoots = detail::resolve_include_roots(input);
         logger::infof_loc(
             "Compiler",
             std::source_location::current(),
             "running: {}",
-            detail::describe_command(compilerPath, input, output, includeRoot));
-        return detail::spawn_compiler(compilerPath, input, output, includeRoot);
+            detail::describe_command(compilerPath, input, output, includeRoots));
+        return detail::spawn_compiler(compilerPath, input, output, includeRoots);
     }
 
 }

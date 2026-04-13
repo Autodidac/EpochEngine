@@ -82,14 +82,27 @@ too instead of pretending Windows proof is enough.
 Generated project shells should keep two honest integration modes working:
 
 - duplicated engine source/layout projects
-- static engine compilation through the exported `Engine/include/` surface
+- embedded-engine compilation through the active engine surface:
+  `Engine/include/`, `Engine/modules/`, `Engine/src/`,
+  `Engine/src/scripts/`, and `Engine/resource/`
 
 Do not document only one path if the project/scripting shell is supposed to
 support both.
 
-The generated project shell now emits an `epoch.project.cmake` fragment and
-uses `__has_include` fallback for the script API so embedded-engine projects can
-prefer `Engine/include/` without instantly breaking older include-root setups.
+The generated project shell now emits an `epoch.project.cmake` fragment, a
+generated child project file, a build script, and script include fallback so
+embedded-engine projects can resolve more than headers alone.
+
+## Local helper probing discipline
+
+At the start of a phase:
+
+- probe `/v1/models`
+- respect any helper-use preference the operator has already made explicit
+- ask which loaded models are allowed only when that allow-list is unclear
+- keep the first detected model as the runtime-parity/in-engine smoke model
+- for the current `9900X` + `5800` workstation target, prefer two loaded
+  helper models with four drafting lanes each for eight total helper parallels
 
 Launcher scope for that shell should stay flat and direct:
 
