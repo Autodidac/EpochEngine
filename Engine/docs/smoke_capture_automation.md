@@ -50,6 +50,9 @@ When the pass is multicontext-specific, validate:
   what the runtime is actually using:
   real child directly parented into the grid with the helper host hidden, or
   child attached to a proxy host shell during a true detached window state
+- for SDL/SFML proxy drags, the current honest contract is release-based redock:
+  prove `MidTopLevel=true`, keep the pane detached while the drag is still held,
+  then prove `EndRedocked=true` after the release returns inside the parent
 - for Raylib dock probes, treat the docked state as valid when the visible
   `GLFW30` child is parented directly into the grid and the parked `EpochChild`
   helper host remains hidden under the parent with no proxy child in use
@@ -183,12 +186,18 @@ Expected smoke behavior:
 - keep startup-render proof and dock/undock validation as separate harness passes:
   use the normal harness path for drag truth, and opt into `-CaptureStartupProof`
   only when you are intentionally collecting first-frame rendered-content samples
+- when validating proxy-child backends, prefer the new `ContractMode` and
+  `LateDetached` fields over older assumptions that every backend should already
+  be redocked before mouse release
 - when proving dock -> undock -> redock in the parented harness, poll for the
   actual detached/redocked state transition instead of assuming a fixed sleep is
   enough under full-grid renderer load
 - if the harness reports a docking mismatch, cross-check the engine log before
   locking in a runtime conclusion; SFML full-grid runs in particular have shown
   real undock/redock commands completing after a too-early harness sample
+- if the maximized full-grid parented pass times out waiting for expected panes,
+  treat that as a real blocker and do not substitute reduced-geometry proof for
+  a maximize-ready signoff
 - when validating SFML redock, trust the actual release position more than the
   last remembered drag point; the Win32 path now redocks from the release-point
   test specifically to avoid stale drag-state failures in loaded full-grid runs

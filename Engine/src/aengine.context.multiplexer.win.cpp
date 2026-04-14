@@ -341,12 +341,13 @@ namespace
 
     [[nodiscard]] inline POINT screen_drag_point(HWND hwnd, LPARAM lParam) noexcept
     {
-        POINT pt{};
+        POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        if (hwnd && ::IsWindow(hwnd) != FALSE && ::ClientToScreen(hwnd, &pt) != FALSE)
+            return pt;
+
         if (::GetCursorPos(&pt) != FALSE)
             return pt;
 
-        pt = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-        ::ClientToScreen(hwnd, &pt);
         return pt;
     }
 
@@ -2651,18 +2652,15 @@ namespace epochnamespace::core
                     if (is_sfml_proxy_detached(window))
                     {
                         drag.proxyUndockPending = false;
-                        if (!drag.proxyRedockPending)
-                        {
-                            post_proxy_host_command(
-                                window,
-                                ProxyDockCmd::Redock,
-                                drag.originalParent,
-                                newX,
-                                newY,
-                                wndW,
-                                wndH);
-                            drag.proxyRedockPending = true;
-                        }
+                        drag.proxyRedockPending = false;
+                        post_proxy_host_command(
+                            window,
+                            ProxyDockCmd::MoveDetached,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            clientW,
+                            clientH);
                     }
                     else if (is_sfml_proxy_candidate(window))
                     {

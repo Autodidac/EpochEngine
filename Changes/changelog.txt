@@ -436,6 +436,11 @@
 - Updated README, runtime/build/smoke/AI docs around the time-based engine direction, the GPU-driven baseline renderer plan, the later SpeedTree-like procedural/node authoring phase with future O2L integration, and the helper-first workflow that can use up to four parallel prompts per loaded local helper model.
 
 ## [Unreleased]
+- Switched Win32 SDL/SFML proxy drags to child-relative screen math and kept proxy panes detached until mouse release, so parented top-row drags stop snap-redocking mid-drag and stop picking up host-frame drift.
+- Extended the parented Win32 harness to record the proxy release-redock contract explicitly (`ContractMode`, `LateDetached`, `EndRedocked`) instead of pretending proxy-child panes should redock live like direct-child panes.
+- Revalidated focused serial SDL and SFML parented drag cycles against the new contract and kept the close/destroy multiplexer logging visible for user-close vs orderly shutdown diagnosis.
+- Added small shared GUI clip slack to reduce first-glyph clipping on left-edge buttons and text rows without touching launcher palette choices.
+- Tightened the Project and AI workspaces with clearer play/build readiness rows, exact generated project path logging, and clearer staged-vs-curated AI role/evidence messaging.
 - Split the Windows parented multicontext harness into two honest proof modes: normal serial runs keep dock/undock evidence clean, while the new opt-in `-CaptureStartupProof` path records startup image samples for first-frame rendered-content checks without replacing the drag baseline.
 - Revalidated focused single-backend SDL and SFML dock -> undock -> redock truth after the harness split, and captured separate startup-proof runs that now report non-empty rendered-content samples for both backends.
 - Added a small shared GUI text inset so left-edge buttons stop clipping the first glyph against the content clip boundary.

@@ -1483,6 +1483,8 @@ namespace epochnamespace
             gui::property_row("[project] Paths manifest", display_project_path(pathsManifest));
             gui::property_row("[project] Debug output", display_project_path(outputExe));
             gui::property_row("[project] Build log", display_project_path(buildLog));
+            gui::property_row("[project] Play target", std::filesystem::exists(outputExe) ? "ready" : "build required");
+            gui::property_row("[project] Build state", std::filesystem::exists(buildScript) ? "script ready" : "missing build script");
             gui::property_row("[project] Manifest exists", std::filesystem::exists(editor.projectManifest) ? "true" : "false");
             gui::property_row("[project] Entry exists", std::filesystem::exists(entrySource) ? "true" : "false");
             gui::property_row("[project] Build script exists", std::filesystem::exists(buildScript) ? "true" : "false");
@@ -1507,6 +1509,9 @@ namespace epochnamespace
             {
                 emit_command(EditorCommand::RunGame, editor.activeRuntimeScene);
                 push_editor_log(editor, std::string("[project] Play requested for ") + editor.projectName + ".");
+                push_editor_log(editor, std::string("[project] Play target: ") + display_project_path(outputExe));
+                if (!std::filesystem::exists(outputExe))
+                    push_editor_log(editor, "[project] Build the active project before expecting a child executable.");
             }
             if (gui::button("Build Active Project", { 220.0f, 30.0f }))
             {
@@ -1529,10 +1534,14 @@ namespace epochnamespace
                 push_editor_log(editor, std::string("[project] ") + created.summary);
                 if (created.succeeded)
                 {
+                    const auto createdPathsManifest = std::filesystem::path{ created.root_path } / "project.paths.txt";
+                    const auto createdProjectFile = project_windows_vcxproj_path(created.root_path);
                     push_editor_log(editor, std::string("[project] Root: ") + created.root_path);
                     push_editor_log(editor, std::string("[project] Manifest: ") + created.manifest_path);
                     push_editor_log(editor, std::string("[project] Entry source: ") + created.entry_source_path);
                     push_editor_log(editor, std::string("[project] Build script: ") + created.build_script_path);
+                    push_editor_log(editor, std::string("[project] Paths manifest: ") + display_project_path(createdPathsManifest));
+                    push_editor_log(editor, std::string("[project] Windows project: ") + display_project_path(createdProjectFile));
                     push_editor_log(editor, std::string("[project] Default script: ") + created.default_script_path);
                     push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
                     set_project(editor, created.project_id, true);
@@ -1547,10 +1556,14 @@ namespace epochnamespace
                 push_editor_log(editor, std::string("[project] ") + created.summary);
                 if (created.succeeded)
                 {
+                    const auto createdPathsManifest = std::filesystem::path{ created.root_path } / "project.paths.txt";
+                    const auto createdProjectFile = project_windows_vcxproj_path(created.root_path);
                     push_editor_log(editor, std::string("[project] Root: ") + created.root_path);
                     push_editor_log(editor, std::string("[project] Manifest: ") + created.manifest_path);
                     push_editor_log(editor, std::string("[project] Entry source: ") + created.entry_source_path);
                     push_editor_log(editor, std::string("[project] Build script: ") + created.build_script_path);
+                    push_editor_log(editor, std::string("[project] Paths manifest: ") + display_project_path(createdPathsManifest));
+                    push_editor_log(editor, std::string("[project] Windows project: ") + display_project_path(createdProjectFile));
                     push_editor_log(editor, std::string("[project] Default script: ") + created.default_script_path);
                     push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
                     set_project(editor, created.project_id, true);
@@ -1625,6 +1638,10 @@ namespace epochnamespace
             gui::property_row("[ai] MCP capture", training.mcp_capture_jsonl);
             gui::property_row("[ai] Local models", training.model_root);
             gui::property_row("[ai] Checkpoints", training.checkpoint_root);
+            gui::property_row("[ai] Runtime role", "EpochBot");
+            gui::property_row("[ai] Control role", "Local MCP/control");
+            gui::property_row("[ai] Promotion gate", "capture -> review/score -> curate/promote");
+            gui::property_row("[ai] Evidence", "build + runtime + retained logs");
             gui::wrapped_label(
                 "Epoch now tracks two intentional engine AI roles: the internal Epoch bot, and a local MCP/control layer that can both steer the engine and teach the bot while the engine is built and operated.",
                 (std::max)(180.0f, log_size.x - 24.0f));

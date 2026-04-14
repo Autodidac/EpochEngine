@@ -83,6 +83,7 @@ namespace epochnamespace::gui
     constexpr float       kBoxInnerPadding = 6.0f;
     constexpr float       kTitleBarPadding = 8.0f;
     constexpr float       kButtonTextClipInset = 2.0f;
+    constexpr float       kTextClipSlack = 2.0f;
     constexpr float       kCaretBlinkPeriod = 1.0f;
     constexpr int         kTabSpaces = 4;
     constexpr const char* kDefaultFontName = "__agui_default_font";
@@ -1081,8 +1082,8 @@ namespace epochnamespace::gui
             if (!g_frame.ctx || !g_resources.font.asset)
                 return 0.0f;
 
-            const float clipLeft = has_content_clip() ? g_frame.contentMin.x : x;
-            const float clipTop = has_content_clip() ? g_frame.contentMin.y : y;
+            const float clipLeft = has_content_clip() ? (g_frame.contentMin.x - kTextClipSlack) : x;
+            const float clipTop = has_content_clip() ? (g_frame.contentMin.y - kTextClipSlack) : y;
             const float clipRight = has_content_clip() ? g_frame.contentMax.x : (x + width);
             const float clipBottom = has_content_clip() ? g_frame.contentMax.y : (y + 100000.0f);
             const float effectiveWidth = (std::max)(space_advance(scale), (std::min)(width, clipRight - x));
@@ -1200,8 +1201,8 @@ namespace epochnamespace::gui
             if (!g_frame.ctx || !g_resources.font.asset)
                 return;
 
-            const float clipLeft = has_content_clip() ? g_frame.contentMin.x : x;
-            const float clipTop = has_content_clip() ? g_frame.contentMin.y : y;
+            const float clipLeft = has_content_clip() ? (g_frame.contentMin.x - kTextClipSlack) : x;
+            const float clipTop = has_content_clip() ? (g_frame.contentMin.y - kTextClipSlack) : y;
             const float clipRight = has_content_clip() ? g_frame.contentMax.x : (x + measure_text_width(text, scale));
             const float clipBottom = has_content_clip() ? g_frame.contentMax.y : (y + line_advance_amount(scale));
             const float anchorX = indent.value_or(x);
