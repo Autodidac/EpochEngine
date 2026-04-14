@@ -101,6 +101,8 @@ namespace epochnamespace::core
         POINT lastMousePos{};
         HWND draggedWindow = nullptr;
         HWND originalParent = nullptr;
+        bool proxyUndockPending = false;
+        bool proxyRedockPending = false;
     };
 
     export std::unordered_map<HWND, std::thread>& Threads() noexcept;

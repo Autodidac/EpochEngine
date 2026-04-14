@@ -2602,6 +2602,8 @@ namespace epochnamespace::core
             if (!drag.originalParent)
                 drag.originalParent = static_cast<HWND>(::GetPropW(hwnd, kEpochDockParentProp));
             drag.lastMousePos = screen_drag_point(hwnd, lParam);
+            drag.proxyUndockPending = false;
+            drag.proxyRedockPending = false;
             return 0;
         }
 
@@ -2648,17 +2650,24 @@ namespace epochnamespace::core
                 {
                     if (is_sfml_proxy_detached(window))
                     {
-                        post_proxy_host_command(
-                            window,
-                            ProxyDockCmd::Redock,
-                            drag.originalParent,
-                            newX,
-                            newY,
-                            wndW,
-                            wndH);
+                        drag.proxyUndockPending = false;
+                        if (!drag.proxyRedockPending)
+                        {
+                            post_proxy_host_command(
+                                window,
+                                ProxyDockCmd::Redock,
+                                drag.originalParent,
+                                newX,
+                                newY,
+                                wndW,
+                                wndH);
+                            drag.proxyRedockPending = true;
+                        }
                     }
                     else if (is_sfml_proxy_candidate(window))
                     {
+                        drag.proxyUndockPending = false;
+                        drag.proxyRedockPending = false;
                         ::SetFocus(hwnd);
                     }
                     else if (::GetParent(hwnd) != drag.originalParent)
@@ -2710,17 +2719,23 @@ namespace epochnamespace::core
                     {
                         if (!is_sfml_proxy_detached(window))
                         {
-                            post_proxy_host_command(
-                                window,
-                                ProxyDockCmd::Undock,
-                                drag.originalParent,
-                                newX,
-                                newY,
-                                clientW,
-                                clientH);
+                            drag.proxyRedockPending = false;
+                            if (!drag.proxyUndockPending)
+                            {
+                                post_proxy_host_command(
+                                    window,
+                                    ProxyDockCmd::Undock,
+                                    drag.originalParent,
+                                    newX,
+                                    newY,
+                                    clientW,
+                                    clientH);
+                                drag.proxyUndockPending = true;
+                            }
                         }
                         else
                         {
+                            drag.proxyUndockPending = false;
                             post_proxy_host_command(
                                 window,
                                 ProxyDockCmd::MoveDetached,
@@ -2846,6 +2861,8 @@ namespace epochnamespace::core
                 drag.dragging = false;
                 drag.draggedWindow = nullptr;
                 drag.originalParent = nullptr;
+                drag.proxyUndockPending = false;
+                drag.proxyRedockPending = false;
 
                 if (originalParent
                     && ::IsWindow(originalParent) != FALSE
