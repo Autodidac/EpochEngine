@@ -45,8 +45,10 @@
 #   endif
 #   include <windowsx.h>
 #   include <commctrl.h>
+#   include <dwmapi.h>
 #   include <shellapi.h>
 #   pragma comment(lib, "comctl32.lib")
+#   pragma comment(lib, "dwmapi.lib")
 
 #   include <algorithm>
 #   include <chrono>
@@ -208,6 +210,43 @@ namespace
     };
     std::vector<PendingWindowCleanup> g_pendingCleanups;
     constexpr std::string_view kLogSys = "Context.Multiplexer.Win";
+    constexpr COLORREF kParentBackgroundColor = RGB(0x1C, 0x1F, 0x26);
+
+    [[nodiscard]] inline HBRUSH parent_background_brush() noexcept
+    {
+        static HBRUSH brush = ::CreateSolidBrush(kParentBackgroundColor);
+        return brush;
+    }
+
+    inline void apply_dark_window_chrome(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        const BOOL enabled = TRUE;
+        ::DwmSetWindowAttribute(hwnd, 20, &enabled, sizeof(enabled));
+        ::DwmSetWindowAttribute(hwnd, 19, &enabled, sizeof(enabled));
+
+        constexpr DWORD DWMWA_BORDER_COLOR = 34;
+        constexpr DWORD DWMWA_CAPTION_COLOR = 35;
+        constexpr DWORD DWMWA_TEXT_COLOR = 36;
+        const COLORREF captionColor = kParentBackgroundColor;
+        const COLORREF borderColor = kParentBackgroundColor;
+        const COLORREF textColor = RGB(0xE8, 0xEA, 0xEE);
+        ::DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(borderColor));
+        ::DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &captionColor, sizeof(captionColor));
+        ::DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, &textColor, sizeof(textColor));
+
+        ::SetWindowPos(
+            hwnd,
+            nullptr,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        ::RedrawWindow(hwnd, nullptr, nullptr, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+    }
     // Some Windows SDK setups don't expose WGL_ARB_create_context declarations here.
     // Provide local fallbacks so this TU can request modern core contexts without extra headers.
 #if !defined(WGL_CONTEXT_MAJOR_VERSION_ARB)
@@ -298,6 +337,17 @@ namespace
             return false;
 
         return point_in_rect(screen_client_rect(parent), screenPoint);
+    }
+
+    [[nodiscard]] inline POINT screen_drag_point(HWND hwnd, LPARAM lParam) noexcept
+    {
+        POINT pt{};
+        if (::GetCursorPos(&pt) != FALSE)
+            return pt;
+
+        pt = POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        ::ClientToScreen(hwnd, &pt);
+        return pt;
     }
 
     inline void dock_host_window_to_parent(
@@ -454,7 +504,7 @@ namespace
         return same_gui_input_surface(g_guiInputOwner, hwnd);
     }
 
-    [[nodiscard]] inline bool uses_visible_proxy_host(
+    [[nodiscard]] inline bool has_proxy_host(
         const epochnamespace::core::WindowData* window) noexcept
     {
         return window
@@ -467,6 +517,14 @@ namespace
             && ::IsWindow(window->host_hwnd) != FALSE;
     }
 
+    [[nodiscard]] inline bool uses_visible_proxy_host(
+        const epochnamespace::core::WindowData* window) noexcept
+    {
+        return has_proxy_host(window)
+            && (::GetParent(window->hwndChild) == window->host_hwnd
+                || ::GetParent(window->host_hwnd) == nullptr);
+    }
+
     inline void apply_child_fill_layout(HWND child, HWND parent, int clientW, int clientH) noexcept;
 
     inline void hide_associated_host_window(
@@ -474,9 +532,6 @@ namespace
         HWND activeHwnd,
         HWND expectedParent) noexcept
     {
-        if (uses_visible_proxy_host(window))
-            return;
-
         if (!window || !window->host_hwnd || window->host_hwnd == activeHwnd)
             return;
 
@@ -518,8 +573,8 @@ namespace
                 desiredScreenY,
                 clientW,
                 clientH);
-            apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
-            ::ShowWindow(window->host_hwnd, SW_SHOWNA);
+            apply_child_fill_layout(window->hwndChild, parent, clientW, clientH);
+            ::ShowWindow(window->host_hwnd, SW_HIDE);
             return;
         }
 
@@ -547,7 +602,7 @@ namespace
     [[nodiscard]] inline bool is_sfml_proxy_candidate(
         const epochnamespace::core::WindowData* window) noexcept
     {
-        return uses_visible_proxy_host(window);
+        return has_proxy_host(window);
     }
 
     [[nodiscard]] inline bool backend_uses_proxy_child(epochnamespace::core::ContextType type) noexcept
@@ -670,6 +725,18 @@ namespace
         if (!is_sfml_proxy_candidate(window) || !parent || ::IsWindow(parent) == FALSE)
             return;
 
+#if defined(_DEBUG)
+        epochnamespace::logger::get(kLogSys).logf(
+            epochnamespace::logger::LogLevel::INFO,
+            std::source_location::current(),
+            "SFML redock begin host={} child={} hostParentBefore={} childParentBefore={} targetParent={}",
+            static_cast<void*>(window->host_hwnd),
+            static_cast<void*>(window->hwndChild),
+            static_cast<void*>(::GetParent(window->host_hwnd)),
+            static_cast<void*>(::GetParent(window->hwndChild)),
+            static_cast<void*>(parent));
+#endif
+
         dock_host_window_to_parent(
             window->host_hwnd,
             parent,
@@ -677,9 +744,21 @@ namespace
             desiredScreenY,
             clientW,
             clientH);
-        apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
-        ::ShowWindow(window->host_hwnd, SW_SHOWNA);
+        apply_child_fill_layout(window->hwndChild, parent, clientW, clientH);
+        ::ShowWindow(window->host_hwnd, SW_HIDE);
         ::SetFocus(window->hwndChild);
+
+#if defined(_DEBUG)
+        epochnamespace::logger::get(kLogSys).logf(
+            epochnamespace::logger::LogLevel::INFO,
+            std::source_location::current(),
+            "SFML redock end host={} child={} hostParentAfter={} childParentAfter={} hostVisible={}",
+            static_cast<void*>(window->host_hwnd),
+            static_cast<void*>(window->hwndChild),
+            static_cast<void*>(::GetParent(window->host_hwnd)),
+            static_cast<void*>(::GetParent(window->hwndChild)),
+            ::IsWindowVisible(window->host_hwnd) != FALSE);
+#endif
     }
 
     inline void post_proxy_host_command(
@@ -713,6 +792,21 @@ namespace
         {
             delete request;
         }
+#if defined(_DEBUG)
+        else
+        {
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Posted SFML proxy command={} host={} child={} hostParent={} childParent={} targetParent={}",
+                static_cast<int>(command),
+                static_cast<void*>(window->host_hwnd),
+                static_cast<void*>(window->hwndChild),
+                static_cast<void*>(::GetParent(window->host_hwnd)),
+                static_cast<void*>(::GetParent(window->hwndChild)),
+                static_cast<void*>(parent));
+        }
+#endif
     }
 
     inline void forward_gui_input_message(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
@@ -879,12 +973,10 @@ namespace
 
         case WM_CHAR:
         case WM_SYSCHAR:
-            forward_gui_input_message(hwnd, msg, wp, lp);
-            return 0;
+            return DefSubclassProc(hwnd, msg, wp, lp);
 
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
-            forward_gui_input_message(hwnd, msg, wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
         }
 
@@ -1170,7 +1262,7 @@ namespace epochnamespace::core
         wc.lpszClassName = name;
         wc.style = CS_OWNDC;
         wc.hCursor = ::LoadCursor(nullptr, IDC_ARROW);
-        wc.hbrBackground = nullptr;
+        wc.hbrBackground = parent_background_brush();
         return ::RegisterClassW(&wc);
     }
 
@@ -1352,6 +1444,7 @@ namespace epochnamespace::core
                 this);
 
             if (!GetParentWindow()) return false;
+            apply_dark_window_chrome(GetParentWindow());
             ::DragAcceptFiles(GetParentWindow(), TRUE);
         }
         else
@@ -2345,6 +2438,12 @@ namespace epochnamespace::core
 
         switch (msg)
         {
+        case WM_CREATE:
+        case WM_SHOWWINDOW:
+        case WM_ACTIVATE:
+            apply_dark_window_chrome(hwnd);
+            return 0;
+
         case WM_SIZE:
             if (wParam != SIZE_MINIMIZED)
                 request_parent_layout(hwnd);
@@ -2362,9 +2461,7 @@ namespace epochnamespace::core
         {
             PAINTSTRUCT ps{};
             HDC hdc = ::BeginPaint(hwnd, &ps);
-#if defined(_DEBUG)
-            ::FillRect(hdc, &ps.rcPaint, (HBRUSH)(COLOR_WINDOW + 1));
-#endif
+            ::FillRect(hdc, &ps.rcPaint, parent_background_brush());
             ::EndPaint(hwnd, &ps);
             return 0;
         }
@@ -2376,6 +2473,11 @@ namespace epochnamespace::core
 
         case WM_CLOSE:
         {
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Parent WM_CLOSE received hwnd={} - beginning orderly child shutdown.",
+                static_cast<void*>(hwnd));
             std::vector<HWND> children;
             const auto is_docked_child = [hwnd](HWND candidate) noexcept
             {
@@ -2428,6 +2530,11 @@ namespace epochnamespace::core
         }
 
         case WM_DESTROY:
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Parent WM_DESTROY received hwnd={} - parent window destroyed cleanly.",
+                static_cast<void*>(hwnd));
             ::RemovePropW(hwnd, kEpochLayoutPendingProp);
             return 0;
         }
@@ -2494,9 +2601,7 @@ namespace epochnamespace::core
                 : ::GetParent(hwnd);
             if (!drag.originalParent)
                 drag.originalParent = static_cast<HWND>(::GetPropW(hwnd, kEpochDockParentProp));
-            POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            ::ClientToScreen(hwnd, &pt);
-            drag.lastMousePos = pt;
+            drag.lastMousePos = screen_drag_point(hwnd, lParam);
             return 0;
         }
 
@@ -2511,8 +2616,7 @@ namespace epochnamespace::core
             if (!drag.dragging || drag.draggedWindow != hwnd)
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
-            POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            ::ClientToScreen(hwnd, &pt);
+            const POINT pt = screen_drag_point(hwnd, lParam);
 
             const int dx = pt.x - drag.lastMousePos.x;
             const int dy = pt.y - drag.lastMousePos.y;
@@ -2732,6 +2836,7 @@ namespace epochnamespace::core
             if (drag.dragging && drag.draggedWindow == hwnd)
             {
                 const HWND originalParent = drag.originalParent;
+                const POINT releasePoint = screen_drag_point(hwnd, lParam);
                 RECT wndRect{};
                 HWND releaseFrame = hwnd;
                 if (is_sfml_proxy_detached(window))
@@ -2745,7 +2850,7 @@ namespace epochnamespace::core
                 if (originalParent
                     && ::IsWindow(originalParent) != FALSE
                     && ((window && is_sfml_proxy_detached(window)) || ::GetParent(hwnd) != originalParent)
-                    && should_redock_to_parent(originalParent, drag.lastMousePos, wndRect))
+                    && should_redock_to_parent(originalParent, releasePoint, wndRect))
                 {
                     RECT clientRect{};
                     ::GetClientRect(hwnd, &clientRect);
@@ -2861,10 +2966,22 @@ namespace epochnamespace::core
             return 0;
         }
         case WM_CLOSE:
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Child WM_CLOSE received hwnd={} parent={}",
+                static_cast<void*>(hwnd),
+                static_cast<void*>(::GetParent(hwnd)));
             ::DestroyWindow(hwnd);
             return 0;
 
         case WM_DESTROY:
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Child WM_DESTROY received hwnd={} parentAfter={}",
+                static_cast<void*>(hwnd),
+                static_cast<void*>(::GetParent(hwnd)));
             if (auto* mgr = s_activeInstance)
             {
                 mgr->RemoveWindow(hwnd);

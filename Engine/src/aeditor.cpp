@@ -976,7 +976,7 @@ namespace epochnamespace
 
         [[nodiscard]] std::filesystem::path project_build_log_path(std::string_view projectRoot)
         {
-            return std::filesystem::path{ projectRoot } / "build" / "logs" / "build-Debug-x64.log";
+            return std::filesystem::path{ projectRoot } / "build" / "logs" / "build-debug-x64.log";
         }
 
         [[nodiscard]] std::string display_project_path(const std::filesystem::path& path)
@@ -1266,10 +1266,7 @@ namespace epochnamespace
         {
             item.x = toolbar_x;
             gui::set_cursor({ toolbar_x, toolbar_button_y });
-            const std::string label = editor.openMenu == item.menu
-                ? std::string("[") + std::string(item.label) + "]"
-                : std::string(item.label);
-            if (gui::button(label, { item.width, toolbar_button_h }))
+            if (gui::button(item.label, { item.width, toolbar_button_h }))
                 editor.openMenu = editor.openMenu == item.menu ? TopMenu::None : item.menu;
             toolbar_x += item.width + 6.0f;
         }
@@ -1304,7 +1301,7 @@ namespace epochnamespace
         const std::string ask_ai_tab = "Ask AI";
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(std::string("[") + editor_tab + "]", { 180.0f, tab_h }))
+        if (gui::button(editor_tab, { 180.0f, tab_h }))
             push_editor_log(editor, "[editor] Editor mode is active.");
         tab_x += 180.0f + tab_gap;
 
@@ -1466,6 +1463,7 @@ namespace epochnamespace
             const std::filesystem::path projectFile = project_windows_vcxproj_path(editor.projectRoot);
             const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
             const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
+            const std::filesystem::path pathsManifest = std::filesystem::path{ editor.projectRoot } / "project.paths.txt";
 
             gui::property_row("[project] Active", activeProfile->display_name);
             gui::property_row("[project] Kind", editor.projectKind);
@@ -1482,17 +1480,22 @@ namespace epochnamespace
             gui::property_row("[project] Entry source", display_project_path(entrySource));
             gui::property_row("[project] Build script", display_project_path(buildScript));
             gui::property_row("[project] Windows project", display_project_path(projectFile));
+            gui::property_row("[project] Paths manifest", display_project_path(pathsManifest));
             gui::property_row("[project] Debug output", display_project_path(outputExe));
             gui::property_row("[project] Build log", display_project_path(buildLog));
+            gui::property_row("[project] Manifest exists", std::filesystem::exists(editor.projectManifest) ? "true" : "false");
+            gui::property_row("[project] Entry exists", std::filesystem::exists(entrySource) ? "true" : "false");
+            gui::property_row("[project] Build script exists", std::filesystem::exists(buildScript) ? "true" : "false");
+            gui::property_row("[project] Paths manifest exists", std::filesystem::exists(pathsManifest) ? "true" : "false");
+            gui::property_row("[project] Output exists", std::filesystem::exists(outputExe) ? "true" : "false");
+            gui::property_row("[project] Build log exists", std::filesystem::exists(buildLog) ? "true" : "false");
             gui::wrapped_label(activeProfile->description, (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(editor.projectStatus, (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(editor.projectBuildStatus, (std::max)(180.0f, log_size.x - 24.0f));
 
             for (const auto& profile : editor_project_profiles())
             {
-                const std::string buttonLabel =
-                    (editor.projectId == profile.id ? std::string("> ") : std::string())
-                    + std::string(profile.display_name);
+                const std::string buttonLabel = std::string(profile.display_name);
                 if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
                 {
                     set_project(editor, profile.id, true);
@@ -1526,6 +1529,11 @@ namespace epochnamespace
                 push_editor_log(editor, std::string("[project] ") + created.summary);
                 if (created.succeeded)
                 {
+                    push_editor_log(editor, std::string("[project] Root: ") + created.root_path);
+                    push_editor_log(editor, std::string("[project] Manifest: ") + created.manifest_path);
+                    push_editor_log(editor, std::string("[project] Entry source: ") + created.entry_source_path);
+                    push_editor_log(editor, std::string("[project] Build script: ") + created.build_script_path);
+                    push_editor_log(editor, std::string("[project] Default script: ") + created.default_script_path);
                     push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
                     set_project(editor, created.project_id, true);
                     editor.projectStatus = created.summary + " Active project loaded.";
@@ -1539,6 +1547,11 @@ namespace epochnamespace
                 push_editor_log(editor, std::string("[project] ") + created.summary);
                 if (created.succeeded)
                 {
+                    push_editor_log(editor, std::string("[project] Root: ") + created.root_path);
+                    push_editor_log(editor, std::string("[project] Manifest: ") + created.manifest_path);
+                    push_editor_log(editor, std::string("[project] Entry source: ") + created.entry_source_path);
+                    push_editor_log(editor, std::string("[project] Build script: ") + created.build_script_path);
+                    push_editor_log(editor, std::string("[project] Default script: ") + created.default_script_path);
                     push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
                     set_project(editor, created.project_id, true);
                     editor.projectStatus = created.summary + " Active project loaded.";
@@ -1552,6 +1565,9 @@ namespace epochnamespace
             const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
             gui::property_row("[script] Active", editor.activeScript);
             gui::property_row("[script] Source", activeScriptSource);
+            gui::property_row(
+                "[script] Source exists",
+                std::filesystem::exists(std::filesystem::path{ activeScriptSource }) ? "true" : "false");
             if (const auto* activeScript = active_script_profile(editor))
             {
                 gui::property_row("[script] Build", activeScript->build_action);
@@ -1565,9 +1581,7 @@ namespace epochnamespace
 
             for (const auto& script : editor_script_profiles())
             {
-                const std::string buttonLabel =
-                    (editor.activeScript == script.id ? std::string("> ") : std::string())
-                    + std::string(script.display_name);
+                const std::string buttonLabel = std::string(script.display_name);
                 const std::string resolvedSource = editor_resolve_script_source_path(script.id, editor.projectRoot);
                 if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
                 {
@@ -1606,6 +1620,7 @@ namespace epochnamespace
             gui::property_row("[ai] Local endpoint", manifest.endpoint);
             gui::property_row("[ai] MCP/control manifest", manifest.manifest_path);
             gui::property_row("[ai] Curated datasets", training.curated_dataset_root);
+            gui::property_row("[ai] Eval suites", training.eval_root);
             gui::property_row("[ai] Raw capture", training.local_capture_jsonl);
             gui::property_row("[ai] MCP capture", training.mcp_capture_jsonl);
             gui::property_row("[ai] Local models", training.model_root);
@@ -1615,6 +1630,9 @@ namespace epochnamespace
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
                 "Raw chat captures land in workspace/auto_train.jsonl as Git-safe staging data, MCP interaction snapshots land in workspace/mcp_capture.jsonl, curated JSON/JSONL stays in Engine/ai/, and outdated local checkpoints/models/caches should be deleted during training pivots when they no longer match the active data or control model.",
+                (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(
+                "AI-assisted engine changes stay staged and reviewable here: capture first, score or inspect the result, then promote curated datasets/evals intentionally instead of allowing blind write-through automation.",
                 (std::max)(180.0f, log_size.x - 24.0f));
 
             const auto currentMcpRecord = [&]() {
@@ -1631,6 +1649,7 @@ namespace epochnamespace
             {
                 epoch::ai::append_mcp_capture(currentMcpRecord());
                 push_editor_log(editor, "[ai] Captured MCP training snapshot.");
+                push_editor_log(editor, std::string("[ai] MCP capture path: ") + training.mcp_capture_jsonl);
             }
 
             if (gui::button("Promote MCP Snapshot", { 220.0f, 30.0f }))
@@ -1639,6 +1658,8 @@ namespace epochnamespace
                 push_editor_log(editor, ok
                     ? "[ai] Promoted MCP snapshot into Engine/ai/datasets/curated."
                     : "[ai] Failed to promote MCP snapshot.");
+                if (ok)
+                    push_editor_log(editor, std::string("[ai] Curated dataset root: ") + training.curated_dataset_root);
             }
 
             if (gui::button("Promote Scene Eval", { 220.0f, 30.0f }))
@@ -1653,6 +1674,8 @@ namespace epochnamespace
                 push_editor_log(editor, ok
                     ? "[ai] Promoted scene eval into Engine/ai/evals."
                     : "[ai] Failed to promote scene eval.");
+                if (ok)
+                    push_editor_log(editor, std::string("[ai] Eval suite root: ") + training.eval_root);
             }
 
             if (gui::button("Promote Latest Chat Pair", { 220.0f, 30.0f }))
@@ -1671,6 +1694,8 @@ namespace epochnamespace
                 push_editor_log(editor, ok
                     ? "[ai] Promoted latest chat pair into Engine/ai/datasets/curated."
                     : "[ai] No valid chat pair available to curate.");
+                if (ok)
+                    push_editor_log(editor, std::string("[ai] Curated dataset root: ") + training.curated_dataset_root);
             }
             break;
         }

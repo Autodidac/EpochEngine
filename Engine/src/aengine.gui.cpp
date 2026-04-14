@@ -82,6 +82,7 @@ namespace epochnamespace::gui
     constexpr float       kLetterSpacingFactor = 0.0f;
     constexpr float       kBoxInnerPadding = 6.0f;
     constexpr float       kTitleBarPadding = 8.0f;
+    constexpr float       kButtonTextClipInset = 2.0f;
     constexpr float       kCaretBlinkPeriod = 1.0f;
     constexpr int         kTabSpaces = 4;
     constexpr const char* kDefaultFontName = "__agui_default_font";
@@ -602,23 +603,23 @@ namespace epochnamespace::gui
                 g_resources.atlas = &atlas;
 
                 g_resources.windowBackground = add_sprite(atlas, "__agui/window_bg",
-                    make_solid_pixels(0x2B, 0x31, 0x39, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x1F, 0x23, 0x2A, 0xFF, 8, 8), 8, 8);
                 g_resources.buttonNormal = add_sprite(atlas, "__agui/button_normal",
-                    make_solid_pixels(0x56, 0x60, 0x6B, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x31, 0x36, 0x3F, 0xFF, 8, 8), 8, 8);
                 g_resources.buttonHover = add_sprite(atlas, "__agui/button_hover",
-                    make_solid_pixels(0x6B, 0x78, 0x86, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x3C, 0x43, 0x4E, 0xFF, 8, 8), 8, 8);
                 g_resources.buttonActive = add_sprite(atlas, "__agui/button_active",
-                    make_solid_pixels(0x88, 0x97, 0xA7, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x48, 0x52, 0x60, 0xFF, 8, 8), 8, 8);
                 g_resources.textField = add_sprite(atlas, "__agui/text_field",
-                    make_solid_pixels(0x22, 0x27, 0x2E, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x21, 0x26, 0x2E, 0xFF, 8, 8), 8, 8);
                 g_resources.textFieldActive = add_sprite(atlas, "__agui/text_field_active",
-                    make_solid_pixels(0x2E, 0x36, 0x40, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x2A, 0x31, 0x3B, 0xFF, 8, 8), 8, 8);
                 g_resources.panelBackground = add_sprite(atlas, "__agui/panel_bg",
-                    make_solid_pixels(0x1D, 0x22, 0x29, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x25, 0x2B, 0x34, 0xF2, 8, 8), 8, 8);
                 g_resources.consoleBackground = add_sprite(atlas, "__agui/console_bg",
-                    make_solid_pixels(0x17, 0x1C, 0x22, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x18, 0x1D, 0x24, 0xE8, 8, 8), 8, 8);
                 g_resources.titleBar = add_sprite(atlas, "__agui/title_bar",
-                    make_solid_pixels(0x1F, 0x27, 0x30, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x2B, 0x31, 0x3B, 0xFF, 8, 8), 8, 8);
 
                 g_resources.atlasBuilt = true;
             }
@@ -866,6 +867,39 @@ namespace epochnamespace::gui
                 current += glyph_advance_with_kerning(static_cast<unsigned char>(ch), next, scale);
             }
             return (std::max)(maxWidth, current);
+        }
+
+        [[nodiscard]] static std::string fit_text_to_width(
+            std::string_view text,
+            float maxWidth,
+            float scale) noexcept
+        {
+            if (text.empty() || maxWidth <= 0.0f)
+                return {};
+
+            if (measure_text_width(text, scale) <= maxWidth)
+                return std::string(text);
+
+            constexpr std::string_view kEllipsis = "...";
+            const float ellipsisWidth = measure_text_width(kEllipsis, scale);
+            if (ellipsisWidth >= maxWidth)
+                return std::string(kEllipsis);
+
+            std::string trimmed{};
+            trimmed.reserve(text.size());
+            for (std::size_t i = 0; i < text.size(); ++i)
+            {
+                const std::string candidate = trimmed + text[i] + std::string(kEllipsis);
+                if (measure_text_width(candidate, scale) > maxWidth)
+                    break;
+                trimmed.push_back(text[i]);
+            }
+
+            if (trimmed.empty())
+                return std::string(kEllipsis);
+
+            trimmed += kEllipsis;
+            return trimmed;
         }
 
         [[nodiscard]] static bool is_wrap_space(char ch) noexcept
@@ -1143,10 +1177,10 @@ namespace epochnamespace::gui
                             const float offsetY = glyph->offset_px.y * scale;
                             const float drawX = penX + offsetX;
                             const float drawY = baseline + offsetY;
-                            if (drawX >= clipLeft
-                                && drawY >= clipTop
-                                && drawX + drawW <= clipRight
-                                && drawY + drawH <= clipBottom)
+                            if (drawX + drawW > clipLeft
+                                && drawY + drawH > clipTop
+                                && drawX < clipRight
+                                && drawY < clipBottom)
                             {
                                 draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
                             }
@@ -1195,10 +1229,10 @@ namespace epochnamespace::gui
                         const float offsetY = glyph->offset_px.y * scale;
                         const float drawX = penX + offsetX;
                         const float drawY = baseline + offsetY;
-                        if (drawX >= clipLeft
-                            && drawY >= clipTop
-                            && drawX + drawW <= clipRight
-                            && drawY + drawH <= clipBottom)
+                        if (drawX + drawW > clipLeft
+                            && drawY + drawH > clipTop
+                            && drawX < clipRight
+                            && drawY < clipBottom)
                         {
                             draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
                         }
@@ -1612,13 +1646,25 @@ namespace epochnamespace::gui
 
         draw_sprite(background, pos.x, pos.y, width, height);
 
-        const float textWidth = measure_text_width(label, kFontScale) + 2.0f;
+        const std::string fittedLabel = fit_text_to_width(
+            label,
+            (std::max)(1.0f, width - 2.0f * kContentPadding - 2.0f),
+            kFontScale);
+        const std::string_view displayLabel = fittedLabel.empty()
+            ? label
+            : std::string_view{ fittedLabel };
+        const float textWidth = measure_text_width(displayLabel, kFontScale) + 2.0f;
         const float textHeight = baseHeight;
-        const float textX = pos.x + (std::max)(0.0f, (width - textWidth) * 0.5f);
+        const float minTextX = pos.x + kContentPadding + kButtonTextClipInset;
+        const float maxTextX = pos.x + width - kContentPadding - textWidth;
+        const float centeredTextX = pos.x + (std::max)(0.0f, (width - textWidth) * 0.5f);
+        const float textX = maxTextX > minTextX
+            ? (std::clamp)(centeredTextX, minTextX, maxTextX)
+            : minTextX;
         const float textY =
             pos.y + std::floor((std::max)(0.0f, (height - textHeight) * 0.5f)) + 1.0f;
 
-        draw_text_line(label, textX, textY, kFontScale);
+        draw_text_line(displayLabel, textX, textY, kFontScale);
 
         g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
         advance_cursor({ 0.0f, height + kContentPadding });
@@ -1959,10 +2005,7 @@ namespace epochnamespace::gui
         {
             const auto& item = items[i];
             set_cursor({ x, rowStart.y });
-            const std::string label = item.active
-                ? std::string("[") + std::string(item.label) + "]"
-                : std::string(item.label);
-            if (button(label, { item.width, height }))
+            if (button(item.label, { item.width, height }))
                 clicked = i;
             x += (std::max)(1.0f, item.width) + gap;
         }

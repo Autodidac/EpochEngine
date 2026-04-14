@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.83.83]
+- Corrected the full-grid Win32 harness contract for Raylib so it now treats the docked pane honestly as a direct child with a hidden parked host, instead of falsely expecting a live proxy child where Raylib does not use one.
+- Tightened shared button text placement so left-edge buttons stop centering their labels right against the clip edge, which reduces the missing-leading-text seam on the first buttons in shared rows.
+- Added more concrete project-shell proof in the editor docks by surfacing `project.paths.txt` and file-exists checks for the manifest, entry source, build script, output, build log, and active script source directly in the Project/Scripts workspaces.
+- Tightened the parented SDL and SFML startup path so the docked child window now pushes its slot size back through the backend window object before the first present, instead of waiting for a later resize event to settle the first visible frame.
+- Corrected the Win32 parented harness dock-state probe so it reports both truthful dock contracts: direct child panes parented into the grid with hidden helper hosts, and true proxy-host detached panes. Focused SDL and SFML dock -> undock -> redock checks are green again without faking wrapper visibility.
+- Removed more width-mutating shared editor labels from the top-bar and segmented button paths so active menu/workspace buttons stop changing their own width just to indicate selection.
+- Removed the outstanding MSVC `C5202` mixed-module warning from `Engine/src/runtime.cpp` by keeping the global module fragment limited to preprocessor directives and moving the legacy runtime forward declaration into normal module scope.
+- Made generated editor project shells more honest and easier to follow: new shells now root under repo-level `Projects/`, emit broader embedded-engine folder surfaces (`include`, `modules`, `source`, `scripts`, `resource`, `assets`), and write a `project.paths.txt` manifest so the editor/build logs point at concrete files instead of vague output.
+- Added stronger project-shell transparency in the editor log by reporting the generated root, manifest, entry source, build script, and default script paths when a game or tool shell is created.
+- Fixed the shared preview camera bookkeeping so per-context preview state stops collapsing onto one camera key, and tightened the ground-hit marker fallback order around real editor focus / center-ray behavior.
+- Shifted the Windows parent host further toward the intended dark shell and calmer editor palette, while documenting that SDL/SFML proxy-host redock visibility is still an active multicontext follow-up instead of falsely signing it off green.
+- Merged the temporary AI-expanded roadmap notes into the real roadmap steering surface and kept the helper-first, evidence-backed automation loop written down for future passes.
+
 ## [v0.83.82]
 - Turned the generated project shell further into a real child-build surface: the Project workspace now exposes entry source, generated project file, build script, build log, expected Debug output, and an explicit `Build Active Project` action.
 - Tightened generated embedded-engine project wording and metadata around the real engine surface instead of only `Engine/include/`: headers, modules, source, scripting, and resources are now treated as part of the honest child-project path.
@@ -420,4 +434,15 @@
 - Surfaced the new time-spine state in the editor Systems workspace beside the existing render/task graph surfaces, widened the generated graph textures for broader tooling coverage, and kept the compatibility-tier guidance visible alongside the new pacing/time diagnostics.
 - Continued the project/runtime cleanup by removing one more hardcoded sample-launch branch from the older editor loop and keeping the project-driven play path centered on real scene ids.
 - Updated README, runtime/build/smoke/AI docs around the time-based engine direction, the GPU-driven baseline renderer plan, the later SpeedTree-like procedural/node authoring phase with future O2L integration, and the helper-first workflow that can use up to four parallel prompts per loaded local helper model.
+
+## [Unreleased]
+- Split the Windows parented multicontext harness into two honest proof modes: normal serial runs keep dock/undock evidence clean, while the new opt-in `-CaptureStartupProof` path records startup image samples for first-frame rendered-content checks without replacing the drag baseline.
+- Revalidated focused single-backend SDL and SFML dock -> undock -> redock truth after the harness split, and captured separate startup-proof runs that now report non-empty rendered-content samples for both backends.
+- Added a small shared GUI text inset so left-edge buttons stop clipping the first glyph against the content clip boundary.
+- Tightened the parented Win32 multicontext harness so drag proofs poll for real undock/redock state transitions instead of assuming a fixed 250 ms sample window, which was under-reporting SFML full-grid escape/return behavior.
+- Confirmed with new Debug evidence that SFML full-grid runs can now show real `Posted Undock -> Posted Redock -> Redock begin/end` sequencing in the engine log, while focused SDL/SFML single-backend runs remain green.
+- Added more in-editor project proof rows for generated project shells and script sources so the Project and Scripts workspaces expose concrete file/output/log locations rather than only status text.
+- Fixed the Win32 SFML redock decision to use the actual mouse-release screen point instead of stale drag history, which was leaving some full-grid runs detached even when the release returned inside the parent window.
+- Switched Win32 proxy drag tracking to the real screen cursor for detached SDL/SFML-style child drags so grabbed panes stop drifting or “running away” as their host/child relationship changes during undock.
+- Clarified the AI workspace with explicit eval-suite visibility plus staged capture and promotion paths in the editor log so the two-role EpochBot/MCP flow stays reviewable instead of reading like blind autonomy.
 

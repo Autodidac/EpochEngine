@@ -46,9 +46,19 @@ When the pass is multicontext-specific, validate:
   the stable Windows top-row proof should show the real child panes `GLFW30`,
   `SDL_app`, and `SFML_Window`, with helper `EpochChild` wrappers hidden while
   docked
+- for SDL/SFML dock probes, treat both docked contracts as valid when they are
+  what the runtime is actually using:
+  real child directly parented into the grid with the helper host hidden, or
+  child attached to a proxy host shell during a true detached window state
+- for Raylib dock probes, treat the docked state as valid when the visible
+  `GLFW30` child is parented directly into the grid and the parked `EpochChild`
+  helper host remains hidden under the parent with no proxy child in use
 - for proxy-host backends, verify the helper `EpochChild` host reattaches to the
   parent and stays hidden after redock; do not sign off if the host remains a
   visible or top-level orphan after the drag cycle
+- for SDL/SFML startup work, do not sign off if the pane only becomes visible
+  after resize, maximize, focus juggling, or drag; a first-frame fix must hold
+  from the normal launch path
 - for resize/maximize regressions, verify the grid is operating on the HWND that
   actually owns the dock slot at that moment and then perform at least one early
   child-close check without killing the parent editor
@@ -93,6 +103,12 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
   backend is replaced by a fake wrapper or black/empty surface
 - do not publish a proof that still shows a visible extra SDL/SFML wrapper in
   the top row; the docked pane should be the real child surface
+- if the harness still reports `ProxyHost.Visible = true` / `RehiddenInParent = false`
+  for SDL or SFML after a dock-redock cycle, the fullscreen README proof is not
+  ready to refresh yet
+- if the full-grid pass still leaves SFML detached while focused single-backend
+  SFML passes are green, treat that as a real multicontext blocker rather than
+  as proof that the harness is wrong
 - if only one backend is under investigation, capture that backend directly
 - prefer the fitted parented multicontext host so six-context layouts stay
   visible on normal desktop work areas instead of drifting off-screen
@@ -162,6 +178,22 @@ Expected smoke behavior:
 - if the first two detected helpers split text and vision strengths, keep the
   first model as runtime parity and use the vision-capable helper for screenshot
   review, pane/layout checks, and color/parity triage
+- run GUI harness sessions serially, not in parallel; parallel parented runs can
+  contaminate drag/focus evidence and should not be treated as trustworthy
+- keep startup-render proof and dock/undock validation as separate harness passes:
+  use the normal harness path for drag truth, and opt into `-CaptureStartupProof`
+  only when you are intentionally collecting first-frame rendered-content samples
+- when proving dock -> undock -> redock in the parented harness, poll for the
+  actual detached/redocked state transition instead of assuming a fixed sleep is
+  enough under full-grid renderer load
+- if the harness reports a docking mismatch, cross-check the engine log before
+  locking in a runtime conclusion; SFML full-grid runs in particular have shown
+  real undock/redock commands completing after a too-early harness sample
+- when validating SFML redock, trust the actual release position more than the
+  last remembered drag point; the Win32 path now redocks from the release-point
+  test specifically to avoid stale drag-state failures in loaded full-grid runs
+- if a serial harness run leaves a non-responding `ConsoleApplication1`, kill it
+  and discard that run instead of treating the JSON as evidence
 
 ## Release asset checks
 
