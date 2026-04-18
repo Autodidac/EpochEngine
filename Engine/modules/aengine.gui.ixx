@@ -62,6 +62,12 @@ namespace epochnamespace::gui
         std::uint8_t r{}, g{}, b{}, a{ 255 };
     };
 
+    export enum class ThemeVariant : std::uint8_t
+    {
+        DefaultDark = 0,
+        ClassicLauncher
+    };
+
     export enum class EventType : std::uint8_t
     {
         None = 0,
@@ -150,6 +156,8 @@ namespace epochnamespace::gui
     export void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void end_window() noexcept;
     export WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept;
+    export void push_theme(ThemeVariant theme) noexcept;
+    export void pop_theme() noexcept;
 
     export void set_cursor(Vec2 position) noexcept;
     export void advance_cursor(Vec2 delta) noexcept;

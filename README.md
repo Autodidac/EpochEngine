@@ -52,6 +52,10 @@ asset set as the main editor host.
 
 - A project-driven runtime shell that creates, selects, builds, and plays real
   game or software projects instead of trapping the editor in fake sample flows.
+- A split shell visual direction: the launcher can keep its older classic steel
+  palette while the editor stays on a darker neutral tool palette, with a
+  future settings-level theme selector planned once scoped GUI themes are fully
+  stabilized.
 - An embedded-engine project path that is being shaped around headers, modules,
   source, scripting, and resources together so generated child builds can
   graduate into honest standalone work.

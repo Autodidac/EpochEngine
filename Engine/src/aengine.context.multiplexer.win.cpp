@@ -544,6 +544,9 @@ namespace
         if (!window || !window->host_hwnd || window->host_hwnd == activeHwnd)
             return;
 
+        if (has_proxy_host(window))
+            return;
+
         if (::IsWindow(window->host_hwnd) == FALSE)
             return;
 
@@ -582,8 +585,8 @@ namespace
                 desiredScreenY,
                 clientW,
                 clientH);
-            apply_child_fill_layout(window->hwndChild, parent, clientW, clientH);
-            ::ShowWindow(window->host_hwnd, SW_HIDE);
+            apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+            ::ShowWindow(window->host_hwnd, SW_SHOWNA);
             return;
         }
 
@@ -755,8 +758,8 @@ namespace
             desiredScreenY,
             clientW,
             clientH);
-        apply_child_fill_layout(window->hwndChild, parent, clientW, clientH);
-        ::ShowWindow(window->host_hwnd, SW_HIDE);
+        apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+        ::ShowWindow(window->host_hwnd, SW_SHOWNA);
         ::SetFocus(window->hwndChild);
 
 #if defined(_DEBUG)
@@ -2643,7 +2646,7 @@ namespace epochnamespace::core
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
             POINT pt = screen_drag_point(hwnd, lParam);
-            if (is_sfml_proxy_detached(window))
+            if (window && is_sfml_proxy_candidate(window))
             {
                 POINT cursor{};
                 if (::GetCursorPos(&cursor) != FALSE)
@@ -2884,7 +2887,7 @@ namespace epochnamespace::core
             {
                 const HWND originalParent = drag.originalParent;
                 POINT releasePoint = screen_drag_point(hwnd, lParam);
-                if (is_sfml_proxy_detached(window))
+                if (window && is_sfml_proxy_candidate(window))
                 {
                     POINT cursor{};
                     if (::GetCursorPos(&cursor) != FALSE)

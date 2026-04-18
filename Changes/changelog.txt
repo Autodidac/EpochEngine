@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [Unreleased]
+- Restored the launcher's older classic steel palette through a scoped GUI theme path, so the launcher can keep its familiar look without forcing the editor back off the darker neutral tool palette.
+- Added launcher/editor theme-split guidance to the README, runtime operations doc, and roadmap, and wrote down the future settings-level theme-selector direction as an independent launcher/editor choice instead of one global toggle.
+- Folded the newest staged planning inputs into the roadmap by provenance: the new `Changes/*.pdf` research drops and `botface.html` are now tracked as reference inputs that still need a real import/review path before they rewrite roadmap or dataset truth.
+
 ## [v0.83.83]
 - Corrected the full-grid Win32 harness contract for Raylib so it now treats the docked pane honestly as a direct child with a hidden parked host, instead of falsely expecting a live proxy child where Raylib does not use one.
 - Tightened shared button text placement so left-edge buttons stop centering their labels right against the clip edge, which reduces the missing-leading-text seam on the first buttons in shared rows.

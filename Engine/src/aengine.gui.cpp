@@ -165,18 +165,24 @@ namespace epochnamespace::gui
 
         struct GuiResources
         {
+            struct PaletteSprites
+            {
+                SpriteHandle windowBackground{};
+                SpriteHandle buttonNormal{};
+                SpriteHandle buttonHover{};
+                SpriteHandle buttonActive{};
+                SpriteHandle textField{};
+                SpriteHandle textFieldActive{};
+                SpriteHandle panelBackground{};
+                SpriteHandle consoleBackground{};
+                SpriteHandle titleBar{};
+            };
+
             bool atlasBuilt = false;
             TextureAtlas* atlas = nullptr;
 
-            SpriteHandle windowBackground{};
-            SpriteHandle buttonNormal{};
-            SpriteHandle buttonHover{};
-            SpriteHandle buttonActive{};
-            SpriteHandle textField{};
-            SpriteHandle textFieldActive{};
-            SpriteHandle panelBackground{};
-            SpriteHandle consoleBackground{};
-            SpriteHandle titleBar{};
+            PaletteSprites defaultDark{};
+            PaletteSprites classicLauncher{};
             GuiFontCache font{};
             font::FontRenderer fontRenderer{};
         };
@@ -254,13 +260,27 @@ namespace epochnamespace::gui
             float deltaTime = 0.0f;
             float caretTimer = 0.0f;
             bool caretVisible = true;
+            ThemeVariant activeTheme = ThemeVariant::DefaultDark;
 
             std::vector<InputEvent> events{};
             std::vector<QueuedSpriteDraw> queuedDraws{};
+            std::vector<ThemeVariant> themeStack{};
         };
 
         static thread_local FrameState g_frame{};
         static thread_local std::vector<InputEvent> g_pendingEvents{};
+
+        [[nodiscard]] static const GuiResources::PaletteSprites& active_palette() noexcept
+        {
+            switch (g_frame.activeTheme)
+            {
+            case ThemeVariant::ClassicLauncher:
+                return g_resources.classicLauncher;
+            case ThemeVariant::DefaultDark:
+            default:
+                return g_resources.defaultDark;
+            }
+        }
 
         [[nodiscard]] static bool rects_intersect(
             float ax,
@@ -603,24 +623,43 @@ namespace epochnamespace::gui
                 TextureAtlas& atlas = *atlasIt->second;
                 g_resources.atlas = &atlas;
 
-                g_resources.windowBackground = add_sprite(atlas, "__agui/window_bg",
+                g_resources.defaultDark.windowBackground = add_sprite(atlas, "__agui/window_bg",
                     make_solid_pixels(0x1F, 0x23, 0x2A, 0xFF, 8, 8), 8, 8);
-                g_resources.buttonNormal = add_sprite(atlas, "__agui/button_normal",
+                g_resources.defaultDark.buttonNormal = add_sprite(atlas, "__agui/button_normal",
                     make_solid_pixels(0x31, 0x36, 0x3F, 0xFF, 8, 8), 8, 8);
-                g_resources.buttonHover = add_sprite(atlas, "__agui/button_hover",
+                g_resources.defaultDark.buttonHover = add_sprite(atlas, "__agui/button_hover",
                     make_solid_pixels(0x3C, 0x43, 0x4E, 0xFF, 8, 8), 8, 8);
-                g_resources.buttonActive = add_sprite(atlas, "__agui/button_active",
+                g_resources.defaultDark.buttonActive = add_sprite(atlas, "__agui/button_active",
                     make_solid_pixels(0x48, 0x52, 0x60, 0xFF, 8, 8), 8, 8);
-                g_resources.textField = add_sprite(atlas, "__agui/text_field",
+                g_resources.defaultDark.textField = add_sprite(atlas, "__agui/text_field",
                     make_solid_pixels(0x21, 0x26, 0x2E, 0xFF, 8, 8), 8, 8);
-                g_resources.textFieldActive = add_sprite(atlas, "__agui/text_field_active",
+                g_resources.defaultDark.textFieldActive = add_sprite(atlas, "__agui/text_field_active",
                     make_solid_pixels(0x2A, 0x31, 0x3B, 0xFF, 8, 8), 8, 8);
-                g_resources.panelBackground = add_sprite(atlas, "__agui/panel_bg",
+                g_resources.defaultDark.panelBackground = add_sprite(atlas, "__agui/panel_bg",
                     make_solid_pixels(0x25, 0x2B, 0x34, 0xF2, 8, 8), 8, 8);
-                g_resources.consoleBackground = add_sprite(atlas, "__agui/console_bg",
+                g_resources.defaultDark.consoleBackground = add_sprite(atlas, "__agui/console_bg",
                     make_solid_pixels(0x18, 0x1D, 0x24, 0xE8, 8, 8), 8, 8);
-                g_resources.titleBar = add_sprite(atlas, "__agui/title_bar",
+                g_resources.defaultDark.titleBar = add_sprite(atlas, "__agui/title_bar",
                     make_solid_pixels(0x2B, 0x31, 0x3B, 0xFF, 8, 8), 8, 8);
+
+                g_resources.classicLauncher.windowBackground = add_sprite(atlas, "__agui_classic/window_bg",
+                    make_solid_pixels(0x33, 0x35, 0x38, 0xFF, 8, 8), 8, 8);
+                g_resources.classicLauncher.buttonNormal = add_sprite(atlas, "__agui_classic/button_normal",
+                    make_solid_pixels(0x5B, 0x5F, 0x66, 0xFF, 8, 8), 8, 8);
+                g_resources.classicLauncher.buttonHover = add_sprite(atlas, "__agui_classic/button_hover",
+                    make_solid_pixels(0x76, 0x7C, 0x85, 0xFF, 8, 8), 8, 8);
+                g_resources.classicLauncher.buttonActive = add_sprite(atlas, "__agui_classic/button_active",
+                    make_solid_pixels(0x94, 0x9A, 0xA3, 0xFF, 8, 8), 8, 8);
+                g_resources.classicLauncher.textField = add_sprite(atlas, "__agui_classic/text_field",
+                    make_solid_pixels(0x2B, 0x2E, 0x33, 0xFF, 8, 8), 8, 8);
+                g_resources.classicLauncher.textFieldActive = add_sprite(atlas, "__agui_classic/text_field_active",
+                    make_solid_pixels(0x3A, 0x3E, 0x45, 0xFF, 8, 8), 8, 8);
+                g_resources.classicLauncher.panelBackground = add_sprite(atlas, "__agui_classic/panel_bg",
+                    make_solid_pixels(0x27, 0x29, 0x2E, 0xFF, 8, 8), 8, 8);
+                g_resources.classicLauncher.consoleBackground = add_sprite(atlas, "__agui_classic/console_bg",
+                    make_solid_pixels(0x1F, 0x21, 0x26, 0xFF, 8, 8), 8, 8);
+                g_resources.classicLauncher.titleBar = add_sprite(atlas, "__agui_classic/title_bar",
+                    make_solid_pixels(0x22, 0x24, 0x28, 0xFF, 8, 8), 8, 8);
 
                 g_resources.atlasBuilt = true;
             }
@@ -1250,7 +1289,7 @@ namespace epochnamespace::gui
         static void draw_caret(float x, float y, float height)
         {
             const float caretWidth = (std::max)(1.0f, space_advance(kFontScale) * 0.08f);
-            draw_sprite(g_resources.textFieldActive, x, y, caretWidth, height);
+            draw_sprite(active_palette().textFieldActive, x, y, caretWidth, height);
         }
 
         static void reset_frame()
@@ -1262,6 +1301,8 @@ namespace epochnamespace::gui
             g_frame.contentMax = {};
             g_frame.insideWindow = false;
             g_frame.lastButtonBounds.reset();
+            g_frame.activeTheme = ThemeVariant::DefaultDark;
+            g_frame.themeStack.clear();
         }
 
         static void forget_upload_state(const void* ctxKey) noexcept
@@ -1518,6 +1559,25 @@ namespace epochnamespace::gui
         g_frame.mouseWheelDelta = 0;
     }
 
+    void push_theme(ThemeVariant theme) noexcept
+    {
+        g_frame.themeStack.push_back(g_frame.activeTheme);
+        g_frame.activeTheme = theme;
+    }
+
+    void pop_theme() noexcept
+    {
+        if (!g_frame.themeStack.empty())
+        {
+            g_frame.activeTheme = g_frame.themeStack.back();
+            g_frame.themeStack.pop_back();
+        }
+        else
+        {
+            g_frame.activeTheme = ThemeVariant::DefaultDark;
+        }
+    }
+
     void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept
     {
         if (!g_frame.ctx) return;
@@ -1530,8 +1590,9 @@ namespace epochnamespace::gui
         g_frame.insideWindow = true;
         g_frame.contentMin = position;
         g_frame.contentMax = { position.x + size.x, position.y + size.y };
+        const auto& palette = active_palette();
 
-        draw_sprite(g_resources.windowBackground, position.x, position.y, size.x, size.y);
+        draw_sprite(palette.windowBackground, position.x, position.y, size.x, size.y);
 
         const bool hasTitleBar = !title.empty();
         float titleBarHeight = 0.0f;
@@ -1540,7 +1601,7 @@ namespace epochnamespace::gui
             const float titleHeight = line_advance_amount(kTitleScale);
             titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
             const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
-            draw_sprite(g_resources.titleBar, position.x, position.y, size.x, titleBarHeight);
+            draw_sprite(palette.titleBar, position.x, position.y, size.x, titleBarHeight);
             draw_text_line(title, position.x + kContentPadding, titleTextY, kTitleScale);
         }
 
@@ -1571,6 +1632,7 @@ namespace epochnamespace::gui
         try { ensure_resources(); }
         catch (...) { return bounds; }
 
+        const auto& palette = active_palette();
         const float width = (std::max)(0.0f, size.x);
         const float height = (std::max)(0.0f, size.y);
         const float border = 2.0f;
@@ -1579,7 +1641,7 @@ namespace epochnamespace::gui
         const float titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
         const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
 
-        draw_sprite(g_resources.titleBar, position.x, position.y, width, titleBarHeight);
+        draw_sprite(palette.titleBar, position.x, position.y, width, titleBarHeight);
         draw_text_line(title, position.x + kContentPadding, titleTextY, kTitleScale);
 
         const float contentY = position.y + titleBarHeight;
@@ -1591,14 +1653,14 @@ namespace epochnamespace::gui
 
         if (needsViewportFallback && contentWidth > 0.0f && contentHeight > 0.0f)
         {
-            draw_sprite(g_resources.consoleBackground, position.x + border, contentY, contentWidth, contentHeight);
+            draw_sprite(palette.consoleBackground, position.x + border, contentY, contentWidth, contentHeight);
 
             const float inset = 18.0f;
             const float cardX = position.x + border + inset;
             const float cardY = contentY + inset;
             const float cardW = (std::max)(48.0f, contentWidth - inset * 2.0f);
             const float cardH = (std::max)(48.0f, contentHeight - inset * 2.0f);
-            draw_sprite(g_resources.panelBackground, cardX, cardY, cardW, cardH);
+            draw_sprite(palette.panelBackground, cardX, cardY, cardW, cardH);
 
             const float previewScale = 1.15f;
             const float lineHeight = line_advance_amount(previewScale);
@@ -1609,8 +1671,8 @@ namespace epochnamespace::gui
 
         if (contentHeight > 0.0f)
         {
-            draw_sprite(g_resources.panelBackground, position.x, contentY, border, contentHeight);
-            draw_sprite(g_resources.panelBackground,
+            draw_sprite(palette.panelBackground, position.x, contentY, border, contentHeight);
+            draw_sprite(palette.panelBackground,
                 position.x + (std::max)(0.0f, width - border),
                 contentY,
                 border,
@@ -1618,7 +1680,7 @@ namespace epochnamespace::gui
         }
         if (height > border)
         {
-            draw_sprite(g_resources.panelBackground,
+            draw_sprite(palette.panelBackground,
                 position.x,
                 position.y + (std::max)(0.0f, height - border),
                 width,
@@ -1640,10 +1702,11 @@ namespace epochnamespace::gui
         const float height = (std::max)(static_cast<float>(size.y), baseHeight + 2.0f * kContentPadding);
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
+        const auto& palette = active_palette();
 
         const SpriteHandle background =
-            hovered ? (g_frame.mouseDown ? g_resources.buttonActive : g_resources.buttonHover)
-            : g_resources.buttonNormal;
+            hovered ? (g_frame.mouseDown ? palette.buttonActive : palette.buttonHover)
+            : palette.buttonNormal;
 
         draw_sprite(background, pos.x, pos.y, width, height);
 
@@ -1682,10 +1745,11 @@ namespace epochnamespace::gui
         const float height = (std::max)(static_cast<float>(size.y), 1.0f);
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
+        const auto& palette = active_palette();
 
         const SpriteHandle background =
-            hovered ? (g_frame.mouseDown ? g_resources.buttonActive : g_resources.buttonHover)
-            : g_resources.buttonNormal;
+            hovered ? (g_frame.mouseDown ? palette.buttonActive : palette.buttonHover)
+            : palette.buttonNormal;
 
         draw_sprite(background, pos.x, pos.y, width, height);
 
@@ -1867,6 +1931,7 @@ namespace epochnamespace::gui
         const void* id = static_cast<const void*>(&text);
         const void* ctxKey = static_cast<const void*>(g_frame.ctx);
         const void* activeWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
+        const auto& palette = active_palette();
 
         if (g_frame.justPressed)
         {
@@ -1891,7 +1956,7 @@ namespace epochnamespace::gui
         const bool active = (activeWidget == id);
         result.active = active;
 
-        const SpriteHandle background = active ? g_resources.textFieldActive : g_resources.textField;
+        const SpriteHandle background = active ? palette.textFieldActive : palette.textField;
         draw_sprite(background, pos.x, pos.y, width, height);
 
         const float contentWidth = (std::max)(1.0f, width - 2.0f * kBoxInnerPadding);
@@ -2076,7 +2141,7 @@ namespace epochnamespace::gui
             height = (std::max)(height, baseHeight + 2.0f * kBoxInnerPadding);
         }
 
-        draw_sprite(g_resources.panelBackground, pos.x, pos.y, width, height);
+        draw_sprite(active_palette().panelBackground, pos.x, pos.y, width, height);
         draw_wrapped_text(text, pos.x + kBoxInnerPadding, pos.y + kBoxInnerPadding, contentWidth, kFontScale);
 
         advance_cursor({ 0.0f, height + kContentPadding });
@@ -2091,6 +2156,7 @@ namespace epochnamespace::gui
         if (!g_frame.insideWindow || !g_frame.ctx) { end_window(); return result; }
 
         ensure_resources();
+        const auto& palette = active_palette();
 
         const float availableWidth = (std::max)(0.0f, options.size.x - 2.0f * kContentPadding);
 
@@ -2109,7 +2175,7 @@ namespace epochnamespace::gui
         const Vec2 logPos = g_frame.cursor;
 
         if (availableWidth > 0.0f && logHeight > 0.0f)
-            draw_sprite(g_resources.consoleBackground, logPos.x, logPos.y, availableWidth, logHeight);
+            draw_sprite(palette.consoleBackground, logPos.x, logPos.y, availableWidth, logHeight);
 
         const float contentWidth = (std::max)(1.0f, availableWidth - 2.0f * kBoxInnerPadding);
         float penY = logPos.y + kBoxInnerPadding;

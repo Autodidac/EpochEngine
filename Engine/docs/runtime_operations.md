@@ -52,6 +52,10 @@ the same engine-owned path.
 - the launcher may open project demos directly or preload a project before the
   editor, but it should not drift back into multiple menu layers or become a
   fake game shell
+- launcher and editor theme ownership should stay split: the launcher can keep
+  its classic steel palette while the editor stays on the darker neutral tool
+  palette, and any future theme selector should preserve that separation rather
+  than forcing one skin across both shells
 - `aeditor.scene.cpp` should own project profiles, script profiles, runtime
   scene ids, and seed entities
 - `aeditor.cpp` should act as the live shell over that scene/project data, not

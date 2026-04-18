@@ -532,6 +532,7 @@ export namespace epochnamespace::menu
             prevUp = upPressed; prevDown = downPressed;
             prevLeft = leftPressed; prevRight = rightPressed;
 
+            gui::push_theme(gui::ThemeVariant::ClassicLauncher);
             gui::begin_window(title, framePosition, frameSize);
 
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 52.0f });
@@ -555,6 +556,7 @@ export namespace epochnamespace::menu
             }
 
             gui::end_window();
+            gui::pop_theme();
 
             if (chosen) return chosen;
             if (enterPressed && !prevEnter)
@@ -601,6 +603,7 @@ export namespace epochnamespace::menu
                     static_cast<float>(currentHeight)
                 };
 
+            gui::push_theme(gui::ThemeVariant::ClassicLauncher);
             gui::begin_window("", framePosition, frameSize);
 
             const float contentWidth = (std::max)(380.0f, (std::min)(frameSize.x - 240.0f, 560.0f));
@@ -636,6 +639,7 @@ export namespace epochnamespace::menu
             const bool clicked = gui::button("Update To Current Epoch", { buttonWidth, buttonHeight });
 
             gui::end_window();
+            gui::pop_theme();
 
             std::optional<Choice> chosen{};
             if (clicked)

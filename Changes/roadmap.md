@@ -65,6 +65,16 @@ wrappers.
 - Current steering docs in `README.md` and `Engine/docs/`
 - Deep-research PDF guidance added under `Changes/` for the six-month 2D
   priority track and solo-engine strategy
+- Additional staged planning inputs under `Changes/`:
+  `EpochEngine Strategy PDF Rewrite Research and Paste-Ready Replacement Text.pdf`
+  and `Locally Hosted Self-Rebuilding LLM System for Games and C++ Engine Automation.pdf`.
+  Treat them as reference inputs with provenance until they are imported through
+  the research/staging path instead of silently rewriting the roadmap from raw
+  binary documents.
+- Local HTML control-surface experiments such as `botface.html` are valid design
+  input for the AI/operator shell direction, but they should be folded back into
+  the staged Epoch planning/evidence flow instead of drifting as unmanaged side
+  interfaces.
 - Renderer capability checklist from the April 2026 repo-aligned planning drop;
   use it as a productivity map for renderer/system/tooling follow-up instead of
   letting renderer features drift into disconnected experiments
@@ -140,6 +150,10 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [ ] Add a lightweight research-import path so new PDF/HTML planning material
       can be converted into staged text artifacts with provenance before it
       changes roadmap language, datasets, or automation policy.
+- [ ] Make the research-import path explicit for `Changes/*.pdf` and local HTML
+      planning surfaces such as `botface.html`, including staged extraction,
+      provenance notes, and a reviewed promotion step before those inputs become
+      roadmap or dataset truth.
 - [ ] Keep helper-model selection and helper-lane count runtime-configurable and
       snapshot that configuration per iteration instead of baking model order
       assumptions into the roadmap itself.
@@ -275,6 +289,12 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [ ] Keep the parented multicontext shell auto-fitted to the desktop work area
       by default so the honest context matrix stays visible on baseline
       hardware.
+- [ ] Keep launcher and editor theming intentionally separate: the launcher may
+      keep its classic steel palette while the editor stays on a darker neutral
+      tool palette instead of forcing one global skin across both shells.
+- [ ] Add a settings-level theme selector only after scoped GUI theme ownership
+      is stable, and keep launcher/editor choices independent rather than
+      collapsing them into one shared toggle.
 
 ## Phase 7 - Procedural World and Time-Node Authoring
 
@@ -333,9 +353,12 @@ These remain support-tier or project-opt-in work, not the default baseline.
    surface.
 3. Continue carrying the time spine deeper into runtime and scene ownership.
 4. Tighten the two-role AI capture/training loop and MCP-driven curation path.
-5. Keep multicontext/backend child-window ownership honest across all active
+5. Restore the launcher's classic palette through scoped theme ownership while
+   keeping the darker editor shell separate and documenting the later theme
+   selector path.
+6. Keep multicontext/backend child-window ownership honest across all active
    backends.
-6. Keep naming cleanup active whenever a touched area can be normalized without
+7. Keep naming cleanup active whenever a touched area can be normalized without
    collateral damage.
 
 ## Acceptance Criteria

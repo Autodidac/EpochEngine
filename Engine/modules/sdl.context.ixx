@@ -526,14 +526,14 @@ export namespace epochnamespace::sdlcontext
         {
             if (sdlcontext.parent)
             {
-                SetParent(sdlcontext.hwnd, sdlcontext.parent);
+                SetParent(sdlcontext.hwnd, hostWnd);
 
                 LONG_PTR style = GetWindowLongPtr(sdlcontext.hwnd, GWL_STYLE);
                 style &= ~WS_OVERLAPPEDWINDOW;
                 style |= WS_CHILD | WS_VISIBLE;
                 SetWindowLongPtr(sdlcontext.hwnd, GWL_STYLE, style);
 
-                epochnamespace::core::MakeDockable(sdlcontext.hwnd, sdlcontext.parent);
+                epochnamespace::core::MakeDockable(sdlcontext.hwnd, hostWnd);
             }
 
             if (!windowTitle.empty())
@@ -566,12 +566,9 @@ export namespace epochnamespace::sdlcontext
                 sdlcontext.onResize(width, height);
 
             if (sdlcontext.parent)
-                epochnamespace::core::MakeDockable(sdlcontext.hwnd, sdlcontext.parent);
-
-            if (sdlcontext.parent)
                 PostMessage(sdlcontext.parent, WM_SIZE, 0, MAKELPARAM(width, height));
 
-            ::ShowWindow(hostWnd, SW_HIDE);
+            ::ShowWindow(hostWnd, SW_SHOWNA);
         }
 #endif
 

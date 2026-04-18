@@ -406,13 +406,14 @@ namespace
         {
             const HWND dockParent = ::GetParent(s_hostWindow);
             const HWND liveDockParent = dockParent ? dockParent : s_hostWindow;
-            ::SetParent(s_childWindow, liveDockParent);
+            s_dockParent = liveDockParent;
+            ::SetParent(s_childWindow, s_hostWindow);
 
             LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
             style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
             style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-            epochnamespace::core::MakeDockable(s_childWindow, liveDockParent);
+            epochnamespace::core::MakeDockable(s_childWindow, s_hostWindow);
 
             RECT client{};
             ::GetClientRect(s_hostWindow, &client);
@@ -437,7 +438,8 @@ namespace
                 nullptr,
                 RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
 
-            ::ShowWindow(s_hostWindow, SW_HIDE);
+            ::ShowWindow(s_hostWindow, SW_SHOWNA);
+            ::PostMessageW(liveDockParent, WM_SIZE, 0, 0);
         }
 
         if (!s_window->setActive(true))
@@ -453,7 +455,7 @@ namespace
         const HWND primaryWindow = s_childWindow ? s_childWindow : s_hostWindow;
         ctx->hdc = s_hdc;
         ctx->hglrc = s_glContext;
-        ctx->hwnd = s_hostWindow ? s_hostWindow : primaryWindow;
+        ctx->hwnd = primaryWindow;
         ctx->native_window = s_childWindow ? s_childWindow : s_hostWindow;
         ctx->native_drawable = s_hdc;
         ctx->native_gl_context = s_glContext;
@@ -468,7 +470,7 @@ namespace
         {
             ctx->windowData->sfml_window = s_window.get();
 #if defined(_WIN32)
-            ctx->windowData->hwnd = s_hostWindow ? s_hostWindow : s_childWindow;
+            ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
             ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
             ctx->windowData->hdc = s_hdc;
