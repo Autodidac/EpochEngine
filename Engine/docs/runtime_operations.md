@@ -32,6 +32,10 @@ the same engine-owned path.
   engine
 - the first generated shell flow should create a real on-disk project root,
   manifest, world file, script stub, and README for both game and tool projects
+- generated shells should land under repo-root `Projects/` so creation and
+  discovery stay stable regardless of the current working directory
+- generated shells should emit `project.paths.txt` so the editor log, build
+  actions, and troubleshooting flow can point at concrete files on disk
 - generated non-template `Projects/**/project.epoch.json` manifests should be
   discovered back into the live editor project list so the shell generation
   path immediately feeds real project selection and play
@@ -71,6 +75,10 @@ the same engine-owned path.
 - build diagnostics should now cover the generated child-project build path too:
   entry source, generated project file, build script, build log, and expected
   output executable should all be visible from the Project workspace
+- the Project workspace should also surface simple existence checks for the
+  manifest, entry source, build script, `project.paths.txt`, expected output,
+  build log, and active script source so the user can tell whether the shell is
+  real without leaving the editor
 - hot reload remains a development feature and needs smoke coverage instead of
   trust
 
@@ -93,6 +101,10 @@ the same engine-owned path.
 - helper `EpochChild` wrappers are implementation detail only:
   they stay hidden while docked and must return hidden under the parent after a
   redock instead of lingering as floating top-level shells
+- Raylib currently uses the direct-child dock contract with a hidden parked host
+  rather than a live proxy child, so harness and runtime checks should judge it
+  by that honest ownership model instead of forcing the SDL/SFML proxy-child
+  expectations onto it
 - when validating Win32 parented multicontext behavior, a live window-tree probe
   should show the real backend child classes as visible pane owners and helper
   wrappers hidden in the docked state
@@ -112,9 +124,9 @@ the same engine-owned path.
   scale, fixed-step cadence, accumulator, and simulated time
 - time diagnostics should also show the current frame step budget and the
   max-steps-per-frame clamp so pacing policy is visible, not implied
-- the shared preview marker should follow the real center camera ray to the grid
-  plane before any editor-focus fallback, so the visible look spot matches the
-  actual view direction more honestly
+- the shared preview marker should prefer the editor focus projected onto the
+  grid plane, then fall back to the center camera ray and last valid hit, so
+  editor panning and the visible look spot stay stable across contexts
 - this surface should help unify renderer/backend behavior instead of becoming
   another debug text dump
 
@@ -235,8 +247,9 @@ The live editor shell should continue to organize around reusable workspaces:
 - `AI`
 - `Output`
 
-These should be backed by reusable GUI controls and the atlas-driven UI system,
-not by hardcoded editor-only tab strips that cannot scale.
+These should be backed by reusable GUI controls and custom UI powered by an
+automated texture-atlas system, not by hardcoded editor-only tab strips that
+cannot scale.
 
 ## Troubleshooting checklist
 

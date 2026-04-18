@@ -391,6 +391,8 @@ namespace
         s_window->setVerticalSyncEnabled(true);
         s_window->setFramerateLimit(60);
         s_window->setKeyRepeatEnabled(false);
+        (void)s_window->setActive(true);
+        (void)s_window->setActive(false);
 
 #if defined(_WIN32)
         s_childWindow = static_cast<HWND>(s_window->getSystemHandle());
@@ -402,13 +404,15 @@ namespace
 
         if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
         {
-            ::SetParent(s_childWindow, s_hostWindow);
+            const HWND dockParent = ::GetParent(s_hostWindow);
+            const HWND liveDockParent = dockParent ? dockParent : s_hostWindow;
+            ::SetParent(s_childWindow, liveDockParent);
 
             LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
             style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
             style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-            epochnamespace::core::MakeDockable(s_childWindow, s_hostWindow);
+            epochnamespace::core::MakeDockable(s_childWindow, liveDockParent);
 
             RECT client{};
             ::GetClientRect(s_hostWindow, &client);
@@ -424,7 +428,16 @@ namespace
                 s_height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-            ::ShowWindow(s_hostWindow, SW_SHOWNA);
+            // Keep SFML's render target size aligned with the dock slot before the
+            // first display so startup does not depend on a later resize event.
+            s_window->setSize(sf::Vector2u(static_cast<unsigned>(s_width), static_cast<unsigned>(s_height)));
+            ::RedrawWindow(
+                s_childWindow,
+                nullptr,
+                nullptr,
+                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+
+            ::ShowWindow(s_hostWindow, SW_HIDE);
         }
 
         if (!s_window->setActive(true))
@@ -437,7 +450,7 @@ namespace
         s_glContext = ::wglGetCurrentContext();
         (void)s_window->setActive(false);
 
-        const HWND primaryWindow = s_hostWindow ? s_hostWindow : s_childWindow;
+        const HWND primaryWindow = s_childWindow ? s_childWindow : s_hostWindow;
         ctx->hdc = s_hdc;
         ctx->hglrc = s_glContext;
         ctx->hwnd = s_hostWindow ? s_hostWindow : primaryWindow;
@@ -448,6 +461,8 @@ namespace
 
         apply_view_size();
         refresh_dimensions(ctx);
+        if (ctx->onResize)
+            ctx->onResize(s_width, s_height);
 
         if (ctx->windowData)
         {

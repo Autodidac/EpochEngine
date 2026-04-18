@@ -132,6 +132,7 @@ namespace epochnamespace::core
         int  width = DEFAULT_WINDOW_WIDTH;
         int  height = DEFAULT_WINDOW_HEIGHT;
         bool should_close = false;
+        bool isFloating = false;
 
         std::function<void(int, int)> onResize{};
 

@@ -61,15 +61,13 @@ changes.
 - `Explain why mixed C++23 module units should use module; before legacy includes.`
 - `Summarize the current project runtime target and the active script in one short answer.`
 
-Current validated helper pair:
+Current validated helper pair is intentionally treated as dynamic. The exact
+names vary with local load order, so the workflow rule is more important than
+the pair itself: use the first two `/v1/models` entries as the drafting pools,
+and keep the first detected model as the in-engine/runtime parity baseline.
 
-- `arliai_glm-4.5-air-derestricted`
-- `qwen/qwen3.5-9b`
-
-The exact helper pair varies with local load order, so the workflow rule is
-more important than the names: use the first two `/v1/models` entries as the
-drafting pools, and keep the first detected model as the in-engine/runtime
-parity baseline.
+For the current April 2026 workstation passes, the first two loaded helpers
+were `nvidia/nemotron-3-nano-4b` and `nvidia/nemotron-3-nano-4b:2`.
 
 Use local helpers aggressively for:
 

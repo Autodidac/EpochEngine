@@ -416,13 +416,15 @@ namespace
 
         if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
         {
-            ::SetParent(s_childWindow, s_hostWindow);
+            const HWND dockParent = ::GetParent(s_hostWindow);
+            const HWND liveDockParent = dockParent ? dockParent : s_hostWindow;
+            ::SetParent(s_childWindow, liveDockParent);
 
             LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
             style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
             style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-            epochnamespace::core::MakeDockable(s_childWindow, s_hostWindow);
+            epochnamespace::core::MakeDockable(s_childWindow, liveDockParent);
 
             RECT client{};
             ::GetClientRect(s_hostWindow, &client);
@@ -438,12 +440,23 @@ namespace
                 s_height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-            ::ShowWindow(s_hostWindow, SW_SHOWNA);
+            // Keep SDL's internal window/backbuffer size aligned with the dock slot
+            // before the first present so the pane does not stay blank until resize.
+            SDL_SetWindowSize(s_window, s_width, s_height);
+            ::RedrawWindow(
+                s_childWindow,
+                nullptr,
+                nullptr,
+                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+
+            ::ShowWindow(s_hostWindow, SW_HIDE);
         }
 
 #endif
 
         refresh_dimensions(ctx);
+        if (ctx->onResize)
+            ctx->onResize(s_width, s_height);
         if (ctx->windowData)
         {
 #if defined(_WIN32)

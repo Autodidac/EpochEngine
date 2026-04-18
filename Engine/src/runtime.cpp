@@ -42,11 +42,6 @@ module;
 #include <source_location>
 #include <utility>
 
-namespace epochnamespace::core::bridge
-{
-    int run_legacy_runtime(bool editor_mode);
-}
-
 module runtime;
 
 import aengine.cli;
@@ -61,6 +56,11 @@ import platform.context;
 import platform.runtime;
 import platform.window;
 import epoch.systems;
+
+namespace epochnamespace::core::bridge
+{
+    int run_legacy_runtime(bool editor_mode);
+}
 
 extern "C"
 {
@@ -396,5 +396,4 @@ namespace runtime
         return run_epoch_native();
     }
 } // namespace runtime
-
 

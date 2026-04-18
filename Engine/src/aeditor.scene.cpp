@@ -1156,6 +1156,23 @@ namespace
         return fs::absolute(fs::current_path(ec), ec).lexically_normal();
     }
 
+    [[nodiscard]] static fs::path resolve_projects_root(const fs::path& hint = {}) noexcept
+    {
+        return (resolve_epoch_repo_root(hint) / "Projects").lexically_normal();
+    }
+
+    [[nodiscard]] static fs::path resolve_project_root_path(const fs::path& project_root) noexcept
+    {
+        if (project_root.empty())
+            return {};
+
+        std::error_code ec;
+        if (project_root.is_absolute())
+            return project_root.lexically_normal();
+
+        return fs::absolute(resolve_epoch_repo_root(project_root) / project_root, ec).lexically_normal();
+    }
+
     [[nodiscard]] static std::string to_windows_path(std::string value)
     {
         std::replace(value.begin(), value.end(), '/', '\\');
@@ -1431,7 +1448,7 @@ namespace
                 owned.push_back(*parsed);
         }
 
-        const fs::path projectsRoot{ "Projects" };
+        const fs::path projectsRoot = resolve_projects_root();
         std::error_code ec;
         if (fs::exists(projectsRoot, ec) && !ec)
         {
@@ -1549,7 +1566,7 @@ namespace
         if (project_root.empty())
             return {};
 
-        return (fs::path(project_root) / "scripts" / (std::string(script_name) + ".ascript.cpp"))
+        return (resolve_project_root_path(fs::path(project_root)) / "scripts" / (std::string(script_name) + ".ascript.cpp"))
             .lexically_normal()
             .generic_string();
     }
@@ -1603,10 +1620,11 @@ namespace
     [[nodiscard]] static std::string next_generated_project_name(EditorProjectKind kind)
     {
         const std::string prefix = kind == EditorProjectKind::Tool ? "ToolProject" : "GameProject";
+        const fs::path projectsRoot = resolve_projects_root();
         for (int ordinal = 1; ordinal < 1000; ++ordinal)
         {
             const std::string candidate = prefix + (ordinal < 10 ? "0" : "") + std::to_string(ordinal);
-            if (!fs::exists(fs::path("Projects") / candidate))
+            if (!fs::exists(projectsRoot / candidate))
                 return candidate;
         }
         return prefix + "_overflow";
@@ -1694,13 +1712,21 @@ namespace epochnamespace
     {
         const std::string projectName = next_generated_project_name(kind);
         const std::string projectId = projectName;
-        const fs::path root = fs::path("Projects") / projectName;
+        const fs::path root = resolve_projects_root() / projectName;
         const fs::path worlds = root / "worlds";
         const fs::path scripts = root / "scripts";
         const fs::path source = root / "source";
+        const fs::path include = root / "include";
+        const fs::path modules = root / "modules";
         const fs::path assets = root / "assets";
+        const fs::path resource = root / "resource";
+        const fs::path buildRoot = root / "build";
+        const fs::path buildLogs = buildRoot / "logs";
+        const fs::path outputDebugDir = root / "bin" / "windows" / "Debug" / "x64";
+        const fs::path outputReleaseDir = root / "bin" / "windows" / "Release" / "x64";
         const fs::path manifest = root / "project.epoch.json";
         const fs::path readme = root / "README.md";
+        const fs::path pathsFile = root / "project.paths.txt";
         const fs::path cmakeFragment = root / "epoch.project.cmake";
         const fs::path cmakeLists = generated_project_cmake_lists_path(root);
         const fs::path entrySource = generated_project_entry_source_path(root);
@@ -1729,13 +1755,23 @@ namespace epochnamespace
         fs::create_directories(worlds, ec);
         fs::create_directories(scripts, ec);
         fs::create_directories(source, ec);
+        fs::create_directories(include, ec);
+        fs::create_directories(modules, ec);
         fs::create_directories(assets, ec);
+        fs::create_directories(resource, ec);
+        fs::create_directories(buildLogs, ec);
+        fs::create_directories(outputDebugDir, ec);
+        fs::create_directories(outputReleaseDir, ec);
         if (ec)
         {
             return {
                 false,
                 projectId,
                 root.string(),
+                manifest.generic_string(),
+                entrySource.generic_string(),
+                windowsBuildScript.generic_string(),
+                scriptFile.generic_string(),
                 "Failed to create project shell directories.",
                 integrationMode,
                 publicIncludeRoot
@@ -1786,11 +1822,26 @@ namespace epochnamespace
             "- Engine source root: Engine/src\n"
             "- Engine script root: Engine/src/scripts\n"
             "- Engine resource root: Engine/resource\n"
+            "- Project include root: " + include.generic_string() + "\n"
+            "- Project module root: " + modules.generic_string() + "\n"
+            "- Project resource root: " + resource.generic_string() + "\n"
             "- Entry source: " + entrySource.generic_string() + "\n"
             "- Windows project: " + windowsProject.filename().string() + "\n"
             "- Windows build script: " + windowsBuildScript.filename().string() + "\n"
             "- Linux build script: " + linuxBuildScript.filename().string() + "\n"
             "- Build fragment: " + cmakeFragment.filename().string() + "\n";
+
+        const std::string pathsText =
+            "root=" + root.generic_string() + "\n"
+            + "manifest=" + manifest.generic_string() + "\n"
+            + "scene=" + worldFile.generic_string() + "\n"
+            + "default_script=" + scriptFile.generic_string() + "\n"
+            + "entry_source=" + entrySource.generic_string() + "\n"
+            + "windows_project=" + windowsProject.generic_string() + "\n"
+            + "windows_build_script=" + windowsBuildScript.generic_string() + "\n"
+            + "linux_build_script=" + linuxBuildScript.generic_string() + "\n"
+            + "build_log=" + generated_project_build_log_path(root).generic_string() + "\n"
+            + "debug_output=" + generated_project_output_path(root).generic_string() + "\n";
 
         const std::string worldText =
             "scene \"" + sceneName + "\"\n"
@@ -1994,7 +2045,9 @@ namespace epochnamespace
             "$projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path\n"
             "$projectFile = Join-Path $projectRoot '" + powershell_escape_single_quoted(windowsProject.filename().string()) + "'\n"
             "$logDir = Join-Path $projectRoot 'build\\logs'\n"
+            "$binDir = Join-Path $projectRoot ('bin\\windows\\' + $Configuration + '\\' + $Platform)\n"
             "New-Item -ItemType Directory -Force -Path $logDir | Out-Null\n"
+            "New-Item -ItemType Directory -Force -Path $binDir | Out-Null\n"
             "$logPath = Join-Path $logDir ('build-' + $Configuration.ToLowerInvariant() + '-' + $Platform.ToLowerInvariant() + '.log')\n"
             "function Resolve-MSBuild {\n"
             "    if (-not [string]::IsNullOrWhiteSpace($env:MSBUILD_EXE_PATH) -and (Test-Path -LiteralPath $env:MSBUILD_EXE_PATH)) {\n"
@@ -2013,6 +2066,8 @@ namespace epochnamespace
             "    throw ('Missing generated project file: ' + $projectFile)\n"
             "}\n"
             "$msbuild = Resolve-MSBuild\n"
+            "Set-Location -LiteralPath $projectRoot\n"
+            "'[INFO] Project root: ' + $projectRoot | Tee-Object -FilePath $logPath\n"
             "'[INFO] Epoch child build project: ' + $projectFile | Tee-Object -FilePath $logPath\n"
             "'[INFO] MSBuild: ' + $msbuild | Tee-Object -FilePath $logPath -Append\n"
             "& $msbuild $projectFile /t:Rebuild /p:Configuration=$Configuration /p:Platform=$Platform /m:1 /clp:ErrorsOnly 2>&1 | Tee-Object -FilePath $logPath -Append\n"
@@ -2040,6 +2095,7 @@ namespace epochnamespace
         const bool ok =
             write_text_file(manifest, manifestText)
             && write_text_file(readme, readmeText)
+            && write_text_file(pathsFile, pathsText)
             && write_text_file(worldFile, worldText)
             && write_text_file(scriptFile, scriptText)
             && write_text_file(entrySource, entrySourceText)
@@ -2056,6 +2112,10 @@ namespace epochnamespace
             ok,
             projectId,
             root.string(),
+            manifest.generic_string(),
+            entrySource.generic_string(),
+            windowsBuildScript.generic_string(),
+            scriptFile.generic_string(),
             ok
                 ? "Created project shell at " + root.string()
                 : "Failed to write one or more generated project files.",
@@ -2069,7 +2129,7 @@ namespace epochnamespace
         if (project_root.empty())
             return { false, "No active project root selected." };
 
-        const fs::path root{ project_root };
+        const fs::path root = resolve_project_root_path(fs::path{ project_root });
         const fs::path scriptPath =
 #if defined(_WIN32)
             generated_project_windows_build_script_path(root);
@@ -2128,10 +2188,16 @@ namespace epochnamespace
             return projectPath;
 
         if (const auto* profile = find_script_profile(script_name))
-            return std::string(profile->source_path);
+        {
+            const fs::path profilePath{ profile->source_path };
+            if (profilePath.is_absolute())
+                return profilePath.generic_string();
+
+            return (resolve_epoch_repo_root(profilePath) / profilePath).lexically_normal().generic_string();
+        }
 
         return projectPath.empty()
-            ? (fs::path("Engine") / "src" / "scripts" / (std::string(script_name) + ".ascript.cpp")).generic_string()
+            ? (resolve_epoch_repo_root({}) / "Engine" / "src" / "scripts" / (std::string(script_name) + ".ascript.cpp")).generic_string()
             : projectPath;
     }
 

@@ -113,6 +113,10 @@ namespace epochnamespace
         bool succeeded{ false };
         std::string project_id{};
         std::string root_path{};
+        std::string manifest_path{};
+        std::string entry_source_path{};
+        std::string build_script_path{};
+        std::string default_script_path{};
         std::string summary{};
         std::string engine_integration_mode{};
         std::string public_include_root{};

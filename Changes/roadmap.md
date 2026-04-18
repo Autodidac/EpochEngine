@@ -137,6 +137,12 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [x] Keep the engine running through one shared runtime/perf/logging spine.
 - [x] Normalize active module/file ownership instead of growing a second naming
       mess beside Epoch.
+- [ ] Add a lightweight research-import path so new PDF/HTML planning material
+      can be converted into staged text artifacts with provenance before it
+      changes roadmap language, datasets, or automation policy.
+- [ ] Keep helper-model selection and helper-lane count runtime-configurable and
+      snapshot that configuration per iteration instead of baking model order
+      assumptions into the roadmap itself.
 
 ## Phase 2 - Project-Driven Runtime and Tool Shell
 
@@ -216,21 +222,41 @@ These remain support-tier or project-opt-in work, not the default baseline.
 
 ## Phase 5 - Two-Role AI Training Spine
 
-- [ ] Keep only two in-engine AI roles:
+- [ ] Standardize exactly two in-engine AI roles:
       internal EpochBot and local MCP/control bots.
-- [ ] Let the MCP/control layer both operate the engine and feed the training
-      loop for EpochBot.
-- [ ] Treat `append_training_sample()` and MCP capture as raw/staged data, then
-      promote curated records into `Engine/ai/datasets/curated/` and
-      `Engine/ai/evals/`.
-- [ ] Document and support deleting outdated or bad training artifacts when the
-      training direction changes.
-- [ ] Keep repo-safe AI assets under `Engine/ai/` and compiled/local artifacts
-      under `workspace/ai/`.
-- [ ] Detect local helper availability at the start of a phase, then use the
-      first two `/v1/models` entries as helper drafting pools when the operator
-      has approved helper-first mode; the current workstation baseline is two
-      loaded helper models with four parallel lanes each.
+- [ ] Use the MCP/control layer to operate the engine, capture execution traces,
+      and produce staged observation records for EpochBot data curation and eval
+      generation.
+- [ ] Separate observation capture from dataset promotion. Treat
+      `append_observation_record()`, `append_training_sample()`, and MCP capture
+      writes as staged/raw inputs first, then promote reviewed or auto-scored
+      records into `Engine/ai/datasets/curated/` and `Engine/ai/evals/` through
+      an explicit curation pipeline.
+- [ ] Support pruning, deprecating, and deleting outdated datasets, evals,
+      captures, and derived artifacts when goals, schema, or training direction
+      change.
+- [ ] Keep committed AI assets in `Engine/ai/`; keep local/generated,
+      compiled/cached, or large transient artifacts in `workspace/ai/`.
+- [ ] Route every AI-assisted engine change through isolated iteration
+      environments with an explicit
+      observe -> propose -> sandbox -> build -> verify -> score -> promote/discard
+      loop so mainline behavior remains protected.
+- [ ] Require proof artifacts before any AI-assisted promotion. A promotion must
+      have build evidence, runtime evidence, and retained logs/captures tied to
+      the exact iteration.
+- [ ] Grow toward an engine-owned
+      planner -> executor -> builder -> verifier -> gate
+      control loop with policy checks, scoring, rollback, and discard rules.
+- [ ] Persist structured engine and project context as versioned JSON/state
+      snapshots, curated datasets, eval suites, and replayable traces so
+      EpochBot improves from real engine operation without losing provenance.
+- [ ] Keep AI execution and engine execution inside the same controlled,
+      reproducible environment, with explicit snapshots for repo state, toolchain
+      state, model selection, and workspace state per iteration.
+- [ ] Drive local helper-model selection from explicit config and approval policy
+      first, with compatible approved fallbacks only when configured preferences
+      are unavailable. Helper count and lane count are runtime configuration, not
+      roadmap assumptions.
 
 ## Phase 6 - UI and Editor Maturity
 
@@ -238,8 +264,8 @@ These remain support-tier or project-opt-in work, not the default baseline.
       fields so focus/caret/input regressions are caught by automation instead
       of screenshots or click-only probes.
 - [ ] Replace remaining ad hoc editor-only layout logic with a full modular GUI
-      workspace system backed by shared controls and the atlas-driven UI
-      pipeline.
+      workspace system backed by shared controls and custom UI powered by an
+      automated texture-atlas system.
 - [ ] Improve project, script, AI, systems, and output surfaces so the shell
       feels closer to Unreal/Godot than a debug console.
 - [ ] Support application/tool-style editor projects alongside game projects so
@@ -274,16 +300,20 @@ These remain support-tier or project-opt-in work, not the default baseline.
       current proof misleading.
 - [ ] Keep docs strict enough that future automated passes can follow the
       build, launch, test, capture, commit, and push loop without improvising.
+- [ ] Keep iteration-run output and evaluation artifacts organized enough that
+      failed AI-assisted passes can be deleted cleanly while promoted evidence
+      stays inspectable.
 
 ## Helper-First Automation Rules
 
-- At the start of a phase, detect local helper availability through
-  `/v1/models`.
+- At the start of a phase, detect local helper availability through the helper
+  endpoint, but do not hard-code model ordering into the roadmap.
 - Ask whether helper-first mode should be used only if that preference or
   helper allow-list has not already been made explicit by the operator.
-- Use the first two loaded models as helper drafting pools when available.
-- For the current `9900X` + `5800` workstation target, prefer two helper
-  models with four parallel lanes each for eight total drafting lanes.
+- Drive helper-model selection from explicit config and approval policy first,
+  with compatible fallbacks only when configured preferences are unavailable.
+- Treat helper pool count and lane count as runtime/operator configuration, not
+  roadmap assumptions.
 - Prefer the LM Studio `/v1/responses` helper path for direct drafting, with
   `input` payloads and `reasoning.effort = none` so the helper returns usable
   text instead of wasting budget on hidden chains.

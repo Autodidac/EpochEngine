@@ -496,8 +496,15 @@ export namespace epochnamespace::sfmlcontext
                 sfmlcontext.hwnd, nullptr, 0, 0, width, height,
                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
+            // Keep the SFML render target size aligned with the dock slot before
+            // the first display so startup does not depend on a resize event.
+            sfmlcontext.window->setSize(sf::Vector2u(static_cast<unsigned>(width), static_cast<unsigned>(height)));
+            RedrawWindow(
+                sfmlcontext.hwnd, nullptr, nullptr,
+                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+
             if (hostWnd && hostWnd != sfmlcontext.hwnd && ::IsWindow(hostWnd) != FALSE)
-                ShowWindow(hostWnd, SW_SHOWNA);
+                ShowWindow(hostWnd, SW_HIDE);
 
             if (sfmlcontext.parent && ::IsWindow(sfmlcontext.parent) != FALSE)
                 epochnamespace::core::MakeDockable(sfmlcontext.hwnd, sfmlcontext.parent);

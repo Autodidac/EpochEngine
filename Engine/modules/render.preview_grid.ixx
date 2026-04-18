@@ -216,7 +216,7 @@ namespace epochnamespace::previewgrid
 
         [[nodiscard]] inline const void* normalize_camera_key(const void* ctxKey) noexcept
         {
-            return ctxKey ? reinterpret_cast<const void*>(static_cast<std::uintptr_t>(1)) : nullptr;
+            return ctxKey;
         }
 
         [[nodiscard]] inline CameraRigState make_editor_rig() noexcept
@@ -597,15 +597,28 @@ namespace epochnamespace::previewgrid
                 markerDistance = it->second.distance;
         }
 
-        const Vec3 ray = normalize(subtract(camera.target, camera.eye));
-        if (std::isfinite(ray.x) && std::isfinite(ray.y) && std::isfinite(ray.z)
-            && std::abs(ray.y) > 1.0e-4f)
         {
-            const float hitDistance = (0.0f - camera.eye.y) / ray.y;
-            if (hitDistance > 0.0f && std::isfinite(hitDistance))
+            std::shared_lock lock(detail::g_cameraRigMutex);
+            const auto it = detail::g_cameraRigs.find(rigKey);
+            if (it != detail::g_cameraRigs.end() && it->second.mode == CameraMode::Editor)
             {
-                hit = add(camera.eye, scale(ray, hitDistance));
+                hit = { it->second.focus.x, 0.0f, it->second.focus.z };
                 hasHit = std::isfinite(hit.x) && std::isfinite(hit.z);
+            }
+        }
+
+        if (!hasHit)
+        {
+            const Vec3 ray = normalize(subtract(camera.target, camera.eye));
+            if (std::isfinite(ray.x) && std::isfinite(ray.y) && std::isfinite(ray.z)
+                && std::abs(ray.y) > 1.0e-4f)
+            {
+                const float hitDistance = (0.0f - camera.eye.y) / ray.y;
+                if (hitDistance > 0.0f && std::isfinite(hitDistance))
+                {
+                    hit = add(camera.eye, scale(ray, hitDistance));
+                    hasHit = std::isfinite(hit.x) && std::isfinite(hit.z);
+                }
             }
         }
 
@@ -616,17 +629,6 @@ namespace epochnamespace::previewgrid
                 lastHit != detail::g_lastMarkerHits.end())
             {
                 hit = lastHit->second;
-                hasHit = std::isfinite(hit.x) && std::isfinite(hit.z);
-            }
-        }
-
-        if (!hasHit)
-        {
-            std::shared_lock lock(detail::g_cameraRigMutex);
-            const auto it = detail::g_cameraRigs.find(rigKey);
-            if (it != detail::g_cameraRigs.end() && it->second.mode == CameraMode::Editor)
-            {
-                hit = { it->second.focus.x, 0.0f, it->second.focus.z };
                 hasHit = std::isfinite(hit.x) && std::isfinite(hit.z);
             }
         }

@@ -496,7 +496,7 @@
     max-height: calc(100svh - (var(--edge-gap) * 2));
     padding: 12px; border-radius: 14px; background: linear-gradient(180deg, rgba(6, 18, 27, .98), rgba(4, 12, 18, .99));
     border:1px solid rgba(39,72,94,.66); box-shadow: 0 28px 64px -40px rgba(0,0,0,.9);
-    transform: translateX(360px); transition: transform .25s ease;
+    transform: translateX(calc(var(--activity-w) + 40px)); transition: transform .25s ease;
     z-index: 15; overflow: hidden;
     display:flex; flex-direction:column;
   }
@@ -888,6 +888,23 @@
   let activeThinkingState = null;
   let editingMessageIndex = -1;
 
+  let shouldAutoScroll = true;
+
+  function isNearBottom(el, threshold = 80) {
+    if (!el) return true;
+    return (el.scrollHeight - el.scrollTop - el.clientHeight) < threshold;
+  }
+
+  function maybeScroll(final = false, force = false) {
+    if (!chatEl) return;
+    if (!force && !shouldAutoScroll) return;
+    chatEl.scrollTo({
+      top: chatEl.scrollHeight,
+      behavior: final ? 'smooth' : 'auto'
+    });
+  }
+
+
   function syncShellLayout() {
     document.body.classList.toggle('chats-open', drawer.classList.contains('open'));
     document.body.classList.toggle('activity-open', thinkingDrawer.classList.contains('open'));
@@ -910,6 +927,10 @@
 
     syncShellLayout();
   }
+
+  chatEl.addEventListener('scroll', () => {
+    shouldAutoScroll = isNearBottom(chatEl);
+  }, { passive: true });
 
   function setStatus(text, state = 'idle') {
     let label = text || '';
@@ -1249,7 +1270,7 @@
       wrap.append(avatar, bubble);
     }
     chatEl.appendChild(wrap);
-    chatEl.scrollTop = chatEl.scrollHeight;
+    maybeScroll();
 
     return { wrap, bubble, body, copy, actions };
   }
@@ -1538,7 +1559,7 @@
       activeThinkingState = state;
       syncThinkingDrawer();
     }
-    chatEl.scrollTop = chatEl.scrollHeight;
+    maybeScroll();
   }
 
   function renderActiveChat() {
@@ -1640,6 +1661,28 @@
     }
 
     return { content: '', thinking: after.trim() };
+  }
+
+  function normalizeAssistantStreamOutput(content, thinking) {
+    let finalContent = cleanAssistantContent(content || '');
+    let finalThinking = cleanThinkingContent(thinking || '');
+
+    const contentLooksLikeThinking = /(^|\n)\s*(Thinking(?:\s+Process)?|Reasoning)\s*:/i.test(finalContent);
+    if (contentLooksLikeThinking) {
+      const parts = splitThinkingFromText(finalContent);
+      finalContent = cleanAssistantContent(parts.content || '');
+      finalThinking = cleanThinkingContent([finalThinking, parts.thinking].filter(Boolean).join('\n\n'));
+    }
+
+    const thinkingLooksStructured = /(^|\n)\s*(Thinking(?:\s+Process)?|Reasoning)\s*:/i.test(finalThinking);
+    const hasFinalMarkerInThinking = /(^|\n)\s*(Final(?:\s+Answer)?|Answer|Response)\s*:/i.test(finalThinking);
+    if ((!finalContent || hasFinalMarkerInThinking) && thinkingLooksStructured) {
+      const parts = splitThinkingFromText(finalThinking);
+      finalContent = cleanAssistantContent(finalContent || parts.content || '');
+      finalThinking = cleanThinkingContent(parts.thinking || finalThinking);
+    }
+
+    return { content: finalContent, thinking: finalThinking };
   }
 
   function normalizeImageData(value) {
@@ -1970,6 +2013,7 @@ ${att.text}
 
     placeholder = addTextMessage('assistant', '');
     placeholderWrap = placeholder.closest('.msg');
+    shouldAutoScroll = true;
 
     controller = new AbortController();
     streamReader = null;
@@ -2070,7 +2114,7 @@ ${att.text}
       const armWatchdog = () => {
         clearWatchdog();
         const hasVisibleOutput = !!(accumulated || accumulatedThinking);
-        const timeoutMs = hasVisibleOutput ? 6000 : 15000;
+        const timeoutMs = accumulated && !accumulatedThinking ? 6000 : (accumulatedThinking && !accumulated ? 8000 : (hasVisibleOutput ? 6000 : 15000));
         streamWatchdog = setTimeout(() => {
           streamClosedByWatchdog = true;
           sawFinishReason = true;
@@ -2080,8 +2124,9 @@ ${att.text}
       };
 
       const updateStreamView = () => {
-        assistantState.content = accumulated;
-        assistantState.thinking = accumulatedThinking;
+        const normalized = normalizeAssistantStreamOutput(accumulated, accumulatedThinking);
+        assistantState.content = normalized.content;
+        assistantState.thinking = normalized.thinking;
         assistantState.thinkingLive = !sawReadyMarker && !sawFinishReason;
         if (activeThinkingState === assistantState || thinkingDrawer.classList.contains('open')) {
           activeThinkingState = assistantState;
@@ -2270,6 +2315,10 @@ ${att.text}
         }
       }
 
+      const normalizedFinal = normalizeAssistantStreamOutput(accumulated, accumulatedThinking);
+      accumulated = normalizedFinal.content;
+      accumulatedThinking = normalizedFinal.thinking;
+
       let completionReason = '';
       let streamEndedBy = '';
       if (sawReadyMarker) {
@@ -2352,6 +2401,7 @@ ${att.text}
       controller = null;
       streamReader = null;
       setBusy(false);
+      maybeScroll(true);
       saveAll();
     }
   }

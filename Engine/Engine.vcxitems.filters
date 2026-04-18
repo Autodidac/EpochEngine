@@ -248,6 +248,7 @@
     <None Include="$(MSBuildThisFileDirectory)resource\WinResource.aps">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)..\Changes\roadmap.md" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.components.ixx">

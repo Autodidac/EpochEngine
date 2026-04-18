@@ -89,9 +89,34 @@ Generated project shells should keep two honest integration modes working:
 Do not document only one path if the project/scripting shell is supposed to
 support both.
 
-The generated project shell now emits an `epoch.project.cmake` fragment, a
-generated child project file, a build script, and script include fallback so
-embedded-engine projects can resolve more than headers alone.
+Generated project shells now land under repo-root `Projects/` and emit:
+
+- `project.epoch.json`
+- `project.paths.txt`
+- `epoch.project.cmake`
+- a generated child project file
+- build scripts
+- script include fallback
+
+That keeps generated shells honest across headers, modules, source, scripts,
+and resources instead of stopping at headers alone.
+
+If editor logs claim a generated project exists but the user cannot tell where
+it landed, inspect `Projects/<ProjectName>/project.paths.txt` first.
+
+The Project/Scripts workspaces should now also expose simple existence proof for
+the generated shell surface:
+
+- manifest exists
+- entry source exists
+- build script exists
+- `project.paths.txt` exists
+- expected output exists
+- build log exists
+- active script source exists
+
+If those checks are missing or vague, the generated-project loop still is not
+proved honestly enough.
 
 ## Local helper probing discipline
 
@@ -158,12 +183,18 @@ before finishing:
   input, and missing-pane behavior
 - after maximize, the visible child rect matches the intended slot rect instead
   of silently growing beyond it
+- for SDL/SFML startup fixes, a run still fails if content only becomes visible
+  after manual resize, maximize, focus juggling, or drag; the first meaningful
+  frame must appear from the normal launch path
 - non-maximized startup must survive the startup settle pass with the same
   visible top-row child contract, not a briefly visible extra SDL/SFML wrapper
 - closing one visible child pane early must not kill the parent editor
 - a proof run must come from `x64/Debug` or `x64/Release` with assets present
 - if the same pass touches Linux/WSL2/WSLg behavior, document whether that path
   was also revalidated or still needs follow-up
+- do not waive MSVC warnings as harmless drift; mixed module units should keep
+  the global module fragment limited to preprocessor directives only, and new
+  warnings should be fixed or explicitly justified before sign-off
 
 Two specific implementation rules should stay written down because they have
 already regressed:

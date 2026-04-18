@@ -352,29 +352,34 @@ Useful entry points:
 # Current snapshot
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source-v0.83.82-1F7A4C?style=for-the-badge" alt="Current source v0.83.82" />
-  <img src="https://img.shields.io/badge/Project_Shell-Child_Builds_Wired-2C6A8A?style=for-the-badge" alt="Child builds wired" />
-  <img src="https://img.shields.io/badge/README-Backend_Proofs_Refreshed-7A5A2F?style=for-the-badge" alt="Backend proofs refreshed" />
+  <img src="https://img.shields.io/badge/Current_Source-v0.83.83-1F7A4C?style=for-the-badge" alt="Current source v0.83.83" />
+  <img src="https://img.shields.io/badge/Project_Shell-Repo_Projects_Wired-2C6A8A?style=for-the-badge" alt="Repo-root project shells wired" />
+  <img src="https://img.shields.io/badge/MSVC_Warnings-C5202_Removed-7A5A2F?style=for-the-badge" alt="MSVC C5202 removed" />
 </p>
 
 Highlights:
-- The source tree is now on `v0.83.82`, so the public snapshot finally matches
-  the current generated-project and editor-shell work instead of lagging behind
-  older proof text.
+- The source tree is now on `v0.83.83`, and this pass removes the lingering
+  MSVC `C5202` mixed-module warning from `Engine/src/runtime.cpp` instead of
+  normalizing compiler noise.
 - The Project workspace now exposes a real child-build path for generated
   shells, including entry source, project file, build script, build log, and
   expected Debug output executable.
-- Generated child projects are now framed around headers, modules, source,
-  scripting, and resources together, and the editor can preload the requested
-  generated project directly on boot.
+- Generated child projects now land under repo-level `Projects/`, create the
+  broader embedded-engine surface (`include`, `modules`, `source`, `scripts`,
+  `resource`, `assets`), and emit `project.paths.txt` so file creation/build
+  output can be traced directly from editor logs.
 - Project-local script compilation now searches project and repo engine surfaces
   more honestly instead of assuming a single fragile include root.
 - The Win32 parented multicontext path now requests a grid relayout after pane
   removal, which tightens the first-slot collapse case the older layout was
   leaving behind.
-- The shared GUI palette has moved off the flat gray look toward a richer dark
-  slate treatment, and the smaller Windows backend proof images have been
-  refreshed from the current fullscreen six-context source proof.
+- The shared preview marker and editor preview camera bookkeeping now track
+  per-context state honestly instead of collapsing different panes onto one
+  preview-camera key.
+- The parent shell and editor palette have been pulled back toward a calmer dark
+  treatment, but the README fullscreen six-context proof is intentionally not
+  refreshed in this pass because SDL/SFML proxy-host redock visibility is still
+  an active multicontext follow-up.
 - The Windows parented multicontext path now revalidates on the real child
   surfaces: Raylib/SDL/SFML all undock and redock cleanly in the harness, the
   maximized six-context grid stays fitted, and an early visible `SFML_Window`

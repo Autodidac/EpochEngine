@@ -443,6 +443,7 @@ export namespace epochnamespace::sdlcontext
                 const HDC previousHdc = ctx->windowData->hdc;
                 ctx->windowData->hwnd = sdlcontext.hwnd;
                 ctx->windowData->host_hwnd = hostWnd;
+                ctx->windowData->hwndChild = sdlcontext.hwnd;
                 ctx->windowData->hdc = nullptr;
                 ctx->hdc = nullptr;
 
@@ -554,6 +555,13 @@ export namespace epochnamespace::sdlcontext
                 sdlcontext.hwnd, nullptr, 0, 0, width, height,
                 SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
+            // Keep SDL's internal window/backbuffer size aligned with the dock slot
+            // before the first present so startup does not wait on resize.
+            SDL_SetWindowSize(sdlcontext.window, width, height);
+            RedrawWindow(
+                sdlcontext.hwnd, nullptr, nullptr,
+                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+
             if (sdlcontext.onResize)
                 sdlcontext.onResize(width, height);
 
@@ -563,7 +571,7 @@ export namespace epochnamespace::sdlcontext
             if (sdlcontext.parent)
                 PostMessage(sdlcontext.parent, WM_SIZE, 0, MAKELPARAM(width, height));
 
-            ::ShowWindow(hostWnd, SW_SHOWNA);
+            ::ShowWindow(hostWnd, SW_HIDE);
         }
 #endif
 

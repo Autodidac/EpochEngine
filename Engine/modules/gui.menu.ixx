@@ -546,8 +546,7 @@ export namespace epochnamespace::menu
                 const auto pos = position_for_index(i);
                 gui::set_cursor({ float(pos.first), float(pos.second) });
 
-                std::string label{ descriptors[i].label };
-                if (size_t(i) == selection) label = "> " + label + " <";
+                const std::string label{ descriptors[i].label };
 
                 if (gui::button(label, descriptors[i].size)) {
                     selection = size_t(i);
@@ -834,9 +833,7 @@ export namespace epochnamespace::menu
                         selection = static_cast<std::size_t>(i);
                 }
 
-                std::string label{ d.label };
-                if (static_cast<int>(selection) == i)
-                    label = "> " + label + " <";
+                const std::string label{ d.label };
 
                 if (gui::button(label, d.size))
                 {
