@@ -40,6 +40,32 @@ Staging captures are not curated truth. Review them, promote the good parts,
 and delete outdated or bad training artifacts when the training direction
 changes.
 
+## Local self-rebuilding direction
+
+Treat "self-rebuilding" as gated iteration over versioned artifacts rather than
+as an unconstrained model rewriting itself.
+
+- keep a fast seed/runtime model available for always-on local engine tasks
+- use stronger on-demand teacher/helper models for critique, labeling, and
+  candidate generation
+- let the verifier own promotion decisions through build, runtime, and scenario
+  evidence
+- prefer adapters, prompts, datasets, tool schemas, and evals as the mutable
+  artifacts instead of treating dense base weights as the first thing to rewrite
+
+## Episode capture shape
+
+When the MCP/control layer or other AI-assisted tooling performs bounded engine
+work, the capture format should preserve enough structure to replay and score
+that work later:
+
+- task specification and constraints
+- repo/toolchain/workspace/model snapshot
+- MCP tool registry or schema snapshot
+- interaction trace including tool calls, arguments, outputs, and failures
+- verifier outputs such as build, tests, smoke, replay, or scenario results
+- promotion/discard decision plus model lineage
+
 ## Working smoke pattern
 
 1. Build `ConsoleApplication1 | Debug | x64`

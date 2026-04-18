@@ -1,4 +1,4 @@
-# Epoch Roadmap
+﻿# Epoch Roadmap
 
 ## Table of Contents
 
@@ -112,6 +112,10 @@ stack.
 - async/task-friendly work partitioning
 - temporal history and reconstruction
 - stronger resource binding paths where supported
+- keep OpenGL as the current six-month 2D shipping/golden path while Vulkan
+  remains a separate parity/migration track
+- keep the software renderer usable as a correctness/capture oracle where that
+  proof is cheaper or more deterministic than GPU parity
 
 ### Standard or Extended only
 
@@ -133,6 +137,11 @@ These remain support-tier or project-opt-in work, not the default baseline.
   abandoning the broader engine mission
 - use the 2D priority track to accelerate solo-developer usefulness while the
   full renderer and tooling stack keeps maturing
+- treat the 2D lane as a vertical slice through core engine primitives such as
+  time, resources, render submission, input, simulation, save/load, and tooling
+  instead of building a separate 2D-only subsystem universe
+- use the 2D priority lane to harden the real engine spines, not to bypass them
+  with disposable gameplay hacks
 
 ### Naming and module normalization
 
@@ -206,6 +215,10 @@ These remain support-tier or project-opt-in work, not the default baseline.
       top of the current graph surfaces.
 - [ ] Use this surface to converge backend behavior across OpenGL, Vulkan,
       software, SDL, SFML, and Raylib instead of letting them drift.
+- [ ] Keep the six-month 2D track on the shared staged renderer order instead of
+      inventing a separate 2D renderer philosophy: visibility -> surface ->
+      lighting -> temporal/post -> present should still describe the 2D lane,
+      even when some stages begin as lightweight specializations.
 - [x] Keep parented multicontext behavior honest: the visible pane should not
       degrade into fake extra dock wrappers or misleading nested windows. The
       current stable rule is real child-surface panes for `GLFW30`, `SDL_app`,
@@ -238,14 +251,25 @@ These remain support-tier or project-opt-in work, not the default baseline.
 
 - [ ] Standardize exactly two in-engine AI roles:
       internal EpochBot and local MCP/control bots.
+- [ ] Treat the practical local AI stack as a gated seed/teacher/verifier
+      architecture even while only two roles exist in-engine at runtime: a fast
+      always-on seed/runtime model, stronger on-demand teacher/helper models,
+      and a deterministic verifier/promoter that decides what survives.
 - [ ] Use the MCP/control layer to operate the engine, capture execution traces,
       and produce staged observation records for EpochBot data curation and eval
       generation.
+- [ ] Use MCP tool schemas as the canonical tool-bus contract and trace shape so
+      tool names, arguments, outputs, and failures can be replayed, scored, and
+      promoted into datasets/evals without guesswork.
 - [ ] Separate observation capture from dataset promotion. Treat
       `append_observation_record()`, `append_training_sample()`, and MCP capture
       writes as staged/raw inputs first, then promote reviewed or auto-scored
       records into `Engine/ai/datasets/curated/` and `Engine/ai/evals/` through
       an explicit curation pipeline.
+- [ ] Define an episode-style capture schema for AI-assisted engine work:
+      task spec, repo state, tool registry snapshot, interaction trace, build/
+      runtime/scenario outcomes, promotion decision, and model lineage should be
+      preserved together.
 - [ ] Support pruning, deprecating, and deleting outdated datasets, evals,
       captures, and derived artifacts when goals, schema, or training direction
       change.
@@ -261,6 +285,9 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [ ] Grow toward an engine-owned
       planner -> executor -> builder -> verifier -> gate
       control loop with policy checks, scoring, rollback, and discard rules.
+- [ ] Prefer adapter/prompt/tool/dataset iteration over any unconstrained
+      "model rewrites itself" story. Self-rebuilding in Epoch means gated
+      iteration over versioned artifacts, not blind self-modification.
 - [ ] Persist structured engine and project context as versioned JSON/state
       snapshots, curated datasets, eval suites, and replayable traces so
       EpochBot improves from real engine operation without losing provenance.
@@ -300,6 +327,12 @@ These remain support-tier or project-opt-in work, not the default baseline.
 
 - [ ] Build a SpeedTree-like modular procedural world authoring path on top of
       Epoch's time/node direction.
+- [ ] Build the six-month 2D material/pixel world as a dedicated chunked
+      simulation subsystem with dirty-chunk scheduling instead of trying to
+      represent every cell/material particle as an ECS entity.
+- [ ] Keep ECS/entity-style ownership for macro gameplay actors such as player,
+      NPCs, items, grenades, and interactables, while the cellular/material
+      world remains a specialized dense-grid simulation.
 - [ ] Support time-based and node-based authoring for vegetation, modular world
       generation, and graph-driven procedural assets.
 - [ ] Add editor tooling for graph-driven procedural assets without breaking the
