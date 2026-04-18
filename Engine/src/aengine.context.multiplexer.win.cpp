@@ -359,6 +359,17 @@ namespace
         return pt;
     }
 
+    [[nodiscard]] inline bool drag_distance_exceeded(
+        const POINT& start,
+        const POINT& current,
+        int thresholdPx = 10) noexcept
+    {
+        const long dx = static_cast<long>(current.x) - static_cast<long>(start.x);
+        const long dy = static_cast<long>(current.y) - static_cast<long>(start.y);
+        const long threshold = static_cast<long>(thresholdPx);
+        return (dx * dx) + (dy * dy) >= (threshold * threshold);
+    }
+
     inline void dock_host_window_to_parent(
         HWND hwnd,
         HWND parent,
@@ -2618,12 +2629,11 @@ namespace epochnamespace::core
             if (!drag.originalParent)
                 drag.originalParent = static_cast<HWND>(::GetPropW(hwnd, kEpochDockParentProp));
             drag.lastMousePos = screen_drag_point(hwnd, lParam);
+            drag.dragStartMousePos = drag.lastMousePos;
 
             HWND dragFrame = hwnd;
-            if (window && is_sfml_proxy_detached(window) && window->host_hwnd)
+            if (window && is_sfml_proxy_candidate(window) && window->host_hwnd)
                 dragFrame = window->host_hwnd;
-            else if (window && is_sfml_proxy_candidate(window) && window->hwndChild)
-                dragFrame = window->hwndChild;
 
             RECT dragFrameRect{};
             ::GetWindowRect(dragFrame, &dragFrameRect);
@@ -2654,13 +2664,15 @@ namespace epochnamespace::core
             }
 
             drag.lastMousePos = pt;
+            const bool proxyDragActivated =
+                window
+                && is_sfml_proxy_candidate(window)
+                && drag_distance_exceeded(drag.dragStartMousePos, pt);
 
             RECT wndRect{};
             HWND dragFrame = hwnd;
-            if (is_sfml_proxy_detached(window) && window->host_hwnd)
+            if (window && is_sfml_proxy_candidate(window) && window->host_hwnd)
                 dragFrame = window->host_hwnd;
-            else if (is_sfml_proxy_candidate(window) && window->hwndChild)
-                dragFrame = window->hwndChild;
             ::GetWindowRect(dragFrame, &wndRect);
 
             const int newX = pt.x - drag.dragWindowOffset.x;
@@ -2694,12 +2706,30 @@ namespace epochnamespace::core
                     }
                     else if (is_sfml_proxy_candidate(window))
                     {
-                        // Docked proxy panes stay anchored in the parent until the pointer
-                        // actually leaves the grid. The detached host then follows the same
-                        // screen-space cursor offset.
-                        drag.proxyUndockPending = false;
-                        drag.proxyRedockPending = false;
-                        ::SetFocus(hwnd);
+                        if (proxyDragActivated)
+                        {
+                            if (::IsZoomed(drag.originalParent) != FALSE)
+                                ::ShowWindow(drag.originalParent, SW_RESTORE);
+                            drag.proxyRedockPending = false;
+                            if (!drag.proxyUndockPending)
+                            {
+                                post_proxy_host_command(
+                                    window,
+                                    ProxyDockCmd::Undock,
+                                    drag.originalParent,
+                                    newX,
+                                    newY,
+                                    clientW,
+                                    clientH);
+                                drag.proxyUndockPending = true;
+                            }
+                        }
+                        else
+                        {
+                            drag.proxyUndockPending = false;
+                            drag.proxyRedockPending = false;
+                            ::SetFocus(hwnd);
+                        }
                     }
                     else if (::GetParent(hwnd) != drag.originalParent)
                     {
@@ -2893,9 +2923,13 @@ namespace epochnamespace::core
                     if (::GetCursorPos(&cursor) != FALSE)
                         releasePoint = cursor;
                 }
+                const bool proxyDragActivated =
+                    window
+                    && is_sfml_proxy_candidate(window)
+                    && drag_distance_exceeded(drag.dragStartMousePos, releasePoint);
                 RECT wndRect{};
                 HWND releaseFrame = hwnd;
-                if (is_sfml_proxy_detached(window))
+                if (window && is_sfml_proxy_candidate(window) && window->host_hwnd)
                     releaseFrame = window->host_hwnd;
                 ::GetWindowRect(releaseFrame, &wndRect);
                 ::ReleaseCapture();
@@ -2903,6 +2937,7 @@ namespace epochnamespace::core
                 drag.dragging = false;
                 drag.draggedWindow = nullptr;
                 drag.originalParent = nullptr;
+                drag.dragStartMousePos = POINT{};
                 drag.proxyUndockPending = false;
                 drag.proxyRedockPending = false;
 
@@ -2920,6 +2955,7 @@ namespace epochnamespace::core
                         wndRect.top + ((wndRect.bottom - wndRect.top) / 2)
                     };
                     const bool centerInsideParent = point_in_rect(parentRect, windowCenter);
+                    const bool releaseOutsideParent = !should_redock_to_parent(originalParent, releasePoint, wndRect);
                     const bool wantsRedock = ((window && is_sfml_proxy_detached(window))
                         || ((!window || !is_sfml_proxy_candidate(window)) && ::GetParent(hwnd) != originalParent))
                         && should_redock_to_parent(originalParent, releasePoint, wndRect);
@@ -2982,7 +3018,11 @@ namespace epochnamespace::core
                         if (auto* mgr = s_activeInstance)
                             mgr->HandleResize(hwnd, clientW, clientH);
                     }
-                    else if (window && is_sfml_proxy_candidate(window) && !is_sfml_proxy_detached(window))
+                    else if (window
+                        && is_sfml_proxy_candidate(window)
+                        && !is_sfml_proxy_detached(window)
+                        && proxyDragActivated
+                        && releaseOutsideParent)
                     {
                         if (::IsZoomed(originalParent) != FALSE)
                             ::ShowWindow(originalParent, SW_RESTORE);

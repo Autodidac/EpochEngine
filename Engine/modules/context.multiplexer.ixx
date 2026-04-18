@@ -99,6 +99,7 @@ namespace epochnamespace::core
     {
         bool dragging = false;
         POINT lastMousePos{};
+        POINT dragStartMousePos{};
         POINT dragWindowOffset{};
         HWND draggedWindow = nullptr;
         HWND originalParent = nullptr;

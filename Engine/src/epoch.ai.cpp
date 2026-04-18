@@ -343,6 +343,7 @@ namespace epoch::ai
                 WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
             if (!hSession) throw std::runtime_error("WinHTTP: WinHttpOpen failed");
+            (void)WinHttpSetTimeouts(hSession, 10000, 10000, 15000, 180000);
 
             HINTERNET hConnect = WinHttpConnect(hSession, u.host.c_str(), u.port, 0);
             if (!hConnect)
@@ -410,13 +411,23 @@ namespace epoch::ai
             {
                 DWORD avail = 0;
                 if (!WinHttpQueryDataAvailable(hRequest, &avail))
-                    break;
+                {
+                    WinHttpCloseHandle(hRequest);
+                    WinHttpCloseHandle(hConnect);
+                    WinHttpCloseHandle(hSession);
+                    throw std::runtime_error("WinHTTP: WinHttpQueryDataAvailable failed");
+                }
                 if (avail == 0) break;
 
                 std::string buf(avail, '\0');
                 DWORD read = 0;
                 if (!WinHttpReadData(hRequest, buf.data(), avail, &read))
-                    break;
+                {
+                    WinHttpCloseHandle(hRequest);
+                    WinHttpCloseHandle(hConnect);
+                    WinHttpCloseHandle(hSession);
+                    throw std::runtime_error("WinHTTP: WinHttpReadData failed");
+                }
                 buf.resize(read);
                 resp += buf;
             }
@@ -435,6 +446,7 @@ namespace epoch::ai
                 WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
             if (!hSession) throw std::runtime_error("WinHTTP: WinHttpOpen failed");
+            (void)WinHttpSetTimeouts(hSession, 10000, 10000, 15000, 180000);
 
             HINTERNET hConnect = WinHttpConnect(hSession, u.host.c_str(), u.port, 0);
             if (!hConnect)
@@ -498,13 +510,23 @@ namespace epoch::ai
             {
                 DWORD avail = 0;
                 if (!WinHttpQueryDataAvailable(hRequest, &avail))
-                    break;
+                {
+                    WinHttpCloseHandle(hRequest);
+                    WinHttpCloseHandle(hConnect);
+                    WinHttpCloseHandle(hSession);
+                    throw std::runtime_error("WinHTTP: WinHttpQueryDataAvailable failed");
+                }
                 if (avail == 0) break;
 
                 std::string buf(avail, '\0');
                 DWORD read = 0;
                 if (!WinHttpReadData(hRequest, buf.data(), avail, &read))
-                    break;
+                {
+                    WinHttpCloseHandle(hRequest);
+                    WinHttpCloseHandle(hConnect);
+                    WinHttpCloseHandle(hSession);
+                    throw std::runtime_error("WinHTTP: WinHttpReadData failed");
+                }
                 buf.resize(read);
                 resp += buf;
             }
@@ -955,7 +977,23 @@ namespace epoch::ai
             if (!last.empty())
                 return last;
 
-            return trim(extract_openai_choice_message_content(response));
+            if (const std::string openaiChoice = trim(extract_openai_choice_message_content(response)); !openaiChoice.empty())
+                return openaiChoice;
+
+            if (const std::string directContent = trim(extract_json_string_field_after(sv, "\"content\"")); !directContent.empty())
+                return directContent;
+
+            if (const std::string directText = trim(extract_json_string_field_after(sv, "\"text\"")); !directText.empty())
+                return directText;
+
+            if (const std::string reasoning = trim(extract_json_string_field_after(sv, "\"reasoning_content\"")); !reasoning.empty())
+            {
+                if (const std::string fallback = reasoning_fallback(reasoning); !fallback.empty())
+                    return fallback;
+                return reasoning;
+            }
+
+            return {};
         }
 
         static std::string lmstudio_chat_complete(const std::string& endpoint_full,
@@ -975,6 +1013,7 @@ namespace epoch::ai
                 if (includeReasoning)
                     body += "\"reasoning\":\"off\",";
                 body += "\"max_output_tokens\":128,";
+                body += "\"stream\":false,";
                 body += "\"store\":false";
                 body += "}";
                 return body;
@@ -995,7 +1034,23 @@ namespace epoch::ai
 #endif
                 if (rawResponse)
                     *rawResponse = resp;
-                return trim(extract_lmstudio_message_content(resp));
+                const std::string parsed = trim(extract_lmstudio_message_content(resp));
+                if (!parsed.empty())
+                    return parsed;
+
+                if (!resp.empty())
+                {
+                    std::string snippet = trim(resp.substr(0, (std::min)(resp.size(), static_cast<std::size_t>(240))));
+                    if (snippet.empty())
+                        snippet = "(non-empty body with no decodable content)";
+                    std::string warn = "LM Studio reply body could not be decoded. bytes=";
+                    warn += std::to_string(resp.size());
+                    warn += " snippet=";
+                    warn += snippet;
+                    core::log::warn("ai", epoch::string_view{warn.data(), warn.size()});
+                }
+
+                return {};
             };
 
             try

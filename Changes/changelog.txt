@@ -1,6 +1,9 @@
 # Epoch Changelog
 
 ## [Unreleased]
+- Reworked the Win32 SDL/SFML proxy drag contract around the real elevated host hierarchy: intentional drag now measures from the visible proxy host, the host can undock as a true top-level shell without waiting to cross the parent boundary, and redock still resolves on release back into the parented slot.
+- Hardened the LM Studio `/api/v1/chat` path with explicit non-stream requests, longer WinHTTP receive timeouts, stricter HTTP read failure handling, and broader response-content fallbacks/logging so slow larger-model warmups are less likely to collapse into a silent `(empty reply)` in the editor chat.
+- Added roadmap/runtime/audit guidance for the next backend-lifecycle target: editor should converge toward a single-context OpenGL path, launcher toward a single-context software path, switching should be explicit, and inactive backends should be torn down instead of left running in the background.
 - Restored the launcher's older classic steel palette through a scoped GUI theme path, so the launcher can keep its familiar look without forcing the editor back off the darker neutral tool palette.
 - Added launcher/editor theme-split guidance to the README, runtime operations doc, and roadmap, and wrote down the future settings-level theme-selector direction as an independent launcher/editor choice instead of one global toggle.
 - Corrected the research-intake wording so the repo no longer treats `Changes/` as the default planning-import home or `botface.html` as Epoch roadmap truth by default; staged research now points toward a neutral `workspace/research/staged/` path and reviewed promotion.

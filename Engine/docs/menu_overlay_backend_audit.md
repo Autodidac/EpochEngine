@@ -15,4 +15,7 @@ This note tracks practical GUI parity across the currently active backends.
 
 - Fix backend-specific GUI/render issues locally where possible.
 - Keep atlas upload, clear/present behavior, and input scaling aligned across the active backends.
+- Audit default shell backend behavior as well as parity: editor OpenGL,
+  launcher software, explicit switching, and full teardown of inactive
+  backends should all stay visible in backend review notes.
 - Do not let retired archive-era UI code become the accidental source of truth again.

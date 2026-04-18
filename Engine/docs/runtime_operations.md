@@ -13,6 +13,10 @@ the same engine-owned path.
   in `aengineconfig_flags.md`
 - the Windows parented multicontext host should fit the active desktop work area
   by default so the full context matrix remains visible on baseline hardware
+- the longer-term shell default should converge toward one active backend at a
+  time: editor favors a single-context OpenGL path, launcher favors a
+  single-context software path, backend switching is explicit, and inactive
+  backends must be torn down instead of running hidden behind the active shell
 
 ## Project-driven runtime direction
 
@@ -56,6 +60,9 @@ the same engine-owned path.
   its classic steel palette while the editor stays on the darker neutral tool
   palette, and any future theme selector should preserve that separation rather
   than forcing one skin across both shells
+- backend ownership should stay equally explicit: switching the live editor to a
+  different backend should tear down the inactive backend rather than leaving it
+  rendering off-screen or parked in the background
 - `aeditor.scene.cpp` should own project profiles, script profiles, runtime
   scene ids, and seed entities
 - `aeditor.cpp` should act as the live shell over that scene/project data, not
@@ -105,6 +112,10 @@ the same engine-owned path.
 - helper `EpochChild` wrappers are implementation detail only:
   they stay hidden while docked and must return hidden under the parent after a
   redock instead of lingering as floating top-level shells
+- SDL3 and SFML3 should keep obeying their elevated host-child hierarchy: the
+  visible proxy host is the movable shell during undock/redock, while the real
+  backend child stays nested inside that shell instead of pretending to be an
+  independent top-level owner
 - Raylib currently uses the direct-child dock contract with a hidden parked host
   rather than a live proxy child, so harness and runtime checks should judge it
   by that honest ownership model instead of forcing the SDL/SFML proxy-child

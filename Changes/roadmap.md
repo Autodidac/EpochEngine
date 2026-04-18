@@ -115,6 +115,11 @@ stack.
   remains a separate parity/migration track
 - keep the software renderer usable as a correctness/capture oracle where that
   proof is cheaper or more deterministic than GPU parity
+- converge shell defaults toward one active backend at a time: editor should
+  favor a single-context OpenGL tool path, launcher should favor a
+  single-context software shell, backend switching should be explicit, and
+  inactive backends should be fully torn down instead of running hidden in the
+  background
 
 ### Standard or Extended only
 
@@ -218,6 +223,9 @@ These remain support-tier or project-opt-in work, not the default baseline.
       top of the current graph surfaces.
 - [ ] Use this surface to converge backend behavior across OpenGL, Vulkan,
       software, SDL, SFML, and Raylib instead of letting them drift.
+- [ ] Make backend ownership explicit in the live tooling surface so the active
+      backend is obvious, switching is deliberate, and inactive backends are
+      torn down/recreated instead of parked invisibly behind the current shell.
 - [ ] Keep the six-month 2D track on the shared staged renderer order instead of
       inventing a separate 2D renderer philosophy: visibility -> surface ->
       lighting -> temporal/post -> present should still describe the 2D lane,
@@ -332,6 +340,10 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [ ] Add a settings-level theme selector only after scoped GUI theme ownership
       is stable, and keep launcher/editor choices independent rather than
       collapsing them into one shared toggle.
+- [ ] Keep launcher/editor backend defaults intentionally separate as the shell
+      matures: launcher should bias toward a single-context software path,
+      editor should bias toward a single-context OpenGL path, and future backend
+      switching must not leave retired contexts running in the background.
 
 ## Phase 7 - Procedural World and Time-Node Authoring
 
