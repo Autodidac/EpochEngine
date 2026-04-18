@@ -100,6 +100,8 @@ export namespace epoch::ai
     void append_training_sample(std::string_view prompt, std::string_view answer, std::string_view source = "win32_chat_panel");
     [[nodiscard]] std::string send_to_bot(const std::string& user_text);
     [[nodiscard]] std::string default_workspace_root();
+    [[nodiscard]] std::string research_staging_root();
+    [[nodiscard]] std::string iteration_packet_root();
     [[nodiscard]] std::string curated_datasets_root();
     [[nodiscard]] std::string evals_root();
     [[nodiscard]] std::string tokenizer_root();
@@ -116,6 +118,7 @@ export namespace epoch::ai
     [[nodiscard]] ModelManifest active_model_manifest();
     [[nodiscard]] TrainingPaths default_training_paths();
     void append_mcp_capture(const McpCaptureRecord& record);
+    [[nodiscard]] std::string stage_iteration_packet(const IterationPacket& packet);
     [[nodiscard]] bool promote_mcp_capture_record(const McpCaptureRecord& record, std::string_view dataset_name = "epoch_mcp_curated");
     [[nodiscard]] bool promote_dataset_record(const DatasetRecord& record, std::string_view dataset_name = "epoch_editor_curated");
     [[nodiscard]] bool promote_eval_case(const EvalCase& record, std::string_view suite_name = "editor_ai_smoke");

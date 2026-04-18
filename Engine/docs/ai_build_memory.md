@@ -28,8 +28,10 @@ Repo-safe:
 Local-only compiled artifacts:
 
 - `workspace/ai/checkpoints/`
+- `workspace/ai/iterations/`
 - `workspace/ai/models/`
 - `workspace/ai/cache/`
+- `workspace/research/staged/`
 
 Raw/staging capture:
 
@@ -39,6 +41,10 @@ Raw/staging capture:
 Staging captures are not curated truth. Review them, promote the good parts,
 and delete outdated or bad training artifacts when the training direction
 changes.
+
+Iteration packets are staged truth only. They are useful because they bind one
+task, one project snapshot, one model/provider snapshot, and one set of
+evidence paths together before any later build/verify/promotion loop happens.
 
 ## Local self-rebuilding direction
 
@@ -65,6 +71,17 @@ that work later:
 - interaction trace including tool calls, arguments, outputs, and failures
 - verifier outputs such as build, tests, smoke, replay, or scenario results
 - promotion/discard decision plus model lineage
+
+The editor AI workspace now stages the first lightweight version of that under
+`workspace/ai/iterations/<packet>/` with:
+
+- `iteration.json` for machine-readable provenance
+- `task.md` for quick human/helper review
+- current project/scene/script context
+- current provider/model/manifest snapshot
+- current raw capture / MCP capture / curated dataset / eval roots
+- concrete evidence paths such as project manifest, build log, output target,
+  script source, and scene path
 
 ## Working smoke pattern
 

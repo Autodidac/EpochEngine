@@ -3,8 +3,9 @@
 ## [Unreleased]
 - Restored the launcher's older classic steel palette through a scoped GUI theme path, so the launcher can keep its familiar look without forcing the editor back off the darker neutral tool palette.
 - Added launcher/editor theme-split guidance to the README, runtime operations doc, and roadmap, and wrote down the future settings-level theme-selector direction as an independent launcher/editor choice instead of one global toggle.
-- Folded the newest staged planning inputs into the roadmap by provenance: the new `Changes/*.pdf` research drops and `botface.html` are now tracked as reference inputs that still need a real import/review path before they rewrite roadmap or dataset truth.
+- Corrected the research-intake wording so the repo no longer treats `Changes/` as the default planning-import home or `botface.html` as Epoch roadmap truth by default; staged research now points toward a neutral `workspace/research/staged/` path and reviewed promotion.
 - Parsed the current strategy PDFs directly and folded their concrete guidance into the roadmap and AI memory: 2D now stays framed as a vertical slice through real engine spines, chunked cellular simulation is preferred over ECS-per-cell, OpenGL remains the six-month 2D golden path with software as a correctness oracle, and the local AI loop is written down as a gated seed/teacher/verifier system instead of vague self-coding language.
+- Added the first explicit AI iteration-packet path under `workspace/ai/iterations/` and surfaced it in the editor AI workspace, so staged task packets now preserve project/model/capture/evidence context in `iteration.json` and `task.md` before any later promotion step.
 
 ## [v0.83.83]
 - Corrected the full-grid Win32 harness contract for Raylib so it now treats the docked pane honestly as a direct child with a hidden parked host, instead of falsely expecting a live proxy child where Raylib does not use one.

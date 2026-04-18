@@ -42,10 +42,12 @@ module;
 #endif
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <cstdio>
 #include <cctype>
 #include <cstdint>
+#include <ctime>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -271,6 +273,22 @@ namespace epoch::ai
             const bool ok = std::fwrite(contents.data(), 1, contents.size(), handle) == contents.size();
             std::fclose(handle);
             return ok;
+        }
+
+        static std::string utc_timestamp_slug()
+        {
+            const std::time_t now = std::time(nullptr);
+            std::tm utc{};
+#if defined(_WIN32)
+            gmtime_s(&utc, &now);
+#else
+            gmtime_r(&now, &utc);
+#endif
+
+            char buffer[32]{};
+            if (std::strftime(buffer, sizeof(buffer), "%Y%m%d-%H%M%SZ", &utc) == 0)
+                return "timestamp";
+            return buffer;
         }
 
 #if defined(_WIN32)
@@ -1151,6 +1169,16 @@ namespace epoch::ai
 #endif
     }
 
+    std::string research_staging_root()
+    {
+        return default_workspace_root() + "/research/staged";
+    }
+
+    std::string iteration_packet_root()
+    {
+        return default_workspace_root() + "/ai/iterations";
+    }
+
     std::string curated_datasets_root()
     {
         return "Engine/ai/datasets/curated";
@@ -1326,6 +1354,101 @@ namespace epoch::ai
                 core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
             }
         }
+    }
+
+    std::string stage_iteration_packet(const IterationPacket& packet)
+    {
+        const std::string packetSlug = slugify(
+            packet.packet_name.empty()
+                ? (packet.project_id.empty() ? std::string("epoch-iteration") : packet.project_id + "-iteration")
+                : packet.packet_name);
+        const std::string timestamp = utc_timestamp_slug();
+        const std::filesystem::path packetDir =
+            std::filesystem::path(iteration_packet_root()) / (packetSlug + "-" + timestamp);
+        const std::filesystem::path jsonFile = packetDir / "iteration.json";
+        const std::filesystem::path taskFile = packetDir / "task.md";
+
+        std::ostringstream json;
+        json << "{\n";
+        json << "  \"status\": \"staged\",\n";
+        json << "  \"created_utc\": \"" << json_escape(timestamp) << "\",\n";
+        json << "  \"packet_name\": \"" << json_escape(packet.packet_name) << "\",\n";
+        json << "  \"task_prompt\": \"" << json_escape(packet.task_prompt) << "\",\n";
+        json << "  \"assistant_hint\": \"" << json_escape(packet.assistant_hint) << "\",\n";
+        json << "  \"operator_notes\": \"" << json_escape(packet.operator_notes) << "\",\n";
+        json << "  \"project_id\": \"" << json_escape(packet.project_id) << "\",\n";
+        json << "  \"project_name\": \"" << json_escape(packet.project_name) << "\",\n";
+        json << "  \"scene_id\": \"" << json_escape(packet.scene_id) << "\",\n";
+        json << "  \"project_root\": \"" << json_escape(packet.project_root) << "\",\n";
+        json << "  \"scene_path\": \"" << json_escape(packet.scene_path) << "\",\n";
+        json << "  \"active_script\": \"" << json_escape(packet.active_script) << "\",\n";
+        json << "  \"build_log_path\": \"" << json_escape(packet.build_log_path) << "\",\n";
+        json << "  \"output_path\": \"" << json_escape(packet.output_path) << "\",\n";
+        json << "  \"provider_summary\": \"" << json_escape(packet.provider_summary) << "\",\n";
+        json << "  \"active_model\": \"" << json_escape(packet.active_model) << "\",\n";
+        json << "  \"manifest_path\": \"" << json_escape(packet.manifest_path) << "\",\n";
+        json << "  \"workspace_root\": \"" << json_escape(packet.workspace_root) << "\",\n";
+        json << "  \"raw_capture_path\": \"" << json_escape(packet.raw_capture_path) << "\",\n";
+        json << "  \"mcp_capture_path\": \"" << json_escape(packet.mcp_capture_path) << "\",\n";
+        json << "  \"checkpoint_root\": \"" << json_escape(packet.checkpoint_root) << "\",\n";
+        json << "  \"model_root\": \"" << json_escape(packet.model_root) << "\",\n";
+        json << "  \"cache_root\": \"" << json_escape(packet.cache_root) << "\",\n";
+        json << "  \"curated_dataset_root\": \"" << json_escape(packet.curated_dataset_root) << "\",\n";
+        json << "  \"eval_root\": \"" << json_escape(packet.eval_root) << "\",\n";
+        json << "  \"evidence_paths\": [";
+        for (std::size_t i = 0; i < packet.evidence_paths.size(); ++i)
+        {
+            if (i != 0)
+                json << ", ";
+            json << "\"" << json_escape(packet.evidence_paths[i]) << "\"";
+        }
+        json << "]\n";
+        json << "}\n";
+
+        std::ostringstream task;
+        task << "# " << (packet.packet_name.empty() ? "Epoch Iteration Packet" : packet.packet_name) << "\n\n";
+        task << "## Task Prompt\n" << (packet.task_prompt.empty() ? "(empty)" : packet.task_prompt) << "\n\n";
+        task << "## Assistant Hint\n" << (packet.assistant_hint.empty() ? "(none)" : packet.assistant_hint) << "\n\n";
+        task << "## Operator Notes\n" << (packet.operator_notes.empty() ? "(none)" : packet.operator_notes) << "\n\n";
+        task << "## Runtime Snapshot\n";
+        task << "- Provider: " << packet.provider_summary << "\n";
+        task << "- Active model: " << (packet.active_model.empty() ? "(detecting)" : packet.active_model) << "\n";
+        task << "- Manifest: " << packet.manifest_path << "\n";
+        task << "- Workspace root: " << packet.workspace_root << "\n";
+        task << "- Raw capture: " << packet.raw_capture_path << "\n";
+        task << "- MCP capture: " << packet.mcp_capture_path << "\n";
+        task << "- Curated datasets: " << packet.curated_dataset_root << "\n";
+        task << "- Eval root: " << packet.eval_root << "\n";
+        task << "- Checkpoints: " << packet.checkpoint_root << "\n";
+        task << "- Local models: " << packet.model_root << "\n";
+        task << "- Cache: " << packet.cache_root << "\n\n";
+        task << "## Project Snapshot\n";
+        task << "- Project id: " << packet.project_id << "\n";
+        task << "- Project name: " << packet.project_name << "\n";
+        task << "- Scene id: " << packet.scene_id << "\n";
+        task << "- Project root: " << packet.project_root << "\n";
+        task << "- Scene path: " << packet.scene_path << "\n";
+        task << "- Active script: " << packet.active_script << "\n";
+        task << "- Build log: " << packet.build_log_path << "\n";
+        task << "- Output path: " << packet.output_path << "\n\n";
+        task << "## Evidence Paths\n";
+        if (packet.evidence_paths.empty())
+        {
+            task << "- (none)\n";
+        }
+        else
+        {
+            for (const auto& path : packet.evidence_paths)
+                task << "- " << path << "\n";
+        }
+
+        if (!write_text_file(jsonFile, json.str()) || !write_text_file(taskFile, task.str()))
+            return {};
+
+        std::string msg = "AI staged iteration packet: ";
+        msg += packetDir.string();
+        core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+        return packetDir.string();
     }
 
     bool promote_dataset_record(const DatasetRecord& record, std::string_view dataset_name)

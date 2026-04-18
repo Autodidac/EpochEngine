@@ -63,18 +63,17 @@ wrappers.
 ## Reference Inputs
 
 - Current steering docs in `README.md` and `Engine/docs/`
-- Deep-research PDF guidance added under `Changes/` for the six-month 2D
-  priority track and solo-engine strategy
-- Additional staged planning inputs under `Changes/`:
-  `EpochEngine Strategy PDF Rewrite Research and Paste-Ready Replacement Text.pdf`
-  and `Locally Hosted Self-Rebuilding LLM System for Games and C++ Engine Automation.pdf`.
-  Treat them as reference inputs with provenance until they are imported through
-  the research/staging path instead of silently rewriting the roadmap from raw
-  binary documents.
-- Local HTML control-surface experiments such as `botface.html` are valid design
-  input for the AI/operator shell direction, but they should be folded back into
-  the staged Epoch planning/evidence flow instead of drifting as unmanaged side
-  interfaces.
+- Deep-research planning material may arrive anywhere in the workspace,
+  including `Changes/`, downloads, local notes, or external scratch surfaces.
+  Treat the current PDFs under `Changes/` as example inputs, not as the default
+  home for research import.
+- Imported research should land first in a staged text/provenance path such as
+  `workspace/research/` before reviewed material is promoted into the real repo
+  docs that need it.
+- Local HTML tools or experiments such as `botface.html` are separate utility
+  surfaces by default. They are not Epoch planning truth unless a reviewed
+  extraction explicitly promotes relevant findings into engine docs or roadmap
+  language.
 - Renderer capability checklist from the April 2026 repo-aligned planning drop;
   use it as a productivity map for renderer/system/tooling follow-up instead of
   letting renderer features drift into disconnected experiments
@@ -159,10 +158,14 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [ ] Add a lightweight research-import path so new PDF/HTML planning material
       can be converted into staged text artifacts with provenance before it
       changes roadmap language, datasets, or automation policy.
-- [ ] Make the research-import path explicit for `Changes/*.pdf` and local HTML
-      planning surfaces such as `botface.html`, including staged extraction,
-      provenance notes, and a reviewed promotion step before those inputs become
-      roadmap or dataset truth.
+- [ ] Make the research-import path generic rather than tied to `Changes/`:
+      raw PDFs/HTML/docs can come from anywhere, staged extraction should land
+      under a neutral import area such as `workspace/research/`, and only
+      reviewed promotions should flow into repo docs, roadmap text, datasets, or
+      automation policy.
+- [ ] Keep utility HTML/tools such as `botface.html` out of the Epoch planning
+      truth path by default; only promote concrete, reviewed findings from those
+      tools when they materially inform the engine roadmap or AI control loop.
 - [ ] Keep helper-model selection and helper-lane count runtime-configurable and
       snapshot that configuration per iteration instead of baking model order
       assumptions into the roadmap itself.
@@ -258,6 +261,10 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [ ] Use the MCP/control layer to operate the engine, capture execution traces,
       and produce staged observation records for EpochBot data curation and eval
       generation.
+- [x] Stage bounded AI work into explicit iteration packets under
+      `workspace/ai/iterations/` so task prompt, project context, model
+      manifest, capture roots, and concrete evidence paths can be reviewed
+      before any promotion decision.
 - [ ] Use MCP tool schemas as the canonical tool-bus contract and trace shape so
       tool names, arguments, outputs, and failures can be replayed, scored, and
       promoted into datasets/evals without guesswork.
@@ -279,6 +286,9 @@ These remain support-tier or project-opt-in work, not the default baseline.
       environments with an explicit
       observe -> propose -> sandbox -> build -> verify -> score -> promote/discard
       loop so mainline behavior remains protected.
+- [x] Surface the current AI iteration/capture/provenance roots directly inside
+      the editor AI workspace so the operator can see where staged packets,
+      raw captures, curated datasets, and eval suites actually live.
 - [ ] Require proof artifacts before any AI-assisted promotion. A promotion must
       have build evidence, runtime evidence, and retained logs/captures tied to
       the exact iteration.

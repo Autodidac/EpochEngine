@@ -1628,18 +1628,31 @@ namespace epochnamespace
         {
             const auto manifest = epoch::ai::active_model_manifest();
             const auto training = epoch::ai::default_training_paths();
+            const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
+            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+            const std::filesystem::path pathsManifest = std::filesystem::path{ editor.projectRoot } / "project.paths.txt";
+            const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
+            const std::string latestPrompt = last_chat_line_with_prefix(chat, "you> ");
+            const std::string latestReply = last_chat_line_with_prefix(chat, "bot> ");
+
             gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
             gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
             gui::property_row("[ai] Local endpoint", manifest.endpoint);
             gui::property_row("[ai] MCP/control manifest", manifest.manifest_path);
+            gui::property_row("[ai] Iteration packets", epoch::ai::iteration_packet_root());
+            gui::property_row("[ai] Research staging", epoch::ai::research_staging_root());
             gui::property_row("[ai] Curated datasets", training.curated_dataset_root);
             gui::property_row("[ai] Eval suites", training.eval_root);
             gui::property_row("[ai] Raw capture", training.local_capture_jsonl);
             gui::property_row("[ai] MCP capture", training.mcp_capture_jsonl);
             gui::property_row("[ai] Local models", training.model_root);
             gui::property_row("[ai] Checkpoints", training.checkpoint_root);
+            gui::property_row("[ai] Active script source", activeScriptSource);
+            gui::property_row("[ai] Active build log", display_project_path(buildLog));
+            gui::property_row("[ai] Active output", display_project_path(outputExe));
             gui::property_row("[ai] Runtime role", "EpochBot");
             gui::property_row("[ai] Control role", "Local MCP/control");
+            gui::property_row("[ai] Seed/helper/verifier", "runtime seed + helper teacher + gated verifier");
             gui::property_row("[ai] Promotion gate", "capture -> review/score -> curate/promote");
             gui::property_row("[ai] Evidence", "build + runtime + retained logs");
             gui::wrapped_label(
@@ -1651,6 +1664,9 @@ namespace epochnamespace
             gui::wrapped_label(
                 "AI-assisted engine changes stay staged and reviewable here: capture first, score or inspect the result, then promote curated datasets/evals intentionally instead of allowing blind write-through automation.",
                 (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(
+                "Iteration packets now stage the current project, scene, script, capture roots, model manifest, and concrete evidence paths into workspace/ai/iterations/ so the control loop has something explicit to build, verify, score, and either promote or discard.",
+                (std::max)(180.0f, log_size.x - 24.0f));
 
             const auto currentMcpRecord = [&]() {
                 return epoch::ai::McpCaptureRecord{
@@ -1661,6 +1677,73 @@ namespace epochnamespace
                     .source_path = editor.projectScenePath.empty() ? editor.projectRoot : editor.projectScenePath
                 };
             };
+            const auto currentIterationPacket = [&]() {
+                std::vector<std::string> evidencePaths;
+                auto addEvidence = [&](const std::string& path) {
+                    if (path.empty())
+                        return;
+                    if (std::find(evidencePaths.begin(), evidencePaths.end(), path) == evidencePaths.end())
+                        evidencePaths.push_back(path);
+                };
+
+                addEvidence(editor.projectManifest);
+                addEvidence(editor.projectRoot);
+                addEvidence(editor.projectScenePath);
+                addEvidence(activeScriptSource);
+                addEvidence(pathsManifest.string());
+                addEvidence(buildLog.string());
+                addEvidence(outputExe.string());
+                addEvidence(training.local_capture_jsonl);
+                addEvidence(training.mcp_capture_jsonl);
+                addEvidence(training.curated_dataset_root);
+                addEvidence(training.eval_root);
+                addEvidence(manifest.manifest_path);
+
+                return epoch::ai::IterationPacket{
+                    .packet_name = editor.projectId.empty() ? std::string("epoch-iteration") : editor.projectId + "-iteration",
+                    .task_prompt = latestPrompt.empty() ? build_ai_scene_prompt(editor) : latestPrompt,
+                    .assistant_hint = latestReply == "(empty reply)" ? std::string{} : latestReply,
+                    .operator_notes = editor.projectBuildStatus.empty()
+                        ? editor.projectStatus
+                        : (editor.projectStatus.empty()
+                            ? editor.projectBuildStatus
+                            : editor.projectBuildStatus + " | " + editor.projectStatus),
+                    .project_id = editor.projectId,
+                    .project_name = editor.projectName,
+                    .scene_id = editor.activeRuntimeScene,
+                    .project_root = editor.projectRoot,
+                    .scene_path = editor.projectScenePath,
+                    .active_script = editor.activeScript,
+                    .build_log_path = buildLog.string(),
+                    .output_path = outputExe.string(),
+                    .provider_summary = epoch::ai::active_provider_summary(),
+                    .active_model = manifest.display_name,
+                    .manifest_path = manifest.manifest_path,
+                    .workspace_root = training.workspace_root,
+                    .raw_capture_path = training.local_capture_jsonl,
+                    .mcp_capture_path = training.mcp_capture_jsonl,
+                    .checkpoint_root = training.checkpoint_root,
+                    .model_root = training.model_root,
+                    .cache_root = training.cache_root,
+                    .curated_dataset_root = training.curated_dataset_root,
+                    .eval_root = training.eval_root,
+                    .evidence_paths = std::move(evidencePaths)
+                };
+            };
+
+            if (gui::button("Stage Iteration Packet", { 220.0f, 30.0f }))
+            {
+                const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
+                if (packetDir.empty())
+                {
+                    push_editor_log(editor, "[ai] Failed to stage iteration packet.");
+                }
+                else
+                {
+                    push_editor_log(editor, "[ai] Staged AI iteration packet.");
+                    push_editor_log(editor, std::string("[ai] Iteration packet path: ") + packetDir);
+                }
+            }
 
             if (gui::button("Capture MCP Snapshot", { 220.0f, 30.0f }))
             {
