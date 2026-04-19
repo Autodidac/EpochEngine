@@ -2708,12 +2708,30 @@ namespace epochnamespace::core
                     }
                     else if (is_sfml_proxy_candidate(window))
                     {
-                        // SDL3/SFML3 proxy panes stay truly docked until the drag
-                        // leaves the parent. Once they escape, the visible proxy
-                        // host becomes the real detached top-level window.
-                        drag.proxyUndockPending = false;
-                        drag.proxyRedockPending = false;
-                        ::SetFocus(hwnd);
+                        if (proxyDragActivated)
+                        {
+                            if (::IsZoomed(drag.originalParent) != FALSE)
+                                ::ShowWindow(drag.originalParent, SW_RESTORE);
+                            drag.proxyRedockPending = false;
+                            if (!drag.proxyUndockPending)
+                            {
+                                post_proxy_host_command(
+                                    window,
+                                    ProxyDockCmd::Undock,
+                                    drag.originalParent,
+                                    newX,
+                                    newY,
+                                    clientW,
+                                    clientH);
+                                drag.proxyUndockPending = true;
+                            }
+                        }
+                        else
+                        {
+                            drag.proxyUndockPending = false;
+                            drag.proxyRedockPending = false;
+                            ::SetFocus(hwnd);
+                        }
                     }
                     else if (::GetParent(hwnd) != drag.originalParent)
                     {

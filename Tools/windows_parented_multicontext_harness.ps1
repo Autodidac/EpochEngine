@@ -417,7 +417,9 @@ function Save-Result([object]$Result, [string]$Destination) {
     if (-not (Test-Path $dir)) {
         New-Item -ItemType Directory -Path $dir | Out-Null
     }
-    $Result | ConvertTo-Json -Depth 8 | Set-Content -Path $Destination -Encoding UTF8
+    $json = $Result | ConvertTo-Json -Depth 8
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Destination, $json, $utf8NoBom)
 }
 
 function Save-WindowScreenshot([IntPtr]$Hwnd, [string]$Destination) {
@@ -522,8 +524,8 @@ function Get-ContentSampleProbe([string]$ImagePath, $ParentRect, $WindowRecord) 
     }
 }
 
-$root = Resolve-Path '.'
-$exe = Join-Path $root ("x64\\{0}\\ConsoleApplication1.exe" -f $Configuration)
+$root = (Resolve-Path '.').Path
+$exe = Join-Path $root ("x64\{0}\ConsoleApplication1.exe" -f $Configuration)
 if (-not (Test-Path $exe)) {
     throw "Missing runtime at $exe"
 }
@@ -544,6 +546,12 @@ $proc = [System.Diagnostics.Process]::Start($psi)
 if (-not $proc) {
     throw 'Failed to launch editor runtime.'
 }
+
+$result = $null
+$stillRunningAfterCloseProbe = $null
+$closeProbeRequested = $false
+$closeProbeTarget = ''
+$outputReady = $false
 
 try {
     Start-Sleep -Seconds 4
@@ -588,7 +596,7 @@ try {
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
         $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         $suffix = if ($Mode -eq 'Single') { "_$Backend" } else { '' }
-        $OutputPath = Join-Path $root ("x64\\{0}\\logs\\multicontext_harness_{1}{2}_{3}.json" -f $Configuration.ToLowerInvariant(), $Mode.ToLowerInvariant(), $suffix, $stamp)
+        $OutputPath = Join-Path $root ("x64\{0}\logs\multicontext_harness_{1}{2}_{3}.json" -f $Configuration.ToLowerInvariant(), $Mode.ToLowerInvariant(), $suffix, $stamp)
     }
 
     $startupScreenshotPath = ''
@@ -645,12 +653,14 @@ try {
     $childrenAfterDrag = Get-DescendantWindows -Parent $parentWindow.Hwnd
     $screenshotPath = ''
 
-    $stillRunningAfterClose = $true
+    $stillRunningAfterCloseProbe = $null
     if (-not $SkipCloseProbe -and $Mode -eq 'Full' -and $sfmlChild) {
+        $closeProbeRequested = $true
+        $closeProbeTarget = 'SFML child WM_CLOSE'
         [void][EpochWin32Harness]::PostMessageW($sfmlChild.Hwnd, $WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero)
-        Start-Sleep -Milliseconds 400
+        Start-Sleep -Milliseconds 600
         $proc.Refresh()
-        $stillRunningAfterClose = -not $proc.HasExited
+        $stillRunningAfterCloseProbe = -not $proc.HasExited
     }
 
     $screenshotPath = [System.IO.Path]::ChangeExtension($OutputPath, '.png')
@@ -667,11 +677,12 @@ try {
         StartupContentProbes = $startupContentProbes
         VisibleChildrenAfterDrag = $childrenAfterDrag | Select-Object Class,Title,Visible,Rect
         Checks = $backendChecks
-        StillRunningAfterClose = $stillRunningAfterClose
+        CloseProbeRequested = $closeProbeRequested
+        CloseProbeTarget = $closeProbeTarget
+        StillRunningAfterCloseProbe = $stillRunningAfterCloseProbe
         ScreenshotPath = $screenshotPath
     }
-    Save-Result -Result $result -Destination $OutputPath
-    Write-Output $OutputPath
+    $outputReady = $true
 }
 finally {
     if ($proc -and -not $proc.HasExited) {
@@ -681,5 +692,18 @@ finally {
             $proc.Kill()
             $proc.WaitForExit()
         }
+    }
+
+    if ($outputReady -and $result) {
+        if ($proc) {
+            $proc.Refresh()
+            $finalStillRunning = -not $proc.HasExited
+        } else {
+            $finalStillRunning = $false
+        }
+
+        $result | Add-Member -Force -NotePropertyName StillRunningAfterClose -NotePropertyValue $finalStillRunning
+        Save-Result -Result $result -Destination $OutputPath
+        Write-Output $OutputPath
     }
 }
