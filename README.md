@@ -356,13 +356,13 @@ Useful entry points:
 # Current snapshot
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source-v0.83.83-1F7A4C?style=for-the-badge" alt="Current source v0.83.83" />
+  <img src="https://img.shields.io/badge/Current_Source-v0.83.84-1F7A4C?style=for-the-badge" alt="Current source v0.83.84" />
   <img src="https://img.shields.io/badge/Project_Shell-Repo_Projects_Wired-2C6A8A?style=for-the-badge" alt="Repo-root project shells wired" />
   <img src="https://img.shields.io/badge/MSVC_Warnings-C5202_Removed-7A5A2F?style=for-the-badge" alt="MSVC C5202 removed" />
 </p>
 
 Highlights:
-- The source tree is now on `v0.83.83`, and this pass removes the lingering
+- The source tree is now on `v0.83.84`, and this pass removes the lingering
   MSVC `C5202` mixed-module warning from `Engine/src/runtime.cpp` instead of
   normalizing compiler noise.
 - The Project workspace now exposes a real child-build path for generated
@@ -384,12 +384,12 @@ Highlights:
   treatment, but the README fullscreen six-context proof is intentionally not
   refreshed in this pass because SDL/SFML proxy-host redock visibility is still
   an active multicontext follow-up.
-- The Windows parented multicontext path now revalidates on the real child
-  surfaces: Raylib/SDL/SFML all undock and redock cleanly in the harness, the
-  maximized six-context grid stays fitted, and an early visible `SFML_Window`
-  close still does not kill the parent editor. The helper `EpochChild` proxy
-  hosts are expected to return hidden under the parent after redock instead of
-  lingering as floating top-level wrappers.
+- The Windows parented multicontext path now has a stronger six-pane proxy-shell
+  proof for SDL/SFML: the visible `EpochChild` shell undocks as a real
+  top-level window, stays with the drag, and can clear the parent bounds in
+  both focused parent runs and the slower all-backends sweep. The harness still
+  uses synthetic mouse messages, so live manual smoke remains the final check
+  before treating this path as truly finished.
 - The AI workspace now promotes staged MCP/control snapshots into curated
   datasets too, instead of leaving that part of the two-role training loop as
   documentation-only.

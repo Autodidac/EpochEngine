@@ -1,6 +1,6 @@
 # Epoch Changelog
 
-## [Unreleased]
+## [v0.83.84]
 - Fixed the six-context Win32 proxy-shell drag path so SDL and SFML can undock from the same visible `EpochChild` shell the user actually grabs in the parented editor, instead of depending on the nested backend child to start the escape. The proxy host is now promoted as a real standalone top-level shell on undock and normalized back into child mode on redock.
 - Corrected the Windows parented harness to drag the visible SDL/SFML proxy shell instead of the nested backend child during multicontext checks, which brings the proof path back in line with the real editor interaction model and restores truthful `MidTopLevel=true` evidence under six-pane load.
 - Reworked the Win32 SDL/SFML proxy drag contract around the real elevated host hierarchy: intentional drag now measures from the visible proxy host, the host can undock as a true top-level shell without waiting to cross the parent boundary, and redock still resolves on release back into the parented slot.
@@ -11,6 +11,9 @@
 - Corrected the research-intake wording so the repo no longer treats `Changes/` as the default planning-import home or `botface.html` as Epoch roadmap truth by default; staged research now points toward a neutral `workspace/research/staged/` path and reviewed promotion.
 - Parsed the current strategy PDFs directly and folded their concrete guidance into the roadmap and AI memory: 2D now stays framed as a vertical slice through real engine spines, chunked cellular simulation is preferred over ECS-per-cell, OpenGL remains the six-month 2D golden path with software as a correctness oracle, and the local AI loop is written down as a gated seed/teacher/verifier system instead of vague self-coding language.
 - Added the first explicit AI iteration-packet path under `workspace/ai/iterations/` and surfaced it in the editor AI workspace, so staged task packets now preserve project/model/capture/evidence context in `iteration.json` and `task.md` before any later promotion step.
+- Completed the focused six-pane SDL/SFML proxy-shell fix: detached drags now stay on the visible `EpochChild` shell, preserve capture through the child-to-top-level transition, and continue following the mouse as real top-level windows instead of freezing inside the parent and auto-redocking on release.
+- Corrected the parented Win32 harness to start proxy drags from the real dock shell, record whether the detached host actually escaped the parent bounds, and wait more honestly for slower cross-thread/backend transitions before judging the run.
+- Revalidated focused SDL and SFML six-pane parent runs against the detached-shell contract, then reran the slower all-backends sweep. Both focused runs and the current full matrix now reach `MidTopLevel=true` and `MidEscapedParentBounds=true` for SDL/SFML, but the harness is still synthetic-message driven and should not outrank live manual smoke forever.
 
 ## [v0.83.83]
 - Corrected the full-grid Win32 harness contract for Raylib so it now treats the docked pane honestly as a direct child with a hidden parked host, instead of falsely expecting a live proxy child where Raylib does not use one.

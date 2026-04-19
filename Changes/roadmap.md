@@ -331,6 +331,11 @@ These remain support-tier or project-opt-in work, not the default baseline.
       Epoch remains a creative software platform as well as a game engine.
 - [ ] Keep backend child-window ownership, padding, clipping, and load
       presentation clean across all active contexts.
+- [ ] Keep SDL3/SFML3 proxy panes behaving like the direct backends in the real
+      six-context parent: the visible `EpochChild` shell should undock as a
+      true top-level window, keep mouse/input control while detached, and only
+      redock on an intentional return/release instead of freezing under the
+      parent bounds.
 - [ ] Keep the parented multicontext shell auto-fitted to the desktop work area
       by default so the honest context matrix stays visible on baseline
       hardware.
@@ -413,7 +418,10 @@ These remain support-tier or project-opt-in work, not the default baseline.
    selector path.
 6. Keep multicontext/backend child-window ownership honest across all active
    backends.
-7. Keep naming cleanup active whenever a touched area can be normalized without
+7. Keep the focused six-pane proxy-shell proof ahead of the all-backends sweep
+   until the harness stops relying on synthetic mouse messages and can validate
+   the same SDL/SFML detach behavior through a closer-to-real input path.
+8. Keep naming cleanup active whenever a touched area can be normalized without
    collateral damage.
 
 ## Acceptance Criteria

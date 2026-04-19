@@ -266,6 +266,18 @@ These should be backed by reusable GUI controls and custom UI powered by an
 automated texture-atlas system, not by hardcoded editor-only tab strips that
 cannot scale.
 
+## Multicontext proxy-shell behavior
+
+- SDL3 and SFML3 use a visible `EpochChild` proxy shell inside the six-context
+  parent rather than exposing the nested backend child directly as the grabbed
+  dock target.
+- The visible proxy shell is the thing that should undock: once dragged outside
+  the parent, it must become a real top-level window, keep mouse/input control,
+  and continue following the drag instead of freezing in place under the parent.
+- Focused six-pane parent validation is the current honest runtime gate for this
+  path. The all-backends sequential harness still needs extra sequencing cleanup
+  after the Raylib pass before it should outrank focused SDL/SFML evidence.
+
 ## Troubleshooting checklist
 
 - verify the expected backend/config macros are enabled

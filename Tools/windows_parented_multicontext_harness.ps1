@@ -225,6 +225,10 @@ function Get-DragContractSnapshot(
     $dockParent = Get-ParentHandleValue $DockHandle
     $hostParent = Get-ParentHandleValue $ProxyHostHandle
     $childParent = Get-ParentHandleValue $ProxyChildHandle
+    $parentRect = Get-WindowRectObject $ParentHwnd
+    $dockRect = if ($DockHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($DockHandle)) { Get-WindowRectObject $DockHandle } else { $null }
+    $hostRect = if ($ProxyHostHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($ProxyHostHandle)) { Get-WindowRectObject $ProxyHostHandle } else { $null }
+    $childRect = if ($ProxyChildHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($ProxyChildHandle)) { Get-WindowRectObject $ProxyChildHandle } else { $null }
 
     $directDocked =
         $dockParent -eq $ParentHwnd -and (
@@ -243,6 +247,14 @@ function Get-DragContractSnapshot(
     } else {
         $dockParent -ne $ParentHwnd
     }
+    $escapedParentBounds = $false
+    if ($midTopLevel -and $hostRect -and $parentRect) {
+        $escapedParentBounds =
+            $hostRect.Left -lt $parentRect.Left -or
+            $hostRect.Top -lt $parentRect.Top -or
+            $hostRect.Right -gt $parentRect.Right -or
+            $hostRect.Bottom -gt $parentRect.Bottom
+    }
 
     [pscustomobject]@{
         UseProxyContract = $useProxyContract
@@ -251,6 +263,11 @@ function Get-DragContractSnapshot(
         ProxyChildParent = $childParent
         Docked = $directDocked -or $proxyDocked
         MidTopLevel = $midTopLevel
+        EscapedParentBounds = $escapedParentBounds
+        ParentRect = $parentRect
+        DockRect = $dockRect
+        ProxyHostRect = $hostRect
+        ProxyChildRect = $childRect
     }
 }
 
@@ -289,11 +306,22 @@ function Invoke-UndockRedock(
         [EpochWin32Harness]::IsWindow($ProxyChildHandle)
     $parentRect = Get-WindowRectObject $ParentHwnd
     $before = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+    $dockRect = if ($DockHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($DockHandle)) { Get-WindowRectObject $DockHandle } else { $null }
     $startX = 20
     $startY = 10
-    Set-ScreenCursorPoint ($parentRect.Left + $startX) ($parentRect.Top + $startY)
+    $dragStartScreenX = if ($dockRect) { $dockRect.Left + $startX } else { $parentRect.Left + $startX }
+    $dragStartScreenY = if ($dockRect) { $dockRect.Top + $startY } else { $parentRect.Top + $startY }
+    Set-ScreenCursorPoint $dragStartScreenX $dragStartScreenY
     [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_LBUTTONDOWN, [IntPtr]$MK_LBUTTON, (Get-LParam $startX $startY))
-    Start-Sleep -Milliseconds 100
+    Start-Sleep -Milliseconds 180
+
+    $edgeScreenX = $parentRect.Right - 8
+    $edgeScreenY = $parentRect.Top + 40
+    Set-ScreenCursorPoint $edgeScreenX $edgeScreenY
+    $edgeTarget = $DockHandle
+    $moveEdge = Convert-ScreenToClientPoint $edgeTarget $edgeScreenX $edgeScreenY
+    [void][EpochWin32Harness]::PostMessageW($edgeTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveEdge.X $moveEdge.Y))
+    Start-Sleep -Milliseconds 140
 
     $outsideScreenX = $parentRect.Right + 120
     $outsideScreenY = $parentRect.Top + 40
@@ -302,19 +330,37 @@ function Invoke-UndockRedock(
     $moveOutside = Convert-ScreenToClientPoint $outsideTarget $outsideScreenX $outsideScreenY
     [void][EpochWin32Harness]::PostMessageW($outsideTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveOutside.X $moveOutside.Y))
     if ($useProxyContract) {
-        $deadline = (Get-Date).AddMilliseconds(1500)
+        $deadline = (Get-Date).AddMilliseconds(4500)
         do {
             $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
             if ($mid.MidTopLevel) {
                 break
             }
-            Start-Sleep -Milliseconds 75
+            Start-Sleep -Milliseconds 120
             Set-ScreenCursorPoint $outsideScreenX $outsideScreenY
             [void][EpochWin32Harness]::PostMessageW($outsideTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveOutside.X $moveOutside.Y))
         } while ((Get-Date) -lt $deadline)
     } else {
-        Start-Sleep -Milliseconds 250
+        Start-Sleep -Milliseconds 400
         $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+    }
+
+    if ($useProxyContract -and $mid.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) {
+        $farOutsideScreenX = $parentRect.Right + 360
+        $farOutsideScreenY = $parentRect.Top + 80
+        $outsideMoveTarget = $ProxyHostHandle
+        $outsideDetachedPoint = Convert-ScreenToClientPoint $outsideMoveTarget $farOutsideScreenX $farOutsideScreenY
+        $outsideDetachedLParam = Get-LParam $outsideDetachedPoint.X $outsideDetachedPoint.Y
+        $deadline = (Get-Date).AddMilliseconds(3500)
+        do {
+            Set-ScreenCursorPoint $farOutsideScreenX $farOutsideScreenY
+            [void][EpochWin32Harness]::PostMessageW($outsideMoveTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, $outsideDetachedLParam)
+            Start-Sleep -Milliseconds 150
+            $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+            if ($mid.EscapedParentBounds) {
+                break
+            }
+        } while ((Get-Date) -lt $deadline)
     }
 
     if (-not [string]::IsNullOrWhiteSpace($MidDragScreenshotPath)) {
@@ -328,13 +374,13 @@ function Invoke-UndockRedock(
     Set-ScreenCursorPoint $insideScreenX $insideScreenY
     [void][EpochWin32Harness]::PostMessageW($moveTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveInside.X $moveInside.Y))
     if ($useProxyContract) {
-        $deadline = (Get-Date).AddMilliseconds(500)
+        $deadline = (Get-Date).AddMilliseconds(2200)
         do {
             $late = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
             if ($late.MidTopLevel) {
                 break
             }
-            Start-Sleep -Milliseconds 75
+            Start-Sleep -Milliseconds 120
             Set-ScreenCursorPoint $insideScreenX $insideScreenY
             $moveTarget = if ($late.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) { $ProxyHostHandle } else { $DockHandle }
             $moveInside = Convert-ScreenToClientPoint $moveTarget $insideScreenX $insideScreenY
@@ -348,14 +394,16 @@ function Invoke-UndockRedock(
     $releaseTarget = if ($useProxyContract -and $late.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) { $ProxyHostHandle } else { $DockHandle }
     $releasePoint = Convert-ScreenToClientPoint $releaseTarget $insideScreenX $insideScreenY
     [void][EpochWin32Harness]::PostMessageW($releaseTarget, $WM_LBUTTONUP, [IntPtr]::Zero, (Get-LParam $releasePoint.X $releasePoint.Y))
-    $end = Wait-ForDragContractState -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -Predicate { param($s) $s.Docked } -TimeoutMs 900
+    $end = Wait-ForDragContractState -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -Predicate { param($s) $s.Docked } -TimeoutMs 2500
 
     [pscustomobject]@{
         ContractMode = if ($useProxyContract) { 'proxy-release-redock' } else { 'direct-live-redock' }
         MidDragScreenshotPath = $MidDragScreenshotPath
         BeforeDocked = $before.Docked
         MidTopLevel = $mid.MidTopLevel
+        MidEscapedParentBounds = $mid.EscapedParentBounds
         LateDetached = $late.MidTopLevel
+        LateEscapedParentBounds = $late.EscapedParentBounds
         LateRedocked = $late.Docked
         EndRedocked = $end.Docked
         DockHandleParentBefore = $before.DockHandleParent
@@ -370,6 +418,12 @@ function Invoke-UndockRedock(
         ProxyChildParentMid = $mid.ProxyChildParent
         ProxyChildParentLate = $late.ProxyChildParent
         ProxyChildParentEnd = $end.ProxyChildParent
+        MidDockRect = $mid.DockRect
+        MidProxyHostRect = $mid.ProxyHostRect
+        MidProxyChildRect = $mid.ProxyChildRect
+        LateDockRect = $late.DockRect
+        LateProxyHostRect = $late.ProxyHostRect
+        LateProxyChildRect = $late.ProxyChildRect
     }
 }
 

@@ -193,12 +193,23 @@ Expected smoke behavior:
 - when validating proxy-child backends, prefer the new `ContractMode` and
   `LateDetached` fields over older assumptions that every backend should already
   be redocked before mouse release
+- start proxy-shell drags from the real visible dock shell, not from the parent
+  origin or the nested backend child, otherwise the harness invents a bogus
+  drag offset and can make SDL/SFML look frozen inside the parent when the
+  runtime is actually waiting on the wrong synthetic cursor path
 - when proving dock -> undock -> redock in the parented harness, poll for the
   actual detached/redocked state transition instead of assuming a fixed sleep is
   enough under full-grid renderer load
+- for SDL/SFML six-pane proof, require both `MidTopLevel=true` and
+  `MidEscapedParentBounds=true`; a top-level proxy shell that still sits fully
+  inside the parent bounds is not honest detached proof
 - if the harness reports a docking mismatch, cross-check the engine log before
   locking in a runtime conclusion; SFML full-grid runs in particular have shown
   real undock/redock commands completing after a too-early harness sample
+- treat focused SDL/SFML six-pane parent runs as the current trusted multicontext
+  runtime gate until the harness grows a closer-to-real input path; the slower
+  all-backends sequential sweep is useful again, but it still relies on
+  synthetic mouse messages and should not be the only signoff
 - if the maximized full-grid parented pass times out waiting for expected panes,
   treat that as a real blocker and do not substitute reduced-geometry proof for
   a maximize-ready signoff
