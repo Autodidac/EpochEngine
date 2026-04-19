@@ -279,7 +279,8 @@ function Invoke-UndockRedock(
     [IntPtr]$DockHandle,
     [IntPtr]$ParentHwnd,
     [IntPtr]$ProxyHostHandle = [IntPtr]::Zero,
-    [IntPtr]$ProxyChildHandle = [IntPtr]::Zero
+    [IntPtr]$ProxyChildHandle = [IntPtr]::Zero,
+    [string]$MidDragScreenshotPath = ''
 ) {
     $useProxyContract =
         $ProxyHostHandle -ne [IntPtr]::Zero -and
@@ -296,9 +297,10 @@ function Invoke-UndockRedock(
 
     $outsideScreenX = $parentRect.Right + 120
     $outsideScreenY = $parentRect.Top + 40
-    $moveOutside = Convert-ScreenToClientPoint $DockHandle $outsideScreenX $outsideScreenY
     Set-ScreenCursorPoint $outsideScreenX $outsideScreenY
-    [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveOutside.X $moveOutside.Y))
+    $outsideTarget = $DockHandle
+    $moveOutside = Convert-ScreenToClientPoint $outsideTarget $outsideScreenX $outsideScreenY
+    [void][EpochWin32Harness]::PostMessageW($outsideTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveOutside.X $moveOutside.Y))
     if ($useProxyContract) {
         $deadline = (Get-Date).AddMilliseconds(1500)
         do {
@@ -308,18 +310,23 @@ function Invoke-UndockRedock(
             }
             Start-Sleep -Milliseconds 75
             Set-ScreenCursorPoint $outsideScreenX $outsideScreenY
-            [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveOutside.X $moveOutside.Y))
+            [void][EpochWin32Harness]::PostMessageW($outsideTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveOutside.X $moveOutside.Y))
         } while ((Get-Date) -lt $deadline)
     } else {
         Start-Sleep -Milliseconds 250
         $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($MidDragScreenshotPath)) {
+        [void](Save-WindowScreenshot -Hwnd $ParentHwnd -Destination $MidDragScreenshotPath)
+    }
+
     $insideScreenX = $parentRect.Left + 60
     $insideScreenY = $parentRect.Top + 60
-    $moveInside = Convert-ScreenToClientPoint $DockHandle $insideScreenX $insideScreenY
+    $moveTarget = if ($useProxyContract -and $mid.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) { $ProxyHostHandle } else { $DockHandle }
+    $moveInside = Convert-ScreenToClientPoint $moveTarget $insideScreenX $insideScreenY
     Set-ScreenCursorPoint $insideScreenX $insideScreenY
-    [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveInside.X $moveInside.Y))
+    [void][EpochWin32Harness]::PostMessageW($moveTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveInside.X $moveInside.Y))
     if ($useProxyContract) {
         $deadline = (Get-Date).AddMilliseconds(500)
         do {
@@ -329,18 +336,23 @@ function Invoke-UndockRedock(
             }
             Start-Sleep -Milliseconds 75
             Set-ScreenCursorPoint $insideScreenX $insideScreenY
-            [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveInside.X $moveInside.Y))
+            $moveTarget = if ($late.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) { $ProxyHostHandle } else { $DockHandle }
+            $moveInside = Convert-ScreenToClientPoint $moveTarget $insideScreenX $insideScreenY
+            [void][EpochWin32Harness]::PostMessageW($moveTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveInside.X $moveInside.Y))
         } while ((Get-Date) -lt $deadline)
     } else {
         Start-Sleep -Milliseconds 250
         $late = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
     }
 
-    [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_LBUTTONUP, [IntPtr]::Zero, (Get-LParam $moveInside.X $moveInside.Y))
+    $releaseTarget = if ($useProxyContract -and $late.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) { $ProxyHostHandle } else { $DockHandle }
+    $releasePoint = Convert-ScreenToClientPoint $releaseTarget $insideScreenX $insideScreenY
+    [void][EpochWin32Harness]::PostMessageW($releaseTarget, $WM_LBUTTONUP, [IntPtr]::Zero, (Get-LParam $releasePoint.X $releasePoint.Y))
     $end = Wait-ForDragContractState -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -Predicate { param($s) $s.Docked } -TimeoutMs 900
 
     [pscustomobject]@{
         ContractMode = if ($useProxyContract) { 'proxy-release-redock' } else { 'direct-live-redock' }
+        MidDragScreenshotPath = $MidDragScreenshotPath
         BeforeDocked = $before.Docked
         MidTopLevel = $mid.MidTopLevel
         LateDetached = $late.MidTopLevel
@@ -624,14 +636,22 @@ try {
     $backendChecks = @()
     foreach ($item in @(
         @{ Name = 'raylib'; DockHandle = $(if ($rayChild) { $rayChild.Hwnd } elseif ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($rayChild) { $rayChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = [IntPtr]::Zero },
-        @{ Name = 'sdl'; DockHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }) },
-        @{ Name = 'sfml'; DockHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }) }
+        @{ Name = 'sdl'; DockHandle = $(if ($sdlHost) { $sdlHost.Hwnd } elseif ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlHost) { $sdlHost.Hwnd } elseif ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }) },
+        @{ Name = 'sfml'; DockHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } elseif ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } elseif ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }) }
     )) {
         if ($Mode -eq 'Single' -and $item.Name -ne $Backend) { continue }
         if ($Mode -eq 'Full' -and -not [string]::IsNullOrWhiteSpace($FocusedBackend) -and $item.Name -ne $FocusedBackend) { continue }
         if ($item.DockHandle -eq [IntPtr]::Zero) { continue }
 
-        $drag = Invoke-UndockRedock -DockHandle $item.DockHandle -ParentHwnd $parentWindow.Hwnd -ProxyHostHandle $item.HostHandle -ProxyChildHandle $item.ChildHandle
+        $midDragScreenshotPath = [System.IO.Path]::ChangeExtension(
+            $OutputPath,
+            ('.' + $item.Name + '.mid.png'))
+        $drag = Invoke-UndockRedock `
+            -DockHandle $item.DockHandle `
+            -ParentHwnd $parentWindow.Hwnd `
+            -ProxyHostHandle $item.HostHandle `
+            -ProxyChildHandle $item.ChildHandle `
+            -MidDragScreenshotPath $midDragScreenshotPath
         Invoke-LeftClick -Hwnd $item.FocusHandle -ClientX 24 -ClientY 24
         Start-Sleep -Milliseconds 150
         $focus = Get-FocusProbe -TargetHwnd $item.FocusHandle

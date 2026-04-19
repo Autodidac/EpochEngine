@@ -390,6 +390,20 @@ namespace
             style |= WS_CHILD;
             ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
         }
+
+        LONG_PTR exStyle = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        LONG_PTR desiredExStyle = exStyle;
+        desiredExStyle &= ~static_cast<LONG_PTR>(
+            WS_EX_APPWINDOW
+            | WS_EX_TOOLWINDOW
+            | WS_EX_TOPMOST
+            | WS_EX_WINDOWEDGE
+            | WS_EX_CLIENTEDGE
+            | WS_EX_DLGMODALFRAME);
+        desiredExStyle |= WS_EX_NOPARENTNOTIFY;
+        if (desiredExStyle != exStyle)
+            ::SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desiredExStyle);
+
         if (currentParent != parent)
             ::SetParent(hwnd, parent);
 
@@ -691,16 +705,29 @@ namespace
         style &= ~WS_CHILD;
         style |= WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
         ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+
+        LONG_PTR exStyle = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        LONG_PTR desiredExStyle = exStyle;
+        desiredExStyle &= ~static_cast<LONG_PTR>(
+            WS_EX_NOPARENTNOTIFY
+            | WS_EX_TOOLWINDOW
+            | WS_EX_TOPMOST);
+        desiredExStyle |= WS_EX_APPWINDOW;
+        if (desiredExStyle != exStyle)
+            ::SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desiredExStyle);
+
         if (::GetParent(hwnd) != nullptr)
             ::SetParent(hwnd, nullptr);
+        if (::GetWindow(hwnd, GW_OWNER) != nullptr)
+            ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, 0);
 
-        const DWORD exStyle = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+        const DWORD adjustedExStyle = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
         RECT adjusted{ 0, 0, clientW, clientH };
         int hostX = desiredClientLeft;
         int hostY = desiredClientTop;
         int hostW = clientW;
         int hostH = clientH;
-        if (::AdjustWindowRectEx(&adjusted, static_cast<DWORD>(style), FALSE, exStyle))
+        if (::AdjustWindowRectEx(&adjusted, static_cast<DWORD>(style), FALSE, adjustedExStyle))
         {
             hostX += adjusted.left;
             hostY += adjusted.top;
@@ -710,12 +737,21 @@ namespace
 
         ::SetWindowPos(
             hwnd,
-            nullptr,
+            HWND_TOPMOST,
             hostX,
             hostY,
             hostW,
             hostH,
-            SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+            SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        ::SetWindowPos(
+            hwnd,
+            HWND_NOTOPMOST,
+            hostX,
+            hostY,
+            hostW,
+            hostH,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        ::BringWindowToTop(hwnd);
     }
 
     inline void undock_sfml_proxy_window(
@@ -2608,9 +2644,6 @@ namespace epochnamespace::core
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
         case WM_LBUTTONDOWN:
         {
-            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
-                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
-
             remember_gui_input_owner(hwnd);
             ::SetFocus(hwnd);
             const auto ctx = resolveGuiContext();
@@ -2646,11 +2679,8 @@ namespace epochnamespace::core
 
         case WM_MOUSEMOVE:
         {
-            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
-                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
-
-            const auto ctx = resolveGuiContext();
             auto* const window = resolve_window_data_for_hwnd(hwnd);
+            const auto ctx = resolveGuiContext();
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseMove, lParam);
             if (!drag.dragging || drag.draggedWindow != hwnd)
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -2878,6 +2908,26 @@ namespace epochnamespace::core
                     request->y,
                     request->width,
                     request->height);
+                {
+                    auto& dragState = epochnamespace::core::Drag();
+                    if (dragState.dragging
+                        && window->host_hwnd
+                        && dragState.draggedWindow == window->hwndChild
+                        && ::IsWindow(window->host_hwnd) != FALSE)
+                    {
+                        POINT cursor{};
+                        RECT hostRect{};
+                        if (::GetCursorPos(&cursor) != FALSE
+                            && ::GetWindowRect(window->host_hwnd, &hostRect) != FALSE)
+                        {
+                            dragState.dragWindowOffset.x = cursor.x - hostRect.left;
+                            dragState.dragWindowOffset.y = cursor.y - hostRect.top;
+                        }
+                        ::ReleaseCapture();
+                        ::SetCapture(window->host_hwnd);
+                        dragState.draggedWindow = window->host_hwnd;
+                    }
+                }
                 if (request->parentHwnd && ::IsWindow(request->parentHwnd) != FALSE)
                     request_parent_layout(request->parentHwnd);
                 return 0;
@@ -2909,11 +2959,8 @@ namespace epochnamespace::core
 
         case WM_LBUTTONUP:
         {
-            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
-                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
-
-            const auto ctx = resolveGuiContext();
             auto* const window = resolve_window_data_for_hwnd(hwnd);
+            const auto ctx = resolveGuiContext();
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam);
             if (drag.dragging && drag.draggedWindow == hwnd)
             {
@@ -2958,9 +3005,10 @@ namespace epochnamespace::core
                     };
                     const bool centerInsideParent = point_in_rect(parentRect, windowCenter);
                     const bool releaseOutsideParent = !should_redock_to_parent(originalParent, releasePoint, wndRect);
-                    const bool wantsRedock = ((window && is_sfml_proxy_detached(window))
-                        || ((!window || !is_sfml_proxy_candidate(window)) && ::GetParent(hwnd) != originalParent))
-                        && should_redock_to_parent(originalParent, releasePoint, wndRect);
+                    const bool wantsRedock = (
+                        ((window && is_sfml_proxy_detached(window))
+                            || ((!window || !is_sfml_proxy_candidate(window)) && ::GetParent(hwnd) != originalParent))
+                        && should_redock_to_parent(originalParent, releasePoint, wndRect));
 #if defined(_DEBUG)
                     if (window && is_sfml_proxy_candidate(window))
                     {

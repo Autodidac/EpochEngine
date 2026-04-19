@@ -50,6 +50,10 @@ When the pass is multicontext-specific, validate:
   what the runtime is actually using:
   real child directly parented into the grid with the helper host hidden, or
   child attached to a proxy host shell during a true detached window state
+- when validating SDL/SFML multicontext undock in the parented editor, start
+  the drag from the visible `EpochChild` proxy shell rather than the nested
+  `SDL_app` / `SFML_Window` child; that shell is the real pane surface the
+  operator grabs, and using the child HWND gives misleading drag results
 - for SDL/SFML proxy drags, the current honest contract is release-based redock:
   prove `MidTopLevel=true`, keep the pane detached while the drag is still held,
   then prove `EndRedocked=true` after the release returns inside the parent
