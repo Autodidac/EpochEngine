@@ -1,5 +1,9 @@
 ﻿cmake_minimum_required(VERSION 3.28)
 
+if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
+endif()
+
 if(CMAKE_VERSION VERSION_LESS 3.29)
     # CMake 3.27ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“3.28 require the experimental dyndep scanner to emit BMI rules.
     set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP 1)

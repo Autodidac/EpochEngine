@@ -135,8 +135,14 @@ WSL/Linux editor proof, source `v0.83.42`:
 
 WSL/Linux note:
 
-- The Linux screenshot above comes from the engine's own frame capture under WSLg, which avoids the extra-window behavior that can make desktop grabs misleading.
-- The broader Linux multi-window view is still visually inconsistent under WSLg, so the README is using the clean single-backend editor proof for now.
+- The Linux screenshot above comes from the engine's own frame capture under
+  WSLg, which avoids the extra-window behavior that can make desktop grabs
+  misleading.
+- The broader Linux multi-window view is still visually inconsistent under
+  WSLg, so the README is using the clean single-backend editor proof for now.
+- The packaged Linux artifact should behave as the main runtime release by
+  default. Updater-shell mode is now treated as an explicit bootstrap build,
+  not the standard Linux packaged identity.
 
 ---
 
@@ -302,9 +308,13 @@ cd Engine
 
 WSL note:
 
-- The packaged Linux updater shell can also be smoke-tested under Windows WSL2.
-- Use a WSLg/X11 setup with working OpenGL, extract the Linux release asset inside WSL, then launch `./epoch`.
-- The Linux updater shell now prefers OpenGL by default on Linux/WSL; you can still force `--backend software` if you need the CPU path.
+- Use a WSLg/X11 setup with working OpenGL, extract the packaged Linux release
+  asset inside WSL, then launch `./epoch`.
+- `./build.sh` produces the normal Linux runtime by default; pass
+  `--updater-shell` only when you intentionally want the bootstrap variant.
+- The Linux packaged runtime should stay version-aligned with the Windows
+  packaged runtime and the tagged source snapshot instead of shipping as an
+  updater-only artifact.
 
 ---
 
@@ -356,48 +366,35 @@ Useful entry points:
 # Current snapshot
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source-v0.83.84-1F7A4C?style=for-the-badge" alt="Current source v0.83.84" />
+  <img src="https://img.shields.io/badge/Current_Source-v0.83.85-1F7A4C?style=for-the-badge" alt="Current source v0.83.85" />
   <img src="https://img.shields.io/badge/Project_Shell-Repo_Projects_Wired-2C6A8A?style=for-the-badge" alt="Repo-root project shells wired" />
   <img src="https://img.shields.io/badge/MSVC_Warnings-C5202_Removed-7A5A2F?style=for-the-badge" alt="MSVC C5202 removed" />
 </p>
 
 Highlights:
-- The source tree is now on `v0.83.84`, and this pass removes the lingering
-  MSVC `C5202` mixed-module warning from `Engine/src/runtime.cpp` instead of
-  normalizing compiler noise.
-- The Project workspace now exposes a real child-build path for generated
-  shells, including entry source, project file, build script, build log, and
-  expected Debug output executable.
-- Generated child projects now land under repo-level `Projects/`, create the
-  broader embedded-engine surface (`include`, `modules`, `source`, `scripts`,
-  `resource`, `assets`), and emit `project.paths.txt` so file creation/build
-  output can be traced directly from editor logs.
-- Project-local script compilation now searches project and repo engine surfaces
-  more honestly instead of assuming a single fragile include root.
-- The Win32 parented multicontext path now requests a grid relayout after pane
-  removal, which tightens the first-slot collapse case the older layout was
-  leaving behind.
-- The shared preview marker and editor preview camera bookkeeping now track
-  per-context state honestly instead of collapsing different panes onto one
-  preview-camera key.
-- The parent shell and editor palette have been pulled back toward a calmer dark
-  treatment, but the README fullscreen six-context proof is intentionally not
-  refreshed in this pass because SDL/SFML proxy-host redock visibility is still
-  an active multicontext follow-up.
-- The Windows parented multicontext path now has a stronger six-pane proxy-shell
-  proof for SDL/SFML: the visible `EpochChild` shell undocks as a real
-  top-level window, stays with the drag, and can clear the parent bounds in
-  both focused parent runs and the slower all-backends sweep. The harness still
-  uses synthetic mouse messages, so live manual smoke remains the final check
-  before treating this path as truly finished.
-- The AI workspace now promotes staged MCP/control snapshots into curated
-  datasets too, instead of leaving that part of the two-role training loop as
-  documentation-only.
-- The roadmap is now GitHub-ready markdown at
-  [Changes/roadmap.md](Changes/roadmap.md), and it explicitly tracks naming
-  cleanup debt, the six-month 2D priority track, the time-system spine, the
-  two-role AI training path, and the later procedural/time-node authoring
-  phase.
+- The source tree is now on `v0.83.85`.
+- The six-pane Win32 runtime has been pulled back toward the working legacy
+  contract: SDL3 and SFML3 promote their visible proxy shell into a real
+  top-level detached window instead of staying visually trapped inside the
+  parent.
+- Clean human six-pane validation is now treated as the final truth for
+  SDL/SFML undock behavior, with the harness kept as an observation/capture aid
+  instead of the only signoff path when synthetic input diverges.
+- Generated project shells still expose concrete build/runtime proof inside the
+  editor, including `project.paths.txt`, child build logs, expected outputs, and
+  active script/source checks.
+- The AI workspace now surfaces staged iteration/capture roots and keeps the
+  two-role EpochBot plus MCP/control split explicit instead of drifting toward
+  vague self-coding claims.
+- Linux packaged runtime guidance is now aligned with the actual build defaults:
+  the main packaged `epoch` runtime is the normal Linux product path, and
+  updater-shell mode is an explicit bootstrap build only.
+- WSL2 clang Release verification now succeeds on the main-runtime OpenGL plus
+  software path and reports the same `v0.83.85` line as the Windows release
+  output.
+- The roadmap continues to center single-context editor OpenGL, single-context
+  launcher software, deliberate backend switching, and full teardown of inactive
+  backends instead of leaving hidden renderers running in the background.
 - Detailed release history lives in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
   current version notes under [Changes/](Changes/).

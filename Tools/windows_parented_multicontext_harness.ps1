@@ -20,6 +20,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Windows.Forms
 
 $user32 = @'
 using System;
@@ -67,6 +68,9 @@ public static class EpochWin32Harness
     [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint threadId, ref GUITHREADINFO info);
     [DllImport("user32.dll")] public static extern bool PostMessageW(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmdShow);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern IntPtr SetActiveWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 }
 '@
 
@@ -78,6 +82,8 @@ $WM_LBUTTONUP = 0x0202
 $WM_CLOSE = 0x0010
 $MK_LBUTTON = 0x0001
 $SW_MAXIMIZE = 3
+$MOUSEEVENTF_LEFTDOWN = 0x0002
+$MOUSEEVENTF_LEFTUP = 0x0004
 
 function Get-LParam([int]$x, [int]$y) {
     $ux = $x -band 0xFFFF
@@ -104,12 +110,14 @@ function Get-ProcessTopWindows([int]$ProcessId) {
         $windowPid = 0
         [void][EpochWin32Harness]::GetWindowThreadProcessId($hwnd, [ref]$windowPid)
         if ($windowPid -eq $ProcessId) {
+            $rectInfo = Get-WindowRectObject $hwnd
             $items.Add([pscustomobject]@{
                 Hwnd = $hwnd
                 Title = Get-WindowTextValue $hwnd
                 Class = Get-ClassNameValue $hwnd
                 Visible = [EpochWin32Harness]::IsWindowVisible($hwnd)
                 Parent = [EpochWin32Harness]::GetParent($hwnd)
+                Rect = $rectInfo
             })
         }
         return $true
@@ -137,19 +145,19 @@ function Get-DescendantWindows([IntPtr]$Parent) {
     $items
 }
 
-function Wait-ForParentWindow([int]$ProcessId, [int]$TimeoutSeconds = 20) {
+function Wait-ForParentWindow([int]$ProcessId, [int]$TimeoutSeconds = 35) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         $top = Get-ProcessTopWindows -ProcessId $ProcessId |
             Where-Object { $_.Visible -and $_.Parent -eq [IntPtr]::Zero } |
             Sort-Object { $_.Title.Length } -Descending
         if ($top) { return $top[0] }
-        Start-Sleep -Milliseconds 200
+        Start-Sleep -Milliseconds 250
     }
     return $null
 }
 
-function Wait-ForBackendWindows([IntPtr]$Parent, [string[]]$Needles, [int]$TimeoutSeconds = 20) {
+function Wait-ForBackendWindows([IntPtr]$Parent, [string[]]$Needles, [int]$TimeoutSeconds = 35) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         $children = Get-DescendantWindows -Parent $Parent
@@ -166,7 +174,7 @@ function Wait-ForBackendWindows([IntPtr]$Parent, [string[]]$Needles, [int]$Timeo
                 Found = $found
             }
         }
-        Start-Sleep -Milliseconds 300
+        Start-Sleep -Milliseconds 400
     }
     return $null
 }
@@ -196,6 +204,53 @@ function Set-ScreenCursorPoint([int]$X, [int]$Y) {
     [void][EpochWin32Harness]::SetCursorPos($X, $Y)
 }
 
+function Set-WindowForeground([IntPtr]$Hwnd) {
+    if ($Hwnd -eq [IntPtr]::Zero -or -not [EpochWin32Harness]::IsWindow($Hwnd)) {
+        return
+    }
+
+    [void][EpochWin32Harness]::SetActiveWindow($Hwnd)
+    [void][EpochWin32Harness]::SetForegroundWindow($Hwnd)
+}
+
+function Invoke-PhysicalLeftDown() {
+    [EpochWin32Harness]::mouse_event($MOUSEEVENTF_LEFTDOWN, 0, 0, 0, [UIntPtr]::Zero)
+}
+
+function Invoke-PhysicalLeftUp() {
+    [EpochWin32Harness]::mouse_event($MOUSEEVENTF_LEFTUP, 0, 0, 0, [UIntPtr]::Zero)
+}
+
+function Move-CursorLinear(
+    [int]$FromX,
+    [int]$FromY,
+    [int]$ToX,
+    [int]$ToY,
+    [int]$Steps = 8,
+    [int]$StepDelayMs = 45
+) {
+    $count = [Math]::Max(1, $Steps)
+    for ($step = 1; $step -le $count; $step++) {
+        $t = $step / [double]$count
+        $x = [int][Math]::Round($FromX + (($ToX - $FromX) * $t))
+        $y = [int][Math]::Round($FromY + (($ToY - $FromY) * $t))
+        Set-ScreenCursorPoint $x $y
+        Start-Sleep -Milliseconds $StepDelayMs
+    }
+}
+
+function Get-VirtualScreenRect() {
+    $virtual = [System.Windows.Forms.SystemInformation]::VirtualScreen
+    return [pscustomobject]@{
+        Left = $virtual.Left
+        Top = $virtual.Top
+        Right = $virtual.Right
+        Bottom = $virtual.Bottom
+        Width = $virtual.Width
+        Height = $virtual.Height
+    }
+}
+
 function Invoke-LeftClick([IntPtr]$Hwnd, [int]$ClientX, [int]$ClientY) {
     [void][EpochWin32Harness]::PostMessageW($Hwnd, $WM_LBUTTONDOWN, [IntPtr]$MK_LBUTTON, (Get-LParam $ClientX $ClientY))
     Start-Sleep -Milliseconds 50
@@ -214,14 +269,9 @@ function Get-DragContractSnapshot(
     [IntPtr]$DockHandle,
     [IntPtr]$ParentHwnd,
     [IntPtr]$ProxyHostHandle = [IntPtr]::Zero,
-    [IntPtr]$ProxyChildHandle = [IntPtr]::Zero
+    [IntPtr]$ProxyChildHandle = [IntPtr]::Zero,
+    [int]$ProcessId = 0
 ) {
-    $useProxyContract =
-        $ProxyHostHandle -ne [IntPtr]::Zero -and
-        $ProxyChildHandle -ne [IntPtr]::Zero -and
-        [EpochWin32Harness]::IsWindow($ProxyHostHandle) -and
-        [EpochWin32Harness]::IsWindow($ProxyChildHandle)
-
     $dockParent = Get-ParentHandleValue $DockHandle
     $hostParent = Get-ParentHandleValue $ProxyHostHandle
     $childParent = Get-ParentHandleValue $ProxyChildHandle
@@ -229,31 +279,74 @@ function Get-DragContractSnapshot(
     $dockRect = if ($DockHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($DockHandle)) { Get-WindowRectObject $DockHandle } else { $null }
     $hostRect = if ($ProxyHostHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($ProxyHostHandle)) { Get-WindowRectObject $ProxyHostHandle } else { $null }
     $childRect = if ($ProxyChildHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($ProxyChildHandle)) { Get-WindowRectObject $ProxyChildHandle } else { $null }
+    $hostVisible = $ProxyHostHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($ProxyHostHandle) -and [EpochWin32Harness]::IsWindowVisible($ProxyHostHandle)
+    $useProxyContract =
+        $ProxyHostHandle -ne [IntPtr]::Zero -and
+        $ProxyChildHandle -ne [IntPtr]::Zero -and
+        [EpochWin32Harness]::IsWindow($ProxyHostHandle) -and
+        [EpochWin32Harness]::IsWindow($ProxyChildHandle)
 
-    $directDocked =
-        $dockParent -eq $ParentHwnd -and (
-            $ProxyHostHandle -eq [IntPtr]::Zero -or (
-                $ProxyChildHandle -eq [IntPtr]::Zero -and $hostParent -eq $ParentHwnd
-            ) -or (
-                $hostParent -eq $ParentHwnd -and $childParent -eq $ParentHwnd
-            )
-        )
-    $proxyDocked =
+    $hiddenProxyDocked =
         $useProxyContract -and
         $hostParent -eq $ParentHwnd -and
+        $childParent -eq $ParentHwnd
+
+    $topLevelWindows = @()
+    if ($ProcessId -gt 0) {
+        $topLevelWindows = Get-ProcessTopWindows -ProcessId $ProcessId |
+            Where-Object { $_.Visible -and $_.Parent -eq [IntPtr]::Zero }
+    }
+    $hostTopLevelRecord = if ($ProxyHostHandle -ne [IntPtr]::Zero) {
+        $topLevelWindows | Where-Object { $_.Hwnd -eq $ProxyHostHandle } | Select-Object -First 1
+    } else {
+        $null
+    }
+    $dockTopLevelRecord = if ($DockHandle -ne [IntPtr]::Zero) {
+        $topLevelWindows | Where-Object { $_.Hwnd -eq $DockHandle } | Select-Object -First 1
+    } else {
+        $null
+    }
+
+    $directDocked =
+        (-not $useProxyContract) -and
+        $dockParent -eq $ParentHwnd
+    $proxyDocked =
+        $useProxyContract -and
+        (
+            ($hostParent -eq $ParentHwnd -and $childParent -eq $ProxyHostHandle) -or
+            $hiddenProxyDocked
+        )
+    $directChildTopLevel =
+        (-not $useProxyContract) -and
+        $dockParent -eq [IntPtr]::Zero -and (
+            $ProxyHostHandle -eq [IntPtr]::Zero -or (
+                $hostParent -eq $ParentHwnd -and $childParent -ne $ProxyHostHandle
+            )
+        )
+    $proxyHostTopLevel =
+        $useProxyContract -and
+        (
+            $hostParent -eq [IntPtr]::Zero -or
+            $null -ne $hostTopLevelRecord
+        ) -and
         $childParent -eq $ProxyHostHandle
     $midTopLevel = if ($useProxyContract) {
-        $hostParent -ne $ParentHwnd -and $childParent -eq $ProxyHostHandle
+        $proxyHostTopLevel -or $directChildTopLevel
     } else {
         $dockParent -ne $ParentHwnd
     }
     $escapedParentBounds = $false
-    if ($midTopLevel -and $hostRect -and $parentRect) {
+    $topLevelRect = if ($proxyHostTopLevel) {
+        if ($hostTopLevelRecord -and $hostTopLevelRecord.Rect) { $hostTopLevelRecord.Rect } else { $hostRect }
+    } else {
+        if ($dockTopLevelRecord -and $dockTopLevelRecord.Rect) { $dockTopLevelRecord.Rect } else { $dockRect }
+    }
+    if ($midTopLevel -and $topLevelRect -and $parentRect) {
         $escapedParentBounds =
-            $hostRect.Left -lt $parentRect.Left -or
-            $hostRect.Top -lt $parentRect.Top -or
-            $hostRect.Right -gt $parentRect.Right -or
-            $hostRect.Bottom -gt $parentRect.Bottom
+            $topLevelRect.Left -lt $parentRect.Left -or
+            $topLevelRect.Top -lt $parentRect.Top -or
+            $topLevelRect.Right -gt $parentRect.Right -or
+            $topLevelRect.Bottom -gt $parentRect.Bottom
     }
 
     [pscustomobject]@{
@@ -268,6 +361,9 @@ function Get-DragContractSnapshot(
         DockRect = $dockRect
         ProxyHostRect = $hostRect
         ProxyChildRect = $childRect
+        TopLevelWindows = $topLevelWindows
+        ProxyHostTopLevelRecord = $hostTopLevelRecord
+        DockTopLevelRecord = $dockTopLevelRecord
     }
 }
 
@@ -276,17 +372,18 @@ function Wait-ForDragContractState(
     [IntPtr]$ParentHwnd,
     [IntPtr]$ProxyHostHandle = [IntPtr]::Zero,
     [IntPtr]$ProxyChildHandle = [IntPtr]::Zero,
+    [int]$ProcessId = 0,
     [scriptblock]$Predicate,
-    [int]$TimeoutMs = 900
+    [int]$TimeoutMs = 2000
 ) {
     $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
     $snapshot = $null
     do {
-        $snapshot = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+        $snapshot = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId
         if (& $Predicate $snapshot) {
             return $snapshot
         }
-        Start-Sleep -Milliseconds 25
+        Start-Sleep -Milliseconds 55
     } while ((Get-Date) -lt $deadline)
 
     return $snapshot
@@ -297,104 +394,116 @@ function Invoke-UndockRedock(
     [IntPtr]$ParentHwnd,
     [IntPtr]$ProxyHostHandle = [IntPtr]::Zero,
     [IntPtr]$ProxyChildHandle = [IntPtr]::Zero,
+    [int]$ProcessId = 0,
     [string]$MidDragScreenshotPath = ''
 ) {
-    $useProxyContract =
-        $ProxyHostHandle -ne [IntPtr]::Zero -and
-        $ProxyChildHandle -ne [IntPtr]::Zero -and
-        [EpochWin32Harness]::IsWindow($ProxyHostHandle) -and
-        [EpochWin32Harness]::IsWindow($ProxyChildHandle)
     $parentRect = Get-WindowRectObject $ParentHwnd
-    $before = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+    $before = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId
+    $useProxyContract = $before.UseProxyContract
     $dockRect = if ($DockHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($DockHandle)) { Get-WindowRectObject $DockHandle } else { $null }
+    $virtualRect = Get-VirtualScreenRect
+    $spaceRight = if ($parentRect) { $virtualRect.Right - $parentRect.Right } else { 0 }
+    $spaceLeft = if ($parentRect) { $parentRect.Left - $virtualRect.Left } else { 0 }
+    $escapeRight = $spaceRight -ge $spaceLeft
     $startX = 20
     $startY = 10
     $dragStartScreenX = if ($dockRect) { $dockRect.Left + $startX } else { $parentRect.Left + $startX }
     $dragStartScreenY = if ($dockRect) { $dockRect.Top + $startY } else { $parentRect.Top + $startY }
+    Set-WindowForeground $ParentHwnd
     Set-ScreenCursorPoint $dragStartScreenX $dragStartScreenY
-    [void][EpochWin32Harness]::PostMessageW($DockHandle, $WM_LBUTTONDOWN, [IntPtr]$MK_LBUTTON, (Get-LParam $startX $startY))
     Start-Sleep -Milliseconds 180
+    Invoke-PhysicalLeftDown
+    Start-Sleep -Milliseconds 260
 
-    $edgeScreenX = $parentRect.Right - 8
+    $edgeScreenX = if ($escapeRight) { $parentRect.Right - 8 } else { $parentRect.Left + 8 }
     $edgeScreenY = $parentRect.Top + 40
-    Set-ScreenCursorPoint $edgeScreenX $edgeScreenY
-    $edgeTarget = $DockHandle
-    $moveEdge = Convert-ScreenToClientPoint $edgeTarget $edgeScreenX $edgeScreenY
-    [void][EpochWin32Harness]::PostMessageW($edgeTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveEdge.X $moveEdge.Y))
-    Start-Sleep -Milliseconds 140
+    Move-CursorLinear -FromX $dragStartScreenX -FromY $dragStartScreenY -ToX $edgeScreenX -ToY $edgeScreenY -Steps 9 -StepDelayMs 75
+    Start-Sleep -Milliseconds 260
 
-    $outsideScreenX = $parentRect.Right + 120
+    $outsideOffset = 220
+    $outsideScreenX = if ($escapeRight) {
+        [Math]::Min($virtualRect.Right - 24, $parentRect.Right + $outsideOffset)
+    } else {
+        [Math]::Max($virtualRect.Left + 24, $parentRect.Left - $outsideOffset)
+    }
     $outsideScreenY = $parentRect.Top + 40
-    Set-ScreenCursorPoint $outsideScreenX $outsideScreenY
-    $outsideTarget = $DockHandle
-    $moveOutside = Convert-ScreenToClientPoint $outsideTarget $outsideScreenX $outsideScreenY
-    [void][EpochWin32Harness]::PostMessageW($outsideTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveOutside.X $moveOutside.Y))
+    Move-CursorLinear -FromX $edgeScreenX -FromY $edgeScreenY -ToX $outsideScreenX -ToY $outsideScreenY -Steps 14 -StepDelayMs 105
     if ($useProxyContract) {
-        $deadline = (Get-Date).AddMilliseconds(4500)
+        $deadline = (Get-Date).AddMilliseconds(9000)
         do {
-            $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+            $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId
             if ($mid.MidTopLevel) {
                 break
             }
-            Start-Sleep -Milliseconds 120
+            Start-Sleep -Milliseconds 260
             Set-ScreenCursorPoint $outsideScreenX $outsideScreenY
-            [void][EpochWin32Harness]::PostMessageW($outsideTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveOutside.X $moveOutside.Y))
         } while ((Get-Date) -lt $deadline)
     } else {
-        Start-Sleep -Milliseconds 400
-        $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+        Start-Sleep -Milliseconds 1200
+        $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId
     }
 
     if ($useProxyContract -and $mid.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) {
-        $farOutsideScreenX = $parentRect.Right + 360
+        $farOutsideOffset = 520
+        $farOutsideScreenX = if ($escapeRight) {
+            [Math]::Min($virtualRect.Right - 24, $parentRect.Right + $farOutsideOffset)
+        } else {
+            [Math]::Max($virtualRect.Left + 24, $parentRect.Left - $farOutsideOffset)
+        }
         $farOutsideScreenY = $parentRect.Top + 80
-        $outsideMoveTarget = $ProxyHostHandle
-        $outsideDetachedPoint = Convert-ScreenToClientPoint $outsideMoveTarget $farOutsideScreenX $farOutsideScreenY
-        $outsideDetachedLParam = Get-LParam $outsideDetachedPoint.X $outsideDetachedPoint.Y
-        $deadline = (Get-Date).AddMilliseconds(3500)
+        $deadline = (Get-Date).AddMilliseconds(8000)
         do {
-            Set-ScreenCursorPoint $farOutsideScreenX $farOutsideScreenY
-            [void][EpochWin32Harness]::PostMessageW($outsideMoveTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, $outsideDetachedLParam)
-            Start-Sleep -Milliseconds 150
-            $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+            Move-CursorLinear -FromX $outsideScreenX -FromY $outsideScreenY -ToX $farOutsideScreenX -ToY $farOutsideScreenY -Steps 8 -StepDelayMs 115
+            Start-Sleep -Milliseconds 420
+            $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId
             if ($mid.EscapedParentBounds) {
                 break
             }
         } while ((Get-Date) -lt $deadline)
     }
 
+    if ($useProxyContract -and $mid.MidTopLevel) {
+        Start-Sleep -Milliseconds 700
+        $mid = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId
+    }
+
     if (-not [string]::IsNullOrWhiteSpace($MidDragScreenshotPath)) {
-        [void](Save-WindowScreenshot -Hwnd $ParentHwnd -Destination $MidDragScreenshotPath)
+        if ($mid.MidTopLevel) {
+            $captureHandles = @($ParentHwnd)
+            if ($useProxyContract -and $ProxyHostHandle -ne [IntPtr]::Zero) {
+                $captureHandles += $ProxyHostHandle
+            } elseif ($DockHandle -ne [IntPtr]::Zero) {
+                $captureHandles += $DockHandle
+            }
+            [void](Save-CombinedWindowScreenshot -Handles $captureHandles -Destination $MidDragScreenshotPath)
+        } else {
+            [void](Save-WindowScreenshot -Hwnd $ParentHwnd -Destination $MidDragScreenshotPath)
+        }
     }
 
     $insideScreenX = $parentRect.Left + 60
     $insideScreenY = $parentRect.Top + 60
-    $moveTarget = if ($useProxyContract -and $mid.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) { $ProxyHostHandle } else { $DockHandle }
-    $moveInside = Convert-ScreenToClientPoint $moveTarget $insideScreenX $insideScreenY
-    Set-ScreenCursorPoint $insideScreenX $insideScreenY
-    [void][EpochWin32Harness]::PostMessageW($moveTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveInside.X $moveInside.Y))
+    $dragFromX = if ($useProxyContract -and $mid.MidTopLevel) { $outsideScreenX } else { $edgeScreenX }
+    $dragFromY = if ($useProxyContract -and $mid.MidTopLevel) { $outsideScreenY } else { $edgeScreenY }
+    Move-CursorLinear -FromX $dragFromX -FromY $dragFromY -ToX $insideScreenX -ToY $insideScreenY -Steps 14 -StepDelayMs 95
     if ($useProxyContract) {
-        $deadline = (Get-Date).AddMilliseconds(2200)
+        $deadline = (Get-Date).AddMilliseconds(6500)
         do {
-            $late = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+            $late = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId
             if ($late.MidTopLevel) {
                 break
             }
-            Start-Sleep -Milliseconds 120
+            Start-Sleep -Milliseconds 260
             Set-ScreenCursorPoint $insideScreenX $insideScreenY
-            $moveTarget = if ($late.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) { $ProxyHostHandle } else { $DockHandle }
-            $moveInside = Convert-ScreenToClientPoint $moveTarget $insideScreenX $insideScreenY
-            [void][EpochWin32Harness]::PostMessageW($moveTarget, $WM_MOUSEMOVE, [IntPtr]$MK_LBUTTON, (Get-LParam $moveInside.X $moveInside.Y))
         } while ((Get-Date) -lt $deadline)
     } else {
-        Start-Sleep -Milliseconds 250
-        $late = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle
+        Start-Sleep -Milliseconds 800
+        $late = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId
     }
 
-    $releaseTarget = if ($useProxyContract -and $late.MidTopLevel -and $ProxyHostHandle -ne [IntPtr]::Zero) { $ProxyHostHandle } else { $DockHandle }
-    $releasePoint = Convert-ScreenToClientPoint $releaseTarget $insideScreenX $insideScreenY
-    [void][EpochWin32Harness]::PostMessageW($releaseTarget, $WM_LBUTTONUP, [IntPtr]::Zero, (Get-LParam $releasePoint.X $releasePoint.Y))
-    $end = Wait-ForDragContractState -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -Predicate { param($s) $s.Docked } -TimeoutMs 2500
+    Set-ScreenCursorPoint $insideScreenX $insideScreenY
+    Invoke-PhysicalLeftUp
+    $end = Wait-ForDragContractState -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId -Predicate { param($s) $s.Docked } -TimeoutMs 6500
 
     [pscustomobject]@{
         ContractMode = if ($useProxyContract) { 'proxy-release-redock' } else { 'direct-live-redock' }
@@ -424,6 +533,12 @@ function Invoke-UndockRedock(
         LateDockRect = $late.DockRect
         LateProxyHostRect = $late.ProxyHostRect
         LateProxyChildRect = $late.ProxyChildRect
+        MidTopLevelWindows = $mid.TopLevelWindows
+        LateTopLevelWindows = $late.TopLevelWindows
+        EndTopLevelWindows = $end.TopLevelWindows
+        MidProxyHostTopLevelRecord = $mid.ProxyHostTopLevelRecord
+        LateProxyHostTopLevelRecord = $late.ProxyHostTopLevelRecord
+        EndProxyHostTopLevelRecord = $end.ProxyHostTopLevelRecord
     }
 }
 
@@ -503,6 +618,44 @@ function Save-WindowScreenshot([IntPtr]$Hwnd, [string]$Destination) {
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
         $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+        $bitmap.Save($Destination, [System.Drawing.Imaging.ImageFormat]::Png)
+        return $true
+    }
+    finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
+
+function Save-CombinedWindowScreenshot([IntPtr[]]$Handles, [string]$Destination, [int]$Padding = 24) {
+    $rects = @()
+    foreach ($handle in $Handles) {
+        if ($handle -eq [IntPtr]::Zero -or -not [EpochWin32Harness]::IsWindow($handle)) { continue }
+        $rect = Get-WindowRectObject $handle
+        if (-not $rect -or $rect.Width -le 0 -or $rect.Height -le 0) { continue }
+        $rects += $rect
+    }
+
+    if (-not $rects -or $rects.Count -eq 0) {
+        return $false
+    }
+
+    $left = ($rects | Measure-Object -Property Left -Minimum).Minimum - $Padding
+    $top = ($rects | Measure-Object -Property Top -Minimum).Minimum - $Padding
+    $right = ($rects | Measure-Object -Property Right -Maximum).Maximum + $Padding
+    $bottom = ($rects | Measure-Object -Property Bottom -Maximum).Maximum + $Padding
+    $width = [Math]::Max(1, $right - $left)
+    $height = [Math]::Max(1, $bottom - $top)
+
+    $dir = Split-Path -Parent $Destination
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir | Out-Null
+    }
+
+    $bitmap = New-Object System.Drawing.Bitmap $width, $height
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen($left, $top, 0, 0, $bitmap.Size)
         $bitmap.Save($Destination, [System.Drawing.Imaging.ImageFormat]::Png)
         return $true
     }
@@ -620,16 +773,17 @@ $closeProbeTarget = ''
 $outputReady = $false
 
 try {
-    Start-Sleep -Seconds 4
-    $parentWindow = Wait-ForParentWindow -ProcessId $proc.Id
+Start-Sleep -Seconds 6
+$parentWindow = Wait-ForParentWindow -ProcessId $proc.Id
     if (-not $parentWindow) {
         throw 'Timed out waiting for the parent editor window.'
     }
 
     if (-not $SkipMaximize) {
         [void][EpochWin32Harness]::ShowWindow($parentWindow.Hwnd, $SW_MAXIMIZE)
-        Start-Sleep -Milliseconds 400
+Start-Sleep -Milliseconds 1200
     }
+Start-Sleep -Milliseconds 1200
 
     $needles = if ($Mode -eq 'Full') {
         @('GLFW','SDL','SFML','Vulkan','OpenGL','Software')
@@ -652,6 +806,7 @@ try {
     }
 
     $children = $ready.Children
+    $topLevelWindowsBefore = Get-ProcessTopWindows -ProcessId $proc.Id | Select-Object Hwnd,Class,Title,Visible,Parent,Rect
     $rayHost = $children | Where-Object { $_.Class -eq 'EpochChild' -and $_.Title -like '*Raylib*' } | Select-Object -First 1
     $sdlHost = $children | Where-Object { $_.Class -eq 'EpochChild' -and $_.Title -like '*SDL*' } | Select-Object -First 1
     $sfmlHost = $children | Where-Object { $_.Class -eq 'EpochChild' -and $_.Title -like '*SFML*' } | Select-Object -First 1
@@ -690,8 +845,8 @@ try {
     $backendChecks = @()
     foreach ($item in @(
         @{ Name = 'raylib'; DockHandle = $(if ($rayChild) { $rayChild.Hwnd } elseif ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($rayChild) { $rayChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = [IntPtr]::Zero },
-        @{ Name = 'sdl'; DockHandle = $(if ($sdlHost) { $sdlHost.Hwnd } elseif ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlHost) { $sdlHost.Hwnd } elseif ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }) },
-        @{ Name = 'sfml'; DockHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } elseif ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } elseif ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }) }
+        @{ Name = 'sdl'; DockHandle = $(if ($sdlChild -and ($sdlHost -eq $null -or -not $sdlHost.Visible)) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } elseif ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }) },
+        @{ Name = 'sfml'; DockHandle = $(if ($sfmlChild -and ($sfmlHost -eq $null -or -not $sfmlHost.Visible)) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } elseif ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }) }
     )) {
         if ($Mode -eq 'Single' -and $item.Name -ne $Backend) { continue }
         if ($Mode -eq 'Full' -and -not [string]::IsNullOrWhiteSpace($FocusedBackend) -and $item.Name -ne $FocusedBackend) { continue }
@@ -705,9 +860,10 @@ try {
             -ParentHwnd $parentWindow.Hwnd `
             -ProxyHostHandle $item.HostHandle `
             -ProxyChildHandle $item.ChildHandle `
+            -ProcessId $proc.Id `
             -MidDragScreenshotPath $midDragScreenshotPath
         Invoke-LeftClick -Hwnd $item.FocusHandle -ClientX 24 -ClientY 24
-        Start-Sleep -Milliseconds 150
+Start-Sleep -Milliseconds 260
         $focus = Get-FocusProbe -TargetHwnd $item.FocusHandle
         $proxyHost = Get-ProxyHostProbe -HostHandle $item.HostHandle -ParentHwnd $parentWindow.Hwnd
         $backendChecks += [pscustomobject]@{
@@ -717,14 +873,15 @@ try {
             ProxyHost = $proxyHost
         }
 
-        Start-Sleep -Milliseconds 500
+Start-Sleep -Milliseconds 800
         if ($Mode -eq 'Full') {
-            [void](Wait-ForBackendWindows -Parent $parentWindow.Hwnd -Needles $needles -TimeoutSeconds 5)
+[void](Wait-ForBackendWindows -Parent $parentWindow.Hwnd -Needles $needles -TimeoutSeconds 10)
         }
     }
 
-    Start-Sleep -Seconds 2
+Start-Sleep -Seconds 3
     $childrenAfterDrag = Get-DescendantWindows -Parent $parentWindow.Hwnd
+    $topLevelWindowsAfterDrag = Get-ProcessTopWindows -ProcessId $proc.Id | Select-Object Hwnd,Class,Title,Visible,Parent,Rect
     $screenshotPath = ''
 
     $stillRunningAfterCloseProbe = $null
@@ -732,13 +889,20 @@ try {
         $closeProbeRequested = $true
         $closeProbeTarget = 'SFML child WM_CLOSE'
         [void][EpochWin32Harness]::PostMessageW($sfmlChild.Hwnd, $WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero)
-        Start-Sleep -Milliseconds 600
+Start-Sleep -Milliseconds 900
         $proc.Refresh()
         $stillRunningAfterCloseProbe = -not $proc.HasExited
     }
 
     $screenshotPath = [System.IO.Path]::ChangeExtension($OutputPath, '.png')
-    [void](Save-WindowScreenshot -Hwnd $parentWindow.Hwnd -Destination $screenshotPath)
+    $topLevelHandles = @($parentWindow.Hwnd) + @(
+        (Get-ProcessTopWindows -ProcessId $proc.Id |
+            Where-Object { $_.Visible -and $_.Parent -eq [IntPtr]::Zero } |
+            ForEach-Object { $_.Hwnd })
+    )
+    if (-not (Save-CombinedWindowScreenshot -Handles $topLevelHandles -Destination $screenshotPath)) {
+        [void](Save-WindowScreenshot -Hwnd $parentWindow.Hwnd -Destination $screenshotPath)
+    }
 
     $result = [pscustomobject]@{
         Mode = $Mode
@@ -746,9 +910,11 @@ try {
         FocusedBackend = $FocusedBackend
         ProcessId = $proc.Id
         Parent = $parentWindow
+        TopLevelWindowsBefore = $topLevelWindowsBefore
         VisibleChildrenBefore = $children | Select-Object Class,Title,Visible,Rect
         StartupScreenshotPath = $startupScreenshotPath
         StartupContentProbes = $startupContentProbes
+        TopLevelWindowsAfterDrag = $topLevelWindowsAfterDrag
         VisibleChildrenAfterDrag = $childrenAfterDrag | Select-Object Class,Title,Visible,Rect
         Checks = $backendChecks
         CloseProbeRequested = $closeProbeRequested
@@ -761,7 +927,7 @@ try {
 finally {
     if ($proc -and -not $proc.HasExited) {
         $proc.CloseMainWindow() | Out-Null
-        Start-Sleep -Milliseconds 400
+Start-Sleep -Milliseconds 650
         if (-not $proc.HasExited) {
             $proc.Kill()
             $proc.WaitForExit()

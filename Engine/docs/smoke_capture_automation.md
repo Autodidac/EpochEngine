@@ -29,7 +29,7 @@ For runtime/editor/backend changes:
 For release-facing passes, add two more checks:
 
 8. Launch `ConsoleApplication1.exe` once with no extra args from `x64/Release/`
-   and confirm the launcher/updater shell actually appears instead of hanging
+   and confirm the expected packaged shell actually appears instead of hanging
 9. If a Windows zip is being published, verify the staged release folder carries
    the VC143 CRT DLLs app-local before zipping
 
@@ -110,12 +110,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
   backend is replaced by a fake wrapper or black/empty surface
 - do not publish a proof that still shows a visible extra SDL/SFML wrapper in
   the top row; the docked pane should be the real child surface
-- if the harness still reports `ProxyHost.Visible = true` / `RehiddenInParent = false`
-  for SDL or SFML after a dock-redock cycle, the fullscreen README proof is not
-  ready to refresh yet
-- if the full-grid pass still leaves SFML detached while focused single-backend
-  SFML passes are green, treat that as a real multicontext blocker rather than
-  as proof that the harness is wrong
+- if the harness and a clean human six-pane drag test disagree, do not refresh
+  the README proof until the runtime truth has been confirmed by direct editor
+  use plus subsystem logs and the harness has been brought back into line
 - if only one backend is under investigation, capture that backend directly
 - prefer the fitted parented multicontext host so six-context layouts stay
   visible on normal desktop work areas instead of drifting off-screen
@@ -206,10 +203,10 @@ Expected smoke behavior:
 - if the harness reports a docking mismatch, cross-check the engine log before
   locking in a runtime conclusion; SFML full-grid runs in particular have shown
   real undock/redock commands completing after a too-early harness sample
-- treat focused SDL/SFML six-pane parent runs as the current trusted multicontext
-  runtime gate until the harness grows a closer-to-real input path; the slower
-  all-backends sequential sweep is useful again, but it still relies on
-  synthetic mouse messages and should not be the only signoff
+- treat live human six-pane validation as the final gate for SDL/SFML proxy
+  undock behavior; the harness is still useful for repeatable observation and
+  screenshots, but it should not outrank clean manual proof when synthetic input
+  diverges
 - if the maximized full-grid parented pass times out waiting for expected panes,
   treat that as a real blocker and do not substitute reduced-geometry proof for
   a maximize-ready signoff
@@ -221,12 +218,15 @@ Expected smoke behavior:
 
 ## Release asset checks
 
-- Windows updater-shell zips should include the app-local VC143 CRT DLL set, not
-  rely on the target machine already having the redistributable installed
+- Windows packaged-runtime zips should include the app-local VC143 CRT DLL set,
+  not rely on the target machine already having the redistributable installed
 - smoke the staged packaged folder with `--version` before uploading
-- smoke the no-args launcher/updater entry path once before uploading
+- smoke the no-args packaged entry path once before uploading
 - Linux/WSL2 packaged assets must report the same version as the tagged source
   commit they were built from
+- Linux/WSL2 packaged assets should boot the main runtime path by default;
+  updater-shell builds are explicit bootstrap variants, not the standard Linux
+  release identity
 - do not publish a Linux asset rebuilt from one commit while GitHub source
   downloads point at another
 
@@ -252,7 +252,7 @@ The working commit/push pattern is:
 - bump `aengine.version.ixx`
 - keep `Changes/roadmap.md` current when the steering surface changes
 - update README/docs/changelog when the behavior is user-visible
-- use a versioned commit title such as `v0.83.63 ...`
+- use a versioned commit title such as `v0.83.85 ...`
 - verify builds before pushing
 - do not leave live windows or bad-folder logs behind
 

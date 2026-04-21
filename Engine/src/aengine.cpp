@@ -41,6 +41,7 @@
 
 #include "../include/aengine.config.hpp"
 #include "../include/aengine.hpp"
+#include "../include/epoch.runtime_bridge.hpp"
 
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -150,11 +151,6 @@ namespace epochnamespace::core
     void RunEngine();
     void StartEngine();
     void RunEditorInterface();
-    namespace bridge
-    {
-        int run_legacy_runtime(bool editor_mode);
-    }
-
     struct LegacyLaunchConfig
     {
         int raylib_count = 1;

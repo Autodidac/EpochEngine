@@ -526,14 +526,43 @@ export namespace epochnamespace::sdlcontext
         {
             if (sdlcontext.parent)
             {
-                SetParent(sdlcontext.hwnd, hostWnd);
+                SetParent(sdlcontext.hwnd, sdlcontext.parent);
 
                 LONG_PTR style = GetWindowLongPtr(sdlcontext.hwnd, GWL_STYLE);
                 style &= ~WS_OVERLAPPEDWINDOW;
-                style |= WS_CHILD | WS_VISIBLE;
+                style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
                 SetWindowLongPtr(sdlcontext.hwnd, GWL_STYLE, style);
 
-                epochnamespace::core::MakeDockable(sdlcontext.hwnd, hostWnd);
+                epochnamespace::core::MakeDockable(sdlcontext.hwnd, sdlcontext.parent);
+
+                RECT client{};
+                HWND sizeSource = hostWnd ? hostWnd : sdlcontext.parent;
+                GetClientRect(sizeSource, &client);
+
+                const int width = (std::max)(1, static_cast<int>(client.right - client.left));
+                const int height = (std::max)(1, static_cast<int>(client.bottom - client.top));
+
+                sdlcontext.width = width;
+                sdlcontext.height = height;
+
+                SetWindowPos(
+                    sdlcontext.hwnd, nullptr, 0, 0, width, height,
+                    SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+                // Keep SDL's internal window/backbuffer size aligned with the dock slot
+                // before the first present so startup does not wait on resize.
+                SDL_SetWindowSize(sdlcontext.window, width, height);
+                RedrawWindow(
+                    sdlcontext.hwnd, nullptr, nullptr,
+                    RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+
+                if (sdlcontext.onResize)
+                    sdlcontext.onResize(width, height);
+
+                if (hostWnd && hostWnd != sdlcontext.hwnd && ::IsWindow(hostWnd) != FALSE)
+                    ShowWindow(hostWnd, SW_HIDE);
+
+                PostMessage(sdlcontext.parent, WM_SIZE, 0, MAKELPARAM(width, height));
             }
 
             if (!windowTitle.empty())
@@ -542,33 +571,8 @@ export namespace epochnamespace::sdlcontext
                 SetWindowTextW(sdlcontext.hwnd, wideTitle.c_str());
             }
 
-            RECT client{};
-            GetClientRect(hostWnd, &client);
-
-            const int width = (std::max)(1, static_cast<int>(client.right - client.left));
-            const int height = (std::max)(1, static_cast<int>(client.bottom - client.top));
-
-            sdlcontext.width = width;
-            sdlcontext.height = height;
-
-            SetWindowPos(
-                sdlcontext.hwnd, nullptr, 0, 0, width, height,
-                SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-
-            // Keep SDL's internal window/backbuffer size aligned with the dock slot
-            // before the first present so startup does not wait on resize.
-            SDL_SetWindowSize(sdlcontext.window, width, height);
-            RedrawWindow(
-                sdlcontext.hwnd, nullptr, nullptr,
-                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
-
-            if (sdlcontext.onResize)
-                sdlcontext.onResize(width, height);
-
-            if (sdlcontext.parent)
-                PostMessage(sdlcontext.parent, WM_SIZE, 0, MAKELPARAM(width, height));
-
-            ::ShowWindow(hostWnd, SW_SHOWNA);
+            if (hostWnd && hostWnd != sdlcontext.hwnd && ::IsWindow(hostWnd) != FALSE)
+                ::ShowWindow(hostWnd, SW_HIDE);
         }
 #endif
 

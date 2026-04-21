@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.83.85]
+- Re-stabilized the SDL3/SFML3 Win32 six-pane undock path around the working promoted-proxy contract: the visible proxy shell is the real detachable top-level host, the backend child stays nested inside it, and detached placement clears the parent bounds instead of freezing visually trapped inside the parent.
+- Kept the harness on a supporting role instead of letting synthetic input rewrite runtime truth: the Win32 probe now records more top-level window state, but clean human six-pane validation and subsystem logs are treated as the deciding evidence when the harness diverges.
+- Bumped the public version to `v0.83.85` and updated README/build/runtime/smoke/config/analysis docs so the repo stops advertising stale `v0.83.63` guidance.
+- Aligned the packaged-runtime story across Windows and Linux: the main packaged runtime is the default release path, updater-shell mode is explicit/bootstrap-only, and Linux packaged assets are expected to stay source/version aligned instead of shipping as updater-only artifacts.
+- Fixed the Linux main-runtime build path under WSL2 by moving the legacy runtime bridge declaration out of module-owned linkage and into a shared header, then keeping the CMake policy floor high enough that the system `glm` package no longer blocks configuration outright.
+- Kept the project-shell and AI roadmap surfaces honest: generated projects still expose explicit build/output/script proof, and the two-role EpochBot plus MCP/control model stays staged/reviewable instead of drifting into blind autonomy language.
+
 ## [v0.83.84]
 - Fixed the six-context Win32 proxy-shell drag path so SDL and SFML can undock from the same visible `EpochChild` shell the user actually grabs in the parented editor, instead of depending on the nested backend child to start the escape. The proxy host is now promoted as a real standalone top-level shell on undock and normalized back into child mode on redock.
 - Corrected the Windows parented harness to drag the visible SDL/SFML proxy shell instead of the nested backend child during multicontext checks, which brings the proof path back in line with the real editor interaction model and restores truthful `MidTopLevel=true` evidence under six-pane load.

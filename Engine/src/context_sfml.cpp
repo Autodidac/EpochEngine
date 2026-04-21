@@ -299,9 +299,7 @@ namespace
     void sync_docked_child_size(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
     {
 #if defined(_WIN32)
-        if (!s_hostWindow || !s_childWindow
-            || ::IsWindow(s_hostWindow) == FALSE
-            || ::IsWindow(s_childWindow) == FALSE)
+        if (!s_childWindow || ::IsWindow(s_childWindow) == FALSE)
         {
             return;
         }
@@ -309,7 +307,7 @@ namespace
         RECT client{};
         UINT positionFlags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW;
         const HWND childParent = ::GetParent(s_childWindow);
-        if (childParent == s_hostWindow)
+        if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE && childParent == s_hostWindow)
         {
             if (!::GetClientRect(s_hostWindow, &client))
                 return;
@@ -407,16 +405,17 @@ namespace
             const HWND dockParent = ::GetParent(s_hostWindow);
             const HWND liveDockParent = dockParent ? dockParent : s_hostWindow;
             s_dockParent = liveDockParent;
-            ::SetParent(s_childWindow, s_hostWindow);
+            ::SetParent(s_childWindow, liveDockParent);
 
             LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
             style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
             style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-            epochnamespace::core::MakeDockable(s_childWindow, s_hostWindow);
+            epochnamespace::core::MakeDockable(s_childWindow, liveDockParent);
 
             RECT client{};
-            ::GetClientRect(s_hostWindow, &client);
+            const HWND sizeSource = s_hostWindow ? s_hostWindow : liveDockParent;
+            ::GetClientRect(sizeSource, &client);
             s_width = (std::max)(1, static_cast<int>(client.right - client.left));
             s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
 
@@ -438,8 +437,8 @@ namespace
                 nullptr,
                 RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
 
-            ::ShowWindow(s_hostWindow, SW_SHOWNA);
-            ::PostMessageW(liveDockParent, WM_SIZE, 0, 0);
+            if (s_hostWindow != s_childWindow)
+                ::ShowWindow(s_hostWindow, SW_HIDE);
         }
 
         if (!s_window->setActive(true))
@@ -468,6 +467,21 @@ namespace
 
         if (ctx->windowData)
         {
+            HWND previousHwnd = ctx->windowData->hwnd;
+            HDC previousHdc = ctx->windowData->hdc;
+            if (previousHwnd && previousHwnd != s_childWindow)
+            {
+                if (previousHdc)
+                    ::ReleaseDC(previousHwnd, previousHdc);
+
+                auto& threads = epochnamespace::core::Threads();
+                auto it = threads.find(previousHwnd);
+                if (it != threads.end())
+                {
+                    threads.emplace(s_childWindow, std::move(it->second));
+                    threads.erase(it);
+                }
+            }
             ctx->windowData->sfml_window = s_window.get();
 #if defined(_WIN32)
             ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
@@ -491,6 +505,8 @@ namespace
             ::SetFocus(focusWindow);
             s_window->requestFocus();
         }
+        if (s_dockParent && ::IsWindow(s_dockParent) != FALSE)
+            ::PostMessageW(s_dockParent, WM_SIZE, 0, 0);
 #endif
 
         epochnamespace::atlasmanager::register_backend_uploader(

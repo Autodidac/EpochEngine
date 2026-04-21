@@ -474,14 +474,14 @@ export namespace epochnamespace::sfmlcontext
 
                 if (sfmlcontext.parent)
         {
-            SetParent(sfmlcontext.hwnd, hostWnd);
+            SetParent(sfmlcontext.hwnd, sfmlcontext.parent);
 
             LONG_PTR style = GetWindowLongPtr(sfmlcontext.hwnd, GWL_STYLE);
             style &= ~WS_OVERLAPPEDWINDOW;
             style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             SetWindowLongPtr(sfmlcontext.hwnd, GWL_STYLE, style);
 
-            epochnamespace::core::MakeDockable(sfmlcontext.hwnd, hostWnd);
+            epochnamespace::core::MakeDockable(sfmlcontext.hwnd, sfmlcontext.parent);
 
             RECT client{};
             HWND sizeSource = hostWnd ? hostWnd : sfmlcontext.parent;
@@ -504,7 +504,7 @@ export namespace epochnamespace::sfmlcontext
                 RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
 
             if (hostWnd && hostWnd != sfmlcontext.hwnd && ::IsWindow(hostWnd) != FALSE)
-                ShowWindow(hostWnd, SW_SHOWNA);
+                ShowWindow(hostWnd, SW_HIDE);
 
             if (sfmlcontext.onResize)
                 sfmlcontext.onResize(width, height);

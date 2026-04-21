@@ -17,6 +17,9 @@ the same engine-owned path.
   time: editor favors a single-context OpenGL path, launcher favors a
   single-context software path, backend switching is explicit, and inactive
   backends must be torn down instead of running hidden behind the active shell
+- packaged Linux releases should follow that same main-runtime rule: the normal
+  packaged `epoch` entry is the product path, while updater-shell mode remains
+  an explicit bootstrap build instead of the default Linux release identity
 
 ## Project-driven runtime direction
 
@@ -123,6 +126,10 @@ the same engine-owned path.
 - when validating Win32 parented multicontext behavior, a live window-tree probe
   should show the real backend child classes as visible pane owners and helper
   wrappers hidden in the docked state
+- if the synthetic harness disagrees with a clean human six-pane validation,
+  treat the live editor behavior plus the Win32 subsystem logs as the deciding
+  truth and repair the harness/probe afterward instead of mutating runtime code
+  to satisfy the harness
 - maximize/restore validation should keep using the pane owner that is actually
   parented into the grid slot at that moment, not a stale abstract "primary"
   HWND that may still be mid-takeover

@@ -30,6 +30,7 @@
  ***********************************************/
 module;
 
+#include "../include/epoch.runtime_bridge.hpp"
 #include "../include/app_api.h"
 #include "../include/epoch.api_types.hpp"
 #include "../include/_epoch.stl_types.hpp"
@@ -56,11 +57,6 @@ import platform.context;
 import platform.runtime;
 import platform.window;
 import epoch.systems;
-
-namespace epochnamespace::core::bridge
-{
-    int run_legacy_runtime(bool editor_mode);
-}
 
 extern "C"
 {
@@ -396,4 +392,3 @@ namespace runtime
         return run_epoch_native();
     }
 } // namespace runtime
-

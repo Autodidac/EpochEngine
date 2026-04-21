@@ -418,10 +418,13 @@ These remain support-tier or project-opt-in work, not the default baseline.
    selector path.
 6. Keep multicontext/backend child-window ownership honest across all active
    backends.
-7. Keep the focused six-pane proxy-shell proof ahead of the all-backends sweep
-   until the harness stops relying on synthetic mouse messages and can validate
-   the same SDL/SFML detach behavior through a closer-to-real input path.
-8. Keep naming cleanup active whenever a touched area can be normalized without
+7. Align packaged Windows and Linux releases with the main runtime path by
+   default, keep updater-shell builds explicit/bootstrap-only, and keep all
+   packaged version lines tied to the same bumped source commit.
+8. Keep the six-pane harness useful as an observation/capture tool, but repair
+   it around live manual truth whenever synthetic input diverges from a clean
+   human validation.
+9. Keep naming cleanup active whenever a touched area can be normalized without
    collateral damage.
 
 ## Acceptance Criteria
@@ -434,6 +437,11 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - The AI/training loop stays clearly two-role in-engine and keeps repo-safe
   text assets separate from local-only compiled artifacts.
 - The multicontext proof shows all six panes honestly, with hidden helper hosts
-  and no fake visible dock wrappers.
+  and no fake visible dock wrappers, and SDL/SFML detach to true top-level
+  promoted shells under the real six-pane parent instead of freezing inside it.
+- Packaged Windows and Linux releases boot the intended main runtime by default,
+  report the same bumped version line as the tagged source snapshot, and keep
+  updater-shell mode as an explicit bootstrap build instead of the default
+  release identity.
 - The docs stay strong enough to steer future automated passes without needing
   to rediscover the architecture from scratch.

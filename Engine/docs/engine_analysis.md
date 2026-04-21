@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current public version: `v0.83.63`
+Current public version: `v0.83.85`
 
 ## Architecture highlights
 
@@ -52,6 +52,10 @@ Current public version: `v0.83.63`
   a dead console/process behind.
 - The parented docking layout now stays intact during shutdown instead of
   undocking backend panes as the host window closes.
+- SDL3 and SFML3 are back on the real promoted-proxy path under the six-context
+  Win32 parent: the visible shell is what detaches, the backend child stays
+  nested inside that shell, and the detached window can escape the parent as a
+  true top-level host instead of freezing under the parent bounds.
 - Live pane management is back in a better place too: undocked windows keep the
   information they need to redock cleanly, and only still-docked panes are
   considered part of the parent grid layout.
