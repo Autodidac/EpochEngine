@@ -23,8 +23,9 @@ the same engine-owned path.
 - packaged updates stay binary-first: the updater shell should pull the newest
   named runtime package first, and only continue to source when the packaged
   runtime is already version-equal or newer
-- the active packaged asset contract is `epoch_win10_x64.zip`,
-  `epoch_linux_x64.tar.gz`, `version_windows.txt`, and `version_linux.txt`
+- the active packaged asset contract is versioned runtime archives such as
+  `epoch_win10_x64_v0.83.86.zip` and `epoch_linux_x64_v0.83.86.tar.gz`
+- the updater extracts the packaged version directly from the archive name
 
 ## Project-driven runtime direction
 

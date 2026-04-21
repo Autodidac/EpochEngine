@@ -396,6 +396,22 @@ namespace epochnamespace::updater
             return text;
         }
 
+        [[nodiscard]] inline bool starts_with_ascii(
+            const std::string& text,
+            const std::string_view prefix) noexcept
+        {
+            return text.size() >= prefix.size()
+                && std::equal(prefix.begin(), prefix.end(), text.begin());
+        }
+
+        [[nodiscard]] inline bool ends_with_ascii(
+            const std::string& text,
+            const std::string_view suffix) noexcept
+        {
+            return text.size() >= suffix.size()
+                && std::equal(suffix.rbegin(), suffix.rend(), text.rbegin());
+        }
+
         struct VersionCheckResult
         {
             bool ok{ false };
@@ -815,7 +831,8 @@ namespace epochnamespace::updater
         {
             bool found{ false };
             std::string tag_name;
-            std::string version_url;
+            std::string binary_name;
+            std::string remote_version;
             std::string binary_url;
         };
 
@@ -835,41 +852,35 @@ namespace epochnamespace::updater
                 return resolved;
 
             const auto releases = parse_github_releases_json(json);
-            const auto version_candidates = PACKAGED_VERSION_ASSET_CANDIDATES();
-            const auto binary_candidates = PACKAGED_BINARY_ASSET_CANDIDATES();
+            const auto binary_prefix = PACKAGED_BINARY_ASSET_PREFIX();
+            const auto binary_suffix = PACKAGED_BINARY_ASSET_SUFFIX();
 
             for (const auto& release : releases)
             {
-                for (const auto& version_name : version_candidates)
+                for (const auto& asset : release.assets)
                 {
-                    const auto version_it = std::find_if(
-                        release.assets.begin(),
-                        release.assets.end(),
-                        [&](const ReleaseAssetInfo& asset)
-                        {
-                            return asset.name == version_name;
-                        });
-                    if (version_it == release.assets.end())
-                        continue;
-
-                    for (const auto& binary_name : binary_candidates)
+                    if (!starts_with_ascii(asset.name, binary_prefix)
+                        || !ends_with_ascii(asset.name, binary_suffix))
                     {
-                        const auto binary_it = std::find_if(
-                            release.assets.begin(),
-                            release.assets.end(),
-                            [&](const ReleaseAssetInfo& asset)
-                            {
-                                return asset.name == binary_name;
-                            });
-                        if (binary_it == release.assets.end())
-                            continue;
-
-                        resolved.found = true;
-                        resolved.tag_name = release.tag_name;
-                        resolved.version_url = version_it->browser_download_url;
-                        resolved.binary_url = binary_it->browser_download_url;
-                        return resolved;
+                        continue;
                     }
+
+                    const std::size_t version_offset = binary_prefix.size();
+                    const std::size_t version_length =
+                        asset.name.size() - binary_prefix.size() - binary_suffix.size();
+                    const std::string remote_version =
+                        extract_version_string(asset.name.substr(version_offset, version_length));
+                    if (remote_version.empty())
+                    {
+                        continue;
+                    }
+
+                    resolved.found = true;
+                    resolved.tag_name = release.tag_name;
+                    resolved.binary_name = asset.name;
+                    resolved.remote_version = remote_version;
+                    resolved.binary_url = asset.browser_download_url;
+                    return resolved;
                 }
             }
 
@@ -3780,25 +3791,22 @@ namespace epochnamespace::updater
             system_detail::extract_version_string(PROJECT_SOURCE_VERSION);
 
         auto packaged_release = system_detail::resolve_packaged_release();
-        if (!packaged_release.found
-            && !channel.version_url.empty()
-            && !channel.binary_url.empty())
-        {
-            packaged_release.found = true;
-            packaged_release.version_url = channel.version_url;
-            packaged_release.binary_url = channel.binary_url;
-        }
-
         system_detail::VersionCheckResult packaged_status{};
         packaged_status.local = local_packaged_version;
         result.local_version = local_packaged_version;
 
-        if (packaged_release.found && !packaged_release.version_url.empty())
+        if (packaged_release.found && !packaged_release.remote_version.empty())
         {
-            packaged_status = check_for_updates(
-                packaged_release.version_url,
-                "Packaged",
-                PROJECT_PACKAGED_VERSION);
+            packaged_status.ok = true;
+            packaged_status.local = local_packaged_version;
+            packaged_status.remote = packaged_release.remote_version;
+            packaged_status.update_available =
+                system_detail::compare_versions(local_packaged_version, packaged_release.remote_version) < 0;
+
+            system_detail::log_info("Packaged Local  : " + packaged_status.local);
+            system_detail::log_info("Packaged Remote : " + packaged_status.remote);
+            if (!packaged_release.binary_name.empty())
+                system_detail::log_info("Packaged Asset  : " + packaged_release.binary_name);
 
             if (packaged_status.ok)
             {

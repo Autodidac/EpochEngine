@@ -62,18 +62,22 @@ namespace epochnamespace::updater
     export inline const std::string PROJECT_PACKAGED_VERSION =
         epochnamespace::GetPackagedVersionString();
 
-    export inline constexpr std::string_view WINDOWS_RUNTIME_BINARY_ASSET =
-        "epoch_win10_x64.zip";
-    export inline constexpr std::string_view LINUX_RUNTIME_BINARY_ASSET =
-        "epoch_linux_x64.tar.gz";
-    export inline constexpr std::string_view WINDOWS_BOOTSTRAP_BINARY_ASSET =
-        "epoch_updater_shell_only_win10_x64.zip";
-    export inline constexpr std::string_view LINUX_BOOTSTRAP_BINARY_ASSET =
-        "epoch_updater_shell_only_linux_x64.tar.gz";
-    export inline constexpr std::string_view WINDOWS_VERSION_ASSET =
-        "version_windows.txt";
-    export inline constexpr std::string_view LINUX_VERSION_ASSET =
-        "version_linux.txt";
+    export inline constexpr std::string_view WINDOWS_RUNTIME_BINARY_PREFIX =
+        "epoch_win10_x64_v";
+    export inline constexpr std::string_view WINDOWS_RUNTIME_BINARY_SUFFIX =
+        ".zip";
+    export inline constexpr std::string_view LINUX_RUNTIME_BINARY_PREFIX =
+        "epoch_linux_x64_v";
+    export inline constexpr std::string_view LINUX_RUNTIME_BINARY_SUFFIX =
+        ".tar.gz";
+    export inline constexpr std::string_view WINDOWS_BOOTSTRAP_BINARY_PREFIX =
+        "epoch_updater_shell_only_win10_x64_v";
+    export inline constexpr std::string_view WINDOWS_BOOTSTRAP_BINARY_SUFFIX =
+        ".zip";
+    export inline constexpr std::string_view LINUX_BOOTSTRAP_BINARY_PREFIX =
+        "epoch_updater_shell_only_linux_x64_v";
+    export inline constexpr std::string_view LINUX_BOOTSTRAP_BINARY_SUFFIX =
+        ".tar.gz";
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Runtime / source build metadata
@@ -162,87 +166,76 @@ namespace epochnamespace::updater
         return std::string{ epoch::platform::policy::source_snapshot_archive_label() };
     }
 
-    export inline std::vector<std::string> PACKAGED_VERSION_ASSET_CANDIDATES()
+    export inline std::string PACKAGED_BINARY_ASSET_PREFIX()
     {
         switch (platform::current_platform())
         {
         case platform::RuntimePlatform::Windows:
-            return { std::string{ WINDOWS_VERSION_ASSET } };
+            return std::string{ WINDOWS_RUNTIME_BINARY_PREFIX };
         case platform::RuntimePlatform::Linux:
-            return { std::string{ LINUX_VERSION_ASSET } };
+            return std::string{ LINUX_RUNTIME_BINARY_PREFIX };
         case platform::RuntimePlatform::MacOS:
-            return { "macos_version.txt" };
+            return "epoch_macos_x64_v";
         default:
-            return { std::string{ WINDOWS_VERSION_ASSET } };
+            return std::string{ WINDOWS_RUNTIME_BINARY_PREFIX };
         }
     }
 
-    export inline std::vector<std::string> PACKAGED_BINARY_ASSET_CANDIDATES()
+    export inline std::string PACKAGED_BINARY_ASSET_SUFFIX()
     {
         switch (platform::current_platform())
         {
         case platform::RuntimePlatform::Windows:
-            return { std::string{ WINDOWS_RUNTIME_BINARY_ASSET } };
+            return std::string{ WINDOWS_RUNTIME_BINARY_SUFFIX };
         case platform::RuntimePlatform::Linux:
-            return { std::string{ LINUX_RUNTIME_BINARY_ASSET } };
+            return std::string{ LINUX_RUNTIME_BINARY_SUFFIX };
         case platform::RuntimePlatform::MacOS:
-            return { "macos_main.tar.gz" };
+            return ".tar.gz";
         default:
-            return { std::string{ WINDOWS_RUNTIME_BINARY_ASSET } };
+            return std::string{ WINDOWS_RUNTIME_BINARY_SUFFIX };
         }
     }
 
-    export inline std::string LATEST_PACKAGED_VERSION_ASSET_NAME()
+    export inline std::string BOOTSTRAP_BINARY_ASSET_PREFIX()
     {
         switch (platform::current_platform())
         {
         case platform::RuntimePlatform::Windows:
-            return std::string{ WINDOWS_VERSION_ASSET };
+            return std::string{ WINDOWS_BOOTSTRAP_BINARY_PREFIX };
         case platform::RuntimePlatform::Linux:
-            return std::string{ LINUX_VERSION_ASSET };
+            return std::string{ LINUX_BOOTSTRAP_BINARY_PREFIX };
         case platform::RuntimePlatform::MacOS:
-            return "macos_version.txt";
+            return "epoch_updater_shell_only_macos_x64_v";
         default:
-            return std::string{ WINDOWS_VERSION_ASSET };
+            return std::string{ WINDOWS_BOOTSTRAP_BINARY_PREFIX };
         }
     }
 
-    export inline std::string LATEST_PACKAGED_BINARY_ASSET_NAME()
+    export inline std::string BOOTSTRAP_BINARY_ASSET_SUFFIX()
     {
         switch (platform::current_platform())
         {
         case platform::RuntimePlatform::Windows:
-            return std::string{ WINDOWS_RUNTIME_BINARY_ASSET };
+            return std::string{ WINDOWS_BOOTSTRAP_BINARY_SUFFIX };
         case platform::RuntimePlatform::Linux:
-            return std::string{ LINUX_RUNTIME_BINARY_ASSET };
+            return std::string{ LINUX_BOOTSTRAP_BINARY_SUFFIX };
         case platform::RuntimePlatform::MacOS:
-            return "macos_main.tar.gz";
+            return ".tar.gz";
         default:
-            return std::string{ WINDOWS_RUNTIME_BINARY_ASSET };
+            return std::string{ WINDOWS_BOOTSTRAP_BINARY_SUFFIX };
         }
     }
 
-    export inline std::string LATEST_BOOTSTRAP_BINARY_ASSET_NAME()
+    export inline std::string CURRENT_PACKAGED_BINARY_ASSET_NAME()
     {
-        switch (platform::current_platform())
-        {
-        case platform::RuntimePlatform::Windows:
-            return std::string{ WINDOWS_BOOTSTRAP_BINARY_ASSET };
-        case platform::RuntimePlatform::Linux:
-            return std::string{ LINUX_BOOTSTRAP_BINARY_ASSET };
-        case platform::RuntimePlatform::MacOS:
-            return "epoch_updater_shell_only_macos_x64.tar.gz";
-        default:
-            return std::string{ WINDOWS_BOOTSTRAP_BINARY_ASSET };
-        }
+        return PACKAGED_BINARY_ASSET_PREFIX()
+            + std::string{ PROJECT_PACKAGED_VERSION }
+            + PACKAGED_BINARY_ASSET_SUFFIX();
     }
 
     export inline std::string PROJECT_PACKAGED_VERSION_URL()
     {
-        return std::string{ GITHUB_BASE }
-            + std::string{ OWNER } + "/"
-            + std::string{ REPO } + "/releases/latest/download/"
-            + LATEST_PACKAGED_VERSION_ASSET_NAME();
+        return {};
     }
 
     export inline std::string PROJECT_SOURCE_URL()
@@ -256,11 +249,7 @@ namespace epochnamespace::updater
 
     export inline std::string PROJECT_BINARY_URL()
     {
-        return std::string{ GITHUB_BASE }
-            + std::string{ OWNER } + "/"
-            + std::string{ REPO }
-            + "/releases/latest/download/"
-            + LATEST_PACKAGED_BINARY_ASSET_NAME();
+        return {};
     }
 
     export inline std::string PROJECT_RELEASE_API_URL()

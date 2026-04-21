@@ -420,9 +420,9 @@ These remain support-tier or project-opt-in work, not the default baseline.
    backends.
 7. Align packaged Windows and Linux releases with the main runtime path by
    default, keep updater-shell builds explicit/bootstrap-only, keep packaged
-   updates ahead of source fallback, and move the runtime asset contract onto
-   `epoch_win10_x64.zip`, `epoch_linux_x64.tar.gz`, `version_windows.txt`, and
-   `version_linux.txt`.
+   updates ahead of source fallback, and use versioned runtime archives such
+   as `epoch_win10_x64_v0.83.86.zip` and `epoch_linux_x64_v0.83.86.tar.gz`
+   so packaged version discovery comes from the asset names themselves.
 8. Keep the six-pane harness useful as an observation/capture tool, but repair
    it around live manual truth whenever synthetic input diverges from a clean
    human validation.

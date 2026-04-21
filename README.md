@@ -11,7 +11,7 @@ multi-context rendering, and a staged two-role AI workspace that keeps helper
 automation reviewable instead of pretending blind autonomy is already solved.
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source-v0.83.86-1F7A4C?style=for-the-badge" alt="Current source v0.83.86" />
+<img src="https://img.shields.io/badge/Current_Source-v0.83.87-1F7A4C?style=for-the-badge" alt="Current source v0.83.87" />
   <img src="https://img.shields.io/badge/Published_Release-v0.83.85-2C6A8A?style=for-the-badge" alt="Published release v0.83.85" />
   <img src="https://img.shields.io/badge/Project--Driven_Runtime-1F6F78?style=for-the-badge" alt="Project-driven runtime" />
   <img src="https://img.shields.io/badge/Multicontext_Tooling-486B4A?style=for-the-badge" alt="Multicontext tooling" />
@@ -129,10 +129,10 @@ WSL/Linux note:
 - The packaged Linux artifact should behave as the main runtime release by
   default. Updater-shell mode is an explicit bootstrap path, not the normal
   Linux packaged identity.
-- The active packaged-runtime contract is now the explicit named asset pair
-  `epoch_win10_x64.zip` and `epoch_linux_x64.tar.gz`, with
-  `version_windows.txt` and `version_linux.txt` used for packaged version
-  probes.
+- The active packaged-runtime contract is now versioned runtime assets such as
+  `epoch_win10_x64_v0.83.86.zip` and `epoch_linux_x64_v0.83.86.tar.gz`.
+  The updater reads the packaged version directly from those archive names
+  before it falls through to source.
 
 ---
 
@@ -357,8 +357,8 @@ Useful entry points:
 
 Highlights:
 
-- The current source tree is on `v0.83.86`, above the published `v0.83.85`
-  release snapshot.
+- The current source tree is on `v0.83.87`, above the published `v0.83.86`
+  bootstrap/runtime release pair.
 - The README proof set is intentionally reduced to the three images that matter
   most right now: full Windows multicontext state, real promoted-window undock
   validation, and current Linux WSL proof.
