@@ -4,6 +4,34 @@ This file consolidates older versioned release-note markdowns. New releases cont
 
 ---
 
+# Epoch v0.83.85 Release Notes
+
+## Highlights
+- Restored the six-pane SDL3/SFML3 promoted-proxy contract on Windows so the
+  visible proxy shell can detach as a real top-level host instead of remaining
+  visually trapped inside the parented editor grid.
+- Re-aligned the packaged runtime story across Windows and Linux: the normal
+  packaged product path is the main runtime, while updater-shell mode is now an
+  explicit bootstrap-only build.
+- Refreshed the README proof set with current `v0.83.85` Windows and WSL/Linux
+  captures, plus an explicit promoted-window undock screenshot.
+
+## Verification
+- Rebuilt `Engine.sln` in `Debug|x64` and `Release|x64` with MSVC.
+- Verified [x64/Release/ConsoleApplication1.exe](../x64/Release/ConsoleApplication1.exe)
+  reports `Epoch v0.83.85`.
+- Rebuilt the Linux main-runtime path under WSL2 with clang/OpenGL/software and
+  verified [Engine/Bin/Clang-Release/epoch](../Engine/Bin/Clang-Release/epoch)
+  reports `Epoch v0.83.85`.
+
+## Notes
+- Clean human six-pane validation remains the final truth for the SDL/SFML
+  promoted-window behavior when the synthetic harness diverges.
+- The Linux proof image is captured from the asset-bearing WSL output rather
+  than a bare source-tree launch so fonts and runtime assets stay aligned.
+
+---
+
 # AlmondShell v0.62.1 Release Notes
 
 ## Highlights

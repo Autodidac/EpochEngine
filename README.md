@@ -105,14 +105,24 @@ the current source/editor state yet.
   behavior changes enough to make the older image misleading.
 - Capture from an asset-bearing `x64/Debug/` or `x64/Release/` launch only.
 
-Windows fullscreen six-context multicontext proof, source `v0.83.80`:
+Windows fullscreen six-context multicontext proof, source `v0.83.85`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08380.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
+  <img src="Images/readme/windows-multicontext-editor-v08385.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
 </p>
 
 Open the PNG directly for native resolution when checking all six panes. GitHub's
 page scaling can make the third column and lower row harder to read at a glance.
+
+Windows promoted-window undock proof, live validation:
+
+<p align="center">
+  <img src="Images/readme/windows-undock-proof-v08385.png" alt="Epoch Windows promoted-window undock proof" width="960" />
+</p>
+
+- The undock proof above is a live desktop capture from a successful six-pane
+  validation, showing the detached SDL/SFML-style promoted shell behavior
+  outside the main parent instead of visually freezing inside it.
 
 ---
 
@@ -127,19 +137,20 @@ source proof:
 
 ---
 
-WSL/Linux editor proof, source `v0.83.42`:
+WSL/Linux editor proof, source `v0.83.85`:
 
 <p align="center">
-  <img src="Images/readme/linux-sfml.png" alt="Epoch Linux WSL SFML editor proof" width="960" />
+  <img src="Images/readme/linux-opengl-v08385.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />
 </p>
 
 WSL/Linux note:
 
 - The Linux screenshot above comes from the engine's own frame capture under
-  WSLg, which avoids the extra-window behavior that can make desktop grabs
-  misleading.
-- The broader Linux multi-window view is still visually inconsistent under
-  WSLg, so the README is using the clean single-backend editor proof for now.
+  WSLg from the asset-bearing `Engine/Bin/Clang-Release/` output, which keeps
+  the proof tied to the real packaged/runtime layout instead of a half-wired
+  source-tree launch.
+- The current Linux proof uses the OpenGL editor path because that is the
+  validated main-runtime route on this workstation's WSL2 setup.
 - The packaged Linux artifact should behave as the main runtime release by
   default. Updater-shell mode is now treated as an explicit bootstrap build,
   not the standard Linux packaged identity.
