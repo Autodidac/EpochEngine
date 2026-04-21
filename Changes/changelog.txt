@@ -1,5 +1,16 @@
 # Epoch Changelog
 
+## [v0.83.86]
+- Reopened `main` above the published `v0.83.85` release so the source tree,
+  docs, and version metadata can move forward without pretending the live
+  branch is still the shipped snapshot.
+- Published the `v0.83.85` GitHub release with both asset-bearing runtime
+  packages attached: Windows `Epoch-v0.83.85-windows-x64.zip` and Linux
+  `Epoch-v0.83.85-linux-main.tar.gz`.
+- Kept the README proof set pinned to the shipped `v0.83.85` captures,
+  including the Windows promoted-window undock proof and the WSL/Linux OpenGL
+  runtime proof, while the working source version advances to `v0.83.86`.
+
 ## [v0.83.85]
 - Re-stabilized the SDL3/SFML3 Win32 six-pane undock path around the working promoted-proxy contract: the visible proxy shell is the real detachable top-level host, the backend child stays nested inside it, and detached placement clears the parent bounds instead of freezing visually trapped inside the parent.
 - Kept the harness on a supporting role instead of letting synthetic input rewrite runtime truth: the Win32 probe now records more top-level window state, but clean human six-pane validation and subsystem logs are treated as the deciding evidence when the harness diverges.

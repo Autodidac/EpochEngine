@@ -252,7 +252,7 @@ The working commit/push pattern is:
 - bump `aengine.version.ixx`
 - keep `Changes/roadmap.md` current when the steering surface changes
 - update README/docs/changelog when the behavior is user-visible
-- use a versioned commit title such as `v0.83.85 ...`
+- use a versioned commit title such as `v0.83.86 ...`
 - verify builds before pushing
 - do not leave live windows or bad-folder logs behind
 

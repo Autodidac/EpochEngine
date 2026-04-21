@@ -377,13 +377,14 @@ Useful entry points:
 # Current snapshot
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source-v0.83.85-1F7A4C?style=for-the-badge" alt="Current source v0.83.85" />
+  <img src="https://img.shields.io/badge/Current_Source-v0.83.86-1F7A4C?style=for-the-badge" alt="Current source v0.83.86" />
   <img src="https://img.shields.io/badge/Project_Shell-Repo_Projects_Wired-2C6A8A?style=for-the-badge" alt="Repo-root project shells wired" />
   <img src="https://img.shields.io/badge/MSVC_Warnings-C5202_Removed-7A5A2F?style=for-the-badge" alt="MSVC C5202 removed" />
 </p>
 
 Highlights:
-- The source tree is now on `v0.83.85`.
+- The source tree is now on `v0.83.86`, above the published `v0.83.85`
+  release.
 - The six-pane Win32 runtime has been pulled back toward the working legacy
   contract: SDL3 and SFML3 promote their visible proxy shell into a real
   top-level detached window instead of staying visually trapped inside the
@@ -400,9 +401,9 @@ Highlights:
 - Linux packaged runtime guidance is now aligned with the actual build defaults:
   the main packaged `epoch` runtime is the normal Linux product path, and
   updater-shell mode is an explicit bootstrap build only.
-- WSL2 clang Release verification now succeeds on the main-runtime OpenGL plus
-  software path and reports the same `v0.83.85` line as the Windows release
-  output.
+- WSL2 clang Release verification succeeded for the published `v0.83.85`
+  main-runtime OpenGL plus software path, and the current source tree now moves
+  forward on `v0.83.86`.
 - The roadmap continues to center single-context editor OpenGL, single-context
   launcher software, deliberate backend switching, and full teardown of inactive
   backends instead of leaving hidden renderers running in the background.

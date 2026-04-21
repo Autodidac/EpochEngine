@@ -1,6 +1,6 @@
 # Epoch Configuration Flags
 
-Current public version: `v0.83.85`
+Current source version: `v0.83.86`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -90,7 +90,8 @@ override them locally in `aengine.config.hpp`.
 
 ## Current release note
 
-- `v0.83.85` is the current source and packaged-version line for this pass.
+- `v0.83.86` is the current source line above the published `v0.83.85`
+  packaged release.
 - Normal desktop/runtime builds should stay on the main runtime path by default.
 - `EPOCH_UPDATER_SHELL_BUILD` is now an explicit bootstrap-mode switch, not the
   default identity for packaged Linux or Windows releases.

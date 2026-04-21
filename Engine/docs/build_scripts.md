@@ -68,7 +68,7 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 - sync with `origin/main` if the local branch has drifted
 - keep unrelated dirt out of the commit
 - bump `Engine/modules/aengine.version.ixx`
-- use a versioned commit title such as `v0.83.85 ...`
+- use a versioned commit title such as `v0.83.86 ...`
 - rebuild `ConsoleApplication1` in both `Debug|x64` and `Release|x64`
 - launch from the asset-bearing `x64/Debug/` or `x64/Release/` runtime, not
   from a source folder
