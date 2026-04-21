@@ -11,6 +11,9 @@
   promoted-window undock proof now uses the supplied live screenshot, and the
   WSL/Linux OpenGL proof now comes from the current asset-bearing `v0.83.86`
   build output.
+- Rewrote the README around the current source/runtime state and pruned
+  `Images/readme/` down to the three proof images still in use: Windows
+  multicontext, Windows promoted-window undock, and WSL/Linux OpenGL.
 - Corrected the Windows multicontext README proof to come from the DPI-aware
   harness startup capture at full parent resolution instead of the earlier
   cropped desktop grab.

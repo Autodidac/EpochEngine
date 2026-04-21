@@ -3,22 +3,19 @@
 # Epoch - Creative Software And Game Engine
 
 **Epoch Engine** is a professional **C++23 game engine and creative software
-platform** for building games, editors, tools, pipelines, and real-time
-interactive systems from a single modern codebase. It combines a
-modules-first architecture, two engine AI runtime roles under one
-engine-owned surface, custom UI powered by an automated texture-atlas
-system, built-in C++23 scripting that compiles with the engine and project,
-multi-context rendering, launcher + editor workflows, a project-driven
-runtime built around engine projects and scenes, and a shared time-system
-spine that treats simulation pacing, pause/resume, scaling, and stepping as
-first-class engine ownership instead of ad hoc per-backend behavior.
+platform** for games, editors, tools, automation, and real-time interactive
+workflows from one codebase. The active source tree is centered on a
+modules-first engine surface, a project-driven editor/runtime flow, custom UI
+and text rendering through Epoch's atlas system, engine-owned C++23 scripting,
+multi-context rendering, and a staged two-role AI workspace that keeps helper
+automation reviewable instead of pretending blind autonomy is already solved.
 
 <p align="left">
+  <img src="https://img.shields.io/badge/Current_Source-v0.83.86-1F7A4C?style=for-the-badge" alt="Current source v0.83.86" />
+  <img src="https://img.shields.io/badge/Published_Release-v0.83.85-2C6A8A?style=for-the-badge" alt="Published release v0.83.85" />
   <img src="https://img.shields.io/badge/Project--Driven_Runtime-1F6F78?style=for-the-badge" alt="Project-driven runtime" />
-  <img src="https://img.shields.io/badge/Custom_UI_Texture--Atlas_System-405C8A?style=for-the-badge" alt="Custom UI powered by an automated texture-atlas system" />
-  <img src="https://img.shields.io/badge/Compiled_C%2B%2B23_Scripting-8A5C2F?style=for-the-badge" alt="Compiled C++23 scripting" />
   <img src="https://img.shields.io/badge/Multicontext_Tooling-486B4A?style=for-the-badge" alt="Multicontext tooling" />
-  <img src="https://img.shields.io/badge/Time--System_Spine-7A4A4A?style=for-the-badge" alt="Time-system spine" />
+  <img src="https://img.shields.io/badge/Compiled_C%2B%2B23_Scripting-8A5C2F?style=for-the-badge" alt="Compiled C++23 scripting" />
   <img src="https://img.shields.io/badge/AI--Assisted_Engine_Ops-5A4D86?style=for-the-badge" alt="AI-assisted engine operations" />
 </p>
 
@@ -39,23 +36,22 @@ x64/Debug/
 x64/Release/
 ```
 
-Those binary folders also carry runtime assets, so launching from the binary
-directory is the safest default for local testing.
-
-For Windows multi-context smoke tests, prefer launching directly from
-`x64/Debug/` or `x64/Release/` so docked SDL/SFML/Vulkan panes see the same
-asset set as the main editor host.
+Those binary folders carry runtime assets too, so launching from the binary
+directory is the safest default for local testing. For Windows multicontext
+validation, prefer `x64/Debug/` or `x64/Release/` so SDL/SFML/Vulkan panes see
+the same asset set as the main editor host.
 
 ---
 
 # What Epoch provides
 
 - A project-driven runtime shell that creates, selects, builds, and plays real
-  game or software projects instead of trapping the editor in fake sample flows.
-- A split shell visual direction: the launcher can keep its older classic steel
+  game or software projects instead of trapping the editor in fake sample
+  flows.
+- A split shell visual direction: the launcher can keep its classic steel
   palette while the editor stays on a darker neutral tool palette, with a
-  future settings-level theme selector planned once scoped GUI themes are fully
-  stabilized.
+  future settings-level theme selector still planned once scoped GUI themes are
+  fully stabilized.
 - An embedded-engine project path that is being shaped around headers, modules,
   source, scripting, and resources together so generated child builds can
   graduate into honest standalone work.
@@ -64,13 +60,13 @@ asset set as the main editor host.
 - Engine-owned C++23 compiled scripting with project-local source resolution,
   host callbacks, validation/build actions, and runtime execution from the live
   editor shell.
-- Multicontext backend orchestration across OpenGL, Vulkan, SDL3, Raylib, SFML,
-  software, and headless/noop paths, with shared preview math keeping scene
-  framing closer across the visible renderers.
+- Multicontext backend orchestration across OpenGL, Vulkan, SDL3, Raylib,
+  SFML, software, and headless/noop paths, with shared preview math keeping
+  scene framing closer across the visible renderers.
 - A Systems workspace that is becoming a real tooling surface for frame/task
   graph views, support-tier diagnostics, pacing visibility, and deeper
   renderer/runtime instrumentation.
-- A time-based engine spine that owns fixed-step simulation, frame pacing,
+- A time-system spine that owns fixed-step simulation, frame pacing,
   pause/resume, scaling, single-step control, and future replay/timeline hooks
   instead of leaving timing scattered across backends.
 - Two intentional in-engine AI roles, the internal EpochBot and the local
@@ -79,31 +75,22 @@ asset set as the main editor host.
 - Broad hardware support aimed at 6-core / GTX 1660 Ti-era desktops and modern
   Linux laptops by default, with heavier renderer features and extra libs kept
   behind explicit support tiers or project opt-in.
-- Cross-platform build freedom through Visual Studio, MSBuild, CMake presets,
-  VS Code, shell scripts, and a module-first C++23 public surface that is still
-  being cleaned up toward more professional naming.
 
 ---
 
 # In action
 
 These README captures are source-state proofs, not updater-shell screenshots.
-The current six-context proof is promoted from engine-generated capture outputs
-so the repo image stays aligned with the real editor/runtime state.
-If a packaged bootstrap release looks older than these, it has not caught up to
-the current source/editor state yet.
+They are intentionally limited to the three images that matter most right now:
+the full Windows multicontext state, a real promoted-window undock validation,
+and the current Linux WSL proof.
 
 - A valid six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
   `Vulkan`, `OpenGL`, and `Software`.
-- Parent/helper host windows must not become stray fake panes. For the current
-  stable Windows parented path, the visible top-row panes are the real
-  `GLFW30`, `SDL_app`, and `SFML_Window` child surfaces, while the old
-  `EpochChild` wrappers stay hidden.
-- Black or empty software captures do not count as proof.
-- Refresh the multicontext proof at least every 10th feature version, or
-  sooner whenever renderer color, docking, context visibility, or layout
-  behavior changes enough to make the older image misleading.
-- Capture from an asset-bearing `x64/Debug/` or `x64/Release/` launch only.
+- The promoted-window proof must show a real detached window outside the main
+  parent, not a fake undock still trapped inside it.
+- The Linux proof should come from the asset-bearing WSL build output, not a
+  half-wired source-tree launch.
 
 Windows fullscreen six-context multicontext proof, source `v0.83.85`:
 
@@ -111,8 +98,9 @@ Windows fullscreen six-context multicontext proof, source `v0.83.85`:
   <img src="Images/readme/windows-multicontext-editor-v08385.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
 </p>
 
-Open the PNG directly for native resolution when checking all six panes. GitHub's
-page scaling can make the third column and lower row harder to read at a glance.
+Open the PNG directly for native resolution when checking all six panes.
+GitHub's page scaling can make the lower row and right column harder to read
+at a glance.
 
 Windows promoted-window undock proof, live validation:
 
@@ -121,19 +109,8 @@ Windows promoted-window undock proof, live validation:
 </p>
 
 - The undock proof above is a live desktop capture from a successful six-pane
-  validation, showing the detached SDL/SFML-style promoted shell behavior
-  outside the main parent instead of visually freezing inside it.
-
----
-
-Windows backend proof crops, refreshed from the latest fullscreen six-context
-source proof:
-
-<p align="center">
-  <img src="Images/readme/windows-opengl.png" alt="Epoch Windows OpenGL editor proof" width="32%" />
-  <img src="Images/readme/windows-sdl.png" alt="Epoch Windows SDL editor proof" width="32%" />
-  <img src="Images/readme/windows-software.png" alt="Epoch Windows software editor proof" width="32%" />
-</p>
+  validation, showing the detached promoted-shell behavior outside the main
+  parent.
 
 ---
 
@@ -145,15 +122,13 @@ WSL/Linux editor proof, source `v0.83.86`:
 
 WSL/Linux note:
 
-- The Linux screenshot above comes from the engine's own frame capture under
-  WSLg from the asset-bearing `Engine/Bin/Clang-Release/` output, which keeps
-  the proof tied to the real packaged/runtime layout instead of a half-wired
-  source-tree launch.
+- The Linux screenshot above comes from a live WSL editor run under WSLg using
+  the asset-bearing `Engine/Bin/Clang-Release/` output.
 - The current Linux proof uses the OpenGL editor path because that is the
   validated main-runtime route on this workstation's WSL2 setup.
 - The packaged Linux artifact should behave as the main runtime release by
-  default. Updater-shell mode is now treated as an explicit bootstrap build,
-  not the standard Linux packaged identity.
+  default. Updater-shell mode is an explicit bootstrap path, not the normal
+  Linux packaged identity.
 
 ---
 
@@ -376,36 +351,24 @@ Useful entry points:
 
 # Current snapshot
 
-<p align="left">
-  <img src="https://img.shields.io/badge/Current_Source-v0.83.86-1F7A4C?style=for-the-badge" alt="Current source v0.83.86" />
-  <img src="https://img.shields.io/badge/Project_Shell-Repo_Projects_Wired-2C6A8A?style=for-the-badge" alt="Repo-root project shells wired" />
-  <img src="https://img.shields.io/badge/MSVC_Warnings-C5202_Removed-7A5A2F?style=for-the-badge" alt="MSVC C5202 removed" />
-</p>
-
 Highlights:
-- The source tree is now on `v0.83.86`, above the published `v0.83.85`
-  release.
-- The six-pane Win32 runtime has been pulled back toward the working legacy
-  contract: SDL3 and SFML3 promote their visible proxy shell into a real
-  top-level detached window instead of staying visually trapped inside the
-  parent.
-- Clean human six-pane validation is now treated as the final truth for
-  SDL/SFML undock behavior, with the harness kept as an observation/capture aid
-  instead of the only signoff path when synthetic input diverges.
+
+- The current source tree is on `v0.83.86`, above the published `v0.83.85`
+  release snapshot.
+- The README proof set is intentionally reduced to the three images that matter
+  most right now: full Windows multicontext state, real promoted-window undock
+  validation, and current Linux WSL proof.
 - Generated project shells still expose concrete build/runtime proof inside the
-  editor, including `project.paths.txt`, child build logs, expected outputs, and
-  active script/source checks.
-- The AI workspace now surfaces staged iteration/capture roots and keeps the
-  two-role EpochBot plus MCP/control split explicit instead of drifting toward
-  vague self-coding claims.
-- Linux packaged runtime guidance is now aligned with the actual build defaults:
+  editor, including `project.paths.txt`, child build logs, expected outputs,
+  and active script/source checks.
+- The AI workspace keeps the two-role EpochBot plus MCP/control split explicit,
+  with staged captures, iteration packets, curated datasets, and eval roots
+  surfaced instead of drifting into vague self-coding claims.
+- Linux packaged runtime guidance is aligned with the actual build defaults:
   the main packaged `epoch` runtime is the normal Linux product path, and
   updater-shell mode is an explicit bootstrap build only.
-- WSL2 clang Release verification succeeded for the published `v0.83.85`
-  main-runtime OpenGL plus software path, and the current source tree now moves
-  forward on `v0.83.86`.
 - The roadmap continues to center single-context editor OpenGL, single-context
-  launcher software, deliberate backend switching, and full teardown of inactive
+  launcher software, deliberate backend switching, and teardown of inactive
   backends instead of leaving hidden renderers running in the background.
 - Detailed release history lives in [Changes/changelog.txt](Changes/changelog.txt),
   [Changes/release_notes_archive.md](Changes/release_notes_archive.md), and the
