@@ -215,6 +215,53 @@ namespace epochnamespace::core
             : std::chrono::milliseconds(100);
     }
 
+    [[nodiscard]] inline int read_post_update_startup_delay_ms() noexcept
+    {
+        constexpr int kMaxDelayMs = 15000;
+
+#if defined(_WIN32)
+        char* raw = nullptr;
+        std::size_t raw_size = 0;
+        if (_dupenv_s(&raw, &raw_size, "EPOCH_POST_UPDATE_STARTUP_DELAY_MS") != 0 || raw == nullptr)
+            return 0;
+
+        const long parsed = std::strtol(raw, nullptr, 10);
+        std::free(raw);
+#else
+        const char* const raw = std::getenv("EPOCH_POST_UPDATE_STARTUP_DELAY_MS");
+        if (raw == nullptr || *raw == '\0')
+            return 0;
+
+        const long parsed = std::strtol(raw, nullptr, 10);
+#endif
+
+        if (parsed <= 0)
+            return 0;
+
+        return (std::min)(static_cast<int>(parsed), kMaxDelayMs);
+    }
+
+    inline void apply_post_update_startup_cooldown(const std::string_view log_system)
+    {
+        const int delay_ms = read_post_update_startup_delay_ms();
+        if (delay_ms <= 0)
+            return;
+
+#if defined(_WIN32)
+        SetEnvironmentVariableA("EPOCH_POST_UPDATE_STARTUP_DELAY_MS", nullptr);
+#else
+        unsetenv("EPOCH_POST_UPDATE_STARTUP_DELAY_MS");
+#endif
+
+        logger::get(std::string{ log_system }).logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "Post-update startup cooldown: {} ms before context initialization.",
+            delay_ms);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+    }
+
 #if defined(_WIN32)
     inline void apply_fullscreen_capture_window_defaults() noexcept
     {
@@ -2464,6 +2511,7 @@ namespace epochnamespace::core
 
                 HINSTANCE hi = hInstance ? hInstance : GetModuleHandleW(nullptr);
 
+                apply_post_update_startup_cooldown(engine::kEngineLog);
                 apply_fullscreen_capture_window_defaults();
                 const auto launch_cfg = resolve_legacy_launch_config();
 
@@ -2529,6 +2577,7 @@ namespace epochnamespace::core
             {
                 epochnamespace::core::MultiContextManager mgr;
 
+                apply_post_update_startup_cooldown(engine::kEngineLog);
                 const auto launch_cfg = resolve_legacy_launch_config();
 
                 const bool ok = mgr.Initialize(
@@ -2628,6 +2677,7 @@ namespace epochnamespace::core
 
             const HINSTANCE hi = GetModuleHandleW(nullptr);
 
+            apply_post_update_startup_cooldown(engine::kEditorLog);
             apply_fullscreen_capture_window_defaults();
             const auto launch_cfg = resolve_legacy_launch_config();
 
@@ -2702,6 +2752,7 @@ namespace epochnamespace::core
         {
             epochnamespace::core::MultiContextManager mgr;
 
+            apply_post_update_startup_cooldown(engine::kEditorLog);
             const auto launch_cfg = resolve_legacy_launch_config();
 
                 const bool ok = mgr.Initialize(

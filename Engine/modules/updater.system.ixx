@@ -3046,7 +3046,9 @@ namespace epochnamespace::updater
             << "Write-Handoff 'INFO' 'Source runtime files copied successfully.'\n"
             << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "$env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS = '3000'\n"
             << "Start-Process -FilePath $targetExe -WorkingDirectory $targetDir\n"
+            << "Remove-Item Env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS -Force -ErrorAction SilentlyContinue\n"
             << "Write-Handoff 'INFO' 'Restarted updated runtime.'\n"
             << "Start-Sleep -Seconds 1\n"
             << "Remove-Item -LiteralPath $workerPath -Force -ErrorAction SilentlyContinue\n";
@@ -3127,7 +3129,9 @@ namespace epochnamespace::updater
             << "  exit /b 1\r\n"
             << ")\r\n"
             << ">> \"%LOG%\" echo [INFO] Replacement executable copied successfully.\r\n"
+            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000\"\r\n"
             << "start \"\" \"%TARGET%\"\r\n"
+            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=\"\r\n"
             << ">> \"%LOG%\" echo [INFO] Restarted updated executable.\r\n"
             << "del /F /Q \"%NEWBIN%\" >nul 2>&1\r\n"
             << "del /F /Q \"%~f0\" >nul 2>&1\r\n";
@@ -3167,7 +3171,7 @@ namespace epochnamespace::updater
             << "  sleep 1\n"
             << "done\n"
             << "chmod +x \"$TARGET\"\n"
-            << "\"$TARGET\" &\n"
+            << "EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000 \"$TARGET\" &\n"
             << "rm -f \"$0\"\n";
 
         sh.close();
@@ -3245,11 +3249,13 @@ namespace epochnamespace::updater
             << ">> \"%LOG%\" echo [INFO] Packaged runtime files copied successfully.\r\n"
             << "rmdir /S /Q \"%EXTRACTED%\" >nul 2>&1\r\n"
             << "del /F /Q \"%ARCHIVE%\" >nul 2>&1\r\n"
+            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000\"\r\n"
             << (chain_after_restart
                 ? ("set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND="
                     + system_detail::powershell_escape_single_quoted(std::string{ restart_auto_command }) + "\"\r\n")
                 : std::string{})
             << "start \"\" /D \"%TARGETDIR%\" \"%TARGETEXE%\"\r\n"
+            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=\"\r\n"
             << (chain_after_restart
                 ? "set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND=\"\r\n"
                 : "")
@@ -3330,8 +3336,8 @@ namespace epochnamespace::updater
             << (chain_after_restart
                 ? ("EPOCH_UPDATER_SHELL_AUTO_COMMAND="
                     + system_detail::quote_shell_arg(std::string{ restart_auto_command })
-                    + " \"$TARGETEXE\" >/dev/null 2>&1 &\n")
-                : "\"$TARGETEXE\" >/dev/null 2>&1 &\n")
+                    + " EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000 \"$TARGETEXE\" >/dev/null 2>&1 &\n")
+                : "EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000 \"$TARGETEXE\" >/dev/null 2>&1 &\n")
             << "if [ $? -ne 0 ]; then\n"
             << "  echo \"[ERROR] Failed to restart updated runtime.\" >> \"$LOG\"\n"
             << "  exit 1\n"
