@@ -10,6 +10,12 @@
 - Kept the README proof set pinned to the shipped `v0.83.85` captures,
   including the Windows promoted-window undock proof and the WSL/Linux OpenGL
   runtime proof, while the working source version advances to `v0.83.86`.
+- Corrected the Windows multicontext README proof to come from the DPI-aware
+  harness startup capture at full parent resolution instead of the earlier
+  cropped desktop grab.
+- Patched the live `v0.83.85` GitHub release with updater-compatible alias
+  assets: `version.txt`, `windows_version.txt`, `linux_version.txt`,
+  `main.zip`, `windows_main.zip`, and `linux_main.tar.gz`.
 
 ## [v0.83.85]
 - Re-stabilized the SDL3/SFML3 Win32 six-pane undock path around the working promoted-proxy contract: the visible proxy shell is the real detachable top-level host, the backend child stays nested inside it, and detached placement clears the parent bounds instead of freezing visually trapped inside the parent.

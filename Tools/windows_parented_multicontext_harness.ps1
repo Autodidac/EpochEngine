@@ -64,6 +64,8 @@ public static class EpochWin32Harness
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
     [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint threadId, ref GUITHREADINFO info);
     [DllImport("user32.dll")] public static extern bool PostMessageW(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -71,11 +73,14 @@ public static class EpochWin32Harness
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern IntPtr SetActiveWindow(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
+    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, uint dwAttribute, out RECT pvAttribute, int cbAttribute);
 }
 '@
 
 Add-Type -TypeDefinition $user32
 
+$DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = [IntPtr](-4)
+$DWMWA_EXTENDED_FRAME_BOUNDS = 9
 $WM_LBUTTONDOWN = 0x0201
 $WM_MOUSEMOVE = 0x0200
 $WM_LBUTTONUP = 0x0202
@@ -84,6 +89,20 @@ $MK_LBUTTON = 0x0001
 $SW_MAXIMIZE = 3
 $MOUSEEVENTF_LEFTDOWN = 0x0002
 $MOUSEEVENTF_LEFTUP = 0x0004
+
+function Initialize-DpiCaptureAwareness() {
+    try {
+        [void][EpochWin32Harness]::SetProcessDpiAwarenessContext($DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+    }
+    catch {}
+
+    try {
+        [void][EpochWin32Harness]::SetProcessDPIAware()
+    }
+    catch {}
+}
+
+Initialize-DpiCaptureAwareness
 
 function Get-LParam([int]$x, [int]$y) {
     $ux = $x -band 0xFFFF
@@ -145,7 +164,7 @@ function Get-DescendantWindows([IntPtr]$Parent) {
     $items
 }
 
-function Wait-ForParentWindow([int]$ProcessId, [int]$TimeoutSeconds = 35) {
+function Wait-ForParentWindow([int]$ProcessId, [int]$TimeoutSeconds = 50) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         $top = Get-ProcessTopWindows -ProcessId $ProcessId |
@@ -157,7 +176,7 @@ function Wait-ForParentWindow([int]$ProcessId, [int]$TimeoutSeconds = 35) {
     return $null
 }
 
-function Wait-ForBackendWindows([IntPtr]$Parent, [string[]]$Needles, [int]$TimeoutSeconds = 35) {
+function Wait-ForBackendWindows([IntPtr]$Parent, [string[]]$Needles, [int]$TimeoutSeconds = 50) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         $children = Get-DescendantWindows -Parent $Parent
@@ -181,7 +200,22 @@ function Wait-ForBackendWindows([IntPtr]$Parent, [string[]]$Needles, [int]$Timeo
 
 function Get-WindowRectObject([IntPtr]$Hwnd) {
     $rect = New-Object EpochWin32Harness+RECT
-    if (-not [EpochWin32Harness]::GetWindowRect($Hwnd, [ref]$rect)) { return $null }
+    $rectSize = [System.Runtime.InteropServices.Marshal]::SizeOf([type][EpochWin32Harness+RECT])
+    $gotRect = $false
+
+    try {
+        $hr = [EpochWin32Harness]::DwmGetWindowAttribute(
+            $Hwnd,
+            [uint32]$DWMWA_EXTENDED_FRAME_BOUNDS,
+            [ref]$rect,
+            $rectSize)
+        if ($hr -eq 0) {
+            $gotRect = $true
+        }
+    }
+    catch {}
+
+    if (-not $gotRect -and -not [EpochWin32Harness]::GetWindowRect($Hwnd, [ref]$rect)) { return $null }
     [pscustomobject]@{
         Left = $rect.Left
         Top = $rect.Top
@@ -773,17 +807,17 @@ $closeProbeTarget = ''
 $outputReady = $false
 
 try {
-Start-Sleep -Seconds 6
-$parentWindow = Wait-ForParentWindow -ProcessId $proc.Id
+Start-Sleep -Seconds 10
+    $parentWindow = Wait-ForParentWindow -ProcessId $proc.Id
     if (-not $parentWindow) {
         throw 'Timed out waiting for the parent editor window.'
     }
 
     if (-not $SkipMaximize) {
         [void][EpochWin32Harness]::ShowWindow($parentWindow.Hwnd, $SW_MAXIMIZE)
-Start-Sleep -Milliseconds 1200
+Start-Sleep -Milliseconds 2200
     }
-Start-Sleep -Milliseconds 1200
+Start-Sleep -Milliseconds 2200
 
     $needles = if ($Mode -eq 'Full') {
         @('GLFW','SDL','SFML','Vulkan','OpenGL','Software')
@@ -803,6 +837,12 @@ Start-Sleep -Milliseconds 1200
             Select-Object Class,Title,Visible
         $childrenDump | ConvertTo-Json -Depth 4 | Write-Output
         throw 'Timed out waiting for expected backend panes.'
+    }
+
+    Start-Sleep -Seconds 4
+    $settledReady = Wait-ForBackendWindows -Parent $parentWindow.Hwnd -Needles $needles -TimeoutSeconds 15
+    if ($settledReady) {
+        $ready = $settledReady
     }
 
     $children = $ready.Children
@@ -879,7 +919,7 @@ Start-Sleep -Milliseconds 800
         }
     }
 
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 4
     $childrenAfterDrag = Get-DescendantWindows -Parent $parentWindow.Hwnd
     $topLevelWindowsAfterDrag = Get-ProcessTopWindows -ProcessId $proc.Id | Select-Object Hwnd,Class,Title,Visible,Parent,Rect
     $screenshotPath = ''
@@ -900,7 +940,10 @@ Start-Sleep -Milliseconds 900
             Where-Object { $_.Visible -and $_.Parent -eq [IntPtr]::Zero } |
             ForEach-Object { $_.Hwnd })
     )
-    if (-not (Save-CombinedWindowScreenshot -Handles $topLevelHandles -Destination $screenshotPath)) {
+    $topLevelHandles = $topLevelHandles | Select-Object -Unique
+    $savedCombinedScreenshot =
+        Save-CombinedWindowScreenshot -Handles $topLevelHandles -Destination $screenshotPath
+    if (-not $savedCombinedScreenshot -or -not (Test-Path $screenshotPath)) {
         [void](Save-WindowScreenshot -Hwnd $parentWindow.Hwnd -Destination $screenshotPath)
     }
 
