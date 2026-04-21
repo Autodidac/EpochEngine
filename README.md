@@ -129,6 +129,10 @@ WSL/Linux note:
 - The packaged Linux artifact should behave as the main runtime release by
   default. Updater-shell mode is an explicit bootstrap path, not the normal
   Linux packaged identity.
+- The active packaged-runtime contract is now the explicit named asset pair
+  `epoch_win10_x64.zip` and `epoch_linux_x64.tar.gz`, with
+  `version_windows.txt` and `version_linux.txt` used for packaged version
+  probes.
 
 ---
 
@@ -367,6 +371,10 @@ Highlights:
 - Linux packaged runtime guidance is aligned with the actual build defaults:
   the main packaged `epoch` runtime is the normal Linux product path, and
   updater-shell mode is an explicit bootstrap build only.
+- Release packaging is moving onto a clean two-drop protocol from current
+  source: a tiny bootstrap updater-shell release, then the lean runtime release
+  it updates into, both using the new canonical asset names instead of the old
+  `main.zip` / `linux_main.tar.gz` aliases.
 - The roadmap continues to center single-context editor OpenGL, single-context
   launcher software, deliberate backend switching, and teardown of inactive
   backends instead of leaving hidden renderers running in the background.

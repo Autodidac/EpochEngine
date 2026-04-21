@@ -419,8 +419,10 @@ These remain support-tier or project-opt-in work, not the default baseline.
 6. Keep multicontext/backend child-window ownership honest across all active
    backends.
 7. Align packaged Windows and Linux releases with the main runtime path by
-   default, keep updater-shell builds explicit/bootstrap-only, and keep all
-   packaged version lines tied to the same bumped source commit.
+   default, keep updater-shell builds explicit/bootstrap-only, keep packaged
+   updates ahead of source fallback, and move the runtime asset contract onto
+   `epoch_win10_x64.zip`, `epoch_linux_x64.tar.gz`, `version_windows.txt`, and
+   `version_linux.txt`.
 8. Keep the six-pane harness useful as an observation/capture tool, but repair
    it around live manual truth whenever synthetic input diverges from a clean
    human validation.
@@ -443,5 +445,8 @@ These remain support-tier or project-opt-in work, not the default baseline.
   report the same bumped version line as the tagged source snapshot, and keep
   updater-shell mode as an explicit bootstrap build instead of the default
   release identity.
+- The bootstrap updater checks the newest packaged runtime release first and
+  only falls through to source when packaged parity is already reached, using
+  the new named runtime assets instead of the older alias set.
 - The docs stay strong enough to steer future automated passes without needing
   to rediscover the architecture from scratch.

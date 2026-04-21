@@ -155,16 +155,24 @@ Before publishing a Windows packaged runtime zip:
 - run `ConsoleApplication1.exe --version` from the staged folder before zipping
 - smoke the no-args packaged entry once before publishing so a release does not
   ship a dead startup path
+- name the runtime asset `epoch_win10_x64.zip`
+- publish `version_windows.txt` beside it
+- if the same release family also includes a bootstrap updater-shell drop, keep
+  that as a separate asset such as `epoch_updater_shell_only_win10_x64.zip`
+  instead of overloading the runtime package name
 
 Before publishing a Linux/WSL2 asset:
 
 - rebuild from the same bumped source commit that will be tagged
 - verify the Linux package reports the same version as the tag/source archive
-- keep the packaged `linux_main.tar.gz` and the GitHub source snapshot aligned
-  to the same commit, not just the same version string
+- keep the packaged `epoch_linux_x64.tar.gz` and the GitHub source snapshot
+  aligned to the same commit, not just the same version string
 - verify the packaged Linux artifact starts the main runtime path by default
   instead of accidentally shipping an updater-shell-only bootstrap
 - do not quietly reuse an older Linux artifact after source has changed
+- publish `version_linux.txt` beside the Linux runtime asset
+- keep any Linux bootstrap drop separate, for example
+  `epoch_updater_shell_only_linux_x64.tar.gz`
 
 ## Multicontext regression contract
 

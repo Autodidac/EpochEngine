@@ -20,6 +20,11 @@ the same engine-owned path.
 - packaged Linux releases should follow that same main-runtime rule: the normal
   packaged `epoch` entry is the product path, while updater-shell mode remains
   an explicit bootstrap build instead of the default Linux release identity
+- packaged updates stay binary-first: the updater shell should pull the newest
+  named runtime package first, and only continue to source when the packaged
+  runtime is already version-equal or newer
+- the active packaged asset contract is `epoch_win10_x64.zip`,
+  `epoch_linux_x64.tar.gz`, `version_windows.txt`, and `version_linux.txt`
 
 ## Project-driven runtime direction
 

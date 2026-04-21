@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.83.86]
+- Switched the active packaged updater contract onto the new named runtime
+  assets `epoch_win10_x64.zip` and `epoch_linux_x64.tar.gz`, with
+  `version_windows.txt` and `version_linux.txt` as the packaged version probes.
+- Kept the updater flow binary-first while preparing the new two-drop release
+  protocol: a tiny bootstrap updater-shell release can move onto the newest
+  packaged runtime release first, then source only if packaged parity is
+  already reached.
 - Reopened `main` above the published `v0.83.85` release so the source tree,
   docs, and version metadata can move forward without pretending the live
   branch is still the shipped snapshot.
