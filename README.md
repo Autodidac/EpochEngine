@@ -137,10 +137,10 @@ source proof:
 
 ---
 
-WSL/Linux editor proof, source `v0.83.85`:
+WSL/Linux editor proof, source `v0.83.86`:
 
 <p align="center">
-  <img src="Images/readme/linux-opengl-v08385.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />
+  <img src="Images/readme/linux-opengl-v08386.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />
 </p>
 
 WSL/Linux note:

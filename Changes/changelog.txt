@@ -7,9 +7,10 @@
 - Published the `v0.83.85` GitHub release with both asset-bearing runtime
   packages attached: Windows `Epoch-v0.83.85-windows-x64.zip` and Linux
   `Epoch-v0.83.85-linux-main.tar.gz`.
-- Kept the README proof set pinned to the shipped `v0.83.85` captures,
-  including the Windows promoted-window undock proof and the WSL/Linux OpenGL
-  runtime proof, while the working source version advances to `v0.83.86`.
+- Refreshed the README proof set while `main` stays on `v0.83.86`: the Windows
+  promoted-window undock proof now uses the supplied live screenshot, and the
+  WSL/Linux OpenGL proof now comes from the current asset-bearing `v0.83.86`
+  build output.
 - Corrected the Windows multicontext README proof to come from the DPI-aware
   harness startup capture at full parent resolution instead of the earlier
   cropped desktop grab.
