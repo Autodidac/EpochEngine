@@ -1,10 +1,217 @@
-# Epoch Release Notes Archive
+# Epoch Engine History And Release Archive
 
-This file consolidates older versioned release-note markdowns. New releases continue as individual files.
+This file is the single long-form history surface for Epoch's release and
+milestone work. It replaces the older split between:
+
+- `post_v0_83_work_collated.md`
+- `release_notes_0_83_0.md`
+- `release_notes_archive.md`
+- `release_notes_version_series_collated.md`
+
+## Snapshot and status tags
+
+- **Stable release**: a packaged release or milestone note that was intended as
+  a shippable runtime snapshot.
+- **Development line**: the active source tree after a release moved forward.
+- **Work log**: a useful progress checkpoint from active source work, but not
+  necessarily a clean standalone packaged release.
+- **Known-bad / regression risk**: a note that explicitly carried instability,
+  breakage, or unresolved follow-up at the time.
+
+Current orientation:
+
+- Latest published stable runtime line: `v0.83.86`
+- Current development source line: `v0.83.88`
+
+## What the engine has become so far
+
+From the archived work in this file, a few themes are clear:
+
+- Epoch has moved from a small launcher/updater-heavy shell toward a
+  project-centric runtime and editor that can launch, build, script, inspect,
+  and iterate from one engine-owned workflow.
+- The rendering stack has expanded into a real multicontext desktop tool
+  surface across Raylib, SDL3, SFML3, Vulkan, OpenGL, and Software, with the
+  harder work focused on honest docking, undocking, redocking, startup, and
+  shutdown behavior rather than fake placeholders.
+- The updater story matured from a fragile one-off replacement path into a real
+  bootstrap/runtime flow with managed rebuilds, source fallback, packaged
+  assets, and cross-platform release alignment.
+- The editor shell has steadily become more professional: clearer top menus,
+  project and script workspaces, systems diagnostics, time controls, AI
+  workspace plumbing, and cleaner documentation/build discipline.
+- The repo itself has been moving toward cleaner public naming, stronger docs,
+  and fewer ambiguous legacy surfaces, even when the underlying engine work is
+  still ongoing.
+
+## Reading guide
+
+- For the latest condensed engine story, start with the summary above.
+- For the `v0.83.x` era after the first updater-shell milestone, read the
+  `Post-v0.83.0 Work Log` section first.
+- For the long release-by-release history before that, continue into the
+  archived release notes below.
+- Use the tags in each section to quickly tell whether an entry describes a
+  stable release, active development work, or a caution/regression period.
 
 ---
 
-# Epoch v0.83.85 Release Notes
+## Post-v0.83.0 Work Log
+
+These notes were previously tracked in `post_v0_83_work_collated.md` and are
+kept here because they describe the active engine/editor direction more directly
+than the older updater-era release cadence.
+
+### [Work Log | Development line] v0.83.59
+- Restored SDL and SFML dock takeover ownership so the real backend child
+  window remains the active pane after docking settles, while the placeholder
+  host stays available only as the container.
+- Unified Vulkan clear color with the shared context palette so Vulkan no
+  longer drifts visually from the other editor backends.
+- Pulled the uploaded `botface.html` into repo history, then restored the
+  cleaner UTF-8 working copy on top so the worktree and GitHub stay aligned
+  without preserving the broken encoded variant.
+
+### [Work Log | Development line] v0.83.54
+- Wired Win32 child-window wheel and text/key messages back into the editor GUI
+  path so docked editor contexts can finally deliver wheel zoom and live AI
+  chat input instead of relying on dead plumbing.
+- Flattened the preview look-hit marker onto the grid plane and removed the
+  floating camera-to-hit indicator so the center-look spot reads like an editor
+  targeting aid instead of a hovering false collision.
+- Replaced the placeholder asset/actions shell with real editor entity controls
+  for adding meshes, lights, spawns, duplicating the current selection,
+  deleting the current selection, and sending a live scene prompt into the AI
+  panel.
+
+### [Work Log | Development line] v0.83.53
+- Added editor viewport drag-pan so held left mouse movement now slides the
+  preview focus while wheel zoom and right-drag orbit remain active.
+- Added a shared camera look-hit marker derived from the center view ray and
+  projected it through the active preview backends so the current focus spot is
+  visible in-editor.
+- Tightened software preview invalidation and telemetry churn by tracking
+  camera revisions directly and only re-emitting software framebuffer gauges
+  when their values actually change.
+- Captured a fresh 4K six-context editor proof from the asset-bearing local
+  runtime for the README.
+
+### [Work Log | Development line] v0.83.52
+- Aligned the Windows resource move into `Engine/resource/` at the repo/build
+  level, including the CMake resource path and the active Visual Studio
+  shared-item surface.
+- Refreshed the editor chrome toward a proper tool-style shell with `File`,
+  `Edit`, `Asset`, `Window`, `Tools`, and `Help` plus mode/system tabs instead
+  of fake project placeholders.
+- Added mouse-wheel zoom for the editor preview camera and surfaced the live
+  zoom value in the inspector/output panels.
+- Captured and documented the refreshed multicontext editor run from the
+  asset-bearing `x64/Debug` runtime so the README reflects the actual current
+  local launch path.
+
+### [Work Log | Development line] v0.83.51
+- Kept the Windows multi-context host visible for docked SDL and SFML panes so
+  backend child windows no longer disappear behind the editor host during local
+  smoke runs.
+- Improved Windows host/child handle matching in the multiplexer so resize,
+  enqueue, cleanup, and dock layout logic follow the real live pane handle
+  instead of only the original host HWND.
+- Documented the asset-bearing output-folder launch path for multi-context
+  smoke tests so local editor runs match the runtime asset layout used by the
+  docked backends.
+
+### [Work Log | Development line] v0.83.4
+- Rolled `main` forward after the packaged `0.83.3` updater-shell release so
+  the public binary can demonstrate the live fallback path into the newer
+  source revision with the repaired runtime-version comparison.
+- Fixed managed-vcpkg baseline rewriting inside updater sandboxes so the source
+  fallback no longer walks up to the Epoch repo's own `HEAD` when it needs a
+  vcpkg registry git revision.
+- Made the source-update worker ignore any inherited `VCPKG_ROOT` and pin a
+  worker-local managed toolchain instead, so updater rebuilds stay isolated
+  from preexisting user vcpkg installs.
+
+### [Work Log | Development line] v0.83.3
+- Rolled `main` forward after the packaged `0.83.2` updater-shell hotfix
+  release so the public binary can demonstrate the full release-to-source
+  update path against a newer source revision.
+- Trimmed the source-update manifest down to the graphics-only `SFML` and
+  non-audio `raylib` feature set so updater-managed rebuilds no longer depend
+  on the flaky `libogg`/`vorbis`/`openal` download chain.
+
+### [Work Log | Development line] v0.83.2
+- Fixed the updater worker's managed-vcpkg Git `HEAD` detection so the public
+  shell can continue past managed tool bootstrap and reach the real
+  restore/build/restart path during source fallback updates.
+
+### [Work Log | Development line] v0.83.1
+- Fixed the updater-shell source fallback so it always uses the
+  updater-managed `vcpkg` toolchain instead of mutating any configured local
+  `VCPKG_ROOT` checkout during the rebuild path.
+
+---
+
+# [Stable Milestone Release] Epoch 0.83.0 Release Notes
+
+Epoch 0.83.0 marks the transition to the updater-shell bootstrap flow.
+
+## Highlights
+
+- Added a dedicated updater-shell entry build for `ConsoleApplication1.exe`.
+- Simplified the launcher path so the bootstrap binary can focus on update,
+  rebuild, handoff, and restart.
+- Added visible version reporting in the launcher and editor surfaces.
+- Cleaned up startup console output so update activity is easier to read.
+- Improved GUI text wrapping and updater-shell copy so update instructions are
+  clearer.
+
+## Updater Shell
+
+- The updater shell is now the intended binary entry point for users who need
+  to move from a packaged build to a newer source snapshot.
+- The shell can close its own window and continue the update in the console
+  while the worker finishes.
+- The update description now warns users not to interrupt the process once
+  update starts.
+- The release payload for the shell is intentionally slim: executable, required
+  runtime DLLs, and the GUI font asset.
+
+## Source Update Path
+
+- Source-version parsing now reads the version macros in
+  `aengine.version.ixx` correctly.
+- The worker now falls back from packaged update checks to source update checks
+  more reliably.
+- Managed `vcpkg` handling was hardened so the worker keeps its own registry
+  snapshot instead of escaping into an outer repository.
+- Inherited `VCPKG_ROOT` values are ignored during worker execution so existing
+  user installs are not repointed or rewritten.
+- The worker prepares its own managed toolchain state before restore/build,
+  keeping update behavior more deterministic.
+
+## Runtime and Stability
+
+- Windows unattended updater runs now avoid interactive debug/assert popups when
+  no debugger is attached.
+- The debug assert path only triggers `DebugBreak()` when a debugger is
+  actually present.
+- Updater validation now works better from short-path sandboxes, which better
+  matches real release usage.
+
+## User-Facing Outcome
+
+The 0.83.x line is the first line intended to demonstrate a practical bootstrap
+flow:
+
+1. Start from the packaged updater shell.
+2. Check the latest packaged release.
+3. If packaged is current but `main` is newer, fall through to source update.
+4. Restore dependencies, build the newer source snapshot, replace the runtime,
+   and relaunch.
+
+---
+
+# [Stable Release] Epoch v0.83.85 Release Notes
 
 ## Highlights
 - Restored the six-pane SDL3/SFML3 promoted-proxy contract on Windows so the

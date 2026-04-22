@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Reordered the README snapshot tags so `C++23 scripting` sits ahead of
+  `multicontext tooling`, which reads more naturally as a language/runtime
+  capability before the current multi-window/editor state.
+- Collapsed the scattered release-history surfaces into one descriptive archive
+  at `Changes/engine_history_and_release_archive.md`, folding the older
+  version-series notes, the `v0.83.0` milestone notes, and the post-`v0.83.0`
+  work log into one easier-to-navigate reference.
 - Finished a real Phase 3 step by surfacing backend ownership directly inside
   the live `Systems` workspace: the active backend, ownership model, shell
   targets, and backend lifecycle policy are now visible in-editor instead of

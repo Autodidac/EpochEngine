@@ -9,11 +9,11 @@ runtime, engine-owned UI/text tooling, C++23 scripting, multicontext renderer
 work, and a staged two-role AI workspace that keeps automation reviewable.
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source-v0.83.88-1F7A4C?style=for-the-badge" alt="Current source v0.83.88" />
-  <img src="https://img.shields.io/badge/Published_Release-v0.83.86-2C6A8A?style=for-the-badge" alt="Published release v0.83.86" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.83.88-1F7A4C?style=for-the-badge" alt="Current development source v0.83.88" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.83.86-2C6A8A?style=for-the-badge" alt="Published stable release v0.83.86" />
   <img src="https://img.shields.io/badge/Project--Centric_Runtime-1F6F78?style=for-the-badge" alt="Project-centric runtime" />
-  <img src="https://img.shields.io/badge/Multicontext_Tooling-486B4A?style=for-the-badge" alt="Multicontext tooling" />
   <img src="https://img.shields.io/badge/C%2B%2B23_Scripting-8A5C2F?style=for-the-badge" alt="C++23 scripting" />
+  <img src="https://img.shields.io/badge/Multicontext_Tooling-486B4A?style=for-the-badge" alt="Multicontext tooling" />
   <img src="https://img.shields.io/badge/AI--Assisted_Engine_Ops-5A4D86?style=for-the-badge" alt="AI-assisted engine operations" />
 </p>
 
@@ -40,8 +40,8 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently `v0.83.88`.
-- The latest published runtime release is `v0.83.86`.
+- Source is currently the active development line at `v0.83.88`.
+- The latest published stable runtime release is `v0.83.86`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
 - Bootstrap updater-shell releases are separate from the main runtime package
@@ -207,7 +207,7 @@ Project planning and release history:
 
 - [Changes/roadmap.md](Changes/roadmap.md)
 - [Changes/changelog.txt](Changes/changelog.txt)
-- [Changes/release_notes_archive.md](Changes/release_notes_archive.md)
+- [Changes/engine_history_and_release_archive.md](Changes/engine_history_and_release_archive.md)
 
 ## Roadmap Direction
 
