@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Rewrote the roadmap around the live mission instead of carrying completed
+  phase bookkeeping forward: it now focuses on preserved baseline, active
+  mission tracks, current push order, release/source policy, acceptance gates,
+  and the new Android-first mobile bring-up direction.
+- Tightened the Windows GitHub workflow so hosted builds restore packages
+  through `NuGet/setup-nuget@v2` and use standard Windows PowerShell steps
+  instead of depending on explicit `pwsh` shells in the MSBuild job.
 - Replaced the remaining cwd-dependent runtime path guesses in the active
   engine path with one shared executable-root resolver: scripts, GUI fonts,
   shader lookup, capture output, project-shell repo discovery, and updater

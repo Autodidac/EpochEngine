@@ -65,6 +65,8 @@ Build-system reality to keep in mind:
 
 ## Platform-specific docs
 
+- `platform/android/android_bringup_plan.md` - honest Android-first mobile
+  bring-up scope and acceptance criteria
 - `platform/linux/linux_wsl_build_setup.md` - WSL/Linux setup and build notes
 
 ## Planning and history

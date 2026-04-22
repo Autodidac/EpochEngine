@@ -24,12 +24,15 @@ jobs:
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
 
+      - name: Set up NuGet
+        uses: NuGet/setup-nuget@v2
+
       - name: Restore NuGet packages
-        shell: pwsh
+        shell: powershell
         run: nuget restore $env:SOLUTION_FILE_PATH
 
       - name: Build ConsoleApplication1
-        shell: pwsh
+        shell: powershell
         run: >
           msbuild $env:SOLUTION_FILE_PATH
           /t:ConsoleApplication1
