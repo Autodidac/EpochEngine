@@ -211,6 +211,7 @@ namespace
     std::vector<PendingWindowCleanup> g_pendingCleanups;
     constexpr std::string_view kLogSys = "Context.Multiplexer.Win";
     constexpr COLORREF kParentBackgroundColor = RGB(0x1C, 0x1F, 0x26);
+    constexpr auto kRenderThreadStartupStepDelay = std::chrono::milliseconds(250);
 
     [[nodiscard]] inline HBRUSH parent_background_brush() noexcept
     {
@@ -2240,9 +2241,6 @@ namespace epochnamespace::core
 
         make_backend_windows(ContextType::Software, SoftwareWinCount);
 #endif
-        ArrangeDockedWindowsGrid();
-        StartRenderThreads();
-
         {
             std::shared_lock lock(g_backendsMutex);
             return !g_backends.empty();
@@ -2456,12 +2454,28 @@ namespace epochnamespace::core
 
         auto& threads = Threads();
 
+        std::size_t launchIndex = 0;
         for (HWND hwnd : hwnds)
         {
             if (threads.contains(hwnd)) continue;
 
-            threads[hwnd] = std::thread([this, hwnd]()
+            const auto startupDelay =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    kRenderThreadStartupStepDelay * static_cast<int>(launchIndex++));
+
+            threads[hwnd] = std::thread([this, hwnd, startupDelay]()
                 {
+                    if (startupDelay.count() > 0)
+                    {
+                        epochnamespace::logger::get(kLogSys).logf(
+                            epochnamespace::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Startup stagger: delaying render thread {} by {} ms.",
+                            static_cast<void*>(hwnd),
+                            startupDelay.count());
+                        std::this_thread::sleep_for(startupDelay);
+                    }
+
                     WindowData* win = nullptr;
                     {
                         std::scoped_lock lock(windowsMutex);

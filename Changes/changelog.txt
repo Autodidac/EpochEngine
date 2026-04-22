@@ -504,6 +504,9 @@
 - Updated README, runtime/build/smoke/AI docs around the time-based engine direction, the GPU-driven baseline renderer plan, the later SpeedTree-like procedural/node authoring phase with future O2L integration, and the helper-first workflow that can use up to four parallel prompts per loaded local helper model.
 
 ## [Unreleased]
+- Removed the duplicate Win32 multicontext bring-up path so context layout and render-thread startup only happen once during engine/editor launch instead of being re-fired from both `Initialize()` and the outer startup loop.
+- Added a short per-context startup stagger on both Win32 and Linux multicontext managers so heavy backends do not all initialize on the same instant, which reduces random bring-up stalls and gives the editor a calmer startup path.
+- Stopped OpenGL from swapping an unready first frame while its quad pipeline is still unavailable, reducing the intermittent load-time flicker/blank-present seam during startup.
 - Switched Win32 SDL/SFML proxy drags to child-relative screen math and kept proxy panes detached until mouse release, so parented top-row drags stop snap-redocking mid-drag and stop picking up host-frame drift.
 - Extended the parented Win32 harness to record the proxy release-redock contract explicitly (`ContractMode`, `LateDetached`, `EndRedocked`) instead of pretending proxy-child panes should redock live like direct-child panes.
 - Revalidated focused serial SDL and SFML parented drag cycles against the new contract and kept the close/destroy multiplexer logging visible for user-close vs orderly shutdown diagnosis.

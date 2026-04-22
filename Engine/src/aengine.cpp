@@ -2534,8 +2534,8 @@ namespace epochnamespace::core
 
                 input::designate_polling_thread_to_current();
 
-                mgr.StartRenderThreads();
                 mgr.ArrangeDockedWindowsGrid();
+                mgr.StartRenderThreads();
 
 #if defined(_WIN32)
                 prepare_parent_window_for_engine_capture(mgr);
@@ -2602,8 +2602,8 @@ namespace epochnamespace::core
 
                 input::designate_polling_thread_to_current();
 
-                mgr.StartRenderThreads();
                 mgr.ArrangeDockedWindowsGrid();
+                mgr.StartRenderThreads();
 
                 if (epochnamespace::core::cli::smoke_requested)
                 {
@@ -2703,8 +2703,8 @@ namespace epochnamespace::core
 
             input::designate_polling_thread_to_current();
 
-            mgr.StartRenderThreads();
             mgr.ArrangeDockedWindowsGrid();
+            mgr.StartRenderThreads();
 
 #if defined(_WIN32)
             prepare_parent_window_for_engine_capture(mgr);
@@ -2777,8 +2777,8 @@ namespace epochnamespace::core
 
             input::designate_polling_thread_to_current();
 
-            mgr.StartRenderThreads();
             mgr.ArrangeDockedWindowsGrid();
+            mgr.StartRenderThreads();
 
             auto pump = []() -> bool
                 {

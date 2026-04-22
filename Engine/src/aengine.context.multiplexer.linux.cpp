@@ -117,6 +117,11 @@ namespace epochnamespace::platform
 
 namespace epochnamespace::core
 {
+    namespace
+    {
+        constexpr auto kRenderThreadStartupStepDelay = std::chrono::milliseconds(250);
+    }
+
     using epochnamespace::platform::global_display;
     using epochnamespace::platform::global_window;
 
@@ -1446,6 +1451,7 @@ namespace
     void MultiContextManager::StartRenderThreads()
     {
         std::scoped_lock lock(windowsMutex);
+        std::size_t launchIndex = 0;
         for (const auto& win : windows)
         {
             if (!win) continue;
@@ -1454,7 +1460,23 @@ namespace
             if (!threads.contains(xwin))
             {
                 WindowData* raw = win.get();
-                threads[xwin] = std::thread([this, raw]() { RenderLoop(*raw); });
+                const auto startupDelay =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        kRenderThreadStartupStepDelay * static_cast<int>(launchIndex++));
+                threads[xwin] = std::thread([this, raw, startupDelay]()
+                    {
+                        if (startupDelay.count() > 0)
+                        {
+                            epochnamespace::logger::get(kLogSys).logf(
+                                epochnamespace::logger::LogLevel::Info,
+                                std::source_location::current(),
+                                "Startup stagger: delaying render thread {} by {} ms.",
+                                static_cast<void*>(raw ? raw->hwnd : nullptr),
+                                startupDelay.count());
+                            std::this_thread::sleep_for(startupDelay);
+                        }
+                        RenderLoop(*raw);
+                    });
             }
         }
     }

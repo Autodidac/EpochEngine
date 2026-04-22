@@ -74,13 +74,13 @@ namespace epochnamespace::openglcontext
 
         if (!openglquad::ensure_quad_pipeline(glState))
         {
-            PlatformGL::swap_buffers(guard.target());
             return true;
         }
 
         opengl_clear();
         opengl_render_active_frame(ctx, queue, fbW, fbH, windowId);
         PlatformGL::swap_buffers(guard.target());
+        ++glState.frameCount;
         return true;
     }
 }
