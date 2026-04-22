@@ -39,6 +39,8 @@ out/
 build_clang/
 built/
 build/
+!Engine/docs/build/
+!Engine/docs/build/**
 build_gcc/
 vcpkg_installed/
 bin/*
