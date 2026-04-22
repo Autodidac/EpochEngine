@@ -24,12 +24,18 @@ work, and a staged two-role AI workspace that keeps automation reviewable.
 
 For newcomers:
 
-- Epoch can launch projects, edit scenes, build scripts, inspect systems, and
-  run different rendering backends from one engine-owned shell.
-- The launcher and editor are intentionally separate surfaces: launcher for
-  project/context/update flow, editor for runtime, scripts, systems, and AI.
-- Current packaged releases are lean runtime/bootstrap builds. Full source and
-  deeper engine work still live in the repository.
+- Think of Epoch as one big workbench for making games and tools. Engines like
+  Unity, Unreal, and Godot try to give you one main place to build things, and
+  Epoch is aiming for that same kind of all-in-one home in its own way.
+- The launcher is the front door. You pick a project, choose settings, check
+  updates, and then open the editor.
+- The editor is the work room. You can look at scenes, run the project, build
+  scripts, check systems, and use AI tools there.
+- Epoch can also draw the same project in different ways. Those are called
+  rendering backends, but you can think of them as different drawing engines
+  under the hood.
+- The downloadable builds are kept small on purpose. The full source code and
+  the deeper engine work still live here in the repository.
 
 For engine/tooling developers:
 
