@@ -1,4 +1,4 @@
-# Renderer Regression Plan
+# Renderer Regression Smoke Plan
 
 This plan defines the minimum smoke coverage for Epoch's active render backends.
 

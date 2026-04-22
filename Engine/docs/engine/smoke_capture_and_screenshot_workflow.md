@@ -1,4 +1,4 @@
-# Smoke And Capture Automation
+# Smoke Capture And Screenshot Workflow
 
 This doc records the working validation loop for backend, editor, AI, and
 systems passes so future automation can follow one predictable method.
@@ -256,7 +256,8 @@ The working commit/push pattern is:
 - bump `aengine.version.ixx`
 - keep `Changes/roadmap.md` current when the steering surface changes
 - update README/docs/changelog when the behavior is user-visible
-- use a versioned commit title such as `v0.83.86 ...`
+- use a descriptive commit title without baking the version number into the
+  commit message
 - verify builds before pushing
 - do not leave live windows or bad-folder logs behind
 

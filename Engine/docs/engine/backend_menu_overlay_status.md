@@ -1,4 +1,4 @@
-# Menu Overlay Backend Audit
+# Backend Menu Overlay Status
 
 This note tracks practical GUI parity across the currently active backends.
 

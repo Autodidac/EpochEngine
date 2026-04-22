@@ -9,7 +9,7 @@ runtime, engine-owned UI/text tooling, C++23 scripting, multicontext renderer
 work, and a staged two-role AI workspace that keeps automation reviewable.
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source-v0.83.87-1F7A4C?style=for-the-badge" alt="Current source v0.83.87" />
+  <img src="https://img.shields.io/badge/Current_Source-v0.83.88-1F7A4C?style=for-the-badge" alt="Current source v0.83.88" />
   <img src="https://img.shields.io/badge/Published_Release-v0.83.86-2C6A8A?style=for-the-badge" alt="Published release v0.83.86" />
   <img src="https://img.shields.io/badge/Project--Centric_Runtime-1F6F78?style=for-the-badge" alt="Project-centric runtime" />
   <img src="https://img.shields.io/badge/Multicontext_Tooling-486B4A?style=for-the-badge" alt="Multicontext tooling" />
@@ -40,7 +40,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently `v0.83.87`.
+- Source is currently `v0.83.88`.
 - The latest published runtime release is `v0.83.86`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
@@ -177,7 +177,7 @@ cmake --build --preset Ninja-Debug
 ## Repository Layout
 
 ```text
-Engine/    engine code, resources, examples, docs, build config
+Engine/    engine code, resources, examples, and docs grouped into build/, engine/, and platform/
 Changes/   changelog, roadmap, release-note archives, current planning text
 Images/    README and repo artwork
 Tools/     local helper scripts and validation utilities
@@ -188,14 +188,23 @@ x64/       MSVC local outputs with colocated runtime assets
 
 Documentation index: [Engine/docs/README.md](Engine/docs/README.md)
 
-Recommended starting points:
+If you're new:
 
-- [Engine/docs/build_presets.md](Engine/docs/build_presets.md)
-- [Engine/docs/build_scripts.md](Engine/docs/build_scripts.md)
-- [Engine/docs/runtime_operations.md](Engine/docs/runtime_operations.md)
-- [Engine/docs/ai_build_memory.md](Engine/docs/ai_build_memory.md)
-- [Engine/docs/smoke_capture_automation.md](Engine/docs/smoke_capture_automation.md)
-- [Engine/docs/wsl_vcpkg_setup.md](Engine/docs/wsl_vcpkg_setup.md)
+- [Engine/docs/build/cmake_presets_and_builds.md](Engine/docs/build/cmake_presets_and_builds.md)
+- [Engine/docs/build/local_build_scripts_and_release_packaging.md](Engine/docs/build/local_build_scripts_and_release_packaging.md)
+- [Engine/docs/engine/runtime_and_editor_workflows.md](Engine/docs/engine/runtime_and_editor_workflows.md)
+- [Engine/docs/platform/linux/linux_wsl_build_setup.md](Engine/docs/platform/linux/linux_wsl_build_setup.md)
+
+If you're digging into engine behavior:
+
+- [Engine/docs/engine/current_engine_architecture.md](Engine/docs/engine/current_engine_architecture.md)
+- [Engine/docs/engine/backend_context_status.md](Engine/docs/engine/backend_context_status.md)
+- [Engine/docs/engine/backend_menu_overlay_status.md](Engine/docs/engine/backend_menu_overlay_status.md)
+- [Engine/docs/engine/ai_training_memory_and_dataset_policy.md](Engine/docs/engine/ai_training_memory_and_dataset_policy.md)
+- [Engine/docs/engine/smoke_capture_and_screenshot_workflow.md](Engine/docs/engine/smoke_capture_and_screenshot_workflow.md)
+
+Project planning and release history:
+
 - [Changes/roadmap.md](Changes/roadmap.md)
 - [Changes/changelog.txt](Changes/changelog.txt)
 - [Changes/release_notes_archive.md](Changes/release_notes_archive.md)

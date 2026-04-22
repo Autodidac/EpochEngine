@@ -1,4 +1,4 @@
-# Runtime Operations
+# Runtime And Editor Workflows
 
 This guide documents the current intended workflow for running Epoch honestly:
 editor, project, scripts, systems, AI, and runtime should all travel through
@@ -10,7 +10,7 @@ the same engine-owned path.
   logging, capture, and project/runtime selection share one path
 - desktop example wiring still lives under `Engine/examples/ConsoleApplication1/`
 - multicontext behavior depends on the active runtime/config macros documented
-  in `aengineconfig_flags.md`
+  in `../build/build_configuration_flags.md`
 - the Windows parented multicontext host should fit the active desktop work area
   by default so the full context matrix remains visible on baseline hardware
 - the longer-term shell default should converge toward one active backend at a
@@ -24,10 +24,10 @@ the same engine-owned path.
   named runtime package first, and only continue to source when the packaged
   runtime is already version-equal or newer
 - the active packaged asset contract is versioned runtime archives such as
-  `epoch_win10_x64_v0.83.86.zip` and `epoch_linux_x64_v0.83.86.tar.gz`
+  `epoch_win10_x64_vX.Y.Z.zip` and `epoch_linux_x64_vX.Y.Z.tar.gz`
 - the updater extracts the packaged version directly from the archive name
 
-## Project-driven runtime direction
+## Project-centric runtime direction
 
 - the editor should play the active project and scene, not a hardcoded sample
   game menu

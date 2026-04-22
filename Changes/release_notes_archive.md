@@ -40,7 +40,7 @@ This file consolidates older versioned release-note markdowns. New releases cont
 - Synchronises the bundled version metadata and changelog so integrators can verify the expected runtime snapshot.
 
 ## Known Issues
-- Automated renderer regression scenes remain under development; see `docs/renderer_regression_plan.md` for the intended coverage.
+- Automated renderer regression scenes remain under development; see `Engine/docs/engine/renderer_regression_smoke_plan.md` for the intended coverage.
 - Crash reporting hooks have not landed yet, so crashes must be reproduced locally with a debugger attached.
 
 ## Roadmap Alignment

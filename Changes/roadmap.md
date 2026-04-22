@@ -134,7 +134,7 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
       top of the current graph surfaces.
 - [ ] Use this surface to converge backend behavior across OpenGL, Vulkan,
       software, SDL, SFML, and Raylib instead of letting them drift.
-- [ ] Make backend ownership explicit in the live tooling surface so the active
+- [x] Make backend ownership explicit in the live tooling surface so the active
       backend is obvious and switching is deliberate.
 - [ ] Tighten multicontext terminology so file/module/doc names stop leaning on
       ambiguous legacy terms like `multiplexer`.
@@ -223,8 +223,8 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
 
 ## Current Push Priorities
 
-1. Strengthen the Systems workspace with backend ownership, pacing, and
-   hardware guidance.
+1. Strengthen the Systems workspace with deeper pacing diagnostics, hardware
+   guidance, and backend convergence.
 2. Carry the time spine deeper into runtime and scene ownership.
 3. Tighten the two-role AI capture, review, and promotion loop.
 4. Keep UI/editor maturity moving forward, especially text/input reliability,

@@ -1,4 +1,4 @@
-# Context Audit
+# Backend Context Status
 
 This is the current high-level status of the context and renderer stack.
 
@@ -20,7 +20,8 @@ This is the current high-level status of the context and renderer stack.
 
 - Prefer module-backed active context surfaces under `Engine/modules/` and
   `Engine/src/`.
-- Use the active modules plus `legacy_feature_map.md` for migration help, not deleted archive snapshots.
+- Use the active modules plus `legacy_feature_map.md` for migration help, not
+  deleted archive snapshots.
 - On Windows, launch multi-context smoke runs from the asset-bearing output
   directory so docked backend panes do not drift away from the editor host's
   runtime assets.

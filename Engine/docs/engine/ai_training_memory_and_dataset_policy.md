@@ -1,4 +1,4 @@
-# AI Build And Smoke Memory
+# AI Training Memory And Dataset Policy
 
 This doc records the current working method for Epoch's AI training and smoke
 loop.
@@ -33,7 +33,7 @@ Local-only compiled artifacts:
 - `workspace/ai/cache/`
 - `workspace/research/staged/`
 
-Use [research_import.md](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/docs/research_import.md)
+Use [research_import_and_promotion.md](research_import_and_promotion.md)
 and [research_import.ps1](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Tools/research_import.ps1)
 to stage PDFs, HTML, and notes there with provenance before they affect the
 roadmap, datasets, or automation policy.
@@ -162,7 +162,8 @@ phase waiting for a cleaner helper reply.
 - sync with `origin/main` when possible
 - keep unrelated dirt out of the pass
 - bump `Engine/modules/aengine.version.ixx`
-- use a versioned commit title
+- use a descriptive commit title without baking the version number into the
+  commit message
 - document user-visible behavior in README/changelog/runtime docs
 - prefer engine-owned capture over ad hoc desktop screenshots
 - do not leave bad-folder logs or disposable debug junk behind

@@ -1,4 +1,4 @@
-# Build Scripts
+# Local Build Scripts And Release Packaging
 
 The helper scripts under `Engine/` are optional, but they are still the fastest
 repeatable path for local builds when you want the tree, output folders, and
@@ -68,7 +68,8 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 - sync with `origin/main` if the local branch has drifted
 - keep unrelated dirt out of the commit
 - bump `Engine/modules/aengine.version.ixx`
-- use a versioned commit title such as `v0.83.86 ...`
+- use a descriptive commit title without baking the version number into the
+  commit message
 - rebuild `ConsoleApplication1` in both `Debug|x64` and `Release|x64`
 - launch from the asset-bearing `x64/Debug/` or `x64/Release/` runtime, not
   from a source folder
@@ -156,10 +157,10 @@ Before publishing a Windows packaged runtime zip:
 - smoke the no-args packaged entry once before publishing so a release does not
   ship a dead startup path
 - name the runtime asset with the packaged version baked in, for example
-  `epoch_win10_x64_v0.83.86.zip`
+  `epoch_win10_x64_vX.Y.Z.zip`
 - if the same release family also includes a bootstrap updater-shell drop, keep
   that as a separate versioned asset such as
-  `epoch_updater_shell_only_win10_x64_v0.83.85.zip` instead of overloading
+  `epoch_updater_shell_only_win10_x64_vX.Y.Z.zip` instead of overloading
   the runtime package name
 
 Before publishing a Linux/WSL2 asset:
@@ -167,13 +168,13 @@ Before publishing a Linux/WSL2 asset:
 - rebuild from the same bumped source commit that will be tagged
 - verify the Linux package reports the same version as the tag/source archive
 - keep the packaged versioned Linux runtime asset, for example
-  `epoch_linux_x64_v0.83.86.tar.gz`, and the GitHub source snapshot aligned
+  `epoch_linux_x64_vX.Y.Z.tar.gz`, and the GitHub source snapshot aligned
   to the same commit, not just the same version string
 - verify the packaged Linux artifact starts the main runtime path by default
   instead of accidentally shipping an updater-shell-only bootstrap
 - do not quietly reuse an older Linux artifact after source has changed
 - keep any Linux bootstrap drop separate, for example
-  `epoch_updater_shell_only_linux_x64_v0.83.85.tar.gz`
+  `epoch_updater_shell_only_linux_x64_vX.Y.Z.tar.gz`
 
 ## Multicontext regression contract
 
@@ -183,12 +184,11 @@ before finishing:
 - the parented grid lays out the HWND that actually owns the slot at that
   moment, not a stale abstract primary handle
 - the visible backend pane contract is explicit:
-  the stable Windows top-row contract is the real child surfaces `GLFW30`,
-  `SDL_app`, and `SFML_Window`, with helper `EpochChild` wrappers hidden while
-  docked
+  the stable Windows top-row contract is the real visible pane owners
+  `GLFW30`, `SDL_app`, and `SFML_Window`, with helper `EpochChild` shells kept
+  as implementation detail instead of stray top-level clutter
 - after a drag-undock-redock cycle, proxy `EpochChild` hosts must be reattached
-  to the parent and hidden again; a pass is not green if a helper host is left
-  floating as a top-level orphan
+  to the parent and stop lingering as floating top-level orphans
 - do not “promote” SDL/SFML backend children to direct grid-pane ownership just
   to hide the host, because that has already regressed maximize stability,
   input, and missing-pane behavior
@@ -347,9 +347,9 @@ When the helper returns mostly reasoning text or stalls:
 
 ## Related docs
 
-- `build_presets.md`
-- `runtime_operations.md`
-- `smoke_capture_automation.md`
-- `ai_build_memory.md`
+- `cmake_presets_and_builds.md`
+- `../engine/runtime_and_editor_workflows.md`
+- `../engine/smoke_capture_and_screenshot_workflow.md`
+- `../engine/ai_training_memory_and_dataset_policy.md`
 - `../../Changes/roadmap.md`
-- `tools_list.md`
+- `developer_tools_and_dependencies.md`

@@ -1,5 +1,23 @@
 # Epoch Changelog
 
+## [v0.83.88]
+- Finished a real Phase 3 step by surfacing backend ownership directly inside
+  the live `Systems` workspace: the active backend, ownership model, shell
+  targets, and backend lifecycle policy are now visible in-editor instead of
+  hiding only in roadmap text.
+- Reorganized the docs into clearer purpose-based folders so Linux guidance no
+  longer competes with engine architecture notes:
+  `Engine/docs/build/`, `Engine/docs/engine/`, and
+  `Engine/docs/platform/linux/`.
+- Renamed the active doc files toward more descriptive, newcomer-safe titles
+  and refreshed the doc index plus README links so the moved files are the
+  actual public navigation path instead of a half-migrated layout.
+- Removed the stale root `code_file_manifest.txt` and the old
+  `Changes/roadmap.txt` breadcrumb so the repo stops advertising dead duplicate
+  structure beside the active roadmap and engine reference docs.
+- Bumped the active source version to `v0.83.88` while keeping the published
+  release badge aligned to the real shipped `v0.83.86` runtime snapshot.
+
 ## [v0.83.87]
 - Rewrote the README around the real current source/release state so it now
   reads cleanly for both newcomers and engine/tooling contributors: the

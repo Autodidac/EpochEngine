@@ -952,6 +952,33 @@ namespace epochnamespace
             return std::format("{:.1f}", epochnamespace::previewgrid::camera_distance_for(ctx.get()));
         }
 
+        [[nodiscard]] std::string backend_ownership_model(const std::shared_ptr<core::Context>& ctx)
+        {
+            if (!ctx)
+                return "No active backend context.";
+
+            switch (ctx->type)
+            {
+            case core::ContextType::SDL:
+                return "Visible proxy shell owns the dock slot; SDL_app stays nested inside it during undock/redock.";
+            case core::ContextType::SFML:
+                return "Visible proxy shell owns the dock slot; SFML_Window stays nested inside it during undock/redock.";
+            case core::ContextType::RayLib:
+                return "Real child pane with a parked helper host; the child surface is the visible docked backend.";
+            case core::ContextType::OpenGL:
+            case core::ContextType::Vulkan:
+            case core::ContextType::Software:
+                return "Direct child/editor-owned pane with no proxy-shell handoff in normal docked use.";
+            default:
+                return "Backend ownership model not classified yet.";
+            }
+        }
+
+        [[nodiscard]] constexpr std::string_view backend_lifecycle_policy() noexcept
+        {
+            return "Switch deliberately; inactive backends should be torn down and recreated, not parked invisibly.";
+        }
+
         [[nodiscard]] std::filesystem::path project_entry_source_path(std::string_view projectRoot)
         {
             return std::filesystem::path{ projectRoot } / "source" / "main.cpp";
@@ -1837,6 +1864,11 @@ namespace epochnamespace
             const float supportHeight = 72.0f;
 
             gui::property_row("[systems] Renderer", renderer_name(ctx));
+            gui::property_row("[systems] Active backend", renderer_name(ctx));
+            gui::property_row("[systems] Ownership model", backend_ownership_model(ctx));
+            gui::property_row("[systems] Editor backend target", "Single-context OpenGL");
+            gui::property_row("[systems] Launcher backend target", "Single-context software");
+            gui::property_row("[systems] Backend lifecycle", backend_lifecycle_policy());
             gui::property_row("[systems] Preview camera", preview_camera_name(ctx));
             gui::property_row("[systems] Runtime target", editor.activeRuntimeScene);
             gui::property_row("[systems] Registered systems", std::to_string(orderedSystems.size));
@@ -1845,7 +1877,7 @@ namespace epochnamespace
             gui::property_row("[systems] Support tier", supportTier);
             gui::property_row("[systems] Render path", "visibility -> surface -> lighting -> temporal -> reconstruction -> present");
             gui::wrapped_label(
-                "The Systems workspace now shows engine-generated graph surfaces with pan/zoom controls. The long-term target is broad automatic hardware support with explicit developer opt-in tiers for heavier backend/libs instead of making every game pay for every integration.",
+                "The Systems workspace now shows engine-generated graph surfaces with pan/zoom controls. Backend ownership is also written down here so the active backend, the dock/undock contract, and the long-term single-backend shell targets stay visible instead of living only in roadmap text.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running");
             gui::property_row("[time] Frame dt", format_ms(editor.timeSnapshot.real_dt_seconds));

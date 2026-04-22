@@ -40,4 +40,4 @@ Examples and tooling
 - `Engine/ai/` curated AI datasets, schemas, evals, manifests, and prompts
 
 Migration notes
-- `Engine/docs/legacy_feature_map.md` legacy-to-active feature ownership map
+- `Engine/docs/engine/legacy_feature_map.md` legacy-to-active feature ownership map

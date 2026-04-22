@@ -1,9 +1,0 @@
-Epoch Roadmap Moved
-===================
-
-The canonical roadmap now lives in:
-
-`Changes/roadmap.md`
-
-Keep this file only as a compatibility breadcrumb for older references and
-automation that still points at the old text path.

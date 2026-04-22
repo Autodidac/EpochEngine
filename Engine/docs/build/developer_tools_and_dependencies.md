@@ -1,4 +1,4 @@
-# Tooling Checklist
+# Developer Tools And Dependencies
 
 This is the minimum tooling picture for working on Epoch locally.
 
@@ -22,4 +22,5 @@ This is the minimum tooling picture for working on Epoch locally.
 - SDL3, Raylib, and SFML development packages for backend work
 - RenderDoc or equivalent GPU debugging tools for renderer investigations
 
-See `build_presets.md` and `runtime_operations.md` for workflow details.
+See `cmake_presets_and_builds.md` and
+`../engine/runtime_and_editor_workflows.md` for workflow details.

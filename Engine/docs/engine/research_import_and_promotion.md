@@ -1,4 +1,4 @@
-# Research Import
+# Research Import And Promotion
 
 Epoch planning material can come from anywhere in the workspace. PDFs, HTML
 prototypes, scratch notes, and downloaded documents should be staged into a

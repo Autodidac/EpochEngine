@@ -1,4 +1,4 @@
-# Epoch Engine Analysis
+# Current Engine Architecture
 
 ## Snapshot
 
@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.83.86`
+Current source version: `v0.83.88`
 
 ## Architecture highlights
 
@@ -32,7 +32,7 @@ Current source version: `v0.83.86`
   dock UI instead of placeholder text.
 - **Migration map**: formerly archived compatibility surfaces are now either
   preserved in active modules or called out explicitly in
-  `Engine/docs/legacy_feature_map.md`.
+  `Engine/docs/engine/legacy_feature_map.md`.
 
 ## Current strengths
 

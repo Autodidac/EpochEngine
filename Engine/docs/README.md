@@ -1,40 +1,68 @@
 # Epoch Documentation Index
 
-Use this index to jump to the current docs set for the active engine tree under
-`Engine/`.
+This folder is now grouped by purpose so Linux setup notes stop competing with
+engine architecture docs.
 
-## Core entry paths
+## Quick orientation
 
-- `../CMakePresets.json` - CMake preset definitions for Windows, Linux, and macOS.
-- `../.vscode/` - VS Code tasks, launch settings, and kit configuration.
-- `../../Engine.sln` - Visual Studio / MSBuild entry point for the MSVC workflow.
-- `../../x64/Debug/` - primary local MSVC runtime output folder.
-- `../../x64/Release/` - release runtime output folder.
+- `../CMakePresets.json` - build presets for Windows, Linux, and macOS
+- `../../Engine.sln` - Visual Studio / MSBuild entry point
+- `../../x64/Debug/` - primary local MSVC runtime output
+- `../../x64/Release/` - release local MSVC runtime output
 
-## Start here
+## If you are new to the repo
 
-- `build_presets.md` - CMake preset names and baseline commands.
-- `build_scripts.md` - `build.sh`, `run.sh`, `install.sh`, and `clean.sh`.
-- `smoke_capture_automation.md` - local build, launch, screenshot, and commit discipline for reproducible editor/backend validation.
-- `tools_list.md` - required and optional tooling.
-- `wsl_vcpkg_setup.md` - WSL-oriented setup notes.
+Start here first:
 
-## Runtime and configuration
+- `build/cmake_presets_and_builds.md` - preset names and first build commands
+- `build/local_build_scripts_and_release_packaging.md` - helper scripts, local
+  validation, and packaging rules
+- `engine/runtime_and_editor_workflows.md` - how launcher, editor, projects,
+  scripts, systems, and runtime are supposed to behave
 
-- `runtime_operations.md` - launcher, scripting, logging, and runtime workflow.
-- `aengineconfig_flags.md` - build/config macros, support status, and cautions.
-- `ai_build_memory.md` - AI storage policy, smoke prompts, and build/test memory.
+## Build and packaging docs
 
-## Architecture and backend status
+- `build/build_configuration_flags.md` - build/config macros, support status,
+  and cautions
+- `build/cmake_presets_and_builds.md` - CMake preset names and baseline build
+  commands
+- `build/developer_tools_and_dependencies.md` - required and optional local
+  tooling
+- `build/local_build_scripts_and_release_packaging.md` - shell scripts,
+  validation flow, and release packaging discipline
 
-- `engine_analysis.md` - current architecture snapshot and priorities.
-- `context_audit.md` - active, experimental, and archival context surfaces.
-- `menu_overlay_backend_audit.md` - backend GUI parity notes.
-- `renderer_regression_plan.md` - smoke-test plan for renderer regressions.
+## Engine and runtime docs
 
-## Repository and migration reference
+- `engine/current_engine_architecture.md` - current architecture snapshot,
+  strengths, cautions, and priorities
+- `engine/runtime_and_editor_workflows.md` - project-centric runtime, editor,
+  scripting, systems, and updater behavior
+- `engine/backend_context_status.md` - backend/context inventory and practical
+  guidance
+- `engine/backend_menu_overlay_status.md` - backend GUI parity and caution
+  notes
+- `engine/renderer_regression_smoke_plan.md` - repeatable backend smoke
+  expectations
+- `engine/smoke_capture_and_screenshot_workflow.md` - capture discipline for
+  proofs and README screenshots
+- `engine/ai_training_memory_and_dataset_policy.md` - AI storage, iteration,
+  capture, and promotion rules
+- `engine/research_import_and_promotion.md` - staged research intake and
+  promotion path
+- `engine/repository_layout_reference.txt` - high-level repo layout
+- `engine/module_inventory_reference.txt` - active module/header inventory
+- `engine/legacy_feature_map.md` - retired legacy surfaces mapped to current
+  replacements
 
-- `file_structure.txt` - high-level repo layout.
-- `filelist.txt` - condensed module/header inventory.
-- `legacy_feature_map.md` - map of retired legacy surfaces to their active
-  Epoch-owned replacements.
+## Platform-specific docs
+
+- `platform/linux/linux_wsl_build_setup.md` - WSL/Linux setup and build notes
+
+## Planning and history
+
+These do not live in `Engine/docs/`, but they are the companion references for
+the active tree:
+
+- `../../Changes/roadmap.md`
+- `../../Changes/changelog.txt`
+- `../../Changes/release_notes_archive.md`

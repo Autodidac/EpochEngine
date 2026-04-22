@@ -1,4 +1,4 @@
-# WSL + vcpkg Setup
+# Linux WSL Build Setup
 
 This guide covers Linux builds from WSL while keeping the repo layout and
 tooling expectations aligned with the current `Engine/` tree.
