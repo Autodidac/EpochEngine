@@ -1,6 +1,18 @@
 # Epoch Changelog
 
 ## [v0.83.87]
+- Rewrote the README around the real current source/release state so it now
+  reads cleanly for both newcomers and engine/tooling contributors: the
+  published release badge is corrected to `v0.83.86`, the top-line language now
+  says `Project-Centric Runtime`, the scripting badge no longer overclaims with
+  `Compiled`, and the quick-start/proof/docs sections are organized around the
+  actual current workflow.
+- Reorganized the roadmap into a cleaner status-driven plan: completed Phase 1
+  and Phase 2 work are called out explicitly, active phases are easier to scan,
+  and the current push priorities are shorter and closer to the live repo.
+- Removed the old superseded `Engine/docs/legacy linuxdoc.txt` scratch note.
+  The live WSL/Linux guidance now stays with the real docs set instead of
+  competing with a stale, badly encoded duplicate.
 - Restored the SDL redock path to the visible proxy-host shell instead of
   collapsing the backend child directly into the parent during the shared
   proxy-redock helper, which was also the relayout path being reused under the
