@@ -1,6 +1,6 @@
-<img align="left" src="Images/567.png" width="95px"/>
+<img align="left" src="Images/567.png" width="110px"/>
 
-# Epoch - Creative Software And Game Engine
+<h1>Epoch - Creative Software And Game Engine</h1>
 
 <p align="left">
   <img src="https://img.shields.io/badge/Current_Source_Development-v0.83.88-1F7A4C?style=for-the-badge" alt="Current development source v0.83.88" />
