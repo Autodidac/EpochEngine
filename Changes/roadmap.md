@@ -30,6 +30,9 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
    stable packaged releases, bootstrap updater-shell releases, and the active
    development source line are different things and must not be blurred
    together.
+9. Build/tooling floors must stay honest. Preserve baseline compatibility where
+   possible, and when CMake/module support really forces a newer requirement,
+   document that explicitly instead of letting the repo drift silently.
 
 ## Release And Source Policy
 
@@ -64,7 +67,7 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
 
 - `README.md`
 - `Engine/docs/`
-- staged research under `workspace/research/`
+- staged research under `Engine/examples/ConsoleApplication1/workspace/research/`
 - release/changelog history under `Changes/`
 - utility tools like `botface.html` only after reviewed extraction, not by
   default
@@ -194,7 +197,7 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
 **Status:** active foundation, broader loop incomplete
 
 - [x] Stage bounded AI work into explicit iteration packets under
-      `workspace/ai/iterations/`.
+`Engine/examples/ConsoleApplication1/workspace/ai/iterations/`.
 - [x] Surface the current AI iteration/capture/provenance roots directly inside
       the editor AI workspace.
 - [ ] Standardize the full two-role runtime story:
@@ -206,7 +209,7 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
       `planner -> executor -> builder -> verifier -> gate`
       loop without drifting into blind autonomy claims.
 - [ ] Keep committed AI assets in `Engine/ai/` and local/generated artifacts in
-      `workspace/ai/`.
+`Engine/examples/ConsoleApplication1/workspace/ai/`.
 
 ## Phase 6 - UI and Editor Maturity
 
@@ -246,6 +249,8 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
 
 - [ ] Make engine-owned smoke/capture validation the default proof path.
 - [ ] Always build from repo root and launch from asset-bearing output folders.
+- [x] Normalize the example atlas tree so source images, tracked prebaked
+      atlases, and disposable local dump outputs are clearly separated.
 - [ ] Keep disposable validation output and failed AI iteration debris easy to
       remove without harming promoted evidence.
 - [ ] Refresh README proof images whenever layout/color/docking changes make the

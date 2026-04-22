@@ -243,10 +243,10 @@ third runtime AI role inside the engine.
 Data rules:
 
 - curated repo-safe assets belong in `Engine/ai/`
-- `workspace/auto_train.jsonl` and `workspace/mcp_capture.jsonl` are raw/staged
+- `Engine/examples/ConsoleApplication1/workspace/auto_train.jsonl` and `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl` are raw/staged
   capture paths
 - checkpoints, compiled local models, and caches stay under local
-  `workspace/ai/` paths
+`Engine/examples/ConsoleApplication1/workspace/ai/` paths
 - outdated or bad training data should be deleted or replaced when the training
   direction changes
 - helper-first passes should check `/v1/models` at the start of a phase, use

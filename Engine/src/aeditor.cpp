@@ -1705,17 +1705,26 @@ namespace epochnamespace
             gui::property_row("[ai] Seed/helper/verifier", "runtime seed + helper teacher + gated verifier");
             gui::property_row("[ai] Promotion gate", "capture -> review/score -> curate/promote");
             gui::property_row("[ai] Evidence", "build + runtime + retained logs");
+            const std::string captureGuidance =
+                "Raw chat captures land in " + training.local_capture_jsonl
+                + " as Git-safe staging data, MCP interaction snapshots land in "
+                + training.mcp_capture_jsonl
+                + ", curated JSON/JSONL stays in Engine/ai/, and outdated local checkpoints/models/caches should be deleted during training pivots when they no longer match the active data or control model.";
+            const std::string iterationGuidance =
+                "Iteration packets now stage the current project, scene, script, capture roots, model manifest, and concrete evidence paths into "
+                + epoch::ai::iteration_packet_root()
+                + " so the control loop has something explicit to build, verify, score, and either promote or discard.";
             gui::wrapped_label(
                 "Epoch now tracks two intentional engine AI roles: the internal Epoch bot, and a local MCP/control layer that can both steer the engine and teach the bot while the engine is built and operated.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
-                "Raw chat captures land in workspace/auto_train.jsonl as Git-safe staging data, MCP interaction snapshots land in workspace/mcp_capture.jsonl, curated JSON/JSONL stays in Engine/ai/, and outdated local checkpoints/models/caches should be deleted during training pivots when they no longer match the active data or control model.",
+                captureGuidance.c_str(),
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
                 "AI-assisted engine changes stay staged and reviewable here: capture first, score or inspect the result, then promote curated datasets/evals intentionally instead of allowing blind write-through automation.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
-                "Iteration packets now stage the current project, scene, script, capture roots, model manifest, and concrete evidence paths into workspace/ai/iterations/ so the control loop has something explicit to build, verify, score, and either promote or discard.",
+                iterationGuidance.c_str(),
                 (std::max)(180.0f, log_size.x - 24.0f));
 
             const auto currentMcpRecord = [&]() {

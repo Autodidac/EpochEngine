@@ -19,14 +19,14 @@ Do not commit normal Git history with:
 
 Compiled local-only outputs live under:
 
-- `workspace/ai/checkpoints/`
-- `workspace/ai/models/`
-- `workspace/ai/cache/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/checkpoints/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/models/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/cache/`
 
 Raw/staging capture can live under:
 
-- `workspace/auto_train.jsonl`
-- `workspace/mcp_capture.jsonl`
+- `Engine/examples/ConsoleApplication1/workspace/auto_train.jsonl`
+- `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl`
 
 Those capture files are Git-safe JSON/JSONL, but they are still staging data.
 Review them, promote only the intentional pieces into curated repo datasets or

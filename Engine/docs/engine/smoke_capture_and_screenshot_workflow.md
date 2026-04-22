@@ -159,9 +159,9 @@ Expected smoke behavior:
 - if the first detected model rejects explicit reasoning configuration, the
   request path should retry without the reasoning field instead of surfacing an
   empty reply
-- raw capture lands in `workspace/auto_train.jsonl`
-- MCP/control snapshots can land in `workspace/mcp_capture.jsonl`
-- no `workspace/ai/*` checkpoints, compiled models, or caches show up as
+- raw capture lands in `Engine/examples/ConsoleApplication1/workspace/auto_train.jsonl`
+- MCP/control snapshots can land in `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl`
+- no `Engine/examples/ConsoleApplication1/workspace/ai/*` checkpoints, compiled models, or caches show up as
   staged Git changes
 - if the first detected helper model is changed locally, keep using the first
   `/v1/models` entry instead of provoking extra model loads during smoke runs

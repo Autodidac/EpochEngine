@@ -315,14 +315,14 @@ Git-safe AI assets live under:
 
 Local-only compiled AI artifacts stay out of Git:
 
-- `workspace/ai/checkpoints/`
-- `workspace/ai/models/`
-- `workspace/ai/cache/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/checkpoints/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/models/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/cache/`
 
 Git-safe staging capture paths include:
 
-- `workspace/auto_train.jsonl`
-- `workspace/mcp_capture.jsonl`
+- `Engine/examples/ConsoleApplication1/workspace/auto_train.jsonl`
+- `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl`
 
 `append_training_sample(...)` and MCP capture writes are raw/staging data, not
 automatic curated truth. Review them, delete bad or outdated samples when the

@@ -120,7 +120,7 @@ if(MSVC)
     set_source_files_properties(
         src/aengine.context.cpp
         PROPERTIES
-            COMPILE_OPTIONS "/bigobj /Zm2000"
+            COMPILE_OPTIONS "/bigobj;/Zm2000"
     )
 
     set_source_files_properties(
@@ -136,7 +136,7 @@ if(MSVC)
         src/opengl_process_impl.cpp
         src/opengl_upload_bridge.cpp
         PROPERTIES
-            COMPILE_OPTIONS "/bigobj /Zm2000 /Od /Ob0 /GL-"
+            COMPILE_OPTIONS "/bigobj;/Zm2000;/Od;/Ob0;/GL-"
     )
 
     set_source_files_properties(
@@ -144,13 +144,13 @@ if(MSVC)
         src/context_sdl.cpp
         src/context_raylib.cpp
         PROPERTIES
-            COMPILE_OPTIONS "/bigobj /Zm2000 /GL-"
+            COMPILE_OPTIONS "/bigobj;/Zm2000;/GL-"
     )
 
     set_source_files_properties(
         src/software.context_render.cpp
         PROPERTIES
-            COMPILE_OPTIONS "/bigobj /Zm2000 /GL-"
+            COMPILE_OPTIONS "/bigobj;/Zm2000;/GL-"
     )
 
     set_source_files_properties(

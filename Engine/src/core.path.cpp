@@ -46,6 +46,15 @@ module core.path;
 
 namespace epoch::core::path
 {
+    namespace
+    {
+        [[nodiscard]] bool exists_noerr(const path& p) noexcept
+        {
+            std::error_code ec;
+            return std::filesystem::exists(p, ec) && !ec;
+        }
+    }
+
     path executable_path()
     {
 #if defined(_WIN32)
@@ -82,6 +91,52 @@ namespace epoch::core::path
         const auto p = executable_path();
         if (p.empty()) return {};
         return p.parent_path();
+    }
+
+    bool is_epoch_repo_root(const path& candidate)
+    {
+        const path root = candidate.lexically_normal();
+        return exists_noerr(root / "Engine" / "CMakeLists.txt")
+            && exists_noerr(root / "Engine" / "include" / "aengine.hpp")
+            && exists_noerr(root / "Engine" / "examples" / "ConsoleApplication1" / "main.cpp");
+    }
+
+    path find_epoch_repo_root(const path& start)
+    {
+        if (start.empty())
+            return {};
+
+        std::error_code ec;
+        path probe = std::filesystem::absolute(start, ec).lexically_normal();
+        if (ec)
+            return {};
+
+        if (std::filesystem::is_regular_file(probe, ec))
+            probe = probe.parent_path();
+
+        while (!probe.empty())
+        {
+            if (is_epoch_repo_root(probe))
+                return probe;
+
+            const path parent = probe.parent_path();
+            if (parent == probe)
+                break;
+            probe = parent;
+        }
+
+        return {};
+    }
+
+    path example_console_workspace_dir()
+    {
+        if (const path repoRoot = find_epoch_repo_root(executable_path()); !repoRoot.empty())
+            return normalize(repoRoot / "Engine" / "examples" / "ConsoleApplication1" / "workspace");
+
+        if (const path exeDir = executable_dir(); !exeDir.empty())
+            return normalize(exeDir / "workspace");
+
+        return {};
     }
 
     path normalize(const path& p)

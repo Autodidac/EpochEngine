@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$InputPath,
 
-    [string]$StageRoot = "workspace/research/staged",
+    [string]$StageRoot = "",
 
     [string]$Slug,
 
@@ -11,6 +11,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-RepoRoot {
+    $repoRoot = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")
+    return $repoRoot.Path
+}
 
 function Convert-ToSlug {
     param([string]$Value)
@@ -154,8 +159,14 @@ $sourceName = $sourceItem.Name
 $sourceExt = $sourceItem.Extension.ToLowerInvariant()
 $sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
 
-$workspaceRoot = Resolve-Path -LiteralPath "."
-$resolvedStageRoot = Join-Path $workspaceRoot $StageRoot
+$repoRoot = Get-RepoRoot
+$resolvedStageRoot = if ([string]::IsNullOrWhiteSpace($StageRoot)) {
+    Join-Path $repoRoot "Engine/examples/ConsoleApplication1/workspace/research/staged"
+} elseif ([System.IO.Path]::IsPathRooted($StageRoot)) {
+    $StageRoot
+} else {
+    Join-Path $repoRoot $StageRoot
+}
 $slugSource = if ([string]::IsNullOrWhiteSpace($Slug)) { $sourceItem.BaseName } else { $Slug }
 $slugToken = Convert-ToSlug -Value $slugSource
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"

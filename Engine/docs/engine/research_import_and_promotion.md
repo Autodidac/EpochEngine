@@ -7,7 +7,7 @@ automation policy.
 
 ## Staging path
 
-- Stage imports under `workspace/research/staged/`
+- Stage imports under `Engine/examples/ConsoleApplication1/workspace/research/staged/`
 - Treat that area as review-only input, not promoted truth
 - Keep the original source path and hash in provenance so the origin stays
   auditable

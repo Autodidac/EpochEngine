@@ -64,6 +64,7 @@ import ai.train;
 import ai.mcp;
 import ai.eval;
 import core.log;
+import core.path;
 
 namespace epoch::ai
 {
@@ -1216,12 +1217,11 @@ namespace epoch::ai
 
     std::string default_workspace_root()
     {
-#if defined(_WIN32)
-        // Default: alongside exe in ./workspace
-        return "workspace";
-#else
-        return "workspace";
-#endif
+        const auto workspace = epoch::core::path::example_console_workspace_dir();
+        if (!workspace.empty())
+            return workspace.generic_string();
+
+        return {};
     }
 
     std::string research_staging_root()

@@ -61,6 +61,7 @@ ninja.zip
 Tools/epoch_install.log
 Tools/epoch_install.log
 Engine/examples/ConsoleApplication1/atlas_dump/
+Engine/examples/ConsoleApplication1/atlas_dump_backup/
 
 Engine/bin/
 Engine/Bin/
@@ -72,6 +73,6 @@ Engine/docs/api/
 project_snapshot.zip
 Temp Script Test/
 .sandbox/
-workspace/ai/checkpoints/
-workspace/ai/models/
-workspace/ai/cache/
+Engine/examples/ConsoleApplication1/workspace/ai/checkpoints/
+Engine/examples/ConsoleApplication1/workspace/ai/models/
+Engine/examples/ConsoleApplication1/workspace/ai/cache/

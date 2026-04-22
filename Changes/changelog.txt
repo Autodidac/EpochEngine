@@ -1,6 +1,17 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Normalized the example atlas/image tree without touching runtime behavior:
+  active source images now stay clearly under
+  `Engine/examples/ConsoleApplication1/assets/`, tracked prebaked atlas output
+  stays under `Engine/examples/ConsoleApplication1/atlases/`, the old
+  `legacy_menu_atlas` and `not used` folders were renamed into descriptive
+  archive locations, and the tracked atlas dump / dump-backup clutter was
+  removed from repo truth.
+- Added in-place asset-folder READMEs and a roadmap rule so the repo now states
+  its atlas/source-of-truth contract directly instead of relying on memory, and
+  so future CMake/tooling floor changes must be documented honestly when they
+  really exceed the older baseline.
 - Wrote down the release/source policy in the live docs so it stops living only
   in recent memory: stable runtime releases, bootstrap updater-shell releases,
   and the active development source line are now explicitly separated in the

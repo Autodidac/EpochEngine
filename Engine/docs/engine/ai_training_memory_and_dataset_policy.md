@@ -27,11 +27,11 @@ Repo-safe:
 
 Local-only compiled artifacts:
 
-- `workspace/ai/checkpoints/`
-- `workspace/ai/iterations/`
-- `workspace/ai/models/`
-- `workspace/ai/cache/`
-- `workspace/research/staged/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/checkpoints/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/iterations/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/models/`
+- `Engine/examples/ConsoleApplication1/workspace/ai/cache/`
+- `Engine/examples/ConsoleApplication1/workspace/research/staged/`
 
 Use [research_import_and_promotion.md](research_import_and_promotion.md)
 and [research_import.ps1](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Tools/research_import.ps1)
@@ -40,8 +40,8 @@ roadmap, datasets, or automation policy.
 
 Raw/staging capture:
 
-- `workspace/auto_train.jsonl`
-- `workspace/mcp_capture.jsonl`
+- `Engine/examples/ConsoleApplication1/workspace/auto_train.jsonl`
+- `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl`
 
 Staging captures are not curated truth. Review them, promote the good parts,
 and delete outdated or bad training artifacts when the training direction
@@ -78,7 +78,7 @@ that work later:
 - promotion/discard decision plus model lineage
 
 The editor AI workspace now stages the first lightweight version of that under
-`workspace/ai/iterations/<packet>/` with:
+`Engine/examples/ConsoleApplication1/workspace/ai/iterations/<packet>/` with:
 
 - `iteration.json` for machine-readable provenance
 - `task.md` for quick human/helper review
