@@ -1,6 +1,11 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Wrote down the release/source policy in the live docs so it stops living only
+  in recent memory: stable runtime releases, bootstrap updater-shell releases,
+  and the active development source line are now explicitly separated in the
+  roadmap and build/release workflow docs, along with the current package
+  naming contract and the rule that commit titles stay versionless.
 - Reordered the README snapshot tags so `C++23 scripting` sits ahead of
   `multicontext tooling`, which reads more naturally as a language/runtime
   capability before the current multi-window/editor state.

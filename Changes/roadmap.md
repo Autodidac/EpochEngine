@@ -26,6 +26,39 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
    opt-in.
 7. Research imports are staged first, reviewed second, and promoted only when
    they materially improve repo truth.
+8. Release policy must stay explicit:
+   stable packaged releases, bootstrap updater-shell releases, and the active
+   development source line are different things and must not be blurred
+   together.
+
+## Release And Source Policy
+
+- The README and public docs should always distinguish:
+  - current development source
+  - published stable runtime release
+  - bootstrap updater-shell release when one exists
+- Packaged runtime assets use versioned platform names:
+  - `epoch_win10_x64_vX.Y.Z.zip`
+  - `epoch_linux_x64_vX.Y.Z.tar.gz`
+- Bootstrap updater-shell assets use their own versioned names:
+  - `epoch_updater_shell_only_win10_x64_vX.Y.Z.zip`
+  - `epoch_updater_shell_only_linux_x64_vX.Y.Z.tar.gz`
+- Standalone packaged version text files are no longer the contract. Packaged
+  version identity should travel with the asset names and the tagged source.
+- The updater remains binary-first:
+  check the latest packaged runtime first, and only continue to source when the
+  packaged runtime is already version-equal or newer.
+- GitHub source archives should remain full source snapshots. Do not slim them
+  down to match runtime/bootstrap package goals.
+- Commit titles should stay descriptive and versionless. Version numbers belong
+  in:
+  - `Engine/modules/aengine.version.ixx`
+  - README/public version badges
+  - changelog/release notes
+  - release tags
+  - packaged asset filenames
+- When a release is cut, `main` should move forward again as a development line
+  instead of pretending the live source tree is still the shipped snapshot.
 
 ## Reference Inputs
 

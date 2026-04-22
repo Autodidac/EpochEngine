@@ -76,6 +76,8 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 - close live windows after validation
 - avoid disposable runs from bad folders that leave stray logs or captures in
   the wrong place
+- when the README or other public-facing markdown changes, verify the rendered
+  GitHub result after push instead of trusting the raw file text alone
 
 If a pass touches Linux or WSL behavior, validate the matching Linux build path
 too instead of pretending Windows proof is enough.
@@ -144,6 +146,38 @@ goal is a project/editor/bootstrap surface.
 
 ## Release packaging discipline
 
+## Release naming and publication contract
+
+Keep these identities separate:
+
+- **development source line**: the active repo on `main`
+- **stable runtime release**: the current packaged product snapshot
+- **bootstrap updater-shell release**: the small updater-focused package that
+  exists only to move users into the newer runtime
+
+Version numbers belong in:
+
+- `Engine/modules/aengine.version.ixx`
+- README/public version badges
+- changelog/release notes
+- release tags
+- packaged asset filenames
+
+Version numbers do **not** belong in commit titles.
+
+GitHub source archives should stay full source snapshots. Do not trim them down
+to match packaged runtime or updater-shell assets.
+
+The updater contract stays binary-first:
+
+1. check the newest packaged runtime asset first
+2. update into that runtime when it is newer
+3. only continue to source when packaged parity is already reached
+
+Do not reintroduce standalone packaged version text assets as the primary
+contract. The packaged version identity should be clear from the tagged source
+and the packaged asset filename itself.
+
 Before publishing a Windows packaged runtime zip:
 
 - stage from `x64/Release/`, not from a source folder
@@ -162,6 +196,9 @@ Before publishing a Windows packaged runtime zip:
   that as a separate versioned asset such as
   `epoch_updater_shell_only_win10_x64_vX.Y.Z.zip` instead of overloading
   the runtime package name
+- if the release is meant to be the published stable runtime, update the README
+  stable-release badge and any public release-note surfaces to match that exact
+  packaged version before tagging
 
 Before publishing a Linux/WSL2 asset:
 
@@ -175,6 +212,15 @@ Before publishing a Linux/WSL2 asset:
 - do not quietly reuse an older Linux artifact after source has changed
 - keep any Linux bootstrap drop separate, for example
   `epoch_updater_shell_only_linux_x64_vX.Y.Z.tar.gz`
+- keep the Linux naming and published-version story aligned with Windows so the
+  stable runtime line is obvious across both platforms
+
+After a release is cut:
+
+- keep the tagged source, packaged asset names, and public release notes aligned
+- then move `main` forward again as the development line
+- update the README badges so `Current Source Development` and
+  `Published Stable Release` stay honest instead of collapsing into one label
 
 ## Multicontext regression contract
 
