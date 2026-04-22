@@ -1,6 +1,17 @@
 # Epoch Changelog
 
 ## [v0.83.87]
+- Restored the SDL redock path to the visible proxy-host shell instead of
+  collapsing the backend child directly into the parent during the shared
+  proxy-redock helper, which was also the relayout path being reused under the
+  six-context parent and could destabilize SDL during detach/redock cycles.
+- Closed the remaining honest Phase 2 checklist items by removing the editor's
+  last built-in sample-script fallback from the runtime command path and
+  sourcing the default project shell state from `Engine/src/aeditor.scene.cpp`
+  instead of hardcoded sandbox strings in `Engine/src/aeditor.cpp`.
+- Updated the README promoted-window proof row so the detached-window shot and a
+  live six-context desktop capture now sit side by side, making the docked vs.
+  promoted state easier to compare at a glance.
 - Reopened `main` above the published `v0.83.86` bootstrap/runtime release
   pair so source can move forward without blurring shipped artifact identity.
 - Backed out the risky hidden-window OpenGL startup experiment and replaced it

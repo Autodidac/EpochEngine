@@ -175,9 +175,9 @@ These remain support-tier or project-opt-in work, not the default baseline.
       active project.
 - [x] Turn `Run Game` into project play/testing instead of a permanent built-in
       sample-game launcher.
-- [ ] Move remaining built-in sample launches behind project templates or script
+- [x] Move remaining built-in sample launches behind project templates or script
       actions so the editor path stays honest.
-- [ ] Finish the project shell in `Engine/src/aeditor.scene.cpp` so project
+- [x] Finish the project shell in `Engine/src/aeditor.scene.cpp` so project
       profiles, script profiles, runtime scene ids, and seed entities live in
       the scene layer instead of scattered editor state.
 - [x] Add the first project creation flow that duplicates the engine-owned
@@ -227,9 +227,9 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [x] Keep parented multicontext behavior honest: the visible pane should not
       degrade into fake extra dock wrappers or misleading nested windows. The
       current stable rule is real child-surface panes for `GLFW30`, `SDL_app`,
-      and `SFML_Window`, with helper `EpochChild` hosts hidden while docked and
-      re-hidden into the parent after redock instead of lingering as top-level
-      orphans.
+      and `SFML_Window`, with any helper `EpochChild` shells staying aligned to
+      the same dock slot while parented and disappearing as stray top-level
+      windows again after a real redock.
 - [x] Keep the shared preview marker honest by deriving the visible ground-hit
       spot from the real center camera ray before any editor-focus fallback.
 - [ ] Tighten multicontext terminology so file names, modules, and docs stop

@@ -2160,16 +2160,22 @@ namespace epochnamespace::core
                                 break;
                             case epochnamespace::EditorCommand::RunScript:
                             {
+                                if (editor_frame.command_argument.empty())
+                                {
+                                    logger::get(kEditorLog).log(
+                                        logger::LogLevel::Error,
+                                        "Editor rejected an empty script command; select a project-backed script action first.",
+                                        std::source_location::current());
+                                    break;
+                                }
                                 const bool ok = epochnamespace::editor_run_script(
                                     ctx.get(),
-                                    editor_frame.command_argument.empty()
-                                    ? std::string_view{ "rotate_all_entities" }
-                                    : std::string_view{ editor_frame.command_argument });
+                                    std::string_view{ editor_frame.command_argument });
                                 logger::get(kEditorLog).logf(
                                     ok ? logger::LogLevel::INFO : logger::LogLevel::Error,
                                     std::source_location::current(),
                                     "Editor script '{}' {}.",
-                                    editor_frame.command_argument.empty() ? "rotate_all_entities" : editor_frame.command_argument,
+                                    editor_frame.command_argument,
                                     ok ? "completed" : "failed");
                                 break;
                             }

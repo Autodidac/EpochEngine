@@ -119,8 +119,8 @@ the same engine-owned path.
 - the stable Windows top-row contract is visible real child panes:
   `GLFW30`, `SDL_app`, and `SFML_Window`
 - helper `EpochChild` wrappers are implementation detail only:
-  they stay hidden while docked and must return hidden under the parent after a
-  redock instead of lingering as floating top-level shells
+  they should stay aligned to the same dock slot while parented and must stop
+  lingering as floating top-level shells after a real redock
 - SDL3 and SFML3 should keep obeying their elevated host-child hierarchy: the
   visible proxy host is the movable shell during undock/redock, while the real
   backend child stays nested inside that shell instead of pretending to be an

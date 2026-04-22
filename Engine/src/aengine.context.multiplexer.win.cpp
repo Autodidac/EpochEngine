@@ -776,7 +776,8 @@ namespace
         int clientW,
         int clientH) noexcept
     {
-        if (uses_visible_proxy_host(window))
+        if (window->type == epochnamespace::core::ContextType::SDL
+            && uses_visible_proxy_host(window))
         {
             if (!window
                 || !parent
@@ -1141,17 +1142,7 @@ namespace
             static_cast<void*>(parent));
 #endif
 
-        dock_host_window_to_parent(
-            window->hwndChild,
-            parent,
-            desiredScreenX,
-            desiredScreenY,
-            clientW,
-            clientH);
-        ::ShowWindow(window->hwndChild, SW_SHOWNA);
-        if (window->host_hwnd
-            && window->host_hwnd != window->hwndChild
-            && ::IsWindow(window->host_hwnd) != FALSE)
+        if (uses_visible_proxy_host(window))
         {
             dock_host_window_to_parent(
                 window->host_hwnd,
@@ -1160,9 +1151,36 @@ namespace
                 desiredScreenY,
                 clientW,
                 clientH);
-            ::ShowWindow(window->host_hwnd, SW_HIDE);
+            apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+            ::ShowWindow(window->host_hwnd, SW_SHOWNA);
+            ::ShowWindow(window->hwndChild, SW_SHOWNA);
+            ::SetFocus(window->hwndChild ? window->hwndChild : window->host_hwnd);
         }
-        ::SetFocus(window->hwndChild);
+        else
+        {
+            dock_host_window_to_parent(
+                window->hwndChild,
+                parent,
+                desiredScreenX,
+                desiredScreenY,
+                clientW,
+                clientH);
+            ::ShowWindow(window->hwndChild, SW_SHOWNA);
+            if (window->host_hwnd
+                && window->host_hwnd != window->hwndChild
+                && ::IsWindow(window->host_hwnd) != FALSE)
+            {
+                dock_host_window_to_parent(
+                    window->host_hwnd,
+                    parent,
+                    desiredScreenX,
+                    desiredScreenY,
+                    clientW,
+                    clientH);
+                ::ShowWindow(window->host_hwnd, SW_HIDE);
+            }
+            ::SetFocus(window->hwndChild);
+        }
 
 #if defined(_DEBUG)
         epochnamespace::logger::get(kLogSys).logf(

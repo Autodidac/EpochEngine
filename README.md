@@ -119,11 +119,14 @@ validation pass.
 Windows promoted-window undock proof, live validation:
 
 <p align="center">
-  <img src="Images/readme/windows-undock-proof-v08385.png" alt="Epoch Windows promoted-window undock proof" width="960" />
+  <img src="Images/readme/windows-undock-proof-v08385.png" alt="Epoch Windows promoted-window undock proof" width="49%" />
+  <img src="Images/readme/windows-redock-proof-v08387.png" alt="Epoch Windows six-context live redock validation proof" width="49%" />
 </p>
 
-- The undock proof above is a live desktop capture from the successful
-  promoted-shell validation pass that established the detached-window contract.
+- The left proof above is a live desktop capture from the promoted-shell
+  validation pass that established the detached-window contract.
+- The right proof is a current live six-context desktop capture kept beside it
+  so the docked/redocked shell state stays visible in the same README section.
 
 ---
 

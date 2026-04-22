@@ -215,19 +215,19 @@ namespace epochnamespace
         {
             bool initialized{ false };
             TopMenu openMenu{ TopMenu::None };
-            std::string projectId{ "sandbox" };
-            std::string projectName{ "Sandbox" };
-            std::string projectRoot{ "Projects/Sandbox" };
-            std::string projectScenePath{ "Projects/Sandbox/scene.epoch" };
-            std::string projectManifest{ "Projects/Sandbox/project.epoch.json" };
-            std::string projectTemplate{ "game-project" };
-            std::string projectKind{ "Game" };
-            std::string activeScript{ "rotate_all_entities" };
-            std::string activeRuntimeScene{ "project:sandbox" };
-            std::string activeWorld{ "PersistentLevel" };
-            std::string projectStatus{ "Project shell ready." };
-            std::string projectBuildStatus{ "Build Project creates a repo-local child executable for generated shells." };
-            std::string scriptBuildStatus{ "Select a script to validate or run." };
+            std::string projectId{};
+            std::string projectName{};
+            std::string projectRoot{};
+            std::string projectScenePath{};
+            std::string projectManifest{};
+            std::string projectTemplate{};
+            std::string projectKind{};
+            std::string activeScript{};
+            std::string activeRuntimeScene{};
+            std::string activeWorld{};
+            std::string projectStatus{};
+            std::string projectBuildStatus{};
+            std::string scriptBuildStatus{};
             std::vector<EditorEntity> entities{};
             std::size_t selectedEntity{ 0 };
             std::vector<std::string> logLines{};
@@ -1016,7 +1016,7 @@ namespace epochnamespace
                 if (!requestedProjectId.empty() && editor_find_project_profile(requestedProjectId))
                     set_project(it->second, requestedProjectId, false);
                 else
-                    set_project(it->second, "sandbox", false);
+                    set_project(it->second, editor_default_project_profile().id, false);
                 if (ctx)
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
