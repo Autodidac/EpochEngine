@@ -11,6 +11,8 @@ work, and a staged two-role AI workspace that keeps automation reviewable.
 <p align="left">
   <img src="https://img.shields.io/badge/Current_Source_Development-v0.83.88-1F7A4C?style=for-the-badge" alt="Current development source v0.83.88" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.83.86-2C6A8A?style=for-the-badge" alt="Published stable release v0.83.86" />
+</p>
+<p align="left">
   <img src="https://img.shields.io/badge/Project--Centric_Runtime-1F6F78?style=for-the-badge" alt="Project-centric runtime" />
   <img src="https://img.shields.io/badge/C%2B%2B23_Scripting-8A5C2F?style=for-the-badge" alt="C++23 scripting" />
   <img src="https://img.shields.io/badge/Multicontext_Tooling-486B4A?style=for-the-badge" alt="Multicontext tooling" />
