@@ -47,7 +47,7 @@ set(EPOCH_SOURCES
     src/opengl_process_impl.cpp
     src/opengl_upload_bridge.cpp
     src/software.context.cpp
-    src/software.context_capture.cpp
+    src/render/software.context_capture.cpp
     src/software.context_draw.cpp
     src/software.context_present.cpp
     src/software.context_preview.cpp
@@ -69,7 +69,7 @@ set(EPOCH_SOURCES
     src/core.id.cpp
     src/core.log.cpp
     src/core.math.cpp
-    src/core.path.cpp
+    src/platform/core.path.cpp
     src/core.string.cpp
     src/core.time.cpp
     src/epoch.ai.cpp
@@ -104,7 +104,7 @@ if(MSVC)
         src/context_software.cpp
         src/context_vulkan.cpp
         src/software.context.cpp
-        src/software.context_capture.cpp
+        src/render/software.context_capture.cpp
         src/software.context_draw.cpp
         src/software.context_present.cpp
         src/software.context_preview.cpp

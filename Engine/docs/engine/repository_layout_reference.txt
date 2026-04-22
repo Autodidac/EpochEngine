@@ -5,6 +5,8 @@
 |   |-- include/          active public headers
 |   |-- modules/          C++23 module interfaces
 |   |-- src/              runtime and backend implementation files
+|   |   |-- platform/     executable-root/runtime path ownership and platform-side internals
+|   |   |-- render/       internal render helpers that are not part of the public API
 |   |-- resource/         Windows resources, icon, rc, and resource headers
 |   |-- ai/               curated AI datasets, schemas, evals, manifests, prompts
 |   |-- docs/             current engine documentation

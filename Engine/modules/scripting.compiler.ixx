@@ -47,6 +47,7 @@ module;
 export module scripting.compiler;
 
 import core.logger;
+import core.path;
 
 namespace epochnamespace::compiler 
 {
@@ -103,30 +104,6 @@ namespace epochnamespace::compiler
             const std::filesystem::path& input) noexcept
         {
             std::error_code ec;
-            auto is_epoch_repo_root = [&](const std::filesystem::path& root) noexcept {
-                return std::filesystem::exists(root / "Engine" / "include" / "epoch.script_api.h", ec)
-                    || std::filesystem::exists(root / "Engine" / "include" / "aengine.hpp", ec);
-            };
-
-            auto ascend_to_repo_root = [&](std::filesystem::path probe) noexcept {
-                probe = std::filesystem::absolute(probe, ec).lexically_normal();
-                if (std::filesystem::is_regular_file(probe, ec))
-                    probe = probe.parent_path();
-
-                for (int depth = 0; depth < 10 && !probe.empty(); ++depth)
-                {
-                    if (is_epoch_repo_root(probe))
-                        return probe;
-
-                    const auto parent = probe.parent_path();
-                    if (parent == probe)
-                        break;
-                    probe = parent;
-                }
-
-                return std::filesystem::path{};
-            };
-
             std::vector<std::filesystem::path> candidates{};
             const auto push_candidate = [&](const std::filesystem::path& candidate) {
                 if (candidate.empty())
@@ -144,15 +121,18 @@ namespace epochnamespace::compiler
             push_candidate(input.parent_path().parent_path() / "include");
             push_candidate(input.parent_path().parent_path() / "source");
 
-            if (const auto repoRoot = ascend_to_repo_root(input); !repoRoot.empty())
+            if (const auto repoRoot = epoch::core::path::find_epoch_repo_root(input); !repoRoot.empty())
             {
                 push_candidate(repoRoot / "Engine" / "include");
                 push_candidate(repoRoot / "Engine");
             }
 
-            push_candidate(std::filesystem::current_path(ec) / "Engine" / "include");
-            push_candidate(std::filesystem::current_path(ec) / "Engine");
-            push_candidate(std::filesystem::current_path(ec) / "include");
+            push_candidate(epoch::core::path::engine_include_dir());
+            if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
+            {
+                push_candidate(runtimeRoot / "Engine");
+                push_candidate(runtimeRoot / "include");
+            }
 
             for (const auto& candidate : candidates)
             {
@@ -160,7 +140,7 @@ namespace epochnamespace::compiler
                     return candidate;
             }
 
-            return (input.parent_path().parent_path().parent_path() / "include").lexically_normal();
+            return epoch::core::path::normalize(input.parent_path().parent_path().parent_path() / "include");
         }
 
         [[nodiscard]] inline std::vector<std::filesystem::path> resolve_include_roots(

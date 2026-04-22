@@ -60,6 +60,7 @@ import aengine.cli;
 import aengine.systems;
 import taskgraph.dotsystem;
 import core.logger;
+import core.path;
 
 
 namespace epochnamespace::scripting
@@ -228,16 +229,18 @@ namespace epochnamespace::scripting
             namespace fs = std::filesystem;
             std::error_code ec;
 
-            const fs::path cwd = fs::current_path(ec);
             const fs::path exeDir = epochnamespace::core::cli::exe_path.empty()
-                ? cwd
+                ? epoch::core::path::executable_dir()
                 : fs::absolute(epochnamespace::core::cli::exe_path, ec).parent_path();
+            const fs::path runtimeRoot = epoch::core::path::runtime_root_dir();
+            const fs::path repoRoot = epoch::core::path::find_epoch_repo_root(exeDir);
 
             const std::vector<fs::path> candidates{
-                cwd / "src" / "scripts",
-                cwd / "Engine" / "src" / "scripts",
                 exeDir / "src" / "scripts",
                 exeDir / "Engine" / "src" / "scripts",
+                runtimeRoot / "src" / "scripts",
+                runtimeRoot / "Engine" / "src" / "scripts",
+                repoRoot / "Engine" / "src" / "scripts",
                 exeDir / ".." / ".." / "Engine" / "src" / "scripts",
                 exeDir / ".." / ".." / ".." / "Engine" / "src" / "scripts"
             };

@@ -26,6 +26,7 @@ export module core.commandline;
 import context.type;
 import aengine.version;
 import core.logger;
+import core.path;
 import aengine.platform;
 
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1277;
@@ -230,22 +231,7 @@ namespace epochnamespace::core::cli
 
     export [[nodiscard]] inline std::filesystem::path capture_output_root()
     {
-#if defined(_WIN32)
-        char* env = nullptr;
-        std::size_t envLength = 0;
-        if (_dupenv_s(&env, &envLength, "EPOCH_CAPTURE_DIR") == 0 && env && *env)
-        {
-            const std::filesystem::path overridePath(env);
-            std::free(env);
-            return overridePath;
-        }
-        std::free(env);
-#else
-        if (const char* env = std::getenv("EPOCH_CAPTURE_DIR"); env && *env)
-            return std::filesystem::path(env);
-#endif
-
-        return std::filesystem::current_path() / "logs" / "captures";
+        return epoch::core::path::capture_output_dir();
     }
 
     export [[nodiscard]] inline std::string capture_output_stem()

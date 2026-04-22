@@ -22,6 +22,7 @@ module software.context;
 
 import core.commandline;
 import core.log;
+import core.path;
 
 namespace epochnamespace::anativecontext
 {
@@ -48,22 +49,7 @@ namespace epochnamespace::anativecontext
 
         [[nodiscard]] std::filesystem::path capture_output_root()
         {
-#if defined(_WIN32)
-            char* env = nullptr;
-            std::size_t envLength = 0;
-            if (_dupenv_s(&env, &envLength, "EPOCH_CAPTURE_DIR") == 0 && env && *env)
-            {
-                const std::filesystem::path overridePath(env);
-                std::free(env);
-                return overridePath;
-            }
-            std::free(env);
-#else
-            if (const char* env = std::getenv("EPOCH_CAPTURE_DIR"); env && *env)
-                return std::filesystem::path(env);
-#endif
-
-            return std::filesystem::current_path() / "logs" / "captures";
+            return epoch::core::path::capture_output_dir();
         }
 
         [[nodiscard]] std::string sanitize_capture_token(const std::string_view value)

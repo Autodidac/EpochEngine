@@ -78,6 +78,9 @@ For engine/tooling developers:
   single-step, and early editor-facing diagnostics.
 - A staged AI workspace centered on two in-engine roles only:
   `EpochBot` and the local MCP/control layer.
+- Executable-root asset, shader, script, font, log, and capture resolution so
+  local runs stop depending on whatever folder the process happened to launch
+  from.
 
 ## In Action
 
@@ -186,7 +189,7 @@ cmake --build --preset Ninja-Debug
 ## Repository Layout
 
 ```text
-Engine/    engine code, resources, examples, and docs grouped into build/, engine/, and platform/
+Engine/    engine code, internal source grouped toward platform/render, examples, assets, and docs
 Changes/   changelog, roadmap, release-note archives, current planning text
 Images/    README and repo artwork
 Tools/     local helper scripts and validation utilities
@@ -237,4 +240,6 @@ See [Changes/roadmap.md](Changes/roadmap.md) for the full phase-by-phase plan.
 LicenseRef-MIT-NoSell
 ```
 
-See [LICENSE](LICENSE) for full terms.
+Epoch is free for non-commercial use. For commercial use or any legal edge
+case, read [LICENSE](LICENSE) directly and follow the full agreement text
+instead of relying on the README summary.

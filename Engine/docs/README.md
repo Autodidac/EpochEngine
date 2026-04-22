@@ -31,6 +31,15 @@ Start here first:
 - `build/local_build_scripts_and_release_packaging.md` - shell scripts,
   validation flow, and release packaging discipline
 
+Build-system reality to keep in mind:
+
+- the repo-root `CMakeLists.txt` is a thin wrapper for CI/simple configure
+  entry, not a replacement for the `Engine/` preset workflow
+- the wrapper keeps the older `3.22.1` entry explicit, but the current
+  module-aware engine path still requires newer CMake and says so on purpose
+- GitHub workflows should stay build-only; GUI smoke and screenshot proof still
+  belong to asset-bearing local runtime outputs
+
 ## Engine and runtime docs
 
 - `engine/current_engine_architecture.md` - current architecture snapshot,

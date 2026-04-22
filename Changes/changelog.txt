@@ -1,6 +1,21 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Replaced the remaining cwd-dependent runtime path guesses in the active
+  engine path with one shared executable-root resolver: scripts, GUI fonts,
+  shader lookup, capture output, project-shell repo discovery, and updater
+  work roots now all honor the same runtime root plus explicit override rules.
+- Started the safe internal source-tree regrouping by moving the shared path
+  resolver into `Engine/src/platform/` and the software capture helper into
+  `Engine/src/render/`, then synced CMake, `Engine.vcxitems`, and filters to
+  the new on-disk paths.
+- Updated both GitHub workflows to current action runtimes and build-only
+  validation: CMake now builds the `epoch` target across Windows/Linux without
+  pretending GUI tests belong in CI, and MSBuild now targets the real
+  `ConsoleApplication1` solution path directly.
+- Tightened the live docs so the repo now records the stable-only commit rule,
+  the honest repo-root-vs-Engine CMake split, the executable-root asset
+  contract, and the non-commercial README license summary more explicitly.
 - Normalized the example atlas/image tree without touching runtime behavior:
   active source images now stay clearly under
   `Engine/examples/ConsoleApplication1/assets/`, tracked prebaked atlas output

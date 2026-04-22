@@ -67,6 +67,7 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 
 - sync with `origin/main` if the local branch has drifted
 - keep unrelated dirt out of the commit
+- commit only stable, verified changes
 - bump `Engine/modules/aengine.version.ixx`
 - use a descriptive commit title without baking the version number into the
   commit message
@@ -81,6 +82,14 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 
 If a pass touches Linux or WSL behavior, validate the matching Linux build path
 too instead of pretending Windows proof is enough.
+
+GitHub CI/workflow discipline:
+
+- keep workflows build-only unless a real headless/runtime-safe automation path
+  exists
+- do not depend on GUI launch, desktop focus, or screenshot capture in CI
+- keep workflow action runtimes current so the repo does not drift onto stale
+  Node/action baselines
 
 Generated project shells should keep two honest integration modes working:
 

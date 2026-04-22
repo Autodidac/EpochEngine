@@ -169,6 +169,12 @@
     <Filter Include="Source Files\core\context\software">
       <UniqueIdentifier>{17dd8b26-b615-4ef3-b238-97689adef445}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\platform">
+      <UniqueIdentifier>{1a7c63fd-3d18-4a4f-8e4c-7ed547cb8e59}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\render">
+      <UniqueIdentifier>{23aaf81e-247f-4fe3-8f6e-8fffa7714e0b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\core\context\opengl">
       <UniqueIdentifier>{eb85cc71-c8ee-49c9-ac11-f1ffdf2adbf3}</UniqueIdentifier>
     </Filter>
@@ -848,8 +854,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.math.cpp">
       <Filter>Source Files\core\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.path.cpp">
-      <Filter>Source Files\core\epoch</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\core.path.cpp">
+      <Filter>Source Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.string.cpp">
       <Filter>Source Files\core\epoch</Filter>
@@ -905,8 +911,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_draw.cpp">
       <Filter>Source Files\core\context\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_capture.cpp">
-      <Filter>Source Files\core\context\software</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\render\software.context_capture.cpp">
+      <Filter>Source Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context.cpp">
       <Filter>Source Files\core\context\software</Filter>

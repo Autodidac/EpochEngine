@@ -55,6 +55,26 @@ export namespace epoch::core::path
     // Falls back to a sibling executable workspace for packaged/runtime installs.
     path example_console_workspace_dir();
 
+    // Canonical repo/install runtime root derived from executable location.
+    // For repo-local runs this resolves to the repo root. For packaged/runtime
+    // installs it resolves to the nearest asset-bearing executable root.
+    path runtime_root_dir();
+
+    // Shared engine asset root.
+    path engine_asset_dir();
+
+    // Example/runtime asset root used by the ConsoleApplication1 shell.
+    path example_asset_dir();
+
+    // Preferred log root derived from the executable/runtime location.
+    path log_output_dir();
+
+    // Preferred capture root. Honors explicit override first.
+    path capture_output_dir();
+
+    // Best-effort engine include root for embedded/project compilation helpers.
+    path engine_include_dir();
+
     // Normalizes a path (lexically). Does not hit the filesystem.
     path normalize(const path& p);
 

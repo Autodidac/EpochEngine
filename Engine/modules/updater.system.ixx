@@ -42,6 +42,7 @@ module;
 export module updater.system;
 
 import core.logger;
+import core.path;
 import aengine.cli;
 import aengine.platform;
 import updater.tools;
@@ -484,10 +485,8 @@ namespace epochnamespace::updater
             if (!ec && !temp_root.empty())
                 return temp_root / UPDATER_TOOLS_SUBDIR();
 
-            ec.clear();
-            const auto cwd = std::filesystem::current_path(ec);
-            if (!ec && !cwd.empty())
-                return cwd / UPDATER_TOOLS_SUBDIR();
+            if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
+                return runtimeRoot / UPDATER_TOOLS_SUBDIR();
 
             return std::filesystem::path{ UPDATER_TOOLS_SUBDIR() };
         }
@@ -505,10 +504,8 @@ namespace epochnamespace::updater
             if (!ec && !temp_root.empty())
                 return temp_root / UPDATER_WORK_SUBDIR();
 
-            ec.clear();
-            const auto cwd = std::filesystem::current_path(ec);
-            if (!ec && !cwd.empty())
-                return cwd / UPDATER_WORK_SUBDIR();
+            if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
+                return runtimeRoot / UPDATER_WORK_SUBDIR();
 
             return std::filesystem::path{ UPDATER_WORK_SUBDIR() };
         }
@@ -2046,8 +2043,7 @@ namespace epochnamespace::updater
             auto temp_root = std::filesystem::temp_directory_path(ec);
             if (ec || temp_root.empty())
             {
-                ec.clear();
-                temp_root = std::filesystem::current_path(ec);
+                temp_root = epoch::core::path::runtime_root_dir();
             }
 
             std::string safe_stem;

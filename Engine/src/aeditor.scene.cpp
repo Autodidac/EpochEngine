@@ -55,6 +55,7 @@ module;
 module aeditor;
 
 import core.logger;
+import core.path;
 
 namespace
 {
@@ -1139,21 +1140,14 @@ namespace
 
     [[nodiscard]] static fs::path resolve_epoch_repo_root(const fs::path& project_root)
     {
+        if (const auto found = epoch::core::path::find_epoch_repo_root(project_root); !found.empty())
+            return found;
+
+        if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
+            return runtimeRoot;
+
         std::error_code ec;
-        const std::array<fs::path, 4> candidates{
-            project_root,
-            project_root.parent_path(),
-            fs::current_path(ec),
-            fs::current_path(ec).parent_path()
-        };
-
-        for (const auto& candidate : candidates)
-        {
-            if (auto found = ascend_to_repo_root(candidate))
-                return *found;
-        }
-
-        return fs::absolute(fs::current_path(ec), ec).lexically_normal();
+        return fs::absolute(project_root.empty() ? fs::path{} : project_root, ec).lexically_normal();
     }
 
     [[nodiscard]] static fs::path resolve_projects_root(const fs::path& hint = {}) noexcept

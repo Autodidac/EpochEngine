@@ -23,6 +23,9 @@ Current source version: `v0.83.88`
   task scheduling rather than ad hoc threaded entry points, and editor-triggered
   compiled scripts now run through an explicit host API instead of a loose
   filewatch-first loop.
+- **Executable-root runtime resolution**: fonts, scripts, shaders, captures,
+  workspace paths, and updater scratch roots are being normalized around one
+  executable-root/runtime-root resolver instead of cwd guesses.
 - **Two-role engine AI path**: the intended runtime roles are internal
   EpochBot and the local MCP/control layer, while external local LLMs remain
   development helpers for testing, curation, and acceleration rather than a
@@ -37,6 +40,9 @@ Current source version: `v0.83.88`
 ## Current strengths
 
 - Strong module-first organization for the active engine.
+- Safer runtime path ownership now that more subsystems resolve assets and
+  support files from the executable/runtime root instead of the working
+  directory.
 - Broad backend coverage for desktop experimentation and tooling.
 - Clearer support target discipline around 6-core / 1660 Ti-era desktops and
   modern Linux laptops as the default automatic compatibility baseline.

@@ -62,6 +62,7 @@ import context.commandqueue;
 
 import atlas.manager;
 import atlas.texture;
+import core.path;
 import core.logger;
 import font.renderer;
 import sprite.pool;
@@ -470,12 +471,10 @@ namespace epochnamespace::gui
                     return envPath;
             }
 
-            const std::array<std::filesystem::path, 5> relativeCandidates{
+            const std::array<std::filesystem::path, 3> relativeCandidates{
                 std::filesystem::path{kDefaultFontFile},
                 std::filesystem::path{"assets/fonts"} / kDefaultFontFile,
                 std::filesystem::path{"Fonts"} / kDefaultFontFile,
-                std::filesystem::path{"epochengine/assets/fonts"} / kDefaultFontFile,
-                std::filesystem::path{"../epochengine/assets/fonts"} / kDefaultFontFile,
             };
 
             const auto try_with_root = [&](const std::filesystem::path& root) -> std::filesystem::path
@@ -490,17 +489,25 @@ namespace epochnamespace::gui
                     return {};
                 };
 
-            if (auto path = try_with_root({}); !path.empty())
-                return path;
-
-            const std::filesystem::path cwd = std::filesystem::current_path();
-            if (auto path = try_with_root(cwd); !path.empty())
-                return path;
-
-            const std::filesystem::path parent = cwd.parent_path();
-            if (!parent.empty())
+            if (const auto exampleAssets = epoch::core::path::example_asset_dir(); !exampleAssets.empty())
             {
-                if (auto path = try_with_root(parent); !path.empty())
+                if (auto path = try_with_root(exampleAssets / "fonts"); !path.empty())
+                    return path;
+                if (auto path = try_with_root(exampleAssets); !path.empty())
+                    return path;
+            }
+
+            if (const auto engineAssets = epoch::core::path::engine_asset_dir(); !engineAssets.empty())
+            {
+                if (auto path = try_with_root(engineAssets / "fonts"); !path.empty())
+                    return path;
+                if (auto path = try_with_root(engineAssets); !path.empty())
+                    return path;
+            }
+
+            if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
+            {
+                if (auto path = try_with_root(runtimeRoot); !path.empty())
                     return path;
             }
 
@@ -547,7 +554,7 @@ namespace epochnamespace::gui
                     logger::warn(
                         "Epoch.GUI",
                         std::format(
-                            "Unable to locate GUI font '{}'. Place it in assets/fonts or set EPOCH_GUI_FONT_PATH.",
+                            "Unable to locate GUI font '{}'. Place it in the resolved example/runtime assets/fonts path or set EPOCH_GUI_FONT_PATH.",
                             kDefaultFontFile));
                     g_missingFontPathWarningLogged = true;
                 }

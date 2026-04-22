@@ -57,6 +57,7 @@ export module vulkan.context:shader_pipeline;
 
 import :shared_vk;
 import aengine.cli;
+import core.path;
 
 namespace epochnamespace::vulkancontext
 {
@@ -207,28 +208,26 @@ namespace epochnamespace::vulkancontext
     {
         namespace fs = std::filesystem;
 
-                const fs::path target = filename;
+        const fs::path target = filename;
         const fs::path exeDir = epochnamespace::core::cli::exe_path.empty()
             ? fs::path{}
             : fs::absolute(epochnamespace::core::cli::exe_path).parent_path();
-        const std::array<fs::path, 10> candidates = {
+        const fs::path runtimeRoot = epoch::core::path::runtime_root_dir();
+        const fs::path engineAssets = epoch::core::path::engine_asset_dir();
+        const fs::path exampleAssets = epoch::core::path::example_asset_dir();
+        const std::array<fs::path, 8> candidates = {
             exeDir / target,
-            exeDir / "assets" / "vulkan" / target,
             target,
-            fs::path("assets") / "vulkan" / target,
-            fs::path("epochengine") / target,
-            fs::path("epochengine") / "assets" / "vulkan" / target,
-            fs::path("..") / "epochengine" / target,
-            fs::path("..") / "epochengine" / "assets" / "vulkan" / target,
-            fs::path("..") / ".." / ".." / "x64" / "Debug" / target,
-            fs::path("..") / ".." / ".." / "x64" / "Debug" / "assets" / "vulkan" / target,
+            exeDir / "assets" / "vulkan" / target,
+            runtimeRoot / "assets" / "vulkan" / target,
+            engineAssets / "vulkan" / target,
+            engineAssets / target,
+            exampleAssets / "vulkan" / target,
+            exampleAssets / target,
         };
 
 #if defined(_DEBUG)
-        // Capture runtime context once per call.
-        std::error_code ec{};
-        const auto cwd = fs::current_path(ec);
-        (void)ec;
+        const auto normalizedRuntimeRoot = runtimeRoot.empty() ? std::string("<unknown>") : runtimeRoot.string();
 #endif
 
         for (const auto& path : candidates)
@@ -247,7 +246,7 @@ namespace epochnamespace::vulkancontext
             // Use your engine logger if you have one; otherwise throw-message works.
             std::ostringstream os;
             os << "[ Vulkan ] -[ShaderIO] opened: " << fs::absolute(path).string() << "\n";
-            os << "[ Vulkan ] -[ShaderIO] cwd: " << (cwd.empty() ? "<unknown>" : cwd.string()) << "\n";
+            os << "[ Vulkan ] -[ShaderIO] runtime root: " << normalizedRuntimeRoot << "\n";
             os << "[ Vulkan ] -[ShaderIO] bytes: " << buffer.size()
                 << " spirv=" << (readhelpers::looks_like_spirv(buffer) ? "yes" : "NO")
                 << " head=" << readhelpers::first_bytes_hex(buffer, 16) << "\n";
@@ -272,7 +271,7 @@ namespace epochnamespace::vulkancontext
         for (const auto& path : candidates)
             message << "\n  - " << fs::absolute(path).string();
 #if defined(_DEBUG)
-        message << "\nCWD: " << fs::current_path().string();
+        message << "\nRuntime root: " << normalizedRuntimeRoot;
 #endif
         throw std::runtime_error(message.str());
     }

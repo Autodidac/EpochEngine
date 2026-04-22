@@ -355,7 +355,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context.cpp">
       <AdditionalOptions>/Zm500 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_capture.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\render\software.context_capture.cpp">
       <AdditionalOptions>/Zm500 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_draw.cpp">
@@ -390,7 +390,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.id.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.math.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.path.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\core.path.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.string.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.time.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.ai.cpp" />

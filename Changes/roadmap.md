@@ -33,6 +33,8 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
 9. Build/tooling floors must stay honest. Preserve baseline compatibility where
    possible, and when CMake/module support really forces a newer requirement,
    document that explicitly instead of letting the repo drift silently.
+10. Commit only stable, verified changes. Do not commit speculative or
+    partially validated runtime/build states just to move the branch forward.
 
 ## Release And Source Policy
 
@@ -174,6 +176,8 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
       backend is obvious and switching is deliberate.
 - [ ] Tighten multicontext terminology so file/module/doc names stop leaning on
       ambiguous legacy terms like `multiplexer`.
+- [x] Start moving safe internal-only ownership into clearer source groupings so
+      platform and render helpers stop piling up in one flat `src/` root.
 
 ## Phase 4 - Time-System Spine
 
@@ -251,6 +255,14 @@ Build Epoch into one professional engine-owned runtime and editor shell with:
 - [ ] Always build from repo root and launch from asset-bearing output folders.
 - [x] Normalize the example atlas tree so source images, tracked prebaked
       atlases, and disposable local dump outputs are clearly separated.
+- [x] Canonicalize runtime asset/script/font/shader/log/capture resolution
+      around executable-root discovery plus explicit overrides instead of cwd
+      guesses.
+- [x] Add a repo-root CMake wrapper with an honest floor story:
+      explicit `3.22.1` entry, explicit failure when the module-aware `Engine/`
+      path still needs newer CMake.
+- [x] Update CI workflows to modern GitHub action runtimes and keep them on
+      build-only validation instead of pretending GUI smoke belongs in CI.
 - [ ] Keep disposable validation output and failed AI iteration debris easy to
       remove without harming promoted evidence.
 - [ ] Refresh README proof images whenever layout/color/docking changes make the
