@@ -33,6 +33,11 @@ Local-only compiled artifacts:
 - `workspace/ai/cache/`
 - `workspace/research/staged/`
 
+Use [research_import.md](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/docs/research_import.md)
+and [research_import.ps1](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Tools/research_import.ps1)
+to stage PDFs, HTML, and notes there with provenance before they affect the
+roadmap, datasets, or automation policy.
+
 Raw/staging capture:
 
 - `workspace/auto_train.jsonl`

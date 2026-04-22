@@ -7,6 +7,13 @@
   update handoff can pause briefly before the full context stack comes back up,
   reducing the longstanding “updated app restarts straight into a fragile
   OpenGL/multicontext bring-up” crash seam on Windows.
+- Fixed the editor top-menu dropdown sizing against the real titled-window
+  content budget so the last menu item text no longer disappears when shared
+  GUI content-origin math changes.
+- Added a generic staged research-import path through
+  `Tools/research_import.ps1` and `workspace/research/staged/`, then closed the
+  remaining Phase 1 roadmap items that were still treating raw PDFs/HTML as
+  direct planning truth.
 
 ## [v0.83.86]
 - Switched the active packaged updater contract onto versioned runtime

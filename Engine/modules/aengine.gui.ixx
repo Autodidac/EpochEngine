@@ -195,6 +195,7 @@ namespace epochnamespace::gui
 
     export float line_height() noexcept;
     export float glyph_width() noexcept;
+    export float titled_window_total_height(float content_height) noexcept;
     export Vec2 cursor_position() noexcept;
 
     export std::optional<WidgetBounds> last_button_bounds() noexcept;

@@ -1851,6 +1851,16 @@ namespace epochnamespace::gui
         return space_advance(kFontScale);
     }
 
+    float titled_window_total_height(float content_height) noexcept
+    {
+        try { ensure_resources(); }
+        catch (...) { return content_height + 48.0f; }
+
+        const float titleHeight = line_advance_amount(kTitleScale);
+        const float titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
+        return titleBarHeight + 2.0f * kContentPadding + (std::max)(0.0f, content_height);
+    }
+
     void label(std::string_view text) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return;

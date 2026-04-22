@@ -1355,6 +1355,29 @@ namespace epochnamespace
             }
         };
 
+        auto dropdown_window_size = [&](float button_width, int item_count) -> gui::Vec2
+        {
+            constexpr float kDropdownInnerLeft = 12.0f;
+            constexpr float kDropdownInnerTop = 14.0f;
+            constexpr float kDropdownInnerBottom = 14.0f;
+            constexpr float kDropdownItemHeight = 28.0f;
+            constexpr float kDropdownItemPitch = 34.0f;
+
+            const int clamped_items = (std::max)(0, item_count);
+            const float content_height =
+                clamped_items <= 0
+                ? (kDropdownInnerTop + kDropdownInnerBottom)
+                : (kDropdownInnerTop
+                    + kDropdownItemHeight
+                    + static_cast<float>(clamped_items - 1) * kDropdownItemPitch
+                    + kDropdownInnerBottom);
+
+            return {
+                button_width + kDropdownInnerLeft * 2.0f,
+                gui::titled_window_total_height(content_height)
+            };
+        };
+
         auto open_dropdown = [&](std::string_view title, TopMenu menu, gui::Vec2 size, auto&& body)
         {
             if (editor.openMenu != menu)
@@ -2042,7 +2065,7 @@ namespace epochnamespace
             chat.submit(std::move(text));
         }
 
-        open_dropdown("File", TopMenu::File, { 220.0f, 144.0f }, [&](gui::Vec2 pos)
+        open_dropdown("File", TopMenu::File, dropdown_window_size(192.0f, 3), [&](gui::Vec2 pos)
         {
             menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
                 emit_command(EditorCommand::OpenLauncher);
@@ -2058,7 +2081,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Edit", TopMenu::Edit, { 220.0f, 144.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Edit", TopMenu::Edit, dropdown_window_size(192.0f, 3), [&](gui::Vec2 pos)
         {
             menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
                 handle_scene_tool(editor, "focus_selection");
@@ -2072,7 +2095,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Asset", TopMenu::Asset, { 248.0f, 212.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 5), [&](gui::Vec2 pos)
         {
             menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
                 add_entity(editor, "cube");
@@ -2091,7 +2114,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Window", TopMenu::Window, { 244.0f, 178.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Window", TopMenu::Window, dropdown_window_size(216.0f, 4), [&](gui::Vec2 pos)
         {
             menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 216.0f, [&]() {
                 editor.previewMode = core::ScenePreviewMode::Editor;
@@ -2109,7 +2132,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Tools", TopMenu::Tools, { 260.0f, 212.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Tools", TopMenu::Tools, dropdown_window_size(228.0f, 5), [&](gui::Vec2 pos)
         {
             menu_item("Camera: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
                 epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
@@ -2134,7 +2157,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Help", TopMenu::Help, { 220.0f, 110.0f }, [&](gui::Vec2 pos)
+        open_dropdown("Help", TopMenu::Help, dropdown_window_size(192.0f, 2), [&](gui::Vec2 pos)
         {
             menu_item("About Epoch", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
                 editor.showAboutModal = true;

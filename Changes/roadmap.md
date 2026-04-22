@@ -160,20 +160,14 @@ These remain support-tier or project-opt-in work, not the default baseline.
 - [x] Keep the engine running through one shared runtime/perf/logging spine.
 - [x] Normalize active module/file ownership instead of growing a second naming
       mess beside Epoch.
-- [ ] Add a lightweight research-import path so new PDF/HTML planning material
+- [x] Add a lightweight research-import path so new PDF/HTML planning material
       can be converted into staged text artifacts with provenance before it
       changes roadmap language, datasets, or automation policy.
-- [ ] Make the research-import path generic rather than tied to `Changes/`:
+- [x] Make the research-import path generic rather than tied to `Changes/`:
       raw PDFs/HTML/docs can come from anywhere, staged extraction should land
       under a neutral import area such as `workspace/research/`, and only
       reviewed promotions should flow into repo docs, roadmap text, datasets, or
       automation policy.
-- [ ] Keep utility HTML/tools such as `botface.html` out of the Epoch planning
-      truth path by default; only promote concrete, reviewed findings from those
-      tools when they materially inform the engine roadmap or AI control loop.
-- [ ] Keep helper-model selection and helper-lane count runtime-configurable and
-      snapshot that configuration per iteration instead of baking model order
-      assumptions into the roadmap itself.
 
 ## Phase 2 - Project-Driven Runtime and Tool Shell
 
