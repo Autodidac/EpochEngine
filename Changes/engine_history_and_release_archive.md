@@ -8,7 +8,7 @@ milestone work. It replaces the older split between:
 - `release_notes_archive.md`
 - `release_notes_version_series_collated.md`
 
-## Snapshot and status tags
+## Archive legend
 
 - **Stable release**: a packaged release or milestone note that was intended as
   a shippable runtime snapshot.
@@ -17,6 +17,10 @@ milestone work. It replaces the older split between:
   necessarily a clean standalone packaged release.
 - **Known-bad / regression risk**: a note that explicitly carried instability,
   breakage, or unresolved follow-up at the time.
+
+When you need the practical answer for "what should I trust right now," prefer
+the README badges plus the latest GitHub stable release first, then use this
+archive for historical context and milestone tracing.
 
 Current orientation:
 
@@ -58,9 +62,9 @@ From the archived work in this file, a few themes are clear:
 
 ## Post-v0.83.0 Work Log
 
-These notes were previously tracked in `post_v0_83_work_collated.md` and are
-kept here because they describe the active engine/editor direction more directly
-than the older updater-era release cadence.
+These notes were previously tracked in `post_v0_83_work_collated.md`. They stay
+here because they explain the active engine/editor direction more directly than
+the older updater-era release cadence alone.
 
 ### [Work Log | Development line] v0.83.59
 - Restored SDL and SFML dock takeover ownership so the real backend child
