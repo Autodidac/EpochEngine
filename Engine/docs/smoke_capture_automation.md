@@ -117,9 +117,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - prefer the fitted parented multicontext host so six-context layouts stay
   visible on normal desktop work areas instead of drifting off-screen
 - keep the screenshot tied to the source version shown in the README
-- refresh smaller backend proof crops from the latest validated fullscreen
-  six-context source proof instead of leaving older per-backend README images
-  behind after layout or palette changes
+- refresh the README per-backend proofs from clean startup-only full-window
+  captures instead of reusing stale crops after layout, palette, or dock
+  chrome changes
 - refresh the README multicontext proof at least every 10th feature version, or
   sooner whenever visible renderer color, layout, or docking behavior changes
   enough that the existing proof is misleading
@@ -187,6 +187,10 @@ Expected smoke behavior:
 - keep startup-render proof and dock/undock validation as separate harness passes:
   use the normal harness path for drag truth, and opt into `-CaptureStartupProof`
   only when you are intentionally collecting first-frame rendered-content samples
+- for README or doc screenshot refreshes, prefer the new startup-only harness
+  path: pair `-CaptureStartupProof` with `-StartupOnly` so proof capture does
+  not depend on synthetic drag input when the runtime bug under investigation is
+  unrelated to startup layout
 - when validating proxy-child backends, prefer the new `ContractMode` and
   `LateDetached` fields over older assumptions that every backend should already
   be redocked before mouse release

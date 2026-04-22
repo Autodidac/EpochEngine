@@ -3,6 +3,20 @@
 ## [v0.83.87]
 - Reopened `main` above the published `v0.83.86` bootstrap/runtime release
   pair so source can move forward without blurring shipped artifact identity.
+- Backed out the risky hidden-window OpenGL startup experiment and replaced it
+  with a safer first-present placeholder path: OpenGL windows stay visible, the
+  Win32 child proc paints the shell's dark neutral background until the first
+  real present lands, and software no longer gets dragged into that startup
+  workaround.
+- Added a startup-only mode to `Tools/windows_parented_multicontext_harness.ps1`
+  so README and doc proofs can capture startup layout/render state without
+  synthetic drag input interfering with live multicontext behavior.
+- Refreshed the README proof set around a current `v0.83.87` Windows
+  multicontext capture plus six full-window per-backend startup screenshots,
+  while keeping the promoted-window undock proof and WSL/Linux proof in place.
+- Marked the Phase 2 workspace-shell organization item complete in the roadmap:
+  the live shell is now explicitly organized around `Project`, `Scripts`,
+  `Systems`, `AI`, and `Output`.
 - Added a post-update startup cooldown to relaunched runtimes so packaged/source
   update handoff can pause briefly before the full context stack comes back up,
   reducing the longstanding “updated app restarts straight into a fragile

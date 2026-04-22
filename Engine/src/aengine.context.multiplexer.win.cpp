@@ -248,6 +248,14 @@ namespace
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         ::RedrawWindow(hwnd, nullptr, nullptr, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
     }
+
+    [[nodiscard]] inline bool should_draw_opengl_startup_placeholder(
+        const epochnamespace::core::WindowData* window) noexcept
+    {
+        return window
+            && window->type == epochnamespace::core::ContextType::OpenGL
+            && !window->firstPresentComplete.load(std::memory_order_acquire);
+    }
     // Some Windows SDK setups don't expose WGL_ARB_create_context declarations here.
     // Provide local fallbacks so this TU can request modern core contexts without extra headers.
 #if !defined(WGL_CONTEXT_MAJOR_VERSION_ARB)
@@ -2344,6 +2352,7 @@ namespace epochnamespace::core
         winPtr->running = true;
         winPtr->onResize = std::move(onResize);
         winPtr->context = ctx;
+        winPtr->firstPresentComplete.store(type != ContextType::OpenGL, std::memory_order_release);
         ctx->windowData = winPtr.get();
 
         RECT rc{};
@@ -2695,8 +2704,8 @@ namespace epochnamespace::core
 
             ::SetWindowPos(liveHwnd, nullptr, c * cw, r * ch, cw, ch,
                 usingHiddenHostPlaceholder
-                ? (SWP_NOZORDER | SWP_NOACTIVATE)
-                : (SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW));
+                    ? (SWP_NOZORDER | SWP_NOACTIVATE)
+                    : (SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW));
 
             if (usingHiddenHostPlaceholder)
                 ::ShowWindow(liveHwnd, SW_HIDE);
@@ -3782,12 +3791,26 @@ namespace epochnamespace::core
             return 0;
 
         case WM_ERASEBKGND:
+            if (auto* const window = resolveWindowData();
+                should_draw_opengl_startup_placeholder(window))
+            {
+                RECT clientRect{};
+                if (::GetClientRect(hwnd, &clientRect))
+                {
+                    ::FillRect(reinterpret_cast<HDC>(wParam), &clientRect, parent_background_brush());
+                }
+            }
             return 1;
 
         case WM_PAINT:
         {
             PAINTSTRUCT ps{};
-            ::BeginPaint(hwnd, &ps);
+            HDC hdc = ::BeginPaint(hwnd, &ps);
+            if (auto* const window = resolveWindowData();
+                should_draw_opengl_startup_placeholder(window))
+            {
+                ::FillRect(hdc, &ps.rcPaint, parent_background_brush());
+            }
             ::EndPaint(hwnd, &ps);
             return 0;
         }

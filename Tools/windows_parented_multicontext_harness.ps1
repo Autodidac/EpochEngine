@@ -15,7 +15,8 @@ param(
 
     [switch]$SkipMaximize,
     [switch]$SkipCloseProbe,
-    [switch]$CaptureStartupProof
+    [switch]$CaptureStartupProof,
+    [switch]$StartupOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -880,6 +881,44 @@ Start-Sleep -Milliseconds 2200
                 Probe = Get-ContentSampleProbe -ImagePath $startupScreenshotPath -ParentRect $parentRect -WindowRecord $startupItem.Window
             }
         }
+    }
+
+    if ($StartupOnly)
+    {
+        $screenshotPath = [System.IO.Path]::ChangeExtension($OutputPath, '.png')
+        $topLevelHandles = @($parentWindow.Hwnd) + @(
+            (Get-ProcessTopWindows -ProcessId $proc.Id |
+                Where-Object { $_.Visible -and $_.Parent -eq [IntPtr]::Zero } |
+                ForEach-Object { $_.Hwnd })
+        )
+        $topLevelHandles = $topLevelHandles | Select-Object -Unique
+        $savedCombinedScreenshot =
+            Save-CombinedWindowScreenshot -Handles $topLevelHandles -Destination $screenshotPath
+        if (-not $savedCombinedScreenshot -or -not (Test-Path $screenshotPath)) {
+            [void](Save-WindowScreenshot -Hwnd $parentWindow.Hwnd -Destination $screenshotPath)
+        }
+
+        $result = [pscustomobject]@{
+            Mode = $Mode
+            Backend = $Backend
+            FocusedBackend = $FocusedBackend
+            StartupOnly = $true
+            ProcessId = $proc.Id
+            Parent = $parentWindow
+            TopLevelWindowsBefore = $topLevelWindowsBefore
+            VisibleChildrenBefore = $children | Select-Object Class,Title,Visible,Rect
+            StartupScreenshotPath = $startupScreenshotPath
+            StartupContentProbes = $startupContentProbes
+            TopLevelWindowsAfterDrag = @()
+            VisibleChildrenAfterDrag = @()
+            Checks = @()
+            CloseProbeRequested = $false
+            CloseProbeTarget = ''
+            StillRunningAfterCloseProbe = $null
+            ScreenshotPath = $screenshotPath
+        }
+        $outputReady = $true
+        return
     }
 
     $backendChecks = @()

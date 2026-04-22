@@ -199,7 +199,7 @@ These remain support-tier or project-opt-in work, not the default baseline.
       and run the script that actually belongs to the active project shell.
 - [x] Keep the launcher/project shell centered on projects, contexts, settings,
       updates, and future automation instead of legacy demo/game menus.
-- [ ] Keep the live shell organized around `Project`, `Scripts`, `Systems`,
+- [x] Keep the live shell organized around `Project`, `Scripts`, `Systems`,
       `AI`, and `Output` workspaces backed by reusable GUI controls.
 - [x] Keep a professional 2D project path visible and honest instead of falling
       back to stale sample-profile naming.
@@ -403,9 +403,10 @@ These remain support-tier or project-opt-in work, not the default baseline.
 
 1. Add automation smoke that creates/selects a generated project shell through
    the live editor and proves the honest game/tool creation loop end to end.
-2. Keep the Systems workspace growing into a real renderer/runtime tooling
-   surface.
-3. Continue carrying the time spine deeper into runtime and scene ownership.
+2. Continue carrying the time spine deeper into runtime and scene ownership.
+3. Keep the Systems workspace growing into a real renderer/runtime tooling
+   surface, including the remaining pacing/perf guidance that supports the time
+   spine.
 4. Tighten the two-role AI capture/training loop and MCP-driven curation path.
 5. Restore the launcher's classic palette through scoped theme ownership while
    keeping the darker editor shell separate and documenting the later theme

@@ -30,6 +30,7 @@
  ***********************************************/
 module;
 
+#include <atomic>
 #include <string>
 #include <string_view>
 #include <stdexcept>
@@ -133,6 +134,7 @@ namespace epochnamespace::core
         int  height = DEFAULT_WINDOW_HEIGHT;
         bool should_close = false;
         bool isFloating = false;
+        std::atomic_bool firstPresentComplete = false;
 
         std::function<void(int, int)> onResize{};
 

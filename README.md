@@ -80,27 +80,41 @@ the same asset set as the main editor host.
 
 # In action
 
-These README captures are source-state proofs, not updater-shell screenshots.
-They are intentionally limited to the three images that matter most right now:
-the full Windows multicontext state, a real promoted-window undock validation,
-and the current Linux WSL proof.
+These README captures are source-state proofs from asset-bearing outputs, not
+updater-shell screenshots.
 
-- A valid six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
+- A valid Windows six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
   `Vulkan`, `OpenGL`, and `Software`.
 - The promoted-window proof must show a real detached window outside the main
   parent, not a fake undock still trapped inside it.
-- The Linux proof should come from the asset-bearing WSL build output, not a
+- The per-backend thumbnails below come from the startup-only harness path so
+  they stay tied to real startup layout without synthetic drag input.
+- The Linux proof comes from the asset-bearing WSL build output, not a
   half-wired source-tree launch.
 
-Windows fullscreen six-context multicontext proof, source `v0.83.85`:
+Windows fullscreen six-context multicontext proof, source `v0.83.87`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08385.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
+  <img src="Images/readme/windows-multicontext-editor-v08387.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
 </p>
 
 Open the PNG directly for native resolution when checking all six panes.
-GitHub's page scaling can make the lower row and right column harder to read
-at a glance.
+GitHub page scaling can make the lower row and right column harder to read at a
+glance.
+
+Current Windows per-backend startup proofs:
+
+<p align="center">
+  <a href="Images/readme/windows-raylib-v08387.png"><img src="Images/readme/windows-raylib-v08387.png" alt="Epoch Windows Raylib editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-sdl-v08387.png"><img src="Images/readme/windows-sdl-v08387.png" alt="Epoch Windows SDL editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-sfml-v08387.png"><img src="Images/readme/windows-sfml-v08387.png" alt="Epoch Windows SFML editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-vulkan-v08387.png"><img src="Images/readme/windows-vulkan-v08387.png" alt="Epoch Windows Vulkan editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-opengl-v08387.png"><img src="Images/readme/windows-opengl-v08387.png" alt="Epoch Windows OpenGL editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-software-v08387.png"><img src="Images/readme/windows-software-v08387.png" alt="Epoch Windows Software editor proof" width="15.6%" /></a>
+</p>
+
+Each thumbnail opens to a full-window startup capture from the same source-state
+validation pass.
 
 Windows promoted-window undock proof, live validation:
 
@@ -108,13 +122,12 @@ Windows promoted-window undock proof, live validation:
   <img src="Images/readme/windows-undock-proof-v08385.png" alt="Epoch Windows promoted-window undock proof" width="960" />
 </p>
 
-- The undock proof above is a live desktop capture from a successful six-pane
-  validation, showing the detached promoted-shell behavior outside the main
-  parent.
+- The undock proof above is a live desktop capture from the successful
+  promoted-shell validation pass that established the detached-window contract.
 
 ---
 
-WSL/Linux editor proof, source `v0.83.86`:
+WSL/Linux editor proof, latest asset-bearing WSL capture:
 
 <p align="center">
   <img src="Images/readme/linux-opengl-v08386.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />
@@ -130,9 +143,9 @@ WSL/Linux note:
   default. Updater-shell mode is an explicit bootstrap path, not the normal
   Linux packaged identity.
 - The active packaged-runtime contract is now versioned runtime assets such as
-  `epoch_win10_x64_v0.83.86.zip` and `epoch_linux_x64_v0.83.86.tar.gz`.
-  The updater reads the packaged version directly from those archive names
-  before it falls through to source.
+  `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`. The updater reads
+  packaged version info from those archive names before it falls through to
+  source.
 
 ---
 

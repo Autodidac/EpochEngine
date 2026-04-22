@@ -2,6 +2,16 @@
 
 #include <include/aengine.config.hpp>
 
+#if defined(_WIN32)
+#   ifndef WIN32_LEAN_AND_MEAN
+#       define WIN32_LEAN_AND_MEAN
+#   endif
+#   ifndef NOMINMAX
+#       define NOMINMAX
+#   endif
+#   include <windows.h>
+#endif
+
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 #   include <glad/glad.h>
 #endif
@@ -81,6 +91,25 @@ namespace epochnamespace::openglcontext
         opengl_render_active_frame(ctx, queue, fbW, fbH, windowId);
         PlatformGL::swap_buffers(guard.target());
         ++glState.frameCount;
+
+#if defined(_WIN32)
+        if (ctx->windowData
+            && !ctx->windowData->firstPresentComplete.exchange(true, std::memory_order_acq_rel)
+            && ctx->windowData->hwnd
+            && ::IsWindow(ctx->windowData->hwnd) != FALSE)
+        {
+            ::RedrawWindow(
+                ctx->windowData->hwnd,
+                nullptr,
+                nullptr,
+                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        }
+#else
+        if (ctx->windowData
+            && !ctx->windowData->firstPresentComplete.exchange(true, std::memory_order_acq_rel))
+        {
+        }
+#endif
         return true;
     }
 }
