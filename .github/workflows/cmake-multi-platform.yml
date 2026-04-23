@@ -59,15 +59,39 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Upgrade pip
+        shell: ${{ matrix.shell }}
+        run: python -m pip install --upgrade pip
+
       - name: Install modern CMake and Ninja
         shell: ${{ matrix.shell }}
-        run: >
-          python -m pip install --upgrade pip cmake==3.30.5 ninja
+        run: python -m pip install cmake==3.30.5 ninja
+
+      - name: Export Python tool shims on PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pythonDir = Split-Path (Get-Command python).Source -Parent
+          $scriptsDir = Join-Path $pythonDir 'Scripts'
+          Add-Content -Path $env:GITHUB_PATH -Value $pythonDir
+          if (Test-Path $scriptsDir) {
+            Add-Content -Path $env:GITHUB_PATH -Value $scriptsDir
+          }
+
+      - name: Export Python tool shims on PATH (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          python_dir="$(dirname "$(command -v python)")"
+          echo "$python_dir" >> "$GITHUB_PATH"
 
       - name: Report tool versions
         shell: ${{ matrix.shell }}
-        run: >
+        run: |
+          python --version
+          python -m pip --version
           cmake --version
+          ninja --version
 
       - name: Configure
         shell: ${{ matrix.shell }}

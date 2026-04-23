@@ -1,6 +1,10 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Hardened the GitHub CMake workflow so it upgrades `pip`, installs the pinned
+  `cmake`/`ninja` toolchain in a separate step, and explicitly exports the
+  Python tool-shim directories onto `PATH` before configure/build on both
+  Windows and Linux runners.
 - Wired the project demo bootstrap path to the embedded Mini Sponza asset more
   honestly: the script host now exposes a queued model-load callback, the
   raylib preview backend can load and draw queued models, `editor_launcher`
