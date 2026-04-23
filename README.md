@@ -30,6 +30,9 @@ continued from there into the current engine line. What started as a rough
 creative engine idea has been turning into a real project-centric runtime and
 tooling platform with a working editor, launcher, project shells, scripting,
 AI review surfaces, and multicontext renderer work all living in one codebase.
+Epoch is also born from the idea that as technology improves, and as
+optimization and good programming get smarter, a better and fuller system can
+be fostered instead of settling for smaller disconnected tools.
 
 Current feature spine:
 
