@@ -20,6 +20,32 @@ work, and a staged two-role AI workspace that keeps automation reviewable.
   <img src="https://img.shields.io/badge/C%2B%2B23_Scripting-8A5C2F?style=for-the-badge" alt="C++23 scripting" />
 </p>
 
+Project-centric runtime | Multicontext tooling | AI-assisted engine operations | C++23 scripting
+
+## The Story Of Epoch Engine
+
+Epoch planning started in the last third of 2024. By the end of February 2025,
+active coding had begun with ChatGPT in the loop, and development has
+continued from there into the current engine line. What started as a rough
+creative engine idea has been turning into a real project-centric runtime and
+tooling platform with a working editor, launcher, project shells, scripting,
+AI review surfaces, and multicontext renderer work all living in one codebase.
+
+Current feature spine:
+
+- Project-centric runtime flow with separate launcher and editor surfaces.
+- Real project creation, discovery, build, and play flow from the live editor.
+- Engine-owned GUI and text rendering instead of middleware-owned editor UI.
+- C++23 scripting with validation, build, reload, and runtime execution.
+- Multicontext backend orchestration across Raylib, SDL3, SFML, Vulkan,
+  OpenGL, software, and noop/headless paths.
+- Model-backed launcher demo flow using the embedded Mini Sponza asset.
+- Systems, Scripts, Project, AI, and Output workspaces inside the editor.
+- Two-role AI loop centered on `EpochBot` plus the local MCP/control layer.
+- Executable-root path and asset resolution instead of fragile cwd-based runs.
+- Windows, Linux/WSL, updater-shell, and packaged runtime workflows with
+  documented release/source policy.
+
 ## What Epoch Is
 
 For newcomers:
