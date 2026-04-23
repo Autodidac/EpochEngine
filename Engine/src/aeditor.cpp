@@ -1093,6 +1093,100 @@ namespace epochnamespace
             return std::filesystem::absolute(path, ec).lexically_normal().generic_string();
         }
 
+        [[nodiscard]] bool path_exists(const std::filesystem::path& path) noexcept
+        {
+            if (path.empty())
+                return false;
+            std::error_code ec;
+            return std::filesystem::exists(path, ec);
+        }
+
+        [[nodiscard]] std::string ready_text(bool ready)
+        {
+            return ready ? "Ready" : "Missing";
+        }
+
+        struct AiReviewGateStatus
+        {
+            bool buildEvidenceReady{ false };
+            bool projectEvidenceReady{ false };
+            bool captureEvidenceReady{ false };
+            bool chatPairReady{ false };
+            std::size_t readyEvidenceCount{ 0 };
+            std::size_t totalEvidenceCount{ 0 };
+            std::string packetEvidenceSummary{};
+            std::string promotionSummary{};
+        };
+
+        [[nodiscard]] AiReviewGateStatus summarize_ai_review_gate(
+            const EditorState& editor,
+            const std::filesystem::path& buildLog,
+            const std::filesystem::path& outputExe,
+            const std::filesystem::path& pathsManifest,
+            const epoch::ai::TrainingPaths& training,
+            std::string_view latestPrompt,
+            std::string_view latestReply)
+        {
+            AiReviewGateStatus status{};
+            const bool manifestReady = !editor.projectManifest.empty() && path_exists(editor.projectManifest);
+            const bool projectRootReady = !editor.projectRoot.empty() && path_exists(editor.projectRoot);
+            const bool sceneReady = !editor.projectScenePath.empty() && path_exists(editor.projectScenePath);
+            const bool buildLogReady = path_exists(buildLog);
+            const bool outputReady = path_exists(outputExe);
+            const bool pathsReady = path_exists(pathsManifest);
+            const bool rawCaptureReady = path_exists(training.local_capture_jsonl);
+            const bool mcpCaptureReady = path_exists(training.mcp_capture_jsonl);
+
+            status.buildEvidenceReady = buildLogReady && outputReady;
+            status.projectEvidenceReady = manifestReady && projectRootReady && pathsReady;
+            status.captureEvidenceReady = rawCaptureReady || mcpCaptureReady;
+            status.chatPairReady = !latestPrompt.empty()
+                && !latestReply.empty()
+                && latestReply != "(empty reply)";
+
+            const std::array evidenceFlags{
+                manifestReady,
+                projectRootReady,
+                sceneReady,
+                pathsReady,
+                buildLogReady,
+                outputReady,
+                rawCaptureReady,
+                mcpCaptureReady
+            };
+            status.totalEvidenceCount = evidenceFlags.size();
+            status.readyEvidenceCount = static_cast<std::size_t>(std::count(evidenceFlags.begin(), evidenceFlags.end(), true));
+            status.packetEvidenceSummary = std::to_string(status.readyEvidenceCount)
+                + "/" + std::to_string(status.totalEvidenceCount)
+                + " staged evidence paths exist";
+
+            if (status.buildEvidenceReady
+                && status.projectEvidenceReady
+                && status.captureEvidenceReady
+                && status.chatPairReady)
+            {
+                status.promotionSummary = "Ready for review and curated promotion";
+            }
+            else if (!status.buildEvidenceReady)
+            {
+                status.promotionSummary = "Blocked: build log/output evidence not ready";
+            }
+            else if (!status.projectEvidenceReady)
+            {
+                status.promotionSummary = "Blocked: project manifest/paths evidence incomplete";
+            }
+            else if (!status.captureEvidenceReady)
+            {
+                status.promotionSummary = "Blocked: no raw or MCP capture evidence yet";
+            }
+            else
+            {
+                status.promotionSummary = "Blocked: latest chat pair is not promotable yet";
+            }
+
+            return status;
+        }
+
         AiChat& chat_state_for(const std::shared_ptr<core::Context>& ctx)
         {
             auto& storage = chat_storage();
@@ -1765,6 +1859,14 @@ namespace epochnamespace
             const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
             const std::string latestPrompt = last_chat_line_with_prefix(chat, "you> ");
             const std::string latestReply = last_chat_line_with_prefix(chat, "bot> ");
+            const auto gateStatus = summarize_ai_review_gate(
+                editor,
+                buildLog,
+                outputExe,
+                pathsManifest,
+                training,
+                latestPrompt,
+                latestReply);
 
             gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
             gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
@@ -1779,6 +1881,7 @@ namespace epochnamespace
             gui::property_row("[ai] Local models", training.model_root);
             gui::property_row("[ai] Checkpoints", training.checkpoint_root);
             gui::property_row("[ai] Active script source", activeScriptSource);
+            gui::property_row("[ai] Paths manifest", display_project_path(pathsManifest));
             gui::property_row("[ai] Active build log", display_project_path(buildLog));
             gui::property_row("[ai] Active output", display_project_path(outputExe));
             gui::property_row("[ai] Runtime role", "EpochBot");
@@ -1786,6 +1889,12 @@ namespace epochnamespace
             gui::property_row("[ai] Seed/helper/verifier", "runtime seed + helper teacher + gated verifier");
             gui::property_row("[ai] Promotion gate", "capture -> review/score -> curate/promote");
             gui::property_row("[ai] Evidence", "build + runtime + retained logs");
+            gui::property_row("[ai] Build evidence", ready_text(gateStatus.buildEvidenceReady));
+            gui::property_row("[ai] Project evidence", ready_text(gateStatus.projectEvidenceReady));
+            gui::property_row("[ai] Capture evidence", ready_text(gateStatus.captureEvidenceReady));
+            gui::property_row("[ai] Chat pair", ready_text(gateStatus.chatPairReady));
+            gui::property_row("[ai] Packet evidence", gateStatus.packetEvidenceSummary);
+            gui::property_row("[ai] Review gate state", gateStatus.promotionSummary);
             const std::string captureGuidance =
                 "Raw chat captures land in " + training.local_capture_jsonl
                 + " as Git-safe staging data, MCP interaction snapshots land in "
@@ -2442,4 +2551,3 @@ namespace epochnamespace
     }
 
 } // namespace epochnamespace
-

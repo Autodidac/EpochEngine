@@ -1,6 +1,12 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Removed the two now-redundant local research PDFs after their useful
+  planning material had already been promoted into repo truth, while keeping
+  the longer-range six-month/two-year planning PDF in place for now.
+- Expanded the editor AI workspace with an explicit review-gate summary so the
+  live shell now reports whether build, project, capture, and latest chat-pair
+  evidence are actually ready before curated promotion is attempted.
 - Expanded the editor `Systems` workspace with clearer pacing-health and
   backend-convergence guidance so the live surface now spells out whether the
   current time budget is healthy, capped, or over budget, and records the
