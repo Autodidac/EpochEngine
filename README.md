@@ -1,11 +1,11 @@
-<img align="left" src="Images/567.png" width="110px"/>
-
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
   <img src="https://img.shields.io/badge/Current_Source_Development-v0.83.88-1F7A4C?style=for-the-badge" alt="Current development source v0.83.88" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.83.86-2C6A8A?style=for-the-badge" alt="Published stable release v0.83.86" />
 </p>
+
+<img align="left" src="Images/567.png" width="110px"/>
 
 **Epoch Engine** is a professional **C++23 game engine and creative software
 platform** for games, editors, tools, automation, and AI-assisted workflows

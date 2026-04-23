@@ -19,35 +19,35 @@ jobs:
         include:
           - name: windows-msvc
             os: windows-latest
-            shell: powershell
+            shell: pwsh
             configure_command: >
-              cmake -S "$env:GITHUB_WORKSPACE" -B "$env:GITHUB_WORKSPACE/build/ci"
+              python -m cmake -S "$env:GITHUB_WORKSPACE" -B "$env:GITHUB_WORKSPACE/build/ci"
               -G "Visual Studio 17 2022"
               -A x64
             build_command: >
-              cmake --build "$env:GITHUB_WORKSPACE/build/ci"
+              python -m cmake --build "$env:GITHUB_WORKSPACE/build/ci"
               --config Release
               --target epoch
           - name: linux-gcc
             os: ubuntu-latest
             shell: bash
             configure_command: >
-              cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/ci"
+              python -m cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/ci"
               -G Ninja
               -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
             build_command: >
-              cmake --build "$GITHUB_WORKSPACE/build/ci"
+              python -m cmake --build "$GITHUB_WORKSPACE/build/ci"
               --config Release
               --target epoch
           - name: linux-clang
             os: ubuntu-latest
             shell: bash
             configure_command: >
-              cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/ci"
+              python -m cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/ci"
               -G Ninja
               -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
             build_command: >
-              cmake --build "$GITHUB_WORKSPACE/build/ci"
+              python -m cmake --build "$GITHUB_WORKSPACE/build/ci"
               --config Release
               --target epoch
 
