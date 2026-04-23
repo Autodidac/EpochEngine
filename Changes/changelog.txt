@@ -8,6 +8,9 @@
 - Tightened that workflow further so the hosted jobs invoke `python -m cmake`
   directly and use `pwsh` on the Windows matrix leg, reducing runner PATH/shell
   ambiguity instead of hoping the right global `cmake` happens to win.
+- Repaired the workflow syntax itself by removing invalid `matrix.shell`
+  expressions from the `shell:` field and splitting the configure/build steps
+  into explicit Windows and Linux branches that GitHub Actions accepts.
 - Wired the project demo bootstrap path to the embedded Mini Sponza asset more
   honestly: the script host now exposes a queued model-load callback, the
   raylib preview backend can load and draw queued models, `editor_launcher`

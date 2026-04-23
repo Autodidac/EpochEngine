@@ -20,6 +20,8 @@ work, and a staged two-role AI workspace that keeps automation reviewable.
   <img src="https://img.shields.io/badge/C%2B%2B23_Scripting-8A5C2F?style=for-the-badge" alt="C++23 scripting" />
 </p>
 
+---
+
 ## The Story Of Epoch Engine
 
 Epoch planning started in the last third of 2024. By the end of February 2025,

@@ -60,11 +60,9 @@ jobs:
           python-version: "3.12"
 
       - name: Upgrade pip
-        shell: ${{ matrix.shell }}
         run: python -m pip install --upgrade pip
 
       - name: Install modern CMake and Ninja
-        shell: ${{ matrix.shell }}
         run: python -m pip install cmake==3.30.5 ninja
 
       - name: Export Python tool shims on PATH (Windows)
@@ -86,17 +84,28 @@ jobs:
           echo "$python_dir" >> "$GITHUB_PATH"
 
       - name: Report tool versions
-        shell: ${{ matrix.shell }}
         run: |
           python --version
           python -m pip --version
           cmake --version
           ninja --version
 
-      - name: Configure
-        shell: ${{ matrix.shell }}
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: ${{ matrix.configure_command }}
 
-      - name: Build
-        shell: ${{ matrix.shell }}
+      - name: Configure (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: ${{ matrix.configure_command }}
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ${{ matrix.build_command }}
+
+      - name: Build (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
         run: ${{ matrix.build_command }}
