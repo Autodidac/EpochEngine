@@ -1520,6 +1520,75 @@ namespace epochnamespace::core
             std::vector<std::shared_ptr<epochnamespace::core::Context>>
         >;
 
+        [[nodiscard]] bool launch_project_child_process(std::string_view launch_argument)
+        {
+            if (!launch_argument.starts_with("project-exe:"))
+                return false;
+
+            const std::filesystem::path executable = std::filesystem::path{
+                std::string(launch_argument.substr(std::string_view{ "project-exe:" }.size()))
+            }.lexically_normal();
+            std::error_code ec;
+            if (!std::filesystem::exists(executable, ec) || ec)
+            {
+                logger::get(kEditorLog).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Built project executable is missing: {}",
+                    executable.generic_string());
+                return false;
+            }
+
+#if defined(_WIN32)
+            STARTUPINFOW startup{};
+            startup.cb = sizeof(startup);
+            startup.dwFlags = STARTF_USESHOWWINDOW;
+            startup.wShowWindow = SW_SHOWNORMAL;
+
+            PROCESS_INFORMATION process{};
+            std::wstring command_line = L"\"" + executable.wstring() + L"\"";
+            std::wstring working_directory = executable.parent_path().wstring();
+            const BOOL created = CreateProcessW(
+                executable.wstring().c_str(),
+                command_line.data(),
+                nullptr,
+                nullptr,
+                FALSE,
+                0,
+                nullptr,
+                working_directory.empty() ? nullptr : working_directory.c_str(),
+                &startup,
+                &process);
+
+            if (!created)
+            {
+                logger::get(kEditorLog).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Failed to launch built project executable: {} (GetLastError={})",
+                    executable.generic_string(),
+                    static_cast<unsigned long>(GetLastError()));
+                return false;
+            }
+
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+            return true;
+#else
+            const std::string command = "\"" + executable.string() + "\" &";
+            if (std::system(command.c_str()) != 0)
+            {
+                logger::get(kEditorLog).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Failed to launch built project executable: {}",
+                    executable.generic_string());
+                return false;
+            }
+            return true;
+#endif
+        }
+
         class ProjectPlayScene final : public epochnamespace::scene::Scene
         {
         public:
@@ -1536,6 +1605,7 @@ namespace epochnamespace::core
                 m_worldName = std::string(profile->world_name);
                 m_scriptName = std::string(profile->default_script);
                 m_description = std::string(profile->description);
+                m_modelSummary = epochnamespace::editor_project_model_summary(m_projectId);
             }
 
             void load() override
@@ -1642,6 +1712,14 @@ namespace epochnamespace::core
                 gui::label(std::string("World: ") + m_worldName);
                 gui::label(std::string("Scene: ") + m_scenePath);
                 gui::label(std::string("Script: ") + m_scriptName);
+                gui::wrapped_label(
+                    std::string("Demo model: ")
+                    + (m_modelSummary.asset_path.empty() ? std::string("(none)") : m_modelSummary.asset_path),
+                    390.0f);
+                gui::wrapped_label(
+                    std::string("Model summary: ")
+                    + (m_modelSummary.summary.empty() ? std::string("(unavailable)") : m_modelSummary.summary),
+                    390.0f);
                 gui::wrapped_label(m_description, 390.0f);
                 gui::wrapped_label("Esc returns to the editor. Use LMB pan, RMB orbit, wheel zoom, and WASD/QE for play-preview navigation.", 390.0f);
                 gui::end_window();
@@ -1658,6 +1736,7 @@ namespace epochnamespace::core
             std::string m_worldName{};
             std::string m_scriptName{};
             std::string m_description{};
+            epochnamespace::EditorProjectModelSummary m_modelSummary{};
             gui::Vec2 m_lastMouse{};
             timing::Clock::time_point m_lastFrame{};
             bool m_hasLastFrame{ false };
@@ -2147,6 +2226,17 @@ namespace epochnamespace::core
                                 ctx_running = true;
                                 break;
                             case epochnamespace::EditorCommand::RunGame:
+                                if (editor_frame.command_argument.starts_with("project-exe:"))
+                                {
+                                    const bool launched = launch_project_child_process(editor_frame.command_argument);
+                                    logger::get(kEditorLog).logf(
+                                        launched ? logger::LogLevel::INFO : logger::LogLevel::Error,
+                                        std::source_location::current(),
+                                        "Editor {} built child executable '{}'.",
+                                        launched ? "launched" : "failed to launch",
+                                        editor_frame.command_argument.substr(std::string_view{ "project-exe:" }.size()));
+                                    break;
+                                }
                                 if (!editor_frame.command_argument.starts_with("project:"))
                                 {
                                     logger::get(kEditorLog).logf(

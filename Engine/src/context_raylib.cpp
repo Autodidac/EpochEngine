@@ -32,6 +32,11 @@ namespace
         return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
     }
 
+    int default_add_model(const char*, const char* path) noexcept
+    {
+        return epochnamespace::raylib_api::load_model(path);
+    }
+
     void bind_default_input(const std::shared_ptr<epochnamespace::core::Context>& ctx)
     {
         ctx->is_key_held = [](epochnamespace::input::Key key) { return epochnamespace::input::is_key_held(key); };
@@ -112,6 +117,7 @@ namespace epochnamespace::core::detail
         {
             return default_add_atlas(atlas);
         };
+        ctx->add_model = &default_add_model;
         bind_default_input(ctx);
         AddContextForBackend(ContextType::RayLib, std::move(ctx));
     }

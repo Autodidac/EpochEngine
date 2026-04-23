@@ -715,9 +715,12 @@ namespace epochnamespace
             state.activeWorld = std::string(profile->world_name);
             state.activeScript = std::string(profile->default_script);
             state.activeRuntimeScene = std::string(profile->runtime_scene_id);
-            state.projectStatus = std::string("Loaded project shell at ") + state.projectRoot + ".";
-            state.projectBuildStatus = "Build Project creates a repo-local child executable for generated shells.";
-            state.scriptBuildStatus = "Select a script to validate or run.";
+            const auto ensuredShell = editor_ensure_project_shell(profile->id);
+            state.projectStatus = ensuredShell.summary.empty()
+                ? (std::string("Loaded project shell at ") + state.projectRoot + ".")
+                : ensuredShell.summary;
+            state.projectBuildStatus = "Build Project creates or refreshes a repo-local child executable for the active shell.";
+            state.scriptBuildStatus = "Select a script to validate or run against the active project shell.";
 
             state.entities.clear();
             for (const auto& seed : editor_seed_entities_for_project(profile->id))
@@ -972,6 +975,46 @@ namespace epochnamespace
             push_editor_log(
                 it->second,
                 std::format("[script] Rotated {} scene entities by {:.1f} degrees.", rotated, deltaDegrees));
+        }
+
+        int script_queue_model_load_callback(void* userData, const char* debugName, const char* modelPath)
+        {
+            auto* ctx = static_cast<core::Context*>(userData);
+            if (!ctx || !modelPath || modelPath[0] == '\0')
+                return -1;
+            if (!ctx->add_model)
+                return -1;
+
+            const std::string path{ modelPath };
+            const std::string label =
+                (debugName && debugName[0] != '\0')
+                ? std::string(debugName)
+                : std::filesystem::path{ path }.stem().string();
+
+            const auto invokeLoad = [ctx, label, path]() noexcept
+                {
+                    return ctx->add_model_safe(label.c_str(), path.c_str());
+                };
+
+            if (auto current = core::get_current_render_context(); current && current.get() == ctx)
+                return invokeLoad();
+
+            if (!ctx->windowData)
+                return -1;
+
+            const core::RenderPath renderPath =
+                (ctx->type == core::ContextType::OpenGL) ? core::RenderPath::OpenGL
+                : (ctx->type == core::ContextType::SFML) ? core::RenderPath::SFML
+                : (ctx->type == core::ContextType::Vulkan) ? core::RenderPath::Vulkan
+                : core::RenderPath::Unknown;
+
+            ctx->windowData->commandQueue.enqueue(
+                [ctx, label, path]()
+                {
+                    (void)ctx->add_model_safe(label.c_str(), path.c_str());
+                },
+                renderPath);
+            return 1;
         }
 
         [[nodiscard]] std::string renderer_name(const std::shared_ptr<core::Context>& ctx)
@@ -1418,19 +1461,26 @@ namespace epochnamespace
             return false;
 
         std::string projectRoot{};
+        std::string projectId{};
         {
             auto& storage = editor_storage();
             std::scoped_lock lock(storage.mutex);
             const auto it = storage.states.find(ctx);
             if (it != storage.states.end())
+            {
                 projectRoot = it->second.projectRoot;
+                projectId = it->second.projectId;
+            }
         }
 
         scripting::ScriptLoadReport report;
+        const std::string projectModelAsset = editor_project_demo_model_path(projectId);
         EpochScriptHost host{
             .user_data = const_cast<core::Context*>(ctx),
             .log = &script_log_callback,
-            .rotate_all_entities_yaw = &script_rotate_all_entities_yaw_callback
+            .rotate_all_entities_yaw = &script_rotate_all_entities_yaw_callback,
+            .queue_model_load = &script_queue_model_load_callback,
+            .project_model_asset = projectModelAsset.empty() ? nullptr : projectModelAsset.c_str()
         };
 
         const std::string sourcePath = editor_resolve_script_source_path(script_name, projectRoot);
@@ -1767,6 +1817,7 @@ namespace epochnamespace
             const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
             const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
             const std::filesystem::path pathsManifest = std::filesystem::path{ editor.projectRoot } / "project.paths.txt";
+            const auto modelSummary = editor_project_model_summary(editor.projectId);
 
             gui::property_row("[project] Active", activeProfile->display_name);
             gui::property_row("[project] Kind", editor.projectKind);
@@ -1778,6 +1829,11 @@ namespace epochnamespace
             gui::property_row("[project] Template", editor.projectTemplate);
             gui::property_row("[project] Default script", activeProfile->default_script);
             gui::property_row("[project] Script source", editor_resolve_script_source_path(activeProfile->default_script, editor.projectRoot));
+            gui::property_row("[project] Demo model", modelSummary.asset_path.empty() ? std::string("(none)") : modelSummary.asset_path);
+            gui::property_row("[project] Demo model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path);
+            gui::property_row("[project] Demo model exists", modelSummary.exists ? "true" : "false");
+            gui::property_row("[project] Demo model parsed", modelSummary.parsed ? "true" : "false");
+            gui::property_row("[project] Demo model summary", modelSummary.summary);
             gui::property_row("[project] Integration", activeProfile->engine_integration_mode);
             gui::property_row("[project] Include root", activeProfile->public_include_root);
             gui::property_row("[project] Entry source", display_project_path(entrySource));
@@ -1823,11 +1879,17 @@ namespace epochnamespace
 
             if (gui::button("Play Current Project", { 180.0f, 30.0f }))
             {
-                emit_command(EditorCommand::RunGame, editor.activeRuntimeScene);
+                const bool hasBuiltOutput = std::filesystem::exists(outputExe);
+                const std::string playTarget = hasBuiltOutput
+                    ? std::string("project-exe:") + display_project_path(outputExe)
+                    : editor.activeRuntimeScene;
+                emit_command(EditorCommand::RunGame, playTarget);
                 push_editor_log(editor, std::string("[project] Play requested for ") + editor.projectName + ".");
-                push_editor_log(editor, std::string("[project] Play target: ") + display_project_path(outputExe));
-                if (!std::filesystem::exists(outputExe))
-                    push_editor_log(editor, "[project] Build the active project before expecting a child executable.");
+                push_editor_log(
+                    editor,
+                    hasBuiltOutput
+                        ? std::string("[project] Launching built child executable: ") + display_project_path(outputExe)
+                        : std::string("[project] No child executable yet; falling back to in-editor runtime target '") + editor.activeRuntimeScene + "'.");
             }
             if (gui::button("Build Active Project", { 220.0f, 30.0f }))
             {

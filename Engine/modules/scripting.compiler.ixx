@@ -88,7 +88,8 @@ namespace epochnamespace::compiler
             const std::vector<std::filesystem::path> candidates{
                 std::filesystem::path{ "C:/Program Files/LLVM/bin/clang++.exe" },
                 std::filesystem::path{ "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/Llvm/x64/bin/clang++.exe" },
-                std::filesystem::path{ "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/Llvm/bin/clang++.exe" }
+                std::filesystem::path{ "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/Llvm/bin/clang++.exe" },
+                std::filesystem::path{ "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe" }
             };
 
             for (const auto& candidate : candidates)
@@ -98,6 +99,11 @@ namespace epochnamespace::compiler
             }
 
             return std::filesystem::path{ "clang++" };
+        }
+
+        [[nodiscard]] inline bool compiler_uses_msvc_style(const std::filesystem::path& compilerPath) noexcept
+        {
+            return compilerPath.filename() == "cl.exe";
         }
 
         [[nodiscard]] inline std::filesystem::path resolve_engine_include_root(
@@ -175,19 +181,37 @@ namespace epochnamespace::compiler
             const std::filesystem::path& output,
             std::span<const std::filesystem::path> includeRoots)
         {
-            std::vector<std::string> clangArgs = {
-                quote_arg(compilerPath.string()),
-                "-std=c++20",
-                "-shared",
-                quote_arg(input.string()),
-                "-o", quote_arg(output.string()),
-                "-fno-rtti",
-                "-fno-exceptions",
-                "-O2"
-            };
+            std::vector<std::string> clangArgs{};
+            if (compiler_uses_msvc_style(compilerPath))
+            {
+                clangArgs = {
+                    quote_arg(compilerPath.string()),
+                    "/nologo",
+                    "/std:c++20",
+                    "/LD",
+                    quote_arg(input.string()),
+                    "/Fe:" + quote_arg(output.string())
+                };
 
-            for (const auto& includeRoot : includeRoots)
-                clangArgs.push_back("-I" + quote_arg(includeRoot.string()));
+                for (const auto& includeRoot : includeRoots)
+                    clangArgs.push_back("/I" + quote_arg(includeRoot.string()));
+            }
+            else
+            {
+                clangArgs = {
+                    quote_arg(compilerPath.string()),
+                    "-std=c++20",
+                    "-shared",
+                    quote_arg(input.string()),
+                    "-o", quote_arg(output.string()),
+                    "-fno-rtti",
+                    "-fno-exceptions",
+                    "-O2"
+                };
+
+                for (const auto& includeRoot : includeRoots)
+                    clangArgs.push_back("-I" + quote_arg(includeRoot.string()));
+            }
 
             std::string cmd;
             for (const auto& arg : clangArgs)
@@ -202,20 +226,38 @@ namespace epochnamespace::compiler
             const std::filesystem::path& output,
             std::span<const std::filesystem::path> includeRoots)
         {
-            std::vector<std::wstring> args{
-                compilerPath.wstring(),
-                L"-std=c++20",
-                L"-shared",
-                input.wstring(),
-                L"-o",
-                output.wstring(),
-                L"-fno-rtti",
-                L"-fno-exceptions",
-                L"-O2"
-            };
+            std::vector<std::wstring> args{};
+            if (compiler_uses_msvc_style(compilerPath))
+            {
+                args = {
+                    compilerPath.wstring(),
+                    L"/nologo",
+                    L"/std:c++20",
+                    L"/LD",
+                    input.wstring(),
+                    L"/Fe:" + output.wstring()
+                };
 
-            for (const auto& includeRoot : includeRoots)
-                args.push_back(L"-I" + includeRoot.wstring());
+                for (const auto& includeRoot : includeRoots)
+                    args.push_back(L"/I" + includeRoot.wstring());
+            }
+            else
+            {
+                args = {
+                    compilerPath.wstring(),
+                    L"-std=c++20",
+                    L"-shared",
+                    input.wstring(),
+                    L"-o",
+                    output.wstring(),
+                    L"-fno-rtti",
+                    L"-fno-exceptions",
+                    L"-O2"
+                };
+
+                for (const auto& includeRoot : includeRoots)
+                    args.push_back(L"-I" + includeRoot.wstring());
+            }
 
             std::vector<const wchar_t*> argv;
             argv.reserve(args.size() + 1);
@@ -235,7 +277,7 @@ namespace epochnamespace::compiler
                 logger::errorf_loc(
                     "Compiler",
                     std::source_location::current(),
-                    "failed to launch clang++: {} (errno={}: {})",
+                    "failed to launch script compiler: {} (errno={}: {})",
                     compilerPath.string(),
                     errno,
                     errno_message(errno));
@@ -244,7 +286,7 @@ namespace epochnamespace::compiler
 
             if (result != 0)
             {
-                logger::errorf_loc("Compiler", std::source_location::current(), "clang++ failed with code: {}", result);
+                logger::errorf_loc("Compiler", std::source_location::current(), "script compiler failed with code: {}", result);
                 return false;
             }
 
@@ -261,7 +303,7 @@ namespace epochnamespace::compiler
             const int result = std::system(cmd.c_str());
             if (result != 0)
             {
-                logger::errorf_loc("Compiler", std::source_location::current(), "clang++ failed with code: {}", result);
+                logger::errorf_loc("Compiler", std::source_location::current(), "script compiler failed with code: {}", result);
                 return false;
             }
             return true;

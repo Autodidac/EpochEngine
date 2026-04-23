@@ -409,6 +409,35 @@ namespace epochnamespace::raylibcontext
                     static_cast<std::uint8_t>((std::clamp)(clearColor[3], 0.0f, 1.0f) * 255.0f)
                 });
 
+            if (epochnamespace::raylib_api::has_loaded_models())
+            {
+                constexpr float kRadiansToDegrees = 57.29577951308232f;
+                const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
+                const int renderHeight = (std::max)(1, epochnamespace::raylib_api::get_render_height());
+                const int renderWidth = (std::max)(1, epochnamespace::raylib_api::get_render_width());
+                const int viewportY = renderHeight - (viewport.y + viewport.height);
+
+                epochnamespace::raylib_api::set_viewport(
+                    viewport.x,
+                    viewportY,
+                    viewport.width,
+                    viewport.height);
+
+                epochnamespace::raylib_api::begin_mode_3d(epochnamespace::raylib_api::Camera3D{
+                    .position = { camera.eye.x, camera.eye.y, camera.eye.z },
+                    .target = { camera.target.x, camera.target.y, camera.target.z },
+                    .up = { camera.up.x, camera.up.y, camera.up.z },
+                    .fovy = camera.fovRadians * kRadiansToDegrees,
+                    .projection = epochnamespace::raylib_api::camera_perspective
+                });
+                epochnamespace::raylib_api::draw_grid(20, 1.0f);
+                epochnamespace::raylib_api::draw_loaded_models();
+                epochnamespace::raylib_api::end_mode_3d();
+                epochnamespace::raylib_api::set_viewport(0, 0, renderWidth, renderHeight);
+                epochnamespace::raylib_api::end_scissor_mode();
+                return;
+            }
+
             const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
@@ -966,6 +995,7 @@ namespace epochnamespace::raylibcontext
 #endif
 
             detail::raylib_stop_rendering_backend(st);
+            epochnamespace::raylib_api::unload_all_models();
 
             if (ctx && ctx->windowData)
             {

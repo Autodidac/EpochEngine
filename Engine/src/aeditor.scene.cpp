@@ -45,12 +45,28 @@ module;
 #include <limits>
 #include <memory>
 #include <optional>
+#include <cstring>
 #include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#if defined(_MSC_VER)
+#  ifndef _CRT_SECURE_NO_WARNINGS
+#    define _CRT_SECURE_NO_WARNINGS
+#  endif
+#  pragma warning(push)
+#  pragma warning(disable: 4996)
+#endif
+
+#define CGLTF_IMPLEMENTATION
+#include <cgltf.h>
+
+#if defined(_MSC_VER)
+#  pragma warning(pop)
+#endif
 
 module aeditor;
 
@@ -907,10 +923,11 @@ namespace
             "project:sandbox",
             "Projects/Sandbox/project.epoch.json",
             "game-project",
-            "rotate_all_entities",
-            "General-purpose sandbox for editor, runtime, and renderer iteration.",
+            "project_demo_bootstrap",
+            "AI and engine-iteration sandbox for editor, runtime, and renderer work.",
             "embedded-static-include or duplicated-source",
-            "Engine/include"
+            "Engine/include",
+            ""
         },
         {
             EditorProjectKind::Game,
@@ -922,10 +939,11 @@ namespace
             "project:platformer",
             "Projects/PlatformerDemo/project.epoch.json",
             "game-project",
-            "editor_launcher",
+            "project_demo_bootstrap",
             "Gameplay test profile for movement, camera tuning, and encounter scripting.",
             "embedded-static-include or duplicated-source",
-            "Engine/include"
+            "Engine/include",
+            ""
         },
         {
             EditorProjectKind::Game,
@@ -937,10 +955,11 @@ namespace
             "project:twodstudio",
             "Projects/TwoDStudio/project.epoch.json",
             "game-2d-project",
-            "game_bootstrap",
+            "project_demo_bootstrap",
             "2D-focused game profile for side-scrollers, top-down prototypes, UI-driven games, and the six-month 2D priority track.",
             "embedded-static-include or duplicated-source",
-            "Engine/include"
+            "Engine/include",
+            ""
         },
         {
             EditorProjectKind::Game,
@@ -955,7 +974,8 @@ namespace
             "editor_launcher",
             "Editor-facing launcher profile for project selection, context setup, settings, and future engine automation.",
             "embedded-static-include or duplicated-source",
-            "Engine/include"
+            "Engine/include",
+            "Engine/assets/demo/minisponza/mini_sponza_v2.gltf"
         },
         {
             EditorProjectKind::Tool,
@@ -970,11 +990,12 @@ namespace
             "tool_bootstrap",
             "Software and tool development profile for workflow automation, dashboards, and editor-facing utilities.",
             "embedded-static-include or duplicated-source",
-            "Engine/include"
+            "Engine/include",
+            ""
         }
     }};
 
-    constexpr std::array<EditorScriptProfile, 4> kScriptProfiles{{
+    constexpr std::array<EditorScriptProfile, 5> kScriptProfiles{{
         {
             "rotate_all_entities",
             "Rotate All Entities",
@@ -985,22 +1006,31 @@ namespace
             "Simple validation script for host callbacks against the current editor scene."
         },
         {
+            "project_demo_bootstrap",
+            "Project Demo Bootstrap",
+            "Engine/src/scripts/project_demo_bootstrap.ascript.cpp",
+            "Validate source path, optional model wiring, and script host bindings",
+            "Prime the active project with the default bootstrap flow",
+            "Confirms the bootstrap script exists and can drive optional project-declared model loads through the engine-owned script host.",
+            "Default bootstrap script for general project shells."
+        },
+        {
             "editor_launcher",
-            "Editor Launcher",
+            "Editor Launcher (Legacy Alias)",
             "Engine/src/scripts/editor_launcher.ascript.cpp",
-            "Validate source path and launcher bindings",
-            "Bootstrap editor project shell actions",
-            "Confirms the bootstrap script exists and is loadable through the engine-owned script host.",
-            "Project bootstrap script surface for future game templates and play flows."
+            "Validate source path, demo asset wiring, and launcher bindings",
+            "Run the launcher-oriented bootstrap flow with the familiar legacy script ID",
+            "Launcher-facing script kept as a first-class source file while sharing the model-backed bootstrap flow.",
+            "Launcher bootstrap script with the ProjectLauncher demo model wiring."
         },
         {
             "game_bootstrap",
             "Game Bootstrap",
-            "Projects/Templates/GameProject/scripts/game_bootstrap.ascript.cpp",
-            "Validate project game bootstrap source",
+            "Engine/src/scripts/project_demo_bootstrap.ascript.cpp",
+            "Validate game bootstrap source and demo asset wiring",
             "Prime a generated game project scene/runtime shell",
-            "Expected in generated game projects; create a new project shell if missing.",
-            "Starter script surface for generated game projects."
+            "Compatibility alias retained for older generated manifests while the default game script moves to project_demo_bootstrap.",
+            "Starter script alias for generated game projects."
         },
         {
             "tool_bootstrap",
@@ -1028,6 +1058,7 @@ namespace
         std::string description{};
         std::string engine_integration_mode{};
         std::string public_include_root{};
+        std::string demo_model_asset{};
 
         [[nodiscard]] EditorProjectProfile view() const noexcept
         {
@@ -1044,7 +1075,8 @@ namespace
                 default_script,
                 description,
                 engine_integration_mode,
-                public_include_root
+                public_include_root,
+                demo_model_asset
             };
         }
     };
@@ -1165,6 +1197,51 @@ namespace
             return project_root.lexically_normal();
 
         return fs::absolute(resolve_epoch_repo_root(project_root) / project_root, ec).lexically_normal();
+    }
+
+    [[nodiscard]] static fs::path resolve_repo_relative_path(const fs::path& candidate, const fs::path& hint = {}) noexcept
+    {
+        if (candidate.empty())
+            return {};
+        if (candidate.is_absolute())
+            return candidate.lexically_normal();
+        return (resolve_epoch_repo_root(hint) / candidate).lexically_normal();
+    }
+
+    [[nodiscard]] static fs::path resolve_project_demo_model_path(const EditorProjectProfile& profile) noexcept
+    {
+        if (profile.demo_model_asset.empty())
+            return {};
+
+        const fs::path declared{ profile.demo_model_asset };
+        if (declared.is_absolute())
+            return declared.lexically_normal();
+
+        const std::string declaredText = declared.generic_string();
+        if (declaredText.starts_with("Engine/") || declaredText.starts_with("Projects/"))
+            return resolve_repo_relative_path(declared, profile.root_path);
+
+        const fs::path projectRoot = resolve_project_root_path(fs::path{ profile.root_path });
+        const fs::path projectLocal = (projectRoot / declared).lexically_normal();
+        std::error_code ec;
+        if (fs::exists(projectLocal, ec) && !ec)
+            return projectLocal;
+
+        if (const fs::path exampleAssets = epoch::core::path::example_asset_dir(); !exampleAssets.empty())
+        {
+            const fs::path exampleRelative = (exampleAssets / declared).lexically_normal();
+            if (fs::exists(exampleRelative, ec) && !ec)
+                return exampleRelative;
+        }
+
+        if (const fs::path engineAssets = epoch::core::path::engine_asset_dir(); !engineAssets.empty())
+        {
+            const fs::path engineRelative = (engineAssets / declared).lexically_normal();
+            if (fs::exists(engineRelative, ec) && !ec)
+                return engineRelative;
+        }
+
+        return resolve_repo_relative_path(declared, profile.root_path);
     }
 
     [[nodiscard]] static std::string to_windows_path(std::string value)
@@ -1404,11 +1481,13 @@ namespace
         profile.template_family = extract_json_string_field(manifestText, "template_family")
             .value_or(profile.kind == EditorProjectKind::Tool ? "tool-project" : "game-project");
         profile.default_script = extract_json_string_field(manifestText, "default_script")
-            .value_or(profile.kind == EditorProjectKind::Tool ? "tool_bootstrap" : "game_bootstrap");
+            .value_or(profile.kind == EditorProjectKind::Tool ? "tool_bootstrap" : "project_demo_bootstrap");
         profile.engine_integration_mode = extract_json_string_field(manifestText, "engine_integration")
             .value_or("embedded-static-include or duplicated-source");
         profile.public_include_root = extract_json_string_field(manifestText, "public_include_root")
             .value_or("Engine/include");
+        profile.demo_model_asset = extract_json_string_field(manifestText, "demo_model_asset")
+            .value_or("");
         profile.description =
             "Generated "
             + std::string(profile.kind == EditorProjectKind::Tool ? "software/tool" : "game")
@@ -1623,6 +1702,562 @@ namespace
         }
         return prefix + "_overflow";
     }
+
+    [[nodiscard]] static bool write_text_file_if_allowed(
+        const fs::path& path,
+        std::string_view text,
+        bool overwrite_existing)
+    {
+        std::error_code ec;
+        if (!overwrite_existing && fs::exists(path, ec) && !ec)
+            return true;
+        return write_text_file(path, text);
+    }
+
+    struct ProjectShellSpec
+    {
+        EditorProjectKind kind{ EditorProjectKind::Game };
+        std::string project_name{};
+        std::string project_id{};
+        fs::path root{};
+        fs::path world_file{};
+        std::string world_name{};
+        std::string template_family{};
+        std::string script_id{};
+        std::string description{};
+        std::string demo_model_asset{};
+        bool overwrite_existing{ true };
+    };
+
+    [[nodiscard]] static std::string make_project_bootstrap_script_text(
+        const ProjectShellSpec& spec,
+        std::string_view script_api_include)
+    {
+        if (spec.kind == EditorProjectKind::Tool)
+        {
+            return std::string(script_api_include)
+                + "namespace\n"
+                + "{\n"
+                + "    void host_log(EpochScriptHost* host, const char* message)\n"
+                + "    {\n"
+                + "        if (host && host->log)\n"
+                + "            host->log(host->user_data, message);\n"
+                + "    }\n"
+                + "}\n\n"
+                + "EPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost* host)\n"
+                + "{\n"
+                + "    if (!host)\n"
+                + "        return;\n\n"
+                + "    host_log(host, \"tool_bootstrap: project shell ready.\");\n"
+                + "}\n";
+        }
+
+        return std::string(script_api_include)
+            + "#include <string>\n\n"
+            + "namespace\n"
+            + "{\n"
+            + "    void host_log(EpochScriptHost* host, const char* message)\n"
+            + "    {\n"
+            + "        if (host && host->log)\n"
+            + "            host->log(host->user_data, message);\n"
+            + "    }\n"
+            + "}\n\n"
+            + "EPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost* host)\n"
+            + "{\n"
+            + "    if (!host)\n"
+            + "        return;\n\n"
+            + "    host_log(host, \"project_demo_bootstrap: project shell ready.\");\n"
+            + "    if (host->project_model_asset && host->project_model_asset[0] != '\\0')\n"
+            + "    {\n"
+            + "        std::string message = std::string(\"project_demo_bootstrap: demo model asset -> \") + host->project_model_asset;\n"
+            + "        host_log(host, message.c_str());\n"
+            + "        if (host->queue_model_load)\n"
+            + "        {\n"
+            + "            const int result = host->queue_model_load(host->user_data, \"mini_sponza_v2\", host->project_model_asset);\n"
+            + "            host_log(host, result >= 0\n"
+            + "                ? \"project_demo_bootstrap: queued demo model load.\"\n"
+            + "                : \"project_demo_bootstrap: backend rejected demo model load.\");\n"
+            + "        }\n"
+            + "        else\n"
+            + "        {\n"
+            + "            host_log(host, \"project_demo_bootstrap: model-load callback unavailable.\");\n"
+            + "        }\n"
+            + "    }\n"
+            + "    else\n"
+            + "    {\n"
+            + "        host_log(host, \"project_demo_bootstrap: no demo model asset declared for this project.\");\n"
+            + "    }\n\n"
+            + "    if (host->rotate_all_entities_yaw)\n"
+            + "    {\n"
+            + "        host->rotate_all_entities_yaw(host->user_data, 6.0f);\n"
+            + "        host_log(host, \"project_demo_bootstrap: applied a light +6 yaw demo step.\");\n"
+            + "    }\n"
+            + "    else\n"
+            + "    {\n"
+            + "        host_log(host, \"project_demo_bootstrap: rotate callback unavailable.\");\n"
+            + "    }\n"
+            + "}\n";
+    }
+
+    [[nodiscard]] static EditorProjectCreationResult write_project_shell(const ProjectShellSpec& spec)
+    {
+        const fs::path root = resolve_project_root_path(spec.root);
+        const fs::path worlds = root / "worlds";
+        const fs::path scripts = root / "scripts";
+        const fs::path source = root / "source";
+        const fs::path include = root / "include";
+        const fs::path modules = root / "modules";
+        const fs::path assets = root / "assets";
+        const fs::path resource = root / "resource";
+        const fs::path buildRoot = root / "build";
+        const fs::path buildLogs = buildRoot / "logs";
+        const fs::path outputDebugDir = root / "bin" / "windows" / "Debug" / "x64";
+        const fs::path outputReleaseDir = root / "bin" / "windows" / "Release" / "x64";
+        const fs::path manifest = root / "project.epoch.json";
+        const fs::path readme = root / "README.md";
+        const fs::path pathsFile = root / "project.paths.txt";
+        const fs::path cmakeFragment = root / "epoch.project.cmake";
+        const fs::path cmakeLists = generated_project_cmake_lists_path(root);
+        const fs::path entrySource = generated_project_entry_source_path(root);
+        const fs::path windowsBuildScript = generated_project_windows_build_script_path(root);
+        const fs::path linuxBuildScript = generated_project_linux_build_script_path(root);
+        const fs::path windowsProject = generated_project_windows_vcxproj_path(root);
+        const fs::path worldFile = spec.world_file.is_absolute()
+            ? spec.world_file.lexically_normal()
+            : resolve_repo_relative_path(spec.world_file, root);
+        const fs::path scriptFile = scripts / (spec.script_id + ".ascript.cpp");
+        const fs::path repoRoot = resolve_epoch_repo_root(root);
+        const fs::path rootAbsolute = fs::absolute(root).lexically_normal();
+        const fs::path manifestAbsolute = fs::absolute(manifest).lexically_normal();
+        const fs::path repoEngineInclude = (repoRoot / "Engine" / "include").lexically_normal();
+        const fs::path repoStaticLibProject = (repoRoot / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj").lexically_normal();
+        const std::string integrationMode = "repo-local embedded-engine child build across headers/modules/source/scripting/resources with project-selected editor boot";
+        const std::string publicIncludeRoot = repoEngineInclude.generic_string();
+        const std::string projectGuid = deterministic_guid(spec.project_id + ":windows-child");
+        const std::string repoRootWin = xml_escape(to_windows_path(repoRoot.string()));
+        const std::string repoRootPowerShell = powershell_escape_single_quoted(to_windows_path(repoRoot.string()));
+        const std::string vcpkgManifestRootPowerShell = powershell_escape_single_quoted(
+            to_windows_path((repoRoot / "Engine").string()));
+        const std::string repoStaticLibProjectWin = xml_escape(to_windows_path(repoStaticLibProject.string()));
+        const std::string manifestAbsoluteText = manifestAbsolute.generic_string();
+        const std::string rootAbsoluteText = rootAbsolute.generic_string();
+
+        std::error_code ec;
+        fs::create_directories(worlds, ec);
+        fs::create_directories(scripts, ec);
+        fs::create_directories(source, ec);
+        fs::create_directories(include, ec);
+        fs::create_directories(modules, ec);
+        fs::create_directories(assets, ec);
+        fs::create_directories(resource, ec);
+        fs::create_directories(buildLogs, ec);
+        fs::create_directories(outputDebugDir, ec);
+        fs::create_directories(outputReleaseDir, ec);
+        fs::create_directories(worldFile.parent_path(), ec);
+        if (ec)
+        {
+            return {
+                false,
+                spec.project_id,
+                root.string(),
+                manifest.generic_string(),
+                entrySource.generic_string(),
+                windowsBuildScript.generic_string(),
+                scriptFile.generic_string(),
+                "Failed to create project shell directories.",
+                integrationMode,
+                publicIncludeRoot
+            };
+        }
+
+        const std::string scriptApiInclude =
+            "#if __has_include(<epoch.script_api.h>)\n"
+            "#  include <epoch.script_api.h>\n"
+            "#elif __has_include(<include/epoch.script_api.h>)\n"
+            "#  include <include/epoch.script_api.h>\n"
+            "#else\n"
+            "#  error \"Epoch script API header not found. Add Engine/include (preferred) or Engine/ to your include paths.\"\n"
+            "#endif\n\n";
+
+        const std::string demoModelLine = spec.demo_model_asset.empty()
+            ? std::string{}
+            : "  \"demo_model_asset\": \"" + json_escape(spec.demo_model_asset) + "\",\n";
+        const std::string readmeDemoLine = spec.demo_model_asset.empty()
+            ? std::string{}
+            : "- Demo model asset: " + spec.demo_model_asset + "\n";
+        const std::string pathsDemoLine = spec.demo_model_asset.empty()
+            ? std::string{}
+            : "demo_model_asset=" + spec.demo_model_asset + "\n";
+
+        const std::string manifestText =
+            "{\n"
+            "  \"engine\": \"epoch\",\n"
+            "  \"id\": \"" + json_escape(spec.project_id) + "\",\n"
+            "  \"display_name\": \"" + json_escape(spec.project_name) + "\",\n"
+            "  \"kind\": \"" + std::string(spec.kind == EditorProjectKind::Tool ? "tool" : "game") + "\",\n"
+            "  \"template_family\": \"" + json_escape(spec.template_family) + "\",\n"
+            "  \"scene\": \"" + json_escape(worldFile.generic_string()) + "\",\n"
+            "  \"default_script\": \"" + json_escape(spec.script_id) + "\",\n"
+            + demoModelLine
+            + "  \"engine_integration\": \"" + json_escape(integrationMode) + "\",\n"
+            "  \"public_include_root\": \"" + json_escape(publicIncludeRoot) + "\",\n"
+            "  \"engine_module_root\": \"Engine/modules\",\n"
+            "  \"engine_source_root\": \"Engine/src\",\n"
+            "  \"engine_script_root\": \"Engine/src/scripts\",\n"
+            "  \"engine_resource_root\": \"Engine/resource\",\n"
+            "  \"build_fragment\": \"" + json_escape(cmakeFragment.filename().generic_string()) + "\",\n"
+            "  \"entry_source\": \"" + json_escape(entrySource.generic_string()) + "\",\n"
+            "  \"windows_project\": \"" + json_escape(windowsProject.filename().generic_string()) + "\",\n"
+            "  \"windows_build_script\": \"" + json_escape(windowsBuildScript.filename().generic_string()) + "\",\n"
+            "  \"linux_build_script\": \"" + json_escape(linuxBuildScript.filename().generic_string()) + "\",\n"
+            "  \"support_tier\": \"baseline\"\n"
+            "}\n";
+
+        const std::string readmeText =
+            "# " + spec.project_name + "\n\n"
+            "Generated or repaired by the Epoch editor project shell flow.\n\n"
+            "- Kind: " + std::string(spec.kind == EditorProjectKind::Tool ? "Software / Tool" : "Game") + "\n"
+            "- Scene: " + worldFile.filename().string() + "\n"
+            "- Script: " + scriptFile.filename().string() + "\n"
+            + readmeDemoLine
+            + "- Engine integration: " + integrationMode + "\n"
+            "- Public include root: " + publicIncludeRoot + "\n"
+            "- Engine module root: Engine/modules\n"
+            "- Engine source root: Engine/src\n"
+            "- Engine script root: Engine/src/scripts\n"
+            "- Engine resource root: Engine/resource\n"
+            "- Project include root: " + include.generic_string() + "\n"
+            "- Project module root: " + modules.generic_string() + "\n"
+            "- Project resource root: " + resource.generic_string() + "\n"
+            "- Entry source: " + entrySource.generic_string() + "\n"
+            "- Windows project: " + windowsProject.filename().string() + "\n"
+            "- Windows build script: " + windowsBuildScript.filename().string() + "\n"
+            "- Linux build script: " + linuxBuildScript.filename().string() + "\n"
+            "- Build fragment: " + cmakeFragment.filename().string() + "\n";
+
+        const std::string pathsText =
+            "root=" + root.generic_string() + "\n"
+            + "manifest=" + manifest.generic_string() + "\n"
+            + "scene=" + worldFile.generic_string() + "\n"
+            + "default_script=" + scriptFile.generic_string() + "\n"
+            + pathsDemoLine
+            + "entry_source=" + entrySource.generic_string() + "\n"
+            + "windows_project=" + windowsProject.generic_string() + "\n"
+            + "windows_build_script=" + windowsBuildScript.generic_string() + "\n"
+            + "linux_build_script=" + linuxBuildScript.generic_string() + "\n"
+            + "build_log=" + generated_project_build_log_path(root).generic_string() + "\n"
+            + "debug_output=" + generated_project_output_path(root).generic_string() + "\n";
+
+        const std::string worldText =
+            "scene \"" + spec.world_name + "\"\n"
+            "{\n"
+            "    kind \"" + std::string(spec.kind == EditorProjectKind::Tool ? "tool" : "game") + "\"\n"
+            "    support_tier \"baseline\"\n"
+            "}\n";
+
+        const std::string scriptText = make_project_bootstrap_script_text(spec, scriptApiInclude);
+
+        const std::string entrySourceText =
+            "#include <cstdlib>\n"
+            "#if defined(_WIN32)\n"
+            "#  include <stdlib.h>\n"
+            "#else\n"
+            "#  include <unistd.h>\n"
+            "#endif\n"
+            "#include <aengine.hpp>\n\n"
+            "namespace\n"
+            "{\n"
+            "    void boot_project_shell()\n"
+            "    {\n"
+            "#if defined(_WIN32)\n"
+            "        _putenv_s(\"EPOCH_EDITOR_PROJECT_ID\", \"" + cxx_escape(spec.project_id) + "\");\n"
+            "        _putenv_s(\"EPOCH_EDITOR_PROJECT_MANIFEST\", \"" + cxx_escape(manifestAbsoluteText) + "\");\n"
+            "        _putenv_s(\"EPOCH_EDITOR_PROJECT_ROOT\", \"" + cxx_escape(rootAbsoluteText) + "\");\n"
+            "#else\n"
+            "        setenv(\"EPOCH_EDITOR_PROJECT_ID\", \"" + cxx_escape(spec.project_id) + "\", 1);\n"
+            "        setenv(\"EPOCH_EDITOR_PROJECT_MANIFEST\", \"" + cxx_escape(manifestAbsoluteText) + "\", 1);\n"
+            "        setenv(\"EPOCH_EDITOR_PROJECT_ROOT\", \"" + cxx_escape(rootAbsoluteText) + "\", 1);\n"
+            "#endif\n"
+            "    }\n"
+            "}\n\n"
+            "int main(int argc, char** argv)\n"
+            "{\n"
+            "    (void)argc;\n"
+            "    (void)argv;\n"
+            "    boot_project_shell();\n"
+            "    epochnamespace::core::RunEngine();\n"
+            "    return 0;\n"
+            "}\n";
+
+        const std::string cmakeText =
+            "cmake_minimum_required(VERSION 3.28)\n\n"
+            "# Import this fragment from a generated project when embedding Epoch.\n"
+            "set(EPOCH_REPO_ROOT \"" + json_escape(repoRoot.generic_string()) + "\" CACHE PATH \"Path to the repo-local Epoch checkout\")\n\n"
+            "function(epoch_configure_embedded_project target)\n"
+            "    if(NOT TARGET ${target})\n"
+            "        message(FATAL_ERROR \"epoch_configure_embedded_project target missing: ${target}\")\n"
+            "    endif()\n\n"
+            "    target_compile_features(${target} PRIVATE cxx_std_23)\n"
+            "    target_include_directories(${target} PRIVATE\n"
+            "        \"${EPOCH_REPO_ROOT}/Engine/include\"\n"
+            "        \"${EPOCH_REPO_ROOT}/Engine\")\n"
+            "endfunction()\n";
+
+        const std::string cmakeListsText =
+            "cmake_minimum_required(VERSION 3.28)\n"
+            "project(" + spec.project_name + " LANGUAGES CXX)\n\n"
+            "include(\"${CMAKE_CURRENT_LIST_DIR}/epoch.project.cmake\")\n"
+            "add_executable(${PROJECT_NAME} source/main.cpp)\n"
+            "epoch_configure_embedded_project(${PROJECT_NAME})\n"
+            "message(STATUS \"Epoch child project scaffold generated.\")\n"
+            "message(STATUS \"The first validated standalone child-build path is build_project.ps1 on Windows.\")\n";
+
+        const std::string windowsProjectText =
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            "<Project DefaultTargets=\"Build\" xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
+            "  <ItemGroup Label=\"ProjectConfigurations\">\n"
+            "    <ProjectConfiguration Include=\"Debug|x64\">\n"
+            "      <Configuration>Debug</Configuration>\n"
+            "      <Platform>x64</Platform>\n"
+            "    </ProjectConfiguration>\n"
+            "    <ProjectConfiguration Include=\"Release|x64\">\n"
+            "      <Configuration>Release</Configuration>\n"
+            "      <Platform>x64</Platform>\n"
+            "    </ProjectConfiguration>\n"
+            "  </ItemGroup>\n"
+            "  <ItemGroup>\n"
+            "    <ClCompile Include=\"source\\main.cpp\" />\n"
+            "  </ItemGroup>\n"
+            "  <ItemGroup>\n"
+            "    <ProjectReference Include=\"" + repoStaticLibProjectWin + "\">\n"
+            "      <Project>{BBA639B7-2B54-4E38-90AC-667FC3303475}</Project>\n"
+            "    </ProjectReference>\n"
+            "  </ItemGroup>\n"
+            "  <PropertyGroup Label=\"Globals\">\n"
+            "    <VCProjectVersion>17.0</VCProjectVersion>\n"
+            "    <Keyword>Win32Proj</Keyword>\n"
+            "    <ProjectGuid>{" + projectGuid + "}</ProjectGuid>\n"
+            "    <RootNamespace>" + xml_escape(spec.project_name) + "</RootNamespace>\n"
+            "    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>\n"
+            "  </PropertyGroup>\n"
+            "  <Import Project=\"$(VCTargetsPath)\\Microsoft.Cpp.Default.props\" />\n"
+            "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\" Label=\"Configuration\">\n"
+            "    <ConfigurationType>Application</ConfigurationType>\n"
+            "    <UseDebugLibraries>true</UseDebugLibraries>\n"
+            "    <PlatformToolset>v143</PlatformToolset>\n"
+            "    <CharacterSet>Unicode</CharacterSet>\n"
+            "  </PropertyGroup>\n"
+            "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\" Label=\"Configuration\">\n"
+            "    <ConfigurationType>Application</ConfigurationType>\n"
+            "    <UseDebugLibraries>false</UseDebugLibraries>\n"
+            "    <PlatformToolset>v143</PlatformToolset>\n"
+            "    <WholeProgramOptimization>false</WholeProgramOptimization>\n"
+            "    <CharacterSet>Unicode</CharacterSet>\n"
+            "  </PropertyGroup>\n"
+            "  <Import Project=\"$(VCTargetsPath)\\Microsoft.Cpp.props\" />\n"
+            "  <ImportGroup Label=\"ExtensionSettings\" />\n"
+            "  <ImportGroup Label=\"Shared\" />\n"
+            "  <ImportGroup Label=\"PropertySheets\" Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n"
+            "    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n"
+            "  </ImportGroup>\n"
+            "  <ImportGroup Label=\"PropertySheets\" Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n"
+            "    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n"
+            "  </ImportGroup>\n"
+            "  <PropertyGroup Label=\"UserMacros\" />\n"
+             "  <PropertyGroup>\n"
+             "    <EpochRepoRoot>" + repoRootWin + "\\</EpochRepoRoot>\n"
+            "    <SolutionDir Condition=\"'$(SolutionDir)'==''\">$(EpochRepoRoot)</SolutionDir>\n"
+            "    <VcpkgManifestRoot Condition=\"'$(VcpkgManifestRoot)'==''\">$(EpochRepoRoot)Engine\\</VcpkgManifestRoot>\n"
+            "    <EpochExtraDefines Condition=\"'$(EpochExtraDefines)'==''\">EPOCH_MAIN_IN_MAIN_CPP=1</EpochExtraDefines>\n"
+             "    <VcpkgTriplet Condition=\"'$(VcpkgTriplet)'==''\">x64-windows</VcpkgTriplet>\n"
+             "    <EpochVcpkgInstallRoot>$(EpochRepoRoot)Engine\\vcpkg_installed\\$(VcpkgTriplet)\\</EpochVcpkgInstallRoot>\n"
+             "    <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\\</EpochVcpkgNestedInstallRoot>\n"
+            "    <EpochVcpkgInstallRoot Condition=\"Exists('$(EpochVcpkgNestedInstallRoot)include\\')\">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>\n"
+            "  </PropertyGroup>\n"
+            "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n"
+            "    <OutDir>$(MSBuildThisFileDirectory)bin\\windows\\Debug\\x64\\</OutDir>\n"
+            "    <IntDir>$(MSBuildThisFileDirectory)build\\windows\\obj\\Debug\\x64\\</IntDir>\n"
+            "  </PropertyGroup>\n"
+            "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n"
+            "    <OutDir>$(MSBuildThisFileDirectory)bin\\windows\\Release\\x64\\</OutDir>\n"
+            "    <IntDir>$(MSBuildThisFileDirectory)build\\windows\\obj\\Release\\x64\\</IntDir>\n"
+            "  </PropertyGroup>\n"
+            "  <PropertyGroup Label=\"Vcpkg\">\n"
+            "    <VcpkgEnableManifest>true</VcpkgEnableManifest>\n"
+            "    <VcpkgUseStatic>false</VcpkgUseStatic>\n"
+            "  </PropertyGroup>\n"
+            "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n"
+            "    <ClCompile>\n"
+            "      <WarningLevel>Level3</WarningLevel>\n"
+            "      <SDLCheck>true</SDLCheck>\n"
+            "      <PreprocessorDefinitions>ENGINE_STATICLIB;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
+            "      <ConformanceMode>true</ConformanceMode>\n"
+            "      <LanguageStandard>stdcpp23</LanguageStandard>\n"
+            "      <LanguageStandard_C>stdc17</LanguageStandard_C>\n"
+            "      <AdditionalIncludeDirectories>$(EpochRepoRoot)Engine\\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>\n"
+            "      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>\n"
+            "      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>\n"
+            "      <CallingConvention>Cdecl</CallingConvention>\n"
+            "    </ClCompile>\n"
+            "    <Link>\n"
+            "      <SubSystem>Console</SubSystem>\n"
+            "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
+            "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)debug\\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
+            "      <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
+            "    </Link>\n"
+            "  </ItemDefinitionGroup>\n"
+            "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n"
+            "    <ClCompile>\n"
+            "      <WarningLevel>Level3</WarningLevel>\n"
+            "      <FunctionLevelLinking>false</FunctionLevelLinking>\n"
+            "      <IntrinsicFunctions>false</IntrinsicFunctions>\n"
+            "      <SDLCheck>true</SDLCheck>\n"
+            "      <PreprocessorDefinitions>ENGINE_STATICLIB;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
+            "      <ConformanceMode>true</ConformanceMode>\n"
+            "      <LanguageStandard>stdcpp23</LanguageStandard>\n"
+            "      <LanguageStandard_C>stdc17</LanguageStandard_C>\n"
+            "      <AdditionalIncludeDirectories>$(EpochRepoRoot)Engine\\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>\n"
+            "      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>\n"
+            "      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>\n"
+            "      <CallingConvention>Cdecl</CallingConvention>\n"
+            "    </ClCompile>\n"
+            "    <Link>\n"
+            "      <SubSystem>Console</SubSystem>\n"
+            "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
+            "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
+            "      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
+            "    </Link>\n"
+            "  </ItemDefinitionGroup>\n"
+            "  <Import Project=\"$(VCTargetsPath)\\Microsoft.Cpp.targets\" />\n"
+            "  <ImportGroup Label=\"ExtensionTargets\" />\n"
+            "</Project>\n";
+
+        const std::string windowsBuildScriptText =
+            "param(\n"
+            "    [string]$Configuration = 'Debug',\n"
+            "    [string]$Platform = 'x64'\n"
+            ")\n"
+            "$ErrorActionPreference = 'Stop'\n"
+            "$projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path\n"
+            "$projectFile = Join-Path $projectRoot '" + powershell_escape_single_quoted(windowsProject.filename().string()) + "'\n"
+            "$repoRoot = '" + repoRootPowerShell + "'\n"
+            "$solutionDir = $repoRoot.TrimEnd('\\\\') + '\\\\'\n"
+            "$vcpkgManifestRoot = '" + vcpkgManifestRootPowerShell + "'\n"
+            "$logDir = Join-Path $projectRoot 'build\\logs'\n"
+            "$binDir = Join-Path $projectRoot ('bin\\windows\\' + $Configuration + '\\' + $Platform)\n"
+            "New-Item -ItemType Directory -Force -Path $logDir | Out-Null\n"
+            "New-Item -ItemType Directory -Force -Path $binDir | Out-Null\n"
+            "$logPath = Join-Path $logDir ('build-' + $Configuration.ToLowerInvariant() + '-' + $Platform.ToLowerInvariant() + '.log')\n"
+            "function Resolve-MSBuild {\n"
+            "    if (-not [string]::IsNullOrWhiteSpace($env:MSBUILD_EXE_PATH) -and (Test-Path -LiteralPath $env:MSBUILD_EXE_PATH)) {\n"
+            "        return $env:MSBUILD_EXE_PATH\n"
+            "    }\n"
+            "    $candidates = @(\n"
+            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe',\n"
+            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\MSBuild.exe'\n"
+            "    )\n"
+            "    foreach ($candidate in $candidates) {\n"
+            "        if (Test-Path -LiteralPath $candidate) { return $candidate }\n"
+            "    }\n"
+            "    throw 'Could not locate MSBuild. Set MSBUILD_EXE_PATH or install Visual Studio Build Tools.'\n"
+            "}\n"
+            "if (-not (Test-Path -LiteralPath $projectFile)) {\n"
+            "    throw ('Missing generated project file: ' + $projectFile)\n"
+            "}\n"
+            "$msbuild = Resolve-MSBuild\n"
+            "Set-Location -LiteralPath $projectRoot\n"
+            "'[INFO] Project root: ' + $projectRoot | Tee-Object -FilePath $logPath\n"
+            "'[INFO] Repo root: ' + $repoRoot | Tee-Object -FilePath $logPath -Append\n"
+            "'[INFO] SolutionDir: ' + $solutionDir | Tee-Object -FilePath $logPath -Append\n"
+            "'[INFO] Epoch child build project: ' + $projectFile | Tee-Object -FilePath $logPath\n"
+            "'[INFO] MSBuild: ' + $msbuild | Tee-Object -FilePath $logPath -Append\n"
+            "$msbuildArgs = @(\n"
+            "    $projectFile,\n"
+            "    '/t:Rebuild',\n"
+            "    ('/p:Configuration=' + $Configuration),\n"
+            "    ('/p:Platform=' + $Platform),\n"
+            "    ('/p:SolutionDir=' + $solutionDir),\n"
+            "    ('/p:VcpkgManifestRoot=' + $vcpkgManifestRoot),\n"
+            "    '/p:EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1',\n"
+            "    '/m:1',\n"
+            "    '/clp:ErrorsOnly'\n"
+            ")\n"
+            "& $msbuild @msbuildArgs 2>&1 | Tee-Object -FilePath $logPath -Append\n"
+            "if ($LASTEXITCODE -ne 0) {\n"
+            "    exit $LASTEXITCODE\n"
+            "}\n"
+            "$exePath = Join-Path $projectRoot ('bin\\windows\\' + $Configuration + '\\' + $Platform + '\\' + '" + powershell_escape_single_quoted(root.filename().string()) + ".exe')\n"
+            "'[INFO] Output: ' + $exePath | Tee-Object -FilePath $logPath -Append\n";
+
+        const std::string linuxBuildScriptText =
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "project_dir=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"\n"
+            "log_dir=\"$project_dir/build/logs\"\n"
+            "mkdir -p \"$log_dir\"\n"
+            "log_path=\"$log_dir/build-linux.log\"\n"
+            "{\n"
+            "  echo \"[INFO] Epoch child project scaffold: " + spec.project_name + "\"\n"
+            "  echo \"[INFO] Repo root: " + bash_escape_single_quoted(repoRoot.generic_string()) + "\"\n"
+            "  echo \"[INFO] Standalone Linux child-project app builds are not yet the first validated path in this version.\"\n"
+            "  echo \"[INFO] Repo-native Linux engine builds continue through " + bash_escape_single_quoted((repoRoot / "Engine" / "build.sh").generic_string()) + ".\"\n"
+            "} | tee \"$log_path\"\n"
+            "exit 1\n";
+
+        const bool ok =
+            write_text_file_if_allowed(manifest, manifestText, spec.overwrite_existing)
+            && write_text_file_if_allowed(readme, readmeText, spec.overwrite_existing)
+            && write_text_file_if_allowed(pathsFile, pathsText, spec.overwrite_existing)
+            && write_text_file_if_allowed(worldFile, worldText, spec.overwrite_existing)
+            && write_text_file_if_allowed(scriptFile, scriptText, spec.overwrite_existing)
+            && write_text_file_if_allowed(entrySource, entrySourceText, spec.overwrite_existing)
+            && write_text_file_if_allowed(cmakeFragment, cmakeText, spec.overwrite_existing)
+            && write_text_file_if_allowed(cmakeLists, cmakeListsText, spec.overwrite_existing)
+            && write_text_file_if_allowed(windowsProject, windowsProjectText, spec.overwrite_existing)
+            && write_text_file_if_allowed(windowsBuildScript, windowsBuildScriptText, spec.overwrite_existing)
+            && write_text_file_if_allowed(linuxBuildScript, linuxBuildScriptText, spec.overwrite_existing);
+
+        if (ok)
+            invalidate_project_profile_cache();
+
+        const bool shellAlreadyPresent =
+            fs::exists(manifest, ec) && !ec
+            && fs::exists(windowsBuildScript, ec) && !ec
+            && fs::exists(entrySource, ec) && !ec;
+
+        return {
+            ok,
+            spec.project_id,
+            root.string(),
+            manifest.generic_string(),
+            entrySource.generic_string(),
+            windowsBuildScript.generic_string(),
+            scriptFile.generic_string(),
+            ok
+                ? (spec.overwrite_existing
+                    ? "Created project shell at " + root.string()
+                    : (shellAlreadyPresent
+                        ? "Verified project shell at " + root.string()
+                        : "Materialized missing project shell files at " + root.string()))
+                : "Failed to write one or more generated project files.",
+            integrationMode,
+            publicIncludeRoot
+        };
+    }
+
+    [[nodiscard]] static const EditorProjectProfile* find_project_profile_by_root(std::string_view project_root) noexcept
+    {
+        const fs::path resolved = resolve_project_root_path(fs::path{ project_root });
+        for (const auto& profile : live_project_profiles())
+        {
+            if (resolve_project_root_path(fs::path{ profile.root_path }) == resolved)
+                return &profile;
+        }
+
+        return nullptr;
+    }
 }
 
 namespace epochnamespace
@@ -1702,420 +2337,160 @@ namespace epochnamespace
         }
     }
 
+    std::string editor_project_demo_model_path(std::string_view project_id)
+    {
+        const auto* profile = editor_find_project_profile(project_id);
+        if (!profile)
+            return {};
+
+        return resolve_project_demo_model_path(*profile).generic_string();
+    }
+
+    EditorProjectModelSummary editor_project_model_summary(std::string_view project_id)
+    {
+        EditorProjectModelSummary summary{};
+        const auto* profile = editor_find_project_profile(project_id);
+        if (!profile)
+        {
+            summary.summary = "Unknown project profile.";
+            return summary;
+        }
+
+        summary.declared = !profile->demo_model_asset.empty();
+        summary.asset_path = std::string(profile->demo_model_asset);
+        if (!summary.declared)
+        {
+            summary.summary = "No demo model declared for this project.";
+            return summary;
+        }
+
+        const fs::path resolved = resolve_project_demo_model_path(*profile);
+        summary.resolved_path = resolved.generic_string();
+
+        std::error_code ec;
+        summary.exists = !resolved.empty() && fs::exists(resolved, ec) && !ec;
+        if (!summary.exists)
+        {
+            summary.summary = "Declared demo model asset is missing.";
+            return summary;
+        }
+
+        if (resolved.extension() != ".gltf")
+        {
+            summary.summary = "Demo model asset exists; parser summary is currently glTF-only.";
+            return summary;
+        }
+
+        cgltf_options options{};
+        cgltf_data* data = nullptr;
+        const std::string resolvedText = resolved.string();
+        const cgltf_result parseResult = cgltf_parse_file(&options, resolvedText.c_str(), &data);
+        if (parseResult != cgltf_result_success || data == nullptr)
+        {
+            summary.summary = "Demo model asset exists but glTF parsing failed.";
+            return summary;
+        }
+
+        summary.parsed = true;
+        summary.scene_count = static_cast<std::uint32_t>(data->scenes_count);
+        summary.node_count = static_cast<std::uint32_t>(data->nodes_count);
+        summary.mesh_count = static_cast<std::uint32_t>(data->meshes_count);
+        summary.material_count = static_cast<std::uint32_t>(data->materials_count);
+        for (cgltf_size meshIndex = 0; meshIndex < data->meshes_count; ++meshIndex)
+            summary.primitive_count += static_cast<std::uint32_t>(data->meshes[meshIndex].primitives_count);
+
+        summary.summary =
+            std::to_string(summary.scene_count) + " scene(s) | "
+            + std::to_string(summary.node_count) + " node(s) | "
+            + std::to_string(summary.mesh_count) + " mesh(es) | "
+            + std::to_string(summary.primitive_count) + " primitive(s) | "
+            + std::to_string(summary.material_count) + " material(s)";
+
+        cgltf_free(data);
+        return summary;
+    }
+
     EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind)
     {
         const std::string projectName = next_generated_project_name(kind);
-        const std::string projectId = projectName;
-        const fs::path root = resolve_projects_root() / projectName;
-        const fs::path worlds = root / "worlds";
-        const fs::path scripts = root / "scripts";
-        const fs::path source = root / "source";
-        const fs::path include = root / "include";
-        const fs::path modules = root / "modules";
-        const fs::path assets = root / "assets";
-        const fs::path resource = root / "resource";
-        const fs::path buildRoot = root / "build";
-        const fs::path buildLogs = buildRoot / "logs";
-        const fs::path outputDebugDir = root / "bin" / "windows" / "Debug" / "x64";
-        const fs::path outputReleaseDir = root / "bin" / "windows" / "Release" / "x64";
-        const fs::path manifest = root / "project.epoch.json";
-        const fs::path readme = root / "README.md";
-        const fs::path pathsFile = root / "project.paths.txt";
-        const fs::path cmakeFragment = root / "epoch.project.cmake";
-        const fs::path cmakeLists = generated_project_cmake_lists_path(root);
-        const fs::path entrySource = generated_project_entry_source_path(root);
-        const fs::path windowsBuildScript = generated_project_windows_build_script_path(root);
-        const fs::path linuxBuildScript = generated_project_linux_build_script_path(root);
-        const fs::path windowsProject = generated_project_windows_vcxproj_path(root);
-        const fs::path worldFile = worlds / (kind == EditorProjectKind::Tool ? "tool.epoch" : "main.epoch");
-        const fs::path scriptFile = scripts / (kind == EditorProjectKind::Tool ? "tool_bootstrap.ascript.cpp" : "game_bootstrap.ascript.cpp");
-        const std::string scriptId = kind == EditorProjectKind::Tool ? "tool_bootstrap" : "game_bootstrap";
-        const std::string sceneName = kind == EditorProjectKind::Tool ? "ToolWorkspace" : "PersistentLevel";
-        const std::string templateFamily = kind == EditorProjectKind::Tool ? "tool-project" : "game-project";
-        const fs::path repoRoot = resolve_epoch_repo_root(root);
-        const fs::path rootAbsolute = fs::absolute(root).lexically_normal();
-        const fs::path manifestAbsolute = fs::absolute(manifest).lexically_normal();
-        const fs::path repoEngineInclude = (repoRoot / "Engine" / "include").lexically_normal();
-        const fs::path repoStaticLibProject = (repoRoot / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj").lexically_normal();
-        const std::string integrationMode = "repo-local embedded-engine child build across headers/modules/source/scripting/resources with project-selected editor boot";
-        const std::string publicIncludeRoot = repoEngineInclude.generic_string();
-        const std::string projectGuid = deterministic_guid(projectId + ":windows-child");
-        const std::string repoRootWin = xml_escape(to_windows_path(repoRoot.string()));
-        const std::string repoStaticLibProjectWin = xml_escape(to_windows_path(repoStaticLibProject.string()));
-        const std::string manifestAbsoluteText = manifestAbsolute.generic_string();
-        const std::string rootAbsoluteText = rootAbsolute.generic_string();
+        const std::string defaultScript = kind == EditorProjectKind::Tool
+            ? "tool_bootstrap"
+            : "project_demo_bootstrap";
 
-        std::error_code ec;
-        fs::create_directories(worlds, ec);
-        fs::create_directories(scripts, ec);
-        fs::create_directories(source, ec);
-        fs::create_directories(include, ec);
-        fs::create_directories(modules, ec);
-        fs::create_directories(assets, ec);
-        fs::create_directories(resource, ec);
-        fs::create_directories(buildLogs, ec);
-        fs::create_directories(outputDebugDir, ec);
-        fs::create_directories(outputReleaseDir, ec);
-        if (ec)
+        return write_project_shell(ProjectShellSpec{
+            .kind = kind,
+            .project_name = projectName,
+            .project_id = projectName,
+            .root = resolve_projects_root() / projectName,
+            .world_file = kind == EditorProjectKind::Tool
+                ? fs::path{ "Projects" } / projectName / "worlds" / "tool.epoch"
+                : fs::path{ "Projects" } / projectName / "worlds" / "main.epoch",
+            .world_name = kind == EditorProjectKind::Tool ? "ToolWorkspace" : "PersistentLevel",
+            .template_family = kind == EditorProjectKind::Tool ? "tool-project" : "game-project",
+            .script_id = defaultScript,
+            .description = kind == EditorProjectKind::Tool
+                ? "Generated software/tool shell."
+                : "Generated game shell.",
+            .demo_model_asset = std::string{},
+            .overwrite_existing = true
+        });
+    }
+
+    EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id)
+    {
+        const auto* profile = editor_find_project_profile(project_id);
+        if (!profile)
         {
             return {
                 false,
-                projectId,
-                root.string(),
-                manifest.generic_string(),
-                entrySource.generic_string(),
-                windowsBuildScript.generic_string(),
-                scriptFile.generic_string(),
-                "Failed to create project shell directories.",
-                integrationMode,
-                publicIncludeRoot
+                std::string(project_id),
+                {},
+                {},
+                {},
+                {},
+                {},
+                "Unknown project profile.",
+                {},
+                {}
             };
         }
 
-        const std::string scriptApiInclude =
-            "#if __has_include(<epoch.script_api.h>)\n"
-            "#  include <epoch.script_api.h>\n"
-            "#elif __has_include(<include/epoch.script_api.h>)\n"
-            "#  include <include/epoch.script_api.h>\n"
-            "#else\n"
-            "#  error \"Epoch script API header not found. Add Engine/include (preferred) or Engine/ to your include paths.\"\n"
-            "#endif\n\n";
+        const fs::path root = resolve_project_root_path(fs::path{ profile->root_path });
+        const fs::path manifest = root / "project.epoch.json";
+        const fs::path buildScript = generated_project_windows_build_script_path(root);
+        const fs::path entrySource = generated_project_entry_source_path(root);
+        std::error_code ec;
+        if (fs::exists(manifest, ec) && !ec
+            && fs::exists(buildScript, ec) && !ec
+            && fs::exists(entrySource, ec) && !ec)
+        {
+            return {
+                true,
+                std::string(profile->id),
+                root.string(),
+                manifest.generic_string(),
+                entrySource.generic_string(),
+                buildScript.generic_string(),
+                (root / "scripts" / (std::string(profile->default_script) + ".ascript.cpp")).generic_string(),
+                "Verified project shell at " + root.string(),
+                std::string(profile->engine_integration_mode),
+                std::string(profile->public_include_root)
+            };
+        }
 
-        const std::string manifestText =
-            "{\n"
-            "  \"engine\": \"epoch\",\n"
-            "  \"id\": \"" + json_escape(projectId) + "\",\n"
-            "  \"display_name\": \"" + json_escape(projectName) + "\",\n"
-            "  \"kind\": \"" + std::string(kind == EditorProjectKind::Tool ? "tool" : "game") + "\",\n"
-            "  \"template_family\": \"" + json_escape(templateFamily) + "\",\n"
-            "  \"scene\": \"" + json_escape(worldFile.generic_string()) + "\",\n"
-            "  \"default_script\": \"" + json_escape(scriptId) + "\",\n"
-            "  \"engine_integration\": \"" + json_escape(integrationMode) + "\",\n"
-            "  \"public_include_root\": \"" + json_escape(publicIncludeRoot) + "\",\n"
-            "  \"engine_module_root\": \"Engine/modules\",\n"
-            "  \"engine_source_root\": \"Engine/src\",\n"
-            "  \"engine_script_root\": \"Engine/src/scripts\",\n"
-            "  \"engine_resource_root\": \"Engine/resource\",\n"
-            "  \"build_fragment\": \"" + json_escape(cmakeFragment.filename().generic_string()) + "\",\n"
-            "  \"entry_source\": \"" + json_escape(entrySource.generic_string()) + "\",\n"
-            "  \"windows_project\": \"" + json_escape(windowsProject.filename().generic_string()) + "\",\n"
-            "  \"windows_build_script\": \"" + json_escape(windowsBuildScript.filename().generic_string()) + "\",\n"
-            "  \"linux_build_script\": \"" + json_escape(linuxBuildScript.filename().generic_string()) + "\",\n"
-            "  \"support_tier\": \"baseline\"\n"
-            "}\n";
-
-        const std::string readmeText =
-            "# " + projectName + "\n\n"
-            "Generated by the Epoch editor project shell flow.\n\n"
-            "- Kind: " + std::string(kind == EditorProjectKind::Tool ? "Software / Tool" : "Game") + "\n"
-            "- Scene: " + worldFile.filename().string() + "\n"
-            "- Script: " + scriptFile.filename().string() + "\n"
-            "- Engine integration: " + integrationMode + "\n"
-            "- Public include root: " + publicIncludeRoot + "\n"
-            "- Engine module root: Engine/modules\n"
-            "- Engine source root: Engine/src\n"
-            "- Engine script root: Engine/src/scripts\n"
-            "- Engine resource root: Engine/resource\n"
-            "- Project include root: " + include.generic_string() + "\n"
-            "- Project module root: " + modules.generic_string() + "\n"
-            "- Project resource root: " + resource.generic_string() + "\n"
-            "- Entry source: " + entrySource.generic_string() + "\n"
-            "- Windows project: " + windowsProject.filename().string() + "\n"
-            "- Windows build script: " + windowsBuildScript.filename().string() + "\n"
-            "- Linux build script: " + linuxBuildScript.filename().string() + "\n"
-            "- Build fragment: " + cmakeFragment.filename().string() + "\n";
-
-        const std::string pathsText =
-            "root=" + root.generic_string() + "\n"
-            + "manifest=" + manifest.generic_string() + "\n"
-            + "scene=" + worldFile.generic_string() + "\n"
-            + "default_script=" + scriptFile.generic_string() + "\n"
-            + "entry_source=" + entrySource.generic_string() + "\n"
-            + "windows_project=" + windowsProject.generic_string() + "\n"
-            + "windows_build_script=" + windowsBuildScript.generic_string() + "\n"
-            + "linux_build_script=" + linuxBuildScript.generic_string() + "\n"
-            + "build_log=" + generated_project_build_log_path(root).generic_string() + "\n"
-            + "debug_output=" + generated_project_output_path(root).generic_string() + "\n";
-
-        const std::string worldText =
-            "scene \"" + sceneName + "\"\n"
-            "{\n"
-            "    kind \"" + std::string(kind == EditorProjectKind::Tool ? "tool" : "game") + "\"\n"
-            "    support_tier \"baseline\"\n"
-            "}\n";
-
-        const std::string scriptText =
-            scriptApiInclude +
-            "extern \"C\" bool EpochScriptEntry(EpochScriptHost* host)\n"
-            "{\n"
-            "    if (!host || !host->log)\n"
-            "        return false;\n"
-            "    host->log(host->user_data, \""
-            + std::string(kind == EditorProjectKind::Tool
-                ? "Tool bootstrap entry ready: connect software workflow here."
-                : "Game bootstrap entry ready: connect gameplay startup here.")
-            + "\");\n"
-            "    return true;\n"
-            "}\n";
-
-        const std::string entrySourceText =
-            "#include <cstdlib>\n"
-            "#if defined(_WIN32)\n"
-            "#  include <stdlib.h>\n"
-            "#endif\n"
-            "#include <aengine.hpp>\n\n"
-            "namespace\n"
-            "{\n"
-            "    void boot_project_shell()\n"
-            "    {\n"
-            "#if defined(_WIN32)\n"
-            "        _putenv_s(\"EPOCH_EDITOR_PROJECT_ID\", \"" + cxx_escape(projectId) + "\");\n"
-            "        _putenv_s(\"EPOCH_EDITOR_PROJECT_MANIFEST\", \"" + cxx_escape(manifestAbsoluteText) + "\");\n"
-            "        _putenv_s(\"EPOCH_EDITOR_PROJECT_ROOT\", \"" + cxx_escape(rootAbsoluteText) + "\");\n"
-            "#else\n"
-            "        setenv(\"EPOCH_EDITOR_PROJECT_ID\", \"" + cxx_escape(projectId) + "\", 1);\n"
-            "        setenv(\"EPOCH_EDITOR_PROJECT_MANIFEST\", \"" + cxx_escape(manifestAbsoluteText) + "\", 1);\n"
-            "        setenv(\"EPOCH_EDITOR_PROJECT_ROOT\", \"" + cxx_escape(rootAbsoluteText) + "\", 1);\n"
-            "#endif\n"
-            "    }\n"
-            "}\n\n"
-            "int main(int argc, char** argv)\n"
-            "{\n"
-            "    (void)argc;\n"
-            "    (void)argv;\n"
-            "    boot_project_shell();\n"
-            "    epochnamespace::core::RunEngine();\n"
-            "    return 0;\n"
-            "}\n";
-
-        const std::string cmakeText =
-            "cmake_minimum_required(VERSION 3.28)\n\n"
-            "# Import this fragment from a generated project when embedding Epoch.\n"
-            "set(EPOCH_REPO_ROOT \"" + json_escape(repoRoot.generic_string()) + "\" CACHE PATH \"Path to the repo-local Epoch checkout\")\n\n"
-            "function(epoch_configure_embedded_project target)\n"
-            "    if(NOT TARGET ${target})\n"
-            "        message(FATAL_ERROR \"epoch_configure_embedded_project target missing: ${target}\")\n"
-            "    endif()\n\n"
-            "    target_compile_features(${target} PRIVATE cxx_std_23)\n"
-            "    target_include_directories(${target} PRIVATE\n"
-            "        \"${EPOCH_REPO_ROOT}/Engine/include\"\n"
-            "        \"${EPOCH_REPO_ROOT}/Engine\")\n"
-            "endfunction()\n";
-
-        const std::string cmakeListsText =
-            "cmake_minimum_required(VERSION 3.28)\n"
-            "project(" + projectName + " LANGUAGES CXX)\n\n"
-            "include(\"${CMAKE_CURRENT_LIST_DIR}/epoch.project.cmake\")\n"
-            "add_executable(${PROJECT_NAME} source/main.cpp)\n"
-            "epoch_configure_embedded_project(${PROJECT_NAME})\n"
-            "message(STATUS \"Epoch child project scaffold generated.\")\n"
-            "message(STATUS \"The first validated standalone child-build path is build_project.ps1 on Windows.\")\n";
-
-        const std::string windowsProjectText =
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-            "<Project DefaultTargets=\"Build\" xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
-            "  <ItemGroup Label=\"ProjectConfigurations\">\n"
-            "    <ProjectConfiguration Include=\"Debug|x64\">\n"
-            "      <Configuration>Debug</Configuration>\n"
-            "      <Platform>x64</Platform>\n"
-            "    </ProjectConfiguration>\n"
-            "    <ProjectConfiguration Include=\"Release|x64\">\n"
-            "      <Configuration>Release</Configuration>\n"
-            "      <Platform>x64</Platform>\n"
-            "    </ProjectConfiguration>\n"
-            "  </ItemGroup>\n"
-            "  <ItemGroup>\n"
-            "    <ClCompile Include=\"source\\main.cpp\" />\n"
-            "  </ItemGroup>\n"
-            "  <ItemGroup>\n"
-            "    <ProjectReference Include=\"" + repoStaticLibProjectWin + "\">\n"
-            "      <Project>{BBA639B7-2B54-4E38-90AC-667FC3303475}</Project>\n"
-            "    </ProjectReference>\n"
-            "  </ItemGroup>\n"
-            "  <PropertyGroup Label=\"Globals\">\n"
-            "    <VCProjectVersion>17.0</VCProjectVersion>\n"
-            "    <Keyword>Win32Proj</Keyword>\n"
-            "    <ProjectGuid>{" + projectGuid + "}</ProjectGuid>\n"
-            "    <RootNamespace>" + xml_escape(projectName) + "</RootNamespace>\n"
-            "    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>\n"
-            "  </PropertyGroup>\n"
-            "  <Import Project=\"$(VCTargetsPath)\\Microsoft.Cpp.Default.props\" />\n"
-            "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\" Label=\"Configuration\">\n"
-            "    <ConfigurationType>Application</ConfigurationType>\n"
-            "    <UseDebugLibraries>true</UseDebugLibraries>\n"
-            "    <PlatformToolset>v143</PlatformToolset>\n"
-            "    <CharacterSet>Unicode</CharacterSet>\n"
-            "  </PropertyGroup>\n"
-            "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\" Label=\"Configuration\">\n"
-            "    <ConfigurationType>Application</ConfigurationType>\n"
-            "    <UseDebugLibraries>false</UseDebugLibraries>\n"
-            "    <PlatformToolset>v143</PlatformToolset>\n"
-            "    <WholeProgramOptimization>false</WholeProgramOptimization>\n"
-            "    <CharacterSet>Unicode</CharacterSet>\n"
-            "  </PropertyGroup>\n"
-            "  <Import Project=\"$(VCTargetsPath)\\Microsoft.Cpp.props\" />\n"
-            "  <ImportGroup Label=\"ExtensionSettings\" />\n"
-            "  <ImportGroup Label=\"Shared\" />\n"
-            "  <ImportGroup Label=\"PropertySheets\" Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n"
-            "    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n"
-            "  </ImportGroup>\n"
-            "  <ImportGroup Label=\"PropertySheets\" Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n"
-            "    <Import Project=\"$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\" Condition=\"exists('$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props')\" Label=\"LocalAppDataPlatform\" />\n"
-            "  </ImportGroup>\n"
-            "  <PropertyGroup Label=\"UserMacros\" />\n"
-            "  <PropertyGroup>\n"
-            "    <EpochRepoRoot>" + repoRootWin + "\\</EpochRepoRoot>\n"
-            "    <VcpkgTriplet Condition=\"'$(VcpkgTriplet)'==''\">x64-windows</VcpkgTriplet>\n"
-            "    <EpochVcpkgInstallRoot>$(EpochRepoRoot)Engine\\vcpkg_installed\\$(VcpkgTriplet)\\</EpochVcpkgInstallRoot>\n"
-            "    <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\\</EpochVcpkgNestedInstallRoot>\n"
-            "    <EpochVcpkgInstallRoot Condition=\"Exists('$(EpochVcpkgNestedInstallRoot)include\\')\">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>\n"
-            "  </PropertyGroup>\n"
-            "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n"
-            "    <OutDir>$(MSBuildThisFileDirectory)bin\\windows\\Debug\\x64\\</OutDir>\n"
-            "    <IntDir>$(MSBuildThisFileDirectory)build\\windows\\obj\\Debug\\x64\\</IntDir>\n"
-            "  </PropertyGroup>\n"
-            "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n"
-            "    <OutDir>$(MSBuildThisFileDirectory)bin\\windows\\Release\\x64\\</OutDir>\n"
-            "    <IntDir>$(MSBuildThisFileDirectory)build\\windows\\obj\\Release\\x64\\</IntDir>\n"
-            "  </PropertyGroup>\n"
-            "  <PropertyGroup Label=\"Vcpkg\">\n"
-            "    <VcpkgEnableManifest>true</VcpkgEnableManifest>\n"
-            "    <VcpkgUseStatic>false</VcpkgUseStatic>\n"
-            "  </PropertyGroup>\n"
-            "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n"
-            "    <ClCompile>\n"
-            "      <WarningLevel>Level3</WarningLevel>\n"
-            "      <SDLCheck>true</SDLCheck>\n"
-            "      <PreprocessorDefinitions>ENGINE_STATICLIB;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
-            "      <ConformanceMode>true</ConformanceMode>\n"
-            "      <LanguageStandard>stdcpp23</LanguageStandard>\n"
-            "      <LanguageStandard_C>stdc17</LanguageStandard_C>\n"
-            "      <AdditionalIncludeDirectories>$(EpochRepoRoot)Engine\\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>\n"
-            "      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>\n"
-            "      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>\n"
-            "      <CallingConvention>Cdecl</CallingConvention>\n"
-            "    </ClCompile>\n"
-            "    <Link>\n"
-            "      <SubSystem>Console</SubSystem>\n"
-            "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
-            "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)debug\\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
-            "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
-            "    </Link>\n"
-            "  </ItemDefinitionGroup>\n"
-            "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n"
-            "    <ClCompile>\n"
-            "      <WarningLevel>Level3</WarningLevel>\n"
-            "      <FunctionLevelLinking>false</FunctionLevelLinking>\n"
-            "      <IntrinsicFunctions>false</IntrinsicFunctions>\n"
-            "      <SDLCheck>true</SDLCheck>\n"
-            "      <PreprocessorDefinitions>ENGINE_STATICLIB;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
-            "      <ConformanceMode>true</ConformanceMode>\n"
-            "      <LanguageStandard>stdcpp23</LanguageStandard>\n"
-            "      <LanguageStandard_C>stdc17</LanguageStandard_C>\n"
-            "      <AdditionalIncludeDirectories>$(EpochRepoRoot)Engine\\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>\n"
-            "      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>\n"
-            "      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>\n"
-            "      <CallingConvention>Cdecl</CallingConvention>\n"
-            "    </ClCompile>\n"
-            "    <Link>\n"
-            "      <SubSystem>Console</SubSystem>\n"
-            "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
-            "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
-            "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
-            "    </Link>\n"
-            "  </ItemDefinitionGroup>\n"
-            "  <Import Project=\"$(VCTargetsPath)\\Microsoft.Cpp.targets\" />\n"
-            "  <ImportGroup Label=\"ExtensionTargets\" />\n"
-            "</Project>\n";
-
-        const std::string windowsBuildScriptText =
-            "param(\n"
-            "    [string]$Configuration = 'Debug',\n"
-            "    [string]$Platform = 'x64'\n"
-            ")\n"
-            "$ErrorActionPreference = 'Stop'\n"
-            "$projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path\n"
-            "$projectFile = Join-Path $projectRoot '" + powershell_escape_single_quoted(windowsProject.filename().string()) + "'\n"
-            "$logDir = Join-Path $projectRoot 'build\\logs'\n"
-            "$binDir = Join-Path $projectRoot ('bin\\windows\\' + $Configuration + '\\' + $Platform)\n"
-            "New-Item -ItemType Directory -Force -Path $logDir | Out-Null\n"
-            "New-Item -ItemType Directory -Force -Path $binDir | Out-Null\n"
-            "$logPath = Join-Path $logDir ('build-' + $Configuration.ToLowerInvariant() + '-' + $Platform.ToLowerInvariant() + '.log')\n"
-            "function Resolve-MSBuild {\n"
-            "    if (-not [string]::IsNullOrWhiteSpace($env:MSBUILD_EXE_PATH) -and (Test-Path -LiteralPath $env:MSBUILD_EXE_PATH)) {\n"
-            "        return $env:MSBUILD_EXE_PATH\n"
-            "    }\n"
-            "    $candidates = @(\n"
-            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe',\n"
-            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\MSBuild.exe'\n"
-            "    )\n"
-            "    foreach ($candidate in $candidates) {\n"
-            "        if (Test-Path -LiteralPath $candidate) { return $candidate }\n"
-            "    }\n"
-            "    throw 'Could not locate MSBuild. Set MSBUILD_EXE_PATH or install Visual Studio Build Tools.'\n"
-            "}\n"
-            "if (-not (Test-Path -LiteralPath $projectFile)) {\n"
-            "    throw ('Missing generated project file: ' + $projectFile)\n"
-            "}\n"
-            "$msbuild = Resolve-MSBuild\n"
-            "Set-Location -LiteralPath $projectRoot\n"
-            "'[INFO] Project root: ' + $projectRoot | Tee-Object -FilePath $logPath\n"
-            "'[INFO] Epoch child build project: ' + $projectFile | Tee-Object -FilePath $logPath\n"
-            "'[INFO] MSBuild: ' + $msbuild | Tee-Object -FilePath $logPath -Append\n"
-            "& $msbuild $projectFile /t:Rebuild /p:Configuration=$Configuration /p:Platform=$Platform /m:1 /clp:ErrorsOnly 2>&1 | Tee-Object -FilePath $logPath -Append\n"
-            "if ($LASTEXITCODE -ne 0) {\n"
-            "    exit $LASTEXITCODE\n"
-            "}\n"
-            "$exePath = Join-Path $projectRoot ('bin\\windows\\' + $Configuration + '\\' + $Platform + '\\' + '" + powershell_escape_single_quoted(projectName) + ".exe')\n"
-            "'[INFO] Output: ' + $exePath | Tee-Object -FilePath $logPath -Append\n";
-
-        const std::string linuxBuildScriptText =
-            "#!/usr/bin/env bash\n"
-            "set -euo pipefail\n"
-            "project_dir=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"\n"
-            "log_dir=\"$project_dir/build/logs\"\n"
-            "mkdir -p \"$log_dir\"\n"
-            "log_path=\"$log_dir/build-linux.log\"\n"
-            "{\n"
-            "  echo \"[INFO] Epoch child project scaffold: " + projectName + "\"\n"
-            "  echo \"[INFO] Repo root: " + bash_escape_single_quoted(repoRoot.generic_string()) + "\"\n"
-            "  echo \"[INFO] Standalone Linux child-project app builds are not yet the first validated path in this version.\"\n"
-            "  echo \"[INFO] Repo-native Linux engine builds continue through " + bash_escape_single_quoted((repoRoot / "Engine" / "build.sh").generic_string()) + ".\"\n"
-            "} | tee \"$log_path\"\n"
-            "exit 1\n";
-
-        const bool ok =
-            write_text_file(manifest, manifestText)
-            && write_text_file(readme, readmeText)
-            && write_text_file(pathsFile, pathsText)
-            && write_text_file(worldFile, worldText)
-            && write_text_file(scriptFile, scriptText)
-            && write_text_file(entrySource, entrySourceText)
-            && write_text_file(cmakeFragment, cmakeText)
-            && write_text_file(cmakeLists, cmakeListsText)
-            && write_text_file(windowsProject, windowsProjectText)
-            && write_text_file(windowsBuildScript, windowsBuildScriptText)
-            && write_text_file(linuxBuildScript, linuxBuildScriptText);
-
-        if (ok)
-            invalidate_project_profile_cache();
-
-        return {
-            ok,
-            projectId,
-            root.string(),
-            manifest.generic_string(),
-            entrySource.generic_string(),
-            windowsBuildScript.generic_string(),
-            scriptFile.generic_string(),
-            ok
-                ? "Created project shell at " + root.string()
-                : "Failed to write one or more generated project files.",
-            integrationMode,
-            publicIncludeRoot
-        };
+        return write_project_shell(ProjectShellSpec{
+            .kind = profile->kind,
+            .project_name = std::string(profile->display_name),
+            .project_id = std::string(profile->id),
+            .root = root,
+            .world_file = fs::path{ profile->scene_path },
+            .world_name = std::string(profile->world_name),
+            .template_family = std::string(profile->template_family),
+            .script_id = std::string(profile->default_script),
+            .description = std::string(profile->description),
+            .demo_model_asset = std::string(profile->demo_model_asset),
+            .overwrite_existing = false
+        });
     }
 
     EditorProjectBuildResult editor_build_project(std::string_view project_root)
@@ -2136,12 +2511,28 @@ namespace epochnamespace
         std::error_code ec;
         if (!fs::exists(scriptPath, ec) || ec)
         {
-            return {
-                false,
-                "Missing generated build script: " + scriptPath.generic_string() + ". Create a generated project shell first.",
-                outputPath.generic_string(),
-                logPath.generic_string()
-            };
+            if (const auto* profile = find_project_profile_by_root(project_root))
+            {
+                const auto ensured = editor_ensure_project_shell(profile->id);
+                if (!ensured.succeeded)
+                {
+                    return {
+                        false,
+                        ensured.summary,
+                        outputPath.generic_string(),
+                        logPath.generic_string()
+                    };
+                }
+            }
+            else
+            {
+                return {
+                    false,
+                    "Missing generated build script: " + scriptPath.generic_string() + ". Create a generated project shell first.",
+                    outputPath.generic_string(),
+                    logPath.generic_string()
+                };
+            }
         }
 
 #if defined(_WIN32)

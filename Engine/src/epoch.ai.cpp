@@ -734,7 +734,37 @@ namespace epoch::ai
 
         static std::string resolve_model_name(const std::string& endpoint, std::string requested)
         {
+            if (!trim(requested).empty())
+                return requested;
+
             auto detected = fetch_detected_models(endpoint);
+
+            auto normalize = [](std::string value)
+                {
+                    std::transform(
+                        value.begin(),
+                        value.end(),
+                        value.begin(),
+                        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+                    return value;
+                };
+
+            for (const auto& candidate : detected)
+            {
+                const std::string lowered = normalize(candidate);
+                if (lowered.find("epoch") != std::string::npos
+                    || lowered.find("helper") != std::string::npos
+                    || lowered.find("development") != std::string::npos)
+                {
+                    return candidate;
+                }
+            }
+
+            for (const auto& candidate : detected)
+            {
+                if (normalize(candidate).find("qwen") == std::string::npos)
+                    return candidate;
+            }
 
             if (!detected.empty())
                 return detected.front();

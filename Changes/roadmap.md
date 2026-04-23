@@ -112,6 +112,12 @@ engine shape and should be treated as starting truth for the next passes:
 
 - keep project creation, project play, script build/run, and generated project
   discovery truthful
+- keep the default demo path honest:
+  generated or discovered projects should build, launch, and hand any
+  declared demo model through the engine-owned script host without falling
+  back to confusing sample-only behavior
+- keep the Mini Sponza demo owned by `ProjectLauncher`, while `Sandbox`
+  stays the AI/engine-iteration shell
 - continue replacing hardcoded built-in sample assumptions with project-owned
   runtime flow
 - keep the already-landed project/scripts shell honest instead of letting it
@@ -140,7 +146,12 @@ engine shape and should be treated as starting truth for the next passes:
   - hard fail with diagnostics
 - keep Visual Studio, repo-root CMake, and packaged runtime path behavior
   aligned
+- keep the project-script compiler honest across normal Windows developer
+  environments instead of assuming one lucky `clang++` path is always present
 - finish the low-risk include/src cleanup and module-aware source grouping
+- keep `Engine/resource/` as the canonical Win32 build-resource root until a
+  broader resource restructure is landed safely; do not strand `icon.ico`
+  behind ad hoc relative paths while the baseline build stays active
 - continue syncing filesystem, CMake, `.vcxproj`, `.vcxitems`, and `.filters`
   so disk truth and IDE truth stay aligned
 - harden install/package expectations so runtime assets, shaders, scripts, and

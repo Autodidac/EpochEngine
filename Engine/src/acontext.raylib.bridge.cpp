@@ -36,6 +36,8 @@ module;
  ***********************************************/
 
 #include <cstdint>
+#include <string>
+#include <vector>
  // IMPORTANT:
  // This TU is the *only* place that should include <raylib.h>.
  // Keep Win32 headers out of here to avoid symbol collisions:
@@ -46,10 +48,42 @@ module;
  // your minimal Win32 shims that undef/avoid collisions.
 
 #include <raylib.h>
+#include <rlgl.h>
 
 module raylib.api;
 namespace epochnamespace::raylib_api
 {
+    namespace
+    {
+        struct LoadedModelEntry
+        {
+            std::string path{};
+            ::Model model{};
+        };
+
+        std::vector<LoadedModelEntry>& loaded_models()
+        {
+            static std::vector<LoadedModelEntry> entries{};
+            return entries;
+        }
+
+        static ::Vector3 to_rl(Vector3 v)
+        {
+            return ::Vector3{ v.x, v.y, v.z };
+        }
+
+        static ::Camera3D to_rl(Camera3D c)
+        {
+            return ::Camera3D{
+                to_rl(c.position),
+                to_rl(c.target),
+                to_rl(c.up),
+                c.fovy,
+                c.projection
+            };
+        }
+    }
+
     const Color raywhite = Color{ ::RAYWHITE.r, ::RAYWHITE.g, ::RAYWHITE.b, ::RAYWHITE.a };
     const Color white = Color{ ::WHITE.r, ::WHITE.g, ::WHITE.b, ::WHITE.a };
 
@@ -113,6 +147,7 @@ namespace epochnamespace::raylib_api
     const int mouse_button_extra = ::MOUSE_BUTTON_EXTRA;
 
     const int pixelformat_rgba8 = ::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+    const int camera_perspective = ::CAMERA_PERSPECTIVE;
 
     static ::Color to_rl(Color c) { return ::Color{ c.r, c.g, c.b, c.a }; }
     static ::Vector2 to_rl(Vector2 v) { return ::Vector2{ v.x, v.y }; }
@@ -194,6 +229,10 @@ namespace epochnamespace::raylib_api
     void end_scissor_mode() { ::EndScissorMode(); }
     void draw_rectangle_rec(const Rectangle& rec, Color color) { ::DrawRectangleRec(to_rl(rec), to_rl(color)); }
     void draw_line_v(Vector2 start, Vector2 end, Color color) { ::DrawLineV(to_rl(start), to_rl(end), to_rl(color)); }
+    void set_viewport(int x, int y, int width, int height) { ::rlViewport(x, y, width, height); }
+    void begin_mode_3d(const Camera3D& camera) { ::BeginMode3D(to_rl(camera)); }
+    void end_mode_3d() { ::EndMode3D(); }
+    void draw_grid(int slices, float spacing) { ::DrawGrid(slices, spacing); }
 
     void set_target_fps(int fps) { ::SetTargetFPS(fps); }
     void set_window_title(const char* title) { ::SetWindowTitle(title); }
@@ -244,6 +283,51 @@ namespace epochnamespace::raylib_api
         Color tint)
     {
         ::DrawTexturePro(to_rl(tex), to_rl(src), to_rl(dst), to_rl(origin), rotation, to_rl(tint));
+    }
+
+    int load_model(const char* path)
+    {
+        if (!path || path[0] == '\0')
+            return -1;
+
+        auto& entries = loaded_models();
+        for (std::size_t i = 0; i < entries.size(); ++i)
+        {
+            if (entries[i].path == path)
+                return static_cast<int>(i);
+        }
+
+        ::Model model = ::LoadModel(path);
+        if (model.meshCount <= 0)
+        {
+            ::UnloadModel(model);
+            return -1;
+        }
+
+        entries.push_back(LoadedModelEntry{
+            .path = path,
+            .model = model
+        });
+        return static_cast<int>(entries.size() - 1);
+    }
+
+    bool has_loaded_models()
+    {
+        return !loaded_models().empty();
+    }
+
+    void draw_loaded_models()
+    {
+        for (const auto& entry : loaded_models())
+            ::DrawModel(entry.model, ::Vector3{ 0.0f, 0.0f, 0.0f }, 1.0f, ::WHITE);
+    }
+
+    void unload_all_models()
+    {
+        auto& entries = loaded_models();
+        for (auto& entry : entries)
+            ::UnloadModel(entry.model);
+        entries.clear();
     }
 }
 

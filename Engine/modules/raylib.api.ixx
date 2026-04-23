@@ -57,6 +57,22 @@ export namespace epochnamespace::raylib_api
         float y{};
     };
 
+    struct Vector3
+    {
+        float x{};
+        float y{};
+        float z{};
+    };
+
+    struct Camera3D
+    {
+        Vector3 position{};
+        Vector3 target{};
+        Vector3 up{};
+        float fovy{};
+        int projection{};
+    };
+
     struct Rectangle
     {
         float x{};
@@ -153,6 +169,7 @@ export namespace epochnamespace::raylib_api
     extern const int mouse_button_extra;
 
     extern const int pixelformat_rgba8;
+    extern const int camera_perspective;
 
     void set_config_flags(unsigned int flags);
     void set_trace_log_level(int level);
@@ -178,6 +195,10 @@ export namespace epochnamespace::raylib_api
     void end_scissor_mode();
     void draw_rectangle_rec(const Rectangle& rec, Color color);
     void draw_line_v(Vector2 start, Vector2 end, Color color);
+    void set_viewport(int x, int y, int width, int height);
+    void begin_mode_3d(const Camera3D& camera);
+    void end_mode_3d();
+    void draw_grid(int slices, float spacing);
 
     void set_target_fps(int fps);
     void set_window_title(const char* title);
@@ -206,5 +227,10 @@ export namespace epochnamespace::raylib_api
         Vector2 origin,
         float rotation,
         Color tint);
+
+    int load_model(const char* path);
+    bool has_loaded_models();
+    void draw_loaded_models();
+    void unload_all_models();
 }
 #endif

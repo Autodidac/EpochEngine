@@ -95,6 +95,7 @@ namespace epochnamespace
         std::string_view description{};
         std::string_view engine_integration_mode{};
         std::string_view public_include_root{};
+        std::string_view demo_model_asset{};
     };
 
     export struct EditorScriptProfile
@@ -134,6 +135,21 @@ namespace epochnamespace
         std::string summary{};
         std::string output_path{};
         std::string log_path{};
+    };
+
+    export struct EditorProjectModelSummary
+    {
+        bool declared{ false };
+        bool exists{ false };
+        bool parsed{ false };
+        std::uint32_t scene_count{ 0 };
+        std::uint32_t node_count{ 0 };
+        std::uint32_t mesh_count{ 0 };
+        std::uint32_t primitive_count{ 0 };
+        std::uint32_t material_count{ 0 };
+        std::string asset_path{};
+        std::string resolved_path{};
+        std::string summary{};
     };
 
     export struct EditorSceneSeedEntity
@@ -184,8 +200,11 @@ namespace epochnamespace
     export [[nodiscard]] std::string_view editor_runtime_scene_for_project(std::string_view project_id) noexcept;
     export [[nodiscard]] std::string_view editor_project_kind_name(EditorProjectKind kind) noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind);
+    export [[nodiscard]] EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id);
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);
     export [[nodiscard]] EditorProjectBuildResult editor_build_project(std::string_view project_root);
+    export [[nodiscard]] EditorProjectModelSummary editor_project_model_summary(std::string_view project_id);
+    export [[nodiscard]] std::string editor_project_demo_model_path(std::string_view project_id);
     [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name, std::string_view project_root);
     [[nodiscard]] std::string editor_resolve_script_source_path(std::string_view script_name, std::string_view project_root = {});
     export void editor_set_time_snapshot(const core::Context* ctx, const EditorTimeSnapshot& snapshot);

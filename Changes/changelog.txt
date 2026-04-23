@@ -1,6 +1,28 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Wired the project demo bootstrap path to the embedded Mini Sponza asset more
+  honestly: the script host now exposes a queued model-load callback, the
+  raylib preview backend can load and draw queued models, `editor_launcher`
+  exists again as a real compatibility script, and the generated Sandbox /
+  ProjectLauncher child shells now keep that same model-backed bootstrap flow.
+- Moved the ownership boundary back where it belongs: `Sandbox` no longer
+  carries the Mini Sponza demo by default, and `ProjectLauncher` is the
+  launcher-facing shell that owns the model-backed bootstrap flow.
+- Hardened the default local-model selection so Epoch no longer blindly falls
+  onto the first detected LM Studio model when an explicit choice is absent;
+  it now prefers Epoch/helper/development-flavored names first and avoids
+  `qwen` when another detected local option exists.
+- Updated the GitHub CMake workflow to set up Python explicitly before
+  installing modern `cmake` and `ninja`, which is closer to the real hosted
+  runner contract than assuming the right Python environment is already active.
+- Added a Windows script-compiler fallback to `cl.exe` so the editor/project
+  bootstrap script path does not depend entirely on one specific `clang++`
+  install being present on PATH.
+- Clarified the roadmap around two still-live structural rules: generated or
+  discovered projects should keep a truthful model-backed demo path, and
+  `Engine/resource/` remains the canonical Win32 build-resource root until a
+  broader resource cleanup can land safely.
 - Removed the two now-redundant local research PDFs after their useful
   planning material had already been promoted into repo truth, while keeping
   the longer-range six-month/two-year planning PDF in place for now.

@@ -575,9 +575,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\aapplicationmodule.ixx">
       <Filter>Module Files\ixx\games\gamecore</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\editor_launcher.ascript.cpp">
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\project_demo_bootstrap.ascript.cpp">
       <Filter>Source Files\external scripts</Filter>
-    </ClCompile>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\editor_launcher.ascript.cpp">
+      <Filter>Source Files\external scripts</Filter>
+    </None>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.entitycomponentmanager.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
