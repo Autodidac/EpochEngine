@@ -177,6 +177,9 @@ engine shape and should be treated as starting truth for the next passes:
 
 - complete the primitive/object system as a real engine-owned authoring/runtime
   path
+- keep the live project shell honest by surfacing current seed-object,
+  archetype, and category proof directly in-editor while the fuller object
+  runtime is still being built out
 - build a modular procedural world path on top of the time/node direction
 - keep ECS/entity ownership for macro gameplay actors while dense cellular or
   material simulation remains specialized

@@ -10,6 +10,8 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
 
     strategy:
       fail-fast: false
@@ -17,37 +19,55 @@ jobs:
         include:
           - name: windows-msvc
             os: windows-latest
-            generator: Visual Studio 17 2022
-            generator_args: -A x64
-            build_config: Release
-            extra_args: ""
+            shell: powershell
+            configure_command: >
+              cmake -S "$env:GITHUB_WORKSPACE" -B "$env:GITHUB_WORKSPACE/build/ci"
+              -G "Visual Studio 17 2022"
+              -A x64
+            build_command: >
+              cmake --build "$env:GITHUB_WORKSPACE/build/ci"
+              --config Release
+              --target epoch
           - name: linux-gcc
             os: ubuntu-latest
-            generator: Ninja
-            generator_args: ""
-            build_config: Release
-            extra_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+            shell: bash
+            configure_command: >
+              cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/ci"
+              -G Ninja
+              -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+            build_command: >
+              cmake --build "$GITHUB_WORKSPACE/build/ci"
+              --config Release
+              --target epoch
           - name: linux-clang
             os: ubuntu-latest
-            generator: Ninja
-            generator_args: ""
-            build_config: Release
-            extra_args: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+            shell: bash
+            configure_command: >
+              cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/ci"
+              -G Ninja
+              -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+            build_command: >
+              cmake --build "$GITHUB_WORKSPACE/build/ci"
+              --config Release
+              --target epoch
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Configure
-        shell: bash
+      - name: Install modern CMake and Ninja
+        shell: ${{ matrix.shell }}
         run: >
-          cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/ci"
-          -G "${{ matrix.generator }}"
-          ${{ matrix.generator_args }}
-          ${{ matrix.extra_args }}
+          python -m pip install --upgrade pip cmake==3.30.5 ninja
+
+      - name: Report tool versions
+        shell: ${{ matrix.shell }}
+        run: >
+          cmake --version
+
+      - name: Configure
+        shell: ${{ matrix.shell }}
+        run: ${{ matrix.configure_command }}
 
       - name: Build
-        shell: bash
-        run: >
-          cmake --build "$GITHUB_WORKSPACE/build/ci"
-          --config "${{ matrix.build_config }}"
-          --target epoch
+        shell: ${{ matrix.shell }}
+        run: ${{ matrix.build_command }}

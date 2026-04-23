@@ -1093,6 +1093,82 @@ namespace epochnamespace
             return std::filesystem::absolute(path, ec).lexically_normal().generic_string();
         }
 
+        struct SeedObjectSummary
+        {
+            std::size_t total{ 0 };
+            std::size_t worldCount{ 0 };
+            std::size_t gameplayCount{ 0 };
+            std::size_t editorCount{ 0 };
+            std::size_t visibleCount{ 0 };
+            std::size_t editorOnlyCount{ 0 };
+            std::vector<std::string> types{};
+            std::vector<std::string> categories{};
+        };
+
+        [[nodiscard]] static SeedObjectSummary summarize_seed_objects(std::span<const EditorSceneSeedEntity> seeds)
+        {
+            SeedObjectSummary summary{};
+            summary.total = seeds.size();
+
+            auto append_unique = [](std::vector<std::string>& values, std::string_view value)
+            {
+                if (value.empty())
+                    return;
+
+                const std::string owned{ value };
+                if (std::find(values.begin(), values.end(), owned) == values.end())
+                    values.push_back(owned);
+            };
+
+            for (const auto& seed : seeds)
+            {
+                if (seed.category == "World")
+                    ++summary.worldCount;
+                else if (seed.category == "Gameplay")
+                    ++summary.gameplayCount;
+                else if (seed.category == "Editor")
+                    ++summary.editorCount;
+
+                if (seed.visible)
+                    ++summary.visibleCount;
+                if (seed.editor_only)
+                    ++summary.editorOnlyCount;
+
+                append_unique(summary.types, seed.type);
+                append_unique(summary.categories, seed.category);
+            }
+
+            return summary;
+        }
+
+        [[nodiscard]] static std::string summarize_seed_category_mix(const SeedObjectSummary& summary)
+        {
+            return "World "
+                + std::to_string(summary.worldCount)
+                + " | Gameplay "
+                + std::to_string(summary.gameplayCount)
+                + " | Editor "
+                + std::to_string(summary.editorCount);
+        }
+
+        [[nodiscard]] static std::string summarize_seed_type_list(const std::vector<std::string>& values)
+        {
+            if (values.empty())
+                return "None";
+
+            std::string result;
+            const std::size_t count = (std::min)(values.size(), std::size_t{ 5 });
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (!result.empty())
+                    result += " | ";
+                result += values[i];
+            }
+            if (values.size() > count)
+                result += " | ...";
+            return result;
+        }
+
         [[nodiscard]] bool path_exists(const std::filesystem::path& path) noexcept
         {
             if (path.empty())
@@ -1682,6 +1758,8 @@ namespace epochnamespace
             const auto* activeProfile = editor_find_project_profile(editor.projectId);
             if (!activeProfile)
                 activeProfile = &editor_default_project_profile();
+            const auto seedEntities = editor_seed_entities_for_project(editor.projectId);
+            const auto seedSummary = summarize_seed_objects(seedEntities);
 
             const std::filesystem::path entrySource = project_entry_source_path(editor.projectRoot);
             const std::filesystem::path buildScript = project_windows_build_script_path(editor.projectRoot);
@@ -1716,7 +1794,20 @@ namespace epochnamespace
             gui::property_row("[project] Paths manifest exists", std::filesystem::exists(pathsManifest) ? "true" : "false");
             gui::property_row("[project] Output exists", std::filesystem::exists(outputExe) ? "true" : "false");
             gui::property_row("[project] Build log exists", std::filesystem::exists(buildLog) ? "true" : "false");
+            gui::property_row("[project] Seed objects", std::to_string(seedSummary.total));
+            gui::property_row("[project] Seed mix", summarize_seed_category_mix(seedSummary));
+            gui::property_row("[project] Archetype types", summarize_seed_type_list(seedSummary.types));
+            gui::property_row("[project] Archetype categories", summarize_seed_type_list(seedSummary.categories));
+            gui::property_row(
+                "[project] Primitive/object path",
+                "scene-owned seed entities are the current engine authoring baseline");
+            gui::property_row(
+                "[project] Visible/editor-only",
+                std::to_string(seedSummary.visibleCount) + " visible | " + std::to_string(seedSummary.editorOnlyCount) + " editor-only");
             gui::wrapped_label(activeProfile->description, (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(
+                "Epoch's current primitive/object path starts with engine-owned scene seed entities and archetype types here, then grows into fuller authoring/runtime object systems from that truthful baseline instead of from hidden sample content.",
+                (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(editor.projectStatus, (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(editor.projectBuildStatus, (std::max)(180.0f, log_size.x - 24.0f));
 
