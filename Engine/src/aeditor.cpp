@@ -397,6 +397,87 @@ namespace epochnamespace
             }
         }
 
+        [[nodiscard]] static std::string pacing_health_summary(const EditorTimeSnapshot& snapshot)
+        {
+            if (snapshot.paused)
+                return "Paused by editor control";
+
+            if (snapshot.fixed_dt_seconds <= 0.0)
+                return "No fixed-step pacing configured";
+
+            const double frameBudgetSeconds = snapshot.fixed_dt_seconds
+                * static_cast<double>((std::max)(1u, snapshot.max_steps_per_frame));
+
+            if (snapshot.step_budget >= snapshot.max_steps_per_frame
+                && snapshot.max_steps_per_frame > 0)
+            {
+                return "At frame-step cap; simulation debt is being clamped";
+            }
+
+            if (snapshot.real_dt_seconds > frameBudgetSeconds * 1.15)
+            {
+                return "Over budget; frame time is outrunning configured simulation pacing";
+            }
+
+            if (snapshot.accumulator_seconds > snapshot.fixed_dt_seconds * 0.5)
+            {
+                return "Recovering accumulated step debt";
+            }
+
+            return "Healthy; frame pacing is inside the configured budget";
+        }
+
+        [[nodiscard]] static std::string backend_runtime_guidance(
+            const std::shared_ptr<core::Context>& ctx,
+            std::string_view supportTier)
+        {
+            if (!ctx)
+                return "No active backend";
+
+            switch (ctx->type)
+            {
+            case core::ContextType::OpenGL:
+                return std::string("Current editor priority path; keep startup presentation clean and stay within ")
+                    + std::string(supportTier) + " tier expectations.";
+            case core::ContextType::Vulkan:
+                return "Best fit for stronger desktop tiers; keep shader/package validation honest before treating it as default.";
+            case core::ContextType::Software:
+                return "Correctness and capture fallback; prioritize clarity and deterministic tooling over throughput.";
+            case core::ContextType::SDL:
+                return "Proxy-host backend; keep detach, input ownership, and redock behavior stable before polishing extras.";
+            case core::ContextType::SFML:
+                return "Proxy-host backend; preserve truthful promoted-window behavior while converging input and resize parity.";
+            case core::ContextType::RayLib:
+                return "Useful backend baseline for detached-window truth; protect the working ownership contract while converging behavior.";
+            default:
+                return "Keep runtime ownership explicit and avoid backend-specific drift.";
+            }
+        }
+
+        [[nodiscard]] static std::string backend_convergence_focus(const std::shared_ptr<core::Context>& ctx)
+        {
+            if (!ctx)
+                return "No active backend";
+
+            switch (ctx->type)
+            {
+            case core::ContextType::OpenGL:
+                return "Focus: first-present stability, startup cosmetics, and single-context editor convergence.";
+            case core::ContextType::Vulkan:
+                return "Focus: packaging/shader validation and support-tier honesty.";
+            case core::ContextType::Software:
+                return "Focus: capture fidelity, deterministic output, and launcher-shell baseline behavior.";
+            case core::ContextType::SDL:
+                return "Focus: promoted-window detach/redock stability and input ownership.";
+            case core::ContextType::SFML:
+                return "Focus: promoted-window detach/redock parity and resize/input cleanup.";
+            case core::ContextType::RayLib:
+                return "Focus: keep the working detach contract as the runtime truth reference for the other proxy-host backends.";
+            default:
+                return "Focus: converge backend behavior without adding another special-case path.";
+            }
+        }
+
         [[nodiscard]] static SurfaceCanvas build_render_graph_surface(
             const SystemsSurfaceState& systems,
             bool expose_ai_inputs)
@@ -1866,6 +1947,9 @@ namespace epochnamespace
                 ? static_cast<std::size_t>(std::thread::hardware_concurrency())
                 : std::size_t{ 6 });
             const std::string supportTier = recommended_support_tier(ctx, workerCount);
+            const std::string pacingHealth = pacing_health_summary(editor.timeSnapshot);
+            const std::string backendGuidance = backend_runtime_guidance(ctx, supportTier);
+            const std::string convergenceFocus = backend_convergence_focus(ctx);
             const float contentWidth = (std::max)(180.0f, log_size.x - 24.0f);
             const float graphGap = 12.0f;
             const float graphWidth = (std::max)(180.0f, (contentWidth - graphGap) * 0.5f);
@@ -1899,6 +1983,8 @@ namespace epochnamespace
             gui::property_row("[time] Step count", std::to_string(editor.timeSnapshot.simulated_steps));
             gui::property_row("[time] Step budget", std::to_string(editor.timeSnapshot.step_budget));
             gui::property_row("[time] Frame step cap", std::to_string(editor.timeSnapshot.max_steps_per_frame));
+            gui::property_row("[time] Time scale", std::format("{:.2f}x", editor.timeSnapshot.time_scale));
+            gui::property_row("[time] Pacing health", pacingHealth);
 
             const std::array timeButtons{
                 gui::InlineButtonSpec{ .label = editor.timeControl.paused ? "Resume" : "Pause", .width = 74.0f },
@@ -2056,6 +2142,8 @@ namespace epochnamespace
             gui::property_row("[systems] Task lanes", "Input | Systems | Scripts | AI | Output");
             gui::property_row("[systems] Lib strategy", "auto on capable hardware; developer can trim support tiers per game");
             gui::property_row("[systems] Tier policy", "Baseline by default, Standard on stronger 6-core+ GPUs/CPUs, Extended only by project opt-in");
+            gui::property_row("[systems] Backend guidance", backendGuidance);
+            gui::property_row("[systems] Convergence focus", convergenceFocus);
             for (auto* system : orderedSystems)
             {
                 const auto name = system->name();
@@ -2354,5 +2442,4 @@ namespace epochnamespace
     }
 
 } // namespace epochnamespace
-
 

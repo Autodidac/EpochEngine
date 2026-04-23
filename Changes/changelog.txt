@@ -1,6 +1,11 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Expanded the editor `Systems` workspace with clearer pacing-health and
+  backend-convergence guidance so the live surface now spells out whether the
+  current time budget is healthy, capped, or over budget, and records the
+  current backend's convergence focus instead of leaving that context only in
+  roadmap text.
 - Rewrote the roadmap around the live mission instead of carrying completed
   phase bookkeeping forward: it now focuses on preserved baseline, active
   mission tracks, current push order, release/source policy, acceptance gates,

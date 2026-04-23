@@ -79,6 +79,23 @@ These are already established and must stay intact while new work lands:
 - current multicontext baseline:
   real backend panes, real detach/redock flow, and no fake demo-launch path
 
+## Established Capabilities
+
+These are no longer "future phase" items. They are already part of the live
+engine shape and should be treated as starting truth for the next passes:
+
+- one shared runtime/perf/logging/bootstrap spine instead of backend-local
+  bootstrap chaos
+- staged research import and reviewed promotion instead of letting planning
+  files rewrite repo truth directly
+- a project-centric launcher/editor shell rather than a demo-first launch path
+- generated game/tool project creation and generated project discovery
+- a real project/scripts dock with build, run, and diagnostics surfaces
+- a live Systems workspace with graph surfaces, backend ownership visibility,
+  and first time-control diagnostics already on-screen
+- explicit AI iteration packet staging and local-vs-committed AI artifact
+  separation
+
 ## Active Mission Tracks
 
 ### 1. Runtime And Multicontext Ownership
@@ -97,6 +114,8 @@ These are already established and must stay intact while new work lands:
   discovery truthful
 - continue replacing hardcoded built-in sample assumptions with project-owned
   runtime flow
+- keep the already-landed project/scripts shell honest instead of letting it
+  drift back toward placeholder tooling
 - keep the launcher centered on projects, contexts, settings, and updates
 - keep the editor centered on `Project`, `Scripts`, `Systems`, `AI`, and
   `Output`
@@ -105,6 +124,8 @@ These are already established and must stay intact while new work lands:
 
 - deepen pacing diagnostics, perf-select guidance, and hardware guidance in the
   Systems workspace
+- build on the graph/time surfaces that already exist instead of replacing them
+  with another temporary debug-only panel
 - continue carrying the shared time-system spine deeper into runtime and scene
   ownership
 - add replay/timeline hook points without pretending the full replay stack is
@@ -141,6 +162,8 @@ These are already established and must stay intact while new work lands:
 
 - standardize the full two-role runtime story:
   `EpochBot` plus local MCP/control
+- build on the current iteration-packet/capture roots already present in the
+  editor instead of inventing a second AI staging path
 - use MCP tool schemas as the canonical tool-bus contract and replay shape
 - separate raw observation capture from curated dataset/eval promotion
 - require build/runtime/log evidence before AI-assisted promotion
