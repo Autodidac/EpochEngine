@@ -10,6 +10,7 @@ env:
   SOLUTION_FILE_PATH: Engine.sln
   BUILD_CONFIGURATION: Release
   BUILD_PLATFORM: x64
+  VCPKG_TRIPLET: x64-windows
 
 permissions:
   contents: read
@@ -21,22 +22,43 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
+      - name: Resolve MSBuild
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\Current\Bin\MSBuild.exe
+          if (-not $msbuild) {
+            throw "MSBuild.exe was not found by vswhere."
+          }
+          "MSBUILD_EXE=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Set up NuGet
-        uses: NuGet/setup-nuget@v2
+      - name: Restore explicit vcpkg dependencies
+        shell: pwsh
+        run: |
+          $vcpkgRoot = $env:VCPKG_ROOT
+          if (-not $vcpkgRoot -or -not (Test-Path (Join-Path $vcpkgRoot 'vcpkg.exe'))) {
+            $vcpkgRoot = Join-Path $env:RUNNER_TEMP 'vcpkg'
+            git clone --depth 1 https://github.com/microsoft/vcpkg $vcpkgRoot
+            & (Join-Path $vcpkgRoot 'bootstrap-vcpkg.bat') -disableMetrics
+          }
 
-      - name: Restore NuGet packages
-        shell: powershell
-        run: nuget restore $env:SOLUTION_FILE_PATH
+          $installRoot = Join-Path $env:GITHUB_WORKSPACE 'Engine\vcpkg_installed'
+          & (Join-Path $vcpkgRoot 'vcpkg.exe') install `
+            --triplet $env:VCPKG_TRIPLET `
+            --x-install-root=$installRoot `
+            asio fmt glad glm vulkan-headers vulkan-loader sdl3 sdl3-image sfml raylib zlib
+
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build ConsoleApplication1
-        shell: powershell
+        shell: pwsh
         run: >
-          msbuild $env:SOLUTION_FILE_PATH
+          & "$env:MSBUILD_EXE" $env:SOLUTION_FILE_PATH
           /t:ConsoleApplication1
           /m:1
           /p:Configuration=$env:BUILD_CONFIGURATION
           /p:Platform=$env:BUILD_PLATFORM
+          /p:VcpkgEnableManifest=false
+          /p:VcpkgTriplet=$env:VCPKG_TRIPLET
+          /p:EpochExtraDefines=EPOCH_CI_HEADLESS_BUILD=1
           /clp:ErrorsOnly

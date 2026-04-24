@@ -11,6 +11,10 @@
 - Repaired the workflow syntax itself by removing invalid `matrix.shell`
   expressions from the `shell:` field and splitting the configure/build steps
   into explicit Windows and Linux branches that GitHub Actions accepts.
+- Removed the Node 20-backed MSBuild/NuGet setup actions from the Windows
+  workflow, resolved MSBuild through `vswhere`, and made the CI build restore
+  the required vcpkg headers/libs into `Engine/vcpkg_installed` explicitly
+  while disabling manifest mode for the hosted build.
 - Wired the project demo bootstrap path to the embedded Mini Sponza asset more
   honestly: the script host now exposes a queued model-load callback, the
   raylib preview backend can load and draw queued models, `editor_launcher`

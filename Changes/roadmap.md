@@ -96,6 +96,24 @@ engine shape and should be treated as starting truth for the next passes:
 - explicit AI iteration packet staging and local-vs-committed AI artifact
   separation
 
+## Phase Progress
+
+- [x] Phase 1: Repository structure, research intake, workspace placement,
+  initial build-path honesty, and documentation cleanup.
+- [x] Phase 2: Project-centric runtime shell, generated project creation,
+  project/script proof rows, launcher/editor separation, and baseline
+  Project/Scripts workspace flow.
+- [~] Phase 3: Systems workspace, time spine, backend ownership diagnostics,
+  and hosted/local build reliability.
+- [ ] Phase 4: GUI maturity, drag/drop, text-input smokes, editor polish, and
+  OpenGL startup-flicker/root-cause cleanup.
+- [ ] Phase 5: Two-role AI control loop, captured task packets, review gates,
+  dataset/eval promotion, and tool-schema replay.
+- [ ] Phase 6: Primitive/object authoring, procedural world spine, 2D vertical
+  slice, and material/cellular simulation boundaries.
+- [ ] Phase 7: Android-first mobile bring-up with one renderer, one input path,
+  one packaging story, and lifecycle stability.
+
 ## Active Mission Tracks
 
 ### 1. Runtime And Multicontext Ownership
