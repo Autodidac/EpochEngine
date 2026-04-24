@@ -651,6 +651,15 @@
 - Updated README, runtime/build/smoke/AI docs around the time-based engine direction, the GPU-driven baseline renderer plan, the later SpeedTree-like procedural/node authoring phase with future O2L integration, and the helper-first workflow that can use up to four parallel prompts per loaded local helper model.
 
 ## [Unreleased]
+- Split hosted CMake validation so Windows keeps the full vcpkg-backed `epoch`
+  build while Linux hosted lanes use a portable `epoch_ci_headless` compile/run
+  smoke that does not require GUI contexts or graphics packages.
+- Added the `HeadlessCI` Visual Studio smoke project and shared
+  `src/ci/headless_smoke.cpp` to verify the script-host ABI and path probes
+  without importing the graphics shared items.
+- Hardened the Windows OpenGL module fragments with a local WGL extension
+  fallback so CMake/MSVC builds no longer require `GL/wglext.h` just to scan the
+  OpenGL sources.
 - Added seed-object, archetype-type, category-mix, and visibility proof rows to
   the editor Project workspace so the primitive/object system now has a
   truthful in-editor baseline instead of living only in scene seed code.

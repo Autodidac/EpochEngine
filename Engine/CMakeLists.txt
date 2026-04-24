@@ -18,6 +18,33 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke target." OFF)
+
+add_executable(epoch_ci_headless
+    src/ci/headless_smoke.cpp
+)
+
+target_include_directories(epoch_ci_headless PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(epoch_ci_headless PRIVATE
+    EPOCH_MAIN_HEADLESS=1
+    EPOCH_CI_HEADLESS_BUILD=1
+)
+
+include(CTest)
+if(BUILD_TESTING)
+    add_test(
+        NAME epoch_ci_headless
+        COMMAND epoch_ci_headless ${CMAKE_SOURCE_DIR}
+    )
+endif()
+
+if(EPOCH_CI_HEADLESS_ONLY)
+    return()
+endif()
+
 set(EPOCH_VERSION_OVERRIDE_MAJOR "" CACHE STRING "Override engine version major for packaging builds")
 set(EPOCH_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override engine version minor for packaging builds")
 set(EPOCH_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override engine version revision for packaging builds")

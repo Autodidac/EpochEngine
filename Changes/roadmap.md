@@ -73,6 +73,10 @@ These are already established and must stay intact while new work lands:
   - tracked prebaked atlases separated from disposable dump output
 - repo-root CMake wrapper with an honest floor story
 - build-only CI direction instead of GUI smoke inside hosted runners
+- hosted CI split:
+  Windows keeps the full vcpkg-backed CMake/MSVC app build, while Linux hosted
+  lanes use the asset-light `epoch_ci_headless` smoke until the full graphics
+  dependency surface is reliable there
 - stable Windows/Linux packaged release path with explicit bootstrap/runtime
   distinction
 - launcher/editor separation and the current project-centric runtime shell

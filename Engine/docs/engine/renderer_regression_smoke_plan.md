@@ -26,3 +26,4 @@ This plan defines the minimum smoke coverage for Epoch's active render backends.
 - Run smoke coverage after backend startup/shutdown changes.
 - Run smoke coverage after atlas or menu overlay changes.
 - Treat Vulkan separately from the stable desktop backends until it graduates from experimental status.
+- Hosted CI may use `epoch_ci_headless` as a no-window canary, but that target is not renderer proof. It confirms the public script-host surface and repo path probes while full renderer confidence still comes from Windows full-stack builds and local runtime smoke.

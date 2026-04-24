@@ -24,10 +24,18 @@ jobs:
               python -m cmake -S "$env:GITHUB_WORKSPACE" -B "$env:GITHUB_WORKSPACE/build/ci"
               -G "Visual Studio 17 2022"
               -A x64
+              -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+              -DVCPKG_MANIFEST_MODE=OFF
+              -DVCPKG_INSTALLED_DIR="$env:GITHUB_WORKSPACE/Engine/vcpkg_installed"
+              -DVCPKG_TARGET_TRIPLET=x64-windows
+              -DEPOCH_REQUIRE_OPTIONAL_DEPENDENCIES=ON
             build_command: >
               python -m cmake --build "$env:GITHUB_WORKSPACE/build/ci"
               --config Release
               --target epoch
+            test_command: |
+              python -m cmake --build "$env:GITHUB_WORKSPACE/build/ci" --config Release --target epoch_ci_headless
+              python -m cmake -E chdir "$env:GITHUB_WORKSPACE/build/ci/Engine" ctest -C Release --output-on-failure
           - name: linux-gcc
             os: ubuntu-latest
             shell: bash
@@ -35,10 +43,14 @@ jobs:
               python -m cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/ci"
               -G Ninja
               -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+              -DEPOCH_CI_HEADLESS_ONLY=ON
             build_command: >
               python -m cmake --build "$GITHUB_WORKSPACE/build/ci"
               --config Release
-              --target epoch
+              --target epoch_ci_headless
+            test_command: >
+              python -m cmake -E chdir "$GITHUB_WORKSPACE/build/ci/Engine"
+              ctest --output-on-failure
           - name: linux-clang
             os: ubuntu-latest
             shell: bash
@@ -46,10 +58,14 @@ jobs:
               python -m cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/ci"
               -G Ninja
               -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+              -DEPOCH_CI_HEADLESS_ONLY=ON
             build_command: >
               python -m cmake --build "$GITHUB_WORKSPACE/build/ci"
               --config Release
-              --target epoch
+              --target epoch_ci_headless
+            test_command: >
+              python -m cmake -E chdir "$GITHUB_WORKSPACE/build/ci/Engine"
+              ctest --output-on-failure
 
     steps:
       - uses: actions/checkout@v5
@@ -90,6 +106,25 @@ jobs:
           cmake --version
           ninja --version
 
+      - name: Restore vcpkg dependencies for Windows full-stack CMake
+        if: matrix.name == 'windows-msvc'
+        shell: pwsh
+        run: |
+          $vcpkgRoot = $env:VCPKG_ROOT
+          if (-not $vcpkgRoot -or -not (Test-Path (Join-Path $vcpkgRoot 'vcpkg.exe'))) {
+            $vcpkgRoot = Join-Path $env:RUNNER_TEMP 'vcpkg'
+            git clone --depth 1 https://github.com/microsoft/vcpkg $vcpkgRoot
+            & (Join-Path $vcpkgRoot 'bootstrap-vcpkg.bat') -disableMetrics
+          }
+
+          $installRoot = Join-Path $env:GITHUB_WORKSPACE 'Engine\vcpkg_installed'
+          & (Join-Path $vcpkgRoot 'vcpkg.exe') install `
+            --triplet x64-windows `
+            --x-install-root=$installRoot `
+            asio fmt glad glm opengl-registry vulkan-headers vulkan-loader sdl3 sdl3-image sfml raylib zlib
+
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Configure (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -109,3 +144,13 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: ${{ matrix.build_command }}
+
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ${{ matrix.test_command }}
+
+      - name: Test (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: ${{ matrix.test_command }}

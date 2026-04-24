@@ -67,3 +67,7 @@ cmake --build --preset macos-release
 - Clean the build directory when you switch compilers or heavily rename module surfaces.
 - If you do not want presets, mirror the same flags manually with
   `cmake -S Engine -B ...` or use the repo-root wrapper with `cmake -S . -B ...`.
+- Hosted GitHub Actions split validation intentionally:
+  - Windows CMake keeps the full `epoch` target and restores explicit vcpkg dependencies.
+  - Linux CMake runs the portable `epoch_ci_headless` smoke target until the graphics/runtime dependency surface is hardened for hosted runners.
+  - The headless smoke target verifies public script-host ABI and filesystem probes without launching GUI contexts or requiring renderer packages.

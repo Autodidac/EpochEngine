@@ -84,11 +84,29 @@ module;
 #if defined(__has_include)
 #  if __has_include(<glad/glad_wgl.h>)
 #    include <glad/glad_wgl.h>
-#  else
+#    define EPOCH_HAS_WGL_EXTENSION_HEADERS 1
+#  elif __has_include(<GL/wglext.h>)
 #    include <GL/wglext.h>
+#    define EPOCH_HAS_WGL_EXTENSION_HEADERS 1
 #  endif
-#else
-#  include <GL/wglext.h>
+#endif
+
+#ifndef EPOCH_HAS_WGL_EXTENSION_HEADERS
+#  ifndef WGL_CONTEXT_MAJOR_VERSION_ARB
+#    define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+#  endif
+#  ifndef WGL_CONTEXT_MINOR_VERSION_ARB
+#    define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+#  endif
+#  ifndef WGL_CONTEXT_PROFILE_MASK_ARB
+#    define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+#  endif
+#  ifndef WGL_CONTEXT_CORE_PROFILE_BIT_ARB
+#    define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+#  endif
+#  ifndef PFNWGLCREATECONTEXTATTRIBSARBPROC
+using PFNWGLCREATECONTEXTATTRIBSARBPROC = HGLRC(WINAPI*)(HDC, HGLRC, const int*);
+#  endif
 #endif
 
 #elif defined(__linux__)
