@@ -1,4 +1,5 @@
 #include "aengine.config.hpp"
+#include "epoch/core/cpp_feature_probe.hpp"
 #include "epoch.runtime_bridge.hpp"
 #include "epoch.script_api.h"
 
@@ -66,6 +67,8 @@ int main(int argc, char** argv)
     static_assert(std::is_same_v<decltype(&epochnamespace::core::bridge::run_legacy_runtime),
         int (*)(bool)>,
         "The runtime bridge signature must remain stable for lightweight callers.");
+    static_assert(epoch::core::has_expected == (EPOCH_HAS_EXPECTED != 0),
+        "Feature probe macros and constexpr values must agree.");
 
     SmokeState state{};
     EpochScriptHost host{};

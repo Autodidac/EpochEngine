@@ -74,14 +74,118 @@ These are already established and must stay intact while new work lands:
 - repo-root CMake wrapper with an honest floor story
 - build-only CI direction instead of GUI smoke inside hosted runners
 - hosted CI split:
-  Windows keeps the full vcpkg-backed CMake/MSVC app build, while Linux hosted
-  lanes use the asset-light `epoch_ci_headless` smoke until the full graphics
-  dependency surface is reliable there
+  required Windows and Linux hosted lanes use the asset-light
+  `epoch_ci_headless` smoke until the full graphics dependency surface is
+  reliable there; full vcpkg-backed app builds remain local/release validation
+  work, not required hosted GUI checks
 - stable Windows/Linux packaged release path with explicit bootstrap/runtime
   distinction
 - launcher/editor separation and the current project-centric runtime shell
 - current multicontext baseline:
   real backend panes, real detach/redock flow, and no fake demo-launch path
+
+## C++26 Future-Ready Multi-Build Roadmap
+
+This section is a first-pass foundation. It does not make C++26 required and
+does not claim renderer, editor, atlas, or source-tree migration work is done.
+
+### Language Policy
+
+- C++23 remains the stable shipping baseline for packaged and developer builds.
+- C++26/latest is an optional validation lane for compiler readiness only.
+- Experimental C++26 features must be feature-probed before use and must not
+  become required by default.
+- New language experiments must keep fallback paths that compile in C++23.
+
+### Multi-Compiler Policy
+
+- Support MSVC, clang-cl, Clang, and GCC where practical.
+- Support Visual Studio, Ninja, and Unix Makefiles where practical.
+- CMake is authoritative for cross-platform builds and project-wide presets.
+- Visual Studio project/filter files must not drift from filesystem and CMake
+  whenever files are moved or added.
+- `CMakePresets.json` is the shared project preset layer.
+- `CMakeUserPresets.json` is for local developer overrides and must stay
+  ignored.
+
+### Backend Roles
+
+- OpenGL is the stable editor/runtime GPU backend for now.
+- The software renderer is the fallback and headless-validation backend.
+- Vulkan remains the future explicit graphics backend until runtime support is
+  fully stabilized.
+- Raylib, SDL, and SFML remain context/backend compatibility and validation
+  lanes, especially for docking, popout, and backend ownership checks.
+
+### Future Feature Gates
+
+- Probe contracts through feature-test macros before any syntax is used.
+- Probe static reflection through feature-test macros before any syntax is
+  used.
+- Probe `std::execution` availability instead of assuming the standard library
+  ships it.
+- Keep feature-test macro coverage visible in a small compatibility layer.
+- Add hardened compiler and standard-library settings per compiler instead of
+  applying one global flag set.
+
+### Asset Root Policy
+
+- Runtime asset lookup must resolve from the executable path, not the working
+  directory.
+- The resolver should walk upward from the executable directory and probe
+  inward for canonical repo and `Engine/assets` layouts.
+- Visual Studio/MSBuild `Debug` and `Release` output directories must work
+  without cwd assumptions.
+- Hardcoded machine-local paths are not allowed.
+- The resolved asset root should be logged once.
+- Explicit override by CLI, environment, or config must win before automatic
+  resolution.
+
+### Atlas Policy
+
+- Later cleanup must classify source atlas assets, generated atlases,
+  runtime/cache atlases, and test/demo atlases.
+- Source atlases belong under the canonical asset tree.
+- Generated/cache atlases must not pollute source directories.
+- Generated/cache atlases must be ignored.
+- Runtime behavior must not depend on random working directories.
+
+### Deferred Heavy Work
+
+- Verify workspace placement and move only if every reference is known.
+- Harden the canonical asset resolver with `std::filesystem`, result caching,
+  override support, and hard-fail diagnostics.
+- Normalize the atlas pipeline and generated/cache ignore policy.
+- Continue `src/` and `include/` cleanup without broad blind moves.
+- Clarify module ownership and avoid globbing experimental modules into active
+  builds by accident.
+- Keep MSVC project/filter entries synchronized with filesystem and CMake when
+  files are moved.
+- Stabilize GUI docking/popout behavior and remaining OpenGL flicker root
+  causes.
+- Complete primitive/object authoring and runtime surfaces.
+- Expand CI/test automation without launching GUI windows on hosted runners.
+- Harden packaging/install asset behavior for runtime releases.
+
+### First-Pass Audit Notes
+
+- Workspace placement is currently canonical at
+  `Engine/examples/ConsoleApplication1/workspace`; this pass did not move it.
+- Asset lookup already has an executable-root resolver and environment
+  overrides in `core.path`, but scattered legacy relative asset requests such
+  as `assets/games/...` and backend-specific fallback probes still need one
+  resolver-only cleanup pass.
+- Atlas state is mixed but classified: source/demo assets live under the
+  example/canonical asset trees, tracked prebaked atlases live under
+  `Engine/examples/ConsoleApplication1/atlases`, generated dump output under
+  `Engine/examples/ConsoleApplication1/atlas_dump` is ignored, and runtime
+  copies under `x64/` are build output.
+- MSVC project/filter files were only touched for newly added files in this
+  pass; future file moves must update filesystem, CMake, `.vcxproj`,
+  `.vcxitems`, and `.filters` together.
+- Hosted CI should remain headless/build-only until GUI/window tests have a
+  deterministic runner-safe harness; no explicit Node 20 setup remains in the
+  checked workflows.
 
 ## Established Capabilities
 

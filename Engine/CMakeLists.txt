@@ -18,7 +18,116 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(CheckCXXCompilerFlag)
+
+option(EPOCH_ENABLE_CPP26_LANE "Enable optional C++26/latest validation flags for this build." OFF)
+option(EPOCH_STRICT_WARNINGS "Enable stricter compiler warnings for Epoch targets." OFF)
+option(EPOCH_WARNINGS_AS_ERRORS "Treat warnings as errors when strict warnings are enabled." OFF)
+option(EPOCH_ENABLE_SANITIZERS "Enable supported sanitizer flags for compatible compilers." OFF)
 option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke target." OFF)
+
+function(epoch_is_msvc_frontend out_var)
+    if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+        set(${out_var} TRUE PARENT_SCOPE)
+    else()
+        set(${out_var} FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(epoch_apply_cxx_dialect target_name)
+    if(NOT TARGET ${target_name})
+        message(FATAL_ERROR "epoch_apply_cxx_dialect called for missing target: ${target_name}")
+    endif()
+
+    set_target_properties(${target_name} PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+
+    if(EPOCH_ENABLE_CPP26_LANE)
+        epoch_is_msvc_frontend(_epoch_msvc_frontend)
+        if(_epoch_msvc_frontend)
+            target_compile_options(${target_name} PRIVATE /std:c++latest /Zc:__cplusplus /permissive-)
+        elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+            check_cxx_compiler_flag("-std=c++2c" EPOCH_COMPILER_SUPPORTS_STDCXX2C)
+            if(EPOCH_COMPILER_SUPPORTS_STDCXX2C)
+                target_compile_options(${target_name} PRIVATE -std=c++2c)
+            else()
+                message(FATAL_ERROR
+                    "EPOCH_ENABLE_CPP26_LANE=ON but ${CMAKE_CXX_COMPILER_ID} "
+                    "${CMAKE_CXX_COMPILER_VERSION} does not accept -std=c++2c.")
+            endif()
+        else()
+            message(FATAL_ERROR
+                "EPOCH_ENABLE_CPP26_LANE=ON is not defined for compiler "
+                "${CMAKE_CXX_COMPILER_ID}.")
+        endif()
+    endif()
+endfunction()
+
+function(epoch_apply_warnings target_name)
+    if(NOT TARGET ${target_name})
+        message(FATAL_ERROR "epoch_apply_warnings called for missing target: ${target_name}")
+    endif()
+
+    if(NOT EPOCH_STRICT_WARNINGS)
+        return()
+    endif()
+
+    epoch_is_msvc_frontend(_epoch_msvc_frontend)
+    if(_epoch_msvc_frontend)
+        target_compile_options(${target_name} PRIVATE /W4 /permissive-)
+        if(EPOCH_WARNINGS_AS_ERRORS)
+            target_compile_options(${target_name} PRIVATE /WX)
+        endif()
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
+        if(EPOCH_WARNINGS_AS_ERRORS)
+            target_compile_options(${target_name} PRIVATE -Werror)
+        endif()
+    endif()
+endfunction()
+
+function(epoch_apply_sanitizers target_name)
+    if(NOT TARGET ${target_name})
+        message(FATAL_ERROR "epoch_apply_sanitizers called for missing target: ${target_name}")
+    endif()
+
+    if(NOT EPOCH_ENABLE_SANITIZERS)
+        return()
+    endif()
+
+    epoch_is_msvc_frontend(_epoch_msvc_frontend)
+    if(_epoch_msvc_frontend)
+        message(STATUS "EPOCH_ENABLE_SANITIZERS requested, but MSVC sanitizer flags are not enabled by this first-pass foundation.")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(${target_name} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_options(${target_name} PRIVATE -fsanitize=address,undefined)
+    else()
+        message(STATUS "EPOCH_ENABLE_SANITIZERS requested, but ${CMAKE_CXX_COMPILER_ID} is not configured for sanitizers.")
+    endif()
+endfunction()
+
+function(epoch_print_build_summary)
+    set(_epoch_active_backends "headless-only")
+    if(DEFINED EPOCH_RAYLIB_ACTIVE)
+        set(_epoch_active_backends
+            "Raylib=${EPOCH_RAYLIB_ACTIVE}; SDL=${EPOCH_SDL_ACTIVE}; SFML=${EPOCH_SFML_ACTIVE}; Vulkan=${EPOCH_VULKAN_ACTIVE}; OpenGL=${EPOCH_OPENGL_ACTIVE}; Software=${EPOCH_SOFTWARE_RENDERER_ACTIVE}")
+    endif()
+
+    message(STATUS "Epoch build summary")
+    message(STATUS "  Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+    message(STATUS "  Generator: ${CMAKE_GENERATOR}")
+    message(STATUS "  System: ${CMAKE_SYSTEM_NAME}")
+    message(STATUS "  C++ baseline: ${CMAKE_CXX_STANDARD}")
+    message(STATUS "  C++26/latest lane: ${EPOCH_ENABLE_CPP26_LANE}")
+    message(STATUS "  Strict warnings: ${EPOCH_STRICT_WARNINGS}")
+    message(STATUS "  Warnings as errors: ${EPOCH_WARNINGS_AS_ERRORS}")
+    message(STATUS "  Sanitizers: ${EPOCH_ENABLE_SANITIZERS}")
+    message(STATUS "  CI/headless-only: ${EPOCH_CI_HEADLESS_ONLY}")
+    message(STATUS "  Active backends: ${_epoch_active_backends}")
+endfunction()
 
 add_executable(epoch_ci_headless
     src/ci/headless_smoke.cpp
@@ -33,6 +142,10 @@ target_compile_definitions(epoch_ci_headless PRIVATE
     EPOCH_CI_HEADLESS_BUILD=1
 )
 
+epoch_apply_cxx_dialect(epoch_ci_headless)
+epoch_apply_warnings(epoch_ci_headless)
+epoch_apply_sanitizers(epoch_ci_headless)
+
 include(CTest)
 if(BUILD_TESTING)
     add_test(
@@ -42,6 +155,7 @@ if(BUILD_TESTING)
 endif()
 
 if(EPOCH_CI_HEADLESS_ONLY)
+    epoch_print_build_summary()
     return()
 endif()
 
@@ -323,12 +437,11 @@ else()
     message(WARNING "glslangValidator not found; Vulkan SPIR-V shaders will not be generated.")
 endif()
 
-if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    # Modern MSVC releases provide standard module support without the
-    # deprecated /experimental:module switch; keep the latest standard
-    # mode enabled so BMI emission stays aligned with scan-for-modules.
-    target_compile_options(epoch PRIVATE /std:c++latest)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+epoch_apply_cxx_dialect(epoch)
+epoch_apply_warnings(epoch)
+epoch_apply_sanitizers(epoch)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # GCC 14+ requires the Modules TS flag so the dyn-dep scanner emits
     # BMI build rules correctly when paired with Ninja or Makefiles.
     target_compile_options(epoch PRIVATE -fmodules-ts)
@@ -337,9 +450,11 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # GCC-specific Modules TS switch is not accepted by clang-scan-deps.
 endif()
 
-if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(epoch_renderer_smoke PRIVATE /std:c++latest)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+epoch_apply_cxx_dialect(epoch_renderer_smoke)
+epoch_apply_warnings(epoch_renderer_smoke)
+epoch_apply_sanitizers(epoch_renderer_smoke)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(epoch_renderer_smoke PRIVATE -fmodules-ts)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # No extra module flag is needed for Clang here.
@@ -791,6 +906,8 @@ if(UNIX AND NOT APPLE)
         target_link_libraries(epoch PRIVATE ${X11_Xrandr_LIB})
     endif()
 endif()
+
+epoch_print_build_summary()
 
 find_package(Doxygen QUIET)
 

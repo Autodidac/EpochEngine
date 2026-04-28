@@ -213,6 +213,9 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch\core\cpp_feature_probe.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.script_api.h">
       <Filter>Header Files</Filter>
     </ClInclude>

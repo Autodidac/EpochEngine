@@ -31,6 +31,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.api_types.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.common.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch\core\cpp_feature_probe.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.script_api.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\main.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\_epoch.stl_types.hpp" />

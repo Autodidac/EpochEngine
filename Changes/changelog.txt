@@ -1,6 +1,16 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Added the first-pass C++26 future-ready build foundation while keeping C++23
+  as the default baseline: root CMake presets now cover MSVC, clang-cl, Clang,
+  GCC, Visual Studio, Ninja, Unix Makefiles where practical, CI headless, and
+  optional C++26/latest validation lanes.
+- Added the portable C++ feature-probe header and wired the headless smoke path
+  to compile it in C++23 mode, exposing contracts, reflection, execution,
+  expected, and stacktrace availability without requiring experimental syntax.
+- Moved required hosted CMake/MSBuild validation back to asset-light headless
+  builds so GitHub runners do not need the full graphics stack to prove the
+  stable script-host/path-probe surface.
 - Hardened the GitHub CMake workflow so it upgrades `pip`, installs the pinned
   `cmake`/`ninja` toolchain in a separate step, and explicitly exports the
   Python tool-shim directories onto `PATH` before configure/build on both
@@ -651,9 +661,10 @@
 - Updated README, runtime/build/smoke/AI docs around the time-based engine direction, the GPU-driven baseline renderer plan, the later SpeedTree-like procedural/node authoring phase with future O2L integration, and the helper-first workflow that can use up to four parallel prompts per loaded local helper model.
 
 ## [Unreleased]
-- Split hosted CMake validation so Windows keeps the full vcpkg-backed `epoch`
-  build while Linux hosted lanes use a portable `epoch_ci_headless` compile/run
-  smoke that does not require GUI contexts or graphics packages.
+- Split hosted validation so required Windows and Linux CMake lanes use the
+  portable `epoch_ci_headless` compile/run smoke, while full vcpkg-backed
+  graphics builds remain local/release validation until hosted graphics
+  dependencies are hardened.
 - Added the `HeadlessCI` Visual Studio smoke project and shared
   `src/ci/headless_smoke.cpp` to verify the script-host ABI and path probes
   without importing the graphics shared items.

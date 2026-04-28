@@ -46,6 +46,7 @@ vcpkg_installed/
 bin/*
 Bin/*
 .vs/
+*.vcxproj.user
 backup/
 app1/
 /updater/Cpp20_Ultimate_Project_Updater/
@@ -55,6 +56,8 @@ update.exe
 
 *.ninja_log
 ninja.zip
+CMakeUserPresets.json
+Engine/CMakeUserPresets.json
 
 *.pdb
 *.idb

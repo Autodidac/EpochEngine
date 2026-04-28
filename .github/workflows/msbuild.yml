@@ -7,10 +7,9 @@ on:
     branches: ["main"]
 
 env:
-  SOLUTION_FILE_PATH: Engine.sln
+  PROJECT_FILE_PATH: Engine\examples\HeadlessCI\HeadlessCI.vcxproj
   BUILD_CONFIGURATION: Release
   BUILD_PLATFORM: x64
-  VCPKG_TRIPLET: x64-windows
 
 permissions:
   contents: read
@@ -32,33 +31,23 @@ jobs:
           }
           "MSBUILD_EXE=$msbuild" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Restore explicit vcpkg dependencies
-        shell: pwsh
-        run: |
-          $vcpkgRoot = $env:VCPKG_ROOT
-          if (-not $vcpkgRoot -or -not (Test-Path (Join-Path $vcpkgRoot 'vcpkg.exe'))) {
-            $vcpkgRoot = Join-Path $env:RUNNER_TEMP 'vcpkg'
-            git clone --depth 1 https://github.com/microsoft/vcpkg $vcpkgRoot
-            & (Join-Path $vcpkgRoot 'bootstrap-vcpkg.bat') -disableMetrics
-          }
-
-          $installRoot = Join-Path $env:GITHUB_WORKSPACE 'Engine\vcpkg_installed'
-          & (Join-Path $vcpkgRoot 'vcpkg.exe') install `
-            --triplet $env:VCPKG_TRIPLET `
-            --x-install-root=$installRoot `
-            asio fmt glad glm vulkan-headers vulkan-loader sdl3 sdl3-image sfml raylib zlib
-
-          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Build ConsoleApplication1
+      - name: Build HeadlessCI
         shell: pwsh
         run: >
-          & "$env:MSBUILD_EXE" $env:SOLUTION_FILE_PATH
-          /t:ConsoleApplication1
+          & "$env:MSBUILD_EXE" $env:PROJECT_FILE_PATH
           /m:1
           /p:Configuration=$env:BUILD_CONFIGURATION
           /p:Platform=$env:BUILD_PLATFORM
-          /p:VcpkgEnableManifest=false
-          /p:VcpkgTriplet=$env:VCPKG_TRIPLET
           /p:EpochExtraDefines=EPOCH_CI_HEADLESS_BUILD=1
           /clp:ErrorsOnly
+
+      - name: Run HeadlessCI
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path $env:GITHUB_WORKSPACE -Filter HeadlessCI.exe -Recurse |
+            Sort-Object FullName |
+            Select-Object -First 1
+          if (-not $exe) {
+            throw "HeadlessCI.exe was not produced."
+          }
+          & $exe.FullName $env:GITHUB_WORKSPACE

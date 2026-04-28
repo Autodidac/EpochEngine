@@ -10,4 +10,6 @@ if(CMAKE_VERSION VERSION_LESS 3.28)
         "CMake build path.")
 endif()
 
+include(CTest)
+
 add_subdirectory(Engine)

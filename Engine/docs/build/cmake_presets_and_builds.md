@@ -1,9 +1,9 @@
 # CMake Presets And Builds
 
-`Engine/CMakePresets.json` is the main preset entry point. The repository root
-also has a thin wrapper `CMakeLists.txt` for CI and simple root-level
-configure/build commands, but the Engine presets remain the authoritative local
-entry path.
+The repository-root `CMakePresets.json` is the shared cross-compiler preset
+layer for CI and portable local validation. `Engine/CMakePresets.json` remains
+available for existing engine-local workflows, but cross-platform build truth
+should be kept synchronized through the root wrapper.
 
 ## Prerequisites
 
@@ -17,40 +17,35 @@ entry path.
 ## Windows (MSVC)
 
 ```powershell
-Set-Location Engine
-cmake --preset x64-release
-cmake --build --preset x64-release
+cmake --preset windows-msvc-release
+cmake --build --preset windows-msvc-release
 ```
 
 Available presets:
 
-- `x64-debug`
-- `x64-release`
-- `x86-debug`
-- `x86-release`
+- `windows-msvc-debug`
+- `windows-msvc-release`
+- `windows-msvc-cpp26-debug`
 
 ## Windows (ClangCL)
 
 ```powershell
-Set-Location Engine
-cmake --preset clang-x64-release
-cmake --build --preset clang-x64-release
+cmake --preset windows-clangcl-debug
+cmake --build --preset windows-clangcl-debug
 ```
 
 ## Windows (MinGW/GCC)
 
 ```powershell
-Set-Location Engine
-cmake --preset gcc-x64-release
-cmake --build --preset gcc-x64-release
+cmake --preset ninja-gcc-debug
+cmake --build --preset ninja-gcc-debug
 ```
 
 ## Linux
 
 ```bash
-cd Engine
-cmake --preset Ninja-Release
-cmake --build --preset Ninja-Release
+cmake --preset ninja-clang-debug
+cmake --build --preset ninja-clang-debug
 ```
 
 ## macOS
@@ -64,10 +59,13 @@ cmake --build --preset macos-release
 ## Notes
 
 - Presets already enable module scanning and set up the expected binary/install directories.
+- C++23 remains the default baseline; `*-cpp26-*` presets are optional
+  `/std:c++latest` or `-std=c++2c` validation lanes only.
 - Clean the build directory when you switch compilers or heavily rename module surfaces.
 - If you do not want presets, mirror the same flags manually with
   `cmake -S Engine -B ...` or use the repo-root wrapper with `cmake -S . -B ...`.
 - Hosted GitHub Actions split validation intentionally:
-  - Windows CMake keeps the full `epoch` target and restores explicit vcpkg dependencies.
-  - Linux CMake runs the portable `epoch_ci_headless` smoke target until the graphics/runtime dependency surface is hardened for hosted runners.
+  - Required Windows and Linux hosted CMake jobs build and test `epoch_ci_headless`.
+  - The MSBuild hosted job builds and runs the `HeadlessCI` Visual Studio project.
+  - Full graphics/editor builds remain local/release validation until the hosted graphics/runtime dependency surface is hardened.
   - The headless smoke target verifies public script-host ABI and filesystem probes without launching GUI contexts or requiring renderer packages.

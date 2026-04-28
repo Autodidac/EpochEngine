@@ -1,0 +1,241 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "repo-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_SCAN_FOR_MODULES": "ON"
+      }
+    },
+    {
+      "name": "windows-visual-studio-base",
+      "hidden": true,
+      "inherits": "repo-base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-msvc-debug",
+      "displayName": "Windows MSVC Debug",
+      "inherits": "windows-visual-studio-base"
+    },
+    {
+      "name": "windows-msvc-release",
+      "displayName": "Windows MSVC Release",
+      "inherits": "windows-visual-studio-base"
+    },
+    {
+      "name": "windows-msvc-cpp26-debug",
+      "displayName": "Windows MSVC Debug C++26/latest validation",
+      "inherits": "windows-visual-studio-base",
+      "cacheVariables": {
+        "EPOCH_ENABLE_CPP26_LANE": "ON"
+      }
+    },
+    {
+      "name": "windows-clangcl-base",
+      "hidden": true,
+      "inherits": "windows-visual-studio-base",
+      "toolset": {
+        "value": "ClangCL",
+        "strategy": "set"
+      }
+    },
+    {
+      "name": "windows-clangcl-debug",
+      "displayName": "Windows clang-cl Debug",
+      "inherits": "windows-clangcl-base"
+    },
+    {
+      "name": "windows-clangcl-cpp26-debug",
+      "displayName": "Windows clang-cl Debug C++26/latest validation",
+      "inherits": "windows-clangcl-base",
+      "cacheVariables": {
+        "EPOCH_ENABLE_CPP26_LANE": "ON"
+      }
+    },
+    {
+      "name": "ninja-clang-debug",
+      "displayName": "Ninja Clang Debug",
+      "inherits": "repo-base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "ninja-clang-cpp26-debug",
+      "displayName": "Ninja Clang Debug C++26/latest validation",
+      "inherits": "ninja-clang-debug",
+      "cacheVariables": {
+        "EPOCH_ENABLE_CPP26_LANE": "ON"
+      }
+    },
+    {
+      "name": "ninja-gcc-debug",
+      "displayName": "Ninja GCC Debug",
+      "inherits": "repo-base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "ninja-gcc-cpp26-debug",
+      "displayName": "Ninja GCC Debug C++26/latest validation",
+      "inherits": "ninja-gcc-debug",
+      "cacheVariables": {
+        "EPOCH_ENABLE_CPP26_LANE": "ON"
+      }
+    },
+    {
+      "name": "unix-makefiles-gcc-debug",
+      "displayName": "Unix Makefiles GCC Debug",
+      "inherits": "repo-base",
+      "generator": "Unix Makefiles",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "unix-makefiles-gcc-cpp26-debug",
+      "displayName": "Unix Makefiles GCC Debug C++26/latest validation",
+      "inherits": "unix-makefiles-gcc-debug",
+      "cacheVariables": {
+        "EPOCH_ENABLE_CPP26_LANE": "ON"
+      }
+    },
+    {
+      "name": "ci-headless",
+      "displayName": "CI Headless Smoke",
+      "inherits": "repo-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "EPOCH_CI_HEADLESS_ONLY": "ON"
+      }
+    },
+    {
+      "name": "ci-headless-cpp26",
+      "displayName": "CI Headless Smoke C++26/latest validation",
+      "inherits": "ci-headless",
+      "cacheVariables": {
+        "EPOCH_ENABLE_CPP26_LANE": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-msvc-debug", "configurePreset": "windows-msvc-debug", "configuration": "Debug" },
+    { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release", "configuration": "Release" },
+    { "name": "windows-msvc-cpp26-debug", "configurePreset": "windows-msvc-cpp26-debug", "configuration": "Debug" },
+    { "name": "windows-clangcl-debug", "configurePreset": "windows-clangcl-debug", "configuration": "Debug" },
+    { "name": "windows-clangcl-cpp26-debug", "configurePreset": "windows-clangcl-cpp26-debug", "configuration": "Debug" },
+    { "name": "ninja-clang-debug", "configurePreset": "ninja-clang-debug" },
+    { "name": "ninja-clang-cpp26-debug", "configurePreset": "ninja-clang-cpp26-debug" },
+    { "name": "ninja-gcc-debug", "configurePreset": "ninja-gcc-debug" },
+    { "name": "ninja-gcc-cpp26-debug", "configurePreset": "ninja-gcc-cpp26-debug" },
+    { "name": "unix-makefiles-gcc-debug", "configurePreset": "unix-makefiles-gcc-debug" },
+    { "name": "unix-makefiles-gcc-cpp26-debug", "configurePreset": "unix-makefiles-gcc-cpp26-debug" },
+    { "name": "ci-headless", "configurePreset": "ci-headless", "configuration": "Release" },
+    { "name": "ci-headless-cpp26", "configurePreset": "ci-headless-cpp26", "configuration": "Release" }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-msvc-debug",
+      "configurePreset": "windows-msvc-debug",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "windows-msvc-release",
+      "configurePreset": "windows-msvc-release",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "windows-msvc-cpp26-debug",
+      "configurePreset": "windows-msvc-cpp26-debug",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "windows-clangcl-debug",
+      "configurePreset": "windows-clangcl-debug",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "windows-clangcl-cpp26-debug",
+      "configurePreset": "windows-clangcl-cpp26-debug",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ninja-clang-debug",
+      "configurePreset": "ninja-clang-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ninja-clang-cpp26-debug",
+      "configurePreset": "ninja-clang-cpp26-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ninja-gcc-debug",
+      "configurePreset": "ninja-gcc-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ninja-gcc-cpp26-debug",
+      "configurePreset": "ninja-gcc-cpp26-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "unix-makefiles-gcc-debug",
+      "configurePreset": "unix-makefiles-gcc-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "unix-makefiles-gcc-cpp26-debug",
+      "configurePreset": "unix-makefiles-gcc-cpp26-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci-headless",
+      "configurePreset": "ci-headless",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci-headless-cpp26",
+      "configurePreset": "ci-headless-cpp26",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
