@@ -133,6 +133,10 @@ add_executable(epoch_ci_headless
     src/ci/headless_smoke.cpp
 )
 
+set_target_properties(epoch_ci_headless PROPERTIES
+    CXX_SCAN_FOR_MODULES OFF
+)
+
 target_include_directories(epoch_ci_headless PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )

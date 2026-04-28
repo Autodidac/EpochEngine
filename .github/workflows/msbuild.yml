@@ -7,6 +7,7 @@ on:
     branches: ["main"]
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   PROJECT_FILE_PATH: Engine\examples\HeadlessCI\HeadlessCI.vcxproj
   BUILD_CONFIGURATION: Release
   BUILD_PLATFORM: x64
