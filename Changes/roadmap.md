@@ -202,6 +202,14 @@ engine shape and should be treated as starting truth for the next passes:
 - a live Systems workspace with graph surfaces, backend ownership visibility,
   first time-control diagnostics, and build-confidence/feature-probe status
   already on-screen
+- an editor-owned continuous AI build lane that watches active project/script
+  evidence, queues one child-project build at a time, and feeds successful
+  build artifacts back into staged AI packets for verifier/gate review
+- an AI tool harness that builds/runs the selected script through the real
+  editor host, captures before/after editor state, records MCP evidence, and
+  stages packets from successful tool actions
+- a committed AI factory-loop contract that records the planner, executor,
+  builder, verifier, and gate handoff rules for future replay/training work
 - explicit AI iteration packet staging and local-vs-committed AI artifact
   separation
 - AI iteration packets now carry review-gate state, evidence readiness, and
@@ -263,6 +271,8 @@ engine shape and should be treated as starting truth for the next passes:
   Systems workspace
 - keep compiler/language/CI validation status visible in Systems so build
   confidence stays tied to the live editor surface
+- use that build-confidence baseline to feed the AI workspace with current
+  build logs/output before task packets are promoted toward Phase 5 replay
 - build on the graph/time surfaces that already exist instead of replacing them
   with another temporary debug-only panel
 - continue carrying the shared time-system spine deeper into runtime and scene
@@ -310,6 +320,12 @@ engine shape and should be treated as starting truth for the next passes:
   editor instead of inventing a second AI staging path
 - make staged packets the first durable handoff between planner/executor work
   and builder/verifier review, including loop-stage and gate-state metadata
+- keep continuous AI builds nonblocking and single-flight so the engine can
+  produce fresh evidence while preserving explicit review gates
+- train from real editor tool actions by capturing before/after state from the
+  selected script harness before promoting any dataset/eval records
+- treat `Engine/ai/factory/continuous_build_loop.json` as the current contract
+  for the self-improvement factory until a replay runner can enforce it
 - use MCP tool schemas as the canonical tool-bus contract and replay shape
 - separate raw observation capture from curated dataset/eval promotion
 - require build/runtime/log evidence before AI-assisted promotion

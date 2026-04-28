@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <type_traits>
@@ -58,6 +59,33 @@ namespace
         // Hosted CI must stay asset-light, so this is an informational probe.
         return true;
     }
+
+    bool RequiredFactoryContractProbe(const std::filesystem::path& repoRoot)
+    {
+        const auto contractPath = repoRoot / "Engine" / "ai" / "factory" / "continuous_build_loop.json";
+        std::ifstream in(contractPath);
+        if (!in)
+        {
+            std::cerr << "[epoch-ci] missing AI factory contract: " << contractPath.string() << '\n';
+            return false;
+        }
+
+        const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        const bool hasPlanner = content.find("\"stage\": \"planner\"") != std::string::npos;
+        const bool hasBuilder = content.find("\"stage\": \"builder\"") != std::string::npos;
+        const bool hasVerifier = content.find("\"stage\": \"verifier\"") != std::string::npos;
+        const bool hasGate = content.find("\"stage\": \"gate\"") != std::string::npos;
+        const bool hasNoBlindWriteThrough =
+            content.find("Never allow blind repo write-through") != std::string::npos;
+
+        std::cout << "[epoch-ci] AI factory contract: " << contractPath.string() << '\n';
+        std::cout << "[epoch-ci] AI factory stages present: "
+            << (hasPlanner && hasBuilder && hasVerifier && hasGate) << '\n';
+        std::cout << "[epoch-ci] AI factory gate policy present: "
+            << hasNoBlindWriteThrough << '\n';
+
+        return hasPlanner && hasBuilder && hasVerifier && hasGate && hasNoBlindWriteThrough;
+    }
 }
 
 int main(int argc, char** argv)
@@ -85,8 +113,9 @@ int main(int argc, char** argv)
         ? std::filesystem::path(argv[1])
         : std::filesystem::current_path();
     OptionalPathProbe(repoRoot);
+    const bool factoryContractReady = RequiredFactoryContractProbe(repoRoot);
 
-    if (!state.logged || !state.queuedModel || queued != 1)
+    if (!state.logged || !state.queuedModel || queued != 1 || !factoryContractReady)
     {
         std::cerr << "[epoch-ci] script host smoke failed\n";
         return 1;

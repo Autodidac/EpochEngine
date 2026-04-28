@@ -244,6 +244,14 @@ namespace epochnamespace
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
             SystemsSurfaceState systems{};
+            bool aiContinuousBuildEnabled{ false };
+            bool aiContinuousBuildStageOnNextFrame{ false };
+            std::optional<std::future<EditorProjectBuildResult>> aiContinuousBuildPending{};
+            std::string aiContinuousBuildFingerprint{};
+            std::string aiContinuousBuildStatus{ "Continuous AI build is off." };
+            std::size_t aiContinuousBuildRunCount{ 0 };
+            std::string aiToolHarnessStatus{ "AI tool harness has not run yet." };
+            std::size_t aiToolHarnessRunCount{ 0 };
         };
 
         struct ContextPtrHash
@@ -989,6 +997,32 @@ namespace epochnamespace
             return rotated;
         }
 
+        [[nodiscard]] std::string editor_tooling_state_summary(const EditorState& state)
+        {
+            std::size_t mutableEntities = 0;
+            float yawSum = 0.0f;
+            std::string firstMutable = "(none)";
+            for (const auto& entity : state.entities)
+            {
+                if (entity.editorOnly || entity.type == "Level" || entity.type == "Camera")
+                    continue;
+
+                if (mutableEntities == 0)
+                    firstMutable = entity.name + " yaw=" + std::format("{:.1f}", entity.rotation[1]);
+                yawSum += entity.rotation[1];
+                ++mutableEntities;
+            }
+
+            return std::format(
+                "project={} script={} entities={} mutable={} first_mutable={} yaw_sum={:.1f}",
+                state.projectId,
+                state.activeScript,
+                state.entities.size(),
+                mutableEntities,
+                firstMutable,
+                yawSum);
+        }
+
         void script_log_callback(void* userData, const char* message)
         {
             const auto* ctx = static_cast<const core::Context*>(userData);
@@ -1173,6 +1207,49 @@ namespace epochnamespace
         [[nodiscard]] std::filesystem::path project_build_log_path(std::string_view projectRoot)
         {
             return std::filesystem::path{ projectRoot } / "build" / "logs" / "build-debug-x64.log";
+        }
+
+        [[nodiscard]] std::string ai_build_path_stamp(const std::filesystem::path& path)
+        {
+            if (path.empty())
+                return "(empty)#missing";
+
+            std::error_code ec;
+            const auto normalized = std::filesystem::absolute(path, ec).lexically_normal().generic_string();
+            ec.clear();
+            if (!std::filesystem::exists(path, ec) || ec)
+                return normalized + "#missing";
+
+            const auto writeTime = std::filesystem::last_write_time(path, ec);
+            if (ec)
+                return normalized + "#time-error";
+
+            std::string stamp = normalized + "#" + std::to_string(writeTime.time_since_epoch().count());
+            ec.clear();
+            if (std::filesystem::is_regular_file(path, ec) && !ec)
+            {
+                ec.clear();
+                const auto size = std::filesystem::file_size(path, ec);
+                if (!ec)
+                    stamp += "#" + std::to_string(size);
+            }
+            return stamp;
+        }
+
+        [[nodiscard]] std::string ai_continuous_build_fingerprint(
+            const EditorState& editor,
+            const std::string& activeScriptSource,
+            const std::filesystem::path& pathsManifest)
+        {
+            const std::filesystem::path root{ editor.projectRoot };
+            std::string fingerprint = editor.projectId + "|" + editor.projectRoot + "|" + editor.activeScript;
+            fingerprint += "|" + ai_build_path_stamp(project_entry_source_path(editor.projectRoot));
+            fingerprint += "|" + ai_build_path_stamp(activeScriptSource);
+            fingerprint += "|" + ai_build_path_stamp(editor.projectManifest);
+            fingerprint += "|" + ai_build_path_stamp(pathsManifest);
+            fingerprint += "|" + ai_build_path_stamp(project_windows_build_script_path(editor.projectRoot));
+            fingerprint += "|" + ai_build_path_stamp(root / "scripts");
+            return fingerprint;
         }
 
         [[nodiscard]] std::string display_project_path(const std::filesystem::path& path)
@@ -2089,6 +2166,7 @@ namespace epochnamespace
             gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
             gui::property_row("[ai] Local endpoint", manifest.endpoint);
             gui::property_row("[ai] MCP/control manifest", manifest.manifest_path);
+            gui::property_row("[ai] Factory contract", "Engine/ai/factory/continuous_build_loop.json");
             gui::property_row("[ai] Iteration packets", epoch::ai::iteration_packet_root());
             gui::property_row("[ai] Research staging", epoch::ai::research_staging_root());
             gui::property_row("[ai] Curated datasets", training.curated_dataset_root);
@@ -2124,6 +2202,8 @@ namespace epochnamespace
                 "Iteration packets now stage the current project, scene, script, capture roots, model manifest, and concrete evidence paths into "
                 + epoch::ai::iteration_packet_root()
                 + " so the control loop has something explicit to build, verify, score, and either promote or discard.";
+            const std::string continuousBuildGuidance =
+                "Continuous AI build watches the active project entry/script/manifest evidence, queues one child-project build at a time, and stages a fresh packet after a successful build so the AI loop can verify from current artifacts.";
             gui::wrapped_label(
                 "Epoch now tracks two intentional engine AI roles: the internal Epoch bot, and a local MCP/control layer that can both steer the engine and teach the bot while the engine is built and operated.",
                 (std::max)(180.0f, log_size.x - 24.0f));
@@ -2138,6 +2218,9 @@ namespace epochnamespace
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
                 iterationGuidance.c_str(),
+                (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(
+                continuousBuildGuidance.c_str(),
                 (std::max)(180.0f, log_size.x - 24.0f));
 
             const auto currentMcpRecord = [&]() {
@@ -2205,6 +2288,147 @@ namespace epochnamespace
                     .evidence_paths = std::move(evidencePaths)
                 };
             };
+
+            auto startAiContinuousBuild = [&](std::string reason, bool force) {
+                if (editor.aiContinuousBuildPending)
+                {
+                    editor.aiContinuousBuildStatus = "Build already running.";
+                    return;
+                }
+
+                if (editor.projectRoot.empty())
+                {
+                    editor.aiContinuousBuildStatus = "Cannot build: no active project root.";
+                    return;
+                }
+
+                const std::string fingerprint = ai_continuous_build_fingerprint(editor, activeScriptSource, pathsManifest);
+                if (!force && fingerprint == editor.aiContinuousBuildFingerprint)
+                {
+                    editor.aiContinuousBuildStatus = "Watching for project/script changes.";
+                    return;
+                }
+
+                editor.aiContinuousBuildFingerprint = fingerprint;
+                editor.aiContinuousBuildStatus = "Queued build: " + reason;
+                push_editor_log(editor, "[ai-build] Queued continuous build: " + reason);
+                editor.aiContinuousBuildPending.emplace(std::async(std::launch::async, [root = editor.projectRoot]() {
+                    return editor_build_project(root);
+                }));
+            };
+
+            bool aiBuildCompletedThisFrame = false;
+            if (editor.aiContinuousBuildPending
+                && editor.aiContinuousBuildPending->wait_for(0ms) == std::future_status::ready)
+            {
+                try
+                {
+                    const auto build = editor.aiContinuousBuildPending->get();
+                    editor.aiContinuousBuildPending.reset();
+                    aiBuildCompletedThisFrame = true;
+                    ++editor.aiContinuousBuildRunCount;
+                    editor.projectBuildStatus = build.summary;
+                    editor.aiContinuousBuildStatus = build.succeeded
+                        ? "Last build passed; packet staging pending."
+                        : "Last build failed; inspect the build log before promotion.";
+                    push_editor_log(
+                        editor,
+                        std::string("[ai-build] ")
+                        + (build.succeeded ? "Build passed. " : "Build failed. ")
+                        + build.summary);
+                    if (!build.output_path.empty())
+                        push_editor_log(editor, "[ai-build] Output: " + build.output_path);
+                    if (!build.log_path.empty())
+                        push_editor_log(editor, "[ai-build] Log: " + build.log_path);
+                    editor.aiContinuousBuildStageOnNextFrame = build.succeeded;
+                }
+                catch (const std::exception& e)
+                {
+                    editor.aiContinuousBuildPending.reset();
+                    aiBuildCompletedThisFrame = true;
+                    editor.aiContinuousBuildStatus = std::string("Build threw: ") + e.what();
+                    push_editor_log(editor, "[ai-build] Build threw: " + std::string(e.what()));
+                }
+            }
+
+            if (editor.aiContinuousBuildStageOnNextFrame && !editor.aiContinuousBuildPending && !aiBuildCompletedThisFrame)
+            {
+                editor.aiContinuousBuildStageOnNextFrame = false;
+                const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
+                if (packetDir.empty())
+                {
+                    editor.aiContinuousBuildStatus = "Build passed, but packet staging failed.";
+                    push_editor_log(editor, "[ai-build] Failed to stage post-build packet.");
+                }
+                else
+                {
+                    editor.aiContinuousBuildStatus = "Build passed and staged packet for verifier/gate review.";
+                    push_editor_log(editor, "[ai-build] Staged post-build AI packet.");
+                    push_editor_log(editor, "[ai-build] Packet: " + packetDir);
+                }
+            }
+
+            if (editor.aiContinuousBuildEnabled && !editor.aiContinuousBuildPending)
+                startAiContinuousBuild("detected project/script evidence change", false);
+
+            gui::property_row("[ai-build] Continuous", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+            gui::property_row("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false");
+            gui::property_row("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount));
+            gui::property_row("[ai-build] Status", editor.aiContinuousBuildStatus);
+            gui::property_row("[ai-tool] Runs", std::to_string(editor.aiToolHarnessRunCount));
+            gui::property_row("[ai-tool] Status", editor.aiToolHarnessStatus);
+
+            if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Continuous AI Build" : "Enable Continuous AI Build", { 240.0f, 30.0f }))
+            {
+                editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
+                editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
+                    ? "Continuous AI build enabled; watching project/script evidence."
+                    : "Continuous AI build paused.";
+                if (editor.aiContinuousBuildEnabled)
+                    editor.aiContinuousBuildFingerprint.clear();
+                push_editor_log(editor, editor.aiContinuousBuildEnabled
+                    ? "[ai-build] Continuous build enabled."
+                    : "[ai-build] Continuous build paused.");
+            }
+
+            if (gui::button("Queue AI Build Now", { 220.0f, 30.0f }))
+                startAiContinuousBuild("manual AI build request", true);
+
+            if (gui::button("Run AI Tool Harness", { 220.0f, 30.0f }))
+            {
+                const std::string before = editor_tooling_state_summary(editor);
+                const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
+                editor.scriptBuildStatus = build.summary;
+                const bool ran = build.succeeded && editor_run_script(ctx.get(), editor.activeScript);
+                const std::string after = editor_tooling_state_summary(editor);
+                ++editor.aiToolHarnessRunCount;
+                editor.aiToolHarnessStatus = ran
+                    ? "Harness ran selected script and captured editor before/after evidence."
+                    : "Harness failed; inspect script build/run logs.";
+
+                epoch::ai::append_mcp_capture(epoch::ai::McpCaptureRecord{
+                    .server = "editor",
+                    .tool = "ai-tool-harness",
+                    .prompt = std::string("Build and run selected editor tooling script: ") + editor.activeScript,
+                    .normalized_output = std::string("build=") + (build.succeeded ? "pass" : "fail")
+                        + "; run=" + (ran ? "pass" : "fail")
+                        + "; before={" + before + "}; after={" + after + "}",
+                    .source_path = activeScriptSource
+                });
+
+                push_editor_log(editor, ran
+                    ? "[ai-tool] Harness ran selected script and captured before/after state."
+                    : "[ai-tool] Harness failed before a verified editor action.");
+                push_editor_log(editor, "[ai-tool] Before: " + before);
+                push_editor_log(editor, "[ai-tool] After: " + after);
+
+                if (ran)
+                {
+                    const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
+                    if (!packetDir.empty())
+                        push_editor_log(editor, "[ai-tool] Staged tool-harness packet: " + packetDir);
+                }
+            }
 
             if (gui::button("Stage Iteration Packet", { 220.0f, 30.0f }))
             {

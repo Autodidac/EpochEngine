@@ -1,0 +1,63 @@
+{
+  "$schema": "https://epoch.local/schemas/ai_factory_loop.schema.json",
+  "name": "epoch_continuous_build_factory",
+  "status": "phase5_foundation",
+  "summary": "Evidence-gated loop for turning editor/project work into build-verified AI training and eval material.",
+  "roles": {
+    "runtime_bot": "EpochBot",
+    "control_bot": "local MCP/control",
+    "teacher": "optional local helper LLM used only for development-time review and curation"
+  },
+  "loop": [
+    {
+      "stage": "planner",
+      "input": "active project, script, manifest, task prompt, and current roadmap intent",
+      "output": "staged task packet"
+    },
+    {
+      "stage": "executor",
+      "input": "reviewed packet plus explicit operator request",
+      "output": "candidate project/script/repo change"
+    },
+    {
+      "stage": "builder",
+      "input": "candidate change",
+      "output": "child-project build log and output executable evidence"
+    },
+    {
+      "stage": "verifier",
+      "input": "build output, runtime captures, MCP captures, eval prompts, and retained logs",
+      "output": "pass/fail evidence and normalized review notes"
+    },
+    {
+      "stage": "gate",
+      "input": "verifier output plus human/operator review",
+      "output": "curated dataset/eval promotion or discard"
+    }
+  ],
+  "active_engine_hooks": [
+    "AI workspace continuous build toggle",
+    "AI workspace editor tool harness",
+    "single-flight async child-project build",
+    "post-build iteration packet staging",
+    "raw chat capture JSONL",
+    "MCP capture JSONL",
+    "curated dataset promotion",
+    "scene eval promotion"
+  ],
+  "promotion_rules": [
+    "Never promote raw captures directly into committed datasets.",
+    "Never treat failed builds as positive training examples unless explicitly labeled as failure-analysis data.",
+    "Never allow blind repo write-through from planner or executor output.",
+    "Every promoted record must be traceable to a staged packet, build log, runtime capture, MCP capture, or eval case.",
+    "Local checkpoints, local models, and caches stay under the workspace AI folders unless packaged intentionally."
+  ],
+  "next_required_hooks": [
+    "packet replay runner",
+    "verifier result JSON",
+    "eval score history",
+    "tool-schema replay against local MCP/control",
+    "curated failure-analysis dataset lane",
+    "script/tool action replay against editor state"
+  ]
+}

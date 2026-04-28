@@ -1,5 +1,23 @@
 # Epoch Changelog
 
+## [v0.83.89]
+- Bumped the active source version to `v0.83.89` for the AI factory and
+  continuous-build push while keeping the published stable release line at
+  `v0.83.86`.
+- Added the first continuous AI build lane inside the editor AI workspace: it
+  watches active project/script evidence, queues one async child-project build
+  at a time, and stages a fresh AI packet after successful builds for
+  verifier/gate review.
+- Added the first committed AI factory-loop contract so the intended
+  planner/executor/builder/verifier/gate handoff is machine-readable and tied
+  to the editor AI workspace instead of only existing as roadmap prose.
+- Added the first AI editor tool harness: the AI workspace can build/run the
+  selected tooling script through the real editor host, capture before/after
+  editor state as MCP evidence, and stage a packet after successful actions.
+- Extended the headless CI smoke so hosted builds verify the AI factory contract
+  exists and still carries the planner/builder/verifier/gate plus no blind
+  write-through policy.
+
 ## [v0.83.88]
 - Advanced the Phase 5 AI loop foundation: staged iteration packets now carry
   the current control-loop stage, review-gate state, and evidence-readiness
