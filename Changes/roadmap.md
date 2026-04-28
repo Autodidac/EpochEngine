@@ -200,7 +200,8 @@ engine shape and should be treated as starting truth for the next passes:
 - generated game/tool project creation and generated project discovery
 - a real project/scripts dock with build, run, and diagnostics surfaces
 - a live Systems workspace with graph surfaces, backend ownership visibility,
-  and first time-control diagnostics already on-screen
+  first time-control diagnostics, and build-confidence/feature-probe status
+  already on-screen
 - explicit AI iteration packet staging and local-vs-committed AI artifact
   separation
 
@@ -212,7 +213,7 @@ engine shape and should be treated as starting truth for the next passes:
   project/script proof rows, launcher/editor separation, and baseline
   Project/Scripts workspace flow.
 - [~] Phase 3: Systems workspace, time spine, backend ownership diagnostics,
-  and hosted/local build reliability.
+  build-confidence surfacing, and hosted/local build reliability.
 - [ ] Phase 4: GUI maturity, drag/drop, text-input smokes, editor polish, and
   OpenGL startup-flicker/root-cause cleanup.
 - [ ] Phase 5: Two-role AI control loop, captured task packets, review gates,
@@ -256,6 +257,8 @@ engine shape and should be treated as starting truth for the next passes:
 
 - deepen pacing diagnostics, perf-select guidance, and hardware guidance in the
   Systems workspace
+- keep compiler/language/CI validation status visible in Systems so build
+  confidence stays tied to the live editor surface
 - build on the graph/time surfaces that already exist instead of replacing them
   with another temporary debug-only panel
 - continue carrying the shared time-system spine deeper into runtime and scene

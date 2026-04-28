@@ -57,6 +57,8 @@ module;
 #include <utility>
 #include <vector>
 
+#include "epoch/core/cpp_feature_probe.hpp"
+
 module aeditor;
 
 import aengine.gui;
@@ -425,6 +427,49 @@ namespace epochnamespace
             }
 
             return "Healthy; frame pacing is inside the configured budget";
+        }
+
+        [[nodiscard]] static std::string compiler_identity()
+        {
+#if defined(__clang__)
+            return std::format("Clang {}.{}.{}", __clang_major__, __clang_minor__, __clang_patchlevel__);
+#elif defined(_MSC_VER)
+            return std::format("MSVC {}", _MSC_VER);
+#elif defined(__GNUC__)
+            return std::format("GCC {}.{}.{}", __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+#else
+            return "Unknown compiler";
+#endif
+        }
+
+        [[nodiscard]] static std::string language_mode_summary()
+        {
+            return std::format("__cplusplus={} (C++23 baseline; latest validation is optional)",
+                static_cast<long long>(__cplusplus));
+        }
+
+        [[nodiscard]] static constexpr std::string_view build_configuration_label() noexcept
+        {
+#if defined(NDEBUG)
+            return "Release";
+#else
+            return "Debug";
+#endif
+        }
+
+        [[nodiscard]] static std::string feature_probe_summary()
+        {
+            return std::format("expected={} stacktrace={} execution={} contracts={} reflection={}",
+                epoch::core::has_expected ? "yes" : "no",
+                epoch::core::has_stacktrace ? "yes" : "no",
+                epoch::core::has_std_execution ? "yes" : "no",
+                epoch::core::has_contracts ? "yes" : "no",
+                epoch::core::has_static_reflection ? "yes" : "no");
+        }
+
+        [[nodiscard]] static constexpr std::string_view hosted_ci_contract() noexcept
+        {
+            return "C++23 headless plus MSVC C++latest headless; full graphics stays local/release until runner-safe.";
         }
 
         [[nodiscard]] static std::string backend_runtime_guidance(
@@ -2230,6 +2275,11 @@ namespace epochnamespace
             gui::property_row("[systems] Worker lanes", std::to_string(workerCount));
             gui::property_row("[systems] Compatibility target", "6-core / 1660 Ti-era desktop and modern Linux laptops by default");
             gui::property_row("[systems] Support tier", supportTier);
+            gui::property_row("[build] Compiler", compiler_identity());
+            gui::property_row("[build] Configuration", build_configuration_label());
+            gui::property_row("[build] Language mode", language_mode_summary());
+            gui::property_row("[build] Feature probes", feature_probe_summary());
+            gui::property_row("[build] CI contract", hosted_ci_contract());
             gui::property_row("[systems] Render path", "visibility -> surface -> lighting -> temporal -> reconstruction -> present");
             gui::wrapped_label(
                 "The Systems workspace now shows engine-generated graph surfaces with pan/zoom controls. Backend ownership is also written down here so the active backend, the dock/undock contract, and the long-term single-backend shell targets stay visible instead of living only in roadmap text.",

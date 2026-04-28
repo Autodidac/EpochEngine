@@ -1,6 +1,10 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Surfaced the new stable build baseline directly inside the editor Systems
+  workspace: it now reports compiler/configuration, language mode, C++ feature
+  probes, and the hosted CI contract beside backend ownership and pacing
+  diagnostics.
 - Added the first-pass C++26 future-ready build foundation while keeping C++23
   as the default baseline: root CMake presets now cover MSVC, clang-cl, Clang,
   GCC, Visual Studio, Ninja, Unix Makefiles where practical, CI headless, and
