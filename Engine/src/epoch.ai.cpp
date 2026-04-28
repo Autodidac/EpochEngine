@@ -1461,6 +1461,9 @@ namespace epoch::ai
         json << "  \"task_prompt\": \"" << json_escape(packet.task_prompt) << "\",\n";
         json << "  \"assistant_hint\": \"" << json_escape(packet.assistant_hint) << "\",\n";
         json << "  \"operator_notes\": \"" << json_escape(packet.operator_notes) << "\",\n";
+        json << "  \"control_loop_stage\": \"" << json_escape(packet.control_loop_stage) << "\",\n";
+        json << "  \"review_gate_state\": \"" << json_escape(packet.review_gate_state) << "\",\n";
+        json << "  \"review_gate_evidence\": \"" << json_escape(packet.review_gate_evidence) << "\",\n";
         json << "  \"project_id\": \"" << json_escape(packet.project_id) << "\",\n";
         json << "  \"project_name\": \"" << json_escape(packet.project_name) << "\",\n";
         json << "  \"scene_id\": \"" << json_escape(packet.scene_id) << "\",\n";
@@ -1495,6 +1498,11 @@ namespace epoch::ai
         task << "## Task Prompt\n" << (packet.task_prompt.empty() ? "(empty)" : packet.task_prompt) << "\n\n";
         task << "## Assistant Hint\n" << (packet.assistant_hint.empty() ? "(none)" : packet.assistant_hint) << "\n\n";
         task << "## Operator Notes\n" << (packet.operator_notes.empty() ? "(none)" : packet.operator_notes) << "\n\n";
+        task << "## AI Control Loop\n";
+        task << "- Stage: " << (packet.control_loop_stage.empty() ? "(unknown)" : packet.control_loop_stage) << "\n";
+        task << "- Review gate: " << (packet.review_gate_state.empty() ? "(unknown)" : packet.review_gate_state) << "\n";
+        task << "- Evidence: " << (packet.review_gate_evidence.empty() ? "(none)" : packet.review_gate_evidence) << "\n";
+        task << "- Contract: planner -> executor -> builder -> verifier -> gate; staged packets only, no blind write-through.\n\n";
         task << "## Runtime Snapshot\n";
         task << "- Provider: " << packet.provider_summary << "\n";
         task << "- Active model: " << (packet.active_model.empty() ? "(detecting)" : packet.active_model) << "\n";

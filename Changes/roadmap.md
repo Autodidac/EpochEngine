@@ -204,6 +204,10 @@ engine shape and should be treated as starting truth for the next passes:
   already on-screen
 - explicit AI iteration packet staging and local-vs-committed AI artifact
   separation
+- AI iteration packets now carry review-gate state, evidence readiness, and
+  the current `planner -> executor -> builder -> verifier -> gate` loop stage
+  so future replay/training passes can reason from staged evidence instead of
+  guessing from editor state
 
 ## Phase Progress
 
@@ -216,7 +220,7 @@ engine shape and should be treated as starting truth for the next passes:
   build-confidence surfacing, and hosted/local build reliability.
 - [ ] Phase 4: GUI maturity, drag/drop, text-input smokes, editor polish, and
   OpenGL startup-flicker/root-cause cleanup.
-- [ ] Phase 5: Two-role AI control loop, captured task packets, review gates,
+- [~] Phase 5: Two-role AI control loop, captured task packets, review gates,
   dataset/eval promotion, and tool-schema replay.
 - [ ] Phase 6: Primitive/object authoring, procedural world spine, 2D vertical
   slice, and material/cellular simulation boundaries.
@@ -304,6 +308,8 @@ engine shape and should be treated as starting truth for the next passes:
   `EpochBot` plus local MCP/control
 - build on the current iteration-packet/capture roots already present in the
   editor instead of inventing a second AI staging path
+- make staged packets the first durable handoff between planner/executor work
+  and builder/verifier review, including loop-stage and gate-state metadata
 - use MCP tool schemas as the canonical tool-bus contract and replay shape
 - separate raw observation capture from curated dataset/eval promotion
 - require build/runtime/log evidence before AI-assisted promotion
@@ -344,9 +350,10 @@ engine shape and should be treated as starting truth for the next passes:
 2. Strengthen the Systems workspace with deeper pacing diagnostics and backend
    convergence guidance.
 3. Carry the time spine deeper into runtime and scene ownership.
-4. Keep UI/editor maturity moving forward, especially text/input reliability,
+4. Tighten the two-role AI capture, replay, review, and promotion loop until
+   Phase 5 can run from staged packets with builder/verifier gates.
+5. Keep UI/editor maturity moving forward, especially text/input reliability,
    shell polish, drag/drop, and backend-window stability.
-5. Tighten the two-role AI capture, review, and promotion loop.
 6. Complete the primitive/object system and keep it aligned with the project
    runtime shell.
 7. Start Android with an honest single-context bring-up, touch/input

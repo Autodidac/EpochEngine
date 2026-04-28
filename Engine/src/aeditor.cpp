@@ -1351,6 +1351,24 @@ namespace epochnamespace
             return status;
         }
 
+        [[nodiscard]] const char* ai_control_loop_contract() noexcept
+        {
+            return "planner -> executor -> builder -> verifier -> gate";
+        }
+
+        [[nodiscard]] std::string ai_control_loop_stage(const AiReviewGateStatus& status)
+        {
+            if (!status.projectEvidenceReady)
+                return "Planner blocked: project manifest and path evidence incomplete";
+            if (!status.buildEvidenceReady)
+                return "Builder blocked: build log/output evidence incomplete";
+            if (!status.captureEvidenceReady)
+                return "Verifier blocked: no raw or MCP capture evidence staged";
+            if (!status.chatPairReady)
+                return "Gate blocked: latest assistant exchange is not promotable yet";
+            return "Gate ready: build, project, capture, and chat evidence are staged for review";
+        }
+
         AiChat& chat_state_for(const std::shared_ptr<core::Context>& ctx)
         {
             auto& storage = chat_storage();
@@ -2065,6 +2083,7 @@ namespace epochnamespace
                 training,
                 latestPrompt,
                 latestReply);
+            const std::string loopStage = ai_control_loop_stage(gateStatus);
 
             gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
             gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
@@ -2084,8 +2103,11 @@ namespace epochnamespace
             gui::property_row("[ai] Active output", display_project_path(outputExe));
             gui::property_row("[ai] Runtime role", "EpochBot");
             gui::property_row("[ai] Control role", "Local MCP/control");
+            gui::property_row("[ai] Control loop", ai_control_loop_contract());
+            gui::property_row("[ai] Loop stage", loopStage);
             gui::property_row("[ai] Seed/helper/verifier", "runtime seed + helper teacher + gated verifier");
             gui::property_row("[ai] Promotion gate", "capture -> review/score -> curate/promote");
+            gui::property_row("[ai] Replay boundary", "staged packets only; no blind write-through");
             gui::property_row("[ai] Evidence", "build + runtime + retained logs");
             gui::property_row("[ai] Build evidence", ready_text(gateStatus.buildEvidenceReady));
             gui::property_row("[ai] Project evidence", ready_text(gateStatus.projectEvidenceReady));
@@ -2110,6 +2132,9 @@ namespace epochnamespace
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
                 "AI-assisted engine changes stay staged and reviewable here: capture first, score or inspect the result, then promote curated datasets/evals intentionally instead of allowing blind write-through automation.",
+                (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(
+                "Phase 5 starts from explicit staged packets: the local control loop may plan and replay work from evidence, but repo changes still pass through builder/verifier/gate before promotion.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
                 iterationGuidance.c_str(),
@@ -2155,6 +2180,9 @@ namespace epochnamespace
                         : (editor.projectStatus.empty()
                             ? editor.projectBuildStatus
                             : editor.projectBuildStatus + " | " + editor.projectStatus),
+                    .control_loop_stage = loopStage,
+                    .review_gate_state = gateStatus.promotionSummary,
+                    .review_gate_evidence = gateStatus.packetEvidenceSummary,
                     .project_id = editor.projectId,
                     .project_name = editor.projectName,
                     .scene_id = editor.activeRuntimeScene,

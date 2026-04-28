@@ -25,6 +25,9 @@ export namespace epoch::ai
         std::string task_prompt{};
         std::string assistant_hint{};
         std::string operator_notes{};
+        std::string control_loop_stage{};
+        std::string review_gate_state{};
+        std::string review_gate_evidence{};
         std::string project_id{};
         std::string project_name{};
         std::string scene_id{};

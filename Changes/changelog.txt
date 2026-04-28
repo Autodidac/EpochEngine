@@ -1,6 +1,10 @@
 # Epoch Changelog
 
 ## [v0.83.88]
+- Advanced the Phase 5 AI loop foundation: staged iteration packets now carry
+  the current control-loop stage, review-gate state, and evidence-readiness
+  summary so future planner/executor replay can feed builder/verifier gates
+  without granting blind repo write-through.
 - Surfaced the new stable build baseline directly inside the editor Systems
   workspace: it now reports compiler/configuration, language mode, C++ feature
   probes, and the hosted CI contract beside backend ownership and pacing
