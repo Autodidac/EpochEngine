@@ -7,7 +7,7 @@ Tracked here:
 - curated JSONL datasets
 - dataset schemas
 - eval cases
-- factory-loop contracts
+- control-loop contracts
 - tokenizer/manifests
 - prompt templates
 
@@ -42,10 +42,10 @@ External local LLMs such as LM Studio are development helpers for testing,
 evaluation, curation, and iteration speed. They are not a third in-engine
 runtime role.
 
-## Factory Loop
+## AI Control Loop
 
-The current Phase 5 foundation is an evidence-gated dark-factory loop, not
-blind self-modifying autonomy:
+The current Phase 3/4 foundation is an evidence-gated engine AI control loop,
+not blind self-modifying autonomy:
 
 1. planner produces or updates an explicit staged packet
 2. executor proposes work only from the staged packet and current operator goal
@@ -55,7 +55,7 @@ blind self-modifying autonomy:
 
 The live contract is stored in:
 
-- `Engine/ai/factory/continuous_build_loop.json`
+- `Engine/ai/control/continuous_build_loop.json`
 
 The editor AI workspace now has a continuous build lane that watches active
 project/script evidence, runs one child-project build at a time, and stages a
@@ -68,7 +68,7 @@ editor state, records the result as MCP evidence, and stages a packet when the
 tool action succeeds. This is the first bridge from "AI can talk about tooling"
 to "AI can learn from an editor action that actually changed state."
 
-## Running The AI Factory
+## Running The Engine AI Controls
 
 From a developer checkout:
 
@@ -80,7 +80,7 @@ From a developer checkout:
    `build/windows-msvc-debug/Engine/Debug/epoch.exe`
 4. Open the editor workspace panel and select `AI`.
 5. Use the AI sub-workspaces:
-   - `Factory`: visual control room for the continuous build lane
+   - `Control`: visual control room for the AI build watcher
    - `Tooling`: run selected scripts through the editor tool harness
    - `Engine AI`: normal project/scene guidance, MCP capture, and packet staging
    - `Software`: generated project/build/source evidence
@@ -91,13 +91,13 @@ Suggested first run:
 
 1. In `Project`, create or select a generated project shell.
 2. In `Scripts`, select `Rotate All Entities` or another tooling script.
-3. In `AI -> Factory`, click `Enable Continuous AI Build` or `Queue AI Build Now`.
+3. In `AI -> Control`, click `Enable AI Build Watcher` or `Queue Engine AI Build Now`.
 4. In `AI -> Tooling`, click `Run AI Tool Harness`.
 5. Inspect the `Output` workspace for build/tool logs.
 6. Review staged packets under
    `Engine/examples/ConsoleApplication1/workspace/research/staged/iteration_packets/`.
 7. Promote only reviewed, evidence-backed captures from `AI -> Training`.
 
-The factory should feel like a control room, not a hidden autopilot: it can
-watch, build, run tooling, capture evidence, and stage packets, but curated
-training and eval promotion remain explicit review-gated actions.
+The AI control room should be boringly explicit: it can watch, build, run
+tooling, capture evidence, and stage packets, but curated training and eval
+promotion remain review-gated actions.

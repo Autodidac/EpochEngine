@@ -1,7 +1,7 @@
 {
-  "$schema": "https://epoch.local/schemas/ai_factory_loop.schema.json",
-  "name": "epoch_continuous_build_factory",
-  "status": "phase5_foundation",
+  "$schema": "https://epoch.local/schemas/ai_control_loop.schema.json",
+  "name": "epoch_engine_ai_control_loop",
+  "status": "phase3_4_control_foundation",
   "summary": "Evidence-gated loop for turning editor/project work into build-verified AI training and eval material.",
   "roles": {
     "runtime_bot": "EpochBot",
@@ -37,8 +37,8 @@
   ],
   "active_engine_hooks": [
     "AI workspace domain selector",
-    "Dark Factory visual pipeline surface",
-    "AI workspace continuous build toggle",
+    "AI Control visual pipeline surface",
+    "AI build watcher toggle",
     "AI workspace editor tool harness",
     "single-flight async child-project build",
     "post-build iteration packet staging",

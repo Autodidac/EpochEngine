@@ -202,10 +202,10 @@ engine shape and should be treated as starting truth for the next passes:
 - a live Systems workspace with graph surfaces, backend ownership visibility,
   first time-control diagnostics, and build-confidence/feature-probe status
   already on-screen
-- an AI workspace split into Dark Factory, Tooling, Engine AI, Software,
+- an AI workspace split into Control, Tooling, Engine AI, Software,
   Training, and Ops/How-To domains so rebuild/tooling/training controls are
   discoverable in the editor shell
-- a visual Dark Factory surface that summarizes evidence readiness, active
+- a visual AI Control surface that summarizes evidence readiness, active
   planner/builder/verifier/gate state, continuous build status, and tool-harness
   activity
 - an editor-owned continuous AI build lane that watches active project/script
@@ -214,7 +214,7 @@ engine shape and should be treated as starting truth for the next passes:
 - an AI tool harness that builds/runs the selected script through the real
   editor host, captures before/after editor state, records MCP evidence, and
   stages packets from successful tool actions
-- a committed AI factory-loop contract that records the planner, executor,
+- a committed AI control-loop contract that records the planner, executor,
   builder, verifier, and gate handoff rules for future replay/training work
 - explicit AI iteration packet staging and local-vs-committed AI artifact
   separation
@@ -333,8 +333,8 @@ engine shape and should be treated as starting truth for the next passes:
   produce fresh evidence while preserving explicit review gates
 - train from real editor tool actions by capturing before/after state from the
   selected script harness before promoting any dataset/eval records
-- treat `Engine/ai/factory/continuous_build_loop.json` as the current contract
-  for the self-improvement factory until a replay runner can enforce it
+- treat `Engine/ai/control/continuous_build_loop.json` as the current contract
+  for the engine AI control loop until a replay runner can enforce it
 - use MCP tool schemas as the canonical tool-bus contract and replay shape
 - separate raw observation capture from curated dataset/eval promotion
 - require build/runtime/log evidence before AI-assisted promotion

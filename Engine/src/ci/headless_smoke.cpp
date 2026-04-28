@@ -60,13 +60,13 @@ namespace
         return true;
     }
 
-    bool RequiredFactoryContractProbe(const std::filesystem::path& repoRoot)
+    bool RequiredControlContractProbe(const std::filesystem::path& repoRoot)
     {
-        const auto contractPath = repoRoot / "Engine" / "ai" / "factory" / "continuous_build_loop.json";
+        const auto contractPath = repoRoot / "Engine" / "ai" / "control" / "continuous_build_loop.json";
         std::ifstream in(contractPath);
         if (!in)
         {
-            std::cerr << "[epoch-ci] missing AI factory contract: " << contractPath.string() << '\n';
+            std::cerr << "[epoch-ci] missing AI control contract: " << contractPath.string() << '\n';
             return false;
         }
 
@@ -78,10 +78,10 @@ namespace
         const bool hasNoBlindWriteThrough =
             content.find("Never allow blind repo write-through") != std::string::npos;
 
-        std::cout << "[epoch-ci] AI factory contract: " << contractPath.string() << '\n';
-        std::cout << "[epoch-ci] AI factory stages present: "
+        std::cout << "[epoch-ci] AI control contract: " << contractPath.string() << '\n';
+        std::cout << "[epoch-ci] AI control stages present: "
             << (hasPlanner && hasBuilder && hasVerifier && hasGate) << '\n';
-        std::cout << "[epoch-ci] AI factory gate policy present: "
+        std::cout << "[epoch-ci] AI control gate policy present: "
             << hasNoBlindWriteThrough << '\n';
 
         return hasPlanner && hasBuilder && hasVerifier && hasGate && hasNoBlindWriteThrough;
@@ -113,9 +113,9 @@ int main(int argc, char** argv)
         ? std::filesystem::path(argv[1])
         : std::filesystem::current_path();
     OptionalPathProbe(repoRoot);
-    const bool factoryContractReady = RequiredFactoryContractProbe(repoRoot);
+    const bool controlContractReady = RequiredControlContractProbe(repoRoot);
 
-    if (!state.logged || !state.queuedModel || queued != 1 || !factoryContractReady)
+    if (!state.logged || !state.queuedModel || queued != 1 || !controlContractReady)
     {
         std::cerr << "[epoch-ci] script host smoke failed\n";
         return 1;

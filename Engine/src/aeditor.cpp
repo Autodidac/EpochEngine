@@ -99,7 +99,7 @@ namespace epochnamespace
 
         enum class AiWorkspaceDomain : unsigned char
         {
-            Factory = 0,
+            Control = 0,
             Tooling,
             Engine,
             Software,
@@ -120,7 +120,7 @@ namespace epochnamespace
 
         struct AiSurfaceState
         {
-            SpriteHandle factorySurface{};
+            SpriteHandle controlSurface{};
         };
 
         [[nodiscard]] static bool is_ws_only(std::string_view s) noexcept
@@ -261,12 +261,12 @@ namespace epochnamespace
             bool automationConsumed{ false };
             SystemsSurfaceState systems{};
             AiSurfaceState aiSurfaces{};
-            AiWorkspaceDomain aiWorkspaceDomain{ AiWorkspaceDomain::Factory };
+            AiWorkspaceDomain aiWorkspaceDomain{ AiWorkspaceDomain::Control };
             bool aiContinuousBuildEnabled{ false };
             bool aiContinuousBuildStageOnNextFrame{ false };
             std::optional<std::future<EditorProjectBuildResult>> aiContinuousBuildPending{};
             std::string aiContinuousBuildFingerprint{};
-            std::string aiContinuousBuildStatus{ "Continuous AI build is off." };
+            std::string aiContinuousBuildStatus{ "AI build watcher is off." };
             std::size_t aiContinuousBuildRunCount{ 0 };
             std::string aiToolHarnessStatus{ "AI tool harness has not run yet." };
             std::size_t aiToolHarnessRunCount{ 0 };
@@ -1468,8 +1468,8 @@ namespace epochnamespace
         {
             switch (domain)
             {
-            case AiWorkspaceDomain::Factory:
-                return "Dark Factory";
+            case AiWorkspaceDomain::Control:
+                return "AI Control";
             case AiWorkspaceDomain::Tooling:
                 return "Tooling";
             case AiWorkspaceDomain::Engine:
@@ -1485,7 +1485,7 @@ namespace epochnamespace
             }
         }
 
-        [[nodiscard]] static SurfaceCanvas build_ai_factory_surface(
+        [[nodiscard]] static SurfaceCanvas build_ai_control_loop_surface(
             const AiReviewGateStatus& status,
             bool continuousEnabled,
             bool buildPending,
@@ -2274,7 +2274,7 @@ namespace epochnamespace
             const float aiContentWidth = (std::max)(180.0f, log_size.x - 24.0f);
 
             const std::array<gui::SegmentedButtonSpec, 6> aiDomains{{
-                { "Factory", 96.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Factory },
+                { "Control", 96.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Control },
                 { "Tooling", 92.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling },
                 { "Engine AI", 108.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine },
                 { "Software", 104.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Software },
@@ -2286,31 +2286,31 @@ namespace epochnamespace
 
             gui::property_row("[ai] Workspace", ai_workspace_domain_name(editor.aiWorkspaceDomain));
 
-            if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Factory)
+            if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Control)
             {
-                const auto factoryCanvas = build_ai_factory_surface(
+                const auto controlCanvas = build_ai_control_loop_surface(
                     gateStatus,
                     editor.aiContinuousBuildEnabled,
                     editor.aiContinuousBuildPending.has_value(),
                     editor.aiContinuousBuildRunCount,
                     editor.aiToolHarnessRunCount);
-                editor.aiSurfaces.factorySurface = gui::register_runtime_surface(
-                    "ai.factory.pipeline",
-                    factoryCanvas.pixels,
-                    static_cast<std::uint32_t>(factoryCanvas.width),
-                    static_cast<std::uint32_t>(factoryCanvas.height));
+                editor.aiSurfaces.controlSurface = gui::register_runtime_surface(
+                    "ai.control.pipeline",
+                    controlCanvas.pixels,
+                    static_cast<std::uint32_t>(controlCanvas.width),
+                    static_cast<std::uint32_t>(controlCanvas.height));
 
-                if (editor.aiSurfaces.factorySurface.is_valid())
-                    gui::image(editor.aiSurfaces.factorySurface, { aiContentWidth, 126.0f });
+                if (editor.aiSurfaces.controlSurface.is_valid())
+                    gui::image(editor.aiSurfaces.controlSurface, { aiContentWidth, 126.0f });
                 else
-                    gui::wrapped_label("AI factory visual surface unavailable.", aiContentWidth);
+                    gui::wrapped_label("AI control visual surface unavailable.", aiContentWidth);
             }
 
             gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
             gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
             gui::property_row("[ai] Local endpoint", manifest.endpoint);
             gui::property_row("[ai] MCP/control manifest", manifest.manifest_path);
-            gui::property_row("[ai] Factory contract", "Engine/ai/factory/continuous_build_loop.json");
+            gui::property_row("[ai] Control contract", "Engine/ai/control/continuous_build_loop.json");
             gui::property_row("[ai] Iteration packets", epoch::ai::iteration_packet_root());
             gui::property_row("[ai] Research staging", epoch::ai::research_staging_root());
             gui::property_row("[ai] Curated datasets", training.curated_dataset_root);
@@ -2347,7 +2347,7 @@ namespace epochnamespace
                 + epoch::ai::iteration_packet_root()
                 + " so the control loop has something explicit to build, verify, score, and either promote or discard.";
             const std::string continuousBuildGuidance =
-                "Continuous AI build watches the active project entry/script/manifest evidence, queues one child-project build at a time, and stages a fresh packet after a successful build so the AI loop can verify from current artifacts.";
+                "The AI build watcher monitors the active project entry/script/manifest evidence, queues one child-project build at a time, and stages a fresh packet after a successful build so the AI loop can verify from current artifacts.";
             gui::wrapped_label(
                 "Epoch now tracks two intentional engine AI roles: the internal Epoch bot, and a local MCP/control layer that can both steer the engine and teach the bot while the engine is built and operated.",
                 (std::max)(180.0f, log_size.x - 24.0f));
@@ -2366,10 +2366,10 @@ namespace epochnamespace
             gui::wrapped_label(
                 continuousBuildGuidance.c_str(),
                 (std::max)(180.0f, log_size.x - 24.0f));
-            if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Factory)
+            if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Control)
             {
                 gui::wrapped_label(
-                    "Dark Factory domain: keep the build watcher on while you edit scripts/projects, then let successful builds stage packets for verifier/gate review. This is the main self-improvement control room.",
+                    "Control domain: keep the AI build watcher on while you edit scripts/projects, or queue one build manually. Successful builds stage packets for verifier/gate review without granting blind repo write-through.",
                     aiContentWidth);
             }
             else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling)
@@ -2399,7 +2399,7 @@ namespace epochnamespace
             else
             {
                 gui::wrapped_label(
-                    "How to run: build Epoch, launch epoch.exe, open Workspace > AI, pick Factory, create or select a project, enable Continuous AI Build, then use Tooling > Run AI Tool Harness after selecting a script.",
+                    "How to run: build Epoch, launch epoch.exe, open Workspace > AI, pick Control, create or select a project, enable AI Build Watcher, then use Tooling > Run AI Tool Harness after selecting a script.",
                     aiContentWidth);
             }
 
@@ -2472,7 +2472,7 @@ namespace epochnamespace
             auto startAiContinuousBuild = [&](std::string reason, bool force) {
                 if (editor.aiContinuousBuildPending)
                 {
-                    editor.aiContinuousBuildStatus = "Build already running.";
+                    editor.aiContinuousBuildStatus = "AI build already running.";
                     return;
                 }
 
@@ -2491,7 +2491,7 @@ namespace epochnamespace
 
                 editor.aiContinuousBuildFingerprint = fingerprint;
                 editor.aiContinuousBuildStatus = "Queued build: " + reason;
-                push_editor_log(editor, "[ai-build] Queued continuous build: " + reason);
+                push_editor_log(editor, "[ai-build] Queued engine AI build: " + reason);
                 editor.aiContinuousBuildPending.emplace(std::async(std::launch::async, [root = editor.projectRoot]() {
                     return editor_build_project(root);
                 }));
@@ -2551,15 +2551,15 @@ namespace epochnamespace
             if (editor.aiContinuousBuildEnabled && !editor.aiContinuousBuildPending)
                 startAiContinuousBuild("detected project/script evidence change", false);
 
-            const bool showFactoryControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Factory
+            const bool showControlControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Control
                 || editor.aiWorkspaceDomain == AiWorkspaceDomain::Software;
             const bool showToolingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling;
             const bool showTrainingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Training
                 || editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine;
 
-            if (showFactoryControls)
+            if (showControlControls)
             {
-                gui::property_row("[ai-build] Continuous", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+                gui::property_row("[ai-build] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
                 gui::property_row("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false");
                 gui::property_row("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount));
                 gui::property_row("[ai-build] Status", editor.aiContinuousBuildStatus);
@@ -2572,21 +2572,21 @@ namespace epochnamespace
                 gui::property_row("[ai-tool] State", editor_tooling_state_summary(editor));
             }
 
-            if (showFactoryControls && gui::button(editor.aiContinuousBuildEnabled ? "Pause Continuous AI Build" : "Enable Continuous AI Build", { 240.0f, 30.0f }))
+            if (showControlControls && gui::button(editor.aiContinuousBuildEnabled ? "Pause AI Build Watcher" : "Enable AI Build Watcher", { 240.0f, 30.0f }))
             {
                 editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
                 editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
-                    ? "Continuous AI build enabled; watching project/script evidence."
-                    : "Continuous AI build paused.";
+                    ? "AI build watcher enabled; watching project/script evidence."
+                    : "AI build watcher paused.";
                 if (editor.aiContinuousBuildEnabled)
                     editor.aiContinuousBuildFingerprint.clear();
                 push_editor_log(editor, editor.aiContinuousBuildEnabled
-                    ? "[ai-build] Continuous build enabled."
-                    : "[ai-build] Continuous build paused.");
+                    ? "[ai-build] AI build watcher enabled."
+                    : "[ai-build] AI build watcher paused.");
             }
 
-            if (showFactoryControls && gui::button("Queue AI Build Now", { 220.0f, 30.0f }))
-                startAiContinuousBuild("manual AI build request", true);
+            if (showControlControls && gui::button("Queue Engine AI Build Now", { 220.0f, 30.0f }))
+                startAiContinuousBuild("manual engine AI build request", true);
 
             if (showToolingControls && gui::button("Run AI Tool Harness", { 220.0f, 30.0f }))
             {
@@ -2624,7 +2624,7 @@ namespace epochnamespace
                 }
             }
 
-            if ((showFactoryControls || showTrainingControls) && gui::button("Stage Iteration Packet", { 220.0f, 30.0f }))
+            if ((showControlControls || showTrainingControls) && gui::button("Stage Iteration Packet", { 220.0f, 30.0f }))
             {
                 const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
                 if (packetDir.empty())
