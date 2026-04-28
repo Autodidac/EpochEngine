@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.83.90]
+- Bumped the active source version to `v0.83.90` for the AI workspace/domain
+  usability pass.
+- Split the editor AI workspace into explicit domains for Dark Factory,
+  Tooling, Engine AI, Software, Training, and Ops/How-To so the AI rebuild and
+  tooling controls are findable instead of buried in one long diagnostics pane.
+- Added a visual Dark Factory pipeline surface that shows evidence readiness,
+  active planner/builder/verifier/gate state, continuous-build status, and
+  tool-harness run activity.
+- Documented the practical run path for the AI factory and tool harness so
+  developers can build Epoch, launch the editor, enable continuous AI builds,
+  and run editor tooling captures intentionally.
+- Refreshed `botface.html` from the updated voice-control source while keeping
+  the tracked filename unchanged.
+
 ## [v0.83.89]
 - Bumped the active source version to `v0.83.89` for the AI factory and
   continuous-build push while keeping the published stable release line at

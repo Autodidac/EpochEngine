@@ -202,6 +202,12 @@ engine shape and should be treated as starting truth for the next passes:
 - a live Systems workspace with graph surfaces, backend ownership visibility,
   first time-control diagnostics, and build-confidence/feature-probe status
   already on-screen
+- an AI workspace split into Dark Factory, Tooling, Engine AI, Software,
+  Training, and Ops/How-To domains so rebuild/tooling/training controls are
+  discoverable in the editor shell
+- a visual Dark Factory surface that summarizes evidence readiness, active
+  planner/builder/verifier/gate state, continuous build status, and tool-harness
+  activity
 - an editor-owned continuous AI build lane that watches active project/script
   evidence, queues one child-project build at a time, and feeds successful
   build artifacts back into staged AI packets for verifier/gate review
@@ -310,6 +316,9 @@ engine shape and should be treated as starting truth for the next passes:
   not per-backend patches
 - improve project, script, AI, systems, and output surfaces until the shell
   reads as a professional editor rather than a debug console
+- keep AI workspace domains organized around concrete jobs: rebuild/control,
+  editor tooling, normal engine guidance, software artifacts, training
+  promotion, and operator instructions
 - keep launcher and editor theming intentionally separate
 
 ### 6. AI Control, Training, And Review Loop

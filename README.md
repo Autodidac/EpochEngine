@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.83.89-1F7A4C?style=for-the-badge" alt="Current development source v0.83.89" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.83.90-1F7A4C?style=for-the-badge" alt="Current development source v0.83.90" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.83.86-2C6A8A?style=for-the-badge" alt="Published stable release v0.83.86" />
 </p>
 
@@ -48,6 +48,8 @@ Current feature spine:
 - Model-backed launcher demo flow using the embedded Mini Sponza asset.
 - Systems, Scripts, Project, AI, and Output workspaces inside the editor.
 - Two-role AI loop centered on `EpochBot` plus the local MCP/control layer.
+- AI workspace domains for Dark Factory, Tooling, Engine AI, Software,
+  Training, and Ops/How-To.
 - Executable-root path and asset resolution instead of fragile cwd-based runs.
 - Windows, Linux/WSL, updater-shell, and packaged runtime workflows with
   documented release/source policy.
@@ -63,6 +65,9 @@ For newcomers:
   updates, and then open the editor.
 - The editor is the work room. You can look at scenes, run the project, build
   scripts, check systems, and use AI tools there.
+- The AI workspace has its own sub-workspaces. `Factory` is the continuous
+  build/control room, `Tooling` runs editor tool scripts and captures
+  before/after state, and `Training` handles evidence-backed promotion.
 - Epoch can also draw the same project in different ways. Those are called
   rendering backends, but you can think of them as different drawing engines
   under the hood.
@@ -81,7 +86,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.83.89`.
+- Source is currently the active development line at `v0.83.90`.
 - The latest published stable runtime release is `v0.83.86`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
@@ -91,6 +96,21 @@ For engine/tooling developers:
 - Phase 1 and Phase 2 of the active roadmap are complete. Current work is
   concentrated in systems tooling, time ownership, AI control/capture, and UI
   maturity.
+
+## Running The AI Factory Locally
+
+```powershell
+cmake --preset windows-msvc-debug
+cmake --build --preset windows-msvc-debug
+.\build\windows-msvc-debug\Engine\Debug\epoch.exe
+```
+
+In the editor, open `Workspace -> AI`.
+
+Use `Factory` to enable or queue the continuous AI build lane. Use `Tooling` to
+run the selected script through the real editor tool harness and capture
+before/after state. Use `Training` to review and intentionally promote
+evidence-backed captures into committed datasets/evals.
 
 ## What Epoch Provides Right Now
 

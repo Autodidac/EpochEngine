@@ -44,6 +44,7 @@ module;
 #include <chrono>
 #include <cstdlib>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -96,6 +97,16 @@ namespace epochnamespace
             SourceUpdate
         };
 
+        enum class AiWorkspaceDomain : unsigned char
+        {
+            Factory = 0,
+            Tooling,
+            Engine,
+            Software,
+            Training,
+            Ops
+        };
+
         struct SystemsSurfaceState
         {
             float renderZoom{ 1.0f };
@@ -105,6 +116,11 @@ namespace epochnamespace
             SpriteHandle renderSurface{};
             SpriteHandle taskSurface{};
             SpriteHandle supportSurface{};
+        };
+
+        struct AiSurfaceState
+        {
+            SpriteHandle factorySurface{};
         };
 
         [[nodiscard]] static bool is_ws_only(std::string_view s) noexcept
@@ -244,6 +260,8 @@ namespace epochnamespace
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
             SystemsSurfaceState systems{};
+            AiSurfaceState aiSurfaces{};
+            AiWorkspaceDomain aiWorkspaceDomain{ AiWorkspaceDomain::Factory };
             bool aiContinuousBuildEnabled{ false };
             bool aiContinuousBuildStageOnNextFrame{ false };
             std::optional<std::future<EditorProjectBuildResult>> aiContinuousBuildPending{};
@@ -1446,6 +1464,98 @@ namespace epochnamespace
             return "Gate ready: build, project, capture, and chat evidence are staged for review";
         }
 
+        [[nodiscard]] std::string_view ai_workspace_domain_name(AiWorkspaceDomain domain) noexcept
+        {
+            switch (domain)
+            {
+            case AiWorkspaceDomain::Factory:
+                return "Dark Factory";
+            case AiWorkspaceDomain::Tooling:
+                return "Tooling";
+            case AiWorkspaceDomain::Engine:
+                return "Engine AI";
+            case AiWorkspaceDomain::Software:
+                return "Software";
+            case AiWorkspaceDomain::Training:
+                return "Training";
+            case AiWorkspaceDomain::Ops:
+                return "Ops / How-To";
+            default:
+                return "AI";
+            }
+        }
+
+        [[nodiscard]] static SurfaceCanvas build_ai_factory_surface(
+            const AiReviewGateStatus& status,
+            bool continuousEnabled,
+            bool buildPending,
+            std::size_t buildRuns,
+            std::size_t toolRuns)
+        {
+            constexpr int kSurfaceWidth = 1280;
+            constexpr int kSurfaceHeight = 188;
+            SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 10, 13, 18, 255 });
+
+            for (int x = 0; x < kSurfaceWidth; x += 48)
+                canvas.fill_rect(x, 0, 1, kSurfaceHeight, gui::Color{ 22, 27, 36, 255 });
+            for (int y = 24; y < kSurfaceHeight; y += 40)
+                canvas.hline(0, y, kSurfaceWidth, gui::Color{ 18, 23, 31, 255 });
+
+            const int readyWidth = status.totalEvidenceCount == 0
+                ? 0
+                : static_cast<int>((kSurfaceWidth - 96) * status.readyEvidenceCount / status.totalEvidenceCount);
+            canvas.fill_rect(48, 20, kSurfaceWidth - 96, 12, gui::Color{ 30, 38, 48, 255 });
+            canvas.fill_rect(48, 20, readyWidth, 12, status.buildEvidenceReady && status.captureEvidenceReady
+                ? gui::Color{ 91, 205, 135, 255 }
+                : gui::Color{ 230, 171, 72, 255 });
+
+            const std::array<gui::Color, 5> stageFill{{
+                { 58, 82, 142, 255 },
+                { 70, 104, 157, 255 },
+                { 78, 131, 106, 255 },
+                { 139, 113, 61, 255 },
+                { 127, 82, 118, 255 }
+            }};
+            const std::array<gui::Color, 5> stageAccent{{
+                { 142, 184, 255, 255 },
+                { 134, 207, 255, 255 },
+                { 132, 244, 173, 255 },
+                { 255, 221, 114, 255 },
+                { 255, 158, 210, 255 }
+            }};
+
+            std::size_t activeStage = 4;
+            if (!status.projectEvidenceReady)
+                activeStage = 0;
+            else if (!status.buildEvidenceReady)
+                activeStage = 2;
+            else if (!status.captureEvidenceReady)
+                activeStage = 3;
+
+            constexpr int stageWidth = 176;
+            constexpr int stageHeight = 58;
+            constexpr int stageGap = 58;
+            const int baseX = 74;
+            const int y = 66;
+            for (std::size_t i = 0; i < stageFill.size(); ++i)
+            {
+                const int x = baseX + static_cast<int>(i) * (stageWidth + stageGap);
+                if (i != 0)
+                    canvas.fill_rect(x - stageGap + 6, y + stageHeight / 2 - 3, stageGap - 12, 6, gui::Color{ 48, 57, 72, 255 });
+                canvas.fill_rect(x, y, stageWidth, stageHeight, stageFill[i]);
+                canvas.stroke_rect(x, y, stageWidth, stageHeight, i == activeStage ? stageAccent[i] : gui::Color{ 255, 255, 255, 36 });
+                canvas.fill_rect(x + 12, y + 12, 34, stageHeight - 24, gui::Color{ 255, 255, 255, 30 });
+                if (i == activeStage)
+                    canvas.fill_rect(x + stageWidth - 13, y + 8, 7, stageHeight - 16, stageAccent[i]);
+            }
+
+            canvas.fill_rect(48, 150, 250, 10, continuousEnabled ? gui::Color{ 82, 189, 121, 255 } : gui::Color{ 96, 104, 118, 255 });
+            canvas.fill_rect(320, 150, 250, 10, buildPending ? gui::Color{ 255, 198, 85, 255 } : gui::Color{ 92, 130, 177, 255 });
+            canvas.fill_rect(592, 150, (std::min)(250, 40 + static_cast<int>(buildRuns) * 24), 10, gui::Color{ 125, 177, 255, 255 });
+            canvas.fill_rect(864, 150, (std::min)(250, 40 + static_cast<int>(toolRuns) * 24), 10, gui::Color{ 244, 143, 195, 255 });
+            return canvas;
+        }
+
         AiChat& chat_state_for(const std::shared_ptr<core::Context>& ctx)
         {
             auto& storage = chat_storage();
@@ -2161,6 +2271,40 @@ namespace epochnamespace
                 latestPrompt,
                 latestReply);
             const std::string loopStage = ai_control_loop_stage(gateStatus);
+            const float aiContentWidth = (std::max)(180.0f, log_size.x - 24.0f);
+
+            const std::array<gui::SegmentedButtonSpec, 6> aiDomains{{
+                { "Factory", 96.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Factory },
+                { "Tooling", 92.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling },
+                { "Engine AI", 108.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine },
+                { "Software", 104.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Software },
+                { "Training", 104.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Training },
+                { "Ops", 72.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Ops }
+            }};
+            if (const auto selectedAiDomain = gui::segmented_button_row(aiDomains))
+                editor.aiWorkspaceDomain = static_cast<AiWorkspaceDomain>(*selectedAiDomain);
+
+            gui::property_row("[ai] Workspace", ai_workspace_domain_name(editor.aiWorkspaceDomain));
+
+            if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Factory)
+            {
+                const auto factoryCanvas = build_ai_factory_surface(
+                    gateStatus,
+                    editor.aiContinuousBuildEnabled,
+                    editor.aiContinuousBuildPending.has_value(),
+                    editor.aiContinuousBuildRunCount,
+                    editor.aiToolHarnessRunCount);
+                editor.aiSurfaces.factorySurface = gui::register_runtime_surface(
+                    "ai.factory.pipeline",
+                    factoryCanvas.pixels,
+                    static_cast<std::uint32_t>(factoryCanvas.width),
+                    static_cast<std::uint32_t>(factoryCanvas.height));
+
+                if (editor.aiSurfaces.factorySurface.is_valid())
+                    gui::image(editor.aiSurfaces.factorySurface, { aiContentWidth, 126.0f });
+                else
+                    gui::wrapped_label("AI factory visual surface unavailable.", aiContentWidth);
+            }
 
             gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
             gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
@@ -2222,6 +2366,42 @@ namespace epochnamespace
             gui::wrapped_label(
                 continuousBuildGuidance.c_str(),
                 (std::max)(180.0f, log_size.x - 24.0f));
+            if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Factory)
+            {
+                gui::wrapped_label(
+                    "Dark Factory domain: keep the build watcher on while you edit scripts/projects, then let successful builds stage packets for verifier/gate review. This is the main self-improvement control room.",
+                    aiContentWidth);
+            }
+            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling)
+            {
+                gui::wrapped_label(
+                    "Tooling domain: select a script in Scripts, then run the AI tool harness here. The harness builds/runs it through EpochScriptHost, captures before/after editor state, records MCP evidence, and stages a packet.",
+                    aiContentWidth);
+            }
+            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine)
+            {
+                gui::wrapped_label(
+                    "Engine AI domain: use this as the regular game-engine assistant surface for scene/project guidance, active model inspection, MCP capture, and safe iteration packet staging.",
+                    aiContentWidth);
+            }
+            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Software)
+            {
+                gui::wrapped_label(
+                    "Software domain: tracks generated project shells, build logs, child executables, and script/source evidence so the AI can reason about real software artifacts instead of just editor chat.",
+                    aiContentWidth);
+            }
+            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Training)
+            {
+                gui::wrapped_label(
+                    "Training domain: raw captures stay local until review; curated datasets and evals live under Engine/ai. Promote only records tied to build/runtime/tool evidence.",
+                    aiContentWidth);
+            }
+            else
+            {
+                gui::wrapped_label(
+                    "How to run: build Epoch, launch epoch.exe, open Workspace > AI, pick Factory, create or select a project, enable Continuous AI Build, then use Tooling > Run AI Tool Harness after selecting a script.",
+                    aiContentWidth);
+            }
 
             const auto currentMcpRecord = [&]() {
                 return epoch::ai::McpCaptureRecord{
@@ -2371,14 +2551,28 @@ namespace epochnamespace
             if (editor.aiContinuousBuildEnabled && !editor.aiContinuousBuildPending)
                 startAiContinuousBuild("detected project/script evidence change", false);
 
-            gui::property_row("[ai-build] Continuous", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
-            gui::property_row("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false");
-            gui::property_row("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount));
-            gui::property_row("[ai-build] Status", editor.aiContinuousBuildStatus);
-            gui::property_row("[ai-tool] Runs", std::to_string(editor.aiToolHarnessRunCount));
-            gui::property_row("[ai-tool] Status", editor.aiToolHarnessStatus);
+            const bool showFactoryControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Factory
+                || editor.aiWorkspaceDomain == AiWorkspaceDomain::Software;
+            const bool showToolingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling;
+            const bool showTrainingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Training
+                || editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine;
 
-            if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Continuous AI Build" : "Enable Continuous AI Build", { 240.0f, 30.0f }))
+            if (showFactoryControls)
+            {
+                gui::property_row("[ai-build] Continuous", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+                gui::property_row("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false");
+                gui::property_row("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount));
+                gui::property_row("[ai-build] Status", editor.aiContinuousBuildStatus);
+            }
+
+            if (showToolingControls)
+            {
+                gui::property_row("[ai-tool] Runs", std::to_string(editor.aiToolHarnessRunCount));
+                gui::property_row("[ai-tool] Status", editor.aiToolHarnessStatus);
+                gui::property_row("[ai-tool] State", editor_tooling_state_summary(editor));
+            }
+
+            if (showFactoryControls && gui::button(editor.aiContinuousBuildEnabled ? "Pause Continuous AI Build" : "Enable Continuous AI Build", { 240.0f, 30.0f }))
             {
                 editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
                 editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
@@ -2391,10 +2585,10 @@ namespace epochnamespace
                     : "[ai-build] Continuous build paused.");
             }
 
-            if (gui::button("Queue AI Build Now", { 220.0f, 30.0f }))
+            if (showFactoryControls && gui::button("Queue AI Build Now", { 220.0f, 30.0f }))
                 startAiContinuousBuild("manual AI build request", true);
 
-            if (gui::button("Run AI Tool Harness", { 220.0f, 30.0f }))
+            if (showToolingControls && gui::button("Run AI Tool Harness", { 220.0f, 30.0f }))
             {
                 const std::string before = editor_tooling_state_summary(editor);
                 const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
@@ -2430,7 +2624,7 @@ namespace epochnamespace
                 }
             }
 
-            if (gui::button("Stage Iteration Packet", { 220.0f, 30.0f }))
+            if ((showFactoryControls || showTrainingControls) && gui::button("Stage Iteration Packet", { 220.0f, 30.0f }))
             {
                 const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
                 if (packetDir.empty())
@@ -2444,14 +2638,14 @@ namespace epochnamespace
                 }
             }
 
-            if (gui::button("Capture MCP Snapshot", { 220.0f, 30.0f }))
+            if (showTrainingControls && gui::button("Capture MCP Snapshot", { 220.0f, 30.0f }))
             {
                 epoch::ai::append_mcp_capture(currentMcpRecord());
                 push_editor_log(editor, "[ai] Captured MCP training snapshot.");
                 push_editor_log(editor, std::string("[ai] MCP capture path: ") + training.mcp_capture_jsonl);
             }
 
-            if (gui::button("Promote MCP Snapshot", { 220.0f, 30.0f }))
+            if (showTrainingControls && gui::button("Promote MCP Snapshot", { 220.0f, 30.0f }))
             {
                 const bool ok = epoch::ai::promote_mcp_capture_record(currentMcpRecord(), "epoch_mcp_curated");
                 push_editor_log(editor, ok
@@ -2461,7 +2655,7 @@ namespace epochnamespace
                     push_editor_log(editor, std::string("[ai] Curated dataset root: ") + training.curated_dataset_root);
             }
 
-            if (gui::button("Promote Scene Eval", { 220.0f, 30.0f }))
+            if (showTrainingControls && gui::button("Promote Scene Eval", { 220.0f, 30.0f }))
             {
                 const bool ok = epoch::ai::promote_eval_case(epoch::ai::EvalCase{
                     .name = editor.projectId + "-scene-guidance",
@@ -2477,7 +2671,7 @@ namespace epochnamespace
                     push_editor_log(editor, std::string("[ai] Eval suite root: ") + training.eval_root);
             }
 
-            if (gui::button("Promote Latest Chat Pair", { 220.0f, 30.0f }))
+            if (showTrainingControls && gui::button("Promote Latest Chat Pair", { 220.0f, 30.0f }))
             {
                 const std::string latestPrompt = last_chat_line_with_prefix(chat, "you> ");
                 const std::string latestReply = last_chat_line_with_prefix(chat, "bot> ");

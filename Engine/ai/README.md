@@ -67,3 +67,37 @@ selected tooling script through the real `EpochScriptHost`, captures before/afte
 editor state, records the result as MCP evidence, and stages a packet when the
 tool action succeeds. This is the first bridge from "AI can talk about tooling"
 to "AI can learn from an editor action that actually changed state."
+
+## Running The AI Factory
+
+From a developer checkout:
+
+1. Configure/build the editor:
+   `cmake --preset windows-msvc-debug`
+2. Build after code changes:
+   `cmake --build --preset windows-msvc-debug`
+3. Launch the editor executable:
+   `build/windows-msvc-debug/Engine/Debug/epoch.exe`
+4. Open the editor workspace panel and select `AI`.
+5. Use the AI sub-workspaces:
+   - `Factory`: visual control room for the continuous build lane
+   - `Tooling`: run selected scripts through the editor tool harness
+   - `Engine AI`: normal project/scene guidance, MCP capture, and packet staging
+   - `Software`: generated project/build/source evidence
+   - `Training`: raw capture, curated dataset, and eval promotion controls
+   - `Ops / How-To`: quick operating instructions
+
+Suggested first run:
+
+1. In `Project`, create or select a generated project shell.
+2. In `Scripts`, select `Rotate All Entities` or another tooling script.
+3. In `AI -> Factory`, click `Enable Continuous AI Build` or `Queue AI Build Now`.
+4. In `AI -> Tooling`, click `Run AI Tool Harness`.
+5. Inspect the `Output` workspace for build/tool logs.
+6. Review staged packets under
+   `Engine/examples/ConsoleApplication1/workspace/research/staged/iteration_packets/`.
+7. Promote only reviewed, evidence-backed captures from `AI -> Training`.
+
+The factory should feel like a control room, not a hidden autopilot: it can
+watch, build, run tooling, capture evidence, and stage packets, but curated
+training and eval promotion remain explicit review-gated actions.

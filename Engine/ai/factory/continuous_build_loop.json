@@ -36,6 +36,8 @@
     }
   ],
   "active_engine_hooks": [
+    "AI workspace domain selector",
+    "Dark Factory visual pipeline surface",
     "AI workspace continuous build toggle",
     "AI workspace editor tool harness",
     "single-flight async child-project build",
