@@ -218,6 +218,14 @@ engine shape and should be treated as starting truth for the next passes:
 - an editor-owned continuous AI build lane that watches active project/script
   evidence, queues one child-project build at a time, and feeds successful
   build artifacts back into staged AI packets for verifier/gate review
+- AI Control can repair active project evidence from the editor by regenerating
+  or verifying the selected project shell before queueing a builder pass
+- AI Control exposes repair, manual builder queue, and watcher controls in the
+  Inspector as well as the AI workspace so Phase 5 can be driven without
+  command-line operation
+- AI evidence lookup is now executable/repo-root aware, so launching the editor
+  from Visual Studio/MSBuild output directories no longer makes project
+  manifests and build artifacts appear missing only because the cwd changed
 - an AI tool harness that builds/runs the selected script through the real
   editor host, captures before/after editor state, records MCP evidence, and
   stages packets from successful tool actions
@@ -229,6 +237,9 @@ engine shape and should be treated as starting truth for the next passes:
   the current `planner -> executor -> builder -> verifier -> gate` loop stage
   so future replay/training passes can reason from staged evidence instead of
   guessing from editor state
+- the scene viewport now has first-pass object interaction: visible editor
+  primitives can be click-selected and left-dragged while empty scene space
+  still supports camera pan/orbit/zoom
 
 ## Phase Progress
 
@@ -352,6 +363,12 @@ engine shape and should be treated as starting truth for the next passes:
   and builder/verifier review, including loop-stage and gate-state metadata
 - keep continuous AI builds nonblocking and single-flight so the engine can
   produce fresh evidence while preserving explicit review gates
+- keep project evidence repair available in the AI Control domain so Phase 5
+  work can recover from missing generated shells without leaving the editor
+- keep the Inspector copy of AI repair/build/watcher controls alive until the
+  bottom workspace gets a proper scroll/resize treatment
+- promote only staged packets that include root-resolved project/build/output
+  evidence; cwd-dependent evidence is considered invalid
 - train from real editor tool actions by capturing before/after state from the
   selected script harness before promoting any dataset/eval records
 - keep local model activation operator-gated; no first-detected model fallback,
@@ -374,6 +391,8 @@ engine shape and should be treated as starting truth for the next passes:
 - build from the current ambient-solid primitive preview baseline toward true
   ECS-owned cube/light/material components instead of falling back to abstract
   helper glyphs
+- turn the new scene click/drag path into a real transform gizmo and persist
+  transform edits through the project/ECS scene-authoring source of truth
 - keep the live project shell honest by surfacing current seed-object,
   archetype, and category proof directly in-editor while the fuller object
   runtime is still being built out

@@ -2273,63 +2273,72 @@ namespace epochnamespace::core
                                 && mouse_in_scene)
                             {
                                 auto& look_state = g_preview_look_states[ctx.get()];
-                                const int wheelDelta = epochnamespace::gui::consume_mouse_wheel_delta();
-                                const float forwardInput =
-                                    (ctx->is_key_held_safe(epochnamespace::input::Key::W) ? 1.0f : 0.0f)
-                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::S) ? 1.0f : 0.0f);
-                                const float rightInput =
-                                    (ctx->is_key_held_safe(epochnamespace::input::Key::D) ? 1.0f : 0.0f)
-                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::A) ? 1.0f : 0.0f);
-                                const float upInput =
-                                    (ctx->is_key_held_safe(epochnamespace::input::Key::E) ? 1.0f : 0.0f)
-                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::Q) ? 1.0f : 0.0f);
-                                const float yawInput =
-                                    (ctx->is_key_held_safe(epochnamespace::input::Key::Right) ? 1.0f : 0.0f)
-                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::Left) ? 1.0f : 0.0f);
-                                const float pitchInput =
-                                    (ctx->is_key_held_safe(epochnamespace::input::Key::Up) ? 1.0f : 0.0f)
-                                    - (ctx->is_key_held_safe(epochnamespace::input::Key::Down) ? 1.0f : 0.0f);
-
-                                if (mouse_right_down && look_state.looking)
+                                if (editor_frame.scene_input_captured)
                                 {
-                                    const float mouseDeltaX = mouse_pos.x - look_state.last_mouse.x;
-                                    const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
-                                    constexpr float kMouseSensitivity = 0.20f;
-                                    epochnamespace::previewgrid::look_camera(
-                                        ctx.get(),
-                                        mouseDeltaX * kMouseSensitivity,
-                                        -mouseDeltaY * kMouseSensitivity);
+                                    look_state.last_mouse = mouse_pos;
+                                    look_state.looking = false;
+                                    look_state.panning = false;
                                 }
-                                else if (mouse_left_down && !mouse_right_down && look_state.panning)
+                                else
                                 {
-                                    const float mouseDeltaX = mouse_pos.x - look_state.last_mouse.x;
-                                    const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
-                                    epochnamespace::previewgrid::pan_camera_drag(
+                                    const int wheelDelta = epochnamespace::gui::consume_mouse_wheel_delta();
+                                    const float forwardInput =
+                                        (ctx->is_key_held_safe(epochnamespace::input::Key::W) ? 1.0f : 0.0f)
+                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::S) ? 1.0f : 0.0f);
+                                    const float rightInput =
+                                        (ctx->is_key_held_safe(epochnamespace::input::Key::D) ? 1.0f : 0.0f)
+                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::A) ? 1.0f : 0.0f);
+                                    const float upInput =
+                                        (ctx->is_key_held_safe(epochnamespace::input::Key::E) ? 1.0f : 0.0f)
+                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::Q) ? 1.0f : 0.0f);
+                                    const float yawInput =
+                                        (ctx->is_key_held_safe(epochnamespace::input::Key::Right) ? 1.0f : 0.0f)
+                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::Left) ? 1.0f : 0.0f);
+                                    const float pitchInput =
+                                        (ctx->is_key_held_safe(epochnamespace::input::Key::Up) ? 1.0f : 0.0f)
+                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::Down) ? 1.0f : 0.0f);
+
+                                    if (mouse_right_down && look_state.looking)
+                                    {
+                                        const float mouseDeltaX = mouse_pos.x - look_state.last_mouse.x;
+                                        const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
+                                        constexpr float kMouseSensitivity = 0.20f;
+                                        epochnamespace::previewgrid::look_camera(
+                                            ctx.get(),
+                                            mouseDeltaX * kMouseSensitivity,
+                                            -mouseDeltaY * kMouseSensitivity);
+                                    }
+                                    else if (mouse_left_down && !mouse_right_down && look_state.panning)
+                                    {
+                                        const float mouseDeltaX = mouse_pos.x - look_state.last_mouse.x;
+                                        const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
+                                        epochnamespace::previewgrid::pan_camera_drag(
+                                            ctx.get(),
+                                            mouseDeltaX,
+                                            -mouseDeltaY);
+                                    }
+
+                                    if (wheelDelta != 0)
+                                    {
+                                        constexpr float kWheelZoomStep = 1.3f;
+                                        epochnamespace::previewgrid::zoom_camera(
+                                            ctx.get(),
+                                            (static_cast<float>(wheelDelta) / 120.0f) * kWheelZoomStep);
+                                    }
+
+                                    epochnamespace::previewgrid::step_camera(
                                         ctx.get(),
-                                        mouseDeltaX,
-                                        -mouseDeltaY);
+                                        dt,
+                                        forwardInput,
+                                        rightInput,
+                                        upInput,
+                                        yawInput,
+                                        pitchInput);
+
+                                    look_state.last_mouse = mouse_pos;
+                                    look_state.looking = mouse_right_down;
+                                    look_state.panning = mouse_left_down && !mouse_right_down;
                                 }
-
-                                if (wheelDelta != 0)
-                                {
-                                    constexpr float kWheelZoomStep = 1.3f;
-                                    epochnamespace::previewgrid::zoom_camera(
-                                        ctx.get(),
-                                        (static_cast<float>(wheelDelta) / 120.0f) * kWheelZoomStep);
-                                }
-
-                                epochnamespace::previewgrid::step_camera(
-                                    ctx.get(),
-                                    dt,
-                                    forwardInput,
-                                    rightInput,
-                                    upInput,
-                                    yawInput,
-                                    pitchInput);
-
-                                look_state.last_mouse = mouse_pos;
-                                look_state.looking = mouse_right_down;
-                                look_state.panning = mouse_left_down && !mouse_right_down;
                             }
                             else
                             {

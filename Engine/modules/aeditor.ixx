@@ -76,6 +76,7 @@ namespace epochnamespace
     export struct EditorFrameResult
     {
         gui::WidgetBounds scene_viewport{};
+        bool scene_input_captured{ false };
         EditorCommand command{ EditorCommand::None };
         std::string command_argument{};
     };

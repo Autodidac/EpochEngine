@@ -42,6 +42,7 @@ module;
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cstddef>
 #include <cstdint>
@@ -67,6 +68,7 @@ import aengine.gui;
 import aengine.version;
 import aspritehandle;
 import core.context;
+import core.path;
 import context.type;
 import aengine.input;
 import ascripting.system;
@@ -279,6 +281,11 @@ namespace epochnamespace
             std::size_t selectedEntity{ 0 };
             std::vector<std::string> logLines{};
             bool helpersVisible{ true };
+            bool sceneDragActive{ false };
+            bool sceneLeftWasHeld{ false };
+            std::size_t sceneDragEntity{ 0 };
+            gui::Vec2 sceneDragStartMouse{};
+            std::array<float, 3> sceneDragStartPosition{ 0.0f, 0.0f, 0.0f };
             EditorTimeSnapshot timeSnapshot{};
             EditorTimeControl timeControl{};
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
@@ -1064,6 +1071,177 @@ namespace epochnamespace
                 std::span<const epochnamespace::previewgrid::ObjectMarker>{ markers.data(), markers.size() });
         }
 
+        [[nodiscard]] bool project_editor_entity_to_screen(
+            const core::Context* ctx,
+            const EditorEntity& entity,
+            const gui::WidgetBounds& viewport,
+            gui::Vec2& out) noexcept
+        {
+            if (!ctx || viewport.size.x <= 1.0f || viewport.size.y <= 1.0f)
+                return false;
+
+            const auto camera = epochnamespace::previewgrid::camera_for(ctx);
+            const float aspect = viewport.size.x / viewport.size.y;
+            const auto projection = epochnamespace::previewgrid::perspective(
+                camera.fovRadians,
+                aspect,
+                camera.nearPlane,
+                camera.farPlane);
+            const auto view = epochnamespace::previewgrid::look_at(
+                camera.eye,
+                camera.target,
+                camera.up);
+            const auto mvp = epochnamespace::previewgrid::multiply(projection, view);
+            const auto clip = epochnamespace::previewgrid::transform_point(
+                mvp,
+                epochnamespace::previewgrid::Vec3{
+                    entity.position[0],
+                    entity.position[1],
+                    entity.position[2]
+                });
+
+            if (clip.w <= 1.0e-4f)
+                return false;
+
+            const float invW = 1.0f / clip.w;
+            const float ndcX = clip.x * invW;
+            const float ndcY = clip.y * invW;
+            if (!std::isfinite(ndcX) || !std::isfinite(ndcY))
+                return false;
+
+            // Keep slightly off-center objects selectable while the preview matures.
+            if (ndcX < -1.35f || ndcX > 1.35f || ndcY < -1.35f || ndcY > 1.35f)
+                return false;
+
+            out.x = viewport.position.x + ((ndcX * 0.5f) + 0.5f) * viewport.size.x;
+            out.y = viewport.position.y + ((-ndcY * 0.5f) + 0.5f) * viewport.size.y;
+            return true;
+        }
+
+        [[nodiscard]] std::optional<std::size_t> pick_editor_scene_entity(
+            const core::Context* ctx,
+            const EditorState& state,
+            const gui::WidgetBounds& viewport,
+            const gui::Vec2& mouse) noexcept
+        {
+            std::optional<std::size_t> best{};
+            float bestDistanceSq = 1.0e12f;
+
+            for (std::size_t i = 0; i < state.entities.size(); ++i)
+            {
+                const auto& entity = state.entities[i];
+                if (!entity.visible)
+                    continue;
+
+                gui::Vec2 screen{};
+                if (!project_editor_entity_to_screen(ctx, entity, viewport, screen))
+                    continue;
+
+                const float dx = mouse.x - screen.x;
+                const float dy = mouse.y - screen.y;
+                const float distanceSq = (dx * dx) + (dy * dy);
+                const float pickRadius = (std::clamp)(30.0f + marker_radius_for_entity(entity) * 18.0f, 34.0f, 72.0f);
+                const float pickRadiusSq = pickRadius * pickRadius;
+                if (distanceSq <= pickRadiusSq && distanceSq < bestDistanceSq)
+                {
+                    best = i;
+                    bestDistanceSq = distanceSq;
+                }
+            }
+
+            return best;
+        }
+
+        void update_scene_object_interaction(
+            const std::shared_ptr<core::Context>& ctx,
+            EditorState& editor,
+            EditorFrameResult& result)
+        {
+            if (!ctx || editor.previewMode != core::ScenePreviewMode::Editor)
+            {
+                editor.sceneDragActive = false;
+                editor.sceneLeftWasHeld = false;
+                return;
+            }
+
+            int mx = 0;
+            int my = 0;
+            ctx->get_mouse_position_safe(mx, my);
+            const gui::Vec2 mouse{
+                static_cast<float>(mx),
+                static_cast<float>(my)
+            };
+
+            const auto& viewport = result.scene_viewport;
+            const bool mouseInScene =
+                mouse.x >= viewport.position.x
+                && mouse.y >= viewport.position.y
+                && mouse.x < (viewport.position.x + viewport.size.x)
+                && mouse.y < (viewport.position.y + viewport.size.y);
+
+            const bool leftHeld = ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseLeft);
+            const bool rightHeld = ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseRight);
+            const bool leftPressed = leftHeld && !editor.sceneLeftWasHeld;
+
+            if (leftPressed && mouseInScene && !rightHeld)
+            {
+                const auto picked = pick_editor_scene_entity(ctx.get(), editor, viewport, mouse);
+                if (picked)
+                {
+                    editor.selectedEntity = *picked;
+                    editor.sceneDragActive = true;
+                    editor.sceneDragEntity = *picked;
+                    editor.sceneDragStartMouse = mouse;
+                    editor.sceneDragStartPosition = editor.entities[*picked].position;
+                    result.scene_input_captured = true;
+                    push_editor_log(editor, "[scene] Selected " + editor.entities[*picked].name + ".");
+                }
+                else
+                {
+                    editor.sceneDragActive = false;
+                }
+            }
+
+            if (editor.sceneDragActive && leftHeld && !rightHeld && editor.sceneDragEntity < editor.entities.size())
+            {
+                result.scene_input_captured = true;
+
+                const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
+                auto forward = epochnamespace::previewgrid::normalize(epochnamespace::previewgrid::subtract(camera.target, camera.eye));
+                forward.y = 0.0f;
+                forward = epochnamespace::previewgrid::normalize(forward);
+                if (epochnamespace::previewgrid::dot(forward, forward) <= 1.0e-6f)
+                    forward = { 0.0f, 0.0f, -1.0f };
+
+                constexpr epochnamespace::previewgrid::Vec3 kWorldUp{ 0.0f, 1.0f, 0.0f };
+                auto right = epochnamespace::previewgrid::normalize(epochnamespace::previewgrid::cross(forward, kWorldUp));
+                if (epochnamespace::previewgrid::dot(right, right) <= 1.0e-6f)
+                    right = { 1.0f, 0.0f, 0.0f };
+
+                const float dragScale = (std::max)(
+                    0.010f,
+                    epochnamespace::previewgrid::camera_distance_for(ctx.get()) * 0.0125f);
+                const float dx = mouse.x - editor.sceneDragStartMouse.x;
+                const float dy = mouse.y - editor.sceneDragStartMouse.y;
+                const auto delta = epochnamespace::previewgrid::add(
+                    epochnamespace::previewgrid::scale(right, dx * dragScale),
+                    epochnamespace::previewgrid::scale(forward, -dy * dragScale));
+
+                auto& entity = editor.entities[editor.sceneDragEntity];
+                entity.position[0] = editor.sceneDragStartPosition[0] + delta.x;
+                entity.position[2] = editor.sceneDragStartPosition[2] + delta.z;
+            }
+
+            if (!leftHeld && editor.sceneDragActive)
+            {
+                if (editor.sceneDragEntity < editor.entities.size())
+                    push_editor_log(editor, "[scene] Moved " + editor.entities[editor.sceneDragEntity].name + ".");
+                editor.sceneDragActive = false;
+            }
+
+            editor.sceneLeftWasHeld = leftHeld;
+        }
+
         [[nodiscard]] std::string build_ai_scene_prompt(const EditorState& state)
         {
             if (state.entities.empty())
@@ -1325,31 +1503,53 @@ namespace epochnamespace
             return "Switch deliberately; inactive backends should be torn down and recreated, not parked invisibly.";
         }
 
+        [[nodiscard]] std::filesystem::path editor_runtime_root()
+        {
+            if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
+                return runtimeRoot.lexically_normal();
+
+            if (const auto exeRoot = epoch::core::path::find_epoch_repo_root(epoch::core::path::executable_dir()); !exeRoot.empty())
+                return exeRoot.lexically_normal();
+
+            std::error_code ec;
+            const auto cwd = std::filesystem::current_path(ec);
+            return ec ? std::filesystem::path{} : cwd.lexically_normal();
+        }
+
+        [[nodiscard]] std::filesystem::path resolve_editor_path(const std::filesystem::path& path)
+        {
+            if (path.empty())
+                return {};
+            if (path.is_absolute())
+                return path.lexically_normal();
+            return (editor_runtime_root() / path).lexically_normal();
+        }
+
         [[nodiscard]] std::filesystem::path project_entry_source_path(std::string_view projectRoot)
         {
-            return std::filesystem::path{ projectRoot } / "source" / "main.cpp";
+            return resolve_editor_path(std::filesystem::path{ projectRoot }) / "source" / "main.cpp";
         }
 
         [[nodiscard]] std::filesystem::path project_windows_build_script_path(std::string_view projectRoot)
         {
-            return std::filesystem::path{ projectRoot } / "build_project.ps1";
+            return resolve_editor_path(std::filesystem::path{ projectRoot }) / "build_project.ps1";
         }
 
         [[nodiscard]] std::filesystem::path project_windows_vcxproj_path(std::string_view projectRoot)
         {
-            const std::filesystem::path root{ projectRoot };
+            const std::filesystem::path root = resolve_editor_path(std::filesystem::path{ projectRoot });
             return root / (root.filename().string() + ".vcxproj");
         }
 
         [[nodiscard]] std::filesystem::path project_output_exe_path(std::string_view projectRoot)
         {
-            const std::filesystem::path root{ projectRoot };
+            const std::filesystem::path root = resolve_editor_path(std::filesystem::path{ projectRoot });
             return root / "bin" / "windows" / "Debug" / "x64" / (root.filename().string() + ".exe");
         }
 
         [[nodiscard]] std::filesystem::path project_build_log_path(std::string_view projectRoot)
         {
-            return std::filesystem::path{ projectRoot } / "build" / "logs" / "build-debug-x64.log";
+            return resolve_editor_path(std::filesystem::path{ projectRoot }) / "build" / "logs" / "build-debug-x64.log";
         }
 
         [[nodiscard]] std::string ai_build_path_stamp(const std::filesystem::path& path)
@@ -1357,22 +1557,23 @@ namespace epochnamespace
             if (path.empty())
                 return "(empty)#missing";
 
+            const auto resolvedPath = resolve_editor_path(path);
             std::error_code ec;
-            const auto normalized = std::filesystem::absolute(path, ec).lexically_normal().generic_string();
+            const auto normalized = std::filesystem::absolute(resolvedPath, ec).lexically_normal().generic_string();
             ec.clear();
-            if (!std::filesystem::exists(path, ec) || ec)
+            if (!std::filesystem::exists(resolvedPath, ec) || ec)
                 return normalized + "#missing";
 
-            const auto writeTime = std::filesystem::last_write_time(path, ec);
+            const auto writeTime = std::filesystem::last_write_time(resolvedPath, ec);
             if (ec)
                 return normalized + "#time-error";
 
             std::string stamp = normalized + "#" + std::to_string(writeTime.time_since_epoch().count());
             ec.clear();
-            if (std::filesystem::is_regular_file(path, ec) && !ec)
+            if (std::filesystem::is_regular_file(resolvedPath, ec) && !ec)
             {
                 ec.clear();
-                const auto size = std::filesystem::file_size(path, ec);
+                const auto size = std::filesystem::file_size(resolvedPath, ec);
                 if (!ec)
                     stamp += "#" + std::to_string(size);
             }
@@ -1384,7 +1585,7 @@ namespace epochnamespace
             const std::string& activeScriptSource,
             const std::filesystem::path& pathsManifest)
         {
-            const std::filesystem::path root{ editor.projectRoot };
+            const std::filesystem::path root = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
             std::string fingerprint = editor.projectId + "|" + editor.projectRoot + "|" + editor.activeScript;
             fingerprint += "|" + ai_build_path_stamp(project_entry_source_path(editor.projectRoot));
             fingerprint += "|" + ai_build_path_stamp(activeScriptSource);
@@ -1395,10 +1596,46 @@ namespace epochnamespace
             return fingerprint;
         }
 
+        void start_ai_continuous_project_build(
+            EditorState& editor,
+            const std::string& activeScriptSource,
+            const std::filesystem::path& pathsManifest,
+            std::string_view reason,
+            bool force)
+        {
+            if (editor.aiContinuousBuildPending)
+            {
+                editor.aiContinuousBuildStatus = "AI build already running.";
+                return;
+            }
+
+            if (editor.projectRoot.empty())
+            {
+                editor.aiContinuousBuildStatus = "Cannot build: no active project root.";
+                return;
+            }
+
+            const std::string fingerprint = ai_continuous_build_fingerprint(editor, activeScriptSource, pathsManifest);
+            if (!force && fingerprint == editor.aiContinuousBuildFingerprint)
+            {
+                editor.aiContinuousBuildStatus = "Watching for project/script changes.";
+                return;
+            }
+
+            editor.aiContinuousBuildFingerprint = fingerprint;
+            editor.aiContinuousBuildStatus = "Queued build: " + std::string(reason);
+            push_editor_log(editor, "[ai-build] Queued engine AI build: " + std::string(reason));
+
+            editor.aiContinuousBuildPending.emplace(std::async(std::launch::async, [root = editor.projectRoot]() {
+                return editor_build_project(root);
+            }));
+        }
+
         [[nodiscard]] std::string display_project_path(const std::filesystem::path& path)
         {
+            const auto resolvedPath = resolve_editor_path(path);
             std::error_code ec;
-            return std::filesystem::absolute(path, ec).lexically_normal().generic_string();
+            return std::filesystem::absolute(resolvedPath, ec).lexically_normal().generic_string();
         }
 
         struct SeedObjectSummary
@@ -1482,7 +1719,28 @@ namespace epochnamespace
             if (path.empty())
                 return false;
             std::error_code ec;
-            return std::filesystem::exists(path, ec);
+            return std::filesystem::exists(resolve_editor_path(path), ec);
+        }
+
+        void repair_active_project_evidence(EditorState& editor)
+        {
+            const std::string requestedProject = editor.projectId.empty()
+                ? std::string(editor_default_project_profile().id)
+                : editor.projectId;
+            const auto ensured = editor_ensure_project_shell(requestedProject);
+            editor.projectStatus = ensured.summary;
+            editor.aiContinuousBuildFingerprint.clear();
+            if (ensured.succeeded)
+            {
+                set_project(editor, ensured.project_id.empty() ? requestedProject : ensured.project_id, true);
+                editor.aiContinuousBuildStatus = "Project evidence repaired; queue an AI build to stage verifier evidence.";
+                push_editor_log(editor, "[ai-control] Project evidence repaired: " + ensured.summary);
+            }
+            else
+            {
+                editor.aiContinuousBuildStatus = "Project evidence repair failed; inspect project status.";
+                push_editor_log(editor, "[ai-control] Project evidence repair failed: " + ensured.summary);
+            }
         }
 
         [[nodiscard]] std::string ready_text(bool ready)
@@ -2133,11 +2391,53 @@ namespace epochnamespace
         gui::begin_window("Inspector", details_pos, details_size);
         if (editor.workspaceTab == EditorWorkspaceTab::AI)
         {
+            const auto inspectorTraining = epoch::ai::default_training_paths();
+            const std::filesystem::path inspectorBuildLog = project_build_log_path(editor.projectRoot);
+            const std::filesystem::path inspectorOutputExe = project_output_exe_path(editor.projectRoot);
+            const std::filesystem::path inspectorPathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
+            const std::string inspectorActiveScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
+            const auto inspectorGate = summarize_ai_review_gate(
+                editor,
+                inspectorBuildLog,
+                inspectorOutputExe,
+                inspectorPathsManifest,
+                inspectorTraining,
+                last_chat_line_with_prefix(chat, "you> "),
+                last_chat_line_with_prefix(chat, "bot> "));
+            const std::string inspectorStage = ai_control_loop_stage(inspectorGate);
+            const float inspectorWidth = (std::max)(180.0f, details_size.x - 24.0f);
+
             gui::label("Selected: AI Control");
             gui::wrapped_label(
                 "Discovery can list local models, but chat/tool execution stays disabled until you explicitly select one here.",
-                (std::max)(180.0f, details_size.x - 24.0f));
-            render_ai_model_picker(editor, (std::max)(180.0f, details_size.x - 24.0f));
+                inspectorWidth);
+            gui::property_row("[ai-control] Stage", inspectorStage);
+            gui::property_row("[ai-control] Evidence", inspectorGate.packetEvidenceSummary);
+            gui::property_row("[ai-build] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+            gui::property_row("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false");
+            gui::property_row("[ai-build] Status", editor.aiContinuousBuildStatus);
+            if (gui::button("Repair Active Project Evidence", { 260.0f, 30.0f }))
+                repair_active_project_evidence(editor);
+            if (gui::button("Queue Engine AI Build Now", { 240.0f, 30.0f }))
+                start_ai_continuous_project_build(
+                    editor,
+                    inspectorActiveScriptSource,
+                    inspectorPathsManifest,
+                    "manual inspector AI build request",
+                    true);
+            if (gui::button(editor.aiContinuousBuildEnabled ? "Pause AI Build Watcher" : "Enable AI Build Watcher", { 240.0f, 30.0f }))
+            {
+                editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
+                editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
+                    ? "AI build watcher enabled; watching project/script evidence."
+                    : "AI build watcher paused.";
+                if (editor.aiContinuousBuildEnabled)
+                    editor.aiContinuousBuildFingerprint.clear();
+                push_editor_log(editor, editor.aiContinuousBuildEnabled
+                    ? "[ai-build] AI build watcher enabled."
+                    : "[ai-build] AI build watcher paused.");
+            }
+            render_ai_model_picker(editor, inspectorWidth);
         }
         else
         {
@@ -2168,7 +2468,7 @@ namespace epochnamespace
             gui::label(std::string("Preview Objects: ") + std::to_string(visible_entity_count(editor)));
             gui::label(std::string("Editor Script: ") + editor.activeScript);
             gui::label(std::string("Runtime Target: ") + editor.activeRuntimeScene);
-            gui::label("Viewport Input: LMB pan  |  RMB orbit  |  Wheel zoom");
+            gui::label("Viewport Input: click/drag objects  |  empty LMB pan  |  RMB orbit  |  Wheel zoom");
         }
         gui::end_window();
 
@@ -2180,6 +2480,7 @@ namespace epochnamespace
             static_cast<int>((std::max)(0.0f, result.scene_viewport.size.x)),
             static_cast<int>((std::max)(0.0f, result.scene_viewport.size.y))
         });
+        update_scene_object_interaction(ctx, editor, result);
         publish_editor_preview_markers(ctx.get(), editor);
 
         const float split = 0.55f;
@@ -2215,7 +2516,7 @@ namespace epochnamespace
             const std::filesystem::path projectFile = project_windows_vcxproj_path(editor.projectRoot);
             const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
             const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
-            const std::filesystem::path pathsManifest = std::filesystem::path{ editor.projectRoot } / "project.paths.txt";
+            const std::filesystem::path pathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
             const auto modelSummary = editor_project_model_summary(editor.projectId);
 
             gui::property_row("[project] Active", activeProfile->display_name);
@@ -2241,14 +2542,14 @@ namespace epochnamespace
             gui::property_row("[project] Paths manifest", display_project_path(pathsManifest));
             gui::property_row("[project] Debug output", display_project_path(outputExe));
             gui::property_row("[project] Build log", display_project_path(buildLog));
-            gui::property_row("[project] Play target", std::filesystem::exists(outputExe) ? "ready" : "build required");
-            gui::property_row("[project] Build state", std::filesystem::exists(buildScript) ? "script ready" : "missing build script");
-            gui::property_row("[project] Manifest exists", std::filesystem::exists(editor.projectManifest) ? "true" : "false");
-            gui::property_row("[project] Entry exists", std::filesystem::exists(entrySource) ? "true" : "false");
-            gui::property_row("[project] Build script exists", std::filesystem::exists(buildScript) ? "true" : "false");
-            gui::property_row("[project] Paths manifest exists", std::filesystem::exists(pathsManifest) ? "true" : "false");
-            gui::property_row("[project] Output exists", std::filesystem::exists(outputExe) ? "true" : "false");
-            gui::property_row("[project] Build log exists", std::filesystem::exists(buildLog) ? "true" : "false");
+            gui::property_row("[project] Play target", path_exists(outputExe) ? "ready" : "build required");
+            gui::property_row("[project] Build state", path_exists(buildScript) ? "script ready" : "missing build script");
+            gui::property_row("[project] Manifest exists", path_exists(editor.projectManifest) ? "true" : "false");
+            gui::property_row("[project] Entry exists", path_exists(entrySource) ? "true" : "false");
+            gui::property_row("[project] Build script exists", path_exists(buildScript) ? "true" : "false");
+            gui::property_row("[project] Paths manifest exists", path_exists(pathsManifest) ? "true" : "false");
+            gui::property_row("[project] Output exists", path_exists(outputExe) ? "true" : "false");
+            gui::property_row("[project] Build log exists", path_exists(buildLog) ? "true" : "false");
             gui::property_row("[project] Seed objects", std::to_string(seedSummary.total));
             gui::property_row("[project] Seed mix", summarize_seed_category_mix(seedSummary));
             gui::property_row("[project] Archetype types", summarize_seed_type_list(seedSummary.types));
@@ -2408,7 +2709,7 @@ namespace epochnamespace
             const auto training = epoch::ai::default_training_paths();
             const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
             const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
-            const std::filesystem::path pathsManifest = std::filesystem::path{ editor.projectRoot } / "project.paths.txt";
+            const std::filesystem::path pathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
             const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
             const std::string latestPrompt = last_chat_line_with_prefix(chat, "you> ");
             const std::string latestReply = last_chat_line_with_prefix(chat, "bot> ");
@@ -2439,6 +2740,14 @@ namespace epochnamespace
             if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Control)
             {
                 render_ai_control_status_panel(editor, gateStatus, loopStage, aiContentWidth);
+                if (!gateStatus.projectEvidenceReady)
+                {
+                    gui::wrapped_label(
+                        "Project evidence is incomplete. Repair Active Project Evidence rebuilds the manifest/source/build-script shell from the active profile before you queue the next AI build.",
+                        aiContentWidth);
+                }
+                if (gui::button("Repair Active Project Evidence", { 260.0f, 30.0f }))
+                    repair_active_project_evidence(editor);
             }
 
             gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
@@ -2636,31 +2945,7 @@ namespace epochnamespace
             };
 
             auto startAiContinuousBuild = [&](std::string reason, bool force) {
-                if (editor.aiContinuousBuildPending)
-                {
-                    editor.aiContinuousBuildStatus = "AI build already running.";
-                    return;
-                }
-
-                if (editor.projectRoot.empty())
-                {
-                    editor.aiContinuousBuildStatus = "Cannot build: no active project root.";
-                    return;
-                }
-
-                const std::string fingerprint = ai_continuous_build_fingerprint(editor, activeScriptSource, pathsManifest);
-                if (!force && fingerprint == editor.aiContinuousBuildFingerprint)
-                {
-                    editor.aiContinuousBuildStatus = "Watching for project/script changes.";
-                    return;
-                }
-
-                editor.aiContinuousBuildFingerprint = fingerprint;
-                editor.aiContinuousBuildStatus = "Queued build: " + reason;
-                push_editor_log(editor, "[ai-build] Queued engine AI build: " + reason);
-                editor.aiContinuousBuildPending.emplace(std::async(std::launch::async, [root = editor.projectRoot]() {
-                    return editor_build_project(root);
-                }));
+                start_ai_continuous_project_build(editor, activeScriptSource, pathsManifest, reason, force);
             };
 
             bool aiBuildCompletedThisFrame = false;

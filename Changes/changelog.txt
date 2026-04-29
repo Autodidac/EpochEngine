@@ -1,5 +1,23 @@
 # Epoch Changelog
 
+## [v0.84.01]
+- Bumped the active source version to `v0.84.01` for the editor-native
+  self-iteration and scene-control pass.
+- Resolved project and AI-control evidence paths from the executable/repo root
+  instead of the launch working directory, so Visual Studio/MSBuild output-dir
+  launches can still find `Projects/...` manifests, build scripts, output
+  executables, logs, and staged path manifests.
+- Added an AI Control repair action that regenerates/verifies the active
+  project shell from the selected project profile and clears the continuous
+  build fingerprint so the operator can queue a fresh builder/verifier pass
+  from the editor.
+- Mirrored the AI repair, manual build queue, and watcher toggle into the
+  Inspector when the AI workspace is active, keeping the self-iteration loop
+  reachable without relying on command-line operation or a tall bottom panel.
+- Added scene-viewport click selection and left-drag movement for visible
+  editor primitives while preserving empty-space LMB camera pan, RMB orbit, and
+  wheel zoom.
+
 ## [v0.84.00]
 - Bumped the active source version to `v0.84.00` for the editor scene visibility
   and workspace usability pass.
