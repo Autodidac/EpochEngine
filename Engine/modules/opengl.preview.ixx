@@ -5,6 +5,7 @@ module;
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <include/aengine.config.hpp>
 
@@ -310,18 +311,37 @@ void main() {
                 GL_UNSIGNED_INT,
                 nullptr);
 
-            const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx);
-            const auto markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx);
-            if (markerCount >= 2 && state.sceneMarkerVao && state.sceneMarkerVbo)
+            auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(ctx);
+            if (solidVertices.size() >= 3 && state.sceneMarkerVao && state.sceneMarkerVbo)
             {
                 glBindVertexArray(state.sceneMarkerVao);
                 glBindBuffer(GL_ARRAY_BUFFER, state.sceneMarkerVbo);
                 glBufferData(
                     GL_ARRAY_BUFFER,
-                    static_cast<GLsizeiptr>(markerCount * sizeof(markerVertices[0])),
-                    markerVertices.data(),
+                    static_cast<GLsizeiptr>(solidVertices.size() * sizeof(solidVertices[0])),
+                    solidVertices.data(),
                     GL_DYNAMIC_DRAW);
-                glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(markerCount));
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(solidVertices.size()));
+            }
+
+            std::vector<epochnamespace::previewgrid::Vertex> dynamicVertices{};
+            const auto focusVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx);
+            const auto focusCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx);
+            if (focusCount > 0)
+                dynamicVertices.insert(dynamicVertices.end(), focusVertices.begin(), focusVertices.begin() + focusCount);
+            auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx);
+            dynamicVertices.insert(dynamicVertices.end(), objectVertices.begin(), objectVertices.end());
+
+            if (dynamicVertices.size() >= 2 && state.sceneMarkerVao && state.sceneMarkerVbo)
+            {
+                glBindVertexArray(state.sceneMarkerVao);
+                glBindBuffer(GL_ARRAY_BUFFER, state.sceneMarkerVbo);
+                glBufferData(
+                    GL_ARRAY_BUFFER,
+                    static_cast<GLsizeiptr>(dynamicVertices.size() * sizeof(dynamicVertices[0])),
+                    dynamicVertices.data(),
+                    GL_DYNAMIC_DRAW);
+                glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(dynamicVertices.size()));
             }
             glBindVertexArray(0);
             glUseProgram(0);

@@ -28,8 +28,8 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 8. Build/tooling floors must stay honest. Preserve baseline compatibility where
    possible, and document the real split when newer CMake/module support is
    required.
-9. External local LLMs are development helpers, not a third in-engine runtime
-   role.
+9. External local LLM endpoints are explicitly selected tooling providers, not a
+   third in-engine runtime role and not an auto-selected default.
 10. The engine keeps exactly two in-engine AI runtime roles:
     - `EpochBot`
     - local MCP/control
@@ -199,15 +199,22 @@ engine shape and should be treated as starting truth for the next passes:
 - a project-centric launcher/editor shell rather than a demo-first launch path
 - generated game/tool project creation and generated project discovery
 - a real project/scripts dock with build, run, and diagnostics surfaces
+- scene preview now receives typed primitive preview data, so seed objects and
+  newly created Cube/Light/Spawn entities render as ambient-colored solid
+  primitives with wire outlines while the fuller ECS/material/object runtime is
+  still being built out
 - a live Systems workspace with graph surfaces, backend ownership visibility,
   first time-control diagnostics, and build-confidence/feature-probe status
   already on-screen
 - an AI workspace split into Control, Tooling, Engine AI, Software,
   Training, and Ops/How-To domains so rebuild/tooling/training controls are
   discoverable in the editor shell
-- a visual AI Control surface that summarizes evidence readiness, active
+- local AI model discovery is explicit-selection only: the editor may list
+  available local OpenAI-compatible models, but chat/tooling stays disabled and
+  unnamed until the operator selects one
+- an editor-native AI Control panel that summarizes evidence readiness, active
   planner/builder/verifier/gate state, continuous build status, and tool-harness
-  activity
+  activity without depending on runtime surface/atlas packing
 - an editor-owned continuous AI build lane that watches active project/script
   evidence, queues one child-project build at a time, and feeds successful
   build artifacts back into staged AI packets for verifier/gate review
@@ -232,11 +239,11 @@ engine shape and should be treated as starting truth for the next passes:
   Project/Scripts workspace flow.
 - [~] Phase 3: Systems workspace, time spine, backend ownership diagnostics,
   build-confidence surfacing, and hosted/local build reliability.
-- [ ] Phase 4: GUI maturity, drag/drop, text-input smokes, editor polish, and
+- [~] Phase 4: GUI maturity, drag/drop, text-input smokes, editor polish, and
   OpenGL startup-flicker/root-cause cleanup.
 - [~] Phase 5: Two-role AI control loop, captured task packets, review gates,
   dataset/eval promotion, and tool-schema replay.
-- [ ] Phase 6: Primitive/object authoring, procedural world spine, 2D vertical
+- [~] Phase 6: Primitive/object authoring, procedural world spine, 2D vertical
   slice, and material/cellular simulation boundaries.
 - [ ] Phase 7: Android-first mobile bring-up with one renderer, one input path,
   one packaging story, and lifecycle stability.
@@ -249,7 +256,13 @@ engine shape and should be treated as starting truth for the next passes:
   instead of drifting into backend-specific hacks
 - finish IDE-class docking/popout behavior so detach, input ownership, z-order,
   redock, and startup presentation remain stable
-- eliminate remaining OpenGL startup flicker and related launch cosmetics
+- eliminate remaining OpenGL flicker in both single-context and multicontext
+  modes; menu open/close activity and software-context interaction are known
+  repro amplifiers and should be investigated before cosmetic-only fixes
+- keep maximize/restore in the renderer-windowing repro matrix; maximize can
+  still crash the editor and must be fixed before claiming docking stability
+- fix the Raylib redock crash that can still bring down the parent editor
+  process during backend-window docking tests
 - tighten terminology so runtime/module/doc names stop leaning on ambiguous
   legacy words like `multiplexer`
 
@@ -314,11 +327,19 @@ engine shape and should be treated as starting truth for the next passes:
   ownership
 - finish drag/drop and docking/popup behavior as first-class editor systems,
   not per-backend patches
+- keep GUI menu rendering in the OpenGL flicker repro matrix; menu interaction
+  currently makes the issue easier to trigger and should stay documented until
+  root cause is fixed
 - improve project, script, AI, systems, and output surfaces until the shell
   reads as a professional editor rather than a debug console
+- keep AI Control editor-native until runtime surfaces are stable enough to be
+  optional decoration, not the only way to operate the loop
 - keep AI workspace domains organized around concrete jobs: rebuild/control,
   editor tooling, normal engine guidance, software artifacts, training
   promotion, and operator instructions
+- keep model discovery and model activation separated in the GUI: discovered
+  names can appear only as selectable options, never as the active model until
+  the operator chooses one
 - keep launcher and editor theming intentionally separate
 
 ### 6. AI Control, Training, And Review Loop
@@ -333,6 +354,8 @@ engine shape and should be treated as starting truth for the next passes:
   produce fresh evidence while preserving explicit review gates
 - train from real editor tool actions by capturing before/after state from the
   selected script harness before promoting any dataset/eval records
+- keep local model activation operator-gated; no first-detected model fallback,
+  no hidden helper identity, and no chat/tool execution before selection
 - treat `Engine/ai/control/continuous_build_loop.json` as the current contract
   for the engine AI control loop until a replay runner can enforce it
 - use MCP tool schemas as the canonical tool-bus contract and replay shape
@@ -348,6 +371,9 @@ engine shape and should be treated as starting truth for the next passes:
 
 - complete the primitive/object system as a real engine-owned authoring/runtime
   path
+- build from the current ambient-solid primitive preview baseline toward true
+  ECS-owned cube/light/material components instead of falling back to abstract
+  helper glyphs
 - keep the live project shell honest by surfacing current seed-object,
   archetype, and category proof directly in-editor while the fuller object
   runtime is still being built out

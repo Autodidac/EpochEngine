@@ -74,6 +74,8 @@ namespace epoch::ai
         ProviderMode g_providerMode = ProviderMode::LmStudioOracle;
         std::string g_selectedModel{};
         std::string g_selectedEndpoint{ "http://localhost:1234" };
+        std::vector<std::string> g_detectedModels{};
+        std::string g_modelDetectionStatus{ "Not scanned." };
 
         static bool ends_with(std::string_view s, std::string_view suf)
         {
@@ -734,41 +736,7 @@ namespace epoch::ai
 
         static std::string resolve_model_name(const std::string& endpoint, std::string requested)
         {
-            if (!trim(requested).empty())
-                return requested;
-
-            auto detected = fetch_detected_models(endpoint);
-
-            auto normalize = [](std::string value)
-                {
-                    std::transform(
-                        value.begin(),
-                        value.end(),
-                        value.begin(),
-                        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-                    return value;
-                };
-
-            for (const auto& candidate : detected)
-            {
-                const std::string lowered = normalize(candidate);
-                if (lowered.find("epoch") != std::string::npos
-                    || lowered.find("helper") != std::string::npos
-                    || lowered.find("development") != std::string::npos)
-                {
-                    return candidate;
-                }
-            }
-
-            for (const auto& candidate : detected)
-            {
-                if (normalize(candidate).find("qwen") == std::string::npos)
-                    return candidate;
-            }
-
-            if (!detected.empty())
-                return detected.front();
-
+            (void)endpoint;
             return requested;
         }
 
@@ -1207,10 +1175,19 @@ namespace epoch::ai
     {
         if (g_bot) return;
 
+        if (g_detectedModels.empty() && g_modelDetectionStatus == "Not scanned.")
+            (void)refresh_detected_models();
+
+        if (g_selectedModel.empty())
+        {
+            core::log::info("ai", "Bot not initialized: no AI model selected.");
+            return;
+        }
+
         g_bot = new Bot({
             .backend = "lmstudio_chat",
-            .endpoint = "http://localhost:1234",
-            .model = {},
+            .endpoint = g_selectedEndpoint,
+            .model = g_selectedModel,
             .best_of = 1
         });
 
@@ -1335,6 +1312,54 @@ namespace epoch::ai
         return summary;
     }
 
+    std::vector<std::string> detected_model_names()
+    {
+        return g_detectedModels;
+    }
+
+    std::string model_detection_status()
+    {
+        return g_modelDetectionStatus;
+    }
+
+    std::vector<std::string> refresh_detected_models()
+    {
+        g_detectedModels = fetch_detected_models(g_selectedEndpoint);
+        if (g_detectedModels.empty())
+        {
+            g_modelDetectionStatus = "No local models detected. Start LM Studio/Ollama-compatible API or check endpoint.";
+        }
+        else
+        {
+            g_modelDetectionStatus = "Detected " + std::to_string(g_detectedModels.size()) + " local model(s); select one to enable chat/tooling.";
+        }
+
+        return g_detectedModels;
+    }
+
+    bool select_active_model(std::string_view model_id)
+    {
+        const std::string selected = trim(model_id);
+        if (selected.empty())
+            return false;
+
+        if (g_detectedModels.empty()
+            || std::find(g_detectedModels.begin(), g_detectedModels.end(), selected) == g_detectedModels.end())
+        {
+            return false;
+        }
+
+        delete g_bot;
+        g_bot = nullptr;
+        g_selectedModel = selected;
+        g_modelDetectionStatus = "Selected model: " + selected;
+
+        std::string msg = "AI model selected: ";
+        msg += selected;
+        core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+        return true;
+    }
+
     ModelManifest active_model_manifest()
     {
         ModelManifest manifest{};
@@ -1349,16 +1374,16 @@ namespace epoch::ai
         switch (g_providerMode)
         {
         case ProviderMode::EmbeddedTiny:
-            manifest.display_name = g_selectedModel.empty() ? std::string("Embedded EpochBot") : g_selectedModel;
+            manifest.display_name = g_selectedModel;
             manifest.manifest_path = manifests_root() + "/embedded_tiny_epoch.json";
             break;
         case ProviderMode::McpOperations:
-            manifest.display_name = g_selectedModel.empty() ? std::string("Local MCP control/training bot") : g_selectedModel;
+            manifest.display_name = g_selectedModel;
             manifest.manifest_path = manifests_root() + "/local_mcp_control.json";
             break;
         case ProviderMode::LmStudioOracle:
         default:
-            manifest.display_name = g_selectedModel.empty() ? std::string("LM Studio development helper") : g_selectedModel;
+            manifest.display_name = g_selectedModel;
             manifest.manifest_path = manifests_root() + "/teacher_oracle_lmstudio.json";
             break;
         }
@@ -1505,7 +1530,7 @@ namespace epoch::ai
         task << "- Contract: planner -> executor -> builder -> verifier -> gate; staged packets only, no blind write-through.\n\n";
         task << "## Runtime Snapshot\n";
         task << "- Provider: " << packet.provider_summary << "\n";
-        task << "- Active model: " << (packet.active_model.empty() ? "(detecting)" : packet.active_model) << "\n";
+        task << "- Active model: " << (packet.active_model.empty() ? "(none selected)" : packet.active_model) << "\n";
         task << "- Manifest: " << packet.manifest_path << "\n";
         task << "- Workspace root: " << packet.workspace_root << "\n";
         task << "- Raw capture: " << packet.raw_capture_path << "\n";
@@ -1621,6 +1646,9 @@ namespace epoch::ai
 
     std::string send_to_bot(const std::string& user_text)
     {
+        if (g_selectedModel.empty())
+            return "No AI model selected. Open AI Control, refresh local models, and choose a model before running chat/tooling.";
+
         if (!g_bot) init_bot();
         if (!g_bot) return {};
 

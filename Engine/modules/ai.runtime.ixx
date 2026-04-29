@@ -34,11 +34,11 @@ export namespace epoch::ai
         switch (mode)
         {
         case ProviderMode::EmbeddedTiny:
-            return "embedded-epochbot";
+            return "embedded-local";
         case ProviderMode::McpOperations:
             return "local-mcp-control";
         case ProviderMode::LmStudioOracle:
-            return "development-helper";
+            return "local-openai-compatible";
         default:
             return "unknown";
         }

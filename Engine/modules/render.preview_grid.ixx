@@ -33,6 +33,15 @@ namespace epochnamespace::previewgrid
 
     export using Mat4 = std::array<float, 16>;
 
+    export enum class ObjectPreviewPrimitive : std::uint8_t
+    {
+        Cube = 0,
+        Light,
+        Spawn,
+        Camera,
+        Level
+    };
+
     export struct Camera
     {
         Vec3 eye{ 9.0f, 7.0f, 9.0f };
@@ -41,6 +50,17 @@ namespace epochnamespace::previewgrid
         float fovRadians = 0.90f;
         float nearPlane = 0.1f;
         float farPlane = 64.0f;
+    };
+
+    export struct ObjectMarker
+    {
+        Vec3 position{};
+        Vec3 color{ 0.95f, 0.62f, 0.28f };
+        Vec3 scale{ 1.0f, 1.0f, 1.0f };
+        float radius = 0.35f;
+        ObjectPreviewPrimitive primitive{ ObjectPreviewPrimitive::Cube };
+        bool selected = false;
+        bool editorOnly = false;
     };
 
     export inline constexpr std::array<float, 4> kClearColor{
@@ -212,7 +232,9 @@ namespace epochnamespace::previewgrid
 
         export inline std::unordered_map<const void*, CameraRigState, PtrHash> g_cameraRigs{};
         export inline std::unordered_map<const void*, Vec3, PtrHash> g_lastMarkerHits{};
+        export inline std::unordered_map<const void*, std::vector<ObjectMarker>, PtrHash> g_objectMarkers{};
         inline std::shared_mutex g_cameraRigMutex{};
+        inline std::shared_mutex g_objectMarkerMutex{};
 
         [[nodiscard]] inline const void* normalize_camera_key(const void* ctxKey) noexcept
         {
@@ -487,6 +509,9 @@ namespace epochnamespace::previewgrid
         const void* const rigKey = detail::normalize_camera_key(ctxKey);
         if (!rigKey)
             return;
+
+        std::unique_lock lock(detail::g_objectMarkerMutex);
+        detail::g_objectMarkers.erase(rigKey);
     }
 
     export [[nodiscard]] inline Camera camera_for(const void* ctxKey) noexcept
@@ -671,6 +696,269 @@ namespace epochnamespace::previewgrid
                 return vertices.size();
         }
         return 0u;
+    }
+
+    export inline void set_object_markers(const void* ctxKey, std::span<const ObjectMarker> markers)
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return;
+
+        std::unique_lock lock(detail::g_objectMarkerMutex);
+        if (markers.empty())
+        {
+            detail::g_objectMarkers.erase(rigKey);
+            return;
+        }
+
+        detail::g_objectMarkers[rigKey] = std::vector<ObjectMarker>{ markers.begin(), markers.end() };
+    }
+
+    export inline void clear_object_markers(const void* ctxKey) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return;
+
+        std::unique_lock lock(detail::g_objectMarkerMutex);
+        detail::g_objectMarkers.erase(rigKey);
+    }
+
+    export [[nodiscard]] inline std::vector<Vertex> object_marker_vertices_for(const void* ctxKey)
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return {};
+
+        std::vector<ObjectMarker> markers{};
+        {
+            std::shared_lock lock(detail::g_objectMarkerMutex);
+            const auto it = detail::g_objectMarkers.find(rigKey);
+            if (it == detail::g_objectMarkers.end())
+                return {};
+            markers = it->second;
+        }
+
+        std::vector<Vertex> out{};
+        out.reserve(markers.size() * 32u);
+        const auto make_vertex = [](Vec3 position, Vec3 color) noexcept
+        {
+            return Vertex{ .position = position, .color = color };
+        };
+        const auto safe_axis = [](float value, float fallback) noexcept
+        {
+            const float magnitude = value < 0.0f ? -value : value;
+            return (std::max)(magnitude, fallback);
+        };
+        const auto lit = [](Vec3 color, float factor) noexcept
+        {
+            return Vec3{
+                (std::clamp)(color.x * factor + 0.06f, 0.0f, 1.0f),
+                (std::clamp)(color.y * factor + 0.06f, 0.0f, 1.0f),
+                (std::clamp)(color.z * factor + 0.06f, 0.0f, 1.0f)
+            };
+        };
+        auto push_line = [&](Vec3 a, Vec3 b, Vec3 color)
+        {
+            out.push_back(make_vertex(a, color));
+            out.push_back(make_vertex(b, color));
+        };
+        auto push_box_edges = [&](Vec3 center, Vec3 half, Vec3 color)
+        {
+            const Vec3 c000{ center.x - half.x, center.y - half.y, center.z - half.z };
+            const Vec3 c001{ center.x - half.x, center.y - half.y, center.z + half.z };
+            const Vec3 c010{ center.x - half.x, center.y + half.y, center.z - half.z };
+            const Vec3 c011{ center.x - half.x, center.y + half.y, center.z + half.z };
+            const Vec3 c100{ center.x + half.x, center.y - half.y, center.z - half.z };
+            const Vec3 c101{ center.x + half.x, center.y - half.y, center.z + half.z };
+            const Vec3 c110{ center.x + half.x, center.y + half.y, center.z - half.z };
+            const Vec3 c111{ center.x + half.x, center.y + half.y, center.z + half.z };
+            const Vec3 topColor = lit(color, 1.18f);
+            const Vec3 sideColor = lit(color, 0.90f);
+            const Vec3 bottomColor = lit(color, 0.62f);
+
+            push_line(c000, c100, bottomColor);
+            push_line(c100, c101, bottomColor);
+            push_line(c101, c001, bottomColor);
+            push_line(c001, c000, bottomColor);
+            push_line(c010, c110, topColor);
+            push_line(c110, c111, topColor);
+            push_line(c111, c011, topColor);
+            push_line(c011, c010, topColor);
+            push_line(c000, c010, sideColor);
+            push_line(c100, c110, sideColor);
+            push_line(c101, c111, sideColor);
+            push_line(c001, c011, sideColor);
+        };
+
+        for (const auto& marker : markers)
+        {
+            const float radius = (std::clamp)(marker.radius, 0.16f, 1.75f);
+            Vec3 color = marker.selected ? Vec3{ 1.0f, 0.93f, 0.32f } : marker.color;
+            if (marker.editorOnly && !marker.selected)
+                color = scale(color, 0.68f);
+
+            const Vec3 center{ marker.position.x, (std::max)(0.035f, marker.position.y), marker.position.z };
+            Vec3 half{
+                safe_axis(marker.scale.x * 0.5f, radius * 0.45f),
+                safe_axis(marker.scale.y * 0.5f, radius * 0.45f),
+                safe_axis(marker.scale.z * 0.5f, radius * 0.45f)
+            };
+
+            switch (marker.primitive)
+            {
+            case ObjectPreviewPrimitive::Light:
+                half = { radius * 0.32f, radius * 0.32f, radius * 0.32f };
+                push_box_edges(center, half, color);
+                push_line({ center.x - radius, center.y, center.z }, { center.x + radius, center.y, center.z }, lit(color, 1.2f));
+                push_line({ center.x, center.y - radius, center.z }, { center.x, center.y + radius, center.z }, lit(color, 1.2f));
+                push_line({ center.x, center.y, center.z - radius }, { center.x, center.y, center.z + radius }, lit(color, 1.2f));
+                break;
+            case ObjectPreviewPrimitive::Spawn:
+                half.y = (std::max)(0.08f, radius * 0.12f);
+                push_box_edges(center, half, color);
+                push_line(center, { center.x, center.y + radius * 1.4f, center.z }, lit(color, 1.05f));
+                break;
+            case ObjectPreviewPrimitive::Camera:
+                half = { radius * 0.56f, radius * 0.34f, radius * 0.42f };
+                push_box_edges(center, half, color);
+                push_line(
+                    { center.x - half.x, center.y, center.z - half.z },
+                    { center.x - half.x - radius * 0.52f, center.y, center.z - half.z - radius * 0.52f },
+                    lit(color, 1.0f));
+                push_line(
+                    { center.x + half.x, center.y, center.z - half.z },
+                    { center.x + half.x + radius * 0.52f, center.y, center.z - half.z - radius * 0.52f },
+                    lit(color, 1.0f));
+                break;
+            case ObjectPreviewPrimitive::Level:
+                half.y = (std::max)(0.05f, radius * 0.08f);
+                push_box_edges(center, half, color);
+                break;
+            case ObjectPreviewPrimitive::Cube:
+            default:
+                push_box_edges(center, half, color);
+                break;
+            }
+
+            if (marker.selected)
+            {
+                const Vec3 selectedHalf{
+                    half.x + 0.055f,
+                    half.y + 0.055f,
+                    half.z + 0.055f
+                };
+                push_box_edges(center, selectedHalf, Vec3{ 1.0f, 0.95f, 0.22f });
+            }
+        }
+
+        return out;
+    }
+
+    export [[nodiscard]] inline std::vector<Vertex> object_solid_vertices_for(const void* ctxKey)
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return {};
+
+        std::vector<ObjectMarker> markers{};
+        {
+            std::shared_lock lock(detail::g_objectMarkerMutex);
+            const auto it = detail::g_objectMarkers.find(rigKey);
+            if (it == detail::g_objectMarkers.end())
+                return {};
+            markers = it->second;
+        }
+
+        std::vector<Vertex> out{};
+        out.reserve(markers.size() * 36u);
+        const auto make_vertex = [](Vec3 position, Vec3 color) noexcept
+        {
+            return Vertex{ .position = position, .color = color };
+        };
+        const auto safe_axis = [](float value, float fallback) noexcept
+        {
+            const float magnitude = value < 0.0f ? -value : value;
+            return (std::max)(magnitude, fallback);
+        };
+        const auto lit = [](Vec3 color, float factor) noexcept
+        {
+            return Vec3{
+                (std::clamp)(color.x * factor + 0.08f, 0.0f, 1.0f),
+                (std::clamp)(color.y * factor + 0.08f, 0.0f, 1.0f),
+                (std::clamp)(color.z * factor + 0.08f, 0.0f, 1.0f)
+            };
+        };
+        auto push_tri = [&](Vec3 a, Vec3 b, Vec3 c, Vec3 color)
+        {
+            out.push_back(make_vertex(a, color));
+            out.push_back(make_vertex(b, color));
+            out.push_back(make_vertex(c, color));
+        };
+        auto push_face = [&](Vec3 a, Vec3 b, Vec3 c, Vec3 d, Vec3 color)
+        {
+            push_tri(a, b, c, color);
+            push_tri(a, c, d, color);
+        };
+        auto push_box = [&](Vec3 center, Vec3 half, Vec3 color)
+        {
+            const Vec3 c000{ center.x - half.x, center.y - half.y, center.z - half.z };
+            const Vec3 c001{ center.x - half.x, center.y - half.y, center.z + half.z };
+            const Vec3 c010{ center.x - half.x, center.y + half.y, center.z - half.z };
+            const Vec3 c011{ center.x - half.x, center.y + half.y, center.z + half.z };
+            const Vec3 c100{ center.x + half.x, center.y - half.y, center.z - half.z };
+            const Vec3 c101{ center.x + half.x, center.y - half.y, center.z + half.z };
+            const Vec3 c110{ center.x + half.x, center.y + half.y, center.z - half.z };
+            const Vec3 c111{ center.x + half.x, center.y + half.y, center.z + half.z };
+
+            push_face(c010, c110, c111, c011, lit(color, 1.16f));
+            push_face(c000, c001, c101, c100, lit(color, 0.54f));
+            push_face(c001, c011, c111, c101, lit(color, 0.88f));
+            push_face(c100, c110, c010, c000, lit(color, 0.78f));
+            push_face(c000, c010, c011, c001, lit(color, 0.70f));
+            push_face(c101, c111, c110, c100, lit(color, 0.96f));
+        };
+
+        for (const auto& marker : markers)
+        {
+            const float radius = (std::clamp)(marker.radius, 0.16f, 1.75f);
+            Vec3 color = marker.selected ? Vec3{ 1.0f, 0.93f, 0.32f } : marker.color;
+            if (marker.editorOnly && !marker.selected)
+                color = scale(color, 0.62f);
+
+            const Vec3 center{ marker.position.x, (std::max)(0.035f, marker.position.y), marker.position.z };
+            Vec3 half{
+                safe_axis(marker.scale.x * 0.5f, radius * 0.45f),
+                safe_axis(marker.scale.y * 0.5f, radius * 0.45f),
+                safe_axis(marker.scale.z * 0.5f, radius * 0.45f)
+            };
+
+            switch (marker.primitive)
+            {
+            case ObjectPreviewPrimitive::Light:
+                half = { radius * 0.30f, radius * 0.30f, radius * 0.30f };
+                push_box(center, half, lit(color, 1.25f));
+                break;
+            case ObjectPreviewPrimitive::Spawn:
+                half.y = (std::max)(0.08f, radius * 0.12f);
+                push_box(center, half, color);
+                break;
+            case ObjectPreviewPrimitive::Camera:
+                half = { radius * 0.56f, radius * 0.34f, radius * 0.42f };
+                push_box(center, half, color);
+                break;
+            case ObjectPreviewPrimitive::Level:
+                half.y = (std::max)(0.05f, radius * 0.08f);
+                push_box(center, half, color);
+                break;
+            case ObjectPreviewPrimitive::Cube:
+            default:
+                push_box(center, half, color);
+                break;
+            }
+        }
+
+        return out;
     }
 
     export [[nodiscard]] inline std::span<const Vertex> grid_vertices() noexcept

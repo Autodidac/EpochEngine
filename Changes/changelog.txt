@@ -1,5 +1,43 @@
 # Epoch Changelog
 
+## [v0.84.00]
+- Bumped the active source version to `v0.84.00` for the editor scene visibility
+  and workspace usability pass.
+- Wired live editor entities into the backend scene preview marker layer so
+  seeded project objects and newly created Cube/Light/Spawn entities are
+  visible in the scene viewport instead of only existing in the outliner.
+- Upgraded the preview marker layer into a first solid primitive preview pass:
+  cubes, lights, spawns, cameras, and level slabs now publish typed primitive
+  preview data, render ambient-colored solid geometry, and keep wire outlines
+  for selection/control readability in OpenGL and the software fallback.
+- Made the editor open to the Project workspace by default so project
+  creation, selection, build, and play controls are immediately visible.
+- Added preview-object count feedback in the editor details panel and kept
+  OpenGL/software preview rendering paths aligned for the new marker layer.
+- Changed local AI model handling to explicit selection only: discovery may list
+  available local OpenAI-compatible models, but no model is named, selected, or
+  used until the operator chooses one.
+- Removed the old `first-detected` local model manifest behavior and replaced
+  legacy helper/provider wording with neutral local-compatible provider status.
+- Mirrored the AI model picker into the Inspector when the AI workspace is
+  active so the selection controls remain reachable even while lower workspace
+  layout/docking polish continues.
+- Replaced the atlas-backed AI Control visual surface with editor-native
+  control/status rows so Control AI no longer collapses to a "visual surface
+  unavailable" message when runtime surface packing fails.
+- Replaced the editor workspace smoke-test environment lookup with the MSVC-safe
+  `_dupenv_s` path so `/WX` builds do not trip `C4996` on `getenv`.
+- Documented current renderer/windowing open issues for follow-up: OpenGL
+  flicker remains visible even in single-context mode, GUI menu activity can
+  amplify the flicker, software-context experimentation can affect the flicker
+  path, maximize can still crash the editor, and Raylib redock can still crash
+  the parent process.
+- Restored the intended single-backend default launch policy for normal launcher
+  and editor runs; the full multicontext backend grid now requires an explicit
+  backend-auto request instead of being the accidental default.
+- Verified Debug/Release MSVC builds, Debug/Release headless CTest, and a manual
+  editor AI workspace smoke showing no selected model at startup.
+
 ## [v0.83.91]
 - Bumped the active source version to `v0.83.91` for the AI control wording and
   usability correction.
@@ -332,7 +370,7 @@
 - Tightened the Win32 parented multicontext redock path so proxy `EpochChild` hosts are reattached and hidden after redock instead of lingering as stray top-level wrapper windows beside the real `GLFW30`, `SDL_app`, or `SFML_Window` panes.
 - Hardened the Win32 GUI input bridge around actual focus ownership by tracking `WM_SETFOCUS`/`WM_KILLFOCUS` and rejecting keyboard forwarding when the live Win32 focus is on a different pane, which reduces the editor's cross-pane text/key leakage risk.
 - Made the multicontext harness more honest by recording proxy-host state after each drag cycle, so a pass cannot claim green while a helper host is still floating outside the parent.
-- Updated the AI request path to tolerate first-detected LM Studio models that reject reasoning configuration by retrying without the `reasoning` field instead of surfacing empty replies.
+- Updated the AI request path to tolerate then-current LM Studio model-discovery fallback behavior that rejected reasoning configuration by retrying without the `reasoning` field instead of surfacing empty replies.
 - Refreshed the roadmap and build/runtime/smoke/AI docs around the current parented-pane contract and left typed-text editor smoke explicitly open as the next missing regression gate.
 
 ## [v0.83.74]
@@ -392,14 +430,14 @@
 - Turned the Systems workspace into a more honest Phase 3 tooling surface by rendering wider engine-generated frame/task graph textures in the dock, adding reusable inline pan/zoom controls, surfacing a first support-tier diagnostic strip for Baseline, Standard, and Extended runtime targets, and hiding SDL/SFML placeholder dock hosts until their real backend child is ready.
 - Tightened the shared GUI layer so dock content uses a real inner content region with stronger padding, narrower available-width calculations, and text/image visibility checks that stop wrapped labels from bleeding into neighboring panes such as the Perspective viewport.
 - Kept the hardware guidance visible in-editor and in docs: the default compatibility target remains 6-core / GTX 1660 Ti-era desktops plus modern Linux laptops, while heavier renderer/lib support stays a project-level opt-in.
-- Strengthened the smoke/docs loop around local helper usage and proof discipline: use the first detected LM Studio model for runtime parity, lean on local helpers for bounded drafts, launch only from asset-bearing output folders, and treat black software captures as invalid proof rather than a successful screenshot.
+- Strengthened the smoke/docs loop around the then-current local LM Studio helper path and proof discipline: launch only from asset-bearing output folders, lean on local helpers for bounded drafts, and treat black software captures as invalid proof rather than a successful screenshot.
 
 ## [v0.83.64]
 - Turned the editor shell further into a real project-driven runtime surface: project play now stays project-only from the editor path, and the Project dock exposes project kind, root, manifest, template family, runtime target, and generated shell status instead of a thin fake launcher strip.
 - Added the first generated project shell flow for both game and software/tool projects in `aeditor.scene.cpp`, writing a real project root, manifest, world file, script stub, and README under `Projects/`.
 - Expanded the Scripts dock so it now shows source, build action, run action, and honest validation/load diagnostics instead of only a thin run button.
 - Replaced the old `PuzzleLab` profile with a launcher-oriented `ProjectLauncher` profile so the editor/project shell stays centered on contexts, settings, project flow, and future automation instead of a stray puzzle testbed.
-- Updated the roadmap and build/runtime/smoke/AI docs so the automation loop now explicitly reflects generated project shells, project-only editor play, bounded helper-model drafting, and the first-detected LM Studio model rule.
+- Updated the roadmap and build/runtime/smoke/AI docs so the automation loop now explicitly reflects generated project shells, project-only editor play, bounded helper-model drafting, and the legacy LM Studio discovery rule that has since been replaced by explicit model selection.
 
 ## [v0.83.63]
 - Rewrote the roadmap around the real current direction: project-driven runtime, modular editor workspaces, frame/task graph tooling in the Systems surface, broad automatic hardware support, and explicit support tiers for heavier optional backend/libs.

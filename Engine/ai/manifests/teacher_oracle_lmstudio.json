@@ -1,10 +1,11 @@
 {
-  "id": "lmstudio-development-helper",
-  "display_name": "LM Studio Development Helper",
-  "provider": "lmstudio-helper",
+  "id": "local-openai-compatible-explicit-selection",
+  "display_name": "",
+  "provider": "local-openai-compatible",
   "endpoint": "http://localhost:1234",
-  "model_selection": "first-detected",
+  "selected_model": "",
+  "model_selection": "explicit-user-selection",
   "repo_safe_manifest": true,
   "local_weights_only": true,
-  "status": "development-helper"
+  "status": "awaiting-model-selection"
 }

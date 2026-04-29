@@ -116,6 +116,10 @@ export namespace epoch::ai
     [[nodiscard]] std::string active_model_name();
     [[nodiscard]] std::string active_provider_summary();
     [[nodiscard]] ModelManifest active_model_manifest();
+    [[nodiscard]] std::vector<std::string> detected_model_names();
+    [[nodiscard]] std::string model_detection_status();
+    [[nodiscard]] std::vector<std::string> refresh_detected_models();
+    [[nodiscard]] bool select_active_model(std::string_view model_id);
     [[nodiscard]] TrainingPaths default_training_paths();
     void append_mcp_capture(const McpCaptureRecord& record);
     [[nodiscard]] std::string stage_iteration_packet(const IterationPacket& packet);

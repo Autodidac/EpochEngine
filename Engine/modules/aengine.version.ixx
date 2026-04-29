@@ -32,6 +32,7 @@ module;
 
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 
@@ -44,13 +45,13 @@ module;
 #if defined(EPOCH_OVERRIDE_VERSION_MINOR)
 #  define EPOCH_VERSION_MINOR_VALUE EPOCH_OVERRIDE_VERSION_MINOR
 #else
-#  define EPOCH_VERSION_MINOR_VALUE 83
+#  define EPOCH_VERSION_MINOR_VALUE 84
 #endif
 
 #if defined(EPOCH_OVERRIDE_VERSION_REVISION)
 #  define EPOCH_VERSION_REVISION_VALUE EPOCH_OVERRIDE_VERSION_REVISION
 #else
-#  define EPOCH_VERSION_REVISION_VALUE 91
+#  define EPOCH_VERSION_REVISION_VALUE 0
 #endif
 
 #if defined(EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_MAJOR)
@@ -236,11 +237,78 @@ namespace epochnamespace
         return std::string{ GetPackagedVersion() };
     }
 
+    export std::string GetRuntimePlatformDisplayString()
+    {
+#if defined(_WIN32)
+        return "Windows";
+#elif defined(__APPLE__)
+        return "macOS";
+#elif defined(__linux__)
+        if (std::getenv("WSL_DISTRO_NAME") || std::getenv("WSL_INTEROP"))
+            return "WSL Linux";
+        return "Linux";
+#else
+        return "Unknown OS";
+#endif
+    }
+
+    export constexpr std::string_view GetBuildCompilerString() noexcept
+    {
+#if defined(__clang__) && defined(_MSC_VER)
+        return "clang-cl";
+#elif defined(_MSC_VER)
+        return "MSVC";
+#elif defined(__clang__)
+        return "Clang";
+#elif defined(__GNUC__)
+        return "GCC";
+#else
+        return "Unknown compiler";
+#endif
+    }
+
+    export constexpr std::string_view GetBuildArchitectureString() noexcept
+    {
+#if defined(_M_X64) || defined(__x86_64__) || defined(__amd64__)
+        return "x64";
+#elif defined(_M_ARM64) || defined(__aarch64__)
+        return "arm64";
+#elif defined(_M_IX86) || defined(__i386__)
+        return "x86";
+#else
+        return "unknown-arch";
+#endif
+    }
+
+    export constexpr std::string_view GetBuildConfigurationString() noexcept
+    {
+#if defined(NDEBUG)
+        return "Release";
+#else
+        return "Debug";
+#endif
+    }
+
+    export std::string GetEngineBuildTagString()
+    {
+        std::string result = GetRuntimePlatformDisplayString();
+        result.push_back(' ');
+        result += GetBuildArchitectureString();
+        result.push_back(' ');
+        result += GetBuildCompilerString();
+        result.push_back(' ');
+        result += GetBuildConfigurationString();
+        return result;
+    }
+
     export std::string GetEngineDisplayString()
     {
         std::string result{ kEngineName };
         result.push_back(' ');
         result += GetEngineVersion();
+        result += " [";
+        result += GetEngineBuildTagString();
+        result += "]";
 #if defined(EPOCH_UPDATER_SHELL_BUILD) && (EPOCH_UPDATER_SHELL_BUILD == 1)
         result += " (Updater Shell)";
 #endif

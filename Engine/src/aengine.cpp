@@ -75,6 +75,7 @@
 #include <queue>
 #include <shared_mutex>
 #include <source_location>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -172,6 +173,29 @@ namespace epochnamespace::core
         cfg.opengl_count = (std::max)(0, cli::opengl_window_count);
         cfg.software_count = (std::max)(0, cli::software_window_count);
         cfg.parented = cli::parented_mode;
+
+        const bool defaultAutoBackendGrid =
+            cfg.raylib_count == 1
+            && cfg.sdl_count == 1
+            && cfg.sfml_count == 1
+            && cfg.vulkan_count == 1
+            && cfg.opengl_count == 1
+            && cfg.software_count == 1;
+
+        if (!cli::backend_selection_explicit && defaultAutoBackendGrid)
+        {
+            cfg.raylib_count = 0;
+            cfg.sdl_count = 0;
+            cfg.sfml_count = 0;
+            cfg.vulkan_count = 0;
+            cfg.opengl_count = 0;
+            cfg.software_count = 0;
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+            cfg.opengl_count = 1;
+#elif defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+            cfg.software_count = 1;
+#endif
+        }
 
         const int total_requested =
             cfg.raylib_count +
@@ -1589,6 +1613,92 @@ namespace epochnamespace::core
 #endif
         }
 
+        [[nodiscard]] epochnamespace::previewgrid::Vec3 runtime_marker_color_for_seed(
+            const epochnamespace::EditorSceneSeedEntity& seed,
+            bool selected) noexcept
+        {
+            if (selected)
+                return { 1.00f, 0.86f, 0.24f };
+            if (seed.editor_only || seed.category == "Editor")
+                return { 0.44f, 0.62f, 0.90f };
+            if (seed.type == "Light")
+                return { 1.00f, 0.82f, 0.30f };
+            if (seed.type == "Spawn")
+                return { 0.34f, 0.94f, 0.62f };
+            if (seed.category == "World" || seed.type == "Level")
+                return { 0.70f, 0.78f, 0.90f };
+            return { 0.95f, 0.62f, 0.28f };
+        }
+
+        [[nodiscard]] float runtime_marker_radius_for_seed(const epochnamespace::EditorSceneSeedEntity& seed) noexcept
+        {
+            const float scaleMax = (std::max)(seed.scale[0], (std::max)(seed.scale[1], seed.scale[2]));
+            if (seed.type == "Light")
+                return 0.42f;
+            if (seed.type == "Spawn")
+                return 0.32f;
+            if (seed.type == "Camera")
+                return 0.38f;
+            if (seed.category == "World" || seed.type == "Level")
+                return 0.75f;
+            return (std::clamp)(0.34f * scaleMax, 0.24f, 1.20f);
+        }
+
+        [[nodiscard]] epochnamespace::previewgrid::ObjectPreviewPrimitive runtime_preview_primitive_for_seed(
+            const epochnamespace::EditorSceneSeedEntity& seed) noexcept
+        {
+            if (seed.type == "Light")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Light;
+            if (seed.type == "Spawn")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Spawn;
+            if (seed.type == "Camera")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
+            if (seed.category == "World" || seed.type == "Level")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
+            return epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube;
+        }
+
+        [[nodiscard]] std::size_t visible_seed_count(std::span<const epochnamespace::EditorSceneSeedEntity> seeds) noexcept
+        {
+            std::size_t count = 0;
+            for (const auto& seed : seeds)
+                if (seed.visible)
+                    ++count;
+            return count;
+        }
+
+        void publish_project_play_markers(
+            const epochnamespace::core::Context* ctx,
+            std::span<const epochnamespace::EditorSceneSeedEntity> seeds)
+        {
+            if (!ctx)
+                return;
+
+            std::vector<epochnamespace::previewgrid::ObjectMarker> markers{};
+            markers.reserve(seeds.size());
+            for (std::size_t i = 0; i < seeds.size(); ++i)
+            {
+                const auto& seed = seeds[i];
+                if (!seed.visible)
+                    continue;
+
+                markers.push_back(epochnamespace::previewgrid::ObjectMarker{
+                    .position{ seed.position[0], seed.position[1], seed.position[2] },
+                    .color = runtime_marker_color_for_seed(seed, i == 0u),
+                    .scale{ seed.scale[0], seed.scale[1], seed.scale[2] },
+                    .radius = runtime_marker_radius_for_seed(seed),
+                    .primitive = runtime_preview_primitive_for_seed(seed),
+                    .selected = i == 0u,
+                    .editorOnly = seed.editor_only || seed.category == "Editor"
+                });
+            }
+
+            epochnamespace::previewgrid::set_object_markers(ctx, std::span<const epochnamespace::previewgrid::ObjectMarker>{
+                markers.data(),
+                markers.size()
+            });
+        }
+
         class ProjectPlayScene final : public epochnamespace::scene::Scene
         {
         public:
@@ -1606,6 +1716,7 @@ namespace epochnamespace::core
                 m_scriptName = std::string(profile->default_script);
                 m_description = std::string(profile->description);
                 m_modelSummary = epochnamespace::editor_project_model_summary(m_projectId);
+                m_seedEntities = epochnamespace::editor_seed_entities_for_project(m_projectId);
             }
 
             void load() override
@@ -1619,7 +1730,10 @@ namespace epochnamespace::core
                     return false;
 
                 if (ctx->is_key_down_safe(input::Key::Escape))
+                {
+                    epochnamespace::previewgrid::clear_object_markers(ctx.get());
                     return false;
+                }
 
                 const auto now = timing::Clock::now();
                 float dt = 0.0f;
@@ -1646,6 +1760,10 @@ namespace epochnamespace::core
                 ctx->clear_safe();
                 ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
                 ctx->set_scene_viewport({ 0, 0, width, height });
+                publish_project_play_markers(ctx.get(), std::span<const epochnamespace::EditorSceneSeedEntity>{
+                    m_seedEntities.data(),
+                    m_seedEntities.size()
+                });
 
                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
 
@@ -1712,6 +1830,7 @@ namespace epochnamespace::core
                 gui::label(std::string("World: ") + m_worldName);
                 gui::label(std::string("Scene: ") + m_scenePath);
                 gui::label(std::string("Script: ") + m_scriptName);
+                gui::label(std::string("Preview Objects: ") + std::to_string(visible_seed_count(m_seedEntities)));
                 gui::wrapped_label(
                     std::string("Demo model: ")
                     + (m_modelSummary.asset_path.empty() ? std::string("(none)") : m_modelSummary.asset_path),
@@ -1737,6 +1856,7 @@ namespace epochnamespace::core
             std::string m_scriptName{};
             std::string m_description{};
             epochnamespace::EditorProjectModelSummary m_modelSummary{};
+            std::vector<epochnamespace::EditorSceneSeedEntity> m_seedEntities{};
             gui::Vec2 m_lastMouse{};
             timing::Clock::time_point m_lastFrame{};
             bool m_hasLastFrame{ false };

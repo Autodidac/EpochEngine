@@ -214,6 +214,7 @@ namespace epochnamespace::core::cli
     export inline bool smoke_requested = false;
     export inline bool editor_requested = false;
     export inline bool updater_shell_requested = false;
+    export inline bool backend_selection_explicit = false;
     export inline std::uint32_t capture_warmup_frames = 12;
     export inline std::string scene_name{};
     export inline std::filesystem::path exe_path;
@@ -352,10 +353,9 @@ namespace epochnamespace::core::cli
         window_mode = WindowMode::Auto;
         parented_mode = detail::default_parented_mode();
         runtime_path = RuntimePath::Epoch;
+        backend_selection_explicit = false;
 
         (void)apply_backend_selection("auto");
-
-        bool backend_selection_explicit = false;
 
         if (updater_shell_requested)
         {
@@ -441,8 +441,8 @@ namespace epochnamespace::core::cli
                     "  --window-mode <mode>       Select auto|parented|standalone\n"
                     "  --parented                 Shortcut for --window-mode parented\n"
                     "  --standalone               Shortcut for --window-mode standalone\n"
-                    "  --renderer <backend>       Limit run to one backend\n"
-                    "  --backend <backend>        Alias for --renderer\n"
+                    "  --renderer <backend|auto>  Select one backend; auto requests the backend grid\n"
+                    "  --backend <backend|auto>   Alias for --renderer\n"
                     "  --scene <name>             Optional scene hint for smoke tooling\n"
                     "  --capture                  Optional capture hint for smoke tooling\n"
                     "  --smoke                    Run bounded smoke flow where supported\n"

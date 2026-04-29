@@ -102,6 +102,61 @@ namespace epochnamespace::anativecontext::detail
         }
     }
 
+    void draw_triangle(
+        float ax,
+        float ay,
+        float bx,
+        float by,
+        float cx,
+        float cy,
+        std::uint32_t color,
+        const core::RenderViewport& viewport) noexcept
+    {
+        auto& sr = s_softrendererstate;
+        if (sr.framebuffer.empty() || sr.width <= 0 || sr.height <= 0)
+            return;
+
+        const auto edge = [](float px, float py, float x0, float y0, float x1, float y1) noexcept
+        {
+            return ((px - x0) * (y1 - y0)) - ((py - y0) * (x1 - x0));
+        };
+
+        const float area = edge(ax, ay, bx, by, cx, cy);
+        if (std::abs(area) <= 1.0e-4f)
+            return;
+
+        const float minXf = (std::min)(ax, (std::min)(bx, cx));
+        const float maxXf = (std::max)(ax, (std::max)(bx, cx));
+        const float minYf = (std::min)(ay, (std::min)(by, cy));
+        const float maxYf = (std::max)(ay, (std::max)(by, cy));
+
+        const int x0 = (std::max)(viewport.x, static_cast<int>(std::floor(minXf)));
+        const int x1 = (std::min)(viewport.x + viewport.width - 1, static_cast<int>(std::ceil(maxXf)));
+        const int y0 = (std::max)(viewport.y, static_cast<int>(std::floor(minYf)));
+        const int y1 = (std::min)(viewport.y + viewport.height - 1, static_cast<int>(std::ceil(maxYf)));
+        if (x0 > x1 || y0 > y1)
+            return;
+
+        const bool positive = area > 0.0f;
+        for (int py = y0; py <= y1; ++py)
+        {
+            for (int px = x0; px <= x1; ++px)
+            {
+                const float sampleX = static_cast<float>(px) + 0.5f;
+                const float sampleY = static_cast<float>(py) + 0.5f;
+                const float w0 = edge(sampleX, sampleY, bx, by, cx, cy);
+                const float w1 = edge(sampleX, sampleY, cx, cy, ax, ay);
+                const float w2 = edge(sampleX, sampleY, ax, ay, bx, by);
+                if (positive ? (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) : (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f))
+                {
+                    sr.framebuffer[
+                        static_cast<std::size_t>(py) * static_cast<std::size_t>(sr.width)
+                        + static_cast<std::size_t>(px)] = color;
+                }
+            }
+        }
+    }
+
     bool project_preview_vertex(
         const epochnamespace::previewgrid::Mat4& mvp,
         const epochnamespace::previewgrid::Vec3& position,
@@ -183,6 +238,34 @@ namespace epochnamespace::anativecontext::detail
                 pack_color(color.x, color.y, color.z, 1.0f));
         }
 
+        const auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(&ctx);
+        for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
+        {
+            float ax = 0.0f;
+            float ay = 0.0f;
+            float bx = 0.0f;
+            float by = 0.0f;
+            float cx = 0.0f;
+            float cy = 0.0f;
+            if (!project_preview_vertex(mvp, solidVertices[i].position, viewport, ax, ay)
+                || !project_preview_vertex(mvp, solidVertices[i + 1].position, viewport, bx, by)
+                || !project_preview_vertex(mvp, solidVertices[i + 2].position, viewport, cx, cy))
+            {
+                continue;
+            }
+
+            const auto color = solidVertices[i].color;
+            draw_triangle(
+                ax,
+                ay,
+                bx,
+                by,
+                cx,
+                cy,
+                pack_color(color.x, color.y, color.z, 1.0f),
+                viewport);
+        }
+
         const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(&ctx);
         const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(&ctx);
         for (std::size_t i = 0; i + 1 < markerCount; i += 2)
@@ -198,6 +281,28 @@ namespace epochnamespace::anativecontext::detail
             }
 
             const auto color = markerVertices[i].color;
+            draw_line(
+                static_cast<int>(std::lround(ax)),
+                static_cast<int>(std::lround(ay)),
+                static_cast<int>(std::lround(bx)),
+                static_cast<int>(std::lround(by)),
+                pack_color(color.x, color.y, color.z, 1.0f));
+        }
+
+        const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(&ctx);
+        for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
+        {
+            float ax = 0.0f;
+            float ay = 0.0f;
+            float bx = 0.0f;
+            float by = 0.0f;
+            if (!project_preview_vertex(mvp, objectVertices[i].position, viewport, ax, ay)
+                || !project_preview_vertex(mvp, objectVertices[i + 1].position, viewport, bx, by))
+            {
+                continue;
+            }
+
+            const auto color = objectVertices[i].color;
             draw_line(
                 static_cast<int>(std::lround(ax)),
                 static_cast<int>(std::lround(ay)),

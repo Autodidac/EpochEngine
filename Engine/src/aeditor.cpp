@@ -51,6 +51,7 @@ module;
 #include <future>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -118,11 +119,6 @@ namespace epochnamespace
             SpriteHandle supportSurface{};
         };
 
-        struct AiSurfaceState
-        {
-            SpriteHandle controlSurface{};
-        };
-
         [[nodiscard]] static bool is_ws_only(std::string_view s) noexcept
         {
             for (unsigned char c : s)
@@ -141,7 +137,7 @@ namespace epochnamespace
             AiChat()
             {
                 epoch::ai::init_bot();
-                lines.emplace_back("bot> Ready. Provider: " + epoch::ai::active_provider_summary());
+                lines.emplace_back("bot> Ready. No AI model selected yet. Open AI Control, refresh local models, then choose one.");
                 trim_lines();
             }
 
@@ -229,6 +225,39 @@ namespace epochnamespace
             bool editorOnly{ false };
         };
 
+        [[nodiscard]] EditorWorkspaceTab initial_editor_workspace_tab() noexcept
+        {
+            const auto parse_workspace_tab = [](std::string_view value) noexcept
+            {
+                if (value == "AI" || value == "ai" || value == "Ai")
+                    return EditorWorkspaceTab::AI;
+                if (value == "Systems" || value == "systems")
+                    return EditorWorkspaceTab::Systems;
+                if (value == "Scripts" || value == "scripts")
+                    return EditorWorkspaceTab::Scripts;
+                if (value == "Output" || value == "output")
+                    return EditorWorkspaceTab::Output;
+                return EditorWorkspaceTab::Project;
+            };
+
+#if defined(_MSC_VER)
+            char* rawValue = nullptr;
+            std::size_t rawSize = 0;
+            if (_dupenv_s(&rawValue, &rawSize, "EPOCH_EDITOR_START_WORKSPACE") != 0 || !rawValue)
+                return EditorWorkspaceTab::Project;
+
+            const EditorWorkspaceTab tab = parse_workspace_tab(std::string_view{ rawValue });
+            std::free(rawValue);
+            return tab;
+#else
+            const char* const rawValue = std::getenv("EPOCH_EDITOR_START_WORKSPACE");
+            if (!rawValue)
+                return EditorWorkspaceTab::Project;
+
+            return parse_workspace_tab(std::string_view{ rawValue });
+#endif
+        }
+
         struct EditorState
         {
             bool initialized{ false };
@@ -253,14 +282,13 @@ namespace epochnamespace
             EditorTimeSnapshot timeSnapshot{};
             EditorTimeControl timeControl{};
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
-            EditorWorkspaceTab workspaceTab{ EditorWorkspaceTab::Output };
+            EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
             bool showAboutModal{ false };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
             SystemsSurfaceState systems{};
-            AiSurfaceState aiSurfaces{};
             AiWorkspaceDomain aiWorkspaceDomain{ AiWorkspaceDomain::Control };
             bool aiContinuousBuildEnabled{ false };
             bool aiContinuousBuildStageOnNextFrame{ false };
@@ -939,6 +967,103 @@ namespace epochnamespace
             push_editor_log(state, std::string("[entity] Deleted ") + name + ".");
         }
 
+        [[nodiscard]] epochnamespace::previewgrid::Vec3 marker_color_for_entity(
+            const EditorEntity& entity,
+            bool selected) noexcept
+        {
+            if (selected)
+                return { 1.0f, 0.93f, 0.32f };
+            if (entity.type == "Light")
+                return { 1.0f, 0.82f, 0.25f };
+            if (entity.type == "Spawn")
+                return { 0.28f, 0.94f, 0.48f };
+            if (entity.type == "Camera")
+                return { 0.42f, 0.80f, 1.0f };
+            if (entity.category == "World" || entity.type == "Level")
+                return { 0.62f, 0.78f, 0.98f };
+            if (entity.editorOnly || entity.category == "Editor")
+                return { 0.72f, 0.72f, 0.78f };
+            return { 0.95f, 0.62f, 0.28f };
+        }
+
+        [[nodiscard]] float marker_radius_for_entity(const EditorEntity& entity) noexcept
+        {
+            const float scaleMax = (std::max)(entity.scale[0], (std::max)(entity.scale[1], entity.scale[2]));
+            if (entity.type == "Light")
+                return 0.42f;
+            if (entity.type == "Spawn")
+                return 0.32f;
+            if (entity.type == "Camera")
+                return 0.38f;
+            if (entity.category == "World" || entity.type == "Level")
+                return 0.75f;
+            return (std::clamp)(0.34f * scaleMax, 0.24f, 1.20f);
+        }
+
+        [[nodiscard]] epochnamespace::previewgrid::ObjectPreviewPrimitive preview_primitive_for_entity(
+            const EditorEntity& entity) noexcept
+        {
+            if (entity.type == "Light")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Light;
+            if (entity.type == "Spawn")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Spawn;
+            if (entity.type == "Camera")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
+            if (entity.category == "World" || entity.type == "Level")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
+            return epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube;
+        }
+
+        [[nodiscard]] std::size_t visible_entity_count(const EditorState& state) noexcept
+        {
+            std::size_t count = 0;
+            for (const auto& entity : state.entities)
+                if (entity.visible)
+                    ++count;
+            return count;
+        }
+
+        void publish_editor_preview_markers(const core::Context* ctx, const EditorState& state)
+        {
+            if (!ctx || state.previewMode != core::ScenePreviewMode::Editor)
+            {
+                epochnamespace::previewgrid::clear_object_markers(ctx);
+                return;
+            }
+
+            std::vector<epochnamespace::previewgrid::ObjectMarker> markers{};
+            markers.reserve(state.entities.size());
+            for (std::size_t i = 0; i < state.entities.size(); ++i)
+            {
+                const auto& entity = state.entities[i];
+                if (!entity.visible)
+                    continue;
+
+                const bool selected = i == (std::min)(state.selectedEntity, state.entities.size() - 1u);
+                markers.push_back(epochnamespace::previewgrid::ObjectMarker{
+                    .position{
+                        entity.position[0],
+                        entity.position[1],
+                        entity.position[2]
+                    },
+                    .color = marker_color_for_entity(entity, selected),
+                    .scale{
+                        entity.scale[0],
+                        entity.scale[1],
+                        entity.scale[2]
+                    },
+                    .radius = marker_radius_for_entity(entity),
+                    .primitive = preview_primitive_for_entity(entity),
+                    .selected = selected,
+                    .editorOnly = entity.editorOnly || entity.category == "Editor"
+                });
+            }
+
+            epochnamespace::previewgrid::set_object_markers(
+                ctx,
+                std::span<const epochnamespace::previewgrid::ObjectMarker>{ markers.data(), markers.size() });
+        }
+
         [[nodiscard]] std::string build_ai_scene_prompt(const EditorState& state)
         {
             if (state.entities.empty())
@@ -1485,75 +1610,81 @@ namespace epochnamespace
             }
         }
 
-        [[nodiscard]] static SurfaceCanvas build_ai_control_loop_surface(
-            const AiReviewGateStatus& status,
-            bool continuousEnabled,
-            bool buildPending,
-            std::size_t buildRuns,
-            std::size_t toolRuns)
+        void render_ai_model_picker(EditorState& editor, float width)
         {
-            constexpr int kSurfaceWidth = 1280;
-            constexpr int kSurfaceHeight = 188;
-            SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 10, 13, 18, 255 });
+            const float contentWidth = (std::max)(180.0f, width);
+            const auto manifest = epoch::ai::active_model_manifest();
+            auto detectedModels = epoch::ai::detected_model_names();
 
-            for (int x = 0; x < kSurfaceWidth; x += 48)
-                canvas.fill_rect(x, 0, 1, kSurfaceHeight, gui::Color{ 22, 27, 36, 255 });
-            for (int y = 24; y < kSurfaceHeight; y += 40)
-                canvas.hline(0, y, kSurfaceWidth, gui::Color{ 18, 23, 31, 255 });
+            gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
+            gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(none selected)") : manifest.display_name);
+            gui::property_row("[ai] Local endpoint", manifest.endpoint);
+            gui::property_row("[ai] Model discovery", epoch::ai::model_detection_status());
 
-            const int readyWidth = status.totalEvidenceCount == 0
-                ? 0
-                : static_cast<int>((kSurfaceWidth - 96) * status.readyEvidenceCount / status.totalEvidenceCount);
-            canvas.fill_rect(48, 20, kSurfaceWidth - 96, 12, gui::Color{ 30, 38, 48, 255 });
-            canvas.fill_rect(48, 20, readyWidth, 12, status.buildEvidenceReady && status.captureEvidenceReady
-                ? gui::Color{ 91, 205, 135, 255 }
-                : gui::Color{ 230, 171, 72, 255 });
-
-            const std::array<gui::Color, 5> stageFill{{
-                { 58, 82, 142, 255 },
-                { 70, 104, 157, 255 },
-                { 78, 131, 106, 255 },
-                { 139, 113, 61, 255 },
-                { 127, 82, 118, 255 }
-            }};
-            const std::array<gui::Color, 5> stageAccent{{
-                { 142, 184, 255, 255 },
-                { 134, 207, 255, 255 },
-                { 132, 244, 173, 255 },
-                { 255, 221, 114, 255 },
-                { 255, 158, 210, 255 }
-            }};
-
-            std::size_t activeStage = 4;
-            if (!status.projectEvidenceReady)
-                activeStage = 0;
-            else if (!status.buildEvidenceReady)
-                activeStage = 2;
-            else if (!status.captureEvidenceReady)
-                activeStage = 3;
-
-            constexpr int stageWidth = 176;
-            constexpr int stageHeight = 58;
-            constexpr int stageGap = 58;
-            const int baseX = 74;
-            const int y = 66;
-            for (std::size_t i = 0; i < stageFill.size(); ++i)
+            if (gui::button("Refresh Local Models", { 220.0f, 30.0f }))
             {
-                const int x = baseX + static_cast<int>(i) * (stageWidth + stageGap);
-                if (i != 0)
-                    canvas.fill_rect(x - stageGap + 6, y + stageHeight / 2 - 3, stageGap - 12, 6, gui::Color{ 48, 57, 72, 255 });
-                canvas.fill_rect(x, y, stageWidth, stageHeight, stageFill[i]);
-                canvas.stroke_rect(x, y, stageWidth, stageHeight, i == activeStage ? stageAccent[i] : gui::Color{ 255, 255, 255, 36 });
-                canvas.fill_rect(x + 12, y + 12, 34, stageHeight - 24, gui::Color{ 255, 255, 255, 30 });
-                if (i == activeStage)
-                    canvas.fill_rect(x + stageWidth - 13, y + 8, 7, stageHeight - 16, stageAccent[i]);
+                detectedModels = epoch::ai::refresh_detected_models();
+                push_editor_log(
+                    editor,
+                    detectedModels.empty()
+                        ? "[ai] Model discovery found no local models."
+                        : "[ai] Model discovery refreshed; select a model below.");
             }
 
-            canvas.fill_rect(48, 150, 250, 10, continuousEnabled ? gui::Color{ 82, 189, 121, 255 } : gui::Color{ 96, 104, 118, 255 });
-            canvas.fill_rect(320, 150, 250, 10, buildPending ? gui::Color{ 255, 198, 85, 255 } : gui::Color{ 92, 130, 177, 255 });
-            canvas.fill_rect(592, 150, (std::min)(250, 40 + static_cast<int>(buildRuns) * 24), 10, gui::Color{ 125, 177, 255, 255 });
-            canvas.fill_rect(864, 150, (std::min)(250, 40 + static_cast<int>(toolRuns) * 24), 10, gui::Color{ 244, 143, 195, 255 });
-            return canvas;
+            if (detectedModels.empty())
+            {
+                gui::wrapped_label(
+                    "No model is selected or auto-named. Start a local OpenAI-compatible endpoint, refresh discovery, then choose the exact model you want Epoch to use.",
+                    contentWidth);
+                return;
+            }
+
+            for (const auto& modelId : detectedModels)
+            {
+                const bool selected = modelId == epoch::ai::active_model_name();
+                const std::string buttonLabel = (selected ? std::string("Selected: ") : std::string("Use Model: ")) + modelId;
+                if (gui::button(buttonLabel, { contentWidth, 30.0f }))
+                {
+                    if (epoch::ai::select_active_model(modelId))
+                        push_editor_log(editor, "[ai] Selected local model: " + modelId);
+                    else
+                        push_editor_log(editor, "[ai] Could not select model: " + modelId);
+                }
+            }
+        }
+
+        void render_ai_control_status_panel(
+            const EditorState& editor,
+            const AiReviewGateStatus& status,
+            std::string_view loopStage,
+            float width)
+        {
+            const auto ready = [](bool value) noexcept
+            {
+                return value ? "ready" : "missing";
+            };
+            const std::string evidence =
+                std::to_string(status.readyEvidenceCount)
+                + "/"
+                + std::to_string(status.totalEvidenceCount)
+                + " evidence paths staged";
+
+            gui::wrapped_label(
+                "AI Control is now an editor-native control panel: plan, build, verify, and promote only from visible evidence. It does not depend on atlas/runtime texture packing.",
+                width);
+            gui::property_row("[ai-control] Loop", ai_control_loop_contract());
+            gui::property_row("[ai-control] Stage", std::string(loopStage));
+            gui::property_row("[ai-control] Evidence", evidence);
+            gui::property_row("[ai-control] Project", ready(status.projectEvidenceReady));
+            gui::property_row("[ai-control] Build", ready(status.buildEvidenceReady));
+            gui::property_row("[ai-control] Capture", ready(status.captureEvidenceReady));
+            gui::property_row("[ai-control] Chat pair", ready(status.chatPairReady));
+            gui::property_row("[ai-control] Gate", status.promotionSummary);
+            gui::property_row("[ai-control] Build watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+            gui::property_row("[ai-control] Build pending", editor.aiContinuousBuildPending.has_value() ? "true" : "false");
+            gui::property_row("[ai-control] Build runs", std::to_string(editor.aiContinuousBuildRunCount));
+            gui::property_row("[ai-control] Tool harness runs", std::to_string(editor.aiToolHarnessRunCount));
+            gui::property_row("[ai-control] Write policy", "staged packets only; no blind write-through");
         }
 
         AiChat& chat_state_for(const std::shared_ptr<core::Context>& ctx)
@@ -1861,6 +1992,7 @@ namespace epochnamespace
         gui::set_cursor({ status_x, toolbar_button_y + 4.0f });
         gui::wrapped_label(
             std::string("v") + epochnamespace::GetEngineVersionString()
+            + "  |  " + epochnamespace::GetEngineBuildTagString()
             + "  |  " + renderer_name(ctx)
             + "  |  " + std::string(preview_mode_name(editor.previewMode))
             + "  |  " + preview_camera_name(ctx)
@@ -1876,7 +2008,7 @@ namespace epochnamespace
         const std::string runtime_tab = "Play Project";
         const std::string scripts_tab = "Run Script";
         const std::string project_tab = "Project Shell";
-        const std::string ask_ai_tab = "Ask AI";
+        const std::string ai_control_tab = "AI Control";
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(editor_tab, { 180.0f, tab_h }))
@@ -1910,8 +2042,12 @@ namespace epochnamespace
         tab_x += 164.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(ask_ai_tab, { 180.0f, tab_h }))
-            submit_ai_prompt(build_ai_scene_prompt(editor), "[ai] Asked for scene guidance.");
+        if (gui::button(ai_control_tab, { 180.0f, tab_h }))
+        {
+            editor.workspaceTab = EditorWorkspaceTab::AI;
+            editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
+            push_editor_log(editor, "[ai] AI Control workspace opened.");
+        }
 
         gui::end_window();
 
@@ -1995,33 +2131,45 @@ namespace epochnamespace
         gui::end_window();
 
         gui::begin_window("Inspector", details_pos, details_size);
-        const std::size_t selectedIndex = editor.entities.empty()
-            ? 0u
-            : (std::min)(editor.selectedEntity, editor.entities.size() - 1u);
-        if (!editor.entities.empty())
+        if (editor.workspaceTab == EditorWorkspaceTab::AI)
         {
-            const auto& entity = editor.entities[selectedIndex];
-            gui::label(std::string("Selected: ") + entity.name);
-            gui::label(std::string("Type: ") + entity.type);
-            gui::label(std::string("Category: ") + entity.category);
-            gui::label(std::string("Position: ") + vec3_text(entity.position));
-            gui::label(std::string("Rotation: ") + vec3_text(entity.rotation));
-            gui::label(std::string("Scale: ") + vec3_text(entity.scale));
-            gui::label(std::string("Visible: ") + (entity.visible ? "true" : "false"));
-            gui::label(std::string("EditorOnly: ") + (entity.editorOnly ? "true" : "false"));
+            gui::label("Selected: AI Control");
+            gui::wrapped_label(
+                "Discovery can list local models, but chat/tool execution stays disabled until you explicitly select one here.",
+                (std::max)(180.0f, details_size.x - 24.0f));
+            render_ai_model_picker(editor, (std::max)(180.0f, details_size.x - 24.0f));
         }
         else
         {
-            gui::label("Selected: <none>");
+            const std::size_t selectedIndex = editor.entities.empty()
+                ? 0u
+                : (std::min)(editor.selectedEntity, editor.entities.size() - 1u);
+            if (!editor.entities.empty())
+            {
+                const auto& entity = editor.entities[selectedIndex];
+                gui::label(std::string("Selected: ") + entity.name);
+                gui::label(std::string("Type: ") + entity.type);
+                gui::label(std::string("Category: ") + entity.category);
+                gui::label(std::string("Position: ") + vec3_text(entity.position));
+                gui::label(std::string("Rotation: ") + vec3_text(entity.rotation));
+                gui::label(std::string("Scale: ") + vec3_text(entity.scale));
+                gui::label(std::string("Visible: ") + (entity.visible ? "true" : "false"));
+                gui::label(std::string("EditorOnly: ") + (entity.editorOnly ? "true" : "false"));
+            }
+            else
+            {
+                gui::label("Selected: <none>");
+            }
+            gui::label(std::string("Viewport Target: ") + renderer_name(ctx));
+            gui::label(std::string("Helpers Visible: ") + (editor.helpersVisible ? "true" : "false"));
+            gui::label(std::string("Preview Mode: ") + std::string(preview_mode_name(editor.previewMode)));
+            gui::label(std::string("Preview Camera: ") + preview_camera_name(ctx));
+            gui::label(std::string("Preview Zoom: ") + preview_zoom_text(ctx));
+            gui::label(std::string("Preview Objects: ") + std::to_string(visible_entity_count(editor)));
+            gui::label(std::string("Editor Script: ") + editor.activeScript);
+            gui::label(std::string("Runtime Target: ") + editor.activeRuntimeScene);
+            gui::label("Viewport Input: LMB pan  |  RMB orbit  |  Wheel zoom");
         }
-        gui::label(std::string("Viewport Target: ") + renderer_name(ctx));
-        gui::label(std::string("Helpers Visible: ") + (editor.helpersVisible ? "true" : "false"));
-        gui::label(std::string("Preview Mode: ") + std::string(preview_mode_name(editor.previewMode)));
-        gui::label(std::string("Preview Camera: ") + preview_camera_name(ctx));
-        gui::label(std::string("Preview Zoom: ") + preview_zoom_text(ctx));
-        gui::label(std::string("Editor Script: ") + editor.activeScript);
-        gui::label(std::string("Runtime Target: ") + editor.activeRuntimeScene);
-        gui::label("Viewport Input: LMB pan  |  RMB orbit  |  Wheel zoom");
         gui::end_window();
 
         result.scene_viewport = gui::scene_viewport("Perspective", viewport_pos, viewport_size);
@@ -2032,6 +2180,7 @@ namespace epochnamespace
             static_cast<int>((std::max)(0.0f, result.scene_viewport.size.x)),
             static_cast<int>((std::max)(0.0f, result.scene_viewport.size.y))
         });
+        publish_editor_preview_markers(ctx.get(), editor);
 
         const float split = 0.55f;
         const float left_bottom_w = w * split;
@@ -2255,6 +2404,7 @@ namespace epochnamespace
         case EditorWorkspaceTab::AI:
         {
             const auto manifest = epoch::ai::active_model_manifest();
+            auto detectedModels = epoch::ai::detected_model_names();
             const auto training = epoch::ai::default_training_paths();
             const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
             const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
@@ -2288,27 +2438,43 @@ namespace epochnamespace
 
             if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Control)
             {
-                const auto controlCanvas = build_ai_control_loop_surface(
-                    gateStatus,
-                    editor.aiContinuousBuildEnabled,
-                    editor.aiContinuousBuildPending.has_value(),
-                    editor.aiContinuousBuildRunCount,
-                    editor.aiToolHarnessRunCount);
-                editor.aiSurfaces.controlSurface = gui::register_runtime_surface(
-                    "ai.control.pipeline",
-                    controlCanvas.pixels,
-                    static_cast<std::uint32_t>(controlCanvas.width),
-                    static_cast<std::uint32_t>(controlCanvas.height));
-
-                if (editor.aiSurfaces.controlSurface.is_valid())
-                    gui::image(editor.aiSurfaces.controlSurface, { aiContentWidth, 126.0f });
-                else
-                    gui::wrapped_label("AI control visual surface unavailable.", aiContentWidth);
+                render_ai_control_status_panel(editor, gateStatus, loopStage, aiContentWidth);
             }
 
             gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
-            gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(detecting)") : manifest.display_name);
+            gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(none selected)") : manifest.display_name);
             gui::property_row("[ai] Local endpoint", manifest.endpoint);
+            gui::property_row("[ai] Model discovery", epoch::ai::model_detection_status());
+            if (gui::button("Refresh Local Models", { 220.0f, 30.0f }))
+            {
+                detectedModels = epoch::ai::refresh_detected_models();
+                push_editor_log(
+                    editor,
+                    detectedModels.empty()
+                        ? "[ai] Model discovery found no local models."
+                        : "[ai] Model discovery refreshed; select a model below.");
+            }
+            if (detectedModels.empty())
+            {
+                gui::wrapped_label(
+                    "No model is selected or auto-named. Start a local OpenAI-compatible endpoint, refresh discovery, then choose the exact model you want Epoch to use.",
+                    aiContentWidth);
+            }
+            else
+            {
+                for (const auto& modelId : detectedModels)
+                {
+                    const bool selected = modelId == epoch::ai::active_model_name();
+                    const std::string buttonLabel = (selected ? std::string("Selected: ") : std::string("Use Model: ")) + modelId;
+                    if (gui::button(buttonLabel, { aiContentWidth, 30.0f }))
+                    {
+                        if (epoch::ai::select_active_model(modelId))
+                            push_editor_log(editor, "[ai] Selected local model: " + modelId);
+                        else
+                            push_editor_log(editor, "[ai] Could not select model: " + modelId);
+                    }
+                }
+            }
             gui::property_row("[ai] MCP/control manifest", manifest.manifest_path);
             gui::property_row("[ai] Control contract", "Engine/ai/control/continuous_build_loop.json");
             gui::property_row("[ai] Iteration packets", epoch::ai::iteration_packet_root());
