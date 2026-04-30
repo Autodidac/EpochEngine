@@ -61,8 +61,14 @@ module;
 #  pragma warning(disable: 4996)
 #endif
 
-#define CGLTF_IMPLEMENTATION
-#include <cgltf.h>
+#ifndef EPOCH_HAS_CGLTF
+#  define EPOCH_HAS_CGLTF 0
+#endif
+
+#if EPOCH_HAS_CGLTF
+#  define CGLTF_IMPLEMENTATION
+#  include <cgltf.h>
+#endif
 
 #if defined(_MSC_VER)
 #  pragma warning(pop)
@@ -2381,6 +2387,10 @@ namespace epochnamespace
             return summary;
         }
 
+#if !EPOCH_HAS_CGLTF
+        summary.summary = "Demo model asset exists; cgltf headers are unavailable, so glTF parsing was skipped.";
+        return summary;
+#else
         cgltf_options options{};
         cgltf_data* data = nullptr;
         const std::string resolvedText = resolved.string();
@@ -2408,6 +2418,7 @@ namespace epochnamespace
 
         cgltf_free(data);
         return summary;
+#endif
     }
 
     EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind)

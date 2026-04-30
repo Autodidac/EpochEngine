@@ -1132,6 +1132,9 @@ namespace epoch::ai
             " - Stay grounded in the current Epoch editor/project context.\n"
             " - Prefer concrete editor, scene, engine, and C++ guidance that teaches the internal Epoch bot what to do next.\n"
             " - The local MCP/control layer can teach and steer EpochBot while it operates; keep responses useful for that training loop instead of acting like a generic assistant.\n"
+            " - If asked whether Epoch, EpochBot, training, or self-iteration is working, do not claim success from confidence alone; cite the visible tool, build, scene, packet, log, or capture evidence that proves it.\n"
+            " - Treat sandboxed 3D scene-training as a learning exercise: name the intended scene edit, the tool/action to run, the evidence to watch, and the pass/fail condition.\n"
+            " - Keep self-iteration separate from normal ProjectLauncher game/software editing unless the operator explicitly asks to change the project/editor scene.\n"
             " - When suggesting project or file work, keep it relevant to the active engine/runtime context instead of drifting into generic setup advice.\n";
 
         // Best-of with a fast accept to reduce latency.
@@ -1523,7 +1526,7 @@ namespace epoch::ai
         task << "## Task Prompt\n" << (packet.task_prompt.empty() ? "(empty)" : packet.task_prompt) << "\n\n";
         task << "## Assistant Hint\n" << (packet.assistant_hint.empty() ? "(none)" : packet.assistant_hint) << "\n\n";
         task << "## Operator Notes\n" << (packet.operator_notes.empty() ? "(none)" : packet.operator_notes) << "\n\n";
-        task << "## AI Control Loop\n";
+        task << "## Self-Iteration Loop\n";
         task << "- Stage: " << (packet.control_loop_stage.empty() ? "(unknown)" : packet.control_loop_stage) << "\n";
         task << "- Review gate: " << (packet.review_gate_state.empty() ? "(unknown)" : packet.review_gate_state) << "\n";
         task << "- Evidence: " << (packet.review_gate_evidence.empty() ? "(none)" : packet.review_gate_evidence) << "\n";
@@ -1647,7 +1650,7 @@ namespace epoch::ai
     std::string send_to_bot(const std::string& user_text)
     {
         if (g_selectedModel.empty())
-            return "No AI model selected. Open AI Control, refresh local models, and choose a model before running chat/tooling.";
+            return "No AI model selected. Open AI Sandbox, refresh local models, and choose a model before running chat/tooling.";
 
         if (!g_bot) init_bot();
         if (!g_bot) return {};

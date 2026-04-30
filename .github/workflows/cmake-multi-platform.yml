@@ -80,6 +80,29 @@ jobs:
             test_command: >
               python -m cmake -E chdir "$GITHUB_WORKSPACE/build/ci"
               ctest --output-on-failure
+          - name: linux-clang-engine
+            os: ubuntu-latest
+            shell: bash
+            install_linux_render_deps: true
+            configure_command: >
+              python -m cmake -S "$GITHUB_WORKSPACE" -B "$GITHUB_WORKSPACE/build/linux-clang-engine"
+              -G Ninja
+              -DCMAKE_C_COMPILER=clang-18
+              -DCMAKE_CXX_COMPILER=clang++-18
+              -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=clang-scan-deps-18
+              -DCMAKE_BUILD_TYPE=Release
+              -DEPOCH_ENABLE_RAYLIB=OFF
+              -DEPOCH_ENABLE_SDL=OFF
+              -DEPOCH_ENABLE_SFML=ON
+              -DEPOCH_ENABLE_VULKAN=OFF
+              -DEPOCH_ENABLE_OPENGL=ON
+              -DEPOCH_ENABLE_SOFTWARE_RENDERER=ON
+            build_command: >
+              python -m cmake --build "$GITHUB_WORKSPACE/build/linux-clang-engine"
+              --parallel 2
+            test_command: >
+              python -m cmake -E chdir "$GITHUB_WORKSPACE/build/linux-clang-engine"
+              ctest --output-on-failure
 
     steps:
       - uses: actions/checkout@v5
@@ -119,6 +142,21 @@ jobs:
           python -m pip --version
           cmake --version
           ninja --version
+
+      - name: Install Linux rendering build dependencies
+        if: runner.os == 'Linux' && matrix.install_linux_render_deps == true
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang-18 \
+            clang-tools-18 \
+            libcurl4-openssl-dev \
+            libgl1-mesa-dev \
+            libsfml-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxrender-dev
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'

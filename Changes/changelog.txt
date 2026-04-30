@@ -1,5 +1,52 @@
 # Epoch Changelog
 
+## [v0.84.03]
+- Bumped the active source version to `v0.84.03` for the Linux/GCC build
+  routing and editor console-layout pass.
+- Routed Linux/GCC CMake presets to the portable headless validation target by
+  default because GCC 14 can ICE while writing full-engine C++ module BMIs.
+  Full Linux engine builds should use Clang until GCC module support is stable,
+  or opt into `EPOCH_ALLOW_GCC_MODULE_ENGINE` for local experiments.
+- Added a Linux Clang engine CI lane that installs runner-safe rendering build
+  headers, builds the actual `epoch` target without launching a GUI, and still
+  runs the headless CTest smoke.
+- Refreshed release/update documentation so Windows packaged installs, Linux/WSL
+  packaged installs, and source checkout/source-snapshot fallback all follow the
+  same binary-first updater rule without overclaiming unverified release assets.
+- Cleaned stale helper-model documentation so local LLMs remain operator
+  selected for in-engine use; detected LM Studio models are helper pools only
+  until selected by the operator.
+- Fixed Linux full-engine Clang build issues in SFML/backend registration:
+  SFML now defines its backend registration inside `module core.context`,
+  Windows-only redock handoff stays guarded, and the Linux multiplexer uses the
+  existing `LogLevel::INFO` enum spelling.
+- Made `cgltf` a direct vcpkg dependency and guarded editor glTF metadata
+  parsing so builds without the header still compile cleanly.
+- Added workspace column controls so the bottom editor console can trade width
+  with chat/output without rebuilding the layout.
+- Clipped long `property_row` labels and stacked values on narrow rows so
+  console/status cells stop overlapping while fuller resize-column UI is still
+  pending.
+
+## [v0.84.02]
+- Bumped the active source version to `v0.84.02` for the AI sandbox
+  separation, project-notes feedback, and scene-drag control pass.
+- Reframed user-facing AI controls around a separate Self-Iteration Sandbox,
+  Tool Harness, Engine Assistant, ProjectLauncher evidence, Training, and
+  Ops/How-To so normal game/software authoring is not confused with automated
+  engine self-iteration.
+- Added `PROJECT_NOTES.md` generation for active project shells. Project play,
+  build, creation, script, tool-harness, and self-iteration packet actions now
+  append visible operator notes that can be shown from the Project workspace.
+- Added a `Stage Sandbox Scene Training Task` action that stages an explicit
+  watchable 3D scene-training packet for EpochBot instead of letting local
+  models answer "working fine" without tool/build/scene evidence.
+- Strengthened EpochBot prompt/eval/control-loop context so self-iteration and
+  training claims must cite visible evidence paths or state changes.
+- Changed editor object dragging from distance-amplified pixel deltas to a
+  mouse-ray/object-plane drag path with a clamped fallback, reducing the
+  exponential "object zooms away" behavior.
+
 ## [v0.84.01]
 - Bumped the active source version to `v0.84.01` for the editor-native
   self-iteration and scene-control pass.

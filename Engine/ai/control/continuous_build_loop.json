@@ -2,7 +2,7 @@
   "$schema": "https://epoch.local/schemas/ai_control_loop.schema.json",
   "name": "epoch_engine_ai_control_loop",
   "status": "phase3_4_control_foundation",
-  "summary": "Evidence-gated loop for turning editor/project work into build-verified AI training and eval material.",
+  "summary": "Evidence-gated loop for turning editor/project work into build-verified AI training and eval material without confusing the normal game/software editor with the self-iteration sandbox.",
   "roles": {
     "runtime_bot": "EpochBot",
     "control_bot": "local MCP/control",
@@ -37,20 +37,23 @@
   ],
   "active_engine_hooks": [
     "AI workspace domain selector",
-    "AI Control visual pipeline surface",
-    "AI build watcher toggle",
+    "Self-Iteration Sandbox status surface",
+    "self-iteration build watcher toggle",
     "AI workspace editor tool harness",
     "single-flight async child-project build",
     "post-build iteration packet staging",
     "raw chat capture JSONL",
     "MCP capture JSONL",
     "curated dataset promotion",
-    "scene eval promotion"
+    "scene eval promotion",
+    "sandbox scene-training packet staging"
   ],
   "promotion_rules": [
     "Never promote raw captures directly into committed datasets.",
     "Never treat failed builds as positive training examples unless explicitly labeled as failure-analysis data.",
     "Never allow blind repo write-through from planner or executor output.",
+    "Never accept EpochBot saying it is working fine unless the answer cites visible tool, build, scene, packet, log, or capture evidence.",
+    "Keep self-iteration sandbox tasks separate from normal ProjectLauncher game/software editing unless the operator explicitly approves a project/editor change.",
     "Every promoted record must be traceable to a staged packet, build log, runtime capture, MCP capture, or eval case.",
     "Local checkpoints, local models, and caches stay under the workspace AI folders unless packaged intentionally."
   ],
@@ -58,6 +61,8 @@
     "packet replay runner",
     "verifier result JSON",
     "eval score history",
+    "watchable sandbox 3D scene-training runner",
+    "scene-state diff capture for object edits",
     "tool-schema replay against local MCP/control",
     "curated failure-analysis dataset lane",
     "script/tool action replay against editor state"

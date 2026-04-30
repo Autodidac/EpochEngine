@@ -151,36 +151,36 @@ one C++/engine prompt:
 Expected smoke behavior:
 
 - the selected helper model is logged
-- the helper path should use the first model returned by `/v1/models` unless a
-  future explicit selector is added
-- local helper drafting for docs/code/review is encouraged, but runtime parity
-  testing should still stay on the first detected model
+- discovery may list local models, but chat/tool execution should stay disabled
+  until the operator selects one in the editor
+- local helper drafting for docs/code/review is encouraged only for
+  operator-allowed models; runtime parity testing should stay on the selected
+  editor model
 - the AI dock returns a visible reply
-- if the first detected model rejects explicit reasoning configuration, the
+- if the selected model rejects explicit reasoning configuration, the
   request path should retry without the reasoning field instead of surfacing an
   empty reply
 - raw capture lands in `Engine/examples/ConsoleApplication1/workspace/auto_train.jsonl`
 - MCP/control snapshots can land in `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl`
 - no `Engine/examples/ConsoleApplication1/workspace/ai/*` checkpoints, compiled models, or caches show up as
   staged Git changes
-- if the first detected helper model is changed locally, keep using the first
-  `/v1/models` entry instead of provoking extra model loads during smoke runs
+- if the local helper set changes, re-probe `/v1/models` and require an
+  explicit editor/operator selection before runtime chat/tooling resumes
 - when driving local helpers directly, prefer bounded `/v1/responses` or
   `/v1/chat/completions` requests; omit explicit reasoning config when the
   loaded model rejects it
 - probe `/v1/models` at the start of a phase, respect any already-stated
   helper-use preference, and only ask which loaded models are allowed when that
   allow-list is not already clear
-- for the current `9900X` + `5800` workstation target, prefer two loaded helper
-  models with up to four parallel drafting prompts per model for eight total
-  helper lanes, while the engine runtime itself still stays on the first
-  detected model for parity
+- for the current `9900X` + `5800` workstation target, up to five bounded local
+  helper prompts may be used for drafting/review when the operator allows them,
+  while the engine runtime itself stays on the selected editor model
 - prefer LM Studio `/v1/responses` for offloaded helper drafts, while keeping
-  the engine runtime itself on the first detected local model for parity
+  the engine runtime itself on the selected local model for parity
 - if a helper returns blank `content` but useful `reasoning_content`, harvest
   that output for drafting/review instead of discarding the helper pass
-- if the first two detected helpers split text and vision strengths, keep the
-  first model as runtime parity and use the vision-capable helper for screenshot
+- if allowed helpers split text and vision strengths, keep the selected editor
+  model as runtime parity and use the vision-capable helper for screenshot
   review, pane/layout checks, and color/parity triage
 - run GUI harness sessions serially, not in parallel; parallel parented runs can
   contaminate drag/focus evidence and should not be treated as trustworthy

@@ -12,5 +12,19 @@
     "scene_id": "project:sandbox",
     "prompt": "Explain why mixed C++23 module units should use module; before legacy includes.",
     "expected_contains": "module"
+  },
+  {
+    "name": "self_iteration_evidence_gate",
+    "project_id": "sandbox",
+    "scene_id": "project:sandbox",
+    "prompt": "EpochBot says self-iteration is working fine. What evidence must it cite before that answer is acceptable?",
+    "expected_contains": "evidence"
+  },
+  {
+    "name": "sandbox_scene_training_plan",
+    "project_id": "sandbox",
+    "scene_id": "project:sandbox",
+    "prompt": "Plan a sandboxed 3D scene-training exercise where EpochBot edits a visible primitive and learns from the result.",
+    "expected_contains": "scene"
   }
 ]

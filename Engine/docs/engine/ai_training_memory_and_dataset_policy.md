@@ -94,8 +94,8 @@ The editor AI workspace now stages the first lightweight version of that under
 2. Build `ConsoleApplication1 | Release | x64`
 3. Launch from `x64/Debug/`
 4. Confirm the selected helper model is logged
-   - use the first model returned by `/v1/models` so validation does not
-      trigger extra model loads
+   - discovery may list models, but the engine should not activate one until
+     the operator selects it
 5. Submit at least one editor prompt and one C++ prompt
 6. Confirm the reply is visible in the AI dock
 7. Confirm raw/staged JSONL capture is updated
@@ -109,13 +109,15 @@ The editor AI workspace now stages the first lightweight version of that under
 - `Explain why mixed C++23 module units should use module; before legacy includes.`
 - `Summarize the current project runtime target and the active script in one short answer.`
 
-Current validated helper pair is intentionally treated as dynamic. The exact
-names vary with local load order, so the workflow rule is more important than
-the pair itself: use the first two `/v1/models` entries as the drafting pools,
-and keep the first detected model as the in-engine/runtime parity baseline.
+Current helper availability is intentionally treated as dynamic. The exact names
+vary with local load order, so the workflow rule is more important than the
+pair itself: probe `/v1/models`, use only operator-allowed helpers for bounded
+drafting/review, and keep the in-engine/runtime path disabled until the operator
+selects the active model in the editor.
 
-For the current April 2026 workstation passes, the first two loaded helpers
-were `nvidia/nemotron-3-nano-4b` and `nvidia/nemotron-3-nano-4b:2`.
+For the current April 2026 workstation passes, LM Studio can provide multiple
+parallel helper lanes. Treat those lanes as drafting/review acceleration, not
+as automatic EpochBot model selection.
 
 Use local helpers aggressively for:
 
@@ -132,9 +134,8 @@ preference from the operator, and only ask which loaded models are allowed if
 that allow-list is not already clear.
 
 For the current `9900X` + `5800` workstation target, helper-first supervisor
-passes should prefer two loaded helper models with up to four parallel prompts
-per model for eight total drafting lanes. Keep the first detected model as the
-in-engine/runtime parity baseline.
+passes may use up to five bounded LM Studio helper prompts when the operator has
+allowed them. Keep the in-engine/runtime model operator-selected.
 
 That helper-first check should happen at the start of a phase, not as an
 afterthought once source edits are already underway.
@@ -144,10 +145,10 @@ When possible, send direct helper drafts through LM Studio `/v1/responses` or
 an explicit reasoning field, retry without it instead of treating the helper
 path as broken.
 
-The engine runtime itself must follow the same rule for the first detected
-model: if a Responses API call comes back empty because the model rejects the
-reasoning configuration, retry without the reasoning field so the AI dock still
-shows a visible answer.
+The engine runtime itself must follow the selected-model rule: if a Responses
+API call comes back empty because the selected model rejects the reasoning
+configuration, retry without the reasoning field so the AI dock still shows a
+visible answer.
 
 If a local multimodal helper returns its useful answer in `reasoning_content`
 while `content` is blank, treat that as a tooling/parsing issue in the helper

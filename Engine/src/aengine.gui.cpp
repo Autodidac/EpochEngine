@@ -1900,6 +1900,7 @@ namespace epochnamespace::gui
 
         const Vec2 pos = g_frame.cursor;
         const float availableWidth = content_available_width(g_frame.cursor.x);
+        const float minReadableValueWidth = space_advance(kFontScale) * 14.0f;
         const float labelWidth = std::clamp(
             label_width,
             space_advance(kFontScale) * 6.0f,
@@ -1908,7 +1909,25 @@ namespace epochnamespace::gui
         const float valueX = pos.x + labelWidth + gap;
         const float valueWidth = (std::max)(space_advance(kFontScale), availableWidth - labelWidth - gap);
 
-        draw_text_line(labelText, pos.x, pos.y, kFontScale);
+        if (valueWidth < minReadableValueWidth)
+        {
+            const std::string clippedLabel = fit_text_to_width(labelText, availableWidth, kFontScale);
+            draw_text_line(clippedLabel, pos.x, pos.y, kFontScale);
+
+            const float nextLineY = pos.y + line_advance_amount(kFontScale);
+            const float valueHeight = valueText.empty()
+                ? line_advance_amount(kFontScale)
+                : draw_wrapped_text(valueText, pos.x, nextLineY, availableWidth, kFontScale);
+
+            advance_cursor({
+                0.0f,
+                line_advance_amount(kFontScale) + (std::max)(line_advance_amount(kFontScale), valueHeight)
+            });
+            return;
+        }
+
+        const std::string clippedLabel = fit_text_to_width(labelText, labelWidth, kFontScale);
+        draw_text_line(clippedLabel, pos.x, pos.y, kFontScale);
 
         const float valueHeight = valueText.empty()
             ? line_advance_amount(kFontScale)

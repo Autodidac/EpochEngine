@@ -1,9 +1,10 @@
 {
   "name": "epoch-engine",
-  "version-string": "0.83.5",
+  "version-string": "0.84.3",
   "builtin-baseline": "74ec888e385d189b42d6b398d0bbaa6f1b1d3b0e",
   "dependencies": [
     "asio",
+    "cgltf",
     "fmt",
     "openal-soft",
     "joltphysics",

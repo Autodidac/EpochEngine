@@ -9,7 +9,7 @@ docs flow to stay predictable.
 Run from `Engine/`:
 
 ```bash
-./build.sh [--no-vcpkg] [gcc|clang] [Debug|Release] [-- <extra cmake args>]
+./build.sh [--no-vcpkg] [--updater-shell] [gcc|clang] [Debug|Release] [-- <extra cmake args>]
 ```
 
 What it does:
@@ -24,7 +24,8 @@ Examples:
 
 ```bash
 cd Engine
-./build.sh gcc Release
+./build.sh clang Release
+./build.sh gcc Debug -- -DEPOCH_CI_HEADLESS_ONLY=ON
 ./build.sh --no-vcpkg clang Debug -- -DEPOCH_ENABLE_RAYLIB=OFF
 ```
 
@@ -88,6 +89,11 @@ GitHub CI/workflow discipline:
 - keep workflows build-only unless a real headless/runtime-safe automation path
   exists
 - do not depend on GUI launch, desktop focus, or screenshot capture in CI
+- keep the Linux Clang engine lane as build-only graphics coverage: it should
+  build the real `epoch` target with runner-safe OpenGL/software/SFML
+  dependencies, then run headless CTest without opening windows
+- keep Linux/GCC hosted and local shared presets headless by default until GCC
+  module BMI writing is reliable enough for full-engine validation
 - keep workflow action runtimes current so the repo does not drift onto stale
   Node/action baselines
 
@@ -137,9 +143,11 @@ At the start of a phase:
 - probe `/v1/models`
 - respect any helper-use preference the operator has already made explicit
 - ask which loaded models are allowed only when that allow-list is unclear
-- keep the first detected model as the runtime-parity/in-engine smoke model
-- for the current `9900X` + `5800` workstation target, prefer two loaded
-  helper models with four drafting lanes each for eight total helper parallels
+- do not auto-select or auto-name an in-engine model from discovery alone
+- keep in-engine chat/tool execution disabled until the operator selects a model
+- use available LM Studio helper lanes for drafting/review only when the
+  operator has allowed them; current workstation passes may use up to five
+  bounded helper parallels
 
 Launcher scope for that shell should stay flat and direct:
 
@@ -183,6 +191,20 @@ The updater contract stays binary-first:
 2. update into that runtime when it is newer
 3. only continue to source when packaged parity is already reached
 
+Install/update type matrix:
+
+- packaged Windows runtime installs use the newest matching
+  `epoch_win10_x64_vX.Y.Z.zip` asset
+- packaged Linux and WSL runtime installs use the newest matching
+  `epoch_linux_x64_vX.Y.Z.tar.gz` asset
+- source checkout installs still check packaged runtime first, then rebuild from
+  the GitHub source snapshot only when the packaged runtime is already
+  version-equal/newer or no newer packaged asset exists
+- WSL is treated as Linux for release-asset naming; do not publish a separate
+  WSL-only runtime asset unless the runtime/package layout actually diverges
+- updater-shell packages are bootstrap installers only and must keep their own
+  `epoch_updater_shell_only_*` names
+
 Do not reintroduce standalone packaged version text assets as the primary
 contract. The packaged version identity should be clear from the tagged source
 and the packaged asset filename itself.
@@ -212,13 +234,23 @@ Before publishing a Windows packaged runtime zip:
 Before publishing a Linux/WSL2 asset:
 
 - rebuild from the same bumped source commit that will be tagged
+- use the validated Clang full-engine path for the package build unless a later
+  release pass proves another Linux compiler path
+- do not publish the Linux package while the hosted `linux-clang-engine` build
+  lane is failing
 - verify the Linux package reports the same version as the tag/source archive
+- verify `./epoch --version` from the staged package directory
+- smoke the no-args packaged entry locally under Linux/WSLg or a real Linux
+  desktop before calling the release runtime-ready
 - keep the packaged versioned Linux runtime asset, for example
   `epoch_linux_x64_vX.Y.Z.tar.gz`, and the GitHub source snapshot aligned
   to the same commit, not just the same version string
 - verify the packaged Linux artifact starts the main runtime path by default
   instead of accidentally shipping an updater-shell-only bootstrap
 - do not quietly reuse an older Linux artifact after source has changed
+- include the runtime executable, required shared libraries, assets, shaders,
+  and scripts in the staged package instead of assuming the repo tree exists
+  beside the executable
 - keep any Linux bootstrap drop separate, for example
   `epoch_updater_shell_only_linux_x64_vX.Y.Z.tar.gz`
 - keep the Linux naming and published-version story aligned with Windows so the
@@ -295,22 +327,18 @@ before spending main-model tokens on the final implementation path.
 At the start of each phase:
 
 - probe `/v1/models`
-- use the first two detected models as helper drafting pools when available
-- keep the first detected model as the only runtime-parity/in-engine smoke
+- respect operator-selected/allowed models before sending helper traffic
+- treat discovered models as available helper pools, not as the active in-engine
   model
-- if the second detected helper is vision-capable, use it for screenshot and
-  layout review while still keeping the first detected model as the engine's
-  runtime-parity smoke target
-
-When two local helper models are loaded, supervisor passes should treat them as
-two helper pools with up to four parallel drafting lanes each. Use those lanes
-for roadmap phrasing, code-shape proposals, doc rewrites, screenshot review,
-bounded subsystem design, and changelog drafting before integrating the final
-answer locally.
+- keep the engine runtime/chat/tool path disabled until the operator selects a
+  model in the editor
+- when the operator allows it, fan out up to five bounded LM Studio helper
+  prompts for roadmap phrasing, code-shape proposals, docs, screenshot review,
+  bounded subsystem design, and changelog drafting
 
 When possible, route direct helper drafting through LM Studio `/v1/responses`
-or `/v1/chat/completions` with bounded output tokens. If the selected local
-model rejects an explicit reasoning setting, retry without the reasoning field
+or `/v1/chat/completions` with bounded output tokens. If an allowed helper model
+rejects an explicit reasoning setting, retry without the reasoning field
 instead of treating the helper as broken or empty.
 
 Git-safe AI assets live under:
@@ -339,9 +367,9 @@ training direction changes, and only then promote intentional records into
 `Engine/ai/datasets/curated/` or `Engine/ai/evals/`.
 
 When using local helpers through LM Studio direct responses, prefer the
-lightest visible-output settings the loaded model actually accepts. For Qwen
-helpers that means disabling reasoning when supported; for non-reasoning models
-it means omitting the reasoning field entirely.
+lightest visible-output settings the loaded model actually accepts. For helpers
+that expose reasoning controls, disable reasoning when supported; for
+non-reasoning models, omit the reasoning field entirely.
 
 ## Hardware support strategy
 
@@ -368,11 +396,10 @@ integration by default.
 When a local helper model is available:
 
 - endpoint is usually `http://localhost:1234`
-- model selection is currently first-detected from `/v1/models` so the engine
-  does not provoke extra model loads
-- validated fast helper baseline is `qwen/qwen3.5-9b`
-- stronger local helpers such as Gemma can be used for drafting, evaluation,
-  and smoke prompts when available
+- discovery lists available models, but the editor must not name or activate
+  one until the operator selects it
+- helper lanes can be used for drafting, evaluation, and smoke prompts only
+  when the operator has allowed that loaded model
 
 Use the helper model for:
 
@@ -382,19 +409,16 @@ Use the helper model for:
 - drafted reasoning and code-outline assistance for bounded engine tasks
 - validating that EpochBot receives visible answers through the engine path
 
-If two helper models are loaded:
+If multiple helper models are loaded:
 
-- use the first two `/v1/models` entries for helper drafting work
-- fan out up to four concurrent prompts per model when the local server supports
-  it
-- keep the first detected model as the only runtime-parity/in-engine smoke model
-  so the engine does not provoke extra model loads during testing
-- when only one of those helpers has reliable vision, reserve that helper for
-  screenshot/layout review instead of burning main-model tokens on image triage
+- use only the models the operator has allowed for helper drafting
+- fan out up to five bounded prompts total when the local server supports it
+- keep the in-engine runtime path on the explicitly selected editor model
+- when only one allowed helper has reliable vision, reserve that helper for
+  screenshot/layout review, pane/layout checks, and color/parity triage
 
 When the helper returns mostly reasoning text or stalls:
 
-- keep the first-detected model rule intact
 - use the helper for bounded drafting, not as a blocker for compile-critical work
 - prefer refining small helper drafts locally over waiting on long monolithic answers
 - if `content` is blank but `reasoning_content` contains the useful answer,

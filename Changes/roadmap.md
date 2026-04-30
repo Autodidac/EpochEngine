@@ -7,7 +7,7 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 - project creation, editing, play, scripting, tooling, and updates
 - renderer and systems tooling that stay honest across backends
 - engine-owned GUI/text/input instead of middleware-owned editor behavior
-- a staged two-role AI control loop that stays reviewable and evidence-gated
+- a staged two-role self-iteration loop that stays reviewable and evidence-gated
 - packaging and runtime rules that hold across desktop first, then Android
 
 ## Non-Negotiable Rules
@@ -43,14 +43,20 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 - Packaged runtime assets use versioned platform names:
   - `epoch_win10_x64_vX.Y.Z.zip`
   - `epoch_linux_x64_vX.Y.Z.tar.gz`
+- The updater must resolve the active install type before replacing files:
+  - packaged Windows runtime: install the newest matching `.zip` runtime asset
+  - packaged Linux/WSL runtime: install the newest matching `.tar.gz` runtime asset
+  - source checkout/install: prefer the newest packaged runtime first, then
+    rebuild from the GitHub source snapshot only when packaged parity is already
+    reached or no newer packaged runtime exists
 - Bootstrap updater-shell assets use their own versioned names:
   - `epoch_updater_shell_only_win10_x64_vX.Y.Z.zip`
   - `epoch_updater_shell_only_linux_x64_vX.Y.Z.tar.gz`
 - Packaged version identity travels with the tagged source and release asset
   names rather than standalone packaged version files.
-- The updater remains binary-first:
-  check the newest packaged runtime first, then continue to source only when
-  the packaged runtime is already version-equal or newer.
+- The updater remains binary-first and platform-specific: check the newest
+  packaged runtime for the current platform first, then continue to source only
+  when the packaged runtime is already version-equal or newer.
 - GitHub source archives stay full source snapshots. Do not slim them down to
   imitate runtime/bootstrap packages.
 - Commit titles stay descriptive and versionless. Version numbers belong in:
@@ -74,12 +80,13 @@ These are already established and must stay intact while new work lands:
 - repo-root CMake wrapper with an honest floor story
 - build-only CI direction instead of GUI smoke inside hosted runners
 - hosted CI split:
-  required Windows and Linux hosted lanes use the asset-light
-  `epoch_ci_headless` smoke until the full graphics dependency surface is
-  reliable there; full vcpkg-backed app builds remain local/release validation
-  work, not required hosted GUI checks
+  required Windows and Linux hosted lanes keep the asset-light
+  `epoch_ci_headless` smoke, while the Linux Clang engine lane now builds the
+  real `epoch` target with runner-safe OpenGL/software/SFML build dependencies
+  and still avoids launching GUI windows
 - stable Windows/Linux packaged release path with explicit bootstrap/runtime
-  distinction
+  distinction, including Windows `.zip`, Linux/WSL `.tar.gz`, and source-snapshot
+  fallback rules
 - launcher/editor separation and the current project-centric runtime shell
 - current multicontext baseline:
   real backend panes, real detach/redock flow, and no fake demo-launch path
@@ -101,6 +108,11 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 
 - Support MSVC, clang-cl, Clang, and GCC where practical.
 - Support Visual Studio, Ninja, and Unix Makefiles where practical.
+- Linux/GCC is currently a headless validation lane by default because GCC 14
+  can ICE while writing full-engine C++ module BMIs; full Linux editor/runtime
+  builds should use Clang until GCC module support stabilizes.
+- Linux/Clang 18 is the current full-engine Linux rendering build lane, with
+  OpenGL, software renderer, and SFML validated as build-time backends.
 - CMake is authoritative for cross-platform builds and project-wide presets.
 - Visual Studio project/filter files must not drift from filesystem and CMake
   whenever files are moved or added.
@@ -183,9 +195,9 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - MSVC project/filter files were only touched for newly added files in this
   pass; future file moves must update filesystem, CMake, `.vcxproj`,
   `.vcxitems`, and `.filters` together.
-- Hosted CI should remain headless/build-only until GUI/window tests have a
-  deterministic runner-safe harness; no explicit Node 20 setup remains in the
-  checked workflows.
+- Hosted CI should remain build-only for graphics targets and should not launch
+  GUI windows until a deterministic runner-safe harness exists; no explicit
+  Node 20 setup remains in the checked workflows.
 
 ## Established Capabilities
 
@@ -206,30 +218,33 @@ engine shape and should be treated as starting truth for the next passes:
 - a live Systems workspace with graph surfaces, backend ownership visibility,
   first time-control diagnostics, and build-confidence/feature-probe status
   already on-screen
-- an AI workspace split into Control, Tooling, Engine AI, Software,
-  Training, and Ops/How-To domains so rebuild/tooling/training controls are
-  discoverable in the editor shell
+- an AI workspace split into Self-Iteration Sandbox, Tool Harness,
+  Engine Assistant, ProjectLauncher evidence, Training, and Ops/How-To domains
+  so rebuild/tooling/training controls are discoverable without mixing normal
+  game/software authoring with engine self-iteration
 - local AI model discovery is explicit-selection only: the editor may list
   available local OpenAI-compatible models, but chat/tooling stays disabled and
   unnamed until the operator selects one
-- an editor-native AI Control panel that summarizes evidence readiness, active
-  planner/builder/verifier/gate state, continuous build status, and tool-harness
-  activity without depending on runtime surface/atlas packing
-- an editor-owned continuous AI build lane that watches active project/script
+- an editor-native Self-Iteration Sandbox panel that summarizes evidence
+  readiness, active planner/builder/verifier/gate state, continuous build
+  status, and tool-harness activity without depending on runtime surface/atlas
+  packing
+- an editor-owned continuous self-iteration build lane that watches active project/script
   evidence, queues one child-project build at a time, and feeds successful
   build artifacts back into staged AI packets for verifier/gate review
-- AI Control can repair active project evidence from the editor by regenerating
-  or verifying the selected project shell before queueing a builder pass
-- AI Control exposes repair, manual builder queue, and watcher controls in the
-  Inspector as well as the AI workspace so Phase 5 can be driven without
-  command-line operation
+- the Self-Iteration Sandbox can repair active project evidence from the editor
+  by regenerating or verifying the selected project shell before queueing a
+  builder pass
+- the Self-Iteration Sandbox exposes repair, manual builder queue, watcher
+  controls, and sandbox scene-training packet staging in the Inspector/AI
+  workspace so Phase 5 can be driven without command-line operation
 - AI evidence lookup is now executable/repo-root aware, so launching the editor
   from Visual Studio/MSBuild output directories no longer makes project
   manifests and build artifacts appear missing only because the cwd changed
 - an AI tool harness that builds/runs the selected script through the real
   editor host, captures before/after editor state, records MCP evidence, and
   stages packets from successful tool actions
-- a committed AI control-loop contract that records the planner, executor,
+- a committed self-iteration control-loop contract that records the planner, executor,
   builder, verifier, and gate handoff rules for future replay/training work
 - explicit AI iteration packet staging and local-vs-committed AI artifact
   separation
@@ -237,6 +252,12 @@ engine shape and should be treated as starting truth for the next passes:
   the current `planner -> executor -> builder -> verifier -> gate` loop stage
   so future replay/training passes can reason from staged evidence instead of
   guessing from editor state
+- project actions now append `PROJECT_NOTES.md` operator notes so generated
+  ProjectLauncher shells can show what changed, how to run it, and which
+  self-iteration packets/builds affected the project
+- sandbox scene-training packets can now be staged from the editor so EpochBot
+  has an explicit, watchable 3D edit/test learning lane instead of answering
+  that it is "working fine" without evidence
 - the scene viewport now has first-pass object interaction: visible editor
   primitives can be click-selected and left-dragged while empty scene space
   still supports camera pan/orbit/zoom
@@ -252,7 +273,7 @@ engine shape and should be treated as starting truth for the next passes:
   build-confidence surfacing, and hosted/local build reliability.
 - [~] Phase 4: GUI maturity, drag/drop, text-input smokes, editor polish, and
   OpenGL startup-flicker/root-cause cleanup.
-- [~] Phase 5: Two-role AI control loop, captured task packets, review gates,
+- [~] Phase 5: Two-role self-iteration loop, captured task packets, review gates,
   dataset/eval promotion, and tool-schema replay.
 - [~] Phase 6: Primitive/object authoring, procedural world spine, 2D vertical
   slice, and material/cellular simulation boundaries.
@@ -285,15 +306,19 @@ engine shape and should be treated as starting truth for the next passes:
   generated or discovered projects should build, launch, and hand any
   declared demo model through the engine-owned script host without falling
   back to confusing sample-only behavior
-- keep the Mini Sponza demo owned by `ProjectLauncher`, while `Sandbox`
-  stays the AI/engine-iteration shell
+- keep the Mini Sponza demo owned by `ProjectLauncher`, while the
+  Self-Iteration Sandbox stays the AI/engine-iteration shell
 - continue replacing hardcoded built-in sample assumptions with project-owned
   runtime flow
 - keep the already-landed project/scripts shell honest instead of letting it
   drift back toward placeholder tooling
 - keep the launcher centered on projects, contexts, settings, and updates
+- keep generated project `PROJECT_NOTES.md` visible from the Project workspace
+  so scripted/project/AI actions leave a readable synopsis and usage trail
 - keep the editor centered on `Project`, `Scripts`, `Systems`, `AI`, and
   `Output`
+- replace the temporary console/chat column buttons with a real draggable
+  resize-column control once the GUI input model has stable splitters
 
 ### 3. Systems Workspace And Time Spine
 
@@ -343,38 +368,45 @@ engine shape and should be treated as starting truth for the next passes:
   root cause is fixed
 - improve project, script, AI, systems, and output surfaces until the shell
   reads as a professional editor rather than a debug console
-- keep AI Control editor-native until runtime surfaces are stable enough to be
-  optional decoration, not the only way to operate the loop
-- keep AI workspace domains organized around concrete jobs: rebuild/control,
-  editor tooling, normal engine guidance, software artifacts, training
-  promotion, and operator instructions
+- keep the Self-Iteration Sandbox editor-native until runtime surfaces are
+  stable enough to be optional decoration, not the only way to operate the loop
+- keep AI workspace domains organized around concrete jobs:
+  self-iteration sandbox, editor tool harness, normal engine assistant,
+  ProjectLauncher artifacts, training promotion, and operator instructions
 - keep model discovery and model activation separated in the GUI: discovered
   names can appear only as selectable options, never as the active model until
   the operator chooses one
 - keep launcher and editor theming intentionally separate
 
-### 6. AI Control, Training, And Review Loop
+### 6. Self-Iteration, Training, And Review Loop
 
 - standardize the full two-role runtime story:
-  `EpochBot` plus local MCP/control
+  `EpochBot` plus local MCP/control, with the self-iteration sandbox separated
+  from normal ProjectLauncher/editor scene authoring
 - build on the current iteration-packet/capture roots already present in the
   editor instead of inventing a second AI staging path
 - make staged packets the first durable handoff between planner/executor work
   and builder/verifier review, including loop-stage and gate-state metadata
 - keep continuous AI builds nonblocking and single-flight so the engine can
   produce fresh evidence while preserving explicit review gates
-- keep project evidence repair available in the AI Control domain so Phase 5
-  work can recover from missing generated shells without leaving the editor
+- keep project evidence repair available in the Self-Iteration Sandbox domain
+  so Phase 5 work can recover from missing generated shells without leaving the
+  editor
 - keep the Inspector copy of AI repair/build/watcher controls alive until the
   bottom workspace gets a proper scroll/resize treatment
 - promote only staged packets that include root-resolved project/build/output
   evidence; cwd-dependent evidence is considered invalid
 - train from real editor tool actions by capturing before/after state from the
   selected script harness before promoting any dataset/eval records
+- reject generic EpochBot self-status answers unless they cite tool/build/scene
+  evidence paths or visible state changes
+- grow the sandbox scene-training lane into a watchable 3D edit/test runner
+  where EpochBot can learn from object edits, scene-state diffs, and verifier
+  output without mutating normal game/editor projects by accident
 - keep local model activation operator-gated; no first-detected model fallback,
   no hidden helper identity, and no chat/tool execution before selection
 - treat `Engine/ai/control/continuous_build_loop.json` as the current contract
-  for the engine AI control loop until a replay runner can enforce it
+  for the engine self-iteration control loop until a replay runner can enforce it
 - use MCP tool schemas as the canonical tool-bus contract and replay shape
 - separate raw observation capture from curated dataset/eval promotion
 - require build/runtime/log evidence before AI-assisted promotion
@@ -416,7 +448,8 @@ engine shape and should be treated as starting truth for the next passes:
 
 ## Current Push Order
 
-1. Fix GitHub/workflow reliability and keep local/hosted build truth aligned.
+1. Keep GitHub/workflow reliability and local/hosted build truth aligned after
+   the headless plus Linux Clang engine split.
 2. Strengthen the Systems workspace with deeper pacing diagnostics and backend
    convergence guidance.
 3. Carry the time spine deeper into runtime and scene ownership.

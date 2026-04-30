@@ -34,19 +34,29 @@ cmake --preset windows-clangcl-debug
 cmake --build --preset windows-clangcl-debug
 ```
 
-## Windows (MinGW/GCC)
+## Linux (GCC Headless Validation)
 
-```powershell
+```bash
 cmake --preset ninja-gcc-debug
 cmake --build --preset ninja-gcc-debug
 ```
 
-## Linux
+The GCC presets intentionally route to `epoch_ci_headless` by default because
+GCC 14 can ICE while writing full-engine C++ module BMIs. Only opt into the
+full GNU module build with `-DEPOCH_ALLOW_GCC_MODULE_ENGINE=ON` when you are
+testing compiler/module behavior locally.
+
+## Linux (Clang Full Engine)
 
 ```bash
 cmake --preset ninja-clang-debug
 cmake --build --preset ninja-clang-debug
 ```
+
+The Clang preset is the current Linux full-engine CMake path. In hosted CI the
+matching `linux-clang-engine` lane installs runner-safe OpenGL/software/SFML
+build dependencies, builds the real `epoch` target, then runs the headless
+CTest smoke without launching GUI windows.
 
 ## macOS
 
@@ -67,5 +77,7 @@ cmake --build --preset macos-release
 - Hosted GitHub Actions split validation intentionally:
   - Required Windows and Linux hosted CMake jobs build and test `epoch_ci_headless`.
   - The MSBuild hosted job builds and runs the `HeadlessCI` Visual Studio project.
-  - Full graphics/editor builds remain local/release validation until the hosted graphics/runtime dependency surface is hardened.
+  - The Linux Clang engine lane builds the full `epoch` target with OpenGL,
+    software renderer, and SFML enabled at build time, but still does not launch
+    GUI windows on hosted runners.
   - The headless smoke target verifies public script-host ABI and filesystem probes without launching GUI contexts or requiring renderer packages.

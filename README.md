@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.01-1F7A4C?style=for-the-badge" alt="Current development source v0.84.01" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.03-1F7A4C?style=for-the-badge" alt="Current development source v0.84.03" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.83.86-2C6A8A?style=for-the-badge" alt="Published stable release v0.83.86" />
 </p>
 
@@ -48,8 +48,8 @@ Current feature spine:
 - Model-backed launcher demo flow using the embedded Mini Sponza asset.
 - Systems, Scripts, Project, AI, and Output workspaces inside the editor.
 - Two-role AI loop centered on `EpochBot` plus the local MCP/control layer.
-- AI workspace domains for Control, Tooling, Engine AI, Software,
-  Training, and Ops/How-To.
+- AI workspace domains for the Self-Iteration Sandbox, Tool Harness,
+  Engine Assistant, ProjectLauncher evidence, Training, and Ops/How-To.
 - Executable-root path and asset resolution instead of fragile cwd-based runs.
 - Windows, Linux/WSL, updater-shell, and packaged runtime workflows with
   documented release/source policy.
@@ -65,9 +65,11 @@ For newcomers:
   updates, and then open the editor.
 - The editor is the work room. You can look at scenes, run the project, build
   scripts, check systems, and use AI tools there.
-- The AI workspace has its own sub-workspaces. `Control` is the AI build-loop
-  control room, `Tooling` runs editor tool scripts and captures
-  before/after state, and `Training` handles evidence-backed promotion.
+- The AI workspace has its own sub-workspaces. `Sandbox` is the separate
+  self-iteration control room, `Harness` runs editor tool scripts and captures
+  before/after state, `Assistant` is for normal game-engine/project guidance,
+  `Launcher` tracks project/build evidence, and `Training` handles
+  evidence-backed promotion.
 - Epoch can also draw the same project in different ways. Those are called
   rendering backends, but you can think of them as different drawing engines
   under the hood.
@@ -86,18 +88,22 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.83.91`.
+- Source is currently the active development line at `v0.84.03`.
 - The latest published stable runtime release is `v0.83.86`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
 - Bootstrap updater-shell releases are separate from the main runtime package
   and are meant to update into the current runtime release, then fall through
   to source only when packaged parity is already reached.
+- Update/install policy is binary-first across install types: packaged Windows
+  installs use the newest matching `.zip`, packaged Linux/WSL installs use the
+  newest matching `.tar.gz`, and source checkouts rebuild from source only after
+  packaged-runtime parity or when no newer packaged runtime exists.
 - Phase 1 and Phase 2 of the active roadmap are complete. Current work is
-  concentrated in systems tooling, time ownership, AI control/capture, and UI
+  concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.
 
-Engine AI control instructions live with the AI assets in `Engine/ai/README.md`.
+AI sandbox and training instructions live with the AI assets in `Engine/ai/README.md`.
 
 ## What Epoch Provides Right Now
 
@@ -115,8 +121,9 @@ Engine AI control instructions live with the AI assets in `Engine/ai/README.md`.
   and is being extended with pacing and ownership diagnostics.
 - A time-system spine with fixed-step ownership, pause/resume, scaling,
   single-step, and early editor-facing diagnostics.
-- A staged AI workspace centered on two in-engine roles only:
-  `EpochBot` and the local MCP/control layer.
+- A staged AI workspace centered on `EpochBot`, a local MCP/control layer, and
+  a separate self-iteration sandbox that stages visible evidence before any
+  promotion.
 - Executable-root asset, shader, script, font, log, and capture resolution so
   local runs stop depending on whatever folder the process happened to launch
   from.
@@ -206,24 +213,33 @@ Example app only:
 Windows MSVC:
 
 ```powershell
-Set-Location Engine
-cmake --preset x64-debug
-cmake --build --preset x64-debug
+cmake --preset windows-msvc-debug
+cmake --build --preset windows-msvc-debug
 ```
 
 Linux:
 
 ```bash
-cd Engine
-cmake --preset Ninja-Debug
-cmake --build --preset Ninja-Debug
+cmake --preset ninja-clang-debug
+cmake --build --preset ninja-clang-debug
 ```
+
+Linux/GCC currently uses the headless validation presets by default because
+GCC 14 can ICE while writing full-engine C++ module BMIs. Use
+`ninja-gcc-debug` for headless validation, use Clang for full Linux engine
+builds, or explicitly opt into the experimental GCC module path with
+`-DEPOCH_ALLOW_GCC_MODULE_ENGINE=ON`.
+
+Hosted CI mirrors that split: required portable lanes build/test headless, and
+the Linux Clang engine lane builds the real `epoch` target with OpenGL,
+software renderer, and SFML enabled at build time without launching GUI windows.
 
 ### Run under WSL/Linux
 
 - use an asset-bearing output such as `Engine/Bin/Clang-Release/`
 - launch `./epoch` from the output directory
-- updater-shell mode is explicit/bootstrap-only on Linux, not the default
+- updater-shell mode is explicit/bootstrap-only on Linux/WSL, not the default
+  runtime identity
 
 ## Repository Layout
 
@@ -267,7 +283,8 @@ The current roadmap is focused on:
 1. Growing the Systems workspace into a stronger renderer/runtime ownership and
    pacing surface.
 2. Carrying the time-system spine deeper into runtime and scene ownership.
-3. Tightening the two-role AI capture, review, and promotion loop.
+3. Tightening the two-role AI capture, review, and promotion loop with a
+   separate self-iteration sandbox and watchable scene-training tasks.
 4. Improving UI/editor maturity without regressing the honest project-centric
    runtime flow.
 

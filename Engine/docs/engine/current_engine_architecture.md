@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.83.88`
+Current source version: `v0.84.03`
 
 ## Architecture highlights
 
@@ -80,6 +80,10 @@ Current source version: `v0.83.88`
   a passive download tool: it now restores manifest dependencies with `vcpkg`,
   rebuilds from the downloaded snapshot, and replaces the running runtime from
   the rebuilt output.
+- Update/install policy is platform-aware: Windows uses `.zip` runtime assets,
+  Linux/WSL uses `.tar.gz` runtime assets, and source installs fall back to a
+  source snapshot rebuild only after packaged-runtime parity is reached or no
+  newer packaged asset is available.
 - Backend presentation is more visually coherent now that the active renderer
   base colors are being pulled toward the same darker Vulkan-style baseline,
   and SFML’s shared preview path is clipped back to the intended scene view.

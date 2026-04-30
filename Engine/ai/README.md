@@ -42,10 +42,10 @@ External local LLMs such as LM Studio are development helpers for testing,
 evaluation, curation, and iteration speed. They are not a third in-engine
 runtime role.
 
-## AI Control Loop
+## Self-Iteration Sandbox Loop
 
-The current Phase 3/4 foundation is an evidence-gated engine AI control loop,
-not blind self-modifying autonomy:
+The current Phase 3/4 foundation is an evidence-gated self-iteration sandbox,
+not blind self-modifying autonomy and not the normal game/software editor:
 
 1. planner produces or updates an explicit staged packet
 2. executor proposes work only from the staged packet and current operator goal
@@ -60,7 +60,8 @@ The live contract is stored in:
 The editor AI workspace now has a continuous build lane that watches active
 project/script evidence, runs one child-project build at a time, and stages a
 fresh packet after successful builds. That packet is the durable handoff into
-future replay, verifier scoring, and curated training promotion.
+future replay, verifier scoring, and curated training promotion. It does not
+grant blind write-through to the repo.
 
 The editor AI workspace also has an AI tool harness. It builds and runs the
 selected tooling script through the real `EpochScriptHost`, captures before/after
@@ -68,7 +69,14 @@ editor state, records the result as MCP evidence, and stages a packet when the
 tool action succeeds. This is the first bridge from "AI can talk about tooling"
 to "AI can learn from an editor action that actually changed state."
 
-## Running The Engine AI Controls
+EpochBot must not answer that self-iteration, training, or tooling is "working
+fine" unless it can cite concrete evidence: a staged packet, build log, runtime
+capture, MCP capture, scene state change, eval output, or retained operator note.
+The editor now exposes a `Stage Sandbox Scene Training Task` action so the bot can
+be given watchable 3D scene-edit/test exercises without confusing that sandbox
+with ProjectLauncher game/software work.
+
+## Running The AI Sandbox Controls
 
 From a developer checkout:
 
@@ -80,10 +88,10 @@ From a developer checkout:
    `build/windows-msvc-debug/Engine/Debug/epoch.exe`
 4. Open the editor workspace panel and select `AI`.
 5. Use the AI sub-workspaces:
-   - `Control`: visual control room for the AI build watcher
-   - `Tooling`: run selected scripts through the editor tool harness
-   - `Engine AI`: normal project/scene guidance, MCP capture, and packet staging
-   - `Software`: generated project/build/source evidence
+   - `Sandbox`: separate self-iteration control room for the watcher and staged packets
+   - `Harness`: run selected scripts through the editor tool harness
+   - `Assistant`: normal project/scene guidance, MCP capture, and packet staging
+   - `Launcher`: generated project/build/source evidence
    - `Training`: raw capture, curated dataset, and eval promotion controls
    - `Ops / How-To`: quick operating instructions
 
@@ -91,13 +99,15 @@ Suggested first run:
 
 1. In `Project`, create or select a generated project shell.
 2. In `Scripts`, select `Rotate All Entities` or another tooling script.
-3. In `AI -> Control`, click `Enable AI Build Watcher` or `Queue Engine AI Build Now`.
-4. In `AI -> Tooling`, click `Run AI Tool Harness`.
+3. In `AI -> Sandbox`, click `Enable Self-Iteration Watcher` or `Queue Self-Iteration Build`.
+4. In `AI -> Harness`, click `Run AI Tool Harness`.
 5. Inspect the `Output` workspace for build/tool logs.
 6. Review staged packets under
    `Engine/examples/ConsoleApplication1/workspace/research/staged/iteration_packets/`.
-7. Promote only reviewed, evidence-backed captures from `AI -> Training`.
+7. Use `Stage Sandbox Scene Training Task` when EpochBot needs a watchable
+   3D edit/test exercise before training or evaluation.
+8. Promote only reviewed, evidence-backed captures from `AI -> Training`.
 
-The AI control room should be boringly explicit: it can watch, build, run
-tooling, capture evidence, and stage packets, but curated training and eval
-promotion remain review-gated actions.
+The AI sandbox should be boringly explicit: it can watch, build, run tooling,
+capture evidence, and stage packets, but curated training and eval promotion
+remain review-gated actions.

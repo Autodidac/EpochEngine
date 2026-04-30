@@ -7,7 +7,12 @@ tooling expectations aligned with the current `Engine/` tree.
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential clang ninja-build cmake git curl zip unzip tar pkg-config
+sudo apt install -y \
+  build-essential \
+  clang-18 clang-tools-18 \
+  ninja-build cmake git curl zip unzip tar pkg-config \
+  libcurl4-openssl-dev libgl1-mesa-dev libsfml-dev \
+  libx11-dev libxrandr-dev libxrender-dev
 ```
 
 ## 2. Bootstrap vcpkg
@@ -27,20 +32,29 @@ cmake -S Engine -B build \
 
 ## 3. Use a module-capable compiler
 
-- clang 17+ or GCC 14+ inside WSL
+- Clang 18 plus `clang-scan-deps-18` for the current full-engine Linux module build
+- GCC is kept as a headless validation lane by default because GCC 14 can ICE
+  while writing full-engine C++ module BMIs
 - MSVC only for native Windows builds, not for WSL builds
 
 Clean the build directory when switching compilers or module settings.
 
 ## 4. Configure and build
 
+Full engine with Clang:
+
 ```bash
-rm -rf build
-cmake -S Engine -B build -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_CXX_STANDARD=23 \
-  -DCMAKE_CXX_SCAN_FOR_MODULES=ON
-cmake --build build
+cmake --preset ninja-clang-debug
+cmake --build --preset ninja-clang-debug
+ctest --preset ninja-clang-debug --output-on-failure
+```
+
+Portable GCC/headless validation:
+
+```bash
+cmake --preset ninja-gcc-debug
+cmake --build --preset ninja-gcc-debug
+ctest --preset ninja-gcc-debug --output-on-failure
 ```
 
 ## 5. Optional backend packages
@@ -51,6 +65,10 @@ cmake --build build
 
 ## Notes
 
-- Use `Engine/CMakePresets.json` when you want the preset flow instead of manual flags.
-- WSL is best paired with clang or GCC. Use Windows presets from a Developer
-  Command Prompt when you need the native Visual Studio toolchain.
+- Use the repo-root `CMakePresets.json` for shared Linux/CI truth. The
+  engine-local presets remain available for legacy local workflows.
+- Use Clang for Linux full-engine rendering builds today. Use GCC presets for
+  headless validation unless you are explicitly investigating the GNU module path.
+- Packaged Linux/WSL release assets should be versioned `.tar.gz` runtime
+  archives. The normal packaged entry is `epoch`; updater-shell mode is a
+  separate bootstrap variant, not the default Linux runtime identity.

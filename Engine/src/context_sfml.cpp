@@ -1,3 +1,5 @@
+module;
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -22,10 +24,10 @@
 #include <SFML/Graphics.hpp>
 #endif
 
-#include "core_context_backends.hpp"
+module core.context;
 
-import core.context;
 import context.multiplexer;
+import context.type;
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 import aengine.gui;
@@ -467,6 +469,7 @@ namespace
 
         if (ctx->windowData)
         {
+#if defined(_WIN32)
             HWND previousHwnd = ctx->windowData->hwnd;
             HDC previousHdc = ctx->windowData->hdc;
             if (previousHwnd && previousHwnd != s_childWindow)
@@ -482,6 +485,7 @@ namespace
                     threads.erase(it);
                 }
             }
+#endif
             ctx->windowData->sfml_window = s_window.get();
 #if defined(_WIN32)
             ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;

@@ -5,7 +5,7 @@ if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
 endif()
 
 if(CMAKE_VERSION VERSION_LESS 3.29)
-    # CMake 3.27ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“3.28 require the experimental dyndep scanner to emit BMI rules.
+    # CMake 3.27-3.28 require the experimental dyndep scanner to emit BMI rules.
     set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP 1)
 endif()
 
@@ -25,6 +25,16 @@ option(EPOCH_STRICT_WARNINGS "Enable stricter compiler warnings for Epoch target
 option(EPOCH_WARNINGS_AS_ERRORS "Treat warnings as errors when strict warnings are enabled." OFF)
 option(EPOCH_ENABLE_SANITIZERS "Enable supported sanitizer flags for compatible compilers." OFF)
 option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke target." OFF)
+option(EPOCH_ALLOW_GCC_MODULE_ENGINE "Opt into the experimental full-engine GCC modules build on Linux." OFF)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT WIN32 AND NOT EPOCH_CI_HEADLESS_ONLY AND NOT EPOCH_ALLOW_GCC_MODULE_ENGINE)
+    message(STATUS
+        "Linux/GCC full-engine C++ module builds are disabled by default because GCC 14 "
+        "currently ICEs while writing module locations. Configuring the portable "
+        "headless validation target instead. Use Clang for full Linux engine builds or "
+        "set EPOCH_ALLOW_GCC_MODULE_ENGINE=ON to experiment.")
+    set(EPOCH_CI_HEADLESS_ONLY ON CACHE BOOL "Configure only the portable hosted-CI smoke target." FORCE)
+endif()
 
 function(epoch_is_msvc_frontend out_var)
     if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
@@ -126,6 +136,7 @@ function(epoch_print_build_summary)
     message(STATUS "  Warnings as errors: ${EPOCH_WARNINGS_AS_ERRORS}")
     message(STATUS "  Sanitizers: ${EPOCH_ENABLE_SANITIZERS}")
     message(STATUS "  CI/headless-only: ${EPOCH_CI_HEADLESS_ONLY}")
+    message(STATUS "  GCC full-engine module opt-in: ${EPOCH_ALLOW_GCC_MODULE_ENGINE}")
     message(STATUS "  Active backends: ${_epoch_active_backends}")
 endfunction()
 
@@ -159,6 +170,12 @@ if(BUILD_TESTING)
 endif()
 
 if(EPOCH_CI_HEADLESS_ONLY)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT WIN32 AND NOT EPOCH_ALLOW_GCC_MODULE_ENGINE AND NOT TARGET epoch)
+        add_custom_target(epoch
+            DEPENDS epoch_ci_headless
+            COMMAND ${CMAKE_COMMAND} -E echo "Linux/GCC full-engine modules are skipped; epoch target built epoch_ci_headless instead."
+            COMMENT "Using headless Epoch validation target for Linux/GCC")
+    endif()
     epoch_print_build_summary()
     return()
 endif()
@@ -376,6 +393,15 @@ target_include_directories(epoch PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stb
 )
+
+find_path(CGLTF_INCLUDE_DIR cgltf.h)
+if(CGLTF_INCLUDE_DIR)
+    target_include_directories(epoch PRIVATE ${CGLTF_INCLUDE_DIR})
+    target_compile_definitions(epoch PRIVATE EPOCH_HAS_CGLTF=1)
+else()
+    target_compile_definitions(epoch PRIVATE EPOCH_HAS_CGLTF=0)
+    message(WARNING "cgltf.h was not found; editor glTF metadata parsing will be disabled for this build.")
+endif()
 
 target_include_directories(epoch_renderer_smoke PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

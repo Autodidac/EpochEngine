@@ -74,10 +74,16 @@
       "displayName": "Ninja Clang Debug",
       "inherits": "repo-base",
       "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++"
+        "CMAKE_C_COMPILER": "clang-18",
+        "CMAKE_CXX_COMPILER": "clang++-18",
+        "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS": "clang-scan-deps-18"
       }
     },
     {
@@ -90,18 +96,19 @@
     },
     {
       "name": "ninja-gcc-debug",
-      "displayName": "Ninja GCC Debug",
+      "displayName": "Ninja GCC Headless Debug",
       "inherits": "repo-base",
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_CXX_COMPILER": "g++"
+        "CMAKE_CXX_COMPILER": "g++",
+        "EPOCH_CI_HEADLESS_ONLY": "ON"
       }
     },
     {
       "name": "ninja-gcc-cpp26-debug",
-      "displayName": "Ninja GCC Debug C++26/latest validation",
+      "displayName": "Ninja GCC Headless Debug C++26/latest validation",
       "inherits": "ninja-gcc-debug",
       "cacheVariables": {
         "EPOCH_ENABLE_CPP26_LANE": "ON"
@@ -109,7 +116,7 @@
     },
     {
       "name": "unix-makefiles-gcc-debug",
-      "displayName": "Unix Makefiles GCC Debug",
+      "displayName": "Unix Makefiles GCC Headless Debug",
       "inherits": "repo-base",
       "generator": "Unix Makefiles",
       "condition": {
@@ -120,12 +127,13 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_CXX_COMPILER": "g++"
+        "CMAKE_CXX_COMPILER": "g++",
+        "EPOCH_CI_HEADLESS_ONLY": "ON"
       }
     },
     {
       "name": "unix-makefiles-gcc-cpp26-debug",
-      "displayName": "Unix Makefiles GCC Debug C++26/latest validation",
+      "displayName": "Unix Makefiles GCC Headless Debug C++26/latest validation",
       "inherits": "unix-makefiles-gcc-debug",
       "cacheVariables": {
         "EPOCH_ENABLE_CPP26_LANE": "ON"

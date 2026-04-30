@@ -1468,7 +1468,7 @@ namespace
                         if (startupDelay.count() > 0)
                         {
                             epochnamespace::logger::get(kLogSys).logf(
-                                epochnamespace::logger::LogLevel::Info,
+                                epochnamespace::logger::LogLevel::INFO,
                                 std::source_location::current(),
                                 "Startup stagger: delaying render thread {} by {} ms.",
                                 static_cast<void*>(raw ? raw->hwnd : nullptr),

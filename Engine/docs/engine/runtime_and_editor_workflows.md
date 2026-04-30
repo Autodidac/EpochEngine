@@ -26,6 +26,12 @@ the same engine-owned path.
 - the active packaged asset contract is versioned runtime archives such as
   `epoch_win10_x64_vX.Y.Z.zip` and `epoch_linux_x64_vX.Y.Z.tar.gz`
 - the updater extracts the packaged version directly from the archive name
+- WSL is treated as Linux for runtime package selection and should consume the
+  same `epoch_linux_x64_vX.Y.Z.tar.gz` asset unless a future package layout
+  proves a separate WSL asset is necessary
+- source checkout installs still use the same binary-first rule; only after
+  packaged parity or absence of a newer package should they rebuild from the
+  GitHub source snapshot using the platform build path
 
 ## Project-centric runtime direction
 
