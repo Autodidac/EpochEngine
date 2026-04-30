@@ -155,6 +155,7 @@ jobs:
             libgl1-mesa-dev \
             libsfml-dev \
             libx11-dev \
+            libxi-dev \
             libxrandr-dev \
             libxrender-dev
 

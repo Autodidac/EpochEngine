@@ -1,5 +1,12 @@
 # Epoch Changelog
 
+## [v0.84.04]
+- Bumped the active source version to `v0.84.04` for the hosted Linux Clang
+  engine CI dependency fix.
+- Added `libxi-dev` to the Linux rendering dependency set so GitHub's Ubuntu
+  runner provides `X11/extensions/XInput2.h` for the input module dependency
+  scan.
+
 ## [v0.84.03]
 - Bumped the active source version to `v0.84.03` for the Linux/GCC build
   routing and editor console-layout pass.
