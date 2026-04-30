@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.84.05]
+- Bumped the active source version to `v0.84.05` for the hosted Linux Clang
+  engine CI dependency follow-up.
+- Added `libasio-dev` to the Linux rendering dependency set so the networking
+  module can dependency-scan `asio.hpp` on clean Ubuntu runners.
+
 ## [v0.84.04]
 - Bumped the active source version to `v0.84.04` for the hosted Linux Clang
   engine CI dependency fix.

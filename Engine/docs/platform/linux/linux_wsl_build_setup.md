@@ -11,7 +11,7 @@ sudo apt install -y \
   build-essential \
   clang-18 clang-tools-18 \
   ninja-build cmake git curl zip unzip tar pkg-config \
-  libcurl4-openssl-dev libgl1-mesa-dev libsfml-dev \
+  libasio-dev libcurl4-openssl-dev libgl1-mesa-dev libsfml-dev \
   libx11-dev libxi-dev libxrandr-dev libxrender-dev
 ```
 
