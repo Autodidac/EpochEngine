@@ -24,7 +24,7 @@ archive for historical context and milestone tracing.
 
 Current orientation:
 
-- Latest published stable runtime line: `v0.83.86`
+- Latest published stable runtime line: `v0.84.05`
 - Current development source line: `v0.84.05`
 
 ## What the engine has become so far

@@ -79,6 +79,7 @@ project_snapshot.zip
 Temp Script Test/
 .sandbox/
 Projects/
+addons/
 Engine/examples/ConsoleApplication1/workspace/ai/checkpoints/
 Engine/examples/ConsoleApplication1/workspace/ai/models/
 Engine/examples/ConsoleApplication1/workspace/ai/cache/

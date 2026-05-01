@@ -5,6 +5,10 @@
   engine CI dependency follow-up.
 - Added `libasio-dev` to the Linux rendering dependency set so the networking
   module can dependency-scan `asio.hpp` on clean Ubuntu runners.
+- Promoted `v0.84.05` as the next stable runtime/source release after the
+  GitHub CMake and MSBuild lanes reported green.
+- Updated public stable-release surfaces from `v0.83.86` to `v0.84.05` before
+  cutting the release tag.
 
 ## [v0.84.04]
 - Bumped the active source version to `v0.84.04` for the hosted Linux Clang

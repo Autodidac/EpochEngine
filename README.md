@@ -5,7 +5,7 @@
 
 <p align="left">
   <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.05-1F7A4C?style=for-the-badge" alt="Current development source v0.84.05" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.83.86-2C6A8A?style=for-the-badge" alt="Published stable release v0.83.86" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
 </p>
 
 <img align="left" src="Images/567.png" width="110px"/>
@@ -89,7 +89,7 @@ For engine/tooling developers:
 ## Current Snapshot
 
 - Source is currently the active development line at `v0.84.05`.
-- The latest published stable runtime release is `v0.83.86`.
+- The latest published stable runtime release is `v0.84.05`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
 - Bootstrap updater-shell releases are separate from the main runtime package
