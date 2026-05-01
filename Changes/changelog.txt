@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.84.06]
+- Reopened the active source line after tagging the `v0.84.05` stable runtime
+  release so `main` can continue forward without blurring release and
+  development version surfaces.
+
 ## [v0.84.05]
 - Bumped the active source version to `v0.84.05` for the hosted Linux Clang
   engine CI dependency follow-up.
