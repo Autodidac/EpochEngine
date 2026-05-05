@@ -1720,6 +1720,54 @@ namespace
         return write_text_file(path, text);
     }
 
+    static void replace_all(std::string& text, std::string_view from, std::string_view to)
+    {
+        if (from.empty())
+            return;
+
+        std::size_t pos = 0;
+        while ((pos = text.find(from.data(), pos, from.size())) != std::string::npos)
+        {
+            text.replace(pos, from.size(), to.data(), to.size());
+            pos += to.size();
+        }
+    }
+
+    [[nodiscard]] static bool repair_generated_windows_child_project_build_files(const fs::path& root)
+    {
+        const fs::path projectFile = generated_project_windows_vcxproj_path(root);
+        const fs::path buildScript = generated_project_windows_build_script_path(root);
+
+        std::error_code ec;
+        if (fs::exists(projectFile, ec) && !ec)
+        {
+            std::string projectText = read_text_file(projectFile);
+            const std::string original = projectText;
+            replace_all(projectText, "<PlatformToolset>v145</PlatformToolset>", "<PlatformToolset>v143</PlatformToolset>");
+            replace_all(projectText, "<LanguageStandard>stdcpplatest</LanguageStandard>", "<LanguageStandard>stdcpp23</LanguageStandard>");
+            if (projectText != original && !write_text_file(projectFile, projectText))
+                return false;
+        }
+
+        if (fs::exists(buildScript, ec) && !ec)
+        {
+            std::string scriptText = read_text_file(buildScript);
+            const std::string original = scriptText;
+            if (scriptText.find("'/p:PlatformToolset=v143'") == std::string::npos)
+            {
+                replace_all(
+                    scriptText,
+                    "    ('/p:Platform=' + $Platform),\n",
+                    "    ('/p:Platform=' + $Platform),\n"
+                    "    '/p:PlatformToolset=v143',\n");
+            }
+            if (scriptText != original && !write_text_file(buildScript, scriptText))
+                return false;
+        }
+
+        return true;
+    }
+
     struct ProjectShellSpec
     {
         EditorProjectKind kind{ EditorProjectKind::Game };
@@ -2184,6 +2232,7 @@ namespace
             "    '/t:Rebuild',\n"
             "    ('/p:Configuration=' + $Configuration),\n"
             "    ('/p:Platform=' + $Platform),\n"
+            "    '/p:PlatformToolset=v143',\n"
             "    ('/p:SolutionDir=' + $solutionDir),\n"
             "    ('/p:VcpkgManifestRoot=' + $vcpkgManifestRoot),\n"
             "    '/p:EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1',\n"
@@ -2470,11 +2519,29 @@ namespace epochnamespace
         const fs::path manifest = root / "project.epoch.json";
         const fs::path buildScript = generated_project_windows_build_script_path(root);
         const fs::path entrySource = generated_project_entry_source_path(root);
+        const fs::path windowsProject = generated_project_windows_vcxproj_path(root);
         std::error_code ec;
         if (fs::exists(manifest, ec) && !ec
             && fs::exists(buildScript, ec) && !ec
-            && fs::exists(entrySource, ec) && !ec)
+            && fs::exists(entrySource, ec) && !ec
+            && fs::exists(windowsProject, ec) && !ec)
         {
+            if (!repair_generated_windows_child_project_build_files(root))
+            {
+                return {
+                    false,
+                    std::string(profile->id),
+                    root.string(),
+                    manifest.generic_string(),
+                    entrySource.generic_string(),
+                    buildScript.generic_string(),
+                    (root / "scripts" / (std::string(profile->default_script) + ".ascript.cpp")).generic_string(),
+                    "Project shell exists, but generated Windows build files could not be repaired.",
+                    std::string(profile->engine_integration_mode),
+                    std::string(profile->public_include_root)
+                };
+            }
+
             return {
                 true,
                 std::string(profile->id),
@@ -2544,6 +2611,16 @@ namespace epochnamespace
                     logPath.generic_string()
                 };
             }
+        }
+
+        if (!repair_generated_windows_child_project_build_files(root))
+        {
+            return {
+                false,
+                "Generated project build files could not be repaired before build.",
+                outputPath.generic_string(),
+                logPath.generic_string()
+            };
         }
 
 #if defined(_WIN32)

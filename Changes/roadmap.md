@@ -7,7 +7,7 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 - project creation, editing, play, scripting, tooling, and updates
 - renderer and systems tooling that stay honest across backends
 - engine-owned GUI/text/input instead of middleware-owned editor behavior
-- a staged two-role self-iteration loop that stays reviewable and evidence-gated
+- a staged engine AI/self-iteration loop that stays reviewable and evidence-gated
 - packaging and runtime rules that hold across desktop first, then Android
 
 ## Non-Negotiable Rules
@@ -28,11 +28,23 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 8. Build/tooling floors must stay honest. Preserve baseline compatibility where
    possible, and document the real split when newer CMake/module support is
    required.
-9. External local LLM endpoints are explicitly selected tooling providers, not a
-   third in-engine runtime role and not an auto-selected default.
-10. The engine keeps exactly two in-engine AI runtime roles:
-    - `EpochBot`
-    - local MCP/control
+9. External local LLM endpoints are explicitly selected tooling providers, not
+   hidden authority and not an auto-selected default.
+10. The engine AI architecture keeps three distinct internal pieces:
+    - `EpochBot`, the primary engine-owned trainable LLM
+    - local MCP/control/tool harnesses that operate the editor and collect proof
+    - an offline/injectable OSS or tiny backup LLM path for fallback, generated
+      software embedding, and EpochBot training support
+11. AI may generate local game, tool, app, and server project artifacts only
+    through visible, reviewable requests. It must not create or run apps/services
+    that provide model bypass channels, self-accessible servers, hidden control
+    surfaces, listener creation, port binding, or network-serving mode
+    activation without an explicit human enable/run action.
+12. Local game/tool tests through approved editor/MCP/harness controls are
+    allowed when visible, evidence-captured, and not exposing a new
+    model-accessible network/control surface.
+13. `addons/` is local/offline by default. Treat it as staged source material
+    for future review, not as online repo content.
 
 ## Release And Source Policy
 
@@ -90,6 +102,9 @@ These are already established and must stay intact while new work lands:
 - launcher/editor separation and the current project-centric runtime shell
 - current multicontext baseline:
   real backend panes, real detach/redock flow, and no fake demo-launch path
+- current project scene/world files are metadata shells; live editor preview is
+  still seeded from engine-owned project profiles until scene parsing and
+  serialization own runtime loading
 
 ## C++26 Future-Ready Multi-Build Roadmap
 
@@ -176,6 +191,11 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - Stabilize GUI docking/popout behavior and remaining OpenGL flicker root
   causes.
 - Complete primitive/object authoring and runtime surfaces.
+- Add desktop-grade editor scaling, outliner clipping/resize behavior, and
+  separate in-app editor windows for project/game editing, software/tool work,
+  the self-iteration sandbox, and AI visualization.
+- Promote the first AI loop visualizer into a dedicated surface with packet
+  replay, scene-state diffs, and eventually direct 3D model/weight views.
 - Expand CI/test automation without launching GUI windows on hosted runners.
 - Harden packaging/install asset behavior for runtime releases.
 
@@ -218,6 +238,14 @@ engine shape and should be treated as starting truth for the next passes:
 - a live Systems workspace with graph surfaces, backend ownership visibility,
   first time-control diagnostics, and build-confidence/feature-probe status
   already on-screen
+- the Systems workspace now mirrors Phase 5 self-iteration evidence, including
+  watcher/build/tool status, staged packet count/root, and the
+  planner/executor/builder/verifier/gate contract beside build confidence
+- `addons/` is ignored as a local/offline staging area, and the AI control
+  contract now allows local game/tool/app/server artifact generation while
+  forbidding bypass-capable app/server launch, listener creation, port binding,
+  hidden control surfaces, or model-accessible services without a human
+  enable/run action
 - an AI workspace split into Self-Iteration Sandbox, Tool Harness,
   Engine Assistant, ProjectLauncher evidence, Training, and Ops/How-To domains
   so rebuild/tooling/training controls are discoverable without mixing normal
@@ -380,9 +408,10 @@ engine shape and should be treated as starting truth for the next passes:
 
 ### 6. Self-Iteration, Training, And Review Loop
 
-- standardize the full two-role runtime story:
-  `EpochBot` plus local MCP/control, with the self-iteration sandbox separated
-  from normal ProjectLauncher/editor scene authoring
+- standardize the full engine AI architecture:
+  `EpochBot`, local MCP/control/tool harnesses, and the offline/injectable
+  backup LLM path, with the self-iteration sandbox separated from normal
+  ProjectLauncher/editor scene authoring
 - build on the current iteration-packet/capture roots already present in the
   editor instead of inventing a second AI staging path
 - make staged packets the first durable handoff between planner/executor work
@@ -405,6 +434,10 @@ engine shape and should be treated as starting truth for the next passes:
   output without mutating normal game/editor projects by accident
 - keep local model activation operator-gated; no first-detected model fallback,
   no hidden helper identity, and no chat/tool execution before selection
+- keep bypass-capable runtime activation operator-gated: local game/tool tests
+  can run through visible editor/MCP/harness controls, but apps or servers that
+  expose model-accessible control surfaces, listeners, ports, or serving modes
+  must require an explicit human enable/run action
 - treat `Engine/ai/control/continuous_build_loop.json` as the current contract
   for the engine self-iteration control loop until a replay runner can enforce it
 - use MCP tool schemas as the canonical tool-bus contract and replay shape
@@ -453,20 +486,24 @@ engine shape and should be treated as starting truth for the next passes:
 2. Strengthen the Systems workspace with deeper pacing diagnostics and backend
    convergence guidance.
 3. Carry the time spine deeper into runtime and scene ownership.
-4. Tighten the two-role AI capture, replay, review, and promotion loop until
+4. Tighten the AI capture, replay, review, and promotion loop until
    Phase 5 can run from staged packets with builder/verifier gates.
 5. Keep UI/editor maturity moving forward, especially text/input reliability,
    shell polish, drag/drop, and backend-window stability.
 6. Complete the primitive/object system and keep it aligned with the project
    runtime shell.
-7. Start Android with an honest single-context bring-up, touch/input
+7. Replace metadata-only `.epoch` scene shells with real project-owned
+   scene loading, editing, saving, and play/runtime handoff.
+8. Start Android with an honest single-context bring-up, touch/input
    integration, packaging/install path, and asset-resolution discipline.
-8. Continue safe include/src restructuring and MSVC/CMake synchronization
+9. Continue safe include/src restructuring and MSVC/CMake synchronization
    whenever touched areas can be normalized without collateral damage.
 
 ## Acceptance Gates
 
 - The editor runs real projects/scenes instead of sample-launch illusions.
+- Scene/world files load, save, and drive preview/runtime state instead of
+  acting as metadata-only placeholders.
 - The launcher remains project/context/update focused instead of collapsing back
   into a fake demo shell.
 - The Systems workspace shows real graph/tooling surfaces plus time
@@ -486,6 +523,8 @@ engine shape and should be treated as starting truth for the next passes:
 - Docs stay strong enough that future automated passes can follow the build,
   launch, test, capture, commit, and push loop without rediscovering the
   architecture from scratch.
+- Self-iteration has visible status surfaces and clear operator controls before
+  any automated promotion path is trusted.
 
 ## Reference Inputs
 
@@ -494,5 +533,6 @@ engine shape and should be treated as starting truth for the next passes:
 - staged research under
   `Engine/examples/ConsoleApplication1/workspace/research/`
 - release/changelog history under `Changes/`
-- utility tools like `botface.html` only after reviewed extraction, not by
+- external utility projects such as Botface live in their own repos now; import
+  only reviewed extracts into Epoch, never entire sibling-tool worktrees by
   default

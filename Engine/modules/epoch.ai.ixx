@@ -29,7 +29,7 @@
  *                                              *
  ***********************************************/
  /**************************************************************
- *   Epoch Engine - AI Integration (LM Studio)
+ *   Epoch Engine - AI Integration (Local OpenAI-Compatible)
  *   License: MIT (adapt as needed)
  **************************************************************/
 module;
@@ -80,7 +80,7 @@ export namespace epoch::ai
     public:
         struct Config
         {
-            std::string backend = "lmstudio_chat";     // currently only lmstudio_chat
+            std::string backend = "openai_chat";     // currently only OpenAI-compatible chat
             std::string endpoint = "http://localhost:1234"; // base or full
             std::string model{};
             std::size_t best_of = 1;
@@ -91,7 +91,7 @@ export namespace epoch::ai
 
     private:
         Config m_cfg{};
-        std::string m_endpoint_full{}; // normalized to /api/v1/chat
+        std::string m_endpoint_full{}; // normalized to /v1/chat/completions
     };
 
     // Engine-global service wrapper (simple singleton)

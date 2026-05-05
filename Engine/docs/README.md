@@ -19,6 +19,8 @@ Start here first:
   validation, and packaging rules
 - `engine/runtime_and_editor_workflows.md` - how launcher, editor, projects,
   scripts, systems, and runtime are supposed to behave
+- `../ai/README.md` - live AI sandbox, helper-model, safety, and training-loop
+  contract for the repo-safe AI assets under `Engine/ai/`
 
 ## Build and packaging docs
 
@@ -56,6 +58,7 @@ Build-system reality to keep in mind:
   proofs and README screenshots
 - `engine/ai_training_memory_and_dataset_policy.md` - AI storage, iteration,
   capture, and promotion rules
+- `../ai/README.md` - live AI content map and self-iteration sandbox controls
 - `engine/research_import_and_promotion.md` - staged research intake and
   promotion path
 - `engine/repository_layout_reference.txt` - high-level repo layout

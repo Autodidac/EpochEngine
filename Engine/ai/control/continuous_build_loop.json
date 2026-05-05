@@ -2,12 +2,23 @@
   "$schema": "https://epoch.local/schemas/ai_control_loop.schema.json",
   "name": "epoch_engine_ai_control_loop",
   "status": "phase3_4_control_foundation",
-  "summary": "Evidence-gated loop for turning editor/project work into build-verified AI training and eval material without confusing the normal game/software editor with the self-iteration sandbox.",
+  "summary": "Evidence-gated loop for turning editor/project/sandbox work into build-verified AI training and eval material for EpochBot, the engine-owned LLM path with a backup tiny internal LLM, without confusing the normal game/software editor with the self-iteration sandbox.",
   "roles": {
-    "runtime_bot": "EpochBot",
+    "runtime_bot": "EpochBot engine-owned LLM",
     "control_bot": "local MCP/control",
-    "teacher": "optional local helper LLM used only for development-time review and curation"
+    "offline_backup_bot": "offline/injectable OSS or tiny internal LLM for fallback, generated software embedding, and EpochBot training support",
+    "teacher": "optional selected local helper LLM used only for development-time review, curation, and bootstrapping EpochBot"
   },
+  "technique_policy": [
+    "Keep the loop simple and inspectable: planner, executor, builder, verifier, and gate are workflow stages, not unsupervised autonomous agents.",
+    "Local OpenAI-compatible models may propose plans, review project output, and help label captures only after an operator explicitly selects a model.",
+    "Tool use is mediated by Epoch: models request actions, the editor/tool harness executes them, and tool outputs are captured as evidence before another model step.",
+    "Game, tool, app, and server project generation is allowed as reviewable artifact creation, but bypass-capable runtime activation is human-gated: no model may create or run a self-accessible server, hidden control app, listener, port bind, or serving behavior automatically.",
+    "Local game and tool tests are allowed through approved editor/MCP/harness controls when visible, evidence-captured, and not exposing a new model-accessible network/control surface.",
+    "Raw model output is not training truth. Generated replies can become training data only after they are tied to real tool/build/scene evidence and reviewed.",
+    "Avoid recursive self-training on unverified generated data. Synthetic records must be labeled, mixed with real evidence, and gated by evals before promotion.",
+    "Maintain separate training and eval material so prompt/model changes can be measured instead of trusted by feel."
+  ],
   "loop": [
     {
       "stage": "planner",
@@ -54,10 +65,23 @@
     "Never allow blind repo write-through from planner or executor output.",
     "Never accept EpochBot saying it is working fine unless the answer cites visible tool, build, scene, packet, log, or capture evidence.",
     "Keep self-iteration sandbox tasks separate from normal ProjectLauncher game/software editing unless the operator explicitly approves a project/editor change.",
+    "Apps and server projects may be generated or edited as artifacts, but any app/service that exposes a model-accessible control surface, server process, listener, port, or network-serving mode requires an explicit human run/enable action.",
     "Every promoted record must be traceable to a staged packet, build log, runtime capture, MCP capture, or eval case.",
     "Local checkpoints, local models, and caches stay under the workspace AI folders unless packaged intentionally."
   ],
+  "runtime_permission_gates": {
+    "game_project_generation": "allowed_after_operator_request",
+    "local_game_or_tool_test_run": "allowed_through_visible_editor_or_mcp_harness",
+    "app_project_generation": "allowed_as_reviewable_artifact_after_operator_request",
+    "server_project_generation": "allowed_after_operator_request",
+    "server_process_launch": "explicit_human_enable_required",
+    "network_listener_or_port_bind": "explicit_human_enable_required",
+    "model_accessible_control_surface": "explicit_human_enable_required",
+    "hidden_or_automatic_bypass_app": "forbidden",
+    "automatic_server_creation_and_run": "forbidden"
+  },
   "next_required_hooks": [
+    "structured tool-call schema for editor/project actions",
     "packet replay runner",
     "verifier result JSON",
     "eval score history",

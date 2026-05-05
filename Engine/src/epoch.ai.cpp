@@ -45,6 +45,7 @@ module;
 #include <chrono>
 #include <filesystem>
 #include <cstdio>
+#include <cstdlib>
 #include <cctype>
 #include <cstdint>
 #include <ctime>
@@ -73,7 +74,55 @@ namespace epoch::ai
         Bot* g_bot = nullptr;
         ProviderMode g_providerMode = ProviderMode::LmStudioOracle;
         std::string g_selectedModel{};
-        std::string g_selectedEndpoint{ "http://localhost:1234" };
+        static std::string read_env_var(const char* name)
+        {
+#if defined(_WIN32)
+            const DWORD needed = GetEnvironmentVariableA(name, nullptr, 0);
+            if (needed == 0)
+                return {};
+            std::string value(needed, '\0');
+            const DWORD written = GetEnvironmentVariableA(name, value.data(), needed);
+            if (written == 0)
+                return {};
+            value.resize(static_cast<std::size_t>(written));
+            return value;
+#else
+            const char* value = std::getenv(name);
+            return value ? std::string(value) : std::string{};
+#endif
+        }
+
+        static std::string trim_env_value(std::string value)
+        {
+            auto isSpace = [](unsigned char c) noexcept
+            {
+                return std::isspace(c) != 0;
+            };
+            while (!value.empty() && isSpace(static_cast<unsigned char>(value.front())))
+                value.erase(value.begin());
+            while (!value.empty() && isSpace(static_cast<unsigned char>(value.back())))
+                value.pop_back();
+            return value;
+        }
+
+        static std::string configured_endpoint()
+        {
+            constexpr const char* candidates[] = {
+                "EPOCH_AI_ENDPOINT",
+                "EPOCH_OPENAI_BASE_URL",
+                "LM_STUDIO_BASE_URL",
+                "OPENAI_BASE_URL"
+            };
+            for (const char* name : candidates)
+            {
+                std::string value = trim_env_value(read_env_var(name));
+                if (!value.empty())
+                    return value;
+            }
+            return "http://localhost:1234";
+        }
+
+        std::string g_selectedEndpoint{ configured_endpoint() };
         std::vector<std::string> g_detectedModels{};
         std::string g_modelDetectionStatus{ "Not scanned." };
 
@@ -88,18 +137,34 @@ namespace epoch::ai
                 s.pop_back();
         }
 
-        static std::string normalize_lmstudio_native_chat_endpoint(std::string endpoint)
+        static std::string normalize_openai_chat_endpoint(std::string endpoint)
         {
             // Accept:
             //  - http://host:port
+            //  - http://host:port/v1
+            //  - http://host:port/v1/chat/completions
             //  - http://host:port/api/v1/chat
-            // Normalize to full /api/v1/chat.
+            // Normalize to OpenAI-compatible /v1/chat/completions.
             rstrip_slashes(endpoint);
 
-            if (ends_with(endpoint, "/api/v1/chat"))
-                return endpoint;
+            constexpr std::string_view suffixes[] = {
+                "/api/v1/chat",
+                "/v1/chat/completions",
+                "/v1/models",
+                "/v1"
+            };
 
-            return endpoint + "/api/v1/chat";
+            for (const auto suffix : suffixes)
+            {
+                if (ends_with(endpoint, suffix))
+                {
+                    endpoint.resize(endpoint.size() - suffix.size());
+                    rstrip_slashes(endpoint);
+                    break;
+                }
+            }
+
+            return endpoint + "/v1/chat/completions";
         }
 
         static std::string normalize_model_list_endpoint(std::string endpoint)
@@ -109,7 +174,8 @@ namespace epoch::ai
             constexpr std::string_view suffixes[] = {
                 "/api/v1/chat",
                 "/v1/chat/completions",
-                "/v1/models"
+                "/v1/models",
+                "/v1"
             };
 
             for (const auto suffix : suffixes)
@@ -995,7 +1061,7 @@ namespace epoch::ai
             return {};
         }
 
-        static std::string lmstudio_chat_complete(const std::string& endpoint_full,
+        static std::string openai_chat_complete(const std::string& endpoint_full,
             std::string_view model,
             std::string_view system_prompt,
             std::string_view input,
@@ -1006,14 +1072,14 @@ namespace epoch::ai
                 std::string body;
                 body.reserve(256 + input.size());
                 body += "{";
+                (void)includeReasoning;
                 body += "\"model\":\"" + json_escape(model) + "\",";
-                body += "\"system_prompt\":\"" + json_escape(system_prompt) + "\",";
-                body += "\"input\":\"" + json_escape(input) + "\",";
-                if (includeReasoning)
-                    body += "\"reasoning\":\"off\",";
-                body += "\"max_output_tokens\":128,";
-                body += "\"stream\":false,";
-                body += "\"store\":false";
+                body += "\"messages\":[";
+                body += "{\"role\":\"system\",\"content\":\"" + json_escape(system_prompt) + "\"},";
+                body += "{\"role\":\"user\",\"content\":\"" + json_escape(input) + "\"}";
+                body += "],";
+                body += "\"max_tokens\":256,";
+                body += "\"stream\":false";
                 body += "}";
                 return body;
             };
@@ -1028,7 +1094,7 @@ namespace epoch::ai
 #else
                 (void)endpoint_full;
                 (void)headers;
-                core::log::error("ai", "LM Studio request failed: no non-Windows HTTP transport is configured (build with libcurl).");
+                core::log::error("ai", "Local OpenAI-compatible request failed: no non-Windows HTTP transport is configured (build with libcurl).");
                 return {};
 #endif
                 if (rawResponse)
@@ -1042,7 +1108,7 @@ namespace epoch::ai
                     std::string snippet = trim(resp.substr(0, (std::min)(resp.size(), static_cast<std::size_t>(240))));
                     if (snippet.empty())
                         snippet = "(non-empty body with no decodable content)";
-                    std::string warn = "LM Studio reply body could not be decoded. bytes=";
+                    std::string warn = "Local OpenAI-compatible reply body could not be decoded. bytes=";
                     warn += std::to_string(resp.size());
                     warn += " snippet=";
                     warn += snippet;
@@ -1055,27 +1121,18 @@ namespace epoch::ai
             try
             {
                 std::string rawResponse{};
-                std::string reply = request_once(true, &rawResponse);
+                std::string reply = request_once(false, &rawResponse);
                 if (!reply.empty())
                     return reply;
 
                 const std::string error = extract_json_error_message(rawResponse);
-                if (error.find("reasoning configuration") != std::string::npos
-                    || error.find("does not expose reasoning") != std::string::npos
-                    || error.find("param\": \"reasoning\"") != std::string::npos)
-                {
-                    reply = request_once(false, &rawResponse);
-                    if (!reply.empty())
-                        return reply;
-                }
-
                 if (!error.empty())
                     core::log::warn("ai", epoch::string_view{error.data(), error.size()});
                 return {};
             }
             catch (const std::exception& ex)
             {
-                std::string msg = "LM Studio request failed: ";
+                std::string msg = "Local OpenAI-compatible request failed: ";
                 msg += ex.what();
                 core::log::error("ai", epoch::string_view{msg.data(), msg.size()});
                 return {};
@@ -1098,14 +1155,14 @@ namespace epoch::ai
         : m_cfg(std::move(cfg))
     {
         if (m_cfg.backend.empty())
-            m_cfg.backend = "lmstudio_chat";
+            m_cfg.backend = "openai_chat";
         if (m_cfg.best_of == 0)
             m_cfg.best_of = 1;
 
-        if (m_cfg.backend != "lmstudio_chat")
-            core::log::info("ai", "Bot backend is not lmstudio_chat; only lmstudio_chat is implemented here.");
+        if (m_cfg.backend != "openai_chat")
+            core::log::info("ai", "Bot backend is not openai_chat; only OpenAI-compatible chat is implemented here.");
 
-        m_endpoint_full = normalize_lmstudio_native_chat_endpoint(m_cfg.endpoint);
+        m_endpoint_full = normalize_openai_chat_endpoint(m_cfg.endpoint);
         m_cfg.model = resolve_model_name(m_cfg.endpoint, m_cfg.model);
         g_providerMode = ProviderMode::LmStudioOracle;
         g_selectedEndpoint = m_cfg.endpoint;
@@ -1145,7 +1202,7 @@ namespace epoch::ai
         // For now: no scorer; pick first non-empty.
         for (std::size_t i = 0; i < n; ++i)
         {
-            std::string txt = lmstudio_chat_complete(
+            std::string txt = openai_chat_complete(
                 m_endpoint_full,
                 m_cfg.model,
                 sys,
@@ -1188,7 +1245,7 @@ namespace epoch::ai
         }
 
         g_bot = new Bot({
-            .backend = "lmstudio_chat",
+            .backend = "openai_chat",
             .endpoint = g_selectedEndpoint,
             .model = g_selectedModel,
             .best_of = 1
@@ -1211,7 +1268,7 @@ namespace epoch::ai
             core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
         }
         {
-            std::string msg = "AI MCP capture path: ";
+            std::string msg = "AI tool evidence capture path: ";
             msg += local_mcp_capture_jsonl_path();
             core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
         }
@@ -1330,7 +1387,7 @@ namespace epoch::ai
         g_detectedModels = fetch_detected_models(g_selectedEndpoint);
         if (g_detectedModels.empty())
         {
-            g_modelDetectionStatus = "No local models detected. Start LM Studio/Ollama-compatible API or check endpoint.";
+            g_modelDetectionStatus = "No local models detected. Start LM Studio, Ollama, or another OpenAI-compatible API and check endpoint.";
         }
         else
         {
@@ -1462,7 +1519,7 @@ namespace epoch::ai
             if (!loggedCapturePath)
             {
                 loggedCapturePath = true;
-                std::string msg = "AI appended MCP capture: ";
+                std::string msg = "AI appended tool evidence capture: ";
                 msg += file.string();
                 core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
             }
@@ -1537,7 +1594,7 @@ namespace epoch::ai
         task << "- Manifest: " << packet.manifest_path << "\n";
         task << "- Workspace root: " << packet.workspace_root << "\n";
         task << "- Raw capture: " << packet.raw_capture_path << "\n";
-        task << "- MCP capture: " << packet.mcp_capture_path << "\n";
+        task << "- Tool evidence capture: " << packet.mcp_capture_path << "\n";
         task << "- Curated datasets: " << packet.curated_dataset_root << "\n";
         task << "- Eval root: " << packet.eval_root << "\n";
         task << "- Checkpoints: " << packet.checkpoint_root << "\n";
@@ -1650,7 +1707,7 @@ namespace epoch::ai
     std::string send_to_bot(const std::string& user_text)
     {
         if (g_selectedModel.empty())
-            return "No AI model selected. Open AI Sandbox, refresh local models, and choose a model before running chat/tooling.";
+            return "No AI model selected. Open Workspace > AI, scan local models, and choose a model before running chat/tooling.";
 
         if (!g_bot) init_bot();
         if (!g_bot) return {};
@@ -1659,7 +1716,7 @@ namespace epoch::ai
         if (!reply.text.empty())
         {
             append_mcp_capture(McpCaptureRecord{
-                .server = "local-lmstudio",
+                .server = "local-openai-compatible",
                 .tool = "chat",
                 .prompt = user_text,
                 .normalized_output = reply.text,

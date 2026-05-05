@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.06-1F7A4C?style=for-the-badge" alt="Current development source v0.84.06" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.08-1F7A4C?style=for-the-badge" alt="Current development source v0.84.08" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
 </p>
 
@@ -14,7 +14,7 @@
 platform** for games, editors, tools, automation, and AI-assisted workflows
 from one codebase. The active source tree is centered on a project-centric
 runtime, engine-owned UI/text tooling, C++23 scripting, multicontext renderer
-work, and a staged two-role AI workspace that keeps automation reviewable.
+work, and a staged engine AI workspace that keeps automation reviewable.
 
 <p align="left">
   <img src="https://img.shields.io/badge/Project--Centric_Runtime-1F6F78?style=for-the-badge" alt="Project-centric runtime" />
@@ -47,7 +47,8 @@ Current feature spine:
   OpenGL, software, and noop/headless paths.
 - Model-backed launcher demo flow using the embedded Mini Sponza asset.
 - Systems, Scripts, Project, AI, and Output workspaces inside the editor.
-- Two-role AI loop centered on `EpochBot` plus the local MCP/control layer.
+- Engine AI loop centered on `EpochBot`, local MCP/control harnesses, and an
+  offline/injectable backup LLM path.
 - AI workspace domains for the Self-Iteration Sandbox, Tool Harness,
   Engine Assistant, ProjectLauncher evidence, Training, and Ops/How-To.
 - Executable-root path and asset resolution instead of fragile cwd-based runs.
@@ -88,7 +89,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.06`.
+- Source is currently the active development line at `v0.84.08`.
 - The latest published stable runtime release is `v0.84.05`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
@@ -121,9 +122,9 @@ AI sandbox and training instructions live with the AI assets in `Engine/ai/READM
   and is being extended with pacing and ownership diagnostics.
 - A time-system spine with fixed-step ownership, pause/resume, scaling,
   single-step, and early editor-facing diagnostics.
-- A staged AI workspace centered on `EpochBot`, a local MCP/control layer, and
-  a separate self-iteration sandbox that stages visible evidence before any
-  promotion.
+- A staged AI workspace centered on `EpochBot`, local MCP/control harnesses, an
+  offline/injectable backup LLM path, and a separate self-iteration sandbox that
+  stages visible evidence before any promotion.
 - Executable-root asset, shader, script, font, log, and capture resolution so
   local runs stop depending on whatever folder the process happened to launch
   from.
@@ -283,7 +284,7 @@ The current roadmap is focused on:
 1. Growing the Systems workspace into a stronger renderer/runtime ownership and
    pacing surface.
 2. Carrying the time-system spine deeper into runtime and scene ownership.
-3. Tightening the two-role AI capture, review, and promotion loop with a
+3. Tightening the AI capture, review, and promotion loop with a
    separate self-iteration sandbox and watchable scene-training tasks.
 4. Improving UI/editor maturity without regressing the honest project-centric
    runtime flow.

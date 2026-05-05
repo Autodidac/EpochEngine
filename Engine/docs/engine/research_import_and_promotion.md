@@ -47,8 +47,9 @@ findings. Promotion should be explicit and narrow:
 4. Leave utility-only sources out of Epoch planning truth unless they really
    inform the engine
 
-## Botface note
+## External utility note
 
-`botface.html` is a local LLM/control surface experiment by default. It is not
-Epoch roadmap truth just because it exists in the repo. If something from it is
-useful, stage and review that finding like any other import.
+Botface now lives in its own external repo. It is not Epoch roadmap truth by
+default and should not be copied into this worktree wholesale. If something
+from it is useful for Epoch, stage and review that finding like any other
+research or utility import.

@@ -311,14 +311,16 @@ already regressed:
 
 ## AI asset policy
 
-Epoch currently documents two engine AI runtime roles:
+Epoch currently documents three internal AI/control pieces:
 
-- internal EpochBot inside the engine/editor/runtime
-- local MCP/control bots that can operate the engine and also train EpochBot
+- EpochBot inside the engine/editor/runtime
+- local MCP/control/tool harnesses that operate the engine and collect proof
+- the offline/injectable OSS or tiny backup LLM path for fallback, generated
+  software embedding, and EpochBot training support
 
 External local LLMs such as LM Studio are development helpers. They are useful
 for testing, curation, evaluation, and speeding up documentation/build work,
-but they are not a third engine runtime role.
+but they are selected teacher/reviewer providers rather than hidden authority.
 
 Future automated passes should use available local helpers aggressively for
 draft reasoning, documentation, screenshot review, and bounded code sketches

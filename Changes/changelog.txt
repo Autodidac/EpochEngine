@@ -1,9 +1,62 @@
 # Epoch Changelog
 
-## [v0.84.06]
+## [v0.84.08]
+- Bumped the active source line to `v0.84.08` for the selected-model chat route,
+  AI workspace label cleanup, and solution-build visibility pass.
+- Bumped the active source line to `v0.84.07` for the editor AI visualizer,
+  outliner organization, documentation-map, and selected-model safety pass.
 - Reopened the active source line after tagging the `v0.84.05` stable runtime
   release so `main` can continue forward without blurring release and
   development version surfaces.
+- Added roadmap discipline to `AGENTS.md` so future agent passes sync first,
+  follow `Changes/roadmap.md`, keep docs current, and commit only short
+  validated batches.
+- Mirrored Phase 5 self-iteration evidence into the Systems workspace: watcher
+  state, pending build state, build/tool run counts, staged packet count/root,
+  and the review-gate contract now sit beside compiler/build confidence.
+- Added a selected-model project-output review action for the AI workspace so
+  local OpenAI-compatible models can produce one evidence-grounded
+  builder/verifier plan from project manifests, build logs, output paths, and
+  staged packet roots.
+- Switched the live local helper-model chat path to OpenAI-compatible
+  `/v1/models` discovery plus `/v1/chat/completions` requests, with endpoint
+  overrides available through `EPOCH_AI_ENDPOINT`, `EPOCH_OPENAI_BASE_URL`,
+  `LM_STUDIO_BASE_URL`, or `OPENAI_BASE_URL`.
+- Reorganized the AI workspace labels around Sandbox, Harness, Assistant,
+  Launcher, Training, Viz, and Ops, and moved AI Inspector controls to a
+  read-only summary so control buttons no longer imply hidden Inspector actions.
+- Renamed user-facing MCP snapshot controls to tool evidence capture/promote
+  actions where the engine is only writing JSONL evidence logs, not invoking a
+  separate hidden LLM runtime.
+- Fixed generated child-project repair/build behavior so stale `v145` Visual
+  Studio toolset metadata is retargeted to `v143`, normal generated projects
+  stay on C++23, and build scripts force the current VS 2022 toolset.
+- Corrected the active AI architecture docs to track EpochBot, local
+  MCP/control/tool harnesses, and the offline/injectable backup LLM path, while
+  keeping external local OpenAI-compatible models as selected teacher/reviewer
+  providers rather than hidden authority.
+- Tightened the AI control docs, prompt seed, and eval seed around current
+  agent practice: explicit tool outputs, trace/capture evidence, evals before
+  promotion, and no recursive self-training on unverified generated answers.
+- Locked down the server/addon policy: `addons/` stays local/offline, AI may
+  generate local game/tool/app/server artifacts only for review, local game/tool
+  tests may run through visible evidence-capturing editor/tool harnesses, and
+  bypass-capable apps/servers/listeners/ports/model-accessible control surfaces
+  require an explicit human enable/run action.
+- Added a first visible AI loop visualizer surface in the editor AI workspace so
+  self-iteration shows planner, builder, verifier, gate, and human-review
+  readiness instead of only console rows.
+- Reworked the World Outliner into compact add/edit button groups and exposed
+  the active project root plus scene-file status so object/project truth is
+  easier to see during manual editor runs.
+- Clarified docs and agent guidance around the correct Epoch documentation map,
+  local `Projects/` evidence, ignored `addons/`, selected-model-only AI
+  behavior, and the hard human gate for server/bypass-capable runtime surfaces.
+- Documented current gaps explicitly: OpenGL launcher/editor flicker, desktop UI
+  scaling, outliner clipping/resizable columns, separate in-app editor windows,
+  metadata-only scene files, and the future AI 3D weight/model visualizer.
+- Removed the stale roadmap pointer to in-tree Botface utilities now that
+  Botface is treated as its own external repo.
 
 ## [v0.84.05]
 - Bumped the active source version to `v0.84.05` for the hosted Linux Clang
@@ -386,7 +439,7 @@
 - Refreshed the README proof set for `v0.83.85`: the Windows six-pane source image now comes from a current asset-bearing release run, the README also includes a dedicated promoted-window undock proof, and the Linux proof now comes from the WSL2 OpenGL capture path under the asset-bearing `Engine/Bin/Clang-Release/` output.
 - Aligned the packaged-runtime story across Windows and Linux: the main packaged runtime is the default release path, updater-shell mode is explicit/bootstrap-only, and Linux packaged assets are expected to stay source/version aligned instead of shipping as updater-only artifacts.
 - Fixed the Linux main-runtime build path under WSL2 by moving the legacy runtime bridge declaration out of module-owned linkage and into a shared header, then keeping the CMake policy floor high enough that the system `glm` package no longer blocks configuration outright.
-- Kept the project-shell and AI roadmap surfaces honest: generated projects still expose explicit build/output/script proof, and the two-role EpochBot plus MCP/control model stays staged/reviewable instead of drifting into blind autonomy language.
+- Kept the project-shell and AI roadmap surfaces honest: generated projects still expose explicit build/output/script proof, and the EpochBot plus MCP/control model stays staged/reviewable instead of drifting into blind autonomy language.
 
 ## [v0.83.84]
 - Fixed the six-context Win32 proxy-shell drag path so SDL and SFML can undock from the same visible `EpochChild` shell the user actually grabs in the parented editor, instead of depending on the nested backend child to start the escape. The proxy host is now promoted as a real standalone top-level shell on undock and normalized back into child mode on redock.
@@ -487,7 +540,7 @@
 
 ## [v0.83.70]
 - Corrected the shared preview look marker so it prefers the real center camera ray against the grid plane before falling back to projected editor focus, which makes the visible target spot more honest across the active backends.
-- Extended the two-role AI curation path with an MCP snapshot promotion helper and editor action, so staged scene-guidance captures can now move into `Engine/ai/datasets/curated` instead of stopping at local workspace staging.
+- Extended the AI curation path with an MCP snapshot promotion helper and editor action, so staged scene-guidance captures can now move into `Engine/ai/datasets/curated` instead of stopping at local workspace staging.
 - Tightened the generated project shell language and launcher-facing project wording so embedded-engine/bootstrap flows read like live project work instead of placeholders or demo-era leftovers.
 - Updated the roadmap, README, runtime/build/smoke docs, and AI build memory to reflect the native LM Studio helper endpoint shape, the now-explicit dual generated-project modes, and the continuing marker/child-surface cleanup work.
 
@@ -528,7 +581,7 @@
 
 ## [v0.83.63]
 - Rewrote the roadmap around the real current direction: project-driven runtime, modular editor workspaces, frame/task graph tooling in the Systems surface, broad automatic hardware support, and explicit support tiers for heavier optional backend/libs.
-- Corrected the AI docs from the mistaken three-role wording to the intended two-role engine model: internal EpochBot plus the local MCP/control layer, while local LM Studio models remain development helpers outside the engine runtime role count.
+- Documented the then-current AI split around internal EpochBot plus the local MCP/control layer, while local LM Studio models remained development helpers outside automatic runtime activation.
 - Added the explicit local MCP manifest and tightened the AI content/docs around raw capture promotion, staged JSONL policy, and deleting outdated training artifacts when the training direction changes.
 - Continued the live Systems workspace implementation with engine-generated render/task graph surfaces and reusable GUI integration, then re-verified the Windows Debug and Release example builds.
 - Refreshed the README multicontext proof at `v0.83.63` from the real 4K asset-bearing `x64/Debug` editor run after the Vulkan color/layout corrections.
@@ -832,7 +885,7 @@
 - Flattened the preview look-hit marker onto the grid plane and removed the floating camera-to-hit indicator so the center-look spot reads like an editor targeting aid instead of a hovering false collision.
 - Replaced the placeholder asset/actions shell with real editor entity controls for adding meshes, lights, spawns, duplicating the current selection, deleting the current selection, and sending a live scene prompt into the AI panel.
 ## [v0.83.66]
-- Rewrote the roadmap around the approved phase order: project/runtime shell, Systems renderer tooling, a new dedicated time-system spine, the two-role AI training spine, UI/editor maturity, later procedural world and time-node authoring, and the automation/capture loop.
+- Rewrote the roadmap around the approved phase order: project/runtime shell, Systems renderer tooling, a new dedicated time-system spine, the AI training spine, UI/editor maturity, later procedural world and time-node authoring, and the automation/capture loop.
 - Added the first shared simulation-clock ownership to `core.time`, including fixed-step accumulation, pause/resume, time scaling, single-step support, and editor-facing stats that can travel through the engine instead of living as per-backend guesswork.
 - Surfaced the new time-spine state in the editor Systems workspace beside the existing render/task graph surfaces, widened the generated graph textures for broader tooling coverage, and kept the compatibility-tier guidance visible alongside the new pacing/time diagnostics.
 - Continued the project/runtime cleanup by removing one more hardcoded sample-launch branch from the older editor loop and keeping the project-driven play path centered on real scene ids.
@@ -872,5 +925,5 @@
 - Added more in-editor project proof rows for generated project shells and script sources so the Project and Scripts workspaces expose concrete file/output/log locations rather than only status text.
 - Fixed the Win32 SFML redock decision to use the actual mouse-release screen point instead of stale drag history, which was leaving some full-grid runs detached even when the release returned inside the parent window.
 - Switched Win32 proxy drag tracking to the real screen cursor for detached SDL/SFML-style child drags so grabbed panes stop drifting or “running away” as their host/child relationship changes during undock.
-- Clarified the AI workspace with explicit eval-suite visibility plus staged capture and promotion paths in the editor log so the two-role EpochBot/MCP flow stays reviewable instead of reading like blind autonomy.
+- Clarified the AI workspace with explicit eval-suite visibility plus staged capture and promotion paths in the editor log so the EpochBot/MCP flow stays reviewable instead of reading like blind autonomy.
 

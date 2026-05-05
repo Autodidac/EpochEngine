@@ -109,6 +109,7 @@ namespace epochnamespace
             Engine,
             Software,
             Training,
+            Visualizer,
             Ops
         };
 
@@ -121,6 +122,7 @@ namespace epochnamespace
             SpriteHandle renderSurface{};
             SpriteHandle taskSurface{};
             SpriteHandle supportSurface{};
+            SpriteHandle aiLoopSurface{};
         };
 
         [[nodiscard]] static bool is_ws_only(std::string_view s) noexcept
@@ -141,7 +143,7 @@ namespace epochnamespace
             AiChat()
             {
                 epoch::ai::init_bot();
-                lines.emplace_back("bot> Ready. No AI model selected yet. Open AI Sandbox, refresh local models, then choose one.");
+                lines.emplace_back("bot> Ready. No AI model selected yet. Open Workspace > AI, scan local models, then choose one.");
                 trim_lines();
             }
 
@@ -742,6 +744,84 @@ namespace epochnamespace
                 canvas.fill_rect(22, 92, 220, 6, gui::Color{ 174, 124, 89, 255 });
             else
                 canvas.fill_rect(22, 92, 220, 6, gui::Color{ 95, 174, 127, 255 });
+
+            return canvas;
+        }
+
+        [[nodiscard]] static SurfaceCanvas build_ai_loop_surface(
+            const std::array<bool, 5>& readiness,
+            bool watcherEnabled,
+            bool buildPending)
+        {
+            constexpr int kSurfaceWidth = 960;
+            constexpr int kSurfaceHeight = 124;
+            SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 12, 15, 21, 255 });
+
+            for (int x = 24; x < kSurfaceWidth; x += 48)
+                canvas.vline(x, 0, kSurfaceHeight, gui::Color{ 20, 25, 34, 255 });
+            for (int y = 20; y < kSurfaceHeight; y += 28)
+                canvas.hline(0, y, kSurfaceWidth, gui::Color{ 18, 23, 31, 255 });
+
+            const std::array<gui::Color, 5> accents{{
+                { 91, 151, 255, 255 },
+                { 255, 196, 88, 255 },
+                { 88, 211, 159, 255 },
+                { 190, 128, 255, 255 },
+                { 255, 132, 155, 255 }
+            }};
+
+            int active = 4;
+            for (int i = 0; i < 5; ++i)
+            {
+                if (!readiness[static_cast<std::size_t>(i)])
+                {
+                    active = i;
+                    break;
+                }
+            }
+
+            const int cardW = 136;
+            const int cardH = 54;
+            const int gap = 44;
+            const int baseX = 34;
+            const int y = 38;
+
+            for (int i = 0; i < 5; ++i)
+            {
+                const int x = baseX + i * (cardW + gap);
+                const bool ready = readiness[static_cast<std::size_t>(i)];
+                const bool current = i == active;
+                const auto accent = accents[static_cast<std::size_t>(i)];
+                const gui::Color fill = ready
+                    ? gui::Color{ 38, 82, 66, 255 }
+                    : (current ? gui::Color{ 92, 73, 38, 255 } : gui::Color{ 42, 48, 60, 255 });
+                const gui::Color stroke = ready ? gui::Color{ 102, 244, 168, 255 } : (current ? accent : gui::Color{ 255, 255, 255, 36 });
+
+                if (i != 0)
+                    canvas.fill_rect(x - gap + 8, y + cardH / 2 - 3, gap - 16, 6, gui::Color{ 54, 62, 78, 255 });
+
+                canvas.fill_rect(x, y, cardW, cardH, fill);
+                canvas.stroke_rect(x, y, cardW, cardH, stroke);
+                canvas.fill_rect(x + 12, y + 12, 28, cardH - 24, gui::Color{ 255, 255, 255, static_cast<std::uint8_t>(ready ? 52 : 28) });
+                canvas.fill_rect(x + cardW - 14, y + 10, 6, cardH - 20, accent);
+                if (current)
+                    canvas.fill_rect(x + 8, y - 10, cardW - 16, 5, accent);
+            }
+
+            const int progressW = 820;
+            canvas.fill_rect(34, 104, progressW, 8, gui::Color{ 30, 35, 45, 255 });
+            const int readyCount = static_cast<int>(std::count(readiness.begin(), readiness.end(), true));
+            canvas.fill_rect(34, 104, (progressW * readyCount) / 5, 8, gui::Color{ 94, 201, 142, 255 });
+
+            if (watcherEnabled)
+                canvas.fill_rect(866, 20, 68, 16, gui::Color{ 80, 167, 115, 255 });
+            else
+                canvas.fill_rect(866, 20, 68, 16, gui::Color{ 97, 80, 70, 255 });
+
+            if (buildPending)
+                canvas.fill_rect(866, 44, 68, 16, gui::Color{ 223, 174, 77, 255 });
+            else
+                canvas.fill_rect(866, 44, 68, 16, gui::Color{ 58, 68, 84, 255 });
 
             return canvas;
         }
@@ -1821,6 +1901,116 @@ namespace epochnamespace
             return std::filesystem::absolute(resolvedPath, ec).lexically_normal().generic_string();
         }
 
+        [[nodiscard]] std::string read_text_tail(const std::filesystem::path& path, std::size_t maxChars = 2400)
+        {
+            const auto resolvedPath = resolve_editor_path(path);
+            std::error_code ec;
+            if (!std::filesystem::exists(resolvedPath, ec) || ec)
+                return "(missing)";
+
+            std::ifstream in(resolvedPath, std::ios::binary);
+            if (!in)
+                return "(unreadable)";
+
+            in.seekg(0, std::ios::end);
+            const auto end = in.tellg();
+            const auto endOffset = static_cast<std::streamoff>(end);
+            if (endOffset <= 0)
+                return "(empty)";
+
+            const auto size = static_cast<std::size_t>(endOffset);
+            const std::size_t readSize = (std::min)(size, maxChars);
+            in.seekg(static_cast<std::streamoff>(size - readSize), std::ios::beg);
+            std::string text(readSize, '\0');
+            in.read(text.data(), static_cast<std::streamsize>(text.size()));
+            return text;
+        }
+
+        [[nodiscard]] std::string file_ready_summary(const std::filesystem::path& path)
+        {
+            const auto resolvedPath = resolve_editor_path(path);
+            std::error_code ec;
+            if (!std::filesystem::exists(resolvedPath, ec) || ec)
+                return "missing";
+
+            if (std::filesystem::is_regular_file(resolvedPath, ec) && !ec)
+            {
+                ec.clear();
+                const auto size = std::filesystem::file_size(resolvedPath, ec);
+                if (!ec)
+                    return std::format("ready ({} bytes)", size);
+            }
+
+            return "ready";
+        }
+
+        [[nodiscard]] std::string build_ai_project_output_review_prompt(
+            const EditorState& state,
+            const std::filesystem::path& pathsManifest,
+            const std::filesystem::path& buildLog,
+            const std::filesystem::path& outputExe)
+        {
+            return std::format(
+                "You are the selected local coding model helping build EpochBot: a from-scratch engine-owned LLM plus backup tiny internal LLM, trained through editor tools, sandbox scenes, build evidence, and eval gates.\n"
+                "Review the latest project output evidence and produce exactly one safe self-iteration pass.\n"
+                "Do not claim anything is working unless you cite the evidence paths below.\n"
+                "Return concise sections: Diagnosis, Proposed Files, Editor/Tool Actions, Build/Test Commands, Verifier Gate, Training/Eval Record.\n"
+                "Keep normal ProjectLauncher game/software work separate from the Self-Iteration Sandbox unless the operator explicitly approves mixing them.\n\n"
+                "Local game/tool/app/server project code is allowed when requested, and local game/tool tests may run through visible editor/tool-harness controls when evidence-captured.\n"
+                "Do not create or run apps/services that expose a model-accessible bypass channel, hidden control surface, server, listener, port bind, or serving mode without an explicit human enable/run action.\n\n"
+                "Project: '{}' ({})\n"
+                "Project root: {}\n"
+                "Scene: {}\n"
+                "Active script: {}\n"
+                "Project status: {}\n"
+                "Build status: {}\n"
+                "Tool state: {}\n"
+                "Paths manifest: {} [{}]\n"
+                "Build log: {} [{}]\n"
+                "Output executable: {} [{}]\n"
+                "Iteration packet root: {}\n"
+                "Build log tail:\n{}\n",
+                state.projectName,
+                state.projectId,
+                state.projectRoot,
+                state.projectScenePath,
+                state.activeScript,
+                state.projectStatus,
+                state.projectBuildStatus,
+                editor_tooling_state_summary(state),
+                display_project_path(pathsManifest),
+                file_ready_summary(pathsManifest),
+                display_project_path(buildLog),
+                file_ready_summary(buildLog),
+                display_project_path(outputExe),
+                file_ready_summary(outputExe),
+                display_project_path(std::filesystem::path{ epoch::ai::iteration_packet_root() }),
+                read_text_tail(buildLog));
+        }
+
+        [[nodiscard]] std::string staged_packet_count_summary(const std::filesystem::path& packetRoot)
+        {
+            const auto resolvedRoot = resolve_editor_path(packetRoot);
+            std::error_code ec;
+            if (!std::filesystem::exists(resolvedRoot, ec) || ec)
+                return "0 staged packets; root not created yet";
+
+            std::size_t packetCount = 0;
+            for (const auto& entry : std::filesystem::directory_iterator(resolvedRoot, ec))
+            {
+                if (ec)
+                    break;
+                std::error_code entryEc;
+                if (entry.is_directory(entryEc) && !entryEc)
+                    ++packetCount;
+            }
+
+            if (ec)
+                return "Packet root unreadable; inspect workspace permissions";
+
+            return std::format("{} staged packet{}", packetCount, packetCount == 1 ? "" : "s");
+        }
+
         struct SeedObjectSummary
         {
             std::size_t total{ 0 };
@@ -2007,7 +2197,7 @@ namespace epochnamespace
             }
             else if (!status.captureEvidenceReady)
             {
-                status.promotionSummary = "Blocked: no raw or MCP capture evidence yet";
+                status.promotionSummary = "Blocked: no raw or tool evidence capture yet";
             }
             else
             {
@@ -2029,7 +2219,7 @@ namespace epochnamespace
             if (!status.buildEvidenceReady)
                 return "Builder blocked: build log/output evidence incomplete";
             if (!status.captureEvidenceReady)
-                return "Verifier blocked: no raw or MCP capture evidence staged";
+                return "Verifier blocked: no raw or tool evidence capture staged";
             if (!status.chatPairReady)
                 return "Gate blocked: latest assistant exchange is not promotable yet";
             return "Gate ready: build, project, capture, and chat evidence are staged for review";
@@ -2049,6 +2239,8 @@ namespace epochnamespace
                 return "Project Launcher";
             case AiWorkspaceDomain::Training:
                 return "Training";
+            case AiWorkspaceDomain::Visualizer:
+                return "AI Visualizer";
             case AiWorkspaceDomain::Ops:
                 return "Ops / How-To";
             default:
@@ -2062,25 +2254,26 @@ namespace epochnamespace
             const auto manifest = epoch::ai::active_model_manifest();
             auto detectedModels = epoch::ai::detected_model_names();
 
-            gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
-            gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(none selected)") : manifest.display_name);
-            gui::property_row("[ai] Local endpoint", manifest.endpoint);
+            gui::property_row("[model] Chat provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
+            gui::property_row("[model] Selected model", manifest.display_name.empty() ? std::string("(none selected)") : manifest.display_name);
+            gui::property_row("[model] Endpoint", manifest.endpoint);
+            gui::property_row("[model] API route", "/v1/models + /v1/chat/completions");
             gui::property_row("[ai] Model discovery", epoch::ai::model_detection_status());
 
-            if (gui::button("Refresh Local Models", { 220.0f, 30.0f }))
+            if (gui::button("Scan Local OpenAI Models", { 240.0f, 30.0f }))
             {
                 detectedModels = epoch::ai::refresh_detected_models();
                 push_editor_log(
                     editor,
                     detectedModels.empty()
-                        ? "[ai] Model discovery found no local models."
-                        : "[ai] Model discovery refreshed; select a model below.");
+                        ? "[ai] Model scan found no local OpenAI-compatible models."
+                        : "[ai] Model scan refreshed; select one model below.");
             }
 
             if (detectedModels.empty())
             {
                 gui::wrapped_label(
-                    "No model is selected or auto-named. Start a local OpenAI-compatible endpoint, refresh discovery, then choose the exact model you want Epoch to use.",
+                    "No chat model is selected. Start LM Studio, Ollama, or another local OpenAI-compatible endpoint, scan models, then choose the exact model Epoch should call.",
                     contentWidth);
                 return;
             }
@@ -2088,7 +2281,7 @@ namespace epochnamespace
             for (const auto& modelId : detectedModels)
             {
                 const bool selected = modelId == epoch::ai::active_model_name();
-                const std::string buttonLabel = (selected ? std::string("Selected: ") : std::string("Use Model: ")) + modelId;
+                const std::string buttonLabel = (selected ? std::string("Selected Chat Model: ") : std::string("Use Chat Model: ")) + modelId;
                 if (gui::button(buttonLabel, { contentWidth, 30.0f }))
                 {
                     if (epoch::ai::select_active_model(modelId))
@@ -2549,26 +2742,53 @@ namespace epochnamespace
         };
 
         gui::begin_window("World Outliner", outliner_pos, outliner_size);
+        const float outlinerWidth = (std::max)(150.0f, outliner_size.x - 18.0f);
         gui::label(std::string("Scene: ") + editor.activeWorld);
-        gui::label(std::string("Project Root: ") + editor.projectRoot);
         gui::label(std::string("Entities: ") + std::to_string(editor.entities.size()));
-        if (gui::button("+ Cube", { 92.0f, 26.0f }))
-            add_entity(editor, "cube");
-        if (gui::button("+ Light", { 92.0f, 26.0f }))
-            add_entity(editor, "light");
-        if (gui::button("+ Spawn", { 92.0f, 26.0f }))
-            add_entity(editor, "spawn");
-        if (gui::button("Duplicate", { 92.0f, 26.0f }))
-            duplicate_selected_entity(editor);
-        if (gui::button("Delete", { 92.0f, 26.0f }))
-            delete_selected_entity(editor);
+        gui::property_row("[outliner] Root", display_project_path(editor.projectRoot), 84.0f);
+        gui::property_row("[outliner] Scene file", file_ready_summary(editor.projectScenePath), 104.0f);
+
+        const std::array outlinerAddButtons{
+            gui::InlineButtonSpec{ .label = "+ Cube", .width = 72.0f },
+            gui::InlineButtonSpec{ .label = "+ Light", .width = 72.0f },
+            gui::InlineButtonSpec{ .label = "+ Spawn", .width = 78.0f },
+            gui::InlineButtonSpec{ .label = "+ Camera", .width = 88.0f }
+        };
+        if (const auto action = gui::inline_button_row(outlinerAddButtons, 26.0f, 5.0f))
+        {
+            switch (*action)
+            {
+            case 0: add_entity(editor, "cube"); break;
+            case 1: add_entity(editor, "light"); break;
+            case 2: add_entity(editor, "spawn"); break;
+            case 3: add_entity(editor, "camera"); break;
+            default: break;
+            }
+        }
+
+        const std::array outlinerEditButtons{
+            gui::InlineButtonSpec{ .label = "Duplicate", .width = 96.0f },
+            gui::InlineButtonSpec{ .label = "Delete", .width = 74.0f },
+            gui::InlineButtonSpec{ .label = "Focus", .width = 70.0f }
+        };
+        if (const auto action = gui::inline_button_row(outlinerEditButtons, 26.0f, 5.0f))
+        {
+            switch (*action)
+            {
+            case 0: duplicate_selected_entity(editor); break;
+            case 1: delete_selected_entity(editor); break;
+            case 2: handle_scene_tool(editor, "focus_selection"); break;
+            default: break;
+            }
+        }
+
         for (std::size_t i = 0; i < editor.entities.size(); ++i)
         {
             const auto& entity = editor.entities[i];
-            std::string label = (i == editor.selectedEntity ? "> " : "") + entity.name + " [" + entity.type + "]";
+            std::string label = (i == editor.selectedEntity ? "> " : "") + entity.name + "  |  " + entity.type + "  |  " + entity.category;
             if (!entity.visible)
                 label += " (hidden)";
-            if (gui::button(label, { (std::max)(120.0f, outliner_size.x - 18.0f), 28.0f }))
+            if (gui::button(label, { outlinerWidth, 28.0f }))
             {
                 editor.selectedEntity = i;
                 push_editor_log(editor, std::string("[select] ") + entity.name);
@@ -2595,49 +2815,23 @@ namespace epochnamespace
             const std::string inspectorStage = ai_control_loop_stage(inspectorGate);
             const float inspectorWidth = (std::max)(180.0f, details_size.x - 24.0f);
 
-            gui::label("Selected: Self-Iteration Sandbox");
+            gui::label("AI Inspector Summary");
             gui::wrapped_label(
-                "Discovery can list local models, but chat/tool execution stays disabled until you explicitly select one here.",
+                "Inspector is read-only for AI. Use Workspace > AI for model selection, sandbox builds, harness runs, and training promotion.",
                 inspectorWidth);
-            gui::property_row("[self-iteration] Stage", inspectorStage);
-            gui::property_row("[self-iteration] Evidence", inspectorGate.packetEvidenceSummary);
-            gui::property_row("[self-iteration] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
-            gui::property_row("[self-iteration] Pending", editor.aiContinuousBuildPending ? "true" : "false");
-            gui::property_row("[self-iteration] Status", editor.aiContinuousBuildStatus);
-            if (gui::button("Repair Active Project Evidence", { 260.0f, 30.0f }))
-                repair_active_project_evidence(editor);
-            if (gui::button("Queue Self-Iteration Build", { 240.0f, 30.0f }))
-            {
-                start_ai_continuous_project_build(
-                    editor,
-                    inspectorActiveScriptSource,
-                    inspectorPathsManifest,
-                    "manual inspector self-iteration build request",
-                    true);
-                append_project_note(
-                    editor,
-                    "Queue Self-Iteration Build",
-                    editor.aiContinuousBuildStatus,
-                    "Queued from the Inspector; review build evidence and staged packets before promotion.");
-            }
-            if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Self-Iteration Watcher" : "Enable Self-Iteration Watcher", { 260.0f, 30.0f }))
-            {
-                editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
-                editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
-                    ? "Self-iteration watcher enabled; watching project/script evidence."
-                    : "Self-iteration watcher paused.";
-                if (editor.aiContinuousBuildEnabled)
-                    editor.aiContinuousBuildFingerprint.clear();
-                push_editor_log(editor, editor.aiContinuousBuildEnabled
-                    ? "[ai-build] Self-iteration watcher enabled."
-                    : "[ai-build] Self-iteration watcher paused.");
-                append_project_note(
-                    editor,
-                    editor.aiContinuousBuildEnabled ? "Self-Iteration Watcher Enabled" : "Self-Iteration Watcher Paused",
-                    editor.aiContinuousBuildStatus,
-                    "Toggled from the Inspector.");
-            }
-            render_ai_model_picker(editor, inspectorWidth);
+            gui::property_row("[ai] Active panel", ai_workspace_domain_name(editor.aiWorkspaceDomain));
+            gui::property_row("[ai] Stage", inspectorStage);
+            gui::property_row("[ai] Evidence", inspectorGate.packetEvidenceSummary);
+            gui::property_row("[ai] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+            gui::property_row("[ai] Pending build", editor.aiContinuousBuildPending ? "true" : "false");
+            gui::property_row("[ai] Status", editor.aiContinuousBuildStatus);
+            gui::property_row("[ai] Selected model", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name());
+            gui::property_row("[ai] Tool script", inspectorActiveScriptSource);
+            gui::property_row("[ai] Build log", display_project_path(inspectorBuildLog));
+            gui::property_row("[ai] Output", display_project_path(inspectorOutputExe));
+            gui::wrapped_label(
+                "Controls were moved out of Inspector so the right panel stays predictable. The AI workspace is the control room.",
+                inspectorWidth);
         }
         else
         {
@@ -2775,6 +2969,8 @@ namespace epochnamespace
             gui::property_row("[project] Paths manifest exists", path_exists(pathsManifest) ? "true" : "false");
             gui::property_row("[project] Output exists", path_exists(outputExe) ? "true" : "false");
             gui::property_row("[project] Build log exists", path_exists(buildLog) ? "true" : "false");
+            gui::property_row("[project] Scene file status", file_ready_summary(editor.projectScenePath));
+            gui::property_row("[project] Scene file role", "metadata shell; live preview currently uses editor seed entities");
             gui::property_row("[project] Seed objects", std::to_string(seedSummary.total));
             gui::property_row("[project] Seed mix", summarize_seed_category_mix(seedSummary));
             gui::property_row("[project] Archetype types", summarize_seed_type_list(seedSummary.types));
@@ -2964,7 +3160,6 @@ namespace epochnamespace
         case EditorWorkspaceTab::AI:
         {
             const auto manifest = epoch::ai::active_model_manifest();
-            auto detectedModels = epoch::ai::detected_model_names();
             const auto training = epoch::ai::default_training_paths();
             const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
             const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
@@ -2983,21 +3178,44 @@ namespace epochnamespace
             const std::string loopStage = ai_control_loop_stage(gateStatus);
             const float aiContentWidth = (std::max)(180.0f, log_size.x - 24.0f);
 
-            const std::array<gui::SegmentedButtonSpec, 6> aiDomains{{
+            const std::array<gui::SegmentedButtonSpec, 7> aiDomains{{
                 { "Sandbox", 104.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Control },
                 { "Harness", 100.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling },
                 { "Assistant", 112.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine },
                 { "Launcher", 108.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Software },
                 { "Training", 104.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Training },
+                { "Viz", 64.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Visualizer },
                 { "Ops", 72.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Ops }
             }};
             if (const auto selectedAiDomain = gui::segmented_button_row(aiDomains))
                 editor.aiWorkspaceDomain = static_cast<AiWorkspaceDomain>(*selectedAiDomain);
 
             gui::property_row("[ai] Workspace", ai_workspace_domain_name(editor.aiWorkspaceDomain));
+            const std::array<bool, 5> aiLoopReady{{
+                gateStatus.projectEvidenceReady,
+                gateStatus.buildEvidenceReady,
+                gateStatus.captureEvidenceReady,
+                gateStatus.chatPairReady,
+                gateStatus.projectEvidenceReady
+                    && gateStatus.buildEvidenceReady
+                    && gateStatus.captureEvidenceReady
+                    && gateStatus.chatPairReady
+            }};
+            const auto aiLoopCanvas = build_ai_loop_surface(
+                aiLoopReady,
+                editor.aiContinuousBuildEnabled,
+                editor.aiContinuousBuildPending.has_value());
+            editor.systems.aiLoopSurface = gui::register_runtime_surface(
+                "ai-loop-visualizer",
+                std::span<const std::uint8_t>(aiLoopCanvas.pixels.data(), aiLoopCanvas.pixels.size()),
+                static_cast<std::uint32_t>(aiLoopCanvas.width),
+                static_cast<std::uint32_t>(aiLoopCanvas.height));
 
             if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Control)
             {
+                gui::label("AI Loop Visualizer");
+                if (editor.systems.aiLoopSurface.is_valid())
+                    gui::image(editor.systems.aiLoopSurface, { aiContentWidth, 92.0f });
                 render_ai_control_status_panel(editor, gateStatus, loopStage, aiContentWidth);
                 if (!gateStatus.projectEvidenceReady)
                 {
@@ -3009,48 +3227,17 @@ namespace epochnamespace
                     repair_active_project_evidence(editor);
             }
 
-            gui::property_row("[ai] Provider", std::string(epoch::ai::provider_mode_name(epoch::ai::current_provider_mode())));
-            gui::property_row("[ai] Active local model", manifest.display_name.empty() ? std::string("(none selected)") : manifest.display_name);
-            gui::property_row("[ai] Local endpoint", manifest.endpoint);
-            gui::property_row("[ai] Model discovery", epoch::ai::model_detection_status());
-            if (gui::button("Refresh Local Models", { 220.0f, 30.0f }))
-            {
-                detectedModels = epoch::ai::refresh_detected_models();
-                push_editor_log(
-                    editor,
-                    detectedModels.empty()
-                        ? "[ai] Model discovery found no local models."
-                        : "[ai] Model discovery refreshed; select a model below.");
-            }
-            if (detectedModels.empty())
-            {
-                gui::wrapped_label(
-                    "No model is selected or auto-named. Start a local OpenAI-compatible endpoint, refresh discovery, then choose the exact model you want Epoch to use.",
-                    aiContentWidth);
-            }
-            else
-            {
-                for (const auto& modelId : detectedModels)
-                {
-                    const bool selected = modelId == epoch::ai::active_model_name();
-                    const std::string buttonLabel = (selected ? std::string("Selected: ") : std::string("Use Model: ")) + modelId;
-                    if (gui::button(buttonLabel, { aiContentWidth, 30.0f }))
-                    {
-                        if (epoch::ai::select_active_model(modelId))
-                            push_editor_log(editor, "[ai] Selected local model: " + modelId);
-                        else
-                            push_editor_log(editor, "[ai] Could not select model: " + modelId);
-                    }
-                }
-            }
-            gui::property_row("[ai] MCP/control manifest", manifest.manifest_path);
+            gui::label("Local Model Connection");
+            render_ai_model_picker(editor, aiContentWidth);
+            gui::property_row("[model] Chat request path", "OpenAI-compatible /v1/chat/completions");
+            gui::property_row("[model] Manifest", manifest.manifest_path);
             gui::property_row("[ai] Self-iteration contract", "Engine/ai/control/continuous_build_loop.json");
             gui::property_row("[ai] Iteration packets", epoch::ai::iteration_packet_root());
             gui::property_row("[ai] Research staging", epoch::ai::research_staging_root());
             gui::property_row("[ai] Curated datasets", training.curated_dataset_root);
             gui::property_row("[ai] Eval suites", training.eval_root);
             gui::property_row("[ai] Raw capture", training.local_capture_jsonl);
-            gui::property_row("[ai] MCP capture", training.mcp_capture_jsonl);
+            gui::property_row("[ai] Tool evidence capture", training.mcp_capture_jsonl);
             gui::property_row("[ai] Local models", training.model_root);
             gui::property_row("[ai] Checkpoints", training.checkpoint_root);
             gui::property_row("[ai] Active script source", activeScriptSource);
@@ -3058,7 +3245,7 @@ namespace epochnamespace
             gui::property_row("[ai] Active build log", display_project_path(buildLog));
             gui::property_row("[ai] Active output", display_project_path(outputExe));
             gui::property_row("[ai] Runtime role", "EpochBot");
-            gui::property_row("[ai] Sandbox role", "Local MCP/control");
+            gui::property_row("[ai] Sandbox role", "local tool/control capture");
             gui::property_row("[ai] Self-iteration loop", ai_control_loop_contract());
             gui::property_row("[ai] Loop stage", loopStage);
             gui::property_row("[ai] Seed/helper/verifier", "runtime seed + helper teacher + gated verifier");
@@ -3073,7 +3260,7 @@ namespace epochnamespace
             gui::property_row("[ai] Review gate state", gateStatus.promotionSummary);
             const std::string captureGuidance =
                 "Raw chat captures land in " + training.local_capture_jsonl
-                + " as Git-safe staging data, MCP interaction snapshots land in "
+                + " as Git-safe staging data, tool/harness interaction snapshots land in "
                 + training.mcp_capture_jsonl
                 + ", curated JSON/JSONL stays in Engine/ai/, and outdated local checkpoints/models/caches should be deleted during training pivots when they no longer match the active data or control model.";
             const std::string iterationGuidance =
@@ -3109,13 +3296,13 @@ namespace epochnamespace
             else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling)
             {
                 gui::wrapped_label(
-                    "Harness domain: select a script in Scripts, then run the AI tool harness here. The harness builds/runs it through EpochScriptHost, captures before/after editor state, records MCP evidence, and stages a packet.",
+                    "Harness domain: select a script in Scripts, then run the AI tool harness here. The harness builds/runs it through EpochScriptHost, captures before/after editor state, records tool evidence, and stages a packet.",
                     aiContentWidth);
             }
             else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine)
             {
                 gui::wrapped_label(
-                    "Assistant domain: use this as the regular game-engine assistant surface for scene/project guidance, active model inspection, MCP capture, and safe iteration packet staging.",
+                    "Assistant domain: use this as the regular game-engine assistant surface for scene/project guidance, active model inspection, selected-model chat, and safe iteration packet staging.",
                     aiContentWidth);
             }
             else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Software)
@@ -3129,6 +3316,19 @@ namespace epochnamespace
                 gui::wrapped_label(
                     "Training domain: raw captures stay local until review; curated datasets and evals live under Engine/ai. Promote only records tied to build/runtime/tool evidence.",
                     aiContentWidth);
+            }
+            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Visualizer)
+            {
+                gui::wrapped_label(
+                    "Visualizer domain: first-pass Phase 5 view. The cards represent planner/project evidence, builder/build evidence, verifier/capture evidence, gate/chat evidence, and final human review. Future work turns this into a separate AI window with live packet replay, scene-state diffs, and eventually a 3D weight/model view.",
+                    aiContentWidth);
+                if (editor.systems.aiLoopSurface.is_valid())
+                    gui::image(editor.systems.aiLoopSurface, { aiContentWidth, 116.0f });
+                gui::property_row("[viz] Planner", gateStatus.projectEvidenceReady ? "project evidence ready" : "blocked: project/manifest evidence missing");
+                gui::property_row("[viz] Builder", gateStatus.buildEvidenceReady ? "build/output evidence ready" : "blocked: build log/output evidence missing");
+                gui::property_row("[viz] Verifier", gateStatus.captureEvidenceReady ? "capture evidence ready" : "blocked: raw or tool evidence missing");
+                gui::property_row("[viz] Gate", gateStatus.chatPairReady ? "chat/eval candidate ready" : "blocked: assistant exchange not ready");
+                gui::property_row("[viz] Future window", "AI visualizer needs dedicated editor-window docking and 3D weight view");
             }
             else
             {
@@ -3271,14 +3471,15 @@ namespace epochnamespace
             if (editor.aiContinuousBuildEnabled && !editor.aiContinuousBuildPending)
                 startAiContinuousBuild("detected project/script evidence change", false);
 
-            const bool showControlControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Control
-                || editor.aiWorkspaceDomain == AiWorkspaceDomain::Software;
+            const bool showSandboxControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Control;
             const bool showToolingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling;
-            const bool showTrainingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Training
-                || editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine;
+            const bool showAssistantControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine;
+            const bool showLauncherControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Software;
+            const bool showTrainingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Training;
 
-            if (showControlControls)
+            if (showSandboxControls)
             {
+                gui::label("Sandbox Build Controls");
                 gui::property_row("[ai-build] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
                 gui::property_row("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false");
                 gui::property_row("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount));
@@ -3287,12 +3488,41 @@ namespace epochnamespace
 
             if (showToolingControls)
             {
+                gui::label("Tool Harness Controls");
                 gui::property_row("[ai-tool] Runs", std::to_string(editor.aiToolHarnessRunCount));
                 gui::property_row("[ai-tool] Status", editor.aiToolHarnessStatus);
                 gui::property_row("[ai-tool] State", editor_tooling_state_summary(editor));
             }
 
-            if (showControlControls && gui::button(editor.aiContinuousBuildEnabled ? "Pause Self-Iteration Watcher" : "Enable Self-Iteration Watcher", { 260.0f, 30.0f }))
+            if (showLauncherControls)
+            {
+                gui::label("ProjectLauncher Evidence");
+                gui::property_row("[launcher] Project root", display_project_path(editor.projectRoot));
+                gui::property_row("[launcher] Manifest", file_ready_summary(editor.projectManifest));
+                gui::property_row("[launcher] Build log", file_ready_summary(buildLog));
+                gui::property_row("[launcher] Output", file_ready_summary(outputExe));
+                gui::wrapped_label(
+                    "Launcher tracks generated game/software project evidence. Sandbox build controls are kept in the Sandbox tab so normal project work and engine self-iteration do not blur together.",
+                    aiContentWidth);
+            }
+
+            if (showAssistantControls)
+            {
+                gui::label("Assistant Model Actions");
+                gui::wrapped_label(
+                    "These buttons call the selected local OpenAI-compatible model. Tool evidence files are JSONL evidence logs, not a separate hidden LLM runtime.",
+                    aiContentWidth);
+            }
+
+            if (showTrainingControls)
+            {
+                gui::label("Training Promotion Controls");
+                gui::wrapped_label(
+                    "Training actions only capture or promote visible evidence. They do not call a model and they do not run servers.",
+                    aiContentWidth);
+            }
+
+            if (showSandboxControls && gui::button(editor.aiContinuousBuildEnabled ? "Pause Self-Iteration Watcher" : "Enable Self-Iteration Watcher", { 260.0f, 30.0f }))
             {
                 editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
                 editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
@@ -3310,12 +3540,12 @@ namespace epochnamespace
                     "The watcher only stages evidence packets; it does not write repo changes blindly.");
             }
 
-            if (showControlControls && gui::button("Queue Self-Iteration Build", { 240.0f, 30.0f }))
+            if (showSandboxControls && gui::button("Queue Sandbox Build Pass", { 240.0f, 30.0f }))
             {
                 startAiContinuousBuild("manual self-iteration build request", true);
                 append_project_note(
                     editor,
-                    "Queue Self-Iteration Build",
+                    "Queue Sandbox Build Pass",
                     editor.aiContinuousBuildStatus,
                     "Wait for build evidence, then review the staged packet before promotion.");
             }
@@ -3368,7 +3598,7 @@ namespace epochnamespace
                 }
             }
 
-            if ((showControlControls || showTrainingControls) && gui::button("Stage Iteration Packet", { 220.0f, 30.0f }))
+            if ((showSandboxControls || showTrainingControls) && gui::button("Stage Evidence Packet", { 220.0f, 30.0f }))
             {
                 const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
                 if (packetDir.empty())
@@ -3387,7 +3617,32 @@ namespace epochnamespace
                 }
             }
 
-            if ((showControlControls || showTrainingControls) && gui::button("Stage Sandbox Scene Training Task", { 280.0f, 30.0f }))
+            if ((showSandboxControls || showAssistantControls) && gui::button("Ask Selected Model For Plan", { 260.0f, 30.0f }))
+            {
+                if (epoch::ai::active_model_name().empty())
+                {
+                    push_editor_log(editor, "[ai] Select a local chat model before requesting a model plan.");
+                }
+                else
+                {
+                    const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
+                    const std::string prompt = build_ai_project_output_review_prompt(
+                        editor,
+                        pathsManifest,
+                        buildLog,
+                        outputExe);
+                    submit_ai_prompt(prompt, "[ai] Submitted latest project output evidence to the selected local model.");
+                    append_project_note(
+                        editor,
+                        "Selected Model Builder Plan Requested",
+                        std::string("Model: ") + epoch::ai::active_model_name(),
+                        packetDir.empty()
+                            ? "Review the chat reply against current project/build/output evidence before approving work."
+                            : std::string("Packet staged at ") + packetDir + "; review the chat reply before approving work.");
+                }
+            }
+
+            if (showSandboxControls && gui::button("Stage Scene Training Task", { 250.0f, 30.0f }))
             {
                 auto packet = currentIterationPacket();
                 packet.packet_name = editor.projectId.empty()
@@ -3414,30 +3669,30 @@ namespace epochnamespace
                 }
             }
 
-            if (showTrainingControls && gui::button("Capture MCP Snapshot", { 220.0f, 30.0f }))
+            if (showTrainingControls && gui::button("Capture Tool Evidence Snapshot", { 260.0f, 30.0f }))
             {
                 epoch::ai::append_mcp_capture(currentMcpRecord());
-                push_editor_log(editor, "[ai] Captured MCP training snapshot.");
-                push_editor_log(editor, std::string("[ai] MCP capture path: ") + training.mcp_capture_jsonl);
+                push_editor_log(editor, "[ai] Captured tool evidence training snapshot.");
+                push_editor_log(editor, std::string("[ai] Tool evidence path: ") + training.mcp_capture_jsonl);
                 append_project_note(
                     editor,
-                    "Capture MCP Snapshot",
-                    std::string("MCP snapshot appended to ") + training.mcp_capture_jsonl,
+                    "Capture Tool Evidence Snapshot",
+                    std::string("Tool evidence snapshot appended to ") + training.mcp_capture_jsonl,
                     "Review captured evidence before curating or promoting training data.");
             }
 
-            if (showTrainingControls && gui::button("Promote MCP Snapshot", { 220.0f, 30.0f }))
+            if (showTrainingControls && gui::button("Promote Tool Evidence Snapshot", { 270.0f, 30.0f }))
             {
                 const bool ok = epoch::ai::promote_mcp_capture_record(currentMcpRecord(), "epoch_mcp_curated");
                 push_editor_log(editor, ok
-                    ? "[ai] Promoted MCP snapshot into Engine/ai/datasets/curated."
-                    : "[ai] Failed to promote MCP snapshot.");
+                    ? "[ai] Promoted tool evidence snapshot into Engine/ai/datasets/curated."
+                    : "[ai] Failed to promote tool evidence snapshot.");
                 if (ok)
                 {
                     push_editor_log(editor, std::string("[ai] Curated dataset root: ") + training.curated_dataset_root);
                     append_project_note(
                         editor,
-                        "Promote MCP Snapshot",
+                        "Promote Tool Evidence Snapshot",
                         std::string("Promoted into ") + training.curated_dataset_root,
                         "Promotion happened only from the explicit Training domain control.");
                 }
@@ -3514,9 +3769,23 @@ namespace epochnamespace
             gui::property_row("[build] Language mode", language_mode_summary());
             gui::property_row("[build] Feature probes", feature_probe_summary());
             gui::property_row("[build] CI contract", hosted_ci_contract());
+            const std::filesystem::path phase5PacketRoot{ epoch::ai::iteration_packet_root() };
+            gui::property_row("[phase5] Evidence bridge", "Systems build truth -> AI staged packets");
+            gui::property_row("[phase5] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+            gui::property_row("[phase5] Build pending", editor.aiContinuousBuildPending ? "true" : "false");
+            gui::property_row("[phase5] Build runs", std::to_string(editor.aiContinuousBuildRunCount));
+            gui::property_row("[phase5] Build status", editor.aiContinuousBuildStatus);
+            gui::property_row("[phase5] Tool runs", std::to_string(editor.aiToolHarnessRunCount));
+            gui::property_row("[phase5] Tool status", editor.aiToolHarnessStatus);
+            gui::property_row("[phase5] Staged packets", staged_packet_count_summary(phase5PacketRoot));
+            gui::property_row("[phase5] Packet root", display_project_path(phase5PacketRoot));
+            gui::property_row("[phase5] Gate contract", "planner -> executor -> builder -> verifier -> gate");
             gui::property_row("[systems] Render path", "visibility -> surface -> lighting -> temporal -> reconstruction -> present");
             gui::wrapped_label(
                 "The Systems workspace now shows engine-generated graph surfaces with pan/zoom controls. Backend ownership is also written down here so the active backend, the dock/undock contract, and the long-term single-backend shell targets stay visible instead of living only in roadmap text.",
+                (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(
+                "Phase 5 evidence is mirrored here so build confidence, tool-harness activity, staged packet counts, and the review-gate contract are visible from Systems before an AI pass is allowed to promote anything.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running");
             gui::property_row("[time] Frame dt", format_ms(editor.timeSnapshot.real_dt_seconds));

@@ -82,6 +82,13 @@ the same engine-owned path.
   scene ids, and seed entities
 - `aeditor.cpp` should act as the live shell over that scene/project data, not
   as a second hardcoded editor universe
+- current `.epoch` scene/world files are metadata shells only. They must exist
+  and be surfaced as evidence, but the live preview/runtime object list is still
+  driven by `aeditor.scene.cpp` seed entities until scene-file loading,
+  serialization, and project-owned scene authoring are wired end-to-end
+- repo-root `Projects/` is a generated local-project area. The editor can use
+  project manifests, build logs, output paths, and `PROJECT_NOTES.md` there as
+  evidence, but those files are not automatically promoted into tracked source
 
 ## Scripting and reload workflow
 
@@ -119,6 +126,11 @@ the same engine-owned path.
 - graph views render as engine-generated textures inside the docked UI
 - graph views support pan/zoom and remain clipped when they are wider than the
   available panel
+- Phase 5 self-iteration should have visible graph/flow feedback, not only text
+  rows. The first-pass AI loop visualizer shows planner, builder, verifier,
+  gate, and human-review readiness as an engine-generated surface; future work
+  should promote that into a dedicated editor window with packet replay,
+  scene-state diffs, and eventually 3D model/weight visualization
 - support-tier diagnostics should stay visible beside renderer stage flow and
   worker-count information so compatibility policy is visible in the editor
 - docked backend hosts should present one clean pane per active context
@@ -216,6 +228,9 @@ features over forcing every integration on every machine.
   Standard/Extended tiers or explicit project opt-in
 - keep backend convergence visible in the Systems workspace so OpenGL, Vulkan,
   software, SDL, SFML, and Raylib do not drift without tooling feedback
+- OpenGL launcher/editor flicker is still an active runtime defect. It appears
+  tied to GUI/menu frame changes and must stay tracked as an OpenGL/frame
+  synchronization issue until a local manual run proves otherwise.
 
 ## Logging
 
@@ -237,14 +252,21 @@ features over forcing every integration on every machine.
 
 ## AI runtime direction
 
-Epoch documents two engine AI runtime roles:
+Epoch documents three internal AI/control pieces:
 
-- internal EpochBot
-- local MCP/control bots that can operate and train EpochBot
+- EpochBot, the primary engine-owned trainable LLM/runtime path
+- local tool/MCP control harnesses that operate the editor and collect proof
+- an offline/injectable OSS or tiny backup LLM path for fallback, generated
+  software embedding, and EpochBot training support
 
-External local LLMs such as LM Studio are development helpers. They can help
-with testing, evals, dataset cleanup, and faster iteration, but they are not a
-third runtime AI role inside the engine.
+External local OpenAI-compatible LLMs such as LM Studio or Ollama are
+development helpers. They can help with testing, evals, dataset cleanup, and
+faster iteration, but they are selected teacher/reviewer providers rather than
+hidden authority.
+The editor scans `/v1/models` and sends selected-model chat to
+`/v1/chat/completions`; tool evidence capture files, including the legacy
+`mcp_capture.jsonl` path, are evidence logs for the harness, not a hidden second
+chat runtime.
 
 Data rules:
 
@@ -255,9 +277,12 @@ Data rules:
 `Engine/examples/ConsoleApplication1/workspace/ai/` paths
 - outdated or bad training data should be deleted or replaced when the training
   direction changes
-- helper-first passes should check `/v1/models` at the start of a phase, use
-  the first two models as drafting pools when available, and keep the first
-  detected model as the only runtime-parity/in-engine smoke model
+- helper-first passes may probe `/v1/models` at the start of a phase, but the
+  engine must not auto-name or activate a model from discovery. Only the
+  operator-selected model is the active helper model for chat/planning.
+- additional loaded helpers may be used only as explicitly allowed drafting or
+  review lanes, and their output remains proposal material until build/runtime
+  evidence and human review promote it
 - for direct helper drafting, use LM Studio `/v1/responses` or
   `/v1/chat/completions` with bounded output, and retry without any reasoning
   field when the selected model rejects explicit reasoning configuration
@@ -284,6 +309,20 @@ The live editor shell should continue to organize around reusable workspaces:
 These should be backed by reusable GUI controls and custom UI powered by an
 automated texture-atlas system, not by hardcoded editor-only tab strips that
 cannot scale.
+
+Current editor-shell gaps:
+
+- the World Outliner needs stronger grouping, clipping, and resizable columns;
+  the current compact button rows are a first cleanup pass, not the final
+  desktop-grade control
+- global UI scaling should behave like normal desktop software, with explicit
+  user scale/font controls instead of one hardcoded pixel density
+- separate editor windows/domains are still needed inside the application:
+  project/game editor, software/tool editor, self-iteration sandbox, and AI
+  visualizer should be independently launchable/dockable surfaces
+- self-iteration needs visual state, not only console rows. The first visible
+  surface is the AI loop card visualizer; later passes should add packet replay,
+  scene-state diff views, and a 3D model/weight visualization surface
 
 ## Multicontext proxy-shell behavior
 

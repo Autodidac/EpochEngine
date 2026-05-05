@@ -5,14 +5,22 @@ loop.
 
 ## Engine AI roles
 
-Epoch documents two engine runtime AI roles:
+Epoch documents three internal AI/control pieces:
 
-1. internal EpochBot
-2. local MCP/control bots that can operate and train EpochBot
+1. EpochBot, the primary engine-owned trainable LLM/runtime path
+2. local MCP/control/tool harnesses that operate the editor and collect proof
+3. an offline/injectable OSS or tiny backup LLM path for fallback, generated
+   software embedding, and EpochBot training support
 
-External local LLMs such as LM Studio are development helpers. They can speed
-up testing, evaluation, curation, and documentation/build work, but they are
-not a third in-engine runtime role.
+External local LLMs such as LM Studio are selected development helpers. They can
+speed up testing, evaluation, curation, and documentation/build work, but they
+are not hidden authority and are not the same thing as the internal backup LLM
+path.
+
+Model discovery is inventory only. Epoch may list available local models, but
+it must not auto-name or activate one from discovery. The operator-selected
+model is the only active runtime/helper target for in-editor calls unless a
+phase explicitly allows extra helper lanes for drafting or review.
 
 ## Storage rules
 
@@ -59,6 +67,9 @@ as an unconstrained model rewriting itself.
 - keep a fast seed/runtime model available for always-on local engine tasks
 - use stronger on-demand teacher/helper models for critique, labeling, and
   candidate generation
+- build toward an engine-owned LLM plus backup tiny internal model from curated
+  Epoch evidence, editor/tool traces, evals, and reviewable sandbox exercises
+  rather than assuming any external helper is the final runtime brain
 - let the verifier own promotion decisions through build, runtime, and scenario
   evidence
 - prefer adapters, prompts, datasets, tool schemas, and evals as the mutable
@@ -149,6 +160,12 @@ The engine runtime itself must follow the selected-model rule: if a Responses
 API call comes back empty because the selected model rejects the reasoning
 configuration, retry without the reasoning field so the AI dock still shows a
 visible answer.
+
+Any generated app, server, listener, port bind, model-accessible control
+surface, or hidden bypass channel must remain inert until an explicit human
+enable/run action. Local game/tool tests are allowed through visible editor,
+MCP, or harness controls when they are evidence-captured and do not expose a
+new model-accessible network surface.
 
 If a local multimodal helper returns its useful answer in `reasoning_content`
 while `content` is blank, treat that as a tooling/parsing issue in the helper
