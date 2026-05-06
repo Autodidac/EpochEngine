@@ -50,6 +50,7 @@ namespace epochnamespace
         Output = 0,
         Project,
         Scripts,
+        Assets,
         AI,
         Systems
     };

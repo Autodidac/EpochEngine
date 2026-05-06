@@ -231,6 +231,14 @@ engine shape and should be treated as starting truth for the next passes:
 - a project-centric launcher/editor shell rather than a demo-first launch path
 - generated game/tool project creation and generated project discovery
 - a real project/scripts dock with build, run, and diagnostics surfaces
+- project-local script stub creation from the Scripts workspace, with new stubs
+  written under the active project's `scripts/` folder and surfaced in project
+  notes for build/run evidence
+- a shallow active-project file/folder browser that skips generated build/bin/.vs
+  output and lets project scripts be selected without leaving the editor
+- an `Assets` workspace tab with first-pass file-type thumbnail cards for active
+  scene, demo model, image, audio, text, and project asset paths. Full decoded
+  image/model thumbnail previews are still future work.
 - scene preview now receives typed primitive preview data, so seed objects and
   newly created Cube/Light/Spawn entities render as ambient-colored solid
   primitives with wire outlines while the fuller ECS/material/object runtime is
@@ -246,9 +254,10 @@ engine shape and should be treated as starting truth for the next passes:
   forbidding bypass-capable app/server launch, listener creation, port binding,
   hidden control surfaces, or model-accessible services without a human
   enable/run action
-- a temporary bottom Console Dock split into Project, Scripts, Systems, AI, and
-  Output evidence tabs. This is not the final editor-window system; it is the
-  current log/evidence strip until separate editor frames/views are promoted.
+- a temporary bottom Console Dock split into Project, Scripts, Assets, Systems,
+  AI, and Output evidence tabs. This is not the final editor-window system; it
+  is the current log/evidence strip until separate editor frames/views are
+  promoted.
 - first-pass shared GUI scroll areas for arbitrary window bodies, now used by
   the World Outliner, Inspector, and non-output Console Dock pages so tall AI
   controls, project evidence, and status panels stay reachable on normal
@@ -304,6 +313,11 @@ engine shape and should be treated as starting truth for the next passes:
 - the scene viewport now has first-pass object interaction: visible editor
   primitives can be click-selected and left-dragged while empty scene space
   still supports camera pan/orbit/zoom
+- console-dock text rendering now avoids submitting partially clipped glyph
+  atlas quads through the current sprite path, preventing the stretched vertical
+  smear artifacts seen while scrolling tall AI/path rows
+- GUI buttons now capture on press and fire on release, so launcher/editor
+  actions happen after the pressed visual state instead of racing it
 
 ## Phase Progress
 
@@ -361,8 +375,9 @@ engine shape and should be treated as starting truth for the next passes:
 - keep generated Sandbox/ProjectLauncher child builds anchored to current VS
   2022 `v143` toolset metadata in both generated files and the checked-in
   engine projects those generated files reference.
-- keep the bottom dock centered on `Project`, `Scripts`, `Systems`, `AI`, and
-  `Output` as evidence/status tabs, not as the final scene/editor-window model
+- keep the bottom dock centered on `Project`, `Scripts`, `Assets`, `Systems`,
+  `AI`, and `Output` as evidence/status tabs, not as the final
+  scene/editor-window model
 - replace the temporary console/chat column buttons with a real draggable
   resize-column control once the GUI input model has stable splitters
 - build proper editor frames/windows/views next: Scene/Game, Software/Tool,
@@ -372,6 +387,9 @@ engine shape and should be treated as starting truth for the next passes:
   panels, modal/focus overlays, context menus, popouts, dockable/editor windows,
   draggable splitters, resize handles, and column controls must be common engine
   GUI primitives rather than per-pane hacks
+- replace file-type asset cards with decoded image/model thumbnails and make the
+  project browser grow into a real bounded file/folder panel with rename/move,
+  text editing, filtering, and safer script authoring controls
 - design borderless linked-context popouts as explicit operator-controlled
   editor windows for GUI containers, not hidden always-on backends. Each popout
   must own focus, z-order, teardown, redock, and evidence logging before it can
@@ -425,6 +443,9 @@ engine shape and should be treated as starting truth for the next passes:
   root cause is fixed
 - improve project, script, AI, systems, and output surfaces until the shell
   reads as a professional editor rather than a debug console
+- keep the new script/file/asset workspaces usable as visible AI iteration
+  evidence surfaces: scripts should be addable/editable, assets should be
+  browseable with thumbnails, and project notes/logs should explain what changed
 - continue replacing full-width placeholder button rows with proper bounded
   widgets: scroll views, resize handles, hover/click states, clipping, and
   selectable text must work before the AI workspace can be considered usable.
@@ -520,7 +541,8 @@ engine shape and should be treated as starting truth for the next passes:
    convergence guidance.
 3. Carry the time spine deeper into runtime and scene ownership.
 4. Tighten the AI capture, replay, review, and promotion loop until
-   Phase 5 can run from staged packets with builder/verifier gates.
+   Phase 5 can run from staged packets with builder/verifier gates and visible
+   script/file/asset evidence inside the editor.
 5. Keep UI/editor maturity moving forward, especially text/input reliability,
    shell polish, drag/drop, and backend-window stability.
 6. Complete the primitive/object system and keep it aligned with the project
@@ -529,7 +551,10 @@ engine shape and should be treated as starting truth for the next passes:
    scene loading, editing, saving, and play/runtime handoff.
 8. Start Android with an honest single-context bring-up, touch/input
    integration, packaging/install path, and asset-resolution discipline.
-9. Continue safe include/src restructuring and MSVC/CMake synchronization
+9. Promote the first-pass file browser, script stub creator, and asset cards
+   into professional bounded editor controls with decoded thumbnails and
+   editable script/source panes.
+10. Continue safe include/src restructuring and MSVC/CMake synchronization
    whenever touched areas can be normalized without collateral damage.
 
 ## Acceptance Gates

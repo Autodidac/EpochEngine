@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.10-1F7A4C?style=for-the-badge" alt="Current development source v0.84.10" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.11-1F7A4C?style=for-the-badge" alt="Current development source v0.84.11" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
 </p>
 
@@ -46,7 +46,9 @@ Current feature spine:
 - Multicontext backend orchestration across Raylib, SDL3, SFML, Vulkan,
   OpenGL, software, and noop/headless paths.
 - Model-backed launcher demo flow using the embedded Mini Sponza asset.
-- Systems, Scripts, Project, AI, and Output workspaces inside the editor.
+- Systems, Assets, Scripts, Project, AI, and Output workspaces inside the editor.
+- First-pass project file browser, project-local script stub creation, and
+  file-type asset thumbnail cards for active scene/model/image/audio/text assets.
 - Engine AI loop centered on `EpochBot`, local MCP/control harnesses, and an
   offline/injectable backup LLM path.
 - AI workspace domains for the Self-Iteration Sandbox, Tool Harness,
@@ -89,7 +91,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.10`.
+- Source is currently the active development line at `v0.84.11`.
 - The latest published stable runtime release is `v0.84.05`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
@@ -116,6 +118,8 @@ AI sandbox and training instructions live with the AI assets in `Engine/ai/READM
   instead of middleware-owned editor UI.
 - Engine-owned C++23 scripting with project-local source resolution, validation,
   build actions, and runtime execution from the live shell.
+- Editor-visible script/file/asset surfaces so Sandbox and ProjectLauncher work
+  can leave selectable paths, build/run notes, and first-pass asset cards.
 - Multicontext renderer orchestration across Raylib, SDL3, SFML, Vulkan,
   OpenGL, software, and headless/noop paths.
 - A Systems workspace that already shows real renderer/runtime tooling surfaces

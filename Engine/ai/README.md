@@ -162,31 +162,39 @@ From a developer checkout:
    For the CMake preset build: `build/windows-msvc-debug/Engine/Debug/epoch.exe`.
 4. Open the bottom `Console Dock`, select `AI`, and use the AI domain tabs for
    status, model inventory, visual feedback, and logs.
-5. Use the Inspector for the actual AI command buttons:
+5. Use `Scripts` to create/select/build/run project-local script stubs and the
+   shallow project file browser. Use `Assets` to inspect first-pass file-type
+   cards for active scene/model/image/audio/text assets.
+6. Use the Inspector for the actual AI command buttons:
    - `Sandbox`: self-iteration watcher, manual build queue, and scene-training packets
    - `Harness`: run selected scripts through the editor tool harness
    - `Assistant`: selected-model planning and evidence packet staging
    - `Launcher`: generated project/build/source evidence repair
    - `Training`: raw capture, curated dataset, and eval promotion controls
    - `Ops / How-To`: operating instructions and readiness state
-6. If the Inspector or AI status body is taller than the window, use the
+7. If the Inspector or AI status body is taller than the window, use the
    in-panel scrollbar. AI controls should remain reachable without stretching
    the app across multiple monitors.
 
 Suggested first run:
 
-1. In `Project`, create or select a generated project shell.
-2. In `Scripts`, select `Rotate All Entities` or another tooling script.
-3. In `Bottom Dock -> AI`, select `Sandbox`, then use the Inspector to click
+1. In `Project`, create or select a generated project shell such as `Sandbox`.
+2. In `Scripts`, create a project script stub or select an existing script, then
+   use `Build Selected Script` and `Run Selected Script` so the project notes and
+   output log show visible evidence.
+3. In `Assets`, confirm the scene/model/asset cards for the active project and
+   select any asset path that should be part of the iteration evidence.
+4. In `Bottom Dock -> AI`, select `Sandbox`, then use the Inspector to click
    `Enable Self-Iteration Watcher` or `Queue Sandbox Build Pass`.
-4. In `Bottom Dock -> AI`, select `Harness`, then use the Inspector to click
+5. In `Bottom Dock -> AI`, select `Harness`, then use the Inspector to click
    `Run AI Tool Harness`.
-5. Inspect the `Output` dock tab for build/tool logs.
-6. Review staged packets under
+6. Inspect the `Output` dock tab and `Project -> Show Project Notes` for
+   build/tool logs, selected file paths, and human-readable change notes.
+7. Review staged packets under
    `Engine/examples/ConsoleApplication1/workspace/research/staged/iteration_packets/`.
-7. Use `Stage Sandbox Scene Training Task` when EpochBot needs a watchable
+8. Use `Stage Sandbox Scene Training Task` when EpochBot needs a watchable
    3D edit/test exercise before training or evaluation.
-8. Promote only reviewed, evidence-backed captures from `AI -> Training`.
+9. Promote only reviewed, evidence-backed captures from `AI -> Training`.
 
 The AI sandbox should be boringly explicit: it can watch, build, run approved
 local games/tools, capture evidence, and stage packets, but curated training,

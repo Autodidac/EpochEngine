@@ -237,6 +237,7 @@ namespace epochnamespace::gui
         static std::mutex g_contextPendingEventsMutex{};
         static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextMouseDownStates{};
         static thread_local std::unordered_map<const void*, const void*, PtrHash> g_contextActiveWidgets{};
+        static thread_local std::unordered_map<const void*, std::size_t, PtrHash> g_contextPressedButtonKeys{};
 
         struct ScrollTextState
         {
@@ -853,6 +854,28 @@ namespace epochnamespace::gui
                     g_frame.contentMax.y - g_frame.contentMin.y);
         }
 
+        [[nodiscard]] static std::size_t widget_press_key(std::string_view label, Vec2 pos, Vec2 size) noexcept
+        {
+            std::size_t h = static_cast<std::size_t>(1469598103934665603ull);
+            const auto mix = [&h](std::uint64_t value) noexcept
+            {
+                h ^= static_cast<std::size_t>(value);
+                h *= static_cast<std::size_t>(1099511628211ull);
+            };
+            for (const unsigned char ch : label)
+                mix(ch);
+
+            const auto quantize = [](float value) noexcept -> std::uint64_t
+            {
+                return static_cast<std::uint64_t>(static_cast<std::int64_t>(std::lround(value * 4.0f)));
+            };
+            mix(quantize(pos.x));
+            mix(quantize(pos.y));
+            mix(quantize(size.x));
+            mix(quantize(size.y));
+            return h;
+        }
+
         [[nodiscard]] static float base_line_height(float scale) noexcept
         {
             const auto& metrics = g_resources.font.metrics;
@@ -1331,10 +1354,11 @@ namespace epochnamespace::gui
             if (!g_frame.ctx || !g_resources.font.asset)
                 return;
 
-            const float clipLeft = has_content_clip() ? (g_frame.contentMin.x - kTextClipSlack) : x;
-            const float clipTop = has_content_clip() ? (g_frame.contentMin.y - kTextClipSlack) : y;
-            const float clipRight = has_content_clip() ? g_frame.contentMax.x : (x + measure_text_width(text, scale));
-            const float clipBottom = has_content_clip() ? g_frame.contentMax.y : (y + line_advance_amount(scale));
+            const bool clipped = has_content_clip();
+            const float clipLeft = clipped ? g_frame.contentMin.x : x;
+            const float clipTop = clipped ? g_frame.contentMin.y : y;
+            const float clipRight = clipped ? g_frame.contentMax.x : (x + measure_text_width(text, scale));
+            const float clipBottom = clipped ? g_frame.contentMax.y : (y + line_advance_amount(scale));
             const float anchorX = indent.value_or(x);
             float penX = anchorX;
             float baseline = y + baseline_offset(scale);
@@ -1360,10 +1384,16 @@ namespace epochnamespace::gui
                         const float offsetY = glyph->offset_px.y * scale;
                         const float drawX = penX + offsetX;
                         const float drawY = baseline + offsetY;
-                        if (drawX + drawW > clipLeft
-                            && drawY + drawH > clipTop
-                            && drawX < clipRight
-                            && drawY < clipBottom)
+                        const bool glyphVisible = clipped
+                            ? (drawX >= clipLeft
+                                && drawY >= clipTop
+                                && drawX + drawW <= clipRight
+                                && drawY + drawH <= clipBottom)
+                            : (drawX + drawW > clipLeft
+                                && drawY + drawH > clipTop
+                                && drawX < clipRight
+                                && drawY < clipBottom);
+                        if (glyphVisible)
                         {
                             draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
                         }
@@ -1526,6 +1556,7 @@ namespace epochnamespace::gui
         g_deferredDrawBatches.erase(ctx);
         g_contextMouseDownStates.erase(ctx);
         g_contextActiveWidgets.erase(ctx);
+        g_contextPressedButtonKeys.erase(ctx);
         const std::string scrollPrefix = std::to_string(reinterpret_cast<std::uintptr_t>(ctx)) + "|";
         for (auto it = g_scrollTextStates.begin(); it != g_scrollTextStates.end();)
         {
@@ -1649,7 +1680,11 @@ namespace epochnamespace::gui
         g_frame.queuedDraws.clear();
 
         if (rawCtx)
+        {
+            if (g_frame.justPressed)
+                g_contextPressedButtonKeys[rawCtx] = 0;
             g_contextMouseDownStates[rawCtx] = currentMouseDown;
+        }
 
         reset_frame();
     }
@@ -1831,17 +1866,28 @@ namespace epochnamespace::gui
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
             && point_in_active_clip(g_frame.mousePos);
+        const std::size_t pressKey = widget_press_key(label, pos, { width, height });
+        auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+        if (hovered && g_frame.justPressed)
+            pressedKey = pressKey;
+
+        const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+        const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
+        if (g_frame.justReleased && pressedKey == pressKey)
+            pressedKey = 0;
+
         const auto& palette = active_palette();
 
         const SpriteHandle background =
             selected ? palette.buttonActive
-            : hovered ? (g_frame.mouseDown ? palette.buttonActive : palette.buttonHover)
+            : pressed ? palette.buttonActive
+            : hovered ? palette.buttonHover
             : palette.buttonNormal;
 
         draw_sprite(background, pos.x, pos.y, width, height);
-        if (hovered || selected)
+        if (hovered || pressed || selected)
         {
-            const SpriteHandle accent = (g_frame.mouseDown || selected)
+            const SpriteHandle accent = (pressed || selected)
                 ? palette.textFieldActive
                 : palette.buttonHover;
             draw_sprite(accent, pos.x, pos.y, width, 2.0f);
@@ -1871,7 +1917,7 @@ namespace epochnamespace::gui
         g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
         advance_cursor({ 0.0f, height + kContentPadding });
 
-        return hovered && g_frame.justPressed;
+        return clicked;
     }
 
     bool button(std::string_view label, Vec2 size) noexcept
@@ -1889,10 +1935,21 @@ namespace epochnamespace::gui
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
             && point_in_active_clip(g_frame.mousePos);
+        const std::size_t pressKey = widget_press_key("<image-button>", pos, { width, height });
+        auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+        if (hovered && g_frame.justPressed)
+            pressedKey = pressKey;
+
+        const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+        const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
+        if (g_frame.justReleased && pressedKey == pressKey)
+            pressedKey = 0;
+
         const auto& palette = active_palette();
 
         const SpriteHandle background =
-            hovered ? (g_frame.mouseDown ? palette.buttonActive : palette.buttonHover)
+            pressed ? palette.buttonActive
+            : hovered ? palette.buttonHover
             : palette.buttonNormal;
 
         draw_sprite(background, pos.x, pos.y, width, height);
@@ -1903,7 +1960,7 @@ namespace epochnamespace::gui
         g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
         advance_cursor({ 0.0f, height + kContentPadding });
 
-        return hovered && g_frame.justPressed;
+        return clicked;
     }
 
     void image(const SpriteHandle& sprite, Vec2 size) noexcept

@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.10`
+Current source version: `v0.84.11`
 
 ## Architecture highlights
 
@@ -24,6 +24,9 @@ Current source version: `v0.84.10`
   task scheduling rather than ad hoc threaded entry points, and editor-triggered
   compiled scripts now run through an explicit host API instead of a loose
   filewatch-first loop.
+- **Project browser + asset cards**: the editor now exposes project-local script
+  stub creation, project/engine script selection, a shallow file/folder browser,
+  and an `Assets` workspace with first-pass file-type thumbnail cards.
 - **Executable-root runtime resolution**: fonts, scripts, shaders, captures,
   workspace paths, and updater scratch roots are being normalized around one
   executable-root/runtime-root resolver instead of cwd guesses.
@@ -85,6 +88,9 @@ Current source version: `v0.84.10`
   Linux/WSL uses `.tar.gz` runtime assets, and source installs fall back to a
   source snapshot rebuild only after packaged-runtime parity is reached or no
   newer packaged asset is available.
+- Console dock text, buttons, project files, scripts, and active assets now have
+  first-pass GUI affordances for visible Sandbox iteration evidence instead of
+  relying on command-line-only inspection.
 - Backend presentation is more visually coherent now that the active renderer
   base colors are being pulled toward the same darker Vulkan-style baseline,
   and SFML’s shared preview path is clipped back to the intended scene view.
@@ -101,6 +107,9 @@ Current source version: `v0.84.10`
 - Raylib parent/docking work should continue to respect GLFW/raylib ownership of
   the native GL context instead of swapping in fresh Win32 DC handles after
   initialization.
+- The `Assets` workspace currently uses file-type cards, not decoded image/model
+  preview thumbnails. Full thumbnail decoding/render previews remain next-pass
+  GUI/asset-browser work.
 
 ## Recommended priorities
 

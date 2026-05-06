@@ -43,6 +43,7 @@ module;
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cctype>
 #include <cstdlib>
 #include <cstddef>
 #include <cstdint>
@@ -241,6 +242,8 @@ namespace epochnamespace
                     return EditorWorkspaceTab::Systems;
                 if (value == "Scripts" || value == "scripts")
                     return EditorWorkspaceTab::Scripts;
+                if (value == "Assets" || value == "assets")
+                    return EditorWorkspaceTab::Assets;
                 if (value == "Output" || value == "output")
                     return EditorWorkspaceTab::Output;
                 return EditorWorkspaceTab::Project;
@@ -281,6 +284,9 @@ namespace epochnamespace
             std::string projectStatus{};
             std::string projectBuildStatus{};
             std::string scriptBuildStatus{};
+            std::string newScriptName{ "sandbox_iteration" };
+            std::string selectedProjectFile{};
+            std::string selectedAssetPath{};
             std::vector<EditorEntity> entities{};
             std::size_t selectedEntity{ 0 };
             std::vector<std::string> logLines{};
@@ -1944,6 +1950,361 @@ namespace epochnamespace
             return "ready";
         }
 
+        struct EditorBrowserEntry
+        {
+            std::string label{};
+            std::string path{};
+            std::string kind{};
+            bool directory{ false };
+            std::uintmax_t size{ 0 };
+        };
+
+        [[nodiscard]] static bool should_skip_browser_directory(std::string_view name) noexcept
+        {
+            return name == ".git"
+                || name == ".vs"
+                || name == "build"
+                || name == "bin"
+                || name == "Debug"
+                || name == "Release"
+                || name == "x64"
+                || name == "vcpkg_installed";
+        }
+
+        [[nodiscard]] static std::string sanitize_script_id(std::string_view value)
+        {
+            std::string result;
+            result.reserve(value.size());
+            bool previousUnderscore = false;
+            for (const unsigned char raw : value)
+            {
+                if (std::isalnum(raw))
+                {
+                    result.push_back(static_cast<char>(std::tolower(raw)));
+                    previousUnderscore = false;
+                }
+                else if ((raw == '_' || raw == '-' || raw == ' ' || raw == '.') && !previousUnderscore && !result.empty())
+                {
+                    result.push_back('_');
+                    previousUnderscore = true;
+                }
+            }
+
+            while (!result.empty() && result.back() == '_')
+                result.pop_back();
+            if (result.empty())
+                result = "sandbox_iteration";
+            return result;
+        }
+
+        [[nodiscard]] static std::string script_id_from_source_path(const std::filesystem::path& path)
+        {
+            std::string fileName = path.filename().string();
+            constexpr std::string_view suffix = ".ascript.cpp";
+            if (fileName.ends_with(suffix))
+                fileName.resize(fileName.size() - suffix.size());
+            return sanitize_script_id(fileName);
+        }
+
+        [[nodiscard]] static std::string relative_browser_path(
+            const std::filesystem::path& root,
+            const std::filesystem::path& path)
+        {
+            std::error_code ec;
+            const auto relative = std::filesystem::relative(path, root, ec);
+            if (!ec && !relative.empty())
+                return relative.generic_string();
+            return path.filename().generic_string();
+        }
+
+        [[nodiscard]] static std::string browser_kind_for_path(const std::filesystem::path& path, bool directory)
+        {
+            if (directory)
+                return "DIR";
+            const std::string name = path.filename().string();
+            const std::string ext = path.extension().string();
+            if (name.ends_with(".ascript.cpp"))
+                return "SCRIPT";
+            if (ext == ".cpp" || ext == ".hpp" || ext == ".ixx" || ext == ".h")
+                return "CODE";
+            if (ext == ".epoch" || ext == ".json" || ext == ".txt" || ext == ".md")
+                return "TEXT";
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".tga")
+                return "IMAGE";
+            if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx")
+                return "MODEL";
+            if (ext == ".wav" || ext == ".ogg" || ext == ".mp3")
+                return "AUDIO";
+            return "FILE";
+        }
+
+        [[nodiscard]] static EditorBrowserEntry make_browser_entry(
+            const std::filesystem::path& root,
+            const std::filesystem::path& path,
+            bool directory)
+        {
+            std::error_code ec;
+            const std::string kind = browser_kind_for_path(path, directory);
+            const std::string relative = relative_browser_path(root, path);
+            std::uintmax_t size = 0;
+            if (!directory)
+            {
+                ec.clear();
+                size = std::filesystem::file_size(path, ec);
+                if (ec)
+                    size = 0;
+            }
+
+            return EditorBrowserEntry{
+                .label = std::string("[") + kind + "] " + relative + (directory ? "/" : ""),
+                .path = display_project_path(path),
+                .kind = kind,
+                .directory = directory,
+                .size = size
+            };
+        }
+
+        [[nodiscard]] static std::vector<EditorBrowserEntry> collect_project_browser_entries(
+            std::string_view projectRoot,
+            std::size_t maxEntries = 48)
+        {
+            std::vector<EditorBrowserEntry> entries;
+            const auto root = resolve_editor_path(std::filesystem::path{ projectRoot });
+            std::error_code ec;
+            if (root.empty() || !std::filesystem::exists(root, ec) || ec)
+                return entries;
+
+            for (std::filesystem::recursive_directory_iterator it(
+                     root,
+                     std::filesystem::directory_options::skip_permission_denied,
+                     ec),
+                 end;
+                 it != end && entries.size() < maxEntries;
+                 it.increment(ec))
+            {
+                if (ec)
+                {
+                    ec.clear();
+                    continue;
+                }
+
+                const auto path = it->path();
+                const bool directory = it->is_directory(ec);
+                if (ec)
+                {
+                    ec.clear();
+                    continue;
+                }
+
+                if (directory)
+                {
+                    if (should_skip_browser_directory(path.filename().string()))
+                    {
+                        it.disable_recursion_pending();
+                        continue;
+                    }
+                    if (it.depth() >= 2)
+                        it.disable_recursion_pending();
+                }
+
+                if (it.depth() > 2)
+                    continue;
+
+                entries.push_back(make_browser_entry(root, path, directory));
+            }
+
+            return entries;
+        }
+
+        [[nodiscard]] static std::vector<EditorBrowserEntry> collect_script_browser_entries(
+            std::string_view projectRoot,
+            std::size_t maxEntries = 32)
+        {
+            std::vector<EditorBrowserEntry> entries;
+            const std::array roots{
+                resolve_editor_path(std::filesystem::path{ projectRoot }) / "scripts",
+                resolve_editor_path(std::filesystem::path{ "Engine/src/scripts" })
+            };
+
+            for (const auto& root : roots)
+            {
+                std::error_code ec;
+                if (root.empty() || !std::filesystem::exists(root, ec) || ec)
+                    continue;
+
+                for (const auto& entry : std::filesystem::directory_iterator(root, ec))
+                {
+                    if (ec || entries.size() >= maxEntries)
+                    {
+                        ec.clear();
+                        break;
+                    }
+
+                    std::error_code entryEc;
+                    if (!entry.is_regular_file(entryEc) || entryEc)
+                        continue;
+
+                    const auto path = entry.path();
+                    if (!path.filename().string().ends_with(".ascript.cpp"))
+                        continue;
+
+                    auto item = make_browser_entry(root, path, false);
+                    item.kind = script_id_from_source_path(path);
+                    entries.push_back(std::move(item));
+                }
+            }
+
+            return entries;
+        }
+
+        [[nodiscard]] static std::vector<EditorBrowserEntry> collect_asset_browser_entries(
+            const EditorState& editor,
+            std::size_t maxEntries = 48)
+        {
+            std::vector<EditorBrowserEntry> entries;
+            const auto append_if_ready = [&](const std::filesystem::path& root, const std::filesystem::path& path)
+            {
+                if (entries.size() >= maxEntries || path.empty())
+                    return;
+                std::error_code ec;
+                const auto resolved = resolve_editor_path(path);
+                if (!std::filesystem::exists(resolved, ec) || ec)
+                    return;
+                entries.push_back(make_browser_entry(root.empty() ? resolved.parent_path() : root, resolved, std::filesystem::is_directory(resolved, ec) && !ec));
+            };
+
+            const auto projectRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
+            append_if_ready(projectRoot, editor.projectScenePath);
+            const auto modelSummary = editor_project_model_summary(editor.projectId);
+            append_if_ready(projectRoot, modelSummary.resolved_path);
+
+            const std::array roots{
+                projectRoot / "assets",
+                resolve_editor_path(std::filesystem::path{ "Engine/assets" }),
+                resolve_editor_path(std::filesystem::path{ "Engine/examples/ConsoleApplication1/assets" })
+            };
+
+            for (const auto& root : roots)
+            {
+                std::error_code ec;
+                if (root.empty() || !std::filesystem::exists(root, ec) || ec)
+                    continue;
+
+                for (std::filesystem::recursive_directory_iterator it(
+                         root,
+                         std::filesystem::directory_options::skip_permission_denied,
+                         ec),
+                     end;
+                     it != end && entries.size() < maxEntries;
+                     it.increment(ec))
+                {
+                    if (ec)
+                    {
+                        ec.clear();
+                        continue;
+                    }
+                    const bool directory = it->is_directory(ec);
+                    if (ec)
+                    {
+                        ec.clear();
+                        continue;
+                    }
+                    if (directory)
+                    {
+                        if (should_skip_browser_directory(it->path().filename().string()))
+                        {
+                            it.disable_recursion_pending();
+                            continue;
+                        }
+                        if (it.depth() >= 1)
+                            it.disable_recursion_pending();
+                    }
+                    if (it.depth() > 1)
+                        continue;
+
+                    entries.push_back(make_browser_entry(root, it->path(), directory));
+                }
+            }
+
+            return entries;
+        }
+
+        [[nodiscard]] static std::string make_project_script_stub_text(std::string_view scriptId)
+        {
+            return std::format(
+                "#if __has_include(<epoch.script_api.h>)\n"
+                "#  include <epoch.script_api.h>\n"
+                "#elif __has_include(<include/epoch.script_api.h>)\n"
+                "#  include <include/epoch.script_api.h>\n"
+                "#else\n"
+                "#  error \"Epoch script API header not found. Add Engine/include or Engine/ to include paths.\"\n"
+                "#endif\n\n"
+                "namespace\n"
+                "{{\n"
+                "    void host_log(EpochScriptHost* host, const char* message)\n"
+                "    {{\n"
+                "        if (host && host->log)\n"
+                "            host->log(host->user_data, message);\n"
+                "    }}\n"
+                "}}\n\n"
+                "EPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost* host)\n"
+                "{{\n"
+                "    if (!host)\n"
+                "        return;\n\n"
+                "    host_log(host, \"{}: script stub executed.\");\n"
+                "    if (host->rotate_all_entities_yaw)\n"
+                "    {{\n"
+                "        host->rotate_all_entities_yaw(host->user_data, 3.0f);\n"
+                "        host_log(host, \"{}: applied +3 yaw proof step.\");\n"
+                "    }}\n"
+                "}}\n",
+                scriptId,
+                scriptId);
+        }
+
+        static void create_project_script_stub(EditorState& editor)
+        {
+            const std::string scriptIdBase = sanitize_script_id(editor.newScriptName);
+            const auto scriptsRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "scripts";
+            std::error_code ec;
+            std::filesystem::create_directories(scriptsRoot, ec);
+            if (ec)
+            {
+                editor.scriptBuildStatus = "Could not create project scripts directory.";
+                push_editor_log(editor, "[script] Failed to create scripts directory: " + scriptsRoot.generic_string());
+                return;
+            }
+
+            std::string scriptId = scriptIdBase;
+            std::filesystem::path scriptPath = scriptsRoot / (scriptId + ".ascript.cpp");
+            for (int suffix = 2; std::filesystem::exists(scriptPath, ec) && suffix < 100; ++suffix)
+            {
+                ec.clear();
+                scriptId = scriptIdBase + "_" + std::to_string(suffix);
+                scriptPath = scriptsRoot / (scriptId + ".ascript.cpp");
+            }
+
+            std::ofstream out(scriptPath, std::ios::binary);
+            if (!out)
+            {
+                editor.scriptBuildStatus = "Could not write project script stub.";
+                push_editor_log(editor, "[script] Failed to write script stub: " + display_project_path(scriptPath));
+                return;
+            }
+
+            out << make_project_script_stub_text(scriptId);
+            editor.activeScript = scriptId;
+            editor.newScriptName = scriptId;
+            editor.selectedProjectFile = display_project_path(scriptPath);
+            editor.scriptBuildStatus = "Created project script stub: " + editor.selectedProjectFile;
+            push_editor_log(editor, "[script] Created project script stub '" + scriptId + "'.");
+            append_project_note(
+                editor,
+                "Create Project Script Stub",
+                std::string("Created ") + scriptId + ".ascript.cpp.",
+                "Select Build Selected Script, then Run Selected Script. The script logs proof text and rotates scene entities through the host API.");
+        }
+
         [[nodiscard]] std::string build_ai_project_output_review_prompt(
             const EditorState& state,
             const std::filesystem::path& pathsManifest,
@@ -3224,12 +3585,13 @@ namespace epochnamespace
         const gui::Vec2 chat_size{ (std::max)(0.0f, w - left_bottom_w), bottom_h };
 
         gui::begin_window("Console Dock", log_pos, log_size);
-        const std::array<gui::SegmentedButtonSpec, 5> workspaceTabs{{
-            { "Output", 82.0f, editor.workspaceTab == EditorWorkspaceTab::Output },
-            { "Project", 82.0f, editor.workspaceTab == EditorWorkspaceTab::Project },
-            { "Scripts", 82.0f, editor.workspaceTab == EditorWorkspaceTab::Scripts },
-            { "AI", 68.0f, editor.workspaceTab == EditorWorkspaceTab::AI },
-            { "Systems", 90.0f, editor.workspaceTab == EditorWorkspaceTab::Systems }
+        const std::array<gui::SegmentedButtonSpec, 6> workspaceTabs{{
+            { "Output", 78.0f, editor.workspaceTab == EditorWorkspaceTab::Output },
+            { "Project", 78.0f, editor.workspaceTab == EditorWorkspaceTab::Project },
+            { "Scripts", 78.0f, editor.workspaceTab == EditorWorkspaceTab::Scripts },
+            { "Assets", 76.0f, editor.workspaceTab == EditorWorkspaceTab::Assets },
+            { "AI", 58.0f, editor.workspaceTab == EditorWorkspaceTab::AI },
+            { "Systems", 84.0f, editor.workspaceTab == EditorWorkspaceTab::Systems }
         }};
         if (const auto selected = gui::tab_bar(workspaceTabs))
             editor.workspaceTab = static_cast<EditorWorkspaceTab>(*selected);
@@ -3448,6 +3810,7 @@ namespace epochnamespace
         case EditorWorkspaceTab::Scripts:
         {
             const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
+            const float scriptsContentWidth = (std::max)(180.0f, log_size.x - 24.0f);
             gui::property_row("[script] Active", editor.activeScript);
             gui::property_row("[script] Source", activeScriptSource);
             gui::property_row(
@@ -3460,9 +3823,14 @@ namespace epochnamespace
                 gui::property_row("[script] Hint", activeScript->diagnostic_hint);
             }
             gui::wrapped_label(
-                "Scripts compile with the engine/project and use the editor host API for callbacks. This dock now exposes the real source path, the validation/build action, and the runtime action for the selected script.",
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(editor.scriptBuildStatus, (std::max)(180.0f, log_size.x - 24.0f));
+                "Scripts compile with the engine/project and use the editor host API for callbacks. Create project-local stubs here, build them, run them, and watch project notes/output for visible evidence.",
+                scriptsContentWidth);
+            gui::wrapped_label(editor.scriptBuildStatus, scriptsContentWidth);
+
+            gui::property_row("[script] New script", "type a safe id, then create a project-local .ascript.cpp");
+            (void)gui::edit_box(editor.newScriptName, { scriptsContentWidth, 28.0f }, 64, false);
+            if (gui::button("Create Project Script Stub", { (std::min)(260.0f, scriptsContentWidth), 30.0f }))
+                create_project_script_stub(editor);
 
             for (const auto& script : editor_script_profiles())
             {
@@ -3476,6 +3844,19 @@ namespace epochnamespace
                 }
                 gui::property_row("  source", resolvedSource);
                 gui::wrapped_label(script.description, (std::max)(160.0f, log_size.x - 36.0f));
+            }
+
+            const auto scriptEntries = collect_script_browser_entries(editor.projectRoot);
+            gui::property_row("[script] Project/engine script files", std::to_string(scriptEntries.size()));
+            for (const auto& entry : scriptEntries)
+            {
+                if (gui::button(entry.label, { scriptsContentWidth, 28.0f }))
+                {
+                    editor.activeScript = entry.kind;
+                    editor.selectedProjectFile = entry.path;
+                    editor.scriptBuildStatus = "Selected script source: " + entry.path;
+                    push_editor_log(editor, "[script] Selected source " + entry.path);
+                }
             }
 
             if (gui::button("Build Selected Script", { 180.0f, 30.0f }))
@@ -3504,6 +3885,55 @@ namespace epochnamespace
                     std::string("Run requested for ") + editor.activeScript + ".",
                     "Watch the Output workspace for script-host results and editor-visible changes.");
             }
+
+            const auto projectEntries = collect_project_browser_entries(editor.projectRoot);
+            gui::property_row("[files] Active project browser", std::to_string(projectEntries.size()) + " visible entries");
+            gui::wrapped_label("This is the first shallow project file/folder viewer. It skips build/bin/.vs output, selects scripts for build/run, and gives the AI sandbox visible path evidence instead of hidden filesystem magic.", scriptsContentWidth);
+            for (const auto& entry : projectEntries)
+            {
+                if (gui::button(entry.label, { scriptsContentWidth, 26.0f }))
+                {
+                    editor.selectedProjectFile = entry.path;
+                    if (entry.kind == "SCRIPT")
+                    {
+                        editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
+                        editor.scriptBuildStatus = "Selected project script: " + entry.path;
+                    }
+                    push_editor_log(editor, "[files] Selected " + entry.path);
+                }
+            }
+            gui::property_row("[files] Selected", editor.selectedProjectFile.empty() ? std::string("(none)") : editor.selectedProjectFile);
+            break;
+        }
+        case EditorWorkspaceTab::Assets:
+        {
+            const float assetsContentWidth = (std::max)(180.0f, log_size.x - 24.0f);
+            const auto modelSummary = editor_project_model_summary(editor.projectId);
+            gui::property_row("[assets] Project", editor.projectName);
+            gui::property_row("[assets] Project root", editor.projectRoot);
+            gui::property_row("[assets] Scene", editor.projectScenePath);
+            gui::property_row("[assets] Demo model", modelSummary.asset_path.empty() ? std::string("(none)") : modelSummary.asset_path);
+            gui::property_row("[assets] Model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path);
+            gui::property_row("[assets] Model parsed", modelSummary.parsed ? "true" : "false");
+            gui::wrapped_label(
+                "Asset cards are first-pass file-type thumbnails: scene/model/image/audio/text assets are visible and selectable now. Decoded image/model preview thumbnails remain a next-pass GUI renderer feature.",
+                assetsContentWidth);
+
+            const auto assetEntries = collect_asset_browser_entries(editor);
+            gui::property_row("[assets] Active asset cards", std::to_string(assetEntries.size()));
+            for (const auto& entry : assetEntries)
+            {
+                const std::string buttonLabel = entry.label + (entry.directory ? "" : std::format("  [{} bytes]", entry.size));
+                if (gui::button(buttonLabel, { assetsContentWidth, 28.0f }))
+                {
+                    editor.selectedAssetPath = entry.path;
+                    push_editor_log(editor, "[assets] Selected " + entry.path);
+                }
+            }
+
+            if (assetEntries.empty())
+                gui::wrapped_label("No active assets found yet. Add files under the project assets folder or use the project demo model path once it resolves.", assetsContentWidth);
+            gui::property_row("[assets] Selected", editor.selectedAssetPath.empty() ? std::string("(none)") : editor.selectedAssetPath);
             break;
         }
         case EditorWorkspaceTab::AI:
@@ -4404,21 +4834,25 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 5), [&](gui::Vec2 pos)
+        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 6), [&](gui::Vec2 pos)
         {
-            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
+            menu_item("Open Asset Browser", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
+                editor.workspaceTab = EditorWorkspaceTab::Assets;
+                push_editor_log(editor, "[assets] Asset browser opened.");
+            });
+            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
                 add_entity(editor, "cube");
             });
-            menu_item("Add Light", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
+            menu_item("Add Light", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
                 add_entity(editor, "light");
             });
-            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
+            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
                 add_entity(editor, "spawn");
             });
-            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
+            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
                 duplicate_selected_entity(editor);
             });
-            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
+            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
                 delete_selected_entity(editor);
             });
         });

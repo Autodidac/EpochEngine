@@ -1,5 +1,24 @@
 # Epoch Changelog
 
+## [v0.84.11]
+- Bumped the active source line to `v0.84.11` for the script/file/asset
+  workspace pass, console-dock glyph smear fix, and press/release button
+  stabilization.
+- Fixed the console dock text-smear artifact by preventing partially clipped
+  glyph atlas quads from being submitted to the current sprite path, avoiding
+  the stretched vertical bands seen while scrolling.
+- Changed GUI buttons to capture on press and fire on release, keeping the
+  active color locked while held so launcher/editor actions no longer race the
+  pressed visual state.
+- Added an `Assets` workspace tab with first-pass file-type thumbnail cards for
+  active scene, model, image, audio, text, and project asset paths.
+- Expanded the `Scripts` workspace with project-local script stub creation,
+  project/engine script selection, and a shallow file/folder viewer that skips
+  generated build/bin/.vs output.
+- Documented the new visible Sandbox iteration route: create/select scripts,
+  build/run them, inspect project notes/output, and use asset/file cards as
+  evidence surfaces before AI promotion.
+
 ## [v0.84.10]
 - Bumped the active source line to `v0.84.10` for Sandbox build repair,
   scrollable editor panels, GUI clipping containment, and launcher feedback

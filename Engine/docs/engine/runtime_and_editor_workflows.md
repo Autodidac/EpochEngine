@@ -102,9 +102,16 @@ the same engine-owned path.
   `Engine/src/scripts/`, and `Engine/resource/`
 - the scripting/project dock should expose script lists, source paths, run/build
   actions, and compile/load diagnostics
+- the `Scripts` workspace now creates project-local `.ascript.cpp` stubs, lists
+  project and engine script files, and exposes a shallow active-project
+  file/folder browser so scripts can be selected without command-line digging
 - script source resolution should prefer the active project's local `scripts/`
   folder before falling back to template or engine-owned script roots, so the
   dock and editor run actions operate on the real generated project shell
+- script stub creation should append `PROJECT_NOTES.md` entries; a useful
+  Sandbox iteration must leave at least one of: build log output, script-host
+  log output, staged packet evidence, selected project file path, or project
+  notes explaining what changed
 - build diagnostics should now cover the generated child-project build path too:
   entry source, generated project file, build script, build log, and expected
   output executable should all be visible from the Project workspace
@@ -317,6 +324,7 @@ editor-window system. It currently hosts reusable tabbed panes for:
 
 - `Project`
 - `Scripts`
+- `Assets`
 - `Systems`
 - `AI`
 - `Output`
@@ -339,6 +347,9 @@ editor frames and views:
   future 3D weight/model views
 - ProjectLauncher view for project launch/update/context selection
 - Build/Output view for logs, diagnostics, and release/build evidence
+- Asset Browser view for decoded image/model thumbnails, active project assets,
+  and import/organization actions. The current `Assets` tab is only the first
+  file-type-card version of that view.
 
 These views should be backed by reusable GUI controls and custom UI powered by
 an automated texture-atlas system, not by hardcoded editor-only tab strips that
@@ -352,6 +363,9 @@ Current editor-shell gaps:
 - the engine GUI now has reusable `tab_bar`, `scroll_text_panel`, and modal
   focus overlay paths; selectable text is currently row-level and must grow into
   true text-range selection/copy support
+- the current file browser and asset cards are intentionally first-pass
+  controls. They still need bounded columns, filtering, real decoded thumbnails,
+  rename/move/import actions, and a code/text editor surface for scripts.
 - the GUI still needs context menus, popouts, dockable editor windows,
   draggable splitters, resize handles, and column controls
 - global UI scaling should behave like normal desktop software, with explicit
