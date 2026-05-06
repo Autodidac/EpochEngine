@@ -1,5 +1,49 @@
 # Epoch Changelog
 
+## [v0.84.10]
+- Bumped the active source line to `v0.84.10` for Sandbox build repair,
+  scrollable editor panels, GUI clipping containment, and launcher feedback
+  restoration.
+- Normalized the checked-in Windows example projects that the generated
+  Sandbox build references to the VS 2022 `v143` toolset, and extended the
+  Sandbox project repair path to rewrite stale `v142` or `v145` child project
+  metadata before building.
+- Added reusable engine GUI `begin_scroll_area` / `end_scroll_area` primitives
+  for arbitrary window bodies, then wrapped the World Outliner, Inspector, and
+  non-output Console Dock pages so tall AI controls can be operated without
+  stretching the app across multiple monitors.
+- Clipped GUI sprite geometry and hit-testing to active panel content so
+  outliner/inspector/dock controls no longer draw or click through the
+  Perspective scene view.
+- Restored visible launcher button hover/click feedback with stable
+  hover/active colors plus an accent stripe, without returning to the prior
+  frame-flipping theme behavior.
+- Documented the next editor-shell step as real dockable/poppable editor
+  frames, including borderless linked-context popouts for GUI containers once
+  ownership, focus, teardown, and backend safety are explicit.
+
+## [v0.84.09]
+- Bumped the active source line to `v0.84.09` for the modular GUI console/chat
+  cleanup, Inspector AI control restoration, and first-pass editor-shell
+  primitive work.
+- Restored AI action controls to the Inspector and reframed the bottom strip as
+  the temporary Console Dock for status/log/visual feedback, not the final
+  editor-window system.
+- Added the first reusable engine GUI `tab_bar` path with active-tab rendering
+  so Project/Scripts/Systems/AI/Output and AI-domain selectors stop depending on
+  one-off button rows.
+- Added first-pass modular GUI `scroll_text_panel` and modal focus overlay
+  primitives, then moved Output/AI Chat style logs onto clipped scroll panels
+  with selectable rows.
+- Lowered default GUI font/padding metrics slightly and corrected send-row
+  button/input height matching to remove the artifact under the chat send
+  button.
+- Stabilized the ClassicLauncher button theme by removing hover/active color
+  swapping from launcher buttons while the OpenGL flicker root cause is still
+  being chased.
+- Removed the stale roadmap pointer to in-tree Botface utilities now that
+  Botface is treated as its own external repo.
+
 ## [v0.84.08]
 - Bumped the active source line to `v0.84.08` for the selected-model chat route,
   AI workspace label cleanup, and solution-build visibility pass.
@@ -55,9 +99,6 @@
 - Documented current gaps explicitly: OpenGL launcher/editor flicker, desktop UI
   scaling, outliner clipping/resizable columns, separate in-app editor windows,
   metadata-only scene files, and the future AI 3D weight/model visualizer.
-- Removed the stale roadmap pointer to in-tree Botface utilities now that
-  Botface is treated as its own external repo.
-
 ## [v0.84.05]
 - Bumped the active source version to `v0.84.05` for the hosted Linux Clang
   engine CI dependency follow-up.

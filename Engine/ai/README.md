@@ -160,22 +160,28 @@ From a developer checkout:
 3. Launch the editor executable:
    For the Visual Studio solution build: `x64/Debug/ConsoleApplication1.exe`.
    For the CMake preset build: `build/windows-msvc-debug/Engine/Debug/epoch.exe`.
-4. Open the editor workspace panel and select `AI`.
-5. Use the AI sub-workspaces:
-   - `Sandbox`: separate self-iteration control room for the watcher and staged packets
+4. Open the bottom `Console Dock`, select `AI`, and use the AI domain tabs for
+   status, model inventory, visual feedback, and logs.
+5. Use the Inspector for the actual AI command buttons:
+   - `Sandbox`: self-iteration watcher, manual build queue, and scene-training packets
    - `Harness`: run selected scripts through the editor tool harness
-   - `Assistant`: normal project/scene guidance, selected-model chat, and packet staging
-   - `Launcher`: generated project/build/source evidence
+   - `Assistant`: selected-model planning and evidence packet staging
+   - `Launcher`: generated project/build/source evidence repair
    - `Training`: raw capture, curated dataset, and eval promotion controls
-   - `Ops / How-To`: quick operating instructions
+   - `Ops / How-To`: operating instructions and readiness state
+6. If the Inspector or AI status body is taller than the window, use the
+   in-panel scrollbar. AI controls should remain reachable without stretching
+   the app across multiple monitors.
 
 Suggested first run:
 
 1. In `Project`, create or select a generated project shell.
 2. In `Scripts`, select `Rotate All Entities` or another tooling script.
-3. In `AI -> Sandbox`, click `Enable Self-Iteration Watcher` or `Queue Sandbox Build Pass`.
-4. In `AI -> Harness`, click `Run AI Tool Harness`.
-5. Inspect the `Output` workspace for build/tool logs.
+3. In `Bottom Dock -> AI`, select `Sandbox`, then use the Inspector to click
+   `Enable Self-Iteration Watcher` or `Queue Sandbox Build Pass`.
+4. In `Bottom Dock -> AI`, select `Harness`, then use the Inspector to click
+   `Run AI Tool Harness`.
+5. Inspect the `Output` dock tab for build/tool logs.
 6. Review staged packets under
    `Engine/examples/ConsoleApplication1/workspace/research/staged/iteration_packets/`.
 7. Use `Stage Sandbox Scene Training Task` when EpochBot needs a watchable

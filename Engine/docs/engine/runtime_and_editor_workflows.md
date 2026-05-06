@@ -108,6 +108,9 @@ the same engine-owned path.
 - build diagnostics should now cover the generated child-project build path too:
   entry source, generated project file, build script, build log, and expected
   output executable should all be visible from the Project workspace
+- generated child projects, including the Sandbox shell, should repair stale
+  Windows toolset metadata to `v143` before invoking MSBuild, and the checked-in
+  engine projects they reference should stay on the same VS 2022 toolset.
 - the Project workspace should also surface simple existence checks for the
   manifest, entry source, build script, `project.paths.txt`, expected output,
   build log, and active script source so the user can tell whether the shell is
@@ -166,6 +169,17 @@ the same engine-owned path.
 - editor text-entry validation is still an active gap:
   the shell needs a repeatable typed-text smoke for AI chat and other edit
   boxes, not just click/focus proof
+- the first shared arbitrary scroll-area primitive now exists and is used by
+  the World Outliner, Inspector, and non-output Console Dock pages. Future
+  editor windows should build on this path instead of adding new per-panel
+  scrolling hacks.
+- GUI draw and hit testing should remain clipped to active panel content so
+  buttons, rows, and text do not bleed over or steal input from the Perspective
+  scene view.
+- borderless linked-context popouts are a future editor-shell feature, not a
+  hidden always-running backend. Each popped GUI container needs explicit
+  operator action, focus ownership, teardown, redock behavior, and evidence
+  logging before it becomes part of the normal workflow.
 - time diagnostics should show the shared simulation clock state: pause/resume,
   scale, fixed-step cadence, accumulator, and simulated time
 - time diagnostics should also show the current frame step budget and the
@@ -296,9 +310,10 @@ Data rules:
 - do not block the current time-system or Systems milestones on O2L being
   present now
 
-## Editor shell direction
+## Editor Shell Direction
 
-The live editor shell should continue to organize around reusable workspaces:
+The bottom `Console Dock` is a temporary evidence/status strip, not the final
+editor-window system. It currently hosts reusable tabbed panes for:
 
 - `Project`
 - `Scripts`
@@ -306,8 +321,27 @@ The live editor shell should continue to organize around reusable workspaces:
 - `AI`
 - `Output`
 
-These should be backed by reusable GUI controls and custom UI powered by an
-automated texture-atlas system, not by hardcoded editor-only tab strips that
+These tabs should keep logs, build evidence, status, model inventory, and visual
+feedback available without becoming the main command surface. Action controls
+that start AI repair/build/training passes belong in the Inspector until the
+dedicated editor windows below exist.
+
+The real editor shell target is a set of independently focusable/dockable
+editor frames and views:
+
+- Scene/Game editor view for project objects, play state, and runtime scene
+  editing
+- Software/Tool editor view for generated apps/tools and code-oriented project
+  work
+- Self-Iteration Sandbox view for dark-factory coding passes, staged packets,
+  builder/verifier gates, and human approvals
+- AI Visualizer view for model state, packet replay, scene-state diffs, and
+  future 3D weight/model views
+- ProjectLauncher view for project launch/update/context selection
+- Build/Output view for logs, diagnostics, and release/build evidence
+
+These views should be backed by reusable GUI controls and custom UI powered by
+an automated texture-atlas system, not by hardcoded editor-only tab strips that
 cannot scale.
 
 Current editor-shell gaps:
@@ -315,6 +349,11 @@ Current editor-shell gaps:
 - the World Outliner needs stronger grouping, clipping, and resizable columns;
   the current compact button rows are a first cleanup pass, not the final
   desktop-grade control
+- the engine GUI now has reusable `tab_bar`, `scroll_text_panel`, and modal
+  focus overlay paths; selectable text is currently row-level and must grow into
+  true text-range selection/copy support
+- the GUI still needs context menus, popouts, dockable editor windows,
+  draggable splitters, resize handles, and column controls
 - global UI scaling should behave like normal desktop software, with explicit
   user scale/font controls instead of one hardcoded pixel density
 - separate editor windows/domains are still needed inside the application:

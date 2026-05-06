@@ -75,14 +75,14 @@ namespace epochnamespace::gui
     using Context = epochnamespace::core::Context;
 
     constexpr const char* kAtlasName = "__agui_builtin";
-    constexpr float       kContentPadding = 8.0f;
-    constexpr float       kDefaultFontSizePt = 18.0f;
+    constexpr float       kContentPadding = 6.0f;
+    constexpr float       kDefaultFontSizePt = 16.0f;
     constexpr float       kFontScale = 1.0f;
     constexpr float       kTitleScale = 1.1f;
     constexpr float       kLineSpacingFactor = 0.15f;
     constexpr float       kLetterSpacingFactor = 0.0f;
-    constexpr float       kBoxInnerPadding = 6.0f;
-    constexpr float       kTitleBarPadding = 8.0f;
+    constexpr float       kBoxInnerPadding = 5.0f;
+    constexpr float       kTitleBarPadding = 6.0f;
     constexpr float       kButtonTextClipInset = 2.0f;
     constexpr float       kTextClipSlack = 2.0f;
     constexpr float       kCaretBlinkPeriod = 1.0f;
@@ -177,6 +177,7 @@ namespace epochnamespace::gui
                 SpriteHandle panelBackground{};
                 SpriteHandle consoleBackground{};
                 SpriteHandle titleBar{};
+                SpriteHandle modalScrim{};
             };
 
             bool atlasBuilt = false;
@@ -236,6 +237,38 @@ namespace epochnamespace::gui
         static std::mutex g_contextPendingEventsMutex{};
         static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextMouseDownStates{};
         static thread_local std::unordered_map<const void*, const void*, PtrHash> g_contextActiveWidgets{};
+
+        struct ScrollTextState
+        {
+            std::size_t firstLine = 0;
+            std::size_t selectedLine = 0;
+            bool hasSelection = false;
+            std::size_t lastLineCount = 0;
+        };
+
+        struct ScrollAreaState
+        {
+            float scrollY = 0.0f;
+            float contentHeight = 0.0f;
+        };
+
+        struct ScrollAreaFrame
+        {
+            std::string key{};
+            Vec2 previousCursor{};
+            Vec2 previousMin{};
+            Vec2 previousMax{};
+            Vec2 viewportMin{};
+            Vec2 viewportMax{};
+            float viewportHeight = 0.0f;
+            float viewportWidth = 0.0f;
+            float scrollY = 0.0f;
+            bool showScrollbar = true;
+        };
+
+        static thread_local std::unordered_map<std::string, ScrollTextState> g_scrollTextStates{};
+        static thread_local std::unordered_map<std::string, ScrollAreaState> g_scrollAreaStates{};
+        static thread_local std::vector<ScrollAreaFrame> g_scrollAreaStack{};
 
         struct FrameState
         {
@@ -306,6 +339,32 @@ namespace epochnamespace::gui
                 && g_frame.contentMax.y > g_frame.contentMin.y;
         }
 
+        struct ContentClipScope
+        {
+            Vec2 previousMin{};
+            Vec2 previousMax{};
+
+            ContentClipScope(Vec2 clipMin, Vec2 clipMax) noexcept
+            {
+                previousMin = g_frame.contentMin;
+                previousMax = g_frame.contentMax;
+                g_frame.contentMin = {
+                    (std::max)(previousMin.x, clipMin.x),
+                    (std::max)(previousMin.y, clipMin.y)
+                };
+                g_frame.contentMax = {
+                    (std::min)(previousMax.x, clipMax.x),
+                    (std::min)(previousMax.y, clipMax.y)
+                };
+            }
+
+            ~ContentClipScope()
+            {
+                g_frame.contentMin = previousMin;
+                g_frame.contentMax = previousMax;
+            }
+        };
+
         [[nodiscard]] static float content_right() noexcept
         {
             return has_content_clip() ? g_frame.contentMax.x : (g_frame.origin.x + g_frame.windowSize.x);
@@ -319,6 +378,12 @@ namespace epochnamespace::gui
         [[nodiscard]] static float content_available_width(float cursorX) noexcept
         {
             return (std::max)(8.0f, content_right() - cursorX);
+        }
+
+        [[nodiscard]] static std::string scroll_panel_key(std::string_view id)
+        {
+            const auto ctxValue = reinterpret_cast<std::uintptr_t>(g_frame.ctx);
+            return std::to_string(ctxValue) + "|" + std::string(id);
         }
 
         [[nodiscard]] static bool uses_deferred_gui_batch(const core::Context* ctx) noexcept
@@ -648,15 +713,17 @@ namespace epochnamespace::gui
                     make_solid_pixels(0x18, 0x1D, 0x24, 0xE8, 8, 8), 8, 8);
                 g_resources.defaultDark.titleBar = add_sprite(atlas, "__agui/title_bar",
                     make_solid_pixels(0x2B, 0x31, 0x3B, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultDark.modalScrim = add_sprite(atlas, "__agui/modal_scrim",
+                    make_solid_pixels(0x05, 0x07, 0x0B, 0xB8, 8, 8), 8, 8);
 
                 g_resources.classicLauncher.windowBackground = add_sprite(atlas, "__agui_classic/window_bg",
                     make_solid_pixels(0x33, 0x35, 0x38, 0xFF, 8, 8), 8, 8);
                 g_resources.classicLauncher.buttonNormal = add_sprite(atlas, "__agui_classic/button_normal",
                     make_solid_pixels(0x5B, 0x5F, 0x66, 0xFF, 8, 8), 8, 8);
                 g_resources.classicLauncher.buttonHover = add_sprite(atlas, "__agui_classic/button_hover",
-                    make_solid_pixels(0x76, 0x7C, 0x85, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x6C, 0x71, 0x7A, 0xFF, 8, 8), 8, 8);
                 g_resources.classicLauncher.buttonActive = add_sprite(atlas, "__agui_classic/button_active",
-                    make_solid_pixels(0x94, 0x9A, 0xA3, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0x4C, 0x52, 0x5C, 0xFF, 8, 8), 8, 8);
                 g_resources.classicLauncher.textField = add_sprite(atlas, "__agui_classic/text_field",
                     make_solid_pixels(0x2B, 0x2E, 0x33, 0xFF, 8, 8), 8, 8);
                 g_resources.classicLauncher.textFieldActive = add_sprite(atlas, "__agui_classic/text_field_active",
@@ -667,6 +734,8 @@ namespace epochnamespace::gui
                     make_solid_pixels(0x1F, 0x21, 0x26, 0xFF, 8, 8), 8, 8);
                 g_resources.classicLauncher.titleBar = add_sprite(atlas, "__agui_classic/title_bar",
                     make_solid_pixels(0x22, 0x24, 0x28, 0xFF, 8, 8), 8, 8);
+                g_resources.classicLauncher.modalScrim = add_sprite(atlas, "__agui_classic/modal_scrim",
+                    make_solid_pixels(0x04, 0x05, 0x07, 0xB8, 8, 8), 8, 8);
 
                 g_resources.atlasBuilt = true;
             }
@@ -736,15 +805,19 @@ namespace epochnamespace::gui
 
             if (has_content_clip())
             {
-                if (!rects_intersect(
-                    x, y, w, h,
-                    g_frame.contentMin.x,
-                    g_frame.contentMin.y,
-                    g_frame.contentMax.x - g_frame.contentMin.x,
-                    g_frame.contentMax.y - g_frame.contentMin.y))
+                const float left = (std::max)(x, g_frame.contentMin.x);
+                const float top = (std::max)(y, g_frame.contentMin.y);
+                const float right = (std::min)(x + w, g_frame.contentMax.x);
+                const float bottom = (std::min)(y + h, g_frame.contentMax.y);
+                if (right <= left || bottom <= top)
                 {
                     return;
                 }
+
+                x = left;
+                y = top;
+                w = right - left;
+                h = bottom - top;
             }
 
             if (ctx->windowData && g_frame.ctxShared)
@@ -767,6 +840,17 @@ namespace epochnamespace::gui
         [[nodiscard]] static bool point_in_rect(Vec2 p, float x, float y, float w, float h) noexcept
         {
             return (p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h);
+        }
+
+        [[nodiscard]] static bool point_in_active_clip(Vec2 p) noexcept
+        {
+            return !has_content_clip()
+                || point_in_rect(
+                    p,
+                    g_frame.contentMin.x,
+                    g_frame.contentMin.y,
+                    g_frame.contentMax.x - g_frame.contentMin.x,
+                    g_frame.contentMax.y - g_frame.contentMin.y);
         }
 
         [[nodiscard]] static float base_line_height(float scale) noexcept
@@ -1310,6 +1394,7 @@ namespace epochnamespace::gui
             g_frame.lastButtonBounds.reset();
             g_frame.activeTheme = ThemeVariant::DefaultDark;
             g_frame.themeStack.clear();
+            g_scrollAreaStack.clear();
         }
 
         static void forget_upload_state(const void* ctxKey) noexcept
@@ -1441,6 +1526,21 @@ namespace epochnamespace::gui
         g_deferredDrawBatches.erase(ctx);
         g_contextMouseDownStates.erase(ctx);
         g_contextActiveWidgets.erase(ctx);
+        const std::string scrollPrefix = std::to_string(reinterpret_cast<std::uintptr_t>(ctx)) + "|";
+        for (auto it = g_scrollTextStates.begin(); it != g_scrollTextStates.end();)
+        {
+            if (it->first.starts_with(scrollPrefix))
+                it = g_scrollTextStates.erase(it);
+            else
+                ++it;
+        }
+        for (auto it = g_scrollAreaStates.begin(); it != g_scrollAreaStates.end();)
+        {
+            if (it->first.starts_with(scrollPrefix))
+                it = g_scrollAreaStates.erase(it);
+            else
+                ++it;
+        }
     }
 
     std::uint64_t deferred_batch_generation(const core::Context* ctx) noexcept
@@ -1631,6 +1731,27 @@ namespace epochnamespace::gui
         g_frame.contentMax = {};
     }
 
+    void begin_modal_window(const ModalWindowOptions& options) noexcept
+    {
+        if (!g_frame.ctx) return;
+
+        try { ensure_resources(); }
+        catch (...) { return; }
+
+        if (options.dim_background && options.viewport_size.x > 0.0f && options.viewport_size.y > 0.0f)
+        {
+            const auto& palette = active_palette();
+            draw_sprite(palette.modalScrim, 0.0f, 0.0f, options.viewport_size.x, options.viewport_size.y);
+        }
+
+        begin_window(options.title, options.position, options.size);
+    }
+
+    void end_modal_window() noexcept
+    {
+        end_window();
+    }
+
     WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept
     {
         WidgetBounds bounds{};
@@ -1698,7 +1819,7 @@ namespace epochnamespace::gui
         bounds.size = { contentWidth, contentHeight };
         return bounds;
     }
-    bool button(std::string_view label, Vec2 size) noexcept
+    static bool button_with_state(std::string_view label, Vec2 size, bool selected) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return false;
 
@@ -1706,16 +1827,26 @@ namespace epochnamespace::gui
         const float baseHeight = base_line_height(kFontScale);
         const float minWidth = space_advance(kFontScale) + 2.0f * kContentPadding;
         const float width = (std::max)(static_cast<float>(size.x), minWidth);
-        const float height = (std::max)(static_cast<float>(size.y), baseHeight + 2.0f * kContentPadding);
+        const float height = (std::max)(static_cast<float>(size.y), baseHeight + 2.0f * kBoxInnerPadding);
 
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
         const auto& palette = active_palette();
 
         const SpriteHandle background =
-            hovered ? (g_frame.mouseDown ? palette.buttonActive : palette.buttonHover)
+            selected ? palette.buttonActive
+            : hovered ? (g_frame.mouseDown ? palette.buttonActive : palette.buttonHover)
             : palette.buttonNormal;
 
         draw_sprite(background, pos.x, pos.y, width, height);
+        if (hovered || selected)
+        {
+            const SpriteHandle accent = (g_frame.mouseDown || selected)
+                ? palette.textFieldActive
+                : palette.buttonHover;
+            draw_sprite(accent, pos.x, pos.y, width, 2.0f);
+            draw_sprite(accent, pos.x, pos.y, 2.0f, height);
+        }
 
         const std::string fittedLabel = fit_text_to_width(
             label,
@@ -1743,6 +1874,11 @@ namespace epochnamespace::gui
         return hovered && g_frame.justPressed;
     }
 
+    bool button(std::string_view label, Vec2 size) noexcept
+    {
+        return button_with_state(label, size, false);
+    }
+
     bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return false;
@@ -1751,7 +1887,8 @@ namespace epochnamespace::gui
         const float width = (std::max)(static_cast<float>(size.x), 1.0f);
         const float height = (std::max)(static_cast<float>(size.y), 1.0f);
 
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
         const auto& palette = active_palette();
 
         const SpriteHandle background =
@@ -1963,7 +2100,8 @@ namespace epochnamespace::gui
         const float width = (std::max)(static_cast<float>(size.x), minWidth);
         const float height = (std::max)(static_cast<float>(size.y), minHeight);
 
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
         const void* id = static_cast<const void*>(&text);
         const void* ctxKey = static_cast<const void*>(g_frame.ctx);
         const void* activeWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
@@ -2107,7 +2245,7 @@ namespace epochnamespace::gui
         {
             const auto& item = items[i];
             set_cursor({ x, rowStart.y });
-            if (button(item.label, { item.width, height }))
+            if (button_with_state(item.label, { item.width, height }, item.active))
                 clicked = i;
             x += (std::max)(1.0f, item.width) + gap;
         }
@@ -2115,6 +2253,14 @@ namespace epochnamespace::gui
         set_cursor(rowStart);
         advance_cursor({ 0.0f, (std::max)(1.0f, height) + kContentPadding });
         return clicked;
+    }
+
+    std::optional<std::size_t> tab_bar(
+        std::span<const SegmentedButtonSpec> tabs,
+        float height,
+        float gap) noexcept
+    {
+        return segmented_button_row(tabs, height, gap);
     }
 
     std::optional<std::size_t> inline_button_row(
@@ -2183,6 +2329,239 @@ namespace epochnamespace::gui
         advance_cursor({ 0.0f, height + kContentPadding });
     }
 
+    ScrollAreaResult begin_scroll_area(const ScrollAreaOptions& options) noexcept
+    {
+        ScrollAreaResult result{};
+        if (!g_frame.insideWindow || !g_frame.ctx)
+            return result;
+
+        ensure_resources();
+
+        const Vec2 pos = g_frame.cursor;
+        const float availableWidth = content_available_width(pos.x);
+        const float width = options.size.x > 0.0f
+            ? (std::max)(48.0f, options.size.x)
+            : availableWidth;
+        const float height = options.size.y > 0.0f
+            ? (std::max)(48.0f, options.size.y)
+            : 180.0f;
+
+        const std::string id = options.id.empty()
+            ? std::to_string(reinterpret_cast<std::uintptr_t>(g_frame.ctx)) + ":scroll-area"
+            : std::string(options.id);
+        auto& state = g_scrollAreaStates[scroll_panel_key(id)];
+
+        const float estimatedContentHeight = (std::max)(
+            height,
+            options.content_height > 0.0f ? options.content_height : state.contentHeight);
+        const float maxScroll = (std::max)(0.0f, estimatedContentHeight - height);
+        state.scrollY = (std::clamp)(state.scrollY, 0.0f, maxScroll);
+
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
+        if (hovered && g_frame.mouseWheelDelta != 0)
+        {
+            const float wheelSteps = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
+            const float step = line_advance_amount(kFontScale) * 3.0f;
+            state.scrollY = (std::clamp)(state.scrollY - wheelSteps * step, 0.0f, maxScroll);
+            g_frame.mouseWheelDelta = 0;
+            result.wheel_scrolled = true;
+        }
+
+        const auto& palette = active_palette();
+        if (options.draw_background)
+            draw_sprite(palette.consoleBackground, pos.x, pos.y, width, height);
+
+        const float scrollbarWidth = (options.show_scrollbar && estimatedContentHeight > height + 1.0f)
+            ? 10.0f
+            : 0.0f;
+        const float contentWidth = (std::max)(1.0f, width - scrollbarWidth - 2.0f);
+
+        g_scrollAreaStack.push_back(ScrollAreaFrame{
+            .key = scroll_panel_key(id),
+            .previousCursor = g_frame.cursor,
+            .previousMin = g_frame.contentMin,
+            .previousMax = g_frame.contentMax,
+            .viewportMin = pos,
+            .viewportMax = { pos.x + width, pos.y + height },
+            .viewportHeight = height,
+            .viewportWidth = width,
+            .scrollY = state.scrollY,
+            .showScrollbar = options.show_scrollbar
+        });
+
+        g_frame.contentMin = {
+            (std::max)(g_frame.contentMin.x, pos.x),
+            (std::max)(g_frame.contentMin.y, pos.y)
+        };
+        g_frame.contentMax = {
+            (std::min)(g_frame.contentMax.x, pos.x + contentWidth),
+            (std::min)(g_frame.contentMax.y, pos.y + height)
+        };
+        g_frame.cursor = { pos.x, pos.y - state.scrollY };
+
+        result.scroll_y = state.scrollY;
+        result.content_height = estimatedContentHeight;
+        return result;
+    }
+
+    void end_scroll_area() noexcept
+    {
+        if (!g_frame.insideWindow || g_scrollAreaStack.empty())
+            return;
+
+        const ScrollAreaFrame frame = g_scrollAreaStack.back();
+        g_scrollAreaStack.pop_back();
+
+        auto& state = g_scrollAreaStates[frame.key];
+        const float drawnContentHeight = (std::max)(
+            frame.viewportHeight,
+            (g_frame.cursor.y + frame.scrollY) - frame.viewportMin.y);
+        state.contentHeight = drawnContentHeight;
+        const float maxScroll = (std::max)(0.0f, state.contentHeight - frame.viewportHeight);
+        state.scrollY = (std::clamp)(state.scrollY, 0.0f, maxScroll);
+
+        g_frame.contentMin = frame.previousMin;
+        g_frame.contentMax = frame.previousMax;
+        g_frame.cursor = {
+            frame.previousCursor.x,
+            frame.viewportMax.y + kContentPadding
+        };
+
+        if (frame.showScrollbar && state.contentHeight > frame.viewportHeight + 1.0f)
+        {
+            const auto& palette = active_palette();
+            const float scrollbarWidth = 10.0f;
+            const float trackX = frame.viewportMax.x - scrollbarWidth;
+            const float trackY = frame.viewportMin.y;
+            draw_sprite(palette.textField, trackX, trackY, scrollbarWidth, frame.viewportHeight);
+
+            const float visibleRatio = frame.viewportHeight / state.contentHeight;
+            const float thumbHeight = (std::max)(18.0f, frame.viewportHeight * visibleRatio);
+            const float scrollRatio = maxScroll > 0.0f ? state.scrollY / maxScroll : 0.0f;
+            const float thumbY = trackY + (frame.viewportHeight - thumbHeight) * scrollRatio;
+            draw_sprite(palette.buttonActive, trackX, thumbY, scrollbarWidth, thumbHeight);
+        }
+    }
+
+    ScrollTextPanelResult scroll_text_panel(const ScrollTextPanelOptions& options) noexcept
+    {
+        ScrollTextPanelResult result{};
+        if (!g_frame.insideWindow || !g_frame.ctx)
+            return result;
+
+        ensure_resources();
+
+        const Vec2 pos = g_frame.cursor;
+        const float availableWidth = content_available_width(pos.x);
+        const float width = options.size.x > 0.0f
+            ? (std::max)(64.0f, options.size.x)
+            : availableWidth;
+        const float height = options.size.y > 0.0f
+            ? (std::max)(48.0f, options.size.y)
+            : 160.0f;
+        const auto& palette = active_palette();
+
+        draw_sprite(palette.consoleBackground, pos.x, pos.y, width, height);
+
+        const float scrollbarWidth = options.lines.size() > 1 ? 10.0f : 0.0f;
+        const float contentX = pos.x + kBoxInnerPadding;
+        const float contentY = pos.y + kBoxInnerPadding;
+        const float contentWidth = (std::max)(1.0f, width - 2.0f * kBoxInnerPadding - scrollbarWidth);
+        const float contentHeight = (std::max)(1.0f, height - 2.0f * kBoxInnerPadding);
+        const float linePitch = line_advance_amount(kFontScale);
+        const std::size_t visibleLines = (std::max)(std::size_t{ 1 },
+            static_cast<std::size_t>(std::floor(contentHeight / (std::max)(1.0f, linePitch))));
+
+        const std::string id = options.id.empty()
+            ? std::to_string(reinterpret_cast<std::uintptr_t>(options.lines.data()))
+            : std::string(options.id);
+        auto& state = g_scrollTextStates[scroll_panel_key(id)];
+
+        const std::size_t lineCount = options.lines.size();
+        const std::size_t maxFirstLine = lineCount > visibleLines ? lineCount - visibleLines : 0;
+        const bool wasAtBottom = state.lastLineCount == 0
+            || state.firstLine + visibleLines >= state.lastLineCount;
+        if (options.stick_to_bottom && lineCount != state.lastLineCount && wasAtBottom)
+            state.firstLine = maxFirstLine;
+        else
+            state.firstLine = (std::min)(state.firstLine, maxFirstLine);
+        state.lastLineCount = lineCount;
+
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
+        if (hovered && g_frame.mouseWheelDelta != 0)
+        {
+            const int wheelSteps = (std::max)(1, std::abs(g_frame.mouseWheelDelta) / 120);
+            if (g_frame.mouseWheelDelta > 0)
+                state.firstLine = state.firstLine > static_cast<std::size_t>(wheelSteps)
+                    ? state.firstLine - static_cast<std::size_t>(wheelSteps)
+                    : 0;
+            else
+                state.firstLine = (std::min)(maxFirstLine, state.firstLine + static_cast<std::size_t>(wheelSteps));
+
+            g_frame.mouseWheelDelta = 0;
+            result.wheel_scrolled = true;
+        }
+
+        result.first_visible_line = state.firstLine;
+        {
+            ContentClipScope clip{
+                { contentX, contentY },
+                { contentX + contentWidth, contentY + contentHeight }
+            };
+
+            const std::size_t endLine = (std::min)(lineCount, state.firstLine + visibleLines);
+            for (std::size_t lineIndex = state.firstLine; lineIndex < endLine; ++lineIndex)
+            {
+                const float rowY = contentY + static_cast<float>(lineIndex - state.firstLine) * linePitch;
+                const bool lineHovered = hovered && point_in_rect(g_frame.mousePos, contentX, rowY, contentWidth, linePitch);
+
+                if (options.selectable && g_frame.justPressed && lineHovered)
+                {
+                    state.selectedLine = lineIndex;
+                    state.hasSelection = true;
+                    result.selected_line = lineIndex;
+                }
+
+                if (options.selectable && state.hasSelection && state.selectedLine == lineIndex)
+                    draw_sprite(palette.buttonActive, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, linePitch + 2.0f);
+                else if (lineHovered)
+                    draw_sprite(palette.buttonHover, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, linePitch + 2.0f);
+
+                std::string_view line{ options.lines[lineIndex] };
+                if (options.max_line_chars > 0 && line.size() > options.max_line_chars)
+                    line = line.substr(0, options.max_line_chars);
+
+                const std::string fitted = fit_text_to_width(line, contentWidth, kFontScale);
+                draw_text_line(fitted.empty() ? line : std::string_view{ fitted }, contentX, rowY, kFontScale);
+            }
+        }
+
+        if (scrollbarWidth > 0.0f)
+        {
+            const float trackX = pos.x + width - kBoxInnerPadding - scrollbarWidth;
+            const float trackY = contentY;
+            draw_sprite(palette.textField, trackX, trackY, scrollbarWidth, contentHeight);
+
+            if (lineCount > visibleLines)
+            {
+                const float visibleRatio = static_cast<float>(visibleLines) / static_cast<float>(lineCount);
+                const float thumbHeight = (std::max)(18.0f, contentHeight * visibleRatio);
+                const float scrollRatio = maxFirstLine > 0
+                    ? static_cast<float>(state.firstLine) / static_cast<float>(maxFirstLine)
+                    : 0.0f;
+                const float thumbY = trackY + (contentHeight - thumbHeight) * scrollRatio;
+                draw_sprite(palette.buttonActive, trackX, thumbY, scrollbarWidth, thumbHeight);
+            }
+        }
+
+        if (state.hasSelection && state.selectedLine < lineCount)
+            result.selected_line = state.selectedLine;
+
+        advance_cursor({ 0.0f, height + kContentPadding });
+        return result;
+    }
+
     ConsoleWindowResult console_window(const ConsoleWindowOptions& options) noexcept
     {
         ConsoleWindowResult result{};
@@ -2192,12 +2571,7 @@ namespace epochnamespace::gui
         if (!g_frame.insideWindow || !g_frame.ctx) { end_window(); return result; }
 
         ensure_resources();
-        const auto& palette = active_palette();
-
         const float availableWidth = (std::max)(0.0f, options.size.x - 2.0f * kContentPadding);
-
-        const float titleHeight = line_advance_amount(kTitleScale);
-        const float titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
 
         const float fieldHeight = options.input
             ? (base_line_height(kFontScale) + 2.0f * kBoxInnerPadding)
@@ -2211,26 +2585,17 @@ namespace epochnamespace::gui
         const Vec2 logPos = g_frame.cursor;
 
         if (availableWidth > 0.0f && logHeight > 0.0f)
-            draw_sprite(palette.consoleBackground, logPos.x, logPos.y, availableWidth, logHeight);
-
-        const float contentWidth = (std::max)(1.0f, availableWidth - 2.0f * kBoxInnerPadding);
-        float penY = logPos.y + kBoxInnerPadding;
-        const float maxY = logPos.y + (std::max)(0.0f, logHeight - kBoxInnerPadding);
-
-        if (!options.lines.empty() && logHeight > 0.0f)
         {
-            const std::size_t count = options.lines.size();
-            const std::size_t start = (count > options.max_visible_lines) ? (count - options.max_visible_lines) : 0;
-
-            for (std::size_t i = start; i < count; ++i)
-            {
-                const std::string& line = options.lines[i];
-                const float drawn = draw_wrapped_text(line, logPos.x + kBoxInnerPadding, penY, contentWidth, kFontScale);
-
-                const float paragraphGap = (std::max)(0.0f, line_advance_amount(kFontScale) - base_line_height(kFontScale));
-                penY += drawn + paragraphGap;
-                if (penY > maxY) break;
-            }
+            set_cursor(logPos);
+            const std::string panelId = std::string(options.title) + ".log";
+            (void)scroll_text_panel(ScrollTextPanelOptions{
+                .id = panelId,
+                .size = { availableWidth, logHeight },
+                .lines = options.lines,
+                .max_line_chars = options.max_visible_lines == 0 ? 768u : options.max_visible_lines * 16u,
+                .selectable = true,
+                .stick_to_bottom = true
+            });
         }
 
         set_cursor({ logPos.x, logPos.y + logHeight + kContentPadding });

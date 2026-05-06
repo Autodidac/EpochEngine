@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.08`
+Current source version: `v0.84.10`
 
 ## Architecture highlights
 
@@ -15,8 +15,9 @@ Current source version: `v0.84.08`
 - **Backend stack**: OpenGL, SDL, Raylib, SFML, software, and noop/headless are
   all represented in the active engine tree; Vulkan remains experimental.
 - **Custom UI on automated texture/atlas plumbing**: GUI layout, atlas upload,
-  sprite submission, and font/text rendering are engine-owned systems shared
-  across the active render paths.
+  sprite submission, clipped panels, tab bars, scroll text, arbitrary scroll
+  areas, and font/text rendering are engine-owned systems shared across the
+  active render paths.
 - **Launcher/editor split**: project and game entry now live in the launcher,
   while the editor uses a more traditional desktop-style menu flow.
 - **Task graph + scripting**: reload and background work are funneled through
@@ -26,10 +27,10 @@ Current source version: `v0.84.08`
 - **Executable-root runtime resolution**: fonts, scripts, shaders, captures,
   workspace paths, and updater scratch roots are being normalized around one
   executable-root/runtime-root resolver instead of cwd guesses.
-- **Two-role engine AI path**: the intended runtime roles are internal
-  EpochBot and the local MCP/control layer, while external local LLMs remain
-  development helpers for testing, curation, and acceleration rather than a
-  third engine runtime role.
+- **Three-piece engine AI path**: the intended internal pieces are EpochBot,
+  the local MCP/control/tool harness layer, and an offline/injectable backup
+  LLM path. External local OpenAI-compatible LLMs remain selected
+  teacher/reviewer helpers for testing, curation, and acceleration.
 - **Systems workspace direction**: the editor shell is moving toward real
   frame/task graph surfaces rendered as engine-generated textures inside the
   dock UI instead of placeholder text.

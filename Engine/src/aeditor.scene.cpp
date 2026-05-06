@@ -1743,6 +1743,7 @@ namespace
         {
             std::string projectText = read_text_file(projectFile);
             const std::string original = projectText;
+            replace_all(projectText, "<PlatformToolset>v142</PlatformToolset>", "<PlatformToolset>v143</PlatformToolset>");
             replace_all(projectText, "<PlatformToolset>v145</PlatformToolset>", "<PlatformToolset>v143</PlatformToolset>");
             replace_all(projectText, "<LanguageStandard>stdcpplatest</LanguageStandard>", "<LanguageStandard>stdcpp23</LanguageStandard>");
             if (projectText != original && !write_text_file(projectFile, projectText))

@@ -126,6 +126,48 @@ namespace epochnamespace::gui
         bool send_clicked{};
     };
 
+    export struct ScrollTextPanelOptions
+    {
+        std::string_view id{};
+        Vec2 size{};
+        const std::vector<std::string>& lines;
+        std::size_t max_line_chars{ 768 };
+        bool selectable{ true };
+        bool stick_to_bottom{ true };
+    };
+
+    export struct ScrollTextPanelResult
+    {
+        std::size_t first_visible_line{};
+        std::optional<std::size_t> selected_line{};
+        bool wheel_scrolled{};
+    };
+
+    export struct ScrollAreaOptions
+    {
+        std::string_view id{};
+        Vec2 size{};
+        float content_height{ 0.0f };
+        bool draw_background{ false };
+        bool show_scrollbar{ true };
+    };
+
+    export struct ScrollAreaResult
+    {
+        float scroll_y{};
+        float content_height{};
+        bool wheel_scrolled{};
+    };
+
+    export struct ModalWindowOptions
+    {
+        std::string_view title{};
+        Vec2 position{};
+        Vec2 size{};
+        Vec2 viewport_size{};
+        bool dim_background{ true };
+    };
+
     export struct SegmentedButtonSpec
     {
         std::string_view label{};
@@ -155,6 +197,8 @@ namespace epochnamespace::gui
 
     export void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void end_window() noexcept;
+    export void begin_modal_window(const ModalWindowOptions& options) noexcept;
+    export void end_modal_window() noexcept;
     export WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void push_theme(ThemeVariant theme) noexcept;
     export void pop_theme() noexcept;
@@ -174,6 +218,10 @@ namespace epochnamespace::gui
         std::span<const SegmentedButtonSpec> items,
         float height = 26.0f,
         float gap = 6.0f) noexcept;
+    export std::optional<std::size_t> tab_bar(
+        std::span<const SegmentedButtonSpec> tabs,
+        float height = 28.0f,
+        float gap = 2.0f) noexcept;
     export std::optional<std::size_t> inline_button_row(
         std::span<const InlineButtonSpec> items,
         float height = 24.0f,
@@ -185,6 +233,9 @@ namespace epochnamespace::gui
         bool multiline = false) noexcept;
 
     export void text_box(std::string_view text, Vec2 size) noexcept;
+    export ScrollAreaResult begin_scroll_area(const ScrollAreaOptions& options) noexcept;
+    export void end_scroll_area() noexcept;
+    export ScrollTextPanelResult scroll_text_panel(const ScrollTextPanelOptions& options) noexcept;
 
     export ConsoleWindowResult console_window(const ConsoleWindowOptions& options) noexcept;
 

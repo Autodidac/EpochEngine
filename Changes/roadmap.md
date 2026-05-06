@@ -246,9 +246,19 @@ engine shape and should be treated as starting truth for the next passes:
   forbidding bypass-capable app/server launch, listener creation, port binding,
   hidden control surfaces, or model-accessible services without a human
   enable/run action
-- an AI workspace split into Self-Iteration Sandbox, Tool Harness,
-  Engine Assistant, ProjectLauncher evidence, Training, and Ops/How-To domains
-  so rebuild/tooling/training controls are discoverable without mixing normal
+- a temporary bottom Console Dock split into Project, Scripts, Systems, AI, and
+  Output evidence tabs. This is not the final editor-window system; it is the
+  current log/evidence strip until separate editor frames/views are promoted.
+- first-pass shared GUI scroll areas for arbitrary window bodies, now used by
+  the World Outliner, Inspector, and non-output Console Dock pages so tall AI
+  controls, project evidence, and status panels stay reachable on normal
+  single-monitor layouts.
+- active GUI clipping and hit-test containment for panel content so editor
+  controls stop bleeding visually or interactively into the Perspective scene
+  view while the fuller dock/window system is still being built.
+- AI Console Dock domains split Self-Iteration Sandbox, Tool Harness,
+  Engine Assistant, ProjectLauncher evidence, Training, Viz, and Ops status so
+  the Inspector can expose the real controls without mixing normal
   game/software authoring with engine self-iteration
 - local AI model discovery is explicit-selection only: the editor may list
   available local OpenAI-compatible models, but chat/tooling stays disabled and
@@ -260,12 +270,17 @@ engine shape and should be treated as starting truth for the next passes:
 - an editor-owned continuous self-iteration build lane that watches active project/script
   evidence, queues one child-project build at a time, and feeds successful
   build artifacts back into staged AI packets for verifier/gate review
+- generated Sandbox child builds now repair stale Windows toolset metadata to
+  `v143`, and the checked-in engine projects referenced by those child builds
+  also advertise `v143` so manual solution builds and Sandbox scripts do not
+  require unavailable `v145` tooling.
 - the Self-Iteration Sandbox can repair active project evidence from the editor
   by regenerating or verifying the selected project shell before queueing a
   builder pass
 - the Self-Iteration Sandbox exposes repair, manual builder queue, watcher
-  controls, and sandbox scene-training packet staging in the Inspector/AI
-  workspace so Phase 5 can be driven without command-line operation
+  controls, and sandbox scene-training packet staging in the Inspector, while
+  the AI Console Dock remains a status/visual/log surface so Phase 5 can be
+  driven without command-line operation
 - AI evidence lookup is now executable/repo-root aware, so launching the editor
   from Visual Studio/MSBuild output directories no longer makes project
   manifests and build artifacts appear missing only because the cwd changed
@@ -343,10 +358,24 @@ engine shape and should be treated as starting truth for the next passes:
 - keep the launcher centered on projects, contexts, settings, and updates
 - keep generated project `PROJECT_NOTES.md` visible from the Project workspace
   so scripted/project/AI actions leave a readable synopsis and usage trail
-- keep the editor centered on `Project`, `Scripts`, `Systems`, `AI`, and
-  `Output`
+- keep generated Sandbox/ProjectLauncher child builds anchored to current VS
+  2022 `v143` toolset metadata in both generated files and the checked-in
+  engine projects those generated files reference.
+- keep the bottom dock centered on `Project`, `Scripts`, `Systems`, `AI`, and
+  `Output` as evidence/status tabs, not as the final scene/editor-window model
 - replace the temporary console/chat column buttons with a real draggable
   resize-column control once the GUI input model has stable splitters
+- build proper editor frames/windows/views next: Scene/Game, Software/Tool,
+  Self-Iteration Sandbox, AI Visualizer, ProjectLauncher, and Build/Output
+  should be independently focusable/dockable surfaces using shared GUI controls
+- continue modular GUI foundation work: tab bars, scrollable/selectable context
+  panels, modal/focus overlays, context menus, popouts, dockable/editor windows,
+  draggable splitters, resize handles, and column controls must be common engine
+  GUI primitives rather than per-pane hacks
+- design borderless linked-context popouts as explicit operator-controlled
+  editor windows for GUI containers, not hidden always-on backends. Each popout
+  must own focus, z-order, teardown, redock, and evidence logging before it can
+  become part of normal AI/editor operation.
 
 ### 3. Systems Workspace And Time Spine
 
@@ -396,6 +425,9 @@ engine shape and should be treated as starting truth for the next passes:
   root cause is fixed
 - improve project, script, AI, systems, and output surfaces until the shell
   reads as a professional editor rather than a debug console
+- continue replacing full-width placeholder button rows with proper bounded
+  widgets: scroll views, resize handles, hover/click states, clipping, and
+  selectable text must work before the AI workspace can be considered usable.
 - keep the Self-Iteration Sandbox editor-native until runtime surfaces are
   stable enough to be optional decoration, not the only way to operate the loop
 - keep AI workspace domains organized around concrete jobs:
@@ -421,8 +453,9 @@ engine shape and should be treated as starting truth for the next passes:
 - keep project evidence repair available in the Self-Iteration Sandbox domain
   so Phase 5 work can recover from missing generated shells without leaving the
   editor
-- keep the Inspector copy of AI repair/build/watcher controls alive until the
-  bottom workspace gets a proper scroll/resize treatment
+- keep the Inspector copy of AI repair/build/watcher controls as the primary
+  operator command surface; the bottom Console Dock is status/log/visual
+  feedback until dedicated AI and editor windows land
 - promote only staged packets that include root-resolved project/build/output
   evidence; cwd-dependent evidence is considered invalid
 - train from real editor tool actions by capturing before/after state from the
