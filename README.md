@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.11-1F7A4C?style=for-the-badge" alt="Current development source v0.84.11" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.13-1F7A4C?style=for-the-badge" alt="Current development source v0.84.13" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
 </p>
 
@@ -46,7 +46,8 @@ Current feature spine:
 - Multicontext backend orchestration across Raylib, SDL3, SFML, Vulkan,
   OpenGL, software, and noop/headless paths.
 - Model-backed launcher demo flow using the embedded Mini Sponza asset.
-- Systems, Assets, Scripts, Project, AI, and Output workspaces inside the editor.
+- Systems, Assets, Project, AI, and Output workspaces inside the editor, with
+  scripts now surfaced through the normal asset/project view.
 - First-pass project file browser, project-local script stub creation, and
   file-type asset thumbnail cards for active scene/model/image/audio/text assets.
 - Engine AI loop centered on `EpochBot`, local MCP/control harnesses, and an
@@ -91,7 +92,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.11`.
+- Source is currently the active development line at `v0.84.13`.
 - The latest published stable runtime release is `v0.84.05`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
@@ -114,8 +115,12 @@ AI sandbox and training instructions live with the AI assets in `Engine/ai/READM
   project shells instead of trapping the editor in fake sample flows.
 - Generated game and software/tool project shells with explicit build, script,
   output, and manifest proof surfaced in the editor.
-- Engine-owned GUI/text rendering with reusable controls and workspace tabs
-  instead of middleware-owned editor UI.
+- Non-GUI project-shell self-tests for Sandbox and ProjectLauncher, including
+  `--editor-project-self-test <id>` from the checked-in engine and
+  `--project-self-test` from generated child outputs.
+- Engine-owned GUI/text rendering with reusable controls, workspace tabs,
+  open/close panel visibility, and first-pass draggable splitters instead of
+  middleware-owned editor UI.
 - Engine-owned C++23 scripting with project-local source resolution, validation,
   build actions, and runtime execution from the live shell.
 - Editor-visible script/file/asset surfaces so Sandbox and ProjectLauncher work
@@ -211,6 +216,15 @@ Example app only:
 
 ```powershell
 & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" Engine.sln /t:ConsoleApplication1 /p:Configuration=Debug /p:Platform=x64 /m:1
+```
+
+Generated shell self-test:
+
+```powershell
+.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test sandbox
+.\Projects\Sandbox\bin\windows\Debug\x64\Sandbox.exe --project-self-test
+.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test projectlauncher
+.\Projects\ProjectLauncher\bin\windows\Debug\x64\ProjectLauncher.exe --project-self-test
 ```
 
 ### Build with CMake

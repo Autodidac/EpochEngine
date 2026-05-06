@@ -1099,7 +1099,16 @@ namespace epoch::ai
 #endif
                 if (rawResponse)
                     *rawResponse = resp;
-                const std::string parsed = trim(extract_lmstudio_message_content(resp));
+                std::string parsed = trim(extract_lmstudio_message_content(resp));
+                if (parsed.empty())
+                    parsed = trim(extract_openai_choice_message_content(resp));
+                if (parsed.empty())
+                {
+                    std::string_view sv{ resp };
+                    parsed = trim(extract_json_string_field_after(sv, "\"content\""));
+                    if (parsed.empty())
+                        parsed = trim(extract_json_string_field_after(sv, "\"text\""));
+                }
                 if (!parsed.empty())
                     return parsed;
 
@@ -1127,8 +1136,11 @@ namespace epoch::ai
 
                 const std::string error = extract_json_error_message(rawResponse);
                 if (!error.empty())
+                {
                     core::log::warn("ai", epoch::string_view{error.data(), error.size()});
-                return {};
+                    return std::string("Local model API error: ") + error;
+                }
+                return "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response.";
             }
             catch (const std::exception& ex)
             {
@@ -1710,7 +1722,8 @@ namespace epoch::ai
             return "No AI model selected. Open Workspace > AI, scan local models, and choose a model before running chat/tooling.";
 
         if (!g_bot) init_bot();
-        if (!g_bot) return {};
+        if (!g_bot)
+            return "AI bot could not initialize. Confirm a local model is selected and the endpoint is reachable.";
 
         const auto reply = g_bot->submit(user_text);
         if (!reply.text.empty())
@@ -1723,6 +1736,10 @@ namespace epoch::ai
                 .source_path = active_model_manifest().manifest_path
             });
         }
+        if (reply.text.empty())
+            return std::string("No decodable reply from selected local model '") + g_selectedModel
+                + "' at " + g_selectedEndpoint
+                + ". Check the endpoint/model selection and retry.";
         return reply.text;
     }
 }

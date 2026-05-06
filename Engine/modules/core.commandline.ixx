@@ -283,7 +283,9 @@ namespace epochnamespace::core::cli
         bool update_requested = false;
         bool force_update = false;
         bool editor_requested = false;
+        bool editor_project_self_test_requested = false;
         RuntimePath runtime = RuntimePath::Epoch;
+        std::string editor_project_self_test_id{};
     };
 
     export [[nodiscard]] inline bool apply_backend_selection(const std::string_view value)
@@ -434,6 +436,8 @@ namespace epochnamespace::core::cli
                     "  --trace-menu-button0       Log GUI bounds for menu button index 0\n"
                     "  --trace-raylib-design      Log framebuffer vs design canvas dimensions\n"
                     "  --editor                   Start the editor interface\n"
+                    "  --editor-project-self-test <id>\n"
+                    "                             Materialize and build an editor project shell, then exit\n"
                     "  --menu                     Start the menu + games loop\n"
                     "  --runtime <epoch|legacy>   Select epoch-native or legacy parity runtime\n"
                     "  --epoch-native             Shortcut for --runtime epoch\n"
@@ -495,6 +499,15 @@ namespace epochnamespace::core::cli
             {
                 result.editor_requested = true;
                 editor_requested = true;
+            }
+            else if (key == "--editor-project-self-test"sv)
+            {
+                const auto parsed = read_value(key);
+                if (!parsed.empty())
+                {
+                    result.editor_project_self_test_requested = true;
+                    result.editor_project_self_test_id = std::string(parsed);
+                }
             }
             else if (key == "--menu"sv)
             {

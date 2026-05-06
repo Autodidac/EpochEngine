@@ -1,5 +1,41 @@
 # Epoch Changelog
 
+## [v0.84.13]
+- Bumped the active source line to `v0.84.13` for Sandbox-vs-launcher target
+  routing, generated child-shell self-test coverage, and GUI press identity
+  stabilization under resize.
+- Added the root non-GUI `--editor-project-self-test <id>` path so the checked-in
+  engine can materialize/build a selected editor project shell before the child
+  executable is launched with `--project-self-test`.
+- Forced Self-Iteration Sandbox controls and watcher builds to target the
+  `sandbox` profile instead of whichever generated game/tool project was last
+  active, and made stale generated shell manifests rewrite when id/script/template
+  evidence does not match the selected profile.
+- Changed ProjectLauncher to a tool profile so generated launcher shells no
+  longer report themselves as game projects.
+- Stabilized GUI button identity by using window-local widget ordering instead
+  of pixel-position hashes, reducing resize/pressed-state flicker and missed
+  launcher/editor actions.
+
+## [v0.84.12]
+- Bumped the active source line to `v0.84.12` for generated project
+  self-tests, explicit save/run workflow cleanup, the MSVC icon update, and
+  first-pass resizable editor panels.
+- Stopped project selection from silently materializing project shells; the
+  editor now uses explicit Save Project actions and the single centered Run
+  control to save/build/run the active project or selected script.
+- Folded script selection and creation into the normal Assets/project surface
+  instead of treating scripting as a separate editor workspace.
+- Repaired generated Sandbox/ProjectLauncher child project references so
+  manual and script-driven builds no longer try to link a missing
+  `StaticLib1.lib`, and added `--project-self-test` for non-GUI verification.
+- Added GUI mouse-state exports plus dock/open/close state and draggable
+  side/bottom splitters for the World Outliner, Inspector, Console Dock, and AI
+  Chat layout. Borderless linked-context panel popouts remain staged for the
+  next context-host pass, not claimed complete here.
+- Updated the Windows/MSVC app icon from the supplied Epoch logo while leaving
+  Linux/CMake image paths alone.
+
 ## [v0.84.11]
 - Bumped the active source line to `v0.84.11` for the script/file/asset
   workspace pass, console-dock glyph smear fix, and press/release button

@@ -100,11 +100,12 @@ the same engine-owned path.
   duplicated engine-source projects and embedded-engine builds that include the
   engine surface from `Engine/include/`, `Engine/modules/`, `Engine/src/`,
   `Engine/src/scripts/`, and `Engine/resource/`
-- the scripting/project dock should expose script lists, source paths, run/build
+- the project/assets dock should expose script lists, source paths, run/build
   actions, and compile/load diagnostics
-- the `Scripts` workspace now creates project-local `.ascript.cpp` stubs, lists
-  project and engine script files, and exposes a shallow active-project
-  file/folder browser so scripts can be selected without command-line digging
+- the `Assets` workspace now owns script visibility: it creates project-local
+  `.ascript.cpp` stubs, lists project and engine script files, and exposes a
+  shallow active-project file/folder browser so scripts can be selected without
+  command-line digging
 - script source resolution should prefer the active project's local `scripts/`
   folder before falling back to template or engine-owned script roots, so the
   dock and editor run actions operate on the real generated project shell
@@ -118,6 +119,18 @@ the same engine-owned path.
 - generated child projects, including the Sandbox shell, should repair stale
   Windows toolset metadata to `v143` before invoking MSBuild, and the checked-in
   engine projects they reference should stay on the same VS 2022 toolset.
+- generated child projects expose `--project-self-test` so Sandbox and
+  ProjectLauncher output can be verified without opening GUI windows.
+- the checked-in engine exposes `--editor-project-self-test <id>` for the same
+  route from the real engine binary. Use `sandbox` for the self-iteration shell
+  and `projectlauncher` for the launcher shell before running the generated
+  child `--project-self-test`.
+- Self-Iteration Sandbox controls always target the `sandbox` profile. They must
+  not reuse the active ProjectLauncher/game/tool project when queueing engine
+  self-iteration work.
+- project shells should only be materialized by explicit operator action:
+  File > Save Project, Project > Save Active Project, or the centered Run
+  button. Merely selecting a project profile must not create files silently.
 - the Project workspace should also surface simple existence checks for the
   manifest, entry source, build script, `project.paths.txt`, expected output,
   build log, and active script source so the user can tell whether the shell is
@@ -180,6 +193,9 @@ the same engine-owned path.
   the World Outliner, Inspector, and non-output Console Dock pages. Future
   editor windows should build on this path instead of adding new per-panel
   scrolling hacks.
+- the World Outliner, Inspector, Console Dock, and AI Chat now have first-pass
+  open/close layout state plus draggable side/bottom splitters. This is the
+  current docked layout control layer, not yet the final IDE-class window host.
 - GUI draw and hit testing should remain clipped to active panel content so
   buttons, rows, and text do not bleed over or steal input from the Perspective
   scene view.
@@ -323,7 +339,6 @@ The bottom `Console Dock` is a temporary evidence/status strip, not the final
 editor-window system. It currently hosts reusable tabbed panes for:
 
 - `Project`
-- `Scripts`
 - `Assets`
 - `Systems`
 - `AI`
@@ -367,12 +382,16 @@ Current editor-shell gaps:
   controls. They still need bounded columns, filtering, real decoded thumbnails,
   rename/move/import actions, and a code/text editor surface for scripts.
 - the GUI still needs context menus, popouts, dockable editor windows,
-  draggable splitters, resize handles, and column controls
+  persisted layout profiles, resize cursors, resize handles, and column controls
 - global UI scaling should behave like normal desktop software, with explicit
   user scale/font controls instead of one hardcoded pixel density
 - separate editor windows/domains are still needed inside the application:
   project/game editor, software/tool editor, self-iteration sandbox, and AI
   visualizer should be independently launchable/dockable surfaces
+- borderless linked-context popouts should be built as explicit panel hosts for
+  GUI containers such as Inspector, Asset Browser, Code Editor, AI Visualizer,
+  and Build/Output. They must be operator-opened, visible, redockable, and
+  logged; they must not become hidden always-running model/control channels.
 - self-iteration needs visual state, not only console rows. The first visible
   surface is the AI loop card visualizer; later passes should add packet replay,
   scene-state diff views, and a 3D model/weight visualization surface
@@ -388,6 +407,23 @@ Current editor-shell gaps:
 - Focused six-pane parent validation is the current honest runtime gate for this
   path. The all-backends sequential harness still needs extra sequencing cleanup
   after the Raylib pass before it should outrank focused SDL/SFML evidence.
+
+## Generated project shell self-tests
+
+Run these from the repository root after building `ConsoleApplication1`:
+
+```powershell
+.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test sandbox
+.\Projects\Sandbox\bin\windows\Debug\x64\Sandbox.exe --project-self-test
+.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test projectlauncher
+.\Projects\ProjectLauncher\bin\windows\Debug\x64\ProjectLauncher.exe --project-self-test
+```
+
+The first command materializes and builds the selected shell from the real
+engine binary. The second command proves the generated child output is runnable
+without opening GUI windows. The Sandbox route must report the
+engine-self-iteration sandbox identity; ProjectLauncher must report its launcher
+tool identity.
 
 ## Troubleshooting checklist
 

@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.11`
+Current source version: `v0.84.13`
 
 ## Architecture highlights
 
@@ -16,8 +16,8 @@ Current source version: `v0.84.11`
   all represented in the active engine tree; Vulkan remains experimental.
 - **Custom UI on automated texture/atlas plumbing**: GUI layout, atlas upload,
   sprite submission, clipped panels, tab bars, scroll text, arbitrary scroll
-  areas, and font/text rendering are engine-owned systems shared across the
-  active render paths.
+  areas, dock visibility, first-pass splitter resize state, and font/text
+  rendering are engine-owned systems shared across the active render paths.
 - **Launcher/editor split**: project and game entry now live in the launcher,
   while the editor uses a more traditional desktop-style menu flow.
 - **Task graph + scripting**: reload and background work are funneled through
@@ -27,6 +27,10 @@ Current source version: `v0.84.11`
 - **Project browser + asset cards**: the editor now exposes project-local script
   stub creation, project/engine script selection, a shallow file/folder browser,
   and an `Assets` workspace with first-pass file-type thumbnail cards.
+- **Generated project verification**: generated Sandbox and ProjectLauncher
+  child builds now expose non-GUI self-tests, and the checked-in engine exposes
+  `--editor-project-self-test <id>`, so project shells can be materialized,
+  built, and verified without pretending a GUI launch happened.
 - **Executable-root runtime resolution**: fonts, scripts, shaders, captures,
   workspace paths, and updater scratch roots are being normalized around one
   executable-root/runtime-root resolver instead of cwd guesses.
@@ -88,9 +92,13 @@ Current source version: `v0.84.11`
   Linux/WSL uses `.tar.gz` runtime assets, and source installs fall back to a
   source snapshot rebuild only after packaged-runtime parity is reached or no
   newer packaged asset is available.
-- Console dock text, buttons, project files, scripts, and active assets now have
-  first-pass GUI affordances for visible Sandbox iteration evidence instead of
-  relying on command-line-only inspection.
+- Console dock text, buttons, project files, scripts, active assets, and
+  generated project self-tests now have first-pass GUI/build affordances for
+  visible Sandbox iteration evidence instead of relying on command-line-only
+  inspection.
+- World Outliner, Inspector, Console Dock, and AI Chat can now be hidden,
+  reopened, reset, and resized with first-pass splitters. True borderless
+  linked-context panel popouts remain the next context-host step.
 - Backend presentation is more visually coherent now that the active renderer
   base colors are being pulled toward the same darker Vulkan-style baseline,
   and SFML’s shared preview path is clipped back to the intended scene view.

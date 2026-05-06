@@ -25,7 +25,7 @@ archive for historical context and milestone tracing.
 Current orientation:
 
 - Latest published stable runtime line: `v0.84.05`
-- Current development source line: `v0.84.11`
+- Current development source line: `v0.84.13`
 
 ## What the engine has become so far
 
@@ -42,8 +42,9 @@ From the archived work in this file, a few themes are clear:
   bootstrap/runtime flow with managed rebuilds, source fallback, packaged
   assets, and cross-platform release alignment.
 - The editor shell has steadily become more professional: clearer top menus,
-  project and script workspaces, systems diagnostics, time controls, AI
-  workspace plumbing, and cleaner documentation/build discipline.
+  project/assets/script surfaces, systems diagnostics, time controls, AI
+  workspace plumbing, resizable panels, and cleaner documentation/build
+  discipline.
 - The repo itself has been moving toward cleaner public naming, stronger docs,
   and fewer ambiguous legacy surfaces, even when the underlying engine work is
   still ongoing.

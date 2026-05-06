@@ -114,6 +114,14 @@ namespace epochnamespace
             Ops
         };
 
+        enum class EditorLayoutDrag : unsigned char
+        {
+            None = 0,
+            Outliner,
+            Inspector,
+            Dock
+        };
+
         struct SystemsSurfaceState
         {
             float renderZoom{ 1.0f };
@@ -241,7 +249,7 @@ namespace epochnamespace
                 if (value == "Systems" || value == "systems")
                     return EditorWorkspaceTab::Systems;
                 if (value == "Scripts" || value == "scripts")
-                    return EditorWorkspaceTab::Scripts;
+                    return EditorWorkspaceTab::Assets;
                 if (value == "Assets" || value == "assets")
                     return EditorWorkspaceTab::Assets;
                 if (value == "Output" || value == "output")
@@ -303,6 +311,15 @@ namespace epochnamespace
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
             float workspaceSplit{ 0.68f };
+            float outlinerSplit{ 0.20f };
+            float inspectorSplit{ 0.22f };
+            float dockSplit{ 0.24f };
+            bool showOutliner{ true };
+            bool showInspector{ true };
+            bool showConsoleDock{ true };
+            bool showAiChat{ true };
+            EditorLayoutDrag layoutDrag{ EditorLayoutDrag::None };
+            std::string detachedPanelHostStatus{ "Docked panels active. Borderless panel-host routing is staged for the next context pass." };
             bool projectNotesVisible{ false };
             bool showAboutModal{ false };
             bool showUpdateConfirmModal{ false };
@@ -328,6 +345,28 @@ namespace epochnamespace
                 return std::hash<const void*>{}(p);
             }
         };
+
+        [[nodiscard]] static bool editor_point_in_rect(gui::Vec2 point, gui::Vec2 pos, gui::Vec2 size) noexcept
+        {
+            return point.x >= pos.x
+                && point.y >= pos.y
+                && point.x <= pos.x + size.x
+                && point.y <= pos.y + size.y;
+        }
+
+        static void reset_editor_layout(EditorState& editor) noexcept
+        {
+            editor.outlinerSplit = 0.20f;
+            editor.inspectorSplit = 0.22f;
+            editor.dockSplit = 0.24f;
+            editor.workspaceSplit = 0.68f;
+            editor.showOutliner = true;
+            editor.showInspector = true;
+            editor.showConsoleDock = true;
+            editor.showAiChat = true;
+            editor.layoutDrag = EditorLayoutDrag::None;
+            editor.detachedPanelHostStatus = "Layout reset. Docked panel host is ready; borderless host work remains staged.";
+        }
 
         struct ContextPtrEq
         {
@@ -913,11 +952,8 @@ namespace epochnamespace
             state.activeWorld = std::string(profile->world_name);
             state.activeScript = std::string(profile->default_script);
             state.activeRuntimeScene = std::string(profile->runtime_scene_id);
-            const auto ensuredShell = editor_ensure_project_shell(profile->id);
-            state.projectStatus = ensuredShell.summary.empty()
-                ? (std::string("Loaded project shell at ") + state.projectRoot + ".")
-                : ensuredShell.summary;
-            state.projectBuildStatus = "Build Project creates or refreshes a repo-local child executable for the active shell.";
+            state.projectStatus = "Selected project profile. Use File > Save Project or the centered Run button to materialize/update generated project files.";
+            state.projectBuildStatus = "Build Project creates or refreshes a repo-local child executable for the active shell after an explicit save/run.";
             state.scriptBuildStatus = "Select a script to validate or run against the active project shell.";
 
             state.entities.clear();
@@ -2226,6 +2262,16 @@ namespace epochnamespace
                 }
             }
 
+            if (entries.size() < maxEntries)
+            {
+                for (auto scriptEntry : collect_script_browser_entries(editor.projectRoot, maxEntries - entries.size()))
+                {
+                    if (entries.size() >= maxEntries)
+                        break;
+                    entries.push_back(std::move(scriptEntry));
+                }
+            }
+
             return entries;
         }
 
@@ -2302,7 +2348,7 @@ namespace epochnamespace
                 editor,
                 "Create Project Script Stub",
                 std::string("Created ") + scriptId + ".ascript.cpp.",
-                "Select Build Selected Script, then Run Selected Script. The script logs proof text and rotates scene entities through the host API.");
+                "Select Build Selected Script, then use the centered Run button while the Scripts workspace is active. The script logs proof text and rotates scene entities through the host API.");
         }
 
         [[nodiscard]] std::string build_ai_project_output_review_prompt(
@@ -2456,30 +2502,72 @@ namespace epochnamespace
             return std::filesystem::exists(resolve_editor_path(path), ec);
         }
 
-        void repair_active_project_evidence(EditorState& editor)
+        void repair_project_evidence(EditorState& editor, std::string_view projectId)
         {
-            const std::string requestedProject = editor.projectId.empty()
+            const std::string requestedProject = projectId.empty()
                 ? std::string(editor_default_project_profile().id)
-                : editor.projectId;
+                : std::string(projectId);
+            const bool isSandbox = requestedProject == "sandbox";
             const auto ensured = editor_ensure_project_shell(requestedProject);
             editor.projectStatus = ensured.summary;
             editor.aiContinuousBuildFingerprint.clear();
             if (ensured.succeeded)
             {
                 set_project(editor, ensured.project_id.empty() ? requestedProject : ensured.project_id, true);
-                editor.aiContinuousBuildStatus = "Project evidence repaired; queue a self-iteration build to stage verifier evidence.";
-                push_editor_log(editor, "[self-iteration] Project evidence repaired: " + ensured.summary);
+                editor.projectStatus = ensured.summary + " Active project saved.";
+                editor.aiContinuousBuildStatus = isSandbox
+                    ? "Sandbox evidence saved; queue a self-iteration build to stage verifier evidence."
+                    : "Project evidence saved; queue a build/run or explicit self-iteration handoff.";
+                push_editor_log(editor, "[project] Saved active project evidence: " + ensured.summary);
                 append_project_note(
                     editor,
-                    "Repair Active Project Evidence",
+                    isSandbox ? "Save Self-Iteration Sandbox Evidence" : "Save Active Project",
                     ensured.summary,
-                    "Project evidence is ready for the Self-Iteration Sandbox watcher or a manual queue.");
+                    isSandbox
+                        ? "Sandbox evidence is ready for a controlled engine self-iteration build pass."
+                        : "Project evidence is ready for a manual run/build or an explicit AI handoff.");
             }
             else
             {
-                editor.aiContinuousBuildStatus = "Project evidence repair failed; inspect project status.";
-                push_editor_log(editor, "[self-iteration] Project evidence repair failed: " + ensured.summary);
+                editor.aiContinuousBuildStatus = "Project evidence save failed; inspect project status.";
+                push_editor_log(editor, "[project] Save active project evidence failed: " + ensured.summary);
             }
+        }
+
+        void repair_active_project_evidence(EditorState& editor)
+        {
+            repair_project_evidence(editor, editor.projectId);
+        }
+
+        void activate_self_iteration_sandbox(
+            EditorState& editor,
+            const std::shared_ptr<core::Context>& ctx,
+            bool writeLog)
+        {
+            set_project(editor, "sandbox", writeLog);
+            editor.workspaceTab = EditorWorkspaceTab::AI;
+            editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
+            editor.projectStatus = "Self-Iteration Sandbox selected. It manipulates and tests Epoch itself, not generated game/tool projects.";
+            if (ctx)
+            {
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
+                epochnamespace::previewgrid::reset_camera(ctx.get());
+            }
+        }
+
+        void repair_self_iteration_sandbox_evidence(EditorState& editor)
+        {
+            repair_project_evidence(editor, "sandbox");
+        }
+
+        void start_self_iteration_sandbox_build(EditorState& editor, std::string_view reason, bool force)
+        {
+            repair_self_iteration_sandbox_evidence(editor);
+            const std::filesystem::path pathsManifest =
+                resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
+            const std::string activeScriptSource =
+                editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
+            start_ai_continuous_project_build(editor, activeScriptSource, pathsManifest, reason, force);
         }
 
         [[nodiscard]] std::string ready_text(bool ready)
@@ -2898,6 +2986,12 @@ namespace epochnamespace
         auto& editor = editor_state_for(ctx);
         auto& chat = chat_state_for(ctx);
         chat.pump();
+        if (editor.workspaceTab == EditorWorkspaceTab::AI
+            && editor.aiWorkspaceDomain == AiWorkspaceDomain::Control
+            && editor.projectId != "sandbox")
+        {
+            set_project(editor, "sandbox", true);
+        }
 
         // Editor GUI layout should follow the live pane client size, not the
         // backend framebuffer size, so parented multicontext panes do not
@@ -2905,28 +2999,62 @@ namespace epochnamespace
         const float w = static_cast<float>((std::max)(1, ctx->width));
         const float h = static_cast<float>((std::max)(1, ctx->height));
 
+        auto clamp_layout = [](float value, float lo, float hi) noexcept
+        {
+            if (hi < lo)
+                hi = lo;
+            return std::clamp(value, lo, hi);
+        };
+
+        editor.outlinerSplit = std::clamp(editor.outlinerSplit, 0.12f, 0.42f);
+        editor.inspectorSplit = std::clamp(editor.inspectorSplit, 0.14f, 0.45f);
+        editor.dockSplit = std::clamp(editor.dockSplit, 0.14f, 0.58f);
+
         const float toolbar_h = 98.0f;
-        const float bottom_h = (std::max)(220.0f, h * 0.24f);
-        const float left_w = (std::max)(280.0f, w * 0.2f);
-        const float right_w = (std::max)(320.0f, w * 0.22f);
+        const float splitter_w = 7.0f;
+        const float splitter_h = 7.0f;
+        const bool bottom_visible = editor.showConsoleDock || editor.showAiChat;
+        const float raw_bottom_h = bottom_visible ? h * editor.dockSplit : 0.0f;
+        const float bottom_h = bottom_visible
+            ? clamp_layout(raw_bottom_h, (std::min)(170.0f, h * 0.38f), (std::max)(170.0f, h * 0.58f))
+            : 0.0f;
+        const float bottom_split_h = bottom_visible ? splitter_h : 0.0f;
+
+        const float left_min = (std::min)(220.0f, (std::max)(0.0f, w * 0.34f));
+        const float left_max = (std::max)(left_min, (std::min)(520.0f, w * 0.46f));
+        const float right_min = (std::min)(260.0f, (std::max)(0.0f, w * 0.38f));
+        const float right_max = (std::max)(right_min, (std::min)(560.0f, w * 0.48f));
+        const float left_w = editor.showOutliner ? clamp_layout(w * editor.outlinerSplit, left_min, left_max) : 0.0f;
+        const float right_w = editor.showInspector ? clamp_layout(w * editor.inspectorSplit, right_min, right_max) : 0.0f;
+        const float left_split_w = editor.showOutliner ? splitter_w : 0.0f;
+        const float right_split_w = editor.showInspector ? splitter_w : 0.0f;
 
         const gui::Vec2 toolbar_pos{ 0.0f, 0.0f };
         const gui::Vec2 toolbar_size{ w, toolbar_h };
 
+        const gui::Vec2 bottom_split_pos{ 0.0f, (std::max)(0.0f, h - bottom_h - bottom_split_h) };
+        const gui::Vec2 bottom_split_size{ w, bottom_split_h };
         const gui::Vec2 bottom_pos{ 0.0f, (std::max)(0.0f, h - bottom_h) };
         const gui::Vec2 bottom_size{ w, bottom_h };
 
         const float main_y = toolbar_h;
-        const float main_h = (std::max)(0.0f, h - toolbar_h - bottom_h);
+        const float main_h = (std::max)(0.0f, h - toolbar_h - bottom_h - bottom_split_h);
 
         const gui::Vec2 outliner_pos{ 0.0f, main_y };
         const gui::Vec2 outliner_size{ left_w, main_h };
+        const gui::Vec2 outliner_split_pos{ left_w, main_y };
+        const gui::Vec2 outliner_split_size{ left_split_w, main_h };
 
         const gui::Vec2 details_pos{ (std::max)(0.0f, w - right_w), main_y };
         const gui::Vec2 details_size{ right_w, main_h };
+        const gui::Vec2 inspector_split_pos{ (std::max)(0.0f, details_pos.x - right_split_w), main_y };
+        const gui::Vec2 inspector_split_size{ right_split_w, main_h };
 
-        const gui::Vec2 viewport_pos{ left_w, main_y };
-        const gui::Vec2 viewport_size{ (std::max)(0.0f, w - left_w - right_w), main_h };
+        const gui::Vec2 viewport_pos{ left_w + left_split_w, main_y };
+        const gui::Vec2 viewport_size{
+            (std::max)(0.0f, w - left_w - left_split_w - right_w - right_split_w),
+            main_h
+        };
 
         auto emit_command = [&](EditorCommand command, std::string_view argument = {})
         {
@@ -2944,6 +3072,66 @@ namespace epochnamespace
 
             chat.submit(std::move(prompt));
             push_editor_log(editor, std::string(logLine));
+        };
+
+        auto run_active_context = [&]()
+        {
+            const bool selectedScriptAsset = !editor.selectedAssetPath.empty()
+                && std::filesystem::path{ editor.selectedAssetPath }.filename().string().ends_with(".ascript.cpp");
+            if (editor.workspaceTab == EditorWorkspaceTab::Scripts
+                || (editor.workspaceTab == EditorWorkspaceTab::Assets && selectedScriptAsset))
+            {
+                if (selectedScriptAsset)
+                    editor.activeScript = script_id_from_source_path(std::filesystem::path{ editor.selectedAssetPath });
+                emit_command(EditorCommand::RunScript, editor.activeScript);
+                push_editor_log(editor, std::string("[script] Run requested for '") + editor.activeScript + "'.");
+                append_project_note(
+                    editor,
+                    "Run Script",
+                    std::string("Run requested for ") + editor.activeScript + ".",
+                    "Watch the Output workspace for script-host results and editor-visible changes.");
+                return;
+            }
+
+            repair_active_project_evidence(editor);
+
+            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+            if (!path_exists(outputExe))
+            {
+                const auto build = editor_build_project(editor.projectRoot);
+                editor.projectBuildStatus = build.summary;
+                push_editor_log(
+                    editor,
+                    std::string("[project] ")
+                    + (build.succeeded ? "Build passed. " : "Build failed. ")
+                    + build.summary);
+                if (!build.output_path.empty())
+                    push_editor_log(editor, std::string("[project] Output: ") + build.output_path);
+                if (!build.log_path.empty())
+                    push_editor_log(editor, std::string("[project] Log: ") + build.log_path);
+                append_project_note(
+                    editor,
+                    "Run Build Step",
+                    build.summary,
+                    build.succeeded ? "Run saved the project shell and built the child executable." : "Run saved the project shell, but build failed; inspect the build log before retrying.");
+            }
+
+            const bool hasBuiltOutput = path_exists(outputExe);
+            const std::string playTarget = hasBuiltOutput
+                ? std::string("project-exe:") + display_project_path(outputExe)
+                : editor.activeRuntimeScene;
+            emit_command(EditorCommand::RunGame, playTarget);
+            push_editor_log(editor, std::string("[project] Run requested for ") + editor.projectName + ".");
+            push_editor_log(
+                editor,
+                hasBuiltOutput
+                    ? std::string("[project] Launching built child executable: ") + display_project_path(outputExe)
+                    : std::string("[project] No child executable yet; falling back to in-editor runtime target '") + editor.activeRuntimeScene + "'.");
+            append_project_note(
+                editor,
+                "Run Active Project",
+                hasBuiltOutput ? std::string("Launching built child executable.") : std::string("Falling back to in-editor runtime target."),
+                playTarget);
         };
 
         gui::begin_window("", toolbar_pos, toolbar_size);
@@ -2980,15 +3168,13 @@ namespace epochnamespace
             toolbar_x += item.width + 6.0f;
         }
 
-        const float run_button_x = (std::max)(toolbar_pos.x + 16.0f, w - 104.0f);
-        gui::set_cursor({ run_button_x - 24.0f, toolbar_button_y });
-        if (gui::button("Run Script", { 112.0f, toolbar_button_h }))
-        {
-            emit_command(EditorCommand::RunScript, editor.activeScript);
-            push_editor_log(editor, std::string("[script] Run requested for '") + editor.activeScript + "'.");
-        }
+        const float run_button_w = 108.0f;
+        const float run_button_x = (std::max)(toolbar_x + 12.0f, viewport_pos.x + (viewport_size.x - run_button_w) * 0.5f);
+        gui::set_cursor({ run_button_x, toolbar_button_y });
+        if (gui::button("Run", { run_button_w, toolbar_button_h }))
+            run_active_context();
 
-        const float status_x = (std::max)(toolbar_x + 12.0f, run_button_x - 480.0f);
+        const float status_x = (std::max)(toolbar_x + 12.0f, run_button_x + run_button_w + 14.0f);
         gui::set_cursor({ status_x, toolbar_button_y + 4.0f });
         gui::wrapped_label(
             std::string("v") + epochnamespace::GetEngineVersionString()
@@ -2997,7 +3183,7 @@ namespace epochnamespace
             + "  |  " + std::string(preview_mode_name(editor.previewMode))
             + "  |  " + preview_camera_name(ctx)
             + "  |  Zoom " + preview_zoom_text(ctx),
-            (std::max)(180.0f, run_button_x - status_x - 12.0f));
+            (std::max)(180.0f, w - status_x - 12.0f));
 
         const float tab_y = toolbar_pos.y + 48.0f;
         const float tab_h = 34.0f;
@@ -3005,9 +3191,9 @@ namespace epochnamespace
         float tab_x = 16.0f;
 
         const std::string editor_tab = "Editor Mode";
-        const std::string runtime_tab = "Play Project";
-        const std::string scripts_tab = "Run Script";
-        const std::string project_tab = "Project Shell";
+        const std::string runtime_tab = "Game/2D";
+        const std::string assets_tab = "Assets";
+        const std::string project_tab = "Project";
         const std::string ai_control_tab = "AI Sandbox";
 
         gui::set_cursor({ tab_x, tab_y });
@@ -3017,24 +3203,13 @@ namespace epochnamespace
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(runtime_tab, { 156.0f, tab_h }))
-        {
-            emit_command(EditorCommand::RunGame, editor.activeRuntimeScene);
-            push_editor_log(
-                editor,
-                std::string("[runtime] Launching project play target '")
-                + editor.activeRuntimeScene
-                + "'.");
-        }
+            editor.workspaceTab = EditorWorkspaceTab::Project;
         tab_x += 156.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(scripts_tab, { 164.0f, tab_h }))
-        {
-            emit_command(EditorCommand::RunScript, editor.activeScript);
-            push_editor_log(editor, std::string("[script] Run requested for '") + editor.activeScript + "'.");
-            editor.workspaceTab = EditorWorkspaceTab::Scripts;
-        }
-        tab_x += 164.0f + tab_gap;
+        if (gui::button(assets_tab, { 124.0f, tab_h }))
+            editor.workspaceTab = EditorWorkspaceTab::Assets;
+        tab_x += 124.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(project_tab, { 164.0f, tab_h }))
@@ -3044,8 +3219,7 @@ namespace epochnamespace
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(ai_control_tab, { 180.0f, tab_h }))
         {
-            editor.workspaceTab = EditorWorkspaceTab::AI;
-            editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
+            activate_self_iteration_sandbox(editor, ctx, true);
             push_editor_log(editor, "[ai] Self-Iteration Sandbox opened.");
         }
 
@@ -3102,7 +3276,69 @@ namespace epochnamespace
             gui::end_window();
         };
 
+        const gui::Vec2 mouse = gui::mouse_position();
+        if (gui::was_mouse_pressed())
+        {
+            if (editor.showOutliner && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size))
+                editor.layoutDrag = EditorLayoutDrag::Outliner;
+            else if (editor.showInspector && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size))
+                editor.layoutDrag = EditorLayoutDrag::Inspector;
+            else if (bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size))
+                editor.layoutDrag = EditorLayoutDrag::Dock;
+        }
+        if (!gui::is_mouse_down())
+            editor.layoutDrag = EditorLayoutDrag::None;
+
+        if (gui::is_mouse_down())
+        {
+            switch (editor.layoutDrag)
+            {
+            case EditorLayoutDrag::Outliner:
+                editor.outlinerSplit = std::clamp(mouse.x / (std::max)(1.0f, w), 0.12f, 0.42f);
+                break;
+            case EditorLayoutDrag::Inspector:
+                editor.inspectorSplit = std::clamp((w - mouse.x) / (std::max)(1.0f, w), 0.14f, 0.45f);
+                break;
+            case EditorLayoutDrag::Dock:
+                editor.dockSplit = std::clamp((h - mouse.y) / (std::max)(1.0f, h), 0.14f, 0.58f);
+                break;
+            case EditorLayoutDrag::None:
+            default:
+                break;
+            }
+        }
+
+        if (editor.showOutliner && outliner_size.x > 1.0f && outliner_size.y > 1.0f)
+        {
         gui::begin_window("World Outliner", outliner_pos, outliner_size);
+        const std::array<gui::InlineButtonSpec, 4> outlinerWindowButtons{{
+            { "Close", 58.0f },
+            { "Narrow", 68.0f },
+            { "Wide", 56.0f },
+            { "Popout", 70.0f }
+        }};
+        if (const auto action = gui::inline_button_row(outlinerWindowButtons, 24.0f, 5.0f))
+        {
+            switch (*action)
+            {
+            case 0:
+                editor.showOutliner = false;
+                push_editor_log(editor, "[ui] World Outliner hidden. Reopen it from Window > Toggle Outliner.");
+                break;
+            case 1:
+                editor.outlinerSplit = (std::max)(0.12f, editor.outlinerSplit - 0.03f);
+                break;
+            case 2:
+                editor.outlinerSplit = (std::min)(0.42f, editor.outlinerSplit + 0.03f);
+                break;
+            case 3:
+                editor.detachedPanelHostStatus = "World Outliner requested a borderless popout host; docked fallback remains active until the context-host pass lands.";
+                push_editor_log(editor, "[ui] World Outliner popout requested. Borderless context host is staged.");
+                break;
+            default:
+                break;
+            }
+        }
         const gui::Vec2 outlinerScrollStart = gui::cursor_position();
         const float outlinerScrollHeight = (std::max)(
             48.0f,
@@ -3167,8 +3403,39 @@ namespace epochnamespace
         }
         gui::end_scroll_area();
         gui::end_window();
+        }
 
+        if (editor.showInspector && details_size.x > 1.0f && details_size.y > 1.0f)
+        {
         gui::begin_window("Inspector", details_pos, details_size);
+        const std::array<gui::InlineButtonSpec, 4> inspectorWindowButtons{{
+            { "Close", 58.0f },
+            { "Narrow", 68.0f },
+            { "Wide", 56.0f },
+            { "Popout", 70.0f }
+        }};
+        if (const auto action = gui::inline_button_row(inspectorWindowButtons, 24.0f, 5.0f))
+        {
+            switch (*action)
+            {
+            case 0:
+                editor.showInspector = false;
+                push_editor_log(editor, "[ui] Inspector hidden. Reopen it from Window > Toggle Inspector.");
+                break;
+            case 1:
+                editor.inspectorSplit = (std::max)(0.14f, editor.inspectorSplit - 0.03f);
+                break;
+            case 2:
+                editor.inspectorSplit = (std::min)(0.45f, editor.inspectorSplit + 0.03f);
+                break;
+            case 3:
+                editor.detachedPanelHostStatus = "Inspector requested a borderless popout host; docked fallback remains active until the context-host pass lands.";
+                push_editor_log(editor, "[ui] Inspector popout requested. Borderless context host is staged.");
+                break;
+            default:
+                break;
+            }
+        }
         const gui::Vec2 inspectorScrollStart = gui::cursor_position();
         const float inspectorScrollHeight = (std::max)(
             48.0f,
@@ -3267,10 +3534,6 @@ namespace epochnamespace
                 };
             };
 
-            auto inspectorStartAiBuild = [&](std::string reason, bool force) {
-                start_ai_continuous_project_build(editor, inspectorActiveScriptSource, inspectorPathsManifest, reason, force);
-            };
-
             auto stageInspectorPacket = [&](std::string_view successPrefix, std::string_view noteTitle, std::string_view noteBody) {
                 const std::string packetDir = epoch::ai::stage_iteration_packet(inspectorIterationPacket());
                 if (packetDir.empty())
@@ -3313,14 +3576,24 @@ namespace epochnamespace
 
             if (inspectorSandboxControls || inspectorLauncherControls)
             {
-                if (gui::button("Repair Active Project Evidence", { inspectorWidth, 30.0f }))
-                    repair_active_project_evidence(editor);
+                const char* const saveLabel = inspectorSandboxControls
+                    ? "Save Sandbox Evidence"
+                    : "Save Active Project";
+                if (gui::button(saveLabel, { inspectorWidth, 30.0f }))
+                {
+                    if (inspectorSandboxControls)
+                        repair_self_iteration_sandbox_evidence(editor);
+                    else
+                        repair_active_project_evidence(editor);
+                }
             }
 
             if (inspectorSandboxControls)
             {
                 if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Self-Iteration Watcher" : "Enable Self-Iteration Watcher", { inspectorWidth, 30.0f }))
                 {
+                    if (!editor.aiContinuousBuildEnabled)
+                        repair_self_iteration_sandbox_evidence(editor);
                     editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
                     editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
                         ? "Self-iteration watcher enabled; watching project/script evidence."
@@ -3339,7 +3612,7 @@ namespace epochnamespace
 
                 if (gui::button("Queue Sandbox Build Pass", { inspectorWidth, 30.0f }))
                 {
-                    inspectorStartAiBuild("manual self-iteration build request", true);
+                    start_self_iteration_sandbox_build(editor, "manual self-iteration sandbox build request", true);
                     append_project_note(
                         editor,
                         "Queue Sandbox Build Pass",
@@ -3560,6 +3833,7 @@ namespace epochnamespace
         }
         gui::end_scroll_area();
         gui::end_window();
+        }
 
         result.scene_viewport = gui::scene_viewport("Perspective", viewport_pos, viewport_size);
         ctx->set_scene_preview_mode(editor.previewMode);
@@ -3572,32 +3846,63 @@ namespace epochnamespace
         update_scene_object_interaction(ctx, editor, result);
         publish_editor_preview_markers(ctx.get(), editor);
 
+        if (editor.showOutliner && outliner_split_size.x > 1.0f && outliner_split_size.y > 1.0f)
+        {
+            gui::set_cursor(outliner_split_pos);
+            (void)gui::button(" ", outliner_split_size);
+        }
+        if (editor.showInspector && inspector_split_size.x > 1.0f && inspector_split_size.y > 1.0f)
+        {
+            gui::set_cursor(inspector_split_pos);
+            (void)gui::button(" ", inspector_split_size);
+        }
+        if (bottom_visible && bottom_split_size.x > 1.0f && bottom_split_size.y > 1.0f)
+        {
+            gui::set_cursor(bottom_split_pos);
+            (void)gui::button(" ", bottom_split_size);
+        }
+
         editor.workspaceSplit = std::clamp(editor.workspaceSplit, 0.35f, 0.80f);
         const float raw_left_bottom_w = w * editor.workspaceSplit;
         const float min_workspace_w = (std::min)(360.0f, (std::max)(0.0f, w * 0.55f));
         const float min_chat_w = (std::min)(300.0f, (std::max)(0.0f, w * 0.35f));
         const float max_workspace_w = (std::max)(min_workspace_w, w - min_chat_w);
-        const float left_bottom_w = std::clamp(raw_left_bottom_w, min_workspace_w, max_workspace_w);
+        const bool show_workspace_dock = editor.showConsoleDock && bottom_h > 1.0f;
+        const bool show_chat_dock = editor.showAiChat && bottom_h > 1.0f;
+        const float left_bottom_w = (show_workspace_dock && show_chat_dock)
+            ? std::clamp(raw_left_bottom_w, min_workspace_w, max_workspace_w)
+            : (show_workspace_dock ? w : 0.0f);
         const float active_workspace_split = w > 0.0f ? left_bottom_w / w : editor.workspaceSplit;
         const gui::Vec2 log_pos{ 0.0f, bottom_pos.y };
         const gui::Vec2 log_size{ left_bottom_w, bottom_h };
         const gui::Vec2 chat_pos{ left_bottom_w, bottom_pos.y };
-        const gui::Vec2 chat_size{ (std::max)(0.0f, w - left_bottom_w), bottom_h };
+        const gui::Vec2 chat_size{ show_chat_dock ? (std::max)(0.0f, w - left_bottom_w) : 0.0f, bottom_h };
 
+        if (show_workspace_dock)
+        {
         gui::begin_window("Console Dock", log_pos, log_size);
-        const std::array<gui::SegmentedButtonSpec, 6> workspaceTabs{{
+        const std::array<gui::SegmentedButtonSpec, 5> workspaceTabs{{
             { "Output", 78.0f, editor.workspaceTab == EditorWorkspaceTab::Output },
             { "Project", 78.0f, editor.workspaceTab == EditorWorkspaceTab::Project },
-            { "Scripts", 78.0f, editor.workspaceTab == EditorWorkspaceTab::Scripts },
-            { "Assets", 76.0f, editor.workspaceTab == EditorWorkspaceTab::Assets },
+            { "Assets", 90.0f, editor.workspaceTab == EditorWorkspaceTab::Assets || editor.workspaceTab == EditorWorkspaceTab::Scripts },
             { "AI", 58.0f, editor.workspaceTab == EditorWorkspaceTab::AI },
             { "Systems", 84.0f, editor.workspaceTab == EditorWorkspaceTab::Systems }
         }};
+        const std::array<EditorWorkspaceTab, 5> workspaceTabIds{{
+            EditorWorkspaceTab::Output,
+            EditorWorkspaceTab::Project,
+            EditorWorkspaceTab::Assets,
+            EditorWorkspaceTab::AI,
+            EditorWorkspaceTab::Systems
+        }};
         if (const auto selected = gui::tab_bar(workspaceTabs))
-            editor.workspaceTab = static_cast<EditorWorkspaceTab>(*selected);
-        const std::array<gui::InlineButtonSpec, 3> workspaceColumnButtons{{
+            editor.workspaceTab = workspaceTabIds[*selected];
+        const std::array<gui::InlineButtonSpec, 6> workspaceColumnButtons{{
             { "Console +", 96.0f },
             { "Chat +", 76.0f },
+            { "Dock +", 70.0f },
+            { "Dock -", 70.0f },
+            { "Close", 58.0f },
             { "Reset Columns", 122.0f }
         }};
         if (const auto splitAction = gui::inline_button_row(workspaceColumnButtons))
@@ -3606,13 +3911,26 @@ namespace epochnamespace
                 editor.workspaceSplit = (std::min)(0.80f, editor.workspaceSplit + 0.05f);
             else if (*splitAction == 1)
                 editor.workspaceSplit = (std::max)(0.35f, editor.workspaceSplit - 0.05f);
+            else if (*splitAction == 2)
+                editor.dockSplit = (std::min)(0.58f, editor.dockSplit + 0.03f);
+            else if (*splitAction == 3)
+                editor.dockSplit = (std::max)(0.14f, editor.dockSplit - 0.03f);
+            else if (*splitAction == 4)
+            {
+                editor.showConsoleDock = false;
+                push_editor_log(editor, "[ui] Console Dock hidden. Reopen it from Window > Toggle Console Dock.");
+            }
             else
+            {
                 editor.workspaceSplit = 0.68f;
+                editor.dockSplit = 0.24f;
+            }
         }
         gui::property_row(
             "[ui] Columns",
             std::format("dock {:.0f}% | chat {:.0f}%", active_workspace_split * 100.0f, (1.0f - active_workspace_split) * 100.0f),
             96.0f);
+        gui::property_row("[ui] Panel host", editor.detachedPanelHostStatus, 96.0f);
 
         const bool dockUsesOuterScroll = editor.workspaceTab != EditorWorkspaceTab::Output;
         if (dockUsesOuterScroll)
@@ -3713,27 +4031,11 @@ namespace epochnamespace
                 }
             }
 
-            if (gui::button("Play Current Project", { 180.0f, 30.0f }))
-            {
-                const bool hasBuiltOutput = std::filesystem::exists(outputExe);
-                const std::string playTarget = hasBuiltOutput
-                    ? std::string("project-exe:") + display_project_path(outputExe)
-                    : editor.activeRuntimeScene;
-                emit_command(EditorCommand::RunGame, playTarget);
-                push_editor_log(editor, std::string("[project] Play requested for ") + editor.projectName + ".");
-                push_editor_log(
-                    editor,
-                    hasBuiltOutput
-                        ? std::string("[project] Launching built child executable: ") + display_project_path(outputExe)
-                        : std::string("[project] No child executable yet; falling back to in-editor runtime target '") + editor.activeRuntimeScene + "'.");
-                append_project_note(
-                    editor,
-                    "Play Current Project",
-                    hasBuiltOutput ? std::string("Launching built child executable.") : std::string("Falling back to in-editor runtime target."),
-                    playTarget);
-            }
+            if (gui::button("Save Active Project", { 220.0f, 30.0f }))
+                repair_active_project_evidence(editor);
             if (gui::button("Build Active Project", { 220.0f, 30.0f }))
             {
+                repair_active_project_evidence(editor);
                 const auto build = editor_build_project(editor.projectRoot);
                 editor.projectBuildStatus = build.summary;
                 push_editor_log(
@@ -3749,7 +4051,7 @@ namespace epochnamespace
                     editor,
                     "Build Active Project",
                     build.summary,
-                    build.succeeded ? "Build passed; Play Current Project can use the child executable when output exists." : "Build failed; inspect the build log before retrying or promoting AI evidence.");
+                    build.succeeded ? "Build passed; the centered Run button can use the child executable when output exists." : "Build failed; inspect the build log before retrying or promoting AI evidence.");
             }
             if (gui::button("Create Game Project Shell", { 220.0f, 30.0f }))
             {
@@ -3775,7 +4077,7 @@ namespace epochnamespace
                         editor,
                         "Create Game Project Shell",
                         created.summary,
-                        "Use Build Active Project, then Play Current Project. This is a ProjectLauncher game/software shell, not the self-iteration sandbox.");
+                        "Use Build Active Project, then the centered Run button. This is a ProjectLauncher game/software shell, not the self-iteration sandbox.");
                 }
             }
             if (gui::button("Create Tool Project Shell", { 220.0f, 30.0f }))
@@ -3802,7 +4104,7 @@ namespace epochnamespace
                         editor,
                         "Create Tool Project Shell",
                         created.summary,
-                        "Use Scripts or Tool Harness against this project shell. Self-iteration remains controlled from the AI Sandbox.");
+                        "Use Scripts or Tool Harness against this project shell, then the centered Run button when needed. Self-iteration remains controlled from the AI Sandbox.");
                 }
             }
             break;
@@ -3823,7 +4125,7 @@ namespace epochnamespace
                 gui::property_row("[script] Hint", activeScript->diagnostic_hint);
             }
             gui::wrapped_label(
-                "Scripts compile with the engine/project and use the editor host API for callbacks. Create project-local stubs here, build them, run them, and watch project notes/output for visible evidence.",
+                "Scripts compile with the engine/project and use the editor host API for callbacks. Create project-local stubs here, build them, then use the centered Run button while this Scripts workspace is active.",
                 scriptsContentWidth);
             gui::wrapped_label(editor.scriptBuildStatus, scriptsContentWidth);
 
@@ -3875,17 +4177,6 @@ namespace epochnamespace
                     build.succeeded ? "Script validation passed against the active project shell." : "Script validation failed; inspect script diagnostics before running.");
             }
 
-            if (gui::button("Run Selected Script", { 180.0f, 30.0f }))
-            {
-                emit_command(EditorCommand::RunScript, editor.activeScript);
-                push_editor_log(editor, std::string("[script] Run requested for '") + editor.activeScript + "'.");
-                append_project_note(
-                    editor,
-                    "Run Selected Script",
-                    std::string("Run requested for ") + editor.activeScript + ".",
-                    "Watch the Output workspace for script-host results and editor-visible changes.");
-            }
-
             const auto projectEntries = collect_project_browser_entries(editor.projectRoot);
             gui::property_row("[files] Active project browser", std::to_string(projectEntries.size()) + " visible entries");
             gui::wrapped_label("This is the first shallow project file/folder viewer. It skips build/bin/.vs output, selects scripts for build/run, and gives the AI sandbox visible path evidence instead of hidden filesystem magic.", scriptsContentWidth);
@@ -3916,7 +4207,7 @@ namespace epochnamespace
             gui::property_row("[assets] Model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path);
             gui::property_row("[assets] Model parsed", modelSummary.parsed ? "true" : "false");
             gui::wrapped_label(
-                "Asset cards are first-pass file-type thumbnails: scene/model/image/audio/text assets are visible and selectable now. Decoded image/model preview thumbnails remain a next-pass GUI renderer feature.",
+                "Asset cards include scenes, models, images, text files, and project scripts. Scripts are normal project assets here, not a separate editor domain; select a script asset, build it below, then use the centered Run button.",
                 assetsContentWidth);
 
             const auto assetEntries = collect_asset_browser_entries(editor);
@@ -3927,6 +4218,12 @@ namespace epochnamespace
                 if (gui::button(buttonLabel, { assetsContentWidth, 28.0f }))
                 {
                     editor.selectedAssetPath = entry.path;
+                    editor.selectedProjectFile = entry.path;
+                    if (std::filesystem::path{ entry.path }.filename().string().ends_with(".ascript.cpp"))
+                    {
+                        editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
+                        editor.scriptBuildStatus = "Selected script asset: " + entry.path;
+                    }
                     push_editor_log(editor, "[assets] Selected " + entry.path);
                 }
             }
@@ -3934,6 +4231,40 @@ namespace epochnamespace
             if (assetEntries.empty())
                 gui::wrapped_label("No active assets found yet. Add files under the project assets folder or use the project demo model path once it resolves.", assetsContentWidth);
             gui::property_row("[assets] Selected", editor.selectedAssetPath.empty() ? std::string("(none)") : editor.selectedAssetPath);
+
+            const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
+            gui::label("Script Assets");
+            gui::property_row("[script asset] Active", editor.activeScript);
+            gui::property_row("[script asset] Source", activeScriptSource);
+            gui::property_row(
+                "[script asset] Source exists",
+                std::filesystem::exists(std::filesystem::path{ activeScriptSource }) ? "true" : "false");
+            if (const auto* activeScript = active_script_profile(editor))
+            {
+                gui::property_row("[script asset] Build", activeScript->build_action);
+                gui::property_row("[script asset] Run", "Centered Run button");
+                gui::property_row("[script asset] Hint", activeScript->diagnostic_hint);
+            }
+            gui::wrapped_label(editor.scriptBuildStatus, assetsContentWidth);
+            gui::property_row("[script asset] New", "type a safe id, then create a project-local .ascript.cpp");
+            (void)gui::edit_box(editor.newScriptName, { assetsContentWidth, 28.0f }, 64, false);
+            if (gui::button("Create Script Asset", { (std::min)(220.0f, assetsContentWidth), 30.0f }))
+                create_project_script_stub(editor);
+            if (gui::button("Build Selected Script Asset", { (std::min)(240.0f, assetsContentWidth), 30.0f }))
+            {
+                const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
+                editor.scriptBuildStatus = build.summary;
+                push_editor_log(
+                    editor,
+                    std::string("[script] ")
+                    + (build.succeeded ? "Validation passed. " : "Validation failed. ")
+                    + build.summary);
+                append_project_note(
+                    editor,
+                    "Build Script Asset",
+                    build.summary,
+                    build.succeeded ? "Script asset validation passed against the active project shell." : "Script asset validation failed; inspect script diagnostics before running.");
+            }
             break;
         }
         case EditorWorkspaceTab::AI:
@@ -3999,11 +4330,11 @@ namespace epochnamespace
                 if (!gateStatus.projectEvidenceReady)
                 {
                     gui::wrapped_label(
-                        "Project evidence is incomplete. Repair Active Project Evidence rebuilds the manifest/source/build-script shell from the active profile before you queue the next self-iteration build.",
+                        "Sandbox evidence is incomplete. Save Sandbox Evidence rebuilds the manifest/source/build-script shell from the sandbox profile before you queue the next self-iteration build.",
                         aiContentWidth);
                 }
-                if (gui::button("Repair Active Project Evidence", { 260.0f, 30.0f }))
-                    repair_active_project_evidence(editor);
+                if (gui::button("Save Sandbox Evidence", { 260.0f, 30.0f }))
+                    repair_self_iteration_sandbox_evidence(editor);
             }
 
             gui::label("Local Model Connection");
@@ -4236,7 +4567,7 @@ namespace epochnamespace
                 }
                 else
                 {
-                    editor.aiContinuousBuildStatus = "Build passed and staged packet for verifier/gate review.";
+                    editor.aiContinuousBuildStatus = "Build passed; packet staged: " + packetDir;
                     push_editor_log(editor, "[ai-build] Staged post-build AI packet.");
                     push_editor_log(editor, "[ai-build] Packet: " + packetDir);
                     append_project_note(
@@ -4248,7 +4579,12 @@ namespace epochnamespace
             }
 
             if (editor.aiContinuousBuildEnabled && !editor.aiContinuousBuildPending)
-                startAiContinuousBuild("detected project/script evidence change", false);
+            {
+                if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Control)
+                    start_self_iteration_sandbox_build(editor, "detected sandbox evidence change", false);
+                else
+                    startAiContinuousBuild("detected project/script evidence change", false);
+            }
 
             const bool showSandboxControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Control;
             const bool showToolingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling;
@@ -4325,7 +4661,7 @@ namespace epochnamespace
 
             if (showWorkspaceActionButtons && showSandboxControls && gui::button("Queue Sandbox Build Pass", { 240.0f, 30.0f }))
             {
-                startAiContinuousBuild("manual self-iteration build request", true);
+                start_self_iteration_sandbox_build(editor, "manual self-iteration sandbox build request", true);
                 append_project_note(
                     editor,
                     "Queue Sandbox Build Pass",
@@ -4780,7 +5116,10 @@ namespace epochnamespace
         if (dockUsesOuterScroll)
             gui::end_scroll_area();
         gui::end_window();
+        }
 
+        if (show_chat_dock)
+        {
         gui::ConsoleWindowOptions opts{
             .title = "AI Chat",
             .position = chat_pos,
@@ -4803,18 +5142,22 @@ namespace epochnamespace
             chat.input.clear();
             chat.submit(std::move(text));
         }
+        }
 
-        open_dropdown("File", TopMenu::File, dropdown_window_size(192.0f, 3), [&](gui::Vec2 pos)
+        open_dropdown("File", TopMenu::File, dropdown_window_size(192.0f, 4), [&](gui::Vec2 pos)
         {
             menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
                 emit_command(EditorCommand::OpenLauncher);
                 push_editor_log(editor, "[file] Opening launcher.");
             });
-            menu_item("Settings", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
+            menu_item("Save Project", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
+                repair_active_project_evidence(editor);
+            });
+            menu_item("Settings", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
                 emit_command(EditorCommand::Settings);
                 push_editor_log(editor, "[file] Settings selected.");
             });
-            menu_item("Exit", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
+            menu_item("Exit", { pos.x + 12.0f, pos.y + 116.0f }, 192.0f, [&]() {
                 emit_command(EditorCommand::Exit);
                 push_editor_log(editor, "[file] Exit selected.");
             });
@@ -4857,21 +5200,45 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Window", TopMenu::Window, dropdown_window_size(216.0f, 4), [&](gui::Vec2 pos)
+        open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, 10), [&](gui::Vec2 pos)
         {
-            menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 216.0f, [&]() {
+            menu_item(editor.showOutliner ? "Hide Outliner" : "Show Outliner", { pos.x + 12.0f, pos.y + 14.0f }, 248.0f, [&]() {
+                editor.showOutliner = !editor.showOutliner;
+                push_editor_log(editor, editor.showOutliner ? "[window] World Outliner shown." : "[window] World Outliner hidden.");
+            });
+            menu_item(editor.showInspector ? "Hide Inspector" : "Show Inspector", { pos.x + 12.0f, pos.y + 48.0f }, 248.0f, [&]() {
+                editor.showInspector = !editor.showInspector;
+                push_editor_log(editor, editor.showInspector ? "[window] Inspector shown." : "[window] Inspector hidden.");
+            });
+            menu_item(editor.showConsoleDock ? "Hide Console Dock" : "Show Console Dock", { pos.x + 12.0f, pos.y + 82.0f }, 248.0f, [&]() {
+                editor.showConsoleDock = !editor.showConsoleDock;
+                push_editor_log(editor, editor.showConsoleDock ? "[window] Console Dock shown." : "[window] Console Dock hidden.");
+            });
+            menu_item(editor.showAiChat ? "Hide AI Chat" : "Show AI Chat", { pos.x + 12.0f, pos.y + 116.0f }, 248.0f, [&]() {
+                editor.showAiChat = !editor.showAiChat;
+                push_editor_log(editor, editor.showAiChat ? "[window] AI Chat shown." : "[window] AI Chat hidden.");
+            });
+            menu_item("Reset Editor Layout", { pos.x + 12.0f, pos.y + 150.0f }, 248.0f, [&]() {
+                reset_editor_layout(editor);
+                push_editor_log(editor, "[window] Editor layout reset.");
+            });
+            menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 184.0f }, 248.0f, [&]() {
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 push_editor_log(editor, "[window] Preview mode set to Editor.");
             });
-            menu_item("Preview: None", { pos.x + 12.0f, pos.y + 48.0f }, 216.0f, [&]() {
+            menu_item("Preview: None", { pos.x + 12.0f, pos.y + 218.0f }, 248.0f, [&]() {
                 editor.previewMode = core::ScenePreviewMode::None;
                 push_editor_log(editor, "[window] Preview mode set to None.");
             });
-            menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 82.0f }, 216.0f, [&]() {
+            menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 252.0f }, 248.0f, [&]() {
                 handle_scene_tool(editor, "focus_selection");
             });
-            menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 116.0f }, 216.0f, [&]() {
+            menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 286.0f }, 248.0f, [&]() {
                 handle_scene_tool(editor, "toggle_helpers");
+            });
+            menu_item("Borderless Popout Host", { pos.x + 12.0f, pos.y + 320.0f }, 248.0f, [&]() {
+                editor.detachedPanelHostStatus = "Borderless panel-host design accepted: panels stay docked now; next pass routes selected GUI containers into linked contexts.";
+                push_editor_log(editor, "[window] Borderless popout host staged for the next context-routing pass.");
             });
         });
 
@@ -4889,9 +5256,8 @@ namespace epochnamespace
                 epochnamespace::previewgrid::reset_camera(ctx.get());
                 push_editor_log(editor, "[tools] Preview camera reset.");
             });
-            menu_item("Run Script", { pos.x + 12.0f, pos.y + 116.0f }, 228.0f, [&]() {
-                emit_command(EditorCommand::RunScript, editor.activeScript);
-                push_editor_log(editor, std::string("[tools] Script run requested for '") + editor.activeScript + "'.");
+            menu_item("Save Project", { pos.x + 12.0f, pos.y + 116.0f }, 228.0f, [&]() {
+                repair_active_project_evidence(editor);
             });
             menu_item("Update to Latest...", { pos.x + 12.0f, pos.y + 150.0f }, 228.0f, [&]() {
                 editor.showUpdateConfirmModal = true;

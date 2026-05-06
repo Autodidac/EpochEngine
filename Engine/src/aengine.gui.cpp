@@ -282,6 +282,8 @@ namespace epochnamespace::gui
             Vec2 contentMin{};
             Vec2 contentMax{};
             Vec2 mousePos{};
+            std::string windowKey{};
+            std::uint64_t widgetSerial = 0;
 
             bool mouseDown = false;
             bool prevMouseDown = false;
@@ -854,7 +856,7 @@ namespace epochnamespace::gui
                     g_frame.contentMax.y - g_frame.contentMin.y);
         }
 
-        [[nodiscard]] static std::size_t widget_press_key(std::string_view label, Vec2 pos, Vec2 size) noexcept
+        [[nodiscard]] static std::size_t widget_press_key(std::string_view label, Vec2, Vec2) noexcept
         {
             std::size_t h = static_cast<std::size_t>(1469598103934665603ull);
             const auto mix = [&h](std::uint64_t value) noexcept
@@ -862,18 +864,12 @@ namespace epochnamespace::gui
                 h ^= static_cast<std::size_t>(value);
                 h *= static_cast<std::size_t>(1099511628211ull);
             };
+            for (const unsigned char ch : g_frame.windowKey)
+                mix(ch);
+            mix(++g_frame.widgetSerial);
             for (const unsigned char ch : label)
                 mix(ch);
-
-            const auto quantize = [](float value) noexcept -> std::uint64_t
-            {
-                return static_cast<std::uint64_t>(static_cast<std::int64_t>(std::lround(value * 4.0f)));
-            };
-            mix(quantize(pos.x));
-            mix(quantize(pos.y));
-            mix(quantize(size.x));
-            mix(quantize(size.y));
-            return h;
+            return h == 0 ? 1 : h;
         }
 
         [[nodiscard]] static float base_line_height(float scale) noexcept
@@ -1420,6 +1416,8 @@ namespace epochnamespace::gui
             g_frame.windowSize = {};
             g_frame.contentMin = {};
             g_frame.contentMax = {};
+            g_frame.windowKey.clear();
+            g_frame.widgetSerial = 0;
             g_frame.insideWindow = false;
             g_frame.lastButtonBounds.reset();
             g_frame.activeTheme = ThemeVariant::DefaultDark;
@@ -1701,6 +1699,26 @@ namespace epochnamespace::gui
         g_frame.mouseWheelDelta = 0;
     }
 
+    Vec2 mouse_position() noexcept
+    {
+        return g_frame.mousePos;
+    }
+
+    bool is_mouse_down() noexcept
+    {
+        return g_frame.mouseDown;
+    }
+
+    bool was_mouse_pressed() noexcept
+    {
+        return g_frame.justPressed;
+    }
+
+    bool was_mouse_released() noexcept
+    {
+        return g_frame.justReleased;
+    }
+
     void push_theme(ThemeVariant theme) noexcept
     {
         g_frame.themeStack.push_back(g_frame.activeTheme);
@@ -1730,6 +1748,8 @@ namespace epochnamespace::gui
         g_frame.origin = position;
         g_frame.windowSize = size;
         g_frame.insideWindow = true;
+        g_frame.windowKey.assign(title.begin(), title.end());
+        g_frame.widgetSerial = 0;
         g_frame.contentMin = position;
         g_frame.contentMax = { position.x + size.x, position.y + size.y };
         const auto& palette = active_palette();
@@ -1764,6 +1784,8 @@ namespace epochnamespace::gui
         g_frame.insideWindow = false;
         g_frame.contentMin = {};
         g_frame.contentMax = {};
+        g_frame.windowKey.clear();
+        g_frame.widgetSerial = 0;
     }
 
     void begin_modal_window(const ModalWindowOptions& options) noexcept

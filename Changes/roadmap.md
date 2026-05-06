@@ -230,10 +230,10 @@ engine shape and should be treated as starting truth for the next passes:
   files rewrite repo truth directly
 - a project-centric launcher/editor shell rather than a demo-first launch path
 - generated game/tool project creation and generated project discovery
-- a real project/scripts dock with build, run, and diagnostics surfaces
-- project-local script stub creation from the Scripts workspace, with new stubs
-  written under the active project's `scripts/` folder and surfaced in project
-  notes for build/run evidence
+- a real project/assets dock with build, run, script, and diagnostics surfaces
+- project-local script stub creation from the Assets/project surface, with new
+  stubs written under the active project's `scripts/` folder and surfaced in
+  project notes for build/run evidence
 - a shallow active-project file/folder browser that skips generated build/bin/.vs
   output and lets project scripts be selected without leaving the editor
 - an `Assets` workspace tab with first-pass file-type thumbnail cards for active
@@ -254,10 +254,9 @@ engine shape and should be treated as starting truth for the next passes:
   forbidding bypass-capable app/server launch, listener creation, port binding,
   hidden control surfaces, or model-accessible services without a human
   enable/run action
-- a temporary bottom Console Dock split into Project, Scripts, Assets, Systems,
-  AI, and Output evidence tabs. This is not the final editor-window system; it
-  is the current log/evidence strip until separate editor frames/views are
-  promoted.
+- a temporary bottom Console Dock split into Project, Assets, Systems, AI, and
+  Output evidence tabs. This is not the final editor-window system; it is the
+  current log/evidence strip until separate editor frames/views are promoted.
 - first-pass shared GUI scroll areas for arbitrary window bodies, now used by
   the World Outliner, Inspector, and non-output Console Dock pages so tall AI
   controls, project evidence, and status panels stay reachable on normal
@@ -318,6 +317,29 @@ engine shape and should be treated as starting truth for the next passes:
   smear artifacts seen while scrolling tall AI/path rows
 - GUI buttons now capture on press and fire on release, so launcher/editor
   actions happen after the pressed visual state instead of racing it
+- project selection no longer silently creates or rewrites project shells; File
+  > Save Project, Project > Save Active Project, and the centered Run button are
+  the explicit operator actions that materialize/update generated project files
+- the top scene command strip now has one centered Run action. It runs the
+  selected script when a script asset is active, otherwise it saves/builds the
+  active project before launching the generated output
+- generated Sandbox and ProjectLauncher shells expose `--project-self-test` so
+  child project output can be verified without launching GUI windows
+- the checked-in engine now exposes `--editor-project-self-test <id>` so Sandbox
+  and ProjectLauncher shells can be materialized and built from the real engine
+  before their generated child `--project-self-test` paths are run
+- Self-Iteration Sandbox controls now force the `sandbox` profile and rewrite
+  stale generated shell identity when manifest id/script/template evidence does
+  not match the selected profile. Sandbox is for manipulating/testing Epoch
+  itself, not for silently creating normal scripted projects.
+- GUI button press identity is now window-local and order-based instead of
+  pixel-position based, reducing pressed-state flicker during resize. Remaining
+  OpenGL present/resize flicker and real borderless linked-context popouts stay
+  open work.
+- World Outliner, Inspector, Console Dock, and AI Chat are now individually
+  hideable/reopenable from Window, with first-pass draggable side and bottom
+  splitters plus reset controls. Borderless linked-context popouts are only
+  staged as a host route and are not yet normal operation.
 
 ## Phase Progress
 
@@ -325,7 +347,7 @@ engine shape and should be treated as starting truth for the next passes:
   initial build-path honesty, and documentation cleanup.
 - [x] Phase 2: Project-centric runtime shell, generated project creation,
   project/script proof rows, launcher/editor separation, and baseline
-  Project/Scripts workspace flow.
+  project/assets script flow.
 - [~] Phase 3: Systems workspace, time spine, backend ownership diagnostics,
   build-confidence surfacing, and hosted/local build reliability.
 - [~] Phase 4: GUI maturity, drag/drop, text-input smokes, editor polish, and
@@ -367,7 +389,7 @@ engine shape and should be treated as starting truth for the next passes:
   Self-Iteration Sandbox stays the AI/engine-iteration shell
 - continue replacing hardcoded built-in sample assumptions with project-owned
   runtime flow
-- keep the already-landed project/scripts shell honest instead of letting it
+- keep the already-landed project/script asset shell honest instead of letting it
   drift back toward placeholder tooling
 - keep the launcher centered on projects, contexts, settings, and updates
 - keep generated project `PROJECT_NOTES.md` visible from the Project workspace
@@ -375,11 +397,11 @@ engine shape and should be treated as starting truth for the next passes:
 - keep generated Sandbox/ProjectLauncher child builds anchored to current VS
   2022 `v143` toolset metadata in both generated files and the checked-in
   engine projects those generated files reference.
-- keep the bottom dock centered on `Project`, `Scripts`, `Assets`, `Systems`,
-  `AI`, and `Output` as evidence/status tabs, not as the final
-  scene/editor-window model
-- replace the temporary console/chat column buttons with a real draggable
-  resize-column control once the GUI input model has stable splitters
+- keep the bottom dock centered on `Project`, `Assets`, `Systems`, `AI`, and
+  `Output` as evidence/status tabs, not as the final scene/editor-window model
+- promote the new first-pass draggable splitters into reusable dock/window GUI
+  primitives with persisted layouts, keyboard accessibility, and true resize
+  cursors
 - build proper editor frames/windows/views next: Scene/Game, Software/Tool,
   Self-Iteration Sandbox, AI Visualizer, ProjectLauncher, and Build/Output
   should be independently focusable/dockable surfaces using shared GUI controls

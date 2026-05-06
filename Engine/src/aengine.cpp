@@ -265,6 +265,36 @@ namespace epochnamespace::core
         return (std::min)(static_cast<int>(parsed), kMaxDelayMs);
     }
 
+    [[nodiscard]] inline int run_editor_project_self_test(std::string_view project_id)
+    {
+        if (project_id.empty())
+            project_id = "sandbox";
+
+        const auto ensured = epochnamespace::editor_ensure_project_shell(project_id);
+        std::cout << "editor_project_self_test.project_id=" << project_id << '\n';
+        std::cout << "editor_project_self_test.materialize=" << (ensured.succeeded ? "pass" : "fail") << '\n';
+        std::cout << "editor_project_self_test.summary=" << ensured.summary << '\n';
+        if (!ensured.root_path.empty())
+            std::cout << "editor_project_self_test.root=" << ensured.root_path << '\n';
+        if (!ensured.manifest_path.empty())
+            std::cout << "editor_project_self_test.manifest=" << ensured.manifest_path << '\n';
+        if (!ensured.default_script_path.empty())
+            std::cout << "editor_project_self_test.script=" << ensured.default_script_path << '\n';
+
+        if (!ensured.succeeded)
+            return 2;
+
+        const auto build = epochnamespace::editor_build_project(ensured.root_path);
+        std::cout << "editor_project_self_test.build=" << (build.succeeded ? "pass" : "fail") << '\n';
+        std::cout << "editor_project_self_test.build_summary=" << build.summary << '\n';
+        if (!build.output_path.empty())
+            std::cout << "editor_project_self_test.output=" << build.output_path << '\n';
+        if (!build.log_path.empty())
+            std::cout << "editor_project_self_test.log=" << build.log_path << '\n';
+
+        return build.succeeded ? 0 : 3;
+    }
+
     inline void apply_post_update_startup_cooldown(const std::string_view log_system)
     {
         const int delay_ms = read_post_update_startup_delay_ms();
@@ -3130,6 +3160,9 @@ int WINAPI wWinMain(
         if (cli_result.version_requested && !cli_result.update_requested)
             return 0;
 
+        if (cli_result.editor_project_self_test_requested)
+            return epochnamespace::core::run_editor_project_self_test(cli_result.editor_project_self_test_id);
+
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,
             .binary_url = urls::binary_url,
@@ -3185,6 +3218,9 @@ int main(int argc, char** argv)
 
         if (cli_result.version_requested && !cli_result.update_requested)
             return 0;
+
+        if (cli_result.editor_project_self_test_requested)
+            return epochnamespace::core::run_editor_project_self_test(cli_result.editor_project_self_test_id);
 
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,

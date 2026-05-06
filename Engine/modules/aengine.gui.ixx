@@ -194,6 +194,10 @@ namespace epochnamespace::gui
         bool mouse_down) noexcept;
 
     export void end_frame() noexcept;
+    export Vec2 mouse_position() noexcept;
+    export bool is_mouse_down() noexcept;
+    export bool was_mouse_pressed() noexcept;
+    export bool was_mouse_released() noexcept;
 
     export void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void end_window() noexcept;

@@ -928,10 +928,10 @@ namespace
             "PersistentLevel",
             "project:sandbox",
             "Projects/Sandbox/project.epoch.json",
-            "game-project",
-            "project_demo_bootstrap",
-            "AI and engine-iteration sandbox for editor, runtime, and renderer work.",
-            "embedded-static-include or duplicated-source",
+            "engine-self-iteration-sandbox",
+            "engine_self_iteration_harness",
+            "AI and engine self-iteration sandbox for manipulating, building, and testing Epoch itself.",
+            "repo-local engine self-iteration child build for manipulation/testing only",
             "Engine/include",
             ""
         },
@@ -968,7 +968,7 @@ namespace
             ""
         },
         {
-            EditorProjectKind::Game,
+            EditorProjectKind::Tool,
             "projectlauncher",
             "ProjectLauncher",
             "Projects/ProjectLauncher",
@@ -1788,6 +1788,26 @@ namespace
         const ProjectShellSpec& spec,
         std::string_view script_api_include)
     {
+        if (spec.project_id == "sandbox")
+        {
+            return std::string(script_api_include)
+                + "namespace\n"
+                + "{\n"
+                + "    void host_log(EpochScriptHost* host, const char* message)\n"
+                + "    {\n"
+                + "        if (host && host->log)\n"
+                + "            host->log(host->user_data, message);\n"
+                + "    }\n"
+                + "}\n\n"
+                + "EPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost* host)\n"
+                + "{\n"
+                + "    if (!host)\n"
+                + "        return;\n\n"
+                + "    host_log(host, \"engine_self_iteration_harness: sandbox is for manipulating and testing Epoch itself.\");\n"
+                + "    host_log(host, \"engine_self_iteration_harness: review staged changes, build evidence, and editor behavior before promotion.\");\n"
+                + "}\n";
+        }
+
         if (spec.kind == EditorProjectKind::Tool)
         {
             return std::string(script_api_include)
@@ -1886,7 +1906,26 @@ namespace
         const fs::path manifestAbsolute = fs::absolute(manifest).lexically_normal();
         const fs::path repoEngineInclude = (repoRoot / "Engine" / "include").lexically_normal();
         const fs::path repoStaticLibProject = (repoRoot / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj").lexically_normal();
-        const std::string integrationMode = "repo-local embedded-engine child build across headers/modules/source/scripting/resources with project-selected editor boot";
+        const bool isSelfIterationSandbox = spec.project_id == "sandbox";
+        const std::string kindText = isSelfIterationSandbox
+            ? "engine-self-iteration-sandbox"
+            : std::string(spec.kind == EditorProjectKind::Tool ? "tool" : "game");
+        const std::string kindDisplay = isSelfIterationSandbox
+            ? "Engine Self-Iteration Sandbox"
+            : std::string(spec.kind == EditorProjectKind::Tool ? "Software / Tool" : "Game");
+        const std::string integrationMode = isSelfIterationSandbox
+            ? "repo-local engine self-iteration child build for manipulating/testing Epoch source and editor behavior only"
+            : "repo-local embedded-engine child build across headers/modules/source/scripting/resources with project-selected editor boot";
+        const std::string shellLabel = isSelfIterationSandbox ? "engine self-iteration sandbox" : "project shell";
+        const std::string selfTestTitle = isSelfIterationSandbox
+            ? "Epoch engine self-iteration sandbox self-test"
+            : "Epoch generated project shell self-test";
+        const std::string versionTitle = isSelfIterationSandbox
+            ? "Epoch engine self-iteration sandbox host: "
+            : "Epoch generated project shell: ";
+        const std::string scriptLabel = isSelfIterationSandbox
+            ? "Manipulation/test harness script"
+            : "Script";
         const std::string publicIncludeRoot = repoEngineInclude.generic_string();
         const std::string projectGuid = deterministic_guid(spec.project_id + ":windows-child");
         const std::string repoRootWin = xml_escape(to_windows_path(repoRoot.string()));
@@ -1949,7 +1988,7 @@ namespace
             "  \"engine\": \"epoch\",\n"
             "  \"id\": \"" + json_escape(spec.project_id) + "\",\n"
             "  \"display_name\": \"" + json_escape(spec.project_name) + "\",\n"
-            "  \"kind\": \"" + std::string(spec.kind == EditorProjectKind::Tool ? "tool" : "game") + "\",\n"
+            "  \"kind\": \"" + kindText + "\",\n"
             "  \"template_family\": \"" + json_escape(spec.template_family) + "\",\n"
             "  \"scene\": \"" + json_escape(worldFile.generic_string()) + "\",\n"
             "  \"default_script\": \"" + json_escape(spec.script_id) + "\",\n"
@@ -1970,10 +2009,10 @@ namespace
 
         const std::string readmeText =
             "# " + spec.project_name + "\n\n"
-            "Generated or repaired by the Epoch editor project shell flow.\n\n"
-            "- Kind: " + std::string(spec.kind == EditorProjectKind::Tool ? "Software / Tool" : "Game") + "\n"
+            "Generated or repaired by the Epoch editor " + shellLabel + " flow.\n\n"
+            "- Kind: " + kindDisplay + "\n"
             "- Scene: " + worldFile.filename().string() + "\n"
-            "- Script: " + scriptFile.filename().string() + "\n"
+            "- " + scriptLabel + ": " + scriptFile.filename().string() + "\n"
             + readmeDemoLine
             + "- Engine integration: " + integrationMode + "\n"
             "- Public include root: " + publicIncludeRoot + "\n"
@@ -2006,7 +2045,7 @@ namespace
         const std::string worldText =
             "scene \"" + spec.world_name + "\"\n"
             "{\n"
-            "    kind \"" + std::string(spec.kind == EditorProjectKind::Tool ? "tool" : "game") + "\"\n"
+            "    kind \"" + kindText + "\"\n"
             "    support_tier \"baseline\"\n"
             "}\n";
 
@@ -2014,6 +2053,8 @@ namespace
 
         const std::string entrySourceText =
             "#include <cstdlib>\n"
+            "#include <cstdio>\n"
+            "#include <cstring>\n"
             "#if defined(_WIN32)\n"
             "#  include <stdlib.h>\n"
             "#else\n"
@@ -2022,6 +2063,17 @@ namespace
             "#include <aengine.hpp>\n\n"
             "namespace\n"
             "{\n"
+            "    bool has_arg(int argc, char** argv, const char* needle) noexcept\n"
+            "    {\n"
+            "        if (!needle)\n"
+            "            return false;\n"
+            "        for (int i = 1; i < argc; ++i)\n"
+            "        {\n"
+            "            if (argv && argv[i] && std::strcmp(argv[i], needle) == 0)\n"
+            "                return true;\n"
+            "        }\n"
+            "        return false;\n"
+            "    }\n\n"
             "    void boot_project_shell()\n"
             "    {\n"
             "#if defined(_WIN32)\n"
@@ -2034,11 +2086,30 @@ namespace
             "        setenv(\"EPOCH_EDITOR_PROJECT_ROOT\", \"" + cxx_escape(rootAbsoluteText) + "\", 1);\n"
             "#endif\n"
             "    }\n"
+            "\n"
+            "    void print_project_shell_self_test() noexcept\n"
+            "    {\n"
+            "        std::puts(\"" + cxx_escape(selfTestTitle) + "\");\n"
+            "        std::puts(\"project_id=" + cxx_escape(spec.project_id) + "\");\n"
+            "        std::puts(\"project_name=" + cxx_escape(spec.project_name) + "\");\n"
+            "        std::puts(\"project_root=" + cxx_escape(rootAbsoluteText) + "\");\n"
+            "        std::puts(\"manifest=" + cxx_escape(manifestAbsoluteText) + "\");\n"
+            "        std::puts(\"engine_integration=" + cxx_escape(integrationMode) + "\");\n"
+            "    }\n"
             "}\n\n"
             "int main(int argc, char** argv)\n"
             "{\n"
-            "    (void)argc;\n"
-            "    (void)argv;\n"
+            "    if (has_arg(argc, argv, \"--version\") || has_arg(argc, argv, \"-v\"))\n"
+            "    {\n"
+            "        std::puts(\"" + cxx_escape(versionTitle + spec.project_name) + "\");\n"
+            "        return 0;\n"
+            "    }\n"
+            "    if (has_arg(argc, argv, \"--project-self-test\"))\n"
+            "    {\n"
+            "        boot_project_shell();\n"
+            "        print_project_shell_self_test();\n"
+            "        return 0;\n"
+            "    }\n"
             "    boot_project_shell();\n"
             "    epochnamespace::core::RunEngine();\n"
             "    return 0;\n"
@@ -2086,6 +2157,9 @@ namespace
             "  <ItemGroup>\n"
             "    <ProjectReference Include=\"" + repoStaticLibProjectWin + "\">\n"
             "      <Project>{BBA639B7-2B54-4E38-90AC-667FC3303475}</Project>\n"
+            "      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>\n"
+            "      <LinkLibraryDependencies>false</LinkLibraryDependencies>\n"
+            "      <AdditionalProperties>SolutionDir=" + repoRootWin + "\\;VcpkgManifestRoot=" + repoRootWin + "\\Engine\\;EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1;PlatformToolset=v143</AdditionalProperties>\n"
             "    </ProjectReference>\n"
             "  </ItemGroup>\n"
             "  <PropertyGroup Label=\"Globals\">\n"
@@ -2534,6 +2608,37 @@ namespace epochnamespace
             && fs::exists(entrySource, ec) && !ec
             && fs::exists(windowsProject, ec) && !ec)
         {
+            const std::string manifestText = read_text_file(manifest);
+            const auto manifestId = extract_json_string_field(manifestText, "id");
+            const auto manifestKind = extract_json_string_field(manifestText, "kind");
+            const auto manifestScript = extract_json_string_field(manifestText, "default_script");
+            const auto manifestTemplate = extract_json_string_field(manifestText, "template_family");
+            const std::string expectedKind = profile->id == "sandbox"
+                ? "engine-self-iteration-sandbox"
+                : std::string(profile->kind == EditorProjectKind::Tool ? "tool" : "game");
+            const bool manifestMatchesProfile =
+                manifestId && *manifestId == profile->id
+                && manifestKind && *manifestKind == expectedKind
+                && manifestScript && *manifestScript == profile->default_script
+                && manifestTemplate && *manifestTemplate == profile->template_family;
+
+            if (!manifestMatchesProfile)
+            {
+                return write_project_shell(ProjectShellSpec{
+                    .kind = profile->kind,
+                    .project_name = std::string(profile->display_name),
+                    .project_id = std::string(profile->id),
+                    .root = root,
+                    .world_file = fs::path{ profile->scene_path },
+                    .world_name = std::string(profile->world_name),
+                    .template_family = std::string(profile->template_family),
+                    .script_id = std::string(profile->default_script),
+                    .description = std::string(profile->description),
+                    .demo_model_asset = std::string(profile->demo_model_asset),
+                    .overwrite_existing = true
+                });
+            }
+
             if (!repair_generated_windows_child_project_build_files(root))
             {
                 return {
