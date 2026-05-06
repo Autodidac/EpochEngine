@@ -321,8 +321,9 @@ engine shape and should be treated as starting truth for the next passes:
   > Save Project, Project > Save Active Project, and the centered Run button are
   the explicit operator actions that materialize/update generated project files
 - the top scene command strip now has one centered Run action. It runs the
-  selected script when a script asset is active, otherwise it saves/builds the
-  active project before launching the generated output
+  selected script when a script asset is active, otherwise it saves and rebuilds
+  the active project before launching the generated output. A failed build now
+  cancels launch instead of falling through to stale child executables.
 - generated Sandbox and ProjectLauncher shells expose `--project-self-test` so
   child project output can be verified without launching GUI windows
 - the checked-in engine now exposes `--editor-project-self-test <id>` so Sandbox
@@ -332,14 +333,20 @@ engine shape and should be treated as starting truth for the next passes:
   stale generated shell identity when manifest id/script/template evidence does
   not match the selected profile. Sandbox is for manipulating/testing Epoch
   itself, not for silently creating normal scripted projects.
-- GUI button press identity is now window-local and order-based instead of
-  pixel-position based, reducing pressed-state flicker during resize. Remaining
-  OpenGL present/resize flicker and real borderless linked-context popouts stay
-  open work.
+- GUI button press identity is geometry-stable again, while splitters now use a
+  dedicated non-button draw path. This keeps resize chrome from polluting normal
+  button press state and reduces the launcher pressed-state flicker regression.
+  Remaining OpenGL present/resize flicker and real borderless linked-context
+  popouts stay open work.
 - World Outliner, Inspector, Console Dock, and AI Chat are now individually
   hideable/reopenable from Window, with first-pass draggable side and bottom
   splitters plus reset controls. Borderless linked-context popouts are only
   staged as a host route and are not yet normal operation.
+- top-level editor modes now route the center of the shell into separate
+  Scene/Game, Project, Assets, Self-Iteration Sandbox, and Systems surfaces.
+  Scene/Game keep the 3D viewport; Project/Assets/AI/Systems disable the scene
+  preview and show mode-specific GUI instead of forcing all controls into the
+  bottom console dock.
 
 ## Phase Progress
 

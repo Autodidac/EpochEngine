@@ -1,5 +1,23 @@
 # Epoch Changelog
 
+## [v0.84.14]
+- Bumped the active source line to `v0.84.14` for editor surface routing,
+  splitter rendering stabilization, and ProjectLauncher rebuild-on-run.
+- Replaced the fake blank-button splitter draw path with dedicated splitter
+  chrome so resize bars no longer depend on button state, window membership, or
+  sampled theme leftovers during maximize/resize.
+- Restored geometry-stable GUI press identity while keeping splitters out of
+  the button path, reducing launcher pressed-state flicker without letting
+  resize bars consume the normal button identity stream.
+- Added guard rails to GUI sprite submission so zero, negative, or non-finite
+  rectangles are dropped before they can contaminate OpenGL output during live
+  resize/maximize.
+- Changed the centered Run path to always save/build the active generated
+  project and cancel on build failure instead of launching stale child outputs.
+- Added separate central editor surfaces for Project, Assets, Self-Iteration
+  Sandbox, and Systems; only Scene/Game modes keep the real 3D scene viewport
+  active.
+
 ## [v0.84.13]
 - Bumped the active source line to `v0.84.13` for Sandbox-vs-launcher target
   routing, generated child-shell self-test coverage, and GUI press identity

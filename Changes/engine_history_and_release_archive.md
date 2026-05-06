@@ -25,7 +25,7 @@ archive for historical context and milestone tracing.
 Current orientation:
 
 - Latest published stable runtime line: `v0.84.05`
-- Current development source line: `v0.84.13`
+- Current development source line: `v0.84.14`
 
 ## What the engine has become so far
 
@@ -66,6 +66,15 @@ From the archived work in this file, a few themes are clear:
 These notes were previously tracked in `post_v0_83_work_collated.md`. They stay
 here because they explain the active engine/editor direction more directly than
 the older updater-era release cadence alone.
+
+### [Work Log | Development line] v0.84.14
+
+`v0.84.14` moved the editor shell closer to the intended professional
+multi-surface layout: Project, Assets, Self-Iteration Sandbox, and Systems now
+own center-panel GUI surfaces while Scene/Game keep the real 3D viewport. The
+same pass replaced fake button-based resize bars with dedicated splitter chrome
+and made the centered Run action rebuild the active generated project before
+launching so ProjectLauncher cannot silently run stale output.
 
 ### [Work Log | Development line] v0.83.59
 - Restored SDL and SFML dock takeover ownership so the real backend child

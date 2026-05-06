@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.13`
+Current source version: `v0.84.14`
 
 ## Architecture highlights
 
@@ -27,6 +27,10 @@ Current source version: `v0.84.13`
 - **Project browser + asset cards**: the editor now exposes project-local script
   stub creation, project/engine script selection, a shallow file/folder browser,
   and an `Assets` workspace with first-pass file-type thumbnail cards.
+- **Mode-specific editor surfaces**: Scene/Game modes keep the 3D viewport,
+  while Project, Assets, Self-Iteration Sandbox, and Systems now own central GUI
+  surfaces so build, asset, AI, and systems controls are no longer packed only
+  into the bottom console dock.
 - **Generated project verification**: generated Sandbox and ProjectLauncher
   child builds now expose non-GUI self-tests, and the checked-in engine exposes
   `--editor-project-self-test <id>`, so project shells can be materialized,
@@ -99,6 +103,9 @@ Current source version: `v0.84.13`
 - World Outliner, Inspector, Console Dock, and AI Chat can now be hidden,
   reopened, reset, and resized with first-pass splitters. True borderless
   linked-context panel popouts remain the next context-host step.
+- Splitters now render through dedicated GUI chrome instead of fake blank
+  buttons, and the centered Run action rebuilds generated child projects before
+  launch so stale ProjectLauncher output is not mistaken for a fresh build.
 - Backend presentation is more visually coherent now that the active renderer
   base colors are being pulled toward the same darker Vulkan-style baseline,
   and SFML’s shared preview path is clipped back to the intended scene view.

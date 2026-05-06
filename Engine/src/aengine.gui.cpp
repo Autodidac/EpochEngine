@@ -802,6 +802,12 @@ namespace epochnamespace::gui
             if (!handle.is_valid())
                 return;
 
+            if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(w) || !std::isfinite(h)
+                || w <= 0.0f || h <= 0.0f)
+            {
+                return;
+            }
+
             Context* ctx = g_frame.ctx;
             if (!ctx)
                 return;
@@ -856,7 +862,7 @@ namespace epochnamespace::gui
                     g_frame.contentMax.y - g_frame.contentMin.y);
         }
 
-        [[nodiscard]] static std::size_t widget_press_key(std::string_view label, Vec2, Vec2) noexcept
+        [[nodiscard]] static std::size_t widget_press_key(std::string_view label, Vec2 pos, Vec2 size) noexcept
         {
             std::size_t h = static_cast<std::size_t>(1469598103934665603ull);
             const auto mix = [&h](std::uint64_t value) noexcept
@@ -866,9 +872,17 @@ namespace epochnamespace::gui
             };
             for (const unsigned char ch : g_frame.windowKey)
                 mix(ch);
-            mix(++g_frame.widgetSerial);
             for (const unsigned char ch : label)
                 mix(ch);
+
+            const auto quantize = [](float value) noexcept -> std::uint64_t
+            {
+                return static_cast<std::uint64_t>(static_cast<std::int64_t>(std::lround(value * 4.0f)));
+            };
+            mix(quantize(pos.x));
+            mix(quantize(pos.y));
+            mix(quantize(size.x));
+            mix(quantize(size.y));
             return h == 0 ? 1 : h;
         }
 
@@ -1875,6 +1889,32 @@ namespace epochnamespace::gui
         bounds.position = { position.x + border, contentY };
         bounds.size = { contentWidth, contentHeight };
         return bounds;
+    }
+
+    void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active) noexcept
+    {
+        ensure_resources();
+        if (!g_frame.ctx || size.x <= 0.0f || size.y <= 0.0f)
+            return;
+
+        const auto& palette = active_palette();
+        const SpriteHandle fill =
+            active ? palette.buttonActive
+            : hovered ? palette.buttonHover
+            : palette.textField;
+        draw_sprite(fill, position.x, position.y, size.x, size.y);
+
+        const bool vertical = size.y >= size.x;
+        if (vertical && size.x >= 5.0f)
+        {
+            const float x = position.x + std::floor(size.x * 0.5f);
+            draw_sprite(palette.panelBackground, x, position.y, 1.0f, size.y);
+        }
+        else if (!vertical && size.y >= 5.0f)
+        {
+            const float y = position.y + std::floor(size.y * 0.5f);
+            draw_sprite(palette.panelBackground, position.x, y, size.x, 1.0f);
+        }
     }
     static bool button_with_state(std::string_view label, Vec2 size, bool selected) noexcept
     {

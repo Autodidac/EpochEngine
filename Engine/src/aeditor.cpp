@@ -122,6 +122,16 @@ namespace epochnamespace
             Dock
         };
 
+        enum class EditorMainSurface : unsigned char
+        {
+            Scene = 0,
+            Game2D,
+            Assets,
+            Project,
+            AISandbox,
+            Systems
+        };
+
         struct SystemsSurfaceState
         {
             float renderZoom{ 1.0f };
@@ -310,6 +320,7 @@ namespace epochnamespace
             EditorTimeControl timeControl{};
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
+            EditorMainSurface mainSurface{ EditorMainSurface::Project };
             float workspaceSplit{ 0.68f };
             float outlinerSplit{ 0.20f };
             float inspectorSplit{ 0.22f };
@@ -352,6 +363,32 @@ namespace epochnamespace
                 && point.y >= pos.y
                 && point.x <= pos.x + size.x
                 && point.y <= pos.y + size.y;
+        }
+
+        [[nodiscard]] static bool main_surface_uses_scene(EditorMainSurface surface) noexcept
+        {
+            return surface == EditorMainSurface::Scene || surface == EditorMainSurface::Game2D;
+        }
+
+        [[nodiscard]] static std::string_view main_surface_title(EditorMainSurface surface) noexcept
+        {
+            switch (surface)
+            {
+            case EditorMainSurface::Scene:
+                return "Perspective";
+            case EditorMainSurface::Game2D:
+                return "Game / 2D View";
+            case EditorMainSurface::Assets:
+                return "Asset Browser";
+            case EditorMainSurface::Project:
+                return "Project Workspace";
+            case EditorMainSurface::AISandbox:
+                return "Self-Iteration Sandbox";
+            case EditorMainSurface::Systems:
+                return "Systems Workspace";
+            default:
+                return "Workspace";
+            }
         }
 
         static void reset_editor_layout(EditorState& editor) noexcept
@@ -3010,6 +3047,13 @@ namespace epochnamespace
         editor.inspectorSplit = std::clamp(editor.inspectorSplit, 0.14f, 0.45f);
         editor.dockSplit = std::clamp(editor.dockSplit, 0.14f, 0.58f);
 
+        const bool center_uses_scene = main_surface_uses_scene(editor.mainSurface);
+        const bool layout_outliner_visible = editor.showOutliner && center_uses_scene;
+        const bool layout_inspector_visible = editor.showInspector
+            && (center_uses_scene
+                || editor.mainSurface == EditorMainSurface::Project
+                || editor.mainSurface == EditorMainSurface::AISandbox);
+
         const float toolbar_h = 98.0f;
         const float splitter_w = 7.0f;
         const float splitter_h = 7.0f;
@@ -3024,10 +3068,10 @@ namespace epochnamespace
         const float left_max = (std::max)(left_min, (std::min)(520.0f, w * 0.46f));
         const float right_min = (std::min)(260.0f, (std::max)(0.0f, w * 0.38f));
         const float right_max = (std::max)(right_min, (std::min)(560.0f, w * 0.48f));
-        const float left_w = editor.showOutliner ? clamp_layout(w * editor.outlinerSplit, left_min, left_max) : 0.0f;
-        const float right_w = editor.showInspector ? clamp_layout(w * editor.inspectorSplit, right_min, right_max) : 0.0f;
-        const float left_split_w = editor.showOutliner ? splitter_w : 0.0f;
-        const float right_split_w = editor.showInspector ? splitter_w : 0.0f;
+        const float left_w = layout_outliner_visible ? clamp_layout(w * editor.outlinerSplit, left_min, left_max) : 0.0f;
+        const float right_w = layout_inspector_visible ? clamp_layout(w * editor.inspectorSplit, right_min, right_max) : 0.0f;
+        const float left_split_w = layout_outliner_visible ? splitter_w : 0.0f;
+        const float right_split_w = layout_inspector_visible ? splitter_w : 0.0f;
 
         const gui::Vec2 toolbar_pos{ 0.0f, 0.0f };
         const gui::Vec2 toolbar_size{ w, toolbar_h };
@@ -3096,24 +3140,26 @@ namespace epochnamespace
             repair_active_project_evidence(editor);
 
             const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
-            if (!path_exists(outputExe))
+            const auto build = editor_build_project(editor.projectRoot);
+            editor.projectBuildStatus = build.summary;
+            push_editor_log(
+                editor,
+                std::string("[project] ")
+                + (build.succeeded ? "Build passed. " : "Build failed. ")
+                + build.summary);
+            if (!build.output_path.empty())
+                push_editor_log(editor, std::string("[project] Output: ") + build.output_path);
+            if (!build.log_path.empty())
+                push_editor_log(editor, std::string("[project] Log: ") + build.log_path);
+            append_project_note(
+                editor,
+                "Run Build Step",
+                build.summary,
+                build.succeeded ? "Run saved the project shell and built the child executable." : "Run saved the project shell, but build failed; inspect the build log before retrying.");
+            if (!build.succeeded)
             {
-                const auto build = editor_build_project(editor.projectRoot);
-                editor.projectBuildStatus = build.summary;
-                push_editor_log(
-                    editor,
-                    std::string("[project] ")
-                    + (build.succeeded ? "Build passed. " : "Build failed. ")
-                    + build.summary);
-                if (!build.output_path.empty())
-                    push_editor_log(editor, std::string("[project] Output: ") + build.output_path);
-                if (!build.log_path.empty())
-                    push_editor_log(editor, std::string("[project] Log: ") + build.log_path);
-                append_project_note(
-                    editor,
-                    "Run Build Step",
-                    build.summary,
-                    build.succeeded ? "Run saved the project shell and built the child executable." : "Run saved the project shell, but build failed; inspect the build log before retrying.");
+                push_editor_log(editor, "[project] Run canceled because the project build failed.");
+                return;
             }
 
             const bool hasBuiltOutput = path_exists(outputExe);
@@ -3195,32 +3241,57 @@ namespace epochnamespace
         const std::string assets_tab = "Assets";
         const std::string project_tab = "Project";
         const std::string ai_control_tab = "AI Sandbox";
+        const std::string systems_tab = "Systems";
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(editor_tab, { 180.0f, tab_h }))
+        {
+            editor.mainSurface = EditorMainSurface::Scene;
             push_editor_log(editor, "[editor] Editor mode is active.");
+        }
         tab_x += 180.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(runtime_tab, { 156.0f, tab_h }))
+        {
+            editor.mainSurface = EditorMainSurface::Game2D;
             editor.workspaceTab = EditorWorkspaceTab::Project;
+            push_editor_log(editor, "[editor] Game/2D workspace is active.");
+        }
         tab_x += 156.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(assets_tab, { 124.0f, tab_h }))
+        {
+            editor.mainSurface = EditorMainSurface::Assets;
             editor.workspaceTab = EditorWorkspaceTab::Assets;
+        }
         tab_x += 124.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(project_tab, { 164.0f, tab_h }))
+        {
+            editor.mainSurface = EditorMainSurface::Project;
             editor.workspaceTab = EditorWorkspaceTab::Project;
+        }
         tab_x += 164.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(ai_control_tab, { 180.0f, tab_h }))
         {
+            editor.mainSurface = EditorMainSurface::AISandbox;
+            editor.workspaceTab = EditorWorkspaceTab::AI;
+            editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
             activate_self_iteration_sandbox(editor, ctx, true);
             push_editor_log(editor, "[ai] Self-Iteration Sandbox opened.");
+        }
+        tab_x += 180.0f + tab_gap;
+
+        gui::set_cursor({ tab_x, tab_y });
+        if (gui::button(systems_tab, { 124.0f, tab_h }))
+        {
+            editor.mainSurface = EditorMainSurface::Systems;
+            editor.workspaceTab = EditorWorkspaceTab::Systems;
         }
 
         gui::end_window();
@@ -3279,9 +3350,9 @@ namespace epochnamespace
         const gui::Vec2 mouse = gui::mouse_position();
         if (gui::was_mouse_pressed())
         {
-            if (editor.showOutliner && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size))
+            if (layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size))
                 editor.layoutDrag = EditorLayoutDrag::Outliner;
-            else if (editor.showInspector && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size))
+            else if (layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size))
                 editor.layoutDrag = EditorLayoutDrag::Inspector;
             else if (bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size))
                 editor.layoutDrag = EditorLayoutDrag::Dock;
@@ -3308,7 +3379,7 @@ namespace epochnamespace
             }
         }
 
-        if (editor.showOutliner && outliner_size.x > 1.0f && outliner_size.y > 1.0f)
+        if (layout_outliner_visible && outliner_size.x > 1.0f && outliner_size.y > 1.0f)
         {
         gui::begin_window("World Outliner", outliner_pos, outliner_size);
         const std::array<gui::InlineButtonSpec, 4> outlinerWindowButtons{{
@@ -3405,7 +3476,7 @@ namespace epochnamespace
         gui::end_window();
         }
 
-        if (editor.showInspector && details_size.x > 1.0f && details_size.y > 1.0f)
+        if (layout_inspector_visible && details_size.x > 1.0f && details_size.y > 1.0f)
         {
         gui::begin_window("Inspector", details_pos, details_size);
         const std::array<gui::InlineButtonSpec, 4> inspectorWindowButtons{{
@@ -3835,32 +3906,169 @@ namespace epochnamespace
         gui::end_window();
         }
 
-        result.scene_viewport = gui::scene_viewport("Perspective", viewport_pos, viewport_size);
-        ctx->set_scene_preview_mode(editor.previewMode);
-        ctx->set_scene_viewport(core::RenderViewport{
-            static_cast<int>((std::max)(0.0f, result.scene_viewport.position.x)),
-            static_cast<int>((std::max)(0.0f, result.scene_viewport.position.y)),
-            static_cast<int>((std::max)(0.0f, result.scene_viewport.size.x)),
-            static_cast<int>((std::max)(0.0f, result.scene_viewport.size.y))
-        });
-        update_scene_object_interaction(ctx, editor, result);
-        publish_editor_preview_markers(ctx.get(), editor);
+        if (center_uses_scene)
+        {
+            result.scene_viewport = gui::scene_viewport(main_surface_title(editor.mainSurface), viewport_pos, viewport_size);
+            ctx->set_scene_preview_mode(editor.previewMode);
+            ctx->set_scene_viewport(core::RenderViewport{
+                static_cast<int>((std::max)(0.0f, result.scene_viewport.position.x)),
+                static_cast<int>((std::max)(0.0f, result.scene_viewport.position.y)),
+                static_cast<int>((std::max)(0.0f, result.scene_viewport.size.x)),
+                static_cast<int>((std::max)(0.0f, result.scene_viewport.size.y))
+            });
+            update_scene_object_interaction(ctx, editor, result);
+            publish_editor_preview_markers(ctx.get(), editor);
+        }
+        else
+        {
+            result.scene_viewport = gui::WidgetBounds{ .position = viewport_pos, .size = viewport_size };
+            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+            ctx->clear_scene_viewport();
 
-        if (editor.showOutliner && outliner_split_size.x > 1.0f && outliner_split_size.y > 1.0f)
-        {
-            gui::set_cursor(outliner_split_pos);
-            (void)gui::button(" ", outliner_split_size);
+            gui::begin_window(main_surface_title(editor.mainSurface), viewport_pos, viewport_size);
+            const gui::Vec2 centerScrollStart = gui::cursor_position();
+            const float centerWidth = (std::max)(180.0f, viewport_size.x - 24.0f);
+            const float centerScrollHeight = (std::max)(
+                48.0f,
+                viewport_pos.y + viewport_size.y - centerScrollStart.y - 4.0f);
+            const std::string centerScrollId = std::string("center-surface-") + std::string(main_surface_title(editor.mainSurface));
+            (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
+                .id = centerScrollId,
+                .size = { (std::max)(80.0f, viewport_size.x - 12.0f), centerScrollHeight },
+                .draw_background = false,
+                .show_scrollbar = true
+            });
+
+            switch (editor.mainSurface)
+            {
+            case EditorMainSurface::Project:
+            {
+                const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+                const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
+                gui::label(std::string("Active Project: ") + editor.projectName);
+                gui::property_row("[project] Kind", editor.projectKind);
+                gui::property_row("[project] Root", display_project_path(editor.projectRoot), 108.0f);
+                gui::property_row("[project] Manifest", file_ready_summary(editor.projectManifest), 108.0f);
+                gui::property_row("[project] Scene", file_ready_summary(editor.projectScenePath), 108.0f);
+                gui::property_row("[project] Output", file_ready_summary(outputExe.string()), 108.0f);
+                gui::property_row("[project] Build log", file_ready_summary(buildLog.string()), 108.0f);
+                gui::wrapped_label(
+                    "This surface is the project launcher/control workspace. Save, build, and run happen here or from the centered Run button; logs remain mirrored below.",
+                    centerWidth);
+                if (gui::button("Save Active Project", { 220.0f, 30.0f }))
+                    repair_active_project_evidence(editor);
+                if (gui::button("Build Active Project", { 220.0f, 30.0f }))
+                {
+                    repair_active_project_evidence(editor);
+                    const auto build = editor_build_project(editor.projectRoot);
+                    editor.projectBuildStatus = build.summary;
+                    push_editor_log(
+                        editor,
+                        std::string("[project] ")
+                        + (build.succeeded ? "Build passed. " : "Build failed. ")
+                        + build.summary);
+                    if (!build.output_path.empty())
+                        push_editor_log(editor, std::string("[project] Output: ") + build.output_path);
+                    if (!build.log_path.empty())
+                        push_editor_log(editor, std::string("[project] Log: ") + build.log_path);
+                    append_project_note(
+                        editor,
+                        "Build Active Project",
+                        build.summary,
+                        build.succeeded ? "Build passed from the Project surface." : "Build failed from the Project surface; inspect the build log before retrying.");
+                }
+                if (gui::button("Run Active Project", { 220.0f, 30.0f }))
+                    run_active_context();
+                gui::wrapped_label(editor.projectStatus, centerWidth);
+                gui::wrapped_label(editor.projectBuildStatus, centerWidth);
+                break;
+            }
+            case EditorMainSurface::Assets:
+            {
+                gui::label("Asset Browser");
+                gui::property_row("[asset] Project root", display_project_path(editor.projectRoot), 110.0f);
+                gui::property_row("[asset] Selected", editor.selectedAssetPath.empty() ? "(none)" : display_project_path(editor.selectedAssetPath), 110.0f);
+                gui::property_row("[asset] Active script", editor.activeScript, 110.0f);
+                gui::wrapped_label(
+                    "Scripts now belong in the asset/file workflow, not a separate project type. The bottom Assets tab still lists files while this surface becomes the dedicated asset browser.",
+                    centerWidth);
+                if (gui::button("Create Script Asset", { 220.0f, 30.0f }))
+                    create_project_script_stub(editor);
+                if (gui::button("Build Selected Script", { 220.0f, 30.0f }))
+                {
+                    const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
+                    editor.scriptBuildStatus = build.summary;
+                    push_editor_log(
+                        editor,
+                        std::string("[script] ")
+                        + (build.succeeded ? "Build passed. " : "Build failed. ")
+                        + build.summary);
+                }
+                gui::wrapped_label(editor.scriptBuildStatus, centerWidth);
+                break;
+            }
+            case EditorMainSurface::AISandbox:
+            {
+                const auto training = epoch::ai::default_training_paths();
+                gui::label("Self-Iteration Sandbox");
+                gui::property_row("[ai] Project", editor.projectName);
+                gui::property_row("[ai] Root", display_project_path(editor.projectRoot), 108.0f);
+                gui::property_row("[ai] Selected model", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name(), 108.0f);
+                gui::property_row("[ai] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused", 108.0f);
+                gui::property_row("[ai] Status", editor.aiContinuousBuildStatus, 108.0f);
+                gui::property_row("[ai] Captures", display_project_path(training.local_capture_jsonl), 108.0f);
+                gui::wrapped_label(
+                    "This is the visible control surface for engine self-iteration. EpochBot stages evidence and build packets here; promotion remains a human-approved step.",
+                    centerWidth);
+                render_ai_model_picker(editor, (std::min)(centerWidth, 460.0f));
+                if (gui::button("Save Sandbox Evidence", { 240.0f, 30.0f }))
+                    repair_self_iteration_sandbox_evidence(editor);
+                if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Self-Iteration Watcher" : "Enable Self-Iteration Watcher", { 260.0f, 30.0f }))
+                {
+                    if (!editor.aiContinuousBuildEnabled)
+                        repair_self_iteration_sandbox_evidence(editor);
+                    editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
+                    editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
+                        ? "Self-iteration watcher enabled; watching project/script evidence."
+                        : "Self-iteration watcher paused.";
+                    if (editor.aiContinuousBuildEnabled)
+                        editor.aiContinuousBuildFingerprint.clear();
+                    push_editor_log(editor, editor.aiContinuousBuildEnabled
+                        ? "[ai-build] Self-iteration watcher enabled."
+                        : "[ai-build] Self-iteration watcher paused.");
+                }
+                if (gui::button("Queue Sandbox Build Pass", { 240.0f, 30.0f }))
+                    start_self_iteration_sandbox_build(editor, "manual self-iteration sandbox build request", true);
+                break;
+            }
+            case EditorMainSurface::Systems:
+                gui::label("Systems Workspace");
+                gui::property_row("[system] Renderer", renderer_name(ctx), 112.0f);
+                gui::property_row("[system] Platform", epochnamespace::GetEngineBuildTagString(), 112.0f);
+                gui::property_row("[system] Detached host", editor.detachedPanelHostStatus, 112.0f);
+                gui::wrapped_label(
+                    "Systems is reserved for render/backend/context routing, borderless panel hosts, diagnostics, and future node/timeline/video surfaces. It intentionally disables the 3D scene preview while open.",
+                    centerWidth);
+                break;
+            case EditorMainSurface::Scene:
+            case EditorMainSurface::Game2D:
+            default:
+                break;
+            }
+
+            gui::end_scroll_area();
+            gui::end_window();
         }
-        if (editor.showInspector && inspector_split_size.x > 1.0f && inspector_split_size.y > 1.0f)
-        {
-            gui::set_cursor(inspector_split_pos);
-            (void)gui::button(" ", inspector_split_size);
-        }
+
+        const bool outlinerSplitHovered = layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size);
+        const bool inspectorSplitHovered = layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size);
+        const bool bottomSplitHovered = bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size);
+        if (layout_outliner_visible && outliner_split_size.x > 1.0f && outliner_split_size.y > 1.0f)
+            gui::splitter_bar(outliner_split_pos, outliner_split_size, outlinerSplitHovered, editor.layoutDrag == EditorLayoutDrag::Outliner);
+        if (layout_inspector_visible && inspector_split_size.x > 1.0f && inspector_split_size.y > 1.0f)
+            gui::splitter_bar(inspector_split_pos, inspector_split_size, inspectorSplitHovered, editor.layoutDrag == EditorLayoutDrag::Inspector);
         if (bottom_visible && bottom_split_size.x > 1.0f && bottom_split_size.y > 1.0f)
-        {
-            gui::set_cursor(bottom_split_pos);
-            (void)gui::button(" ", bottom_split_size);
-        }
+            gui::splitter_bar(bottom_split_pos, bottom_split_size, bottomSplitHovered, editor.layoutDrag == EditorLayoutDrag::Dock);
 
         editor.workspaceSplit = std::clamp(editor.workspaceSplit, 0.35f, 0.80f);
         const float raw_left_bottom_w = w * editor.workspaceSplit;

@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.13-1F7A4C?style=for-the-badge" alt="Current development source v0.84.13" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.14-1F7A4C?style=for-the-badge" alt="Current development source v0.84.14" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
 </p>
 
@@ -92,7 +92,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.13`.
+- Source is currently the active development line at `v0.84.14`.
 - The latest published stable runtime release is `v0.84.05`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
@@ -113,6 +113,11 @@ AI sandbox and training instructions live with the AI assets in `Engine/ai/READM
 
 - A project-centric runtime shell that creates, selects, builds, and plays real
   project shells instead of trapping the editor in fake sample flows.
+- Top-level editor modes now route the center area into separate Scene/Game,
+  Project, Assets, AI Sandbox, and Systems surfaces instead of forcing every
+  workflow through the Perspective 3D view or the bottom console dock.
+- The centered Run action now always saves/builds the active project before
+  launch and cancels on failed builds instead of launching stale child outputs.
 - Generated game and software/tool project shells with explicit build, script,
   output, and manifest proof surfaced in the editor.
 - Non-GUI project-shell self-tests for Sandbox and ProjectLauncher, including

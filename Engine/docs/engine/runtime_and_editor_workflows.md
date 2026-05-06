@@ -131,6 +131,10 @@ the same engine-owned path.
 - project shells should only be materialized by explicit operator action:
   File > Save Project, Project > Save Active Project, or the centered Run
   button. Merely selecting a project profile must not create files silently.
+- the centered Run button now always saves and rebuilds the active generated
+  project before launch. If the build fails, launch is canceled so stale
+  `Projects/**/bin/...` outputs are not mistaken for the result of the current
+  run.
 - the Project workspace should also surface simple existence checks for the
   manifest, entry source, build script, `project.paths.txt`, expected output,
   build log, and active script source so the user can tell whether the shell is
@@ -149,6 +153,13 @@ the same engine-owned path.
 - graph views render as engine-generated textures inside the docked UI
 - graph views support pan/zoom and remain clipped when they are wider than the
   available panel
+- top-level editor mode buttons now route the central work area. Scene and
+  Game/2D keep the real 3D viewport; Project, Assets, AI Sandbox, and Systems
+  switch to GUI surfaces and clear the scene viewport so those workflows do not
+  have to be operated from the console dock.
+- splitter bars are dedicated GUI chrome rather than blank buttons. They should
+  stay visually stable while resizing/maximizing and must not consume launcher
+  or editor button press identity.
 - Phase 5 self-iteration should have visible graph/flow feedback, not only text
   rows. The first-pass AI loop visualizer shows planner, builder, verifier,
   gate, and human-review readiness as an engine-generated surface; future work

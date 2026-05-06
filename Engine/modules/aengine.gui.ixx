@@ -204,6 +204,7 @@ namespace epochnamespace::gui
     export void begin_modal_window(const ModalWindowOptions& options) noexcept;
     export void end_modal_window() noexcept;
     export WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept;
+    export void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active) noexcept;
     export void push_theme(ThemeVariant theme) noexcept;
     export void pop_theme() noexcept;
 
