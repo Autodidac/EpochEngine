@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.14`
+Current source version: `v0.84.15`
 
 ## Architecture highlights
 
@@ -101,11 +101,17 @@ Current source version: `v0.84.14`
   visible Sandbox iteration evidence instead of relying on command-line-only
   inspection.
 - World Outliner, Inspector, Console Dock, and AI Chat can now be hidden,
-  reopened, reset, and resized with first-pass splitters. True borderless
-  linked-context panel popouts remain the next context-host step.
-- Splitters now render through dedicated GUI chrome instead of fake blank
-  buttons, and the centered Run action rebuilds generated child projects before
-  launch so stale ProjectLauncher output is not mistaken for a fresh build.
+  reopened, reset, and resized with first-pass splitters. The bottom
+  Console/AI Chat split is drag-only now; the old sizing button strip has been
+  removed. True borderless linked-context panel popouts remain the next
+  context-host step.
+- Splitters now render through dedicated neutral GUI chrome instead of fake
+  blank buttons, and the centered Run action rebuilds generated child projects
+  before launch so stale ProjectLauncher output is not mistaken for a fresh
+  build.
+- Game/2D mode now creates and selects a first-pass `Canvas2D` plane in the 3D
+  preview so the 2D workflow has a concrete edit target while real 2D canvas
+  tooling is still being built.
 - Backend presentation is more visually coherent now that the active renderer
   base colors are being pulled toward the same darker Vulkan-style baseline,
   and SFML’s shared preview path is clipped back to the intended scene view.

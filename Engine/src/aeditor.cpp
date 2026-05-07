@@ -51,6 +51,7 @@ module;
 #include <format>
 #include <fstream>
 #include <future>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -119,7 +120,8 @@ namespace epochnamespace
             None = 0,
             Outliner,
             Inspector,
-            Dock
+            Dock,
+            Workspace
         };
 
         enum class EditorMainSurface : unsigned char
@@ -1099,6 +1101,33 @@ namespace epochnamespace
                 + "].");
         }
 
+        void ensure_2d_canvas_entity(EditorState& state)
+        {
+            const auto existing = std::find_if(
+                state.entities.begin(),
+                state.entities.end(),
+                [](const EditorEntity& entity)
+                {
+                    return entity.type == "Canvas2D" || entity.name == "Canvas2D";
+                });
+            if (existing != state.entities.end())
+            {
+                state.selectedEntity = static_cast<std::size_t>(std::distance(state.entities.begin(), existing));
+                return;
+            }
+
+            EditorEntity canvas{};
+            canvas.name = "Canvas2D";
+            canvas.type = "Canvas2D";
+            canvas.category = "2D";
+            canvas.position = { 0.0f, 0.03f, 0.0f };
+            canvas.scale = { 6.4f, 0.05f, 3.6f };
+            canvas.editorOnly = false;
+            state.entities.push_back(std::move(canvas));
+            state.selectedEntity = state.entities.size() - 1u;
+            push_editor_log(state, "[2d] Added Canvas2D editing plane.");
+        }
+
         void duplicate_selected_entity(EditorState& state)
         {
             if (state.entities.empty())
@@ -1181,6 +1210,8 @@ namespace epochnamespace
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Spawn;
             if (entity.type == "Camera")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
+            if (entity.type == "Canvas2D")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
             if (entity.category == "World" || entity.type == "Level")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
             return epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube;
@@ -3256,7 +3287,8 @@ namespace epochnamespace
         {
             editor.mainSurface = EditorMainSurface::Game2D;
             editor.workspaceTab = EditorWorkspaceTab::Project;
-            push_editor_log(editor, "[editor] Game/2D workspace is active.");
+            ensure_2d_canvas_entity(editor);
+            push_editor_log(editor, "[editor] Game/2D workspace is active with Canvas2D selected.");
         }
         tab_x += 156.0f + tab_gap;
 
@@ -3988,23 +4020,12 @@ namespace epochnamespace
                 gui::label("Asset Browser");
                 gui::property_row("[asset] Project root", display_project_path(editor.projectRoot), 110.0f);
                 gui::property_row("[asset] Selected", editor.selectedAssetPath.empty() ? "(none)" : display_project_path(editor.selectedAssetPath), 110.0f);
-                gui::property_row("[asset] Active script", editor.activeScript, 110.0f);
                 gui::wrapped_label(
-                    "Scripts now belong in the asset/file workflow, not a separate project type. The bottom Assets tab still lists files while this surface becomes the dedicated asset browser.",
+                    "This surface is the project asset browser: scenes, models, images, text, and script files as normal project assets. Sandbox controls stay in AI Sandbox and are only for engine self-iteration.",
                     centerWidth);
-                if (gui::button("Create Script Asset", { 220.0f, 30.0f }))
-                    create_project_script_stub(editor);
-                if (gui::button("Build Selected Script", { 220.0f, 30.0f }))
-                {
-                    const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
-                    editor.scriptBuildStatus = build.summary;
-                    push_editor_log(
-                        editor,
-                        std::string("[script] ")
-                        + (build.succeeded ? "Build passed. " : "Build failed. ")
-                        + build.summary);
-                }
-                gui::wrapped_label(editor.scriptBuildStatus, centerWidth);
+                gui::property_row("[asset] Scene", file_ready_summary(editor.projectScenePath), 110.0f);
+                gui::property_row("[asset] Runtime", editor.activeRuntimeScene, 110.0f);
+                gui::wrapped_label("Select files from the bottom Assets dock for now; the thumbnail grid/file tree will replace this text-only browser as the modular docking controls land.", centerWidth);
                 break;
             }
             case EditorMainSurface::AISandbox:
@@ -4070,21 +4091,31 @@ namespace epochnamespace
         if (bottom_visible && bottom_split_size.x > 1.0f && bottom_split_size.y > 1.0f)
             gui::splitter_bar(bottom_split_pos, bottom_split_size, bottomSplitHovered, editor.layoutDrag == EditorLayoutDrag::Dock);
 
-        editor.workspaceSplit = std::clamp(editor.workspaceSplit, 0.35f, 0.80f);
-        const float raw_left_bottom_w = w * editor.workspaceSplit;
-        const float min_workspace_w = (std::min)(360.0f, (std::max)(0.0f, w * 0.55f));
-        const float min_chat_w = (std::min)(300.0f, (std::max)(0.0f, w * 0.35f));
-        const float max_workspace_w = (std::max)(min_workspace_w, w - min_chat_w);
         const bool show_workspace_dock = editor.showConsoleDock && bottom_h > 1.0f;
         const bool show_chat_dock = editor.showAiChat && bottom_h > 1.0f;
+        const float bottom_workspace_split_w = (show_workspace_dock && show_chat_dock) ? splitter_w : 0.0f;
+        const float bottom_available_w = (std::max)(0.0f, w - bottom_workspace_split_w);
+        editor.workspaceSplit = std::clamp(editor.workspaceSplit, 0.30f, 0.82f);
+        const float raw_left_bottom_w = bottom_available_w * editor.workspaceSplit;
+        const float min_workspace_w = (std::min)(320.0f, (std::max)(0.0f, bottom_available_w * 0.50f));
+        const float min_chat_w = (std::min)(280.0f, (std::max)(0.0f, bottom_available_w * 0.32f));
+        const float max_workspace_w = (std::max)(min_workspace_w, bottom_available_w - min_chat_w);
         const float left_bottom_w = (show_workspace_dock && show_chat_dock)
             ? std::clamp(raw_left_bottom_w, min_workspace_w, max_workspace_w)
-            : (show_workspace_dock ? w : 0.0f);
-        const float active_workspace_split = w > 0.0f ? left_bottom_w / w : editor.workspaceSplit;
+            : (show_workspace_dock ? bottom_available_w : 0.0f);
         const gui::Vec2 log_pos{ 0.0f, bottom_pos.y };
         const gui::Vec2 log_size{ left_bottom_w, bottom_h };
-        const gui::Vec2 chat_pos{ left_bottom_w, bottom_pos.y };
-        const gui::Vec2 chat_size{ show_chat_dock ? (std::max)(0.0f, w - left_bottom_w) : 0.0f, bottom_h };
+        const gui::Vec2 workspace_split_pos{ left_bottom_w, bottom_pos.y };
+        const gui::Vec2 workspace_split_size{ bottom_workspace_split_w, bottom_h };
+        const gui::Vec2 chat_pos{ left_bottom_w + bottom_workspace_split_w, bottom_pos.y };
+        const gui::Vec2 chat_size{ show_chat_dock ? (std::max)(0.0f, w - left_bottom_w - bottom_workspace_split_w) : 0.0f, bottom_h };
+        const bool workspaceSplitHovered = show_workspace_dock
+            && show_chat_dock
+            && editor_point_in_rect(mouse, workspace_split_pos, workspace_split_size);
+        if (show_workspace_dock && show_chat_dock && gui::was_mouse_pressed() && workspaceSplitHovered)
+            editor.layoutDrag = EditorLayoutDrag::Workspace;
+        if (gui::is_mouse_down() && editor.layoutDrag == EditorLayoutDrag::Workspace)
+            editor.workspaceSplit = std::clamp(mouse.x / (std::max)(1.0f, bottom_available_w), 0.30f, 0.82f);
 
         if (show_workspace_dock)
         {
@@ -4105,40 +4136,6 @@ namespace epochnamespace
         }};
         if (const auto selected = gui::tab_bar(workspaceTabs))
             editor.workspaceTab = workspaceTabIds[*selected];
-        const std::array<gui::InlineButtonSpec, 6> workspaceColumnButtons{{
-            { "Console +", 96.0f },
-            { "Chat +", 76.0f },
-            { "Dock +", 70.0f },
-            { "Dock -", 70.0f },
-            { "Close", 58.0f },
-            { "Reset Columns", 122.0f }
-        }};
-        if (const auto splitAction = gui::inline_button_row(workspaceColumnButtons))
-        {
-            if (*splitAction == 0)
-                editor.workspaceSplit = (std::min)(0.80f, editor.workspaceSplit + 0.05f);
-            else if (*splitAction == 1)
-                editor.workspaceSplit = (std::max)(0.35f, editor.workspaceSplit - 0.05f);
-            else if (*splitAction == 2)
-                editor.dockSplit = (std::min)(0.58f, editor.dockSplit + 0.03f);
-            else if (*splitAction == 3)
-                editor.dockSplit = (std::max)(0.14f, editor.dockSplit - 0.03f);
-            else if (*splitAction == 4)
-            {
-                editor.showConsoleDock = false;
-                push_editor_log(editor, "[ui] Console Dock hidden. Reopen it from Window > Toggle Console Dock.");
-            }
-            else
-            {
-                editor.workspaceSplit = 0.68f;
-                editor.dockSplit = 0.24f;
-            }
-        }
-        gui::property_row(
-            "[ui] Columns",
-            std::format("dock {:.0f}% | chat {:.0f}%", active_workspace_split * 100.0f, (1.0f - active_workspace_split) * 100.0f),
-            96.0f);
-        gui::property_row("[ui] Panel host", editor.detachedPanelHostStatus, 96.0f);
 
         const bool dockUsesOuterScroll = editor.workspaceTab != EditorWorkspaceTab::Output;
         if (dockUsesOuterScroll)
@@ -5351,6 +5348,13 @@ namespace epochnamespace
             chat.submit(std::move(text));
         }
         }
+
+        if (show_workspace_dock && show_chat_dock && workspace_split_size.x > 1.0f && workspace_split_size.y > 1.0f)
+            gui::splitter_bar(
+                workspace_split_pos,
+                workspace_split_size,
+                workspaceSplitHovered,
+                editor.layoutDrag == EditorLayoutDrag::Workspace);
 
         open_dropdown("File", TopMenu::File, dropdown_window_size(192.0f, 4), [&](gui::Vec2 pos)
         {

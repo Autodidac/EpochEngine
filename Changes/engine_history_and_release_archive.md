@@ -25,7 +25,7 @@ archive for historical context and milestone tracing.
 Current orientation:
 
 - Latest published stable runtime line: `v0.84.05`
-- Current development source line: `v0.84.14`
+- Current development source line: `v0.84.15`
 
 ## What the engine has become so far
 
@@ -66,6 +66,15 @@ From the archived work in this file, a few themes are clear:
 These notes were previously tracked in `post_v0_83_work_collated.md`. They stay
 here because they explain the active engine/editor direction more directly than
 the older updater-era release cadence alone.
+
+### [Work Log | Development line] v0.84.15
+
+`v0.84.15` is a focused editor GUI regression repair pass. It removes the
+temporary Console/Chat/Dock sizing buttons in favor of splitter-only resizing,
+adds a first-pass `Canvas2D` editing plane for Game/2D mode, separates the
+central Asset Browser from Sandbox/script controls, fits title text inside panel
+headers, and suppresses the launcher transition frame that could flash the
+pressed button state while loading the editor.
 
 ### [Work Log | Development line] v0.84.14
 

@@ -340,13 +340,20 @@ engine shape and should be treated as starting truth for the next passes:
   popouts stay open work.
 - World Outliner, Inspector, Console Dock, and AI Chat are now individually
   hideable/reopenable from Window, with first-pass draggable side and bottom
-  splitters plus reset controls. Borderless linked-context popouts are only
-  staged as a host route and are not yet normal operation.
+  splitters. The old Console/Chat/Dock sizing button strip has been removed;
+  bottom dock width/height is resize-bar driven. Borderless linked-context
+  popouts are only staged as a host route and are not yet normal operation.
 - top-level editor modes now route the center of the shell into separate
   Scene/Game, Project, Assets, Self-Iteration Sandbox, and Systems surfaces.
   Scene/Game keep the 3D viewport; Project/Assets/AI/Systems disable the scene
   preview and show mode-specific GUI instead of forcing all controls into the
   bottom console dock.
+- Game/2D mode now creates and selects a first-pass `Canvas2D` plane in the 3D
+  scene preview so the 2D lane has a concrete editing target before dedicated
+  locked-camera/tile/layer tooling lands.
+- the central Asset Browser has been separated from Sandbox/script-command
+  controls. It should represent project assets, while Sandbox remains the
+  engine self-iteration domain and script detail stays a project/asset workflow.
 
 ## Phase Progress
 

@@ -2528,19 +2528,20 @@ namespace epochnamespace::core
                                 right_pressed,
                                 enter_pressed);
                             gui::end_frame();
-                            if (ctx_running)
-                                ctx->present_safe();
 
+                            bool suppress_menu_present = false;
                             if (choice)
                             {
                                 if (*choice == epochnamespace::menu::Choice::Exit)
                                 {
+                                    suppress_menu_present = true;
                                     session.mode = SessionMode::Exit;
                                     ctx_running = false;
                                     win->running = false;
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::UpdateLatest)
                                 {
+                                    suppress_menu_present = true;
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
                                         "Updater shell requested the newest packaged Epoch release, then main source if it is still newer afterward.",
@@ -2556,10 +2557,12 @@ namespace epochnamespace::core
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)
                                 {
+                                    suppress_menu_present = true;
                                     switch_all_sessions_to_editor("projectlauncher");
                                 }
                                 else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
                                 {
+                                    suppress_menu_present = true;
                                     switch_all_sessions_to_editor(project_id);
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::Settings)
@@ -2584,6 +2587,10 @@ namespace epochnamespace::core
                                         std::source_location::current());
                                 }
                             }
+                            if (suppress_menu_present)
+                                ctx->clear_safe();
+                            else if (ctx_running)
+                                ctx->present_safe();
                             break;
                         }
 

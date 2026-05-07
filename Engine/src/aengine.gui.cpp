@@ -711,9 +711,9 @@ namespace epochnamespace::gui
                 g_resources.defaultDark.textFieldActive = add_sprite(atlas, "__agui/text_field_active",
                     make_solid_pixels(0x2A, 0x31, 0x3B, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultDark.panelBackground = add_sprite(atlas, "__agui/panel_bg",
-                    make_solid_pixels(0x25, 0x2B, 0x34, 0xF2, 8, 8), 8, 8);
+                    make_solid_pixels(0x25, 0x2B, 0x34, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultDark.consoleBackground = add_sprite(atlas, "__agui/console_bg",
-                    make_solid_pixels(0x18, 0x1D, 0x24, 0xE8, 8, 8), 8, 8);
+                    make_solid_pixels(0x18, 0x1D, 0x24, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultDark.titleBar = add_sprite(atlas, "__agui/title_bar",
                     make_solid_pixels(0x2B, 0x31, 0x3B, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultDark.modalScrim = add_sprite(atlas, "__agui/modal_scrim",
@@ -1778,7 +1778,15 @@ namespace epochnamespace::gui
             titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
             const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
             draw_sprite(palette.titleBar, position.x, position.y, size.x, titleBarHeight);
-            draw_text_line(title, position.x + kContentPadding, titleTextY, kTitleScale);
+            const std::string fittedTitle = fit_text_to_width(
+                title,
+                (std::max)(1.0f, size.x - 2.0f * kContentPadding),
+                kTitleScale);
+            draw_text_line(
+                fittedTitle.empty() ? title : std::string_view{ fittedTitle },
+                position.x + kContentPadding,
+                titleTextY,
+                kTitleScale);
         }
 
         g_frame.contentMin = {
@@ -1841,7 +1849,15 @@ namespace epochnamespace::gui
         const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
 
         draw_sprite(palette.titleBar, position.x, position.y, width, titleBarHeight);
-        draw_text_line(title, position.x + kContentPadding, titleTextY, kTitleScale);
+        const std::string fittedTitle = fit_text_to_width(
+            title,
+            (std::max)(1.0f, width - 2.0f * kContentPadding),
+            kTitleScale);
+        draw_text_line(
+            fittedTitle.empty() ? title : std::string_view{ fittedTitle },
+            position.x + kContentPadding,
+            titleTextY,
+            kTitleScale);
 
         const float contentY = position.y + titleBarHeight;
         const float contentHeight = (std::max)(0.0f, height - titleBarHeight - border);
@@ -1898,22 +1914,22 @@ namespace epochnamespace::gui
             return;
 
         const auto& palette = active_palette();
-        const SpriteHandle fill =
+        draw_sprite(palette.windowBackground, position.x, position.y, size.x, size.y);
+        const SpriteHandle accent =
             active ? palette.buttonActive
-            : hovered ? palette.buttonHover
-            : palette.textField;
-        draw_sprite(fill, position.x, position.y, size.x, size.y);
+            : hovered ? palette.textFieldActive
+            : palette.titleBar;
 
         const bool vertical = size.y >= size.x;
         if (vertical && size.x >= 5.0f)
         {
             const float x = position.x + std::floor(size.x * 0.5f);
-            draw_sprite(palette.panelBackground, x, position.y, 1.0f, size.y);
+            draw_sprite(accent, x, position.y, 1.0f, size.y);
         }
         else if (!vertical && size.y >= 5.0f)
         {
             const float y = position.y + std::floor(size.y * 0.5f);
-            draw_sprite(palette.panelBackground, position.x, y, size.x, 1.0f);
+            draw_sprite(accent, position.x, y, size.x, 1.0f);
         }
     }
     static bool button_with_state(std::string_view label, Vec2 size, bool selected) noexcept

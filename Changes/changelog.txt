@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.84.15]
+- Bumped the active source line to `v0.84.15` for the editor GUI regression
+  repair pass.
+- Removed the bottom Console/Chat/Dock sizing button strip and replaced it with
+  a draggable splitter between the Console Dock and AI Chat, matching the
+  intended resize-only editor workflow.
+- Made default editor panel backgrounds opaque, clipped/fitted window titles,
+  and neutralized splitter chrome to reduce OpenGL resize/transition artifacts.
+- Suppressed the launcher transition frame with a queued neutral clear when
+  opening the editor or a project so the pressed launcher button frame does not
+  flicker while loading.
+- Separated the central Asset Browser copy from Sandbox/script controls and
+  added a first-pass `Canvas2D` scene entity when entering Game/2D mode.
+
 ## [v0.84.14]
 - Bumped the active source line to `v0.84.14` for editor surface routing,
   splitter rendering stabilization, and ProjectLauncher rebuild-on-run.

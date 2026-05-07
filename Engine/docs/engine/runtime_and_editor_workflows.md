@@ -106,6 +106,10 @@ the same engine-owned path.
   `.ascript.cpp` stubs, lists project and engine script files, and exposes a
   shallow active-project file/folder browser so scripts can be selected without
   command-line digging
+- the central `Assets` surface is intentionally not the Sandbox and not the
+  primary script-control panel; it is the project asset browser shell while the
+  bottom Assets dock temporarily exposes file/script detail until the thumbnail
+  grid and bounded file tree land
 - script source resolution should prefer the active project's local `scripts/`
   folder before falling back to template or engine-owned script roots, so the
   dock and editor run actions operate on the real generated project shell
@@ -142,6 +146,15 @@ the same engine-owned path.
 - hot reload remains a development feature and needs smoke coverage instead of
   trust
 
+## Game/2D editor surface
+
+- `Game/2D` remains a 3D-backed editor viewport for now, but entering it creates
+  and selects a first-pass `Canvas2D` plane so the workflow has a concrete 2D
+  edit target instead of an empty perspective scene.
+- Future 2D work should lock a camera/view to that canvas, then add tile/layer
+  tooling on top of the same entity/project spine instead of creating a
+  separate editor island.
+
 ## Systems workspace direction
 
 - `Systems` is now the active tooling surface for:
@@ -160,6 +173,10 @@ the same engine-owned path.
 - splitter bars are dedicated GUI chrome rather than blank buttons. They should
   stay visually stable while resizing/maximizing and must not consume launcher
   or editor button press identity.
+- the bottom Console Dock / AI Chat column controls are resize-only now: drag
+  the vertical splitter between them or the horizontal splitter above them.
+  Button rows such as `Console +`, `Chat +`, `Dock +`, `Dock -`, and `Reset
+  Columns` are intentionally removed from the active workflow.
 - Phase 5 self-iteration should have visible graph/flow feedback, not only text
   rows. The first-pass AI loop visualizer shows planner, builder, verifier,
   gate, and human-review readiness as an engine-generated surface; future work
