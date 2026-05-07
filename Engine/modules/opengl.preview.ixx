@@ -276,9 +276,11 @@ void main() {
     {
         const int glViewportY = (std::max)(0, framebufferHeight - (viewportY + viewportHeight));
 
+        glDisable(GL_BLEND);
         glEnable(GL_SCISSOR_TEST);
         glScissor(viewportX, glViewportY, viewportWidth, viewportHeight);
         glViewport(viewportX, glViewportY, viewportWidth, viewportHeight);
+        glDepthMask(GL_TRUE);
         const auto clearColor = epochnamespace::previewgrid::kClearColor;
         glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -289,11 +291,21 @@ void main() {
             const float aspect = viewportHeight > 0
                 ? (viewportWidth / static_cast<float>(viewportHeight))
                 : 1.0f;
-            const detail::Mat4 proj = epochnamespace::previewgrid::perspective(
-                camera.fovRadians,
-                aspect,
-                camera.nearPlane,
-                camera.farPlane);
+            const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx);
+            const float canvasHalfHeight = (std::max)(2.0f, camera.eye.y * 0.45f);
+            const detail::Mat4 proj = cameraMode == epochnamespace::previewgrid::CameraMode::Canvas2D
+                ? epochnamespace::previewgrid::orthographic(
+                    -(canvasHalfHeight * aspect),
+                    canvasHalfHeight * aspect,
+                    -canvasHalfHeight,
+                    canvasHalfHeight,
+                    camera.nearPlane,
+                    camera.farPlane)
+                : epochnamespace::previewgrid::perspective(
+                    camera.fovRadians,
+                    aspect,
+                    camera.nearPlane,
+                    camera.farPlane);
             const detail::Mat4 view = epochnamespace::previewgrid::look_at(
                 camera.eye,
                 camera.target,
@@ -347,6 +359,8 @@ void main() {
             glUseProgram(0);
         }
 
+        glDepthMask(GL_FALSE);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_DEPTH_TEST);
         glViewport(0, 0, framebufferWidth, framebufferHeight);

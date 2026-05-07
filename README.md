@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.16-1F7A4C?style=for-the-badge" alt="Current development source v0.84.16" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.17-1F7A4C?style=for-the-badge" alt="Current development source v0.84.17" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
 </p>
 
@@ -92,7 +92,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.16`.
+- Source is currently the active development line at `v0.84.17`.
 - The latest published stable runtime release is `v0.84.05`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
@@ -126,14 +126,16 @@ AI sandbox and training instructions live with the AI assets in `Engine/ai/READM
 - Engine-owned GUI/text rendering with reusable controls, workspace tabs,
   open/close panel visibility, and first-pass draggable splitters instead of
   middleware-owned editor UI.
+- A `Game/2D` editor lane that reuses the same scene through a locked
+  orthographic Canvas2D camera and editor-only canvas plane.
 - Engine-owned C++23 scripting with project-local source resolution, validation,
   build actions, and runtime execution from the live shell.
 - Editor-visible script/file/asset surfaces so Sandbox and ProjectLauncher work
   can leave selectable paths, build/run notes, and first-pass asset cards.
 - Multicontext renderer orchestration across Raylib, SDL3, SFML, Vulkan,
   OpenGL, software, and headless/noop paths.
-- A Systems workspace that already shows real renderer/runtime tooling surfaces
-  and is being extended with pacing and ownership diagnostics.
+- A Systems workspace with readable render/frame, task/thread, support-tier, and
+  AI-loop graph surfaces for renderer/runtime ownership diagnostics.
 - A time-system spine with fixed-step ownership, pause/resume, scaling,
   single-step, and early editor-facing diagnostics.
 - A staged AI workspace centered on `EpochBot`, local MCP/control harnesses, an

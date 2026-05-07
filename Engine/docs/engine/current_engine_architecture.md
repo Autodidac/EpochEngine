@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.16`
+Current source version: `v0.84.17`
 
 ## Architecture highlights
 
@@ -45,7 +45,9 @@ Current source version: `v0.84.16`
   teacher/reviewer helpers for testing, curation, and acceleration.
 - **Systems workspace direction**: central Systems and AI Sandbox surfaces now
   render engine-generated graph textures through the dedicated runtime-surface
-  atlas instead of relying on text-only diagnostics or the bottom dock.
+  atlas instead of relying on text-only diagnostics or the bottom dock. Systems
+  keeps render/frame flow, task/thread scheduling, and support-tier status in
+  readable graph rows.
 - **Migration map**: formerly archived compatibility surfaces are now either
   preserved in active modules or called out explicitly in
   `Engine/docs/engine/legacy_feature_map.md`.
@@ -110,9 +112,9 @@ Current source version: `v0.84.16`
   blank buttons, and the centered Run action rebuilds generated child projects
   before launch so stale ProjectLauncher output is not mistaken for a fresh
   build.
-- Game/2D mode now creates and selects a first-pass `Canvas2D` plane in the 3D
-  preview so the 2D workflow has a concrete edit target while real 2D canvas
-  tooling is still being built.
+- Game/2D mode now creates/selects an editor-only `Canvas2D` plane and switches
+  to a locked Canvas2D camera. OpenGL and editor selection use orthographic
+  projection for that camera mode while tile/layer tooling is still being built.
 - Backend presentation is more visually coherent now that the active renderer
   base colors are being pulled toward the same darker Vulkan-style baseline,
   and SFML’s shared preview path is clipped back to the intended scene view.

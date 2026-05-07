@@ -72,13 +72,15 @@ namespace epochnamespace::previewgrid
     export enum class CameraMode : std::uint8_t
     {
         Editor = 0,
-        FPS = 1
+        FPS = 1,
+        Canvas2D = 2
     };
 
     export [[nodiscard]] inline std::string_view camera_mode_name(CameraMode mode) noexcept
     {
         switch (mode)
         {
+        case CameraMode::Canvas2D: return "2D Canvas";
         case CameraMode::FPS: return "FPS";
         case CameraMode::Editor:
         default: return "Editor";
@@ -163,6 +165,27 @@ namespace epochnamespace::previewgrid
         out[10] = -(zFar + zNear) / (zFar - zNear);
         out[11] = -1.0f;
         out[14] = -(2.0f * zFar * zNear) / (zFar - zNear);
+        return out;
+    }
+
+    export [[nodiscard]] inline Mat4 orthographic(
+        float left,
+        float right,
+        float bottom,
+        float top,
+        float zNear,
+        float zFar) noexcept
+    {
+        const float safeWidth = (std::max)(0.001f, right - left);
+        const float safeHeight = (std::max)(0.001f, top - bottom);
+        const float safeDepth = (std::max)(0.001f, zFar - zNear);
+        Mat4 out = identity_matrix();
+        out[0] = 2.0f / safeWidth;
+        out[5] = 2.0f / safeHeight;
+        out[10] = -2.0f / safeDepth;
+        out[12] = -(right + left) / safeWidth;
+        out[13] = -(top + bottom) / safeHeight;
+        out[14] = -(zFar + zNear) / safeDepth;
         return out;
     }
 
@@ -265,9 +288,30 @@ namespace epochnamespace::previewgrid
             };
         }
 
+        [[nodiscard]] inline CameraRigState make_canvas_2d_rig() noexcept
+        {
+            return CameraRigState{
+                .mode = CameraMode::Canvas2D,
+                .focus{ 0.0f, 0.0f, 0.0f },
+                .position{ 0.0f, 18.0f, 0.0f },
+                .yawDegrees = -90.0f,
+                .pitchDegrees = -90.0f,
+                .distance = 18.0f
+            };
+        }
+
         [[nodiscard]] inline CameraRigState make_default_rig(CameraMode mode) noexcept
         {
-            return mode == CameraMode::FPS ? make_fps_rig() : make_editor_rig();
+            switch (mode)
+            {
+            case CameraMode::FPS:
+                return make_fps_rig();
+            case CameraMode::Canvas2D:
+                return make_canvas_2d_rig();
+            case CameraMode::Editor:
+            default:
+                return make_editor_rig();
+            }
         }
 
         [[nodiscard]] inline Vec3 forward_from_angles(float yawDegrees, float pitchDegrees) noexcept
@@ -321,6 +365,18 @@ namespace epochnamespace::previewgrid
                     .fovRadians = 1.05f,
                     .nearPlane = 0.1f,
                     .farPlane = 96.0f
+                };
+            }
+
+            if (rig.mode == CameraMode::Canvas2D)
+            {
+                return Camera{
+                    .eye = { rig.focus.x, rig.distance, rig.focus.z },
+                    .target = rig.focus,
+                    .up = { 0.0f, 0.0f, -1.0f },
+                    .fovRadians = 0.48f,
+                    .nearPlane = 0.1f,
+                    .farPlane = 128.0f
                 };
             }
 
@@ -463,7 +519,9 @@ namespace epochnamespace::previewgrid
             return;
 
         const float oldDistance = rig.distance;
-        rig.distance = (std::clamp)(rig.distance - amount, 2.5f, 48.0f);
+        const float minDistance = rig.mode == CameraMode::Canvas2D ? 6.0f : 2.5f;
+        const float maxDistance = rig.mode == CameraMode::Canvas2D ? 64.0f : 48.0f;
+        rig.distance = (std::clamp)(rig.distance - amount, minDistance, maxDistance);
         if (rig.distance != oldDistance)
             detail::touch_rig(rig);
     }
@@ -496,8 +554,12 @@ namespace epochnamespace::previewgrid
         if (rig.mode == CameraMode::FPS)
             return;
 
-        const Vec3 right = detail::right_from_angles(rig.yawDegrees, rig.pitchDegrees);
-        const Vec3 forward = detail::flat_forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
+        const Vec3 right = rig.mode == CameraMode::Canvas2D
+            ? Vec3{ 1.0f, 0.0f, 0.0f }
+            : detail::right_from_angles(rig.yawDegrees, rig.pitchDegrees);
+        const Vec3 forward = rig.mode == CameraMode::Canvas2D
+            ? Vec3{ 0.0f, 0.0f, -1.0f }
+            : detail::flat_forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
         const float dragScale = (std::max)(0.010f, rig.distance * 0.0125f);
         rig.focus = add(rig.focus, scale(right, deltaRightPixels * dragScale));
         rig.focus = add(rig.focus, scale(forward, deltaForwardPixels * dragScale));
@@ -546,13 +608,23 @@ namespace epochnamespace::previewgrid
 
         std::unique_lock lock(detail::g_cameraRigMutex);
         auto& rig = detail::ensure_rig(rigKey);
-
         if (moveForward == 0.0f
             && moveRight == 0.0f
             && moveUp == 0.0f
             && yawInput == 0.0f
             && pitchInput == 0.0f)
         {
+            return;
+        }
+
+        if (rig.mode == CameraMode::Canvas2D)
+        {
+            constexpr float kPanSpeed = 5.0f;
+            constexpr float kDollySpeed = 8.5f;
+            rig.focus.x += moveRight * kPanSpeed * dt;
+            rig.focus.z -= moveUp * kPanSpeed * dt;
+            rig.distance = (std::clamp)(rig.distance - moveForward * kDollySpeed * dt, 6.0f, 64.0f);
+            detail::touch_rig(rig);
             return;
         }
 
@@ -598,6 +670,8 @@ namespace epochnamespace::previewgrid
 
         std::unique_lock lock(detail::g_cameraRigMutex);
         auto& rig = detail::ensure_rig(rigKey);
+        if (rig.mode == CameraMode::Canvas2D)
+            return;
         rig.yawDegrees += yawDeltaDegrees;
         rig.pitchDegrees = (std::clamp)(rig.pitchDegrees + pitchDeltaDegrees, -80.0f, 80.0f);
         detail::touch_rig(rig);

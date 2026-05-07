@@ -1,5 +1,25 @@
 # Epoch Changelog
 
+## [v0.84.17]
+- Bumped the active source line to `v0.84.17` for the 2D camera, panel
+  visibility, and graph readability pass.
+- Changed `Game/2D` from a plain perspective-mode alias into a locked
+  `Canvas2D` editing camera path. The Canvas2D plane is editor-only, OpenGL
+  uses an orthographic projection for that camera mode, and screen selection
+  uses the same orthographic projection.
+- Restored Inspector visibility across all central editor surfaces and forces
+  AI Chat visible when the Self-Iteration Sandbox is opened so those panes do
+  not disappear while switching away from the 3D scene view.
+- Enlarged the central Systems graph layout and added readable labels/data to
+  the render/frame graph, task/thread graph, support-tier surface, and AI loop
+  visualizer instead of showing unlabeled colored blocks.
+- Added visible Sandbox notes/build/output evidence paths and latest project
+  notes to the central Self-Iteration Sandbox surface so self-iteration changes
+  have an editor-native place to be inspected.
+- Reset OpenGL preview state after scene-preview rendering to reduce GUI/state
+  bleed during resize/panel transitions. Remaining perspective/launcher flicker
+  stays tracked as an OpenGL present/resize bug, not claimed fully solved.
+
 ## [v0.84.16]
 - Bumped the active source line to `v0.84.16` for the runtime graph-surface
   atlas repair pass.

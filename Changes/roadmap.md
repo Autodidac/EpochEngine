@@ -339,8 +339,9 @@ engine shape and should be treated as starting truth for the next passes:
 - GUI button press identity is geometry-stable again, while splitters now use a
   dedicated non-button draw path. This keeps resize chrome from polluting normal
   button press state and reduces the launcher pressed-state flicker regression.
-  Remaining OpenGL present/resize flicker and real borderless linked-context
-  popouts stay open work.
+  OpenGL preview state is reset after scene-preview rendering as a low-risk
+  bleed-reduction fix, but remaining OpenGL present/resize flicker and real
+  borderless linked-context popouts stay open work.
 - World Outliner, Inspector, Console Dock, and AI Chat are now individually
   hideable/reopenable from Window, with first-pass draggable side and bottom
   splitters. The old Console/Chat/Dock sizing button strip has been removed;
@@ -351,9 +352,15 @@ engine shape and should be treated as starting truth for the next passes:
   Scene/Game keep the 3D viewport; Project/Assets/AI/Systems disable the scene
   preview and show mode-specific GUI instead of forcing all controls into the
   bottom console dock.
-- Game/2D mode now creates and selects a first-pass `Canvas2D` plane in the 3D
-  scene preview so the 2D lane has a concrete editing target before dedicated
-  locked-camera/tile/layer tooling lands.
+- Game/2D mode now creates/selects an editor-only `Canvas2D` plane and switches
+  the scene preview into a locked Canvas2D camera. OpenGL and editor selection
+  use an orthographic projection in that mode, matching the Unity-style
+  "same scene, dedicated 2D camera" direction. Tile/layer tooling still needs to
+  land on top of this.
+- Systems now uses larger central graph surfaces with readable labels/data for
+  render/frame flow, task/thread scheduling, support tiers, and AI loop status.
+  Do not duplicate graph information; combine related scheduling/thread data
+  into the task/thread graph unless a new graph answers a distinct question.
 - the central Asset Browser has been separated from Sandbox/script-command
   controls. It should represent project assets, while Sandbox remains the
   engine self-iteration domain and script detail stays a project/asset workflow.

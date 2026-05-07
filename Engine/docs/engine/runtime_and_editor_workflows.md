@@ -148,12 +148,14 @@ the same engine-owned path.
 
 ## Game/2D editor surface
 
-- `Game/2D` remains a 3D-backed editor viewport for now, but entering it creates
-  and selects a first-pass `Canvas2D` plane so the workflow has a concrete 2D
-  edit target instead of an empty perspective scene.
-- Future 2D work should lock a camera/view to that canvas, then add tile/layer
-  tooling on top of the same entity/project spine instead of creating a
-  separate editor island.
+- `Game/2D` is the same scene viewed through a dedicated Canvas2D camera, not a
+  separate scene or project island.
+- entering `Game/2D` creates/selects an editor-only `Canvas2D` plane and switches
+  the preview camera to the locked 2D Canvas rig
+- OpenGL and editor object selection use an orthographic projection in this mode
+  so 2D editing behaves like a Unity-style scene camera locked to a 3D canvas
+- future 2D work should add tile/layer/canvas tools on top of this same
+  entity/project spine
 
 ## Systems workspace direction
 
@@ -165,6 +167,8 @@ the same engine-owned path.
   - diagnostics
 - graph views render as engine-generated textures inside the central Systems
   surface and the docked UI mirror
+- the central Systems surface gives the render/frame graph and task/thread graph
+  full-width readable rows instead of tiny side-by-side thumbnails
 - graph views support pan/zoom and remain clipped when they are wider than the
   available panel
 - top-level editor mode buttons now route the central work area. Scene and

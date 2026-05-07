@@ -136,8 +136,8 @@ namespace epochnamespace
 
         struct SystemsSurfaceState
         {
-            float renderZoom{ 1.0f };
-            float taskZoom{ 1.0f };
+            float renderZoom{ 1.15f };
+            float taskZoom{ 1.15f };
             int renderPan{ 0 };
             int taskPan{ 0 };
             SpriteHandle renderSurface{};
@@ -542,6 +542,81 @@ namespace epochnamespace
             }
         };
 
+        [[nodiscard]] static std::array<std::string_view, 7> tiny_glyph(char ch) noexcept
+        {
+            switch (static_cast<char>(std::toupper(static_cast<unsigned char>(ch))))
+            {
+            case '0': return { " ### ", "#   #", "#  ##", "# # #", "##  #", "#   #", " ### " };
+            case '1': return { "  #  ", " ##  ", "# #  ", "  #  ", "  #  ", "  #  ", "#####" };
+            case '2': return { " ### ", "#   #", "    #", "   # ", "  #  ", " #   ", "#####" };
+            case '3': return { "#### ", "    #", "    #", " ### ", "    #", "    #", "#### " };
+            case '4': return { "#   #", "#   #", "#   #", "#####", "    #", "    #", "    #" };
+            case '5': return { "#####", "#    ", "#    ", "#### ", "    #", "#   #", " ### " };
+            case '6': return { " ### ", "#    ", "#    ", "#### ", "#   #", "#   #", " ### " };
+            case '7': return { "#####", "    #", "   # ", "  #  ", " #   ", " #   ", " #   " };
+            case '8': return { " ### ", "#   #", "#   #", " ### ", "#   #", "#   #", " ### " };
+            case '9': return { " ### ", "#   #", "#   #", " ####", "    #", "    #", " ### " };
+            case 'A': return { " ### ", "#   #", "#   #", "#####", "#   #", "#   #", "#   #" };
+            case 'B': return { "#### ", "#   #", "#   #", "#### ", "#   #", "#   #", "#### " };
+            case 'C': return { " ### ", "#   #", "#    ", "#    ", "#    ", "#   #", " ### " };
+            case 'D': return { "#### ", "#   #", "#   #", "#   #", "#   #", "#   #", "#### " };
+            case 'E': return { "#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#####" };
+            case 'F': return { "#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#    " };
+            case 'G': return { " ### ", "#   #", "#    ", "#  ##", "#   #", "#   #", " ### " };
+            case 'H': return { "#   #", "#   #", "#   #", "#####", "#   #", "#   #", "#   #" };
+            case 'I': return { "#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "#####" };
+            case 'K': return { "#   #", "#  # ", "# #  ", "##   ", "# #  ", "#  # ", "#   #" };
+            case 'L': return { "#    ", "#    ", "#    ", "#    ", "#    ", "#    ", "#####" };
+            case 'M': return { "#   #", "## ##", "# # #", "#   #", "#   #", "#   #", "#   #" };
+            case 'N': return { "#   #", "##  #", "# # #", "#  ##", "#   #", "#   #", "#   #" };
+            case 'O': return { " ### ", "#   #", "#   #", "#   #", "#   #", "#   #", " ### " };
+            case 'P': return { "#### ", "#   #", "#   #", "#### ", "#    ", "#    ", "#    " };
+            case 'R': return { "#### ", "#   #", "#   #", "#### ", "# #  ", "#  # ", "#   #" };
+            case 'S': return { " ####", "#    ", "#    ", " ### ", "    #", "    #", "#### " };
+            case 'T': return { "#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "  #  " };
+            case 'U': return { "#   #", "#   #", "#   #", "#   #", "#   #", "#   #", " ### " };
+            case 'V': return { "#   #", "#   #", "#   #", "#   #", "#   #", " # # ", "  #  " };
+            case 'W': return { "#   #", "#   #", "#   #", "# # #", "# # #", "## ##", "#   #" };
+            case 'X': return { "#   #", "#   #", " # # ", "  #  ", " # # ", "#   #", "#   #" };
+            case 'Y': return { "#   #", "#   #", " # # ", "  #  ", "  #  ", "  #  ", "  #  " };
+            case '-': return { "     ", "     ", "     ", "#####", "     ", "     ", "     " };
+            case '/': return { "    #", "    #", "   # ", "  #  ", " #   ", "#    ", "#    " };
+            case ':': return { "     ", "  #  ", "     ", "     ", "  #  ", "     ", "     " };
+            default: return { "     ", "     ", "     ", "     ", "     ", "     ", "     " };
+            }
+        }
+
+        static void draw_tiny_text(
+            SurfaceCanvas& canvas,
+            std::string_view text,
+            int x,
+            int y,
+            gui::Color color,
+            int scale = 2) noexcept
+        {
+            int penX = x;
+            const int safeScale = (std::max)(1, scale);
+            for (const char ch : text)
+            {
+                if (ch == ' ')
+                {
+                    penX += 4 * safeScale;
+                    continue;
+                }
+
+                const auto glyph = tiny_glyph(ch);
+                for (int row = 0; row < 7; ++row)
+                {
+                    for (int col = 0; col < 5; ++col)
+                    {
+                        if (glyph[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)] != ' ')
+                            canvas.fill_rect(penX + col * safeScale, y + row * safeScale, safeScale, safeScale, color);
+                    }
+                }
+                penX += 6 * safeScale;
+            }
+        }
+
         [[nodiscard]] static std::string recommended_support_tier(
             const std::shared_ptr<core::Context>& ctx,
             std::size_t workerCount)
@@ -726,6 +801,16 @@ namespace epochnamespace
                 { expose_ai_inputs ? gui::Color{ 157, 88, 112, 255 } : gui::Color{ 118, 86, 123, 255 },
                   expose_ai_inputs ? gui::Color{ 255, 171, 193, 255 } : gui::Color{ 205, 170, 216, 255 } }
             }};
+            constexpr std::array<std::string_view, 8> stageNames{
+                "CAPTURE",
+                "VISIBLE",
+                "SURFACE",
+                "LIGHT",
+                "TEMP",
+                "PRESENT",
+                "DOCK",
+                "AI MCP"
+            };
 
             const int stageWidth = (std::max)(76, static_cast<int>(96.0f * systems.renderZoom));
             const int stageHeight = 56;
@@ -738,6 +823,7 @@ namespace epochnamespace
             canvas.fill_rect(18, kSurfaceHeight - 26, 120, 12, gui::Color{ 89, 110, 138, 255 });
             canvas.fill_rect(18 + 128, kSurfaceHeight - 26, 140, 12, gui::Color{ 98, 152, 116, 255 });
             canvas.fill_rect(18 + 276, kSurfaceHeight - 26, 180, 12, gui::Color{ 149, 122, 60, 255 });
+            draw_tiny_text(canvas, "RENDER FRAME GRAPH", 30, 22, gui::Color{ 210, 224, 242, 255 }, 2);
 
             for (std::size_t i = 0; i < stages.size(); ++i)
             {
@@ -756,7 +842,10 @@ namespace epochnamespace
                 canvas.fill_rect(x + stageWidth - 14, y + 14, 6, stageHeight - 28, stage.accent);
                 canvas.fill_rect(x + 6, y - 12, (std::max)(18, stageWidth / 3), 6, stage.accent);
                 canvas.vline(x + stageWidth / 2, y + stageHeight + 8, 18, gui::Color{ 50, 58, 72, 255 }, 2);
+                draw_tiny_text(canvas, stageNames[i], x + 12, y + 20, gui::Color{ 232, 238, 248, 255 }, 2);
             }
+
+            draw_tiny_text(canvas, "BLUE GPU   GREEN CPU   GOLD PRESENT", 30, kSurfaceHeight - 22, gui::Color{ 220, 226, 236, 255 }, 1);
 
             return canvas;
         }
@@ -776,6 +865,11 @@ namespace epochnamespace
             const int baseX = 26 - systems.taskPan;
             const int taskWidth = (std::max)(34, static_cast<int>(56.0f * systems.taskZoom));
             const int taskGap = (std::max)(10, static_cast<int>(18.0f * systems.taskZoom));
+            const std::string taskHeader = std::string("TASK THREAD GRAPH  WORKERS ")
+                + std::to_string(workerCount)
+                + "  SYSTEMS "
+                + std::to_string(systemCount);
+            draw_tiny_text(canvas, taskHeader, 24, 6, gui::Color{ 214, 224, 238, 255 }, 1);
 
             const std::array<gui::Color, 5> taskColors{{
                 { 86, 142, 255, 255 },
@@ -784,12 +878,20 @@ namespace epochnamespace
                 { 198, 116, 255, 255 },
                 { 255, 118, 150, 255 }
             }};
+            constexpr std::array<std::string_view, 5> taskNames{
+                "INPUT",
+                "SYSTEM",
+                "SCRIPT",
+                "AI",
+                "OUTPUT"
+            };
 
             for (int lane = 0; lane < laneCount; ++lane)
             {
                 const int y = 20 + lane * (laneHeight + laneGap);
                 canvas.fill_rect(0, y + laneHeight / 2, kSurfaceWidth, 2, gui::Color{ 38, 42, 52, 255 });
                 canvas.fill_rect(4, y, 8, laneHeight, gui::Color{ 72, 76, 92, 255 });
+                draw_tiny_text(canvas, std::string("L") + std::to_string(lane + 1), 18, y + 6, gui::Color{ 188, 198, 214, 255 }, 1);
 
                 const int blocks = 5 + static_cast<int>((systemCount + static_cast<std::size_t>(lane)) % 4u);
                 for (int block = 0; block < blocks; ++block)
@@ -798,6 +900,13 @@ namespace epochnamespace
                     const gui::Color fill = taskColors[(static_cast<std::size_t>(block) + static_cast<std::size_t>(lane)) % taskColors.size()];
                     canvas.fill_rect(x, y + 3, taskWidth, laneHeight - 6, fill);
                     canvas.stroke_rect(x, y + 3, taskWidth, laneHeight - 6, gui::Color{ 255, 255, 255, 42 });
+                    draw_tiny_text(
+                        canvas,
+                        taskNames[(static_cast<std::size_t>(block) + static_cast<std::size_t>(lane)) % taskNames.size()],
+                        x + 6,
+                        y + (std::max)(4, laneHeight / 2 - 4),
+                        gui::Color{ 238, 242, 248, 255 },
+                        1);
                     if (block != 0)
                         canvas.fill_rect(x - taskGap + taskGap / 2 - 1, y + laneHeight / 2 - 2, taskGap + 2, 4, gui::Color{ 58, 65, 79, 255 });
                 }
@@ -831,14 +940,21 @@ namespace epochnamespace
                 { { 70, 132, 96, 255 }, { 124, 244, 159, 255 }, 338, 282, activeTier == "Standard" },
                 { { 146, 123, 57, 255 }, { 255, 219, 112, 255 }, 654, 282, activeTier == "Extended" }
             }};
+            constexpr std::array<std::string_view, 3> tierNames{
+                "BASELINE",
+                "STANDARD",
+                "EXTENDED"
+            };
 
-            for (const auto& card : cards)
+            for (std::size_t i = 0; i < cards.size(); ++i)
             {
+                const auto& card = cards[i];
                 const int y = 18;
                 const int h = 72;
                 canvas.fill_rect(card.x, y, card.w, h, card.fill);
                 canvas.stroke_rect(card.x, y, card.w, h, card.active ? card.accent : gui::Color{ 255, 255, 255, 30 });
                 canvas.fill_rect(card.x + 12, y + 12, 42, h - 24, gui::Color{ 255, 255, 255, 28 });
+                draw_tiny_text(canvas, tierNames[i], card.x + 70, y + 26, gui::Color{ 232, 238, 248, 255 }, 2);
                 if (card.active)
                     canvas.fill_rect(card.x + card.w - 14, y + 10, 8, h - 20, card.accent);
             }
@@ -847,6 +963,7 @@ namespace epochnamespace
                 canvas.fill_rect(22, 92, 220, 6, gui::Color{ 174, 124, 89, 255 });
             else
                 canvas.fill_rect(22, 92, 220, 6, gui::Color{ 95, 174, 127, 255 });
+            draw_tiny_text(canvas, std::string("ACTIVE ") + std::string(activeTier), 260, 90, gui::Color{ 218, 226, 236, 255 }, 1);
 
             return canvas;
         }
@@ -872,6 +989,14 @@ namespace epochnamespace
                 { 190, 128, 255, 255 },
                 { 255, 132, 155, 255 }
             }};
+            constexpr std::array<std::string_view, 5> stageNames{
+                "PLAN",
+                "EXEC",
+                "BUILD",
+                "VERIFY",
+                "GATE"
+            };
+            draw_tiny_text(canvas, "AI SELF ITERATION LOOP", 34, 12, gui::Color{ 214, 224, 238, 255 }, 1);
 
             int active = 4;
             for (int i = 0; i < 5; ++i)
@@ -907,6 +1032,7 @@ namespace epochnamespace
                 canvas.stroke_rect(x, y, cardW, cardH, stroke);
                 canvas.fill_rect(x + 12, y + 12, 28, cardH - 24, gui::Color{ 255, 255, 255, static_cast<std::uint8_t>(ready ? 52 : 28) });
                 canvas.fill_rect(x + cardW - 14, y + 10, 6, cardH - 20, accent);
+                draw_tiny_text(canvas, stageNames[static_cast<std::size_t>(i)], x + 48, y + 20, gui::Color{ 232, 238, 248, 255 }, 2);
                 if (current)
                     canvas.fill_rect(x + 8, y - 10, cardW - 16, 5, accent);
             }
@@ -925,6 +1051,8 @@ namespace epochnamespace
                 canvas.fill_rect(866, 44, 68, 16, gui::Color{ 223, 174, 77, 255 });
             else
                 canvas.fill_rect(866, 44, 68, 16, gui::Color{ 58, 68, 84, 255 });
+            draw_tiny_text(canvas, watcherEnabled ? "WATCH ON" : "WATCH OFF", 764, 23, gui::Color{ 238, 242, 248, 255 }, 1);
+            draw_tiny_text(canvas, buildPending ? "BUILD RUN" : "BUILD IDLE", 764, 47, gui::Color{ 238, 242, 248, 255 }, 1);
 
             return canvas;
         }
@@ -1131,6 +1259,7 @@ namespace epochnamespace
                 });
             if (existing != state.entities.end())
             {
+                existing->editorOnly = true;
                 state.selectedEntity = static_cast<std::size_t>(std::distance(state.entities.begin(), existing));
                 return;
             }
@@ -1141,10 +1270,10 @@ namespace epochnamespace
             canvas.category = "2D";
             canvas.position = { 0.0f, 0.03f, 0.0f };
             canvas.scale = { 6.4f, 0.05f, 3.6f };
-            canvas.editorOnly = false;
+            canvas.editorOnly = true;
             state.entities.push_back(std::move(canvas));
             state.selectedEntity = state.entities.size() - 1u;
-            push_editor_log(state, "[2d] Added Canvas2D editing plane.");
+            push_editor_log(state, "[2d] Added editor-only Canvas2D editing plane.");
         }
 
         void duplicate_selected_entity(EditorState& state)
@@ -1297,11 +1426,20 @@ namespace epochnamespace
 
             const auto camera = epochnamespace::previewgrid::camera_for(ctx);
             const float aspect = viewport.size.x / viewport.size.y;
-            const auto projection = epochnamespace::previewgrid::perspective(
-                camera.fovRadians,
-                aspect,
-                camera.nearPlane,
-                camera.farPlane);
+            const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx);
+            const auto projection = cameraMode == epochnamespace::previewgrid::CameraMode::Canvas2D
+                ? epochnamespace::previewgrid::orthographic(
+                    -((std::max)(2.0f, camera.eye.y * 0.45f) * aspect),
+                    ((std::max)(2.0f, camera.eye.y * 0.45f) * aspect),
+                    -(std::max)(2.0f, camera.eye.y * 0.45f),
+                    (std::max)(2.0f, camera.eye.y * 0.45f),
+                    camera.nearPlane,
+                    camera.farPlane)
+                : epochnamespace::previewgrid::perspective(
+                    camera.fovRadians,
+                    aspect,
+                    camera.nearPlane,
+                    camera.farPlane);
             const auto view = epochnamespace::previewgrid::look_at(
                 camera.eye,
                 camera.target,
@@ -1906,6 +2044,13 @@ namespace epochnamespace
             if (text.empty())
                 return "Project notes file exists but is empty.";
             return text;
+        }
+
+        [[nodiscard]] std::string tail_text(std::string text, std::size_t maxChars)
+        {
+            if (text.size() <= maxChars)
+                return text;
+            return std::string("...") + text.substr(text.size() - maxChars);
         }
 
         void append_project_note(
@@ -3099,10 +3244,7 @@ namespace epochnamespace
 
         const bool center_uses_scene = main_surface_uses_scene(editor.mainSurface);
         const bool layout_outliner_visible = editor.showOutliner && center_uses_scene;
-        const bool layout_inspector_visible = editor.showInspector
-            && (center_uses_scene
-                || editor.mainSurface == EditorMainSurface::Project
-                || editor.mainSurface == EditorMainSurface::AISandbox);
+        const bool layout_inspector_visible = editor.showInspector;
 
         const float toolbar_h = 98.0f;
         const float splitter_w = 7.0f;
@@ -3297,6 +3439,8 @@ namespace epochnamespace
         if (gui::button(editor_tab, { 180.0f, tab_h }))
         {
             editor.mainSurface = EditorMainSurface::Scene;
+            if (ctx && epochnamespace::previewgrid::camera_mode_for(ctx.get()) == epochnamespace::previewgrid::CameraMode::Canvas2D)
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
             push_editor_log(editor, "[editor] Editor mode is active.");
         }
         tab_x += 180.0f + tab_gap;
@@ -3306,8 +3450,14 @@ namespace epochnamespace
         {
             editor.mainSurface = EditorMainSurface::Game2D;
             editor.workspaceTab = EditorWorkspaceTab::Project;
+            editor.previewMode = core::ScenePreviewMode::Editor;
             ensure_2d_canvas_entity(editor);
-            push_editor_log(editor, "[editor] Game/2D workspace is active with Canvas2D selected.");
+            if (ctx)
+            {
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Canvas2D);
+                epochnamespace::previewgrid::reset_camera(ctx.get());
+            }
+            push_editor_log(editor, "[editor] Game/2D workspace is active with the locked Canvas2D camera.");
         }
         tab_x += 156.0f + tab_gap;
 
@@ -3333,6 +3483,7 @@ namespace epochnamespace
             editor.mainSurface = EditorMainSurface::AISandbox;
             editor.workspaceTab = EditorWorkspaceTab::AI;
             editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
+            editor.showAiChat = true;
             activate_self_iteration_sandbox(editor, ctx, true);
             push_editor_log(editor, "[ai] Self-Iteration Sandbox opened.");
         }
@@ -4100,6 +4251,14 @@ namespace epochnamespace
                 gui::wrapped_label(
                     "This is the visible control surface for engine self-iteration. EpochBot stages evidence and build packets here; promotion remains a human-approved step.",
                     centerWidth);
+                const auto sandboxNotesPath = project_notes_path(editor.projectRoot);
+                const auto sandboxBuildLog = project_build_log_path(editor.projectRoot);
+                const auto sandboxOutput = project_output_exe_path(editor.projectRoot);
+                gui::property_row("[ai] Notes", display_project_path(sandboxNotesPath), 108.0f);
+                gui::property_row("[ai] Build log", display_project_path(sandboxBuildLog), 108.0f);
+                gui::property_row("[ai] Output", display_project_path(sandboxOutput), 108.0f);
+                gui::label("Latest Sandbox Notes");
+                gui::wrapped_label(tail_text(read_project_notes(editor.projectRoot), 1500), centerWidth);
                 render_ai_model_picker(editor, (std::min)(centerWidth, 460.0f));
                 if (gui::button("Save Sandbox Evidence", { 240.0f, 30.0f }))
                     repair_self_iteration_sandbox_evidence(editor);
@@ -4131,10 +4290,10 @@ namespace epochnamespace
                 const std::string supportTier = recommended_support_tier(ctx, workerCount);
                 const std::string backendGuidance = backend_runtime_guidance(ctx, supportTier);
                 const std::string convergenceFocus = backend_convergence_focus(ctx);
-                const float graphGap = 12.0f;
-                const float graphWidth = (std::max)(180.0f, (centerWidth - graphGap) * 0.5f);
-                const float graphHeight = 156.0f;
-                const float supportHeight = 72.0f;
+                const float graphGap = 14.0f;
+                const float graphWidth = (std::max)(260.0f, centerWidth);
+                const float graphHeight = 208.0f;
+                const float supportHeight = 96.0f;
 
                 const auto renderCanvas = build_render_graph_surface(
                     editor.systems,
@@ -4171,15 +4330,13 @@ namespace epochnamespace
                     "Systems is reserved for render/backend/context routing, borderless panel hosts, diagnostics, and future node/timeline/video surfaces. It intentionally disables the 3D scene preview while open.",
                     centerWidth);
                 const auto systemsOrigin = gui::cursor_position();
-                const float leftX = systemsOrigin.x;
-                const float rightX = systemsOrigin.x + graphWidth + graphGap;
                 const float titleY = systemsOrigin.y + 6.0f;
                 const float controlsY = titleY + gui::line_height() + 4.0f;
                 const float imageY = controlsY + 30.0f;
 
-                gui::set_cursor({ leftX, titleY });
+                gui::set_cursor({ systemsOrigin.x, titleY });
                 gui::label("Render / Frame Graph");
-                gui::set_cursor({ leftX, controlsY });
+                gui::set_cursor({ systemsOrigin.x, controlsY });
                 const std::array renderButtons{
                     gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
                     gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
@@ -4191,21 +4348,25 @@ namespace epochnamespace
                     switch (*action)
                     {
                     case 0: editor.systems.renderPan = (std::max)(0, editor.systems.renderPan - 64); break;
-                    case 1: editor.systems.renderZoom = (std::max)(0.75f, editor.systems.renderZoom - 0.2f); break;
-                    case 2: editor.systems.renderZoom = (std::min)(2.0f, editor.systems.renderZoom + 0.2f); break;
+                    case 1: editor.systems.renderZoom = (std::max)(0.85f, editor.systems.renderZoom - 0.25f); break;
+                    case 2: editor.systems.renderZoom = (std::min)(3.0f, editor.systems.renderZoom + 0.25f); break;
                     case 3: editor.systems.renderPan += 64; break;
                     default: break;
                     }
                 }
-                gui::set_cursor({ leftX, imageY });
+                gui::set_cursor({ systemsOrigin.x, imageY });
                 if (editor.systems.renderSurface.is_valid())
                     gui::image(editor.systems.renderSurface, { graphWidth, graphHeight });
                 else
                     gui::wrapped_label("Render graph surface unavailable.", graphWidth);
 
-                gui::set_cursor({ rightX, titleY });
+                const float taskTitleY = imageY + graphHeight + graphGap;
+                const float taskControlsY = taskTitleY + gui::line_height() + 4.0f;
+                const float taskImageY = taskControlsY + 30.0f;
+
+                gui::set_cursor({ systemsOrigin.x, taskTitleY });
                 gui::label("Task / Thread Graph");
-                gui::set_cursor({ rightX, controlsY });
+                gui::set_cursor({ systemsOrigin.x, taskControlsY });
                 const std::array taskButtons{
                     gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
                     gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
@@ -4217,19 +4378,19 @@ namespace epochnamespace
                     switch (*action)
                     {
                     case 0: editor.systems.taskPan = (std::max)(0, editor.systems.taskPan - 64); break;
-                    case 1: editor.systems.taskZoom = (std::max)(0.75f, editor.systems.taskZoom - 0.2f); break;
-                    case 2: editor.systems.taskZoom = (std::min)(2.0f, editor.systems.taskZoom + 0.2f); break;
+                    case 1: editor.systems.taskZoom = (std::max)(0.85f, editor.systems.taskZoom - 0.25f); break;
+                    case 2: editor.systems.taskZoom = (std::min)(3.0f, editor.systems.taskZoom + 0.25f); break;
                     case 3: editor.systems.taskPan += 64; break;
                     default: break;
                     }
                 }
-                gui::set_cursor({ rightX, imageY });
+                gui::set_cursor({ systemsOrigin.x, taskImageY });
                 if (editor.systems.taskSurface.is_valid())
                     gui::image(editor.systems.taskSurface, { graphWidth, graphHeight });
                 else
                     gui::wrapped_label("Task graph surface unavailable.", graphWidth);
 
-                const float supportY = imageY + graphHeight + 10.0f;
+                const float supportY = taskImageY + graphHeight + graphGap;
                 gui::set_cursor({ systemsOrigin.x, supportY });
                 gui::label("Hardware / Support Tiers");
                 gui::set_cursor({ systemsOrigin.x, supportY + gui::line_height() + 4.0f });
@@ -5403,8 +5564,8 @@ namespace epochnamespace
                 switch (*action)
                 {
                 case 0: editor.systems.renderPan = (std::max)(0, editor.systems.renderPan - 64); break;
-                case 1: editor.systems.renderZoom = (std::max)(0.75f, editor.systems.renderZoom - 0.2f); break;
-                case 2: editor.systems.renderZoom = (std::min)(2.0f, editor.systems.renderZoom + 0.2f); break;
+                case 1: editor.systems.renderZoom = (std::max)(0.85f, editor.systems.renderZoom - 0.25f); break;
+                case 2: editor.systems.renderZoom = (std::min)(3.0f, editor.systems.renderZoom + 0.25f); break;
                 case 3: editor.systems.renderPan += 64; break;
                 default: break;
                 }
@@ -5429,8 +5590,8 @@ namespace epochnamespace
                 switch (*action)
                 {
                 case 0: editor.systems.taskPan = (std::max)(0, editor.systems.taskPan - 64); break;
-                case 1: editor.systems.taskZoom = (std::max)(0.75f, editor.systems.taskZoom - 0.2f); break;
-                case 2: editor.systems.taskZoom = (std::min)(2.0f, editor.systems.taskZoom + 0.2f); break;
+                case 1: editor.systems.taskZoom = (std::max)(0.85f, editor.systems.taskZoom - 0.25f); break;
+                case 2: editor.systems.taskZoom = (std::min)(3.0f, editor.systems.taskZoom + 0.25f); break;
                 case 3: editor.systems.taskPan += 64; break;
                 default: break;
                 }
@@ -5628,7 +5789,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Tools", TopMenu::Tools, dropdown_window_size(228.0f, 5), [&](gui::Vec2 pos)
+        open_dropdown("Tools", TopMenu::Tools, dropdown_window_size(228.0f, 6), [&](gui::Vec2 pos)
         {
             menu_item("Camera: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
                 epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
@@ -5638,14 +5799,21 @@ namespace epochnamespace
                 epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::FPS);
                 push_editor_log(editor, "[tools] Camera mode set to FPS.");
             });
-            menu_item("Reset Preview Camera", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
+            menu_item("Camera: 2D Canvas", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
+                editor.mainSurface = EditorMainSurface::Game2D;
+                editor.previewMode = core::ScenePreviewMode::Editor;
+                ensure_2d_canvas_entity(editor);
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Canvas2D);
+                push_editor_log(editor, "[tools] Camera mode set to locked 2D Canvas.");
+            });
+            menu_item("Reset Preview Camera", { pos.x + 12.0f, pos.y + 116.0f }, 228.0f, [&]() {
                 epochnamespace::previewgrid::reset_camera(ctx.get());
                 push_editor_log(editor, "[tools] Preview camera reset.");
             });
-            menu_item("Save Project", { pos.x + 12.0f, pos.y + 116.0f }, 228.0f, [&]() {
+            menu_item("Save Project", { pos.x + 12.0f, pos.y + 150.0f }, 228.0f, [&]() {
                 repair_active_project_evidence(editor);
             });
-            menu_item("Update to Latest...", { pos.x + 12.0f, pos.y + 150.0f }, 228.0f, [&]() {
+            menu_item("Update to Latest...", { pos.x + 12.0f, pos.y + 184.0f }, 228.0f, [&]() {
                 editor.showUpdateConfirmModal = true;
                 editor.showSourceUpdateConfirmModal = false;
                 push_editor_log(editor, "[tools] Latest update requested. Awaiting confirmation.");
