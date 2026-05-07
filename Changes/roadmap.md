@@ -175,6 +175,8 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - Source atlases belong under the canonical asset tree.
 - Generated/cache atlases must not pollute source directories.
 - Generated/cache atlases must be ignored.
+- Editor-generated graph/runtime surfaces must use the dedicated runtime-surface
+  atlas and must not be packed into the small built-in GUI skin atlas.
 - Runtime behavior must not depend on random working directories.
 
 ### Deferred Heavy Work
@@ -194,8 +196,9 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - Add desktop-grade editor scaling, outliner clipping/resize behavior, and
   separate in-app editor windows for project/game editing, software/tool work,
   the self-iteration sandbox, and AI visualization.
-- Promote the first AI loop visualizer into a dedicated surface with packet
-  replay, scene-state diffs, and eventually direct 3D model/weight views.
+- Promote the first AI loop visualizer from the central AI Sandbox surface into a
+  dedicated editor window with packet replay, scene-state diffs, and eventually
+  direct 3D model/weight views.
 - Expand CI/test automation without launching GUI windows on hosted runners.
 - Harden packaging/install asset behavior for runtime releases.
 
@@ -243,9 +246,9 @@ engine shape and should be treated as starting truth for the next passes:
   newly created Cube/Light/Spawn entities render as ambient-colored solid
   primitives with wire outlines while the fuller ECS/material/object runtime is
   still being built out
-- a live Systems workspace with graph surfaces, backend ownership visibility,
-  first time-control diagnostics, and build-confidence/feature-probe status
-  already on-screen
+- a live Systems workspace with central graph surfaces, backend ownership
+  visibility, first time-control diagnostics, and build-confidence/feature-probe
+  status already on-screen
 - the Systems workspace now mirrors Phase 5 self-iteration evidence, including
   watcher/build/tool status, staged packet count/root, and the
   planner/executor/builder/verifier/gate contract beside build confidence
@@ -271,10 +274,10 @@ engine shape and should be treated as starting truth for the next passes:
 - local AI model discovery is explicit-selection only: the editor may list
   available local OpenAI-compatible models, but chat/tooling stays disabled and
   unnamed until the operator selects one
-- an editor-native Self-Iteration Sandbox panel that summarizes evidence
+- an editor-native Self-Iteration Sandbox surface that summarizes evidence
   readiness, active planner/builder/verifier/gate state, continuous build
-  status, and tool-harness activity without depending on runtime surface/atlas
-  packing
+  status, tool-harness activity, and AI loop graph feedback through the dedicated
+  runtime-surface atlas
 - an editor-owned continuous self-iteration build lane that watches active project/script
   evidence, queues one child-project build at a time, and feeds successful
   build artifacts back into staged AI packets for verifier/gate review

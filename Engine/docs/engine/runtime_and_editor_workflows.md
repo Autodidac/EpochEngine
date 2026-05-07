@@ -163,13 +163,16 @@ the same engine-owned path.
   - time-system diagnostics and controls
   - pacing / perf select
   - diagnostics
-- graph views render as engine-generated textures inside the docked UI
+- graph views render as engine-generated textures inside the central Systems
+  surface and the docked UI mirror
 - graph views support pan/zoom and remain clipped when they are wider than the
   available panel
 - top-level editor mode buttons now route the central work area. Scene and
   Game/2D keep the real 3D viewport; Project, Assets, AI Sandbox, and Systems
   switch to GUI surfaces and clear the scene viewport so those workflows do not
   have to be operated from the console dock.
+- `EPOCH_EDITOR_START_WORKSPACE=AI`, `Systems`, or `Assets` selects the matching
+  central editor surface at startup instead of only changing the bottom dock tab.
 - splitter bars are dedicated GUI chrome rather than blank buttons. They should
   stay visually stable while resizing/maximizing and must not consume launcher
   or editor button press identity.
@@ -179,9 +182,11 @@ the same engine-owned path.
   Columns` are intentionally removed from the active workflow.
 - Phase 5 self-iteration should have visible graph/flow feedback, not only text
   rows. The first-pass AI loop visualizer shows planner, builder, verifier,
-  gate, and human-review readiness as an engine-generated surface; future work
-  should promote that into a dedicated editor window with packet replay,
-  scene-state diffs, and eventually 3D model/weight visualization
+  gate, and human-review readiness as an engine-generated surface in the central
+  AI Sandbox. Generated graph/runtime surfaces use the dedicated runtime-surface
+  atlas, not the small built-in GUI skin atlas. Future work should promote that
+  into a dedicated editor window with packet replay, scene-state diffs, and
+  eventually 3D model/weight visualization
 - support-tier diagnostics should stay visible beside renderer stage flow and
   worker-count information so compatibility policy is visible in the editor
 - docked backend hosts should present one clean pane per active context

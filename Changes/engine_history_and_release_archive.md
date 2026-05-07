@@ -25,7 +25,7 @@ archive for historical context and milestone tracing.
 Current orientation:
 
 - Latest published stable runtime line: `v0.84.05`
-- Current development source line: `v0.84.15`
+- Current development source line: `v0.84.16`
 
 ## What the engine has become so far
 
@@ -66,6 +66,16 @@ From the archived work in this file, a few themes are clear:
 These notes were previously tracked in `post_v0_83_work_collated.md`. They stay
 here because they explain the active engine/editor direction more directly than
 the older updater-era release cadence alone.
+
+### [Work Log | Development line] v0.84.16
+
+`v0.84.16` repairs the runtime graph-surface path that was overflowing the
+built-in GUI atlas. Systems graphs, support-tier graphics, and the AI loop
+visualizer now register through a dedicated runtime-surface atlas, avoiding the
+pack-failure spam and Visual Studio first-chance runtime exceptions seen when
+those generated images were forced into the 512x512 GUI skin atlas. The same
+pass puts AI and Systems graph feedback directly into their central editor
+surfaces.
 
 ### [Work Log | Development line] v0.84.15
 

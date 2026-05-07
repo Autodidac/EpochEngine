@@ -89,6 +89,8 @@ namespace epochnamespace::gui
     constexpr int         kTabSpaces = 4;
     constexpr const char* kDefaultFontName = "__agui_default_font";
     constexpr const char* kDefaultFontFile = "Roboto-Regular.ttf";
+    constexpr const char* kRuntimeSurfaceAtlasName = "__agui_runtime_surfaces";
+    constexpr std::uint32_t kRuntimeSurfaceAtlasSize = 4096;
 
     namespace
     {
@@ -182,6 +184,7 @@ namespace epochnamespace::gui
 
             bool atlasBuilt = false;
             TextureAtlas* atlas = nullptr;
+            TextureAtlas* runtimeSurfaceAtlas = nullptr;
 
             PaletteSprites defaultDark{};
             PaletteSprites classicLauncher{};
@@ -473,41 +476,89 @@ namespace epochnamespace::gui
             return hash;
         }
 
+        [[nodiscard]] static SpriteHandle try_add_sprite(
+            TextureAtlas& atlas,
+            const std::string& name,
+            const std::vector<std::uint8_t>& pixels,
+            std::uint32_t w,
+            std::uint32_t h,
+            bool queueUpload) noexcept
+        {
+            try
+            {
+                Texture texture{};
+                texture.name = name;
+                texture.width = w;
+                texture.height = h;
+                texture.channels = 4;
+                texture.pixels = pixels;
+
+                auto entry = atlas.add_entry(name, texture);
+                if (!entry)
+                    return {};
+
+                if (epochnamespace::spritepool::capacity == 0)
+                    epochnamespace::spritepool::initialize(2048);
+
+                SpriteHandle handle = epochnamespace::spritepool::allocate();
+                if (!handle.is_valid())
+                    return {};
+
+                handle.atlasIndex = static_cast<std::uint32_t>(atlas.get_index());
+                handle.localIndex = static_cast<std::uint32_t>(entry->index);
+
+                epochnamespace::atlasmanager::registry.add(
+                    name, handle,
+                    entry->region.u1,
+                    entry->region.v1,
+                    entry->region.u2 - entry->region.u1,
+                    entry->region.v2 - entry->region.v1);
+
+                if (queueUpload)
+                    epochnamespace::atlasmanager::ensure_uploaded(atlas);
+
+                return handle;
+            }
+            catch (...)
+            {
+                return {};
+            }
+        }
+
         [[nodiscard]] static SpriteHandle add_sprite(
             TextureAtlas& atlas,
             const std::string& name,
             const std::vector<std::uint8_t>& pixels,
             std::uint32_t w, std::uint32_t h)
         {
-            Texture texture{};
-            texture.name = name;
-            texture.width = w;
-            texture.height = h;
-            texture.channels = 4;
-            texture.pixels = pixels;
-
-            auto entry = atlas.add_entry(name, texture);
-            if (!entry)
-                throw std::runtime_error("[agui] Failed to add atlas entry: " + name);
-
-            if (epochnamespace::spritepool::capacity == 0)
-                epochnamespace::spritepool::initialize(2048);
-
-            SpriteHandle handle = epochnamespace::spritepool::allocate();
+            SpriteHandle handle = try_add_sprite(atlas, name, pixels, w, h, false);
             if (!handle.is_valid())
-                throw std::runtime_error("[agui] Sprite pool exhausted while registering GUI sprite");
-
-            handle.atlasIndex = static_cast<std::uint32_t>(atlas.get_index());
-            handle.localIndex = static_cast<std::uint32_t>(entry->index);
-
-            epochnamespace::atlasmanager::registry.add(
-                name, handle,
-                entry->region.u1,
-                entry->region.v1,
-                entry->region.u2 - entry->region.u1,
-                entry->region.v2 - entry->region.v1);
-
+                throw std::runtime_error("[agui] Failed to register GUI sprite: " + name);
             return handle;
+        }
+
+        [[nodiscard]] static TextureAtlas* ensure_runtime_surface_atlas_locked()
+        {
+            if (g_resources.runtimeSurfaceAtlas)
+                return g_resources.runtimeSurfaceAtlas;
+
+            auto atlasIt = epochnamespace::atlasmanager::atlas_map.find(kRuntimeSurfaceAtlasName);
+            if (atlasIt == epochnamespace::atlasmanager::atlas_map.end())
+            {
+                (void)epochnamespace::atlasmanager::create_atlas({
+                    .name = kRuntimeSurfaceAtlasName,
+                    .width = kRuntimeSurfaceAtlasSize,
+                    .height = kRuntimeSurfaceAtlasSize,
+                    .generate_mipmaps = false
+                    });
+                atlasIt = epochnamespace::atlasmanager::atlas_map.find(kRuntimeSurfaceAtlasName);
+            }
+
+            if (atlasIt == epochnamespace::atlasmanager::atlas_map.end())
+                return nullptr;
+
+            g_resources.runtimeSurfaceAtlas = atlasIt->second.get();
+            return g_resources.runtimeSurfaceAtlas;
         }
 
         [[nodiscard]] static std::filesystem::path find_default_font_path()
@@ -2085,15 +2136,25 @@ namespace epochnamespace::gui
             return entry.handle;
         }
 
-        if (!g_resources.atlas)
-            return {};
-
-        std::vector<std::uint8_t> pixels(rgba_pixels.begin(), rgba_pixels.end());
-        std::string spriteName = "__agui/runtime_surface/" + key + "/" + std::to_string(entry.version + 1u);
-
         try
         {
-            entry.handle = add_sprite(*g_resources.atlas, spriteName, pixels, width, height);
+            std::vector<std::uint8_t> pixels(rgba_pixels.begin(), rgba_pixels.end());
+            std::string spriteName = "__agui/runtime_surface/" + key + "/" + std::to_string(entry.version + 1u);
+
+            SpriteHandle handle{};
+            {
+                std::scoped_lock resourceLock(g_resourceMutex);
+                TextureAtlas* runtimeAtlas = ensure_runtime_surface_atlas_locked();
+                if (!runtimeAtlas)
+                    return {};
+
+                handle = try_add_sprite(*runtimeAtlas, spriteName, pixels, width, height, true);
+            }
+
+            if (!handle.is_valid())
+                return {};
+
+            entry.handle = handle;
             entry.contentHash = contentHash;
             entry.width = width;
             entry.height = height;

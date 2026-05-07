@@ -287,6 +287,25 @@ namespace epochnamespace
 #endif
         }
 
+        [[nodiscard]] EditorMainSurface initial_editor_main_surface(EditorWorkspaceTab workspace) noexcept
+        {
+            switch (workspace)
+            {
+            case EditorWorkspaceTab::AI:
+                return EditorMainSurface::AISandbox;
+            case EditorWorkspaceTab::Systems:
+                return EditorMainSurface::Systems;
+            case EditorWorkspaceTab::Assets:
+            case EditorWorkspaceTab::Scripts:
+                return EditorMainSurface::Assets;
+            case EditorWorkspaceTab::Project:
+                return EditorMainSurface::Project;
+            case EditorWorkspaceTab::Output:
+            default:
+                return EditorMainSurface::Project;
+            }
+        }
+
         struct EditorState
         {
             bool initialized{ false };
@@ -322,7 +341,7 @@ namespace epochnamespace
             EditorTimeControl timeControl{};
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
-            EditorMainSurface mainSurface{ EditorMainSurface::Project };
+            EditorMainSurface mainSurface{ initial_editor_main_surface(workspaceTab) };
             float workspaceSplit{ 0.68f };
             float outlinerSplit{ 0.20f };
             float inspectorSplit{ 0.22f };
@@ -4031,6 +4050,39 @@ namespace epochnamespace
             case EditorMainSurface::AISandbox:
             {
                 const auto training = epoch::ai::default_training_paths();
+                const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
+                const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+                const std::filesystem::path pathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
+                const std::string latestPrompt = last_chat_line_with_prefix(chat, "you> ");
+                const std::string latestReply = last_chat_line_with_prefix(chat, "bot> ");
+                const auto gateStatus = summarize_ai_review_gate(
+                    editor,
+                    buildLog,
+                    outputExe,
+                    pathsManifest,
+                    training,
+                    latestPrompt,
+                    latestReply);
+                const std::array<bool, 5> aiLoopReady{{
+                    gateStatus.projectEvidenceReady,
+                    gateStatus.buildEvidenceReady,
+                    gateStatus.captureEvidenceReady,
+                    gateStatus.chatPairReady,
+                    gateStatus.projectEvidenceReady
+                        && gateStatus.buildEvidenceReady
+                        && gateStatus.captureEvidenceReady
+                        && gateStatus.chatPairReady
+                }};
+                const auto aiLoopCanvas = build_ai_loop_surface(
+                    aiLoopReady,
+                    editor.aiContinuousBuildEnabled,
+                    editor.aiContinuousBuildPending.has_value());
+                editor.systems.aiLoopSurface = gui::register_runtime_surface(
+                    "ai-loop-visualizer",
+                    std::span<const std::uint8_t>(aiLoopCanvas.pixels.data(), aiLoopCanvas.pixels.size()),
+                    static_cast<std::uint32_t>(aiLoopCanvas.width),
+                    static_cast<std::uint32_t>(aiLoopCanvas.height));
+
                 gui::label("Self-Iteration Sandbox");
                 gui::property_row("[ai] Project", editor.projectName);
                 gui::property_row("[ai] Root", display_project_path(editor.projectRoot), 108.0f);
@@ -4038,6 +4090,13 @@ namespace epochnamespace
                 gui::property_row("[ai] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused", 108.0f);
                 gui::property_row("[ai] Status", editor.aiContinuousBuildStatus, 108.0f);
                 gui::property_row("[ai] Captures", display_project_path(training.local_capture_jsonl), 108.0f);
+                gui::property_row("[ai] Loop stage", ai_control_loop_stage(gateStatus), 108.0f);
+                gui::property_row("[ai] Evidence", gateStatus.packetEvidenceSummary, 108.0f);
+                gui::label("AI Loop Visualizer");
+                if (editor.systems.aiLoopSurface.is_valid())
+                    gui::image(editor.systems.aiLoopSurface, { centerWidth, 112.0f });
+                else
+                    gui::wrapped_label("AI loop graph surface unavailable; check runtime-surface atlas diagnostics.", centerWidth);
                 gui::wrapped_label(
                     "This is the visible control surface for engine self-iteration. EpochBot stages evidence and build packets here; promotion remains a human-approved step.",
                     centerWidth);
@@ -4063,6 +4122,47 @@ namespace epochnamespace
                 break;
             }
             case EditorMainSurface::Systems:
+            {
+                const auto orderedSystems = epoch::systems::Registry::instance().ordered_systems();
+                const std::size_t workerCount = (std::max)(std::size_t{ 1 },
+                    std::thread::hardware_concurrency() > 0
+                    ? static_cast<std::size_t>(std::thread::hardware_concurrency())
+                    : std::size_t{ 6 });
+                const std::string supportTier = recommended_support_tier(ctx, workerCount);
+                const std::string backendGuidance = backend_runtime_guidance(ctx, supportTier);
+                const std::string convergenceFocus = backend_convergence_focus(ctx);
+                const float graphGap = 12.0f;
+                const float graphWidth = (std::max)(180.0f, (centerWidth - graphGap) * 0.5f);
+                const float graphHeight = 156.0f;
+                const float supportHeight = 72.0f;
+
+                const auto renderCanvas = build_render_graph_surface(
+                    editor.systems,
+                    epoch::ai::current_provider_mode() == epoch::ai::ProviderMode::McpOperations);
+                const auto taskCanvas = build_task_graph_surface(
+                    editor.systems,
+                    workerCount,
+                    orderedSystems.size);
+                const auto supportCanvas = build_support_tier_surface(
+                    supportTier,
+                    ctx && ctx->type == core::ContextType::Software);
+
+                editor.systems.renderSurface = gui::register_runtime_surface(
+                    "systems-render-graph",
+                    std::span<const std::uint8_t>(renderCanvas.pixels.data(), renderCanvas.pixels.size()),
+                    static_cast<std::uint32_t>(renderCanvas.width),
+                    static_cast<std::uint32_t>(renderCanvas.height));
+                editor.systems.taskSurface = gui::register_runtime_surface(
+                    "systems-task-graph",
+                    std::span<const std::uint8_t>(taskCanvas.pixels.data(), taskCanvas.pixels.size()),
+                    static_cast<std::uint32_t>(taskCanvas.width),
+                    static_cast<std::uint32_t>(taskCanvas.height));
+                editor.systems.supportSurface = gui::register_runtime_surface(
+                    "systems-support-tier",
+                    std::span<const std::uint8_t>(supportCanvas.pixels.data(), supportCanvas.pixels.size()),
+                    static_cast<std::uint32_t>(supportCanvas.width),
+                    static_cast<std::uint32_t>(supportCanvas.height));
+
                 gui::label("Systems Workspace");
                 gui::property_row("[system] Renderer", renderer_name(ctx), 112.0f);
                 gui::property_row("[system] Platform", epochnamespace::GetEngineBuildTagString(), 112.0f);
@@ -4070,7 +4170,81 @@ namespace epochnamespace
                 gui::wrapped_label(
                     "Systems is reserved for render/backend/context routing, borderless panel hosts, diagnostics, and future node/timeline/video surfaces. It intentionally disables the 3D scene preview while open.",
                     centerWidth);
+                const auto systemsOrigin = gui::cursor_position();
+                const float leftX = systemsOrigin.x;
+                const float rightX = systemsOrigin.x + graphWidth + graphGap;
+                const float titleY = systemsOrigin.y + 6.0f;
+                const float controlsY = titleY + gui::line_height() + 4.0f;
+                const float imageY = controlsY + 30.0f;
+
+                gui::set_cursor({ leftX, titleY });
+                gui::label("Render / Frame Graph");
+                gui::set_cursor({ leftX, controlsY });
+                const std::array renderButtons{
+                    gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
+                    gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
+                    gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
+                    gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
+                };
+                if (const auto action = gui::inline_button_row(renderButtons, 24.0f, 6.0f))
+                {
+                    switch (*action)
+                    {
+                    case 0: editor.systems.renderPan = (std::max)(0, editor.systems.renderPan - 64); break;
+                    case 1: editor.systems.renderZoom = (std::max)(0.75f, editor.systems.renderZoom - 0.2f); break;
+                    case 2: editor.systems.renderZoom = (std::min)(2.0f, editor.systems.renderZoom + 0.2f); break;
+                    case 3: editor.systems.renderPan += 64; break;
+                    default: break;
+                    }
+                }
+                gui::set_cursor({ leftX, imageY });
+                if (editor.systems.renderSurface.is_valid())
+                    gui::image(editor.systems.renderSurface, { graphWidth, graphHeight });
+                else
+                    gui::wrapped_label("Render graph surface unavailable.", graphWidth);
+
+                gui::set_cursor({ rightX, titleY });
+                gui::label("Task / Thread Graph");
+                gui::set_cursor({ rightX, controlsY });
+                const std::array taskButtons{
+                    gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
+                    gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
+                    gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
+                    gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
+                };
+                if (const auto action = gui::inline_button_row(taskButtons, 24.0f, 6.0f))
+                {
+                    switch (*action)
+                    {
+                    case 0: editor.systems.taskPan = (std::max)(0, editor.systems.taskPan - 64); break;
+                    case 1: editor.systems.taskZoom = (std::max)(0.75f, editor.systems.taskZoom - 0.2f); break;
+                    case 2: editor.systems.taskZoom = (std::min)(2.0f, editor.systems.taskZoom + 0.2f); break;
+                    case 3: editor.systems.taskPan += 64; break;
+                    default: break;
+                    }
+                }
+                gui::set_cursor({ rightX, imageY });
+                if (editor.systems.taskSurface.is_valid())
+                    gui::image(editor.systems.taskSurface, { graphWidth, graphHeight });
+                else
+                    gui::wrapped_label("Task graph surface unavailable.", graphWidth);
+
+                const float supportY = imageY + graphHeight + 10.0f;
+                gui::set_cursor({ systemsOrigin.x, supportY });
+                gui::label("Hardware / Support Tiers");
+                gui::set_cursor({ systemsOrigin.x, supportY + gui::line_height() + 4.0f });
+                if (editor.systems.supportSurface.is_valid())
+                    gui::image(editor.systems.supportSurface, { centerWidth, supportHeight });
+                else
+                    gui::wrapped_label("Support tier surface unavailable.", centerWidth);
+
+                gui::set_cursor({ systemsOrigin.x, supportY + gui::line_height() + 4.0f + supportHeight + 10.0f });
+                gui::property_row("[systems] Render stages", "Capture | Visibility | Surface | Lighting | Temporal | Present", 132.0f);
+                gui::property_row("[systems] Task lanes", "Input | Systems | Scripts | AI | Output", 132.0f);
+                gui::property_row("[systems] Backend guidance", backendGuidance, 132.0f);
+                gui::property_row("[systems] Convergence focus", convergenceFocus, 132.0f);
                 break;
+            }
             case EditorMainSurface::Scene:
             case EditorMainSurface::Game2D:
             default:

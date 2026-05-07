@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.84.16]
+- Bumped the active source line to `v0.84.16` for the runtime graph-surface
+  atlas repair pass.
+- Moved editor-generated runtime surfaces such as Systems graphs and the AI loop
+  visualizer out of the tiny built-in GUI atlas and into a larger dedicated
+  runtime-surface atlas so graph registration no longer spams pack failures or
+  raises first-chance runtime exceptions in Visual Studio.
+- Restored visible graph feedback in the central Self-Iteration Sandbox and
+  Systems workspaces instead of requiring the bottom Console Dock to be on the
+  right tab before graph surfaces can be seen.
+- Made `EPOCH_EDITOR_START_WORKSPACE` select the matching central editor surface
+  as well as the bottom dock tab so AI/Systems startup checks open the workspace
+  the operator actually requested.
+
 ## [v0.84.15]
 - Bumped the active source line to `v0.84.15` for the editor GUI regression
   repair pass.
