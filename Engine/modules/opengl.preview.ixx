@@ -26,6 +26,55 @@ export namespace epochnamespace::openglpreview
     {
         using Mat4 = epochnamespace::previewgrid::Mat4;
 
+        struct ScopedPreviewGLState final
+        {
+            GLboolean blendEnabled = GL_FALSE;
+            GLboolean scissorEnabled = GL_FALSE;
+            GLboolean depthTestEnabled = GL_FALSE;
+            GLboolean depthMask = GL_FALSE;
+            GLint viewport[4]{};
+            GLint scissorBox[4]{};
+            GLint program = 0;
+            GLint vertexArray = 0;
+            GLint arrayBuffer = 0;
+            GLint elementArrayBuffer = 0;
+            GLfloat clearColor[4]{};
+
+            ScopedPreviewGLState() noexcept
+            {
+                blendEnabled = glIsEnabled(GL_BLEND);
+                scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
+                depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
+                glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+                glGetIntegerv(GL_VIEWPORT, viewport);
+                glGetIntegerv(GL_SCISSOR_BOX, scissorBox);
+                glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+                glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertexArray);
+                glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &arrayBuffer);
+                glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &elementArrayBuffer);
+                glGetFloatv(GL_COLOR_CLEAR_VALUE, clearColor);
+            }
+
+            ScopedPreviewGLState(const ScopedPreviewGLState&) = delete;
+            ScopedPreviewGLState& operator=(const ScopedPreviewGLState&) = delete;
+
+            ~ScopedPreviewGLState() noexcept
+            {
+                glUseProgram(static_cast<GLuint>(program));
+                glBindVertexArray(static_cast<GLuint>(vertexArray));
+                glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(arrayBuffer));
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLuint>(elementArrayBuffer));
+                glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+                glScissor(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
+                glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
+                glDepthMask(depthMask);
+
+                if (blendEnabled == GL_TRUE) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+                if (scissorEnabled == GL_TRUE) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+                if (depthTestEnabled == GL_TRUE) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+            }
+        };
+
         [[nodiscard]] inline std::pair<int, int> parse_gl_version(const char* s) noexcept
         {
             if (!s) return { 0, 0 };
@@ -274,6 +323,7 @@ void main() {
         int viewportWidth,
         int viewportHeight)
     {
+        const detail::ScopedPreviewGLState preservedState;
         const int glViewportY = (std::max)(0, framebufferHeight - (viewportY + viewportHeight));
 
         glDisable(GL_BLEND);
@@ -358,12 +408,6 @@ void main() {
             glBindVertexArray(0);
             glUseProgram(0);
         }
-
-        glDepthMask(GL_FALSE);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glDisable(GL_SCISSOR_TEST);
-        glDisable(GL_DEPTH_TEST);
-        glViewport(0, 0, framebufferWidth, framebufferHeight);
     }
 }
 #endif
