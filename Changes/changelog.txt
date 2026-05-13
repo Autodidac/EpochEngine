@@ -1,5 +1,18 @@
 # Epoch Changelog
 
+## [v0.84.18]
+- Bumped the active source line to `v0.84.18` for the OpenGL preview
+  state-preservation follow-up.
+- Promoted the stronger OpenGL preview guard that snapshots and restores GL
+  program, VAO, array/index buffers, viewport, scissor box, clear color, blend,
+  depth test, and depth-write state around editor scene-preview rendering.
+- Added explicit MSVC vcpkg triplet fallbacks to the checked-in
+  `ConsoleApplication1` and `StaticLib1` projects so local solution builds do
+  not depend on machine-global `VcpkgTriplet` state.
+- This narrows the remaining perspective/launcher flicker investigation to
+  present/resize timing and panel-host composition instead of obvious preview
+  state leakage.
+
 ## [v0.84.17]
 - Bumped the active source line to `v0.84.17` for the 2D camera, panel
   visibility, and graph readability pass.

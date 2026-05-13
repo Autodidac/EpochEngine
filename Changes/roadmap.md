@@ -339,9 +339,10 @@ engine shape and should be treated as starting truth for the next passes:
 - GUI button press identity is geometry-stable again, while splitters now use a
   dedicated non-button draw path. This keeps resize chrome from polluting normal
   button press state and reduces the launcher pressed-state flicker regression.
-  OpenGL preview state is reset after scene-preview rendering as a low-risk
-  bleed-reduction fix, but remaining OpenGL present/resize flicker and real
-  borderless linked-context popouts stay open work.
+  OpenGL preview now snapshots and restores key GL state around scene-preview
+  rendering, so the remaining OpenGL present/resize flicker should be chased in
+  present timing, resize timing, and panel-host composition instead of obvious
+  preview state leakage. Real borderless linked-context popouts stay open work.
 - World Outliner, Inspector, Console Dock, and AI Chat are now individually
   hideable/reopenable from Window, with first-pass draggable side and bottom
   splitters. The old Console/Chat/Dock sizing button strip has been removed;
@@ -421,6 +422,9 @@ engine shape and should be treated as starting truth for the next passes:
 - keep generated Sandbox/ProjectLauncher child builds anchored to current VS
   2022 `v143` toolset metadata in both generated files and the checked-in
   engine projects those generated files reference.
+- keep checked-in MSVC solution projects self-contained enough to build from a
+  normal VS 2022/MSBuild invocation, including explicit vcpkg triplet defaults
+  when machine-global vcpkg integration leaves `$(VcpkgTriplet)` empty.
 - keep the bottom dock centered on `Project`, `Assets`, `Systems`, `AI`, and
   `Output` as evidence/status tabs, not as the final scene/editor-window model
 - promote the new first-pass draggable splitters into reusable dock/window GUI
