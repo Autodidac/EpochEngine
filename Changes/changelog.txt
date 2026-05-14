@@ -1,5 +1,129 @@
 # Epoch Changelog
 
+## [v0.84.25]
+- Bumped the active source line to `v0.84.25` for the editor z-order and Systems
+  ownership cleanup pass.
+- Restored OpenGL editor composition to render the scissored scene preview first
+  and then drain GUI commands, so command/dropdown windows, AI Chat, Inspector,
+  and scene viewport titles/chrome draw over the 3D/2D viewport instead of
+  disappearing behind it.
+- Removed the Perspective/Game/2D/Assets/Project/AI submenu strip from the
+  central Systems view; Systems now opens directly into the Systems workspace.
+- Simplified the bottom Console Dock: Output is now just the scrollable output
+  log, and the Systems dock tab keeps compact text diagnostics instead of
+  duplicating the central render/task/support graph surfaces.
+- Validation: `StaticLib1` and `ConsoleApplication1` build cleanly in MSVC
+  Debug x64.
+
+## [v0.84.24]
+- Bumped the active source line to `v0.84.24` for the engine-owned runtime-mini
+  package and editor package-manager pass.
+- Kept the built-in mini-runtime/game modules inside the kernel engine while
+  adding a script-host callback that lets reviewable scripts select an
+  engine-owned scene for the centered Run path.
+- Added the `engine_arcade` local runtime-mini package path for generated game
+  project shells: manifests can advertise the package, assets receive an
+  `engine_arcade.package.json`, and scripts receive an
+  `engine_arcade_scene.ascript.cpp` bridge without copying game implementations
+  out of the engine.
+- Added an Asset menu Package Manager modal for local runtime-mini packages and
+  documented the future downloadable-source package rule: source packages must
+  use an updater-style build gate and must not auto-run services or hidden model
+  control surfaces.
+- Changed OpenGL editor composition so queued GUI work drains before the
+  scissored scene-preview render, keeping GUI/background panels from covering
+  the Perspective/Game viewport while preserving the scene title/chrome area.
+- Validation: `StaticLib1` and `ConsoleApplication1` build cleanly in MSVC
+  Debug x64. Manual eye-test confirmation is still required for remaining
+  Perspective/Game/2D flicker and missing-pane regressions.
+
+## [v0.84.23]
+- Bumped the active source line to `v0.84.23` for the OpenGL flicker
+  stabilization pass.
+- Stopped the editor/menu loop from enqueueing an extra OpenGL clear after the
+  render thread's scene-preview pass, removing a likely double-clear source for
+  launcher, dropdown, and Perspective flicker.
+- Made the OpenGL scene preview treat the grid as non-depth-writing reference
+  geometry and draw editor helper/selection edges as overlay controls, reducing
+  z-fighting while orbiting 3D and 2D canvas scenes.
+- Deferred editor workbench surface switches until the current GUI frame has
+  finished, so Perspective/Game/2D/Assets/Project/AI/Systems no longer draw one
+  frame with stale pane geometry while tabs or menus are changing.
+- Restored the expected Outliner/Inspector/Console/AI pane visibility when
+  switching into the relevant workbenches, and added a one-pixel OpenGL scene
+  viewport guard band so scene clears cannot chew into GUI borders.
+- Validation: `StaticLib1` and `ConsoleApplication1` build cleanly in MSVC
+  Debug/Release x64, and the Sandbox project self-test passes from the rebuilt
+  Debug executable. The interactive OpenGL smoke launch is inconclusive on this
+  pass because the spawned standalone OpenGL context reported
+  `PlatformGL::make_current(final) failed` and did not exit before timeout, so
+  manual eye-test confirmation is still required before pushing.
+
+## [v0.84.22]
+- Bumped the active source line to `v0.84.22` for the single-parent-off layout
+  and 2D editor camera repair pass.
+- Made `EPOCH_SINGLE_PARENT=0` authoritative in the engine launch config so
+  command-line defaults cannot still create the parent/dock host path while the
+  build is meant to run standalone top-level contexts.
+- Changed the Game/2D canvas baseline to an upright XY-style `Canvas2D`
+  primitive with a front-facing orthographic camera, matching the intended
+  Unity-style 2D scene editing plane instead of a flat floor plane.
+- Renamed the editor-facing `ProjectLauncher` profile display label to
+  `Project Hub` while preserving the existing compatibility id and generated
+  path until the project migration can be verified safely.
+- Validation: `StaticLib1` Debug/Release x64, `ConsoleApplication1` Debug x64,
+  Project Hub and Sandbox generated self-tests, both generated child
+  `--project-self-test` runs, and a bounded standalone OpenGL editor smoke all
+  passed locally.
+
+## [v0.84.21]
+- Bumped the active source line to `v0.84.21` for native host FPS title
+  diagnostics.
+- Added a one-second native window title heartbeat for context host loops:
+  Windows updates both child/context titles and the parent docking title, while
+  Linux/X11 updates native context titles. The counter is labeled `host FPS` so
+  remaining OpenGL flicker and double-render/double-present suspicion can be
+  compared against visible host loop cadence.
+- Restored the `EPOCH_SINGLE_PARENT=0` compile path by providing inert
+  non-parented Win32 docking/proxy fallbacks, so `StaticLib1` can build when the
+  single-parent dock host is disabled.
+
+## [v0.84.20]
+- Bumped the active source line to `v0.84.20` for the GUI interaction and
+  EpochBot cognition-loop documentation pass.
+- Removed stale Outliner/Inspector `Narrow` and `Wide` buttons now that panel
+  sizing is owned by draggable splitters.
+- Added click/drag behavior to generic scroll areas and scroll-text panel
+  scrollbars so they are not only decorative.
+- Documented the remaining editor churn: AI Chat/Inspector/Perspective
+  visibility drift, launcher and OpenGL perspective flicker, scene/GUI
+  composition artifacts, graph polish/performance, and redundant surface
+  controls.
+- Captured the target EpochBot architecture as a closed-loop agentic cognition
+  system: working memory, long-term memory, retrieval, goals, planner,
+  executor, verifier, scoring, self-state, attention, and a real-time loop.
+
+## [v0.84.19]
+- Bumped the active source line to `v0.84.19` for the editor workbench and AI
+  control-surface recovery pass.
+- Added a first-pass tabbed central `Editor Workbench` surface for Perspective,
+  Game/2D, Assets, Project, AI Sandbox, and Systems so the editor stops relying
+  on toolbar-only mode switches and starts moving toward Unreal-style docked
+  editor windows.
+- Routed the AI Sandbox toolbar, bottom AI dock tab, and new Window menu entry
+  through one control-surface path that reopens Inspector, AI Chat, and the
+  Console Dock together before activating the self-iteration sandbox.
+- Removed the duplicate no-model bot initialization log caused by chat
+  construction and the shared bot init path both probing the same empty model
+  state.
+- Clarified that the remaining `aengine.*` naming migration is a filename/source
+  layout migration, not a runtime namespace or log-category rename.
+- Started that migration with a source-implementation filename batch:
+  `engine.cpp`, `engine.context.cpp`, `engine.gui.cpp`,
+  `engine.scripting.compiler.cpp`, and `engine.context.host.*.cpp` now own the
+  former `aengine*.cpp` paths while module names/imports stay compatibility
+  stable.
+
 ## [v0.84.18]
 - Bumped the active source line to `v0.84.18` for the OpenGL preview
   state-preservation follow-up.
@@ -678,7 +802,7 @@
 - Hardened the release packaging contract for the next updater-shell asset: the Windows zip now carries the VC143 CRT app-local instead of depending on a machine-global redistributable, the no-args launcher shell gets a direct smoke pass before publishing, and the Linux/WSL2 asset must be rebuilt from the same bumped source commit instead of drifting from the public tag.
 
 ## [v0.83.76]
-- Fixed the Linux/WSL2 updater-shell build by importing `context.window` in [aengine.cpp](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/src/aengine.cpp), which keeps the tagged source snapshot and the packaged Linux asset aligned to the same working commit.
+- Fixed the Linux/WSL2 updater-shell build by importing `context.window` in [engine.cpp](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/src/engine.cpp), which keeps the tagged source snapshot and the packaged Linux asset aligned to the same working commit.
 - Follow-up release packaging now targets matching Windows and Linux updater-shell assets from the same corrected source tag instead of shipping a Linux binary from a different commit than the public source snapshot.
 
 ## [v0.83.75]

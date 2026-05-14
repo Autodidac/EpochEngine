@@ -29,8 +29,6 @@ namespace epochnamespace::openglcontext
         const auto previousContext = core::MultiContextManager::GetCurrent();
         core::MultiContextManager::SetCurrent(ctx);
 
-        openglbridge::render_scene_preview(ctx, framebufferWidth, framebufferHeight);
-
         struct ScopedCurrentContext
         {
             std::shared_ptr<core::Context> previous;
@@ -40,6 +38,7 @@ namespace epochnamespace::openglcontext
             }
         } scoped{ previousContext };
 
+        openglbridge::render_scene_preview(ctx, framebufferWidth, framebufferHeight);
         (void)queue.drain();
         openglbridge::capture_frame_if_requested(framebufferWidth, framebufferHeight, windowId);
     }

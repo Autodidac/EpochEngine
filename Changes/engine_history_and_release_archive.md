@@ -25,7 +25,7 @@ archive for historical context and milestone tracing.
 Current orientation:
 
 - Latest published stable runtime line: `v0.84.05`
-- Current development source line: `v0.84.16`
+- Current development source line: `v0.84.23`
 
 ## What the engine has become so far
 
@@ -66,6 +66,33 @@ From the archived work in this file, a few themes are clear:
 These notes were previously tracked in `post_v0_83_work_collated.md`. They stay
 here because they explain the active engine/editor direction more directly than
 the older updater-era release cadence alone.
+
+### [Work Log | Development line] v0.84.23
+
+`v0.84.23` targets the remaining OpenGL flicker reports. The editor/menu loop
+no longer queues a second OpenGL clear after the render thread's scene-preview
+pass, and the OpenGL preview grid now avoids depth writes while helper and
+selection lines render as overlays. Manual confirmation is still required across
+launcher buttons, dropdowns, Perspective, Game/2D, and graph/matrix scenes
+before treating the flicker issue as closed.
+
+### [Work Log | Development line] v0.84.22
+
+`v0.84.22` tightens the editor/windowing repair path after the host-FPS pass.
+`EPOCH_SINGLE_PARENT=0` is now enforced by launch configuration, so standalone
+context runs cannot accidentally create the parent dock host through CLI
+defaults. Game/2D also moves to an upright XY `Canvas2D` plane with a
+front-facing orthographic rig, and the editor-facing launcher profile is labeled
+`Project Hub` while preserving the existing `projectlauncher` compatibility
+id/path.
+
+### [Work Log | Development line] v0.84.21
+
+`v0.84.21` adds native host FPS title diagnostics so parent and child/context
+window loop rates are visible while investigating the remaining OpenGL flicker,
+resize artifacts, and possible double-render/double-present behavior. The
+counter is intentionally labeled `host FPS` because it measures the native
+context host heartbeat rather than claiming full simulation or gameplay FPS.
 
 ### [Work Log | Development line] v0.84.16
 
@@ -598,7 +625,7 @@ systems.
 - [Engine/modules/aengine.scripting.compiler.ixx](../Engine/modules/aengine.scripting.compiler.ixx)
 - [Engine/src/scripts/rotate_all_entities.ascript.cpp](../Engine/src/scripts/rotate_all_entities.ascript.cpp)
 - [Engine/modules/epoch.render.preview_grid.ixx](../Engine/modules/epoch.render.preview_grid.ixx)
-- [Engine/src/aengine.cpp](../Engine/src/aengine.cpp)
+- [Engine/src/engine.cpp](../Engine/src/engine.cpp)
 - [Engine/src/aeditor.cpp](../Engine/src/aeditor.cpp)
 - [Engine/modules/aengine.updater.system.ixx](../Engine/modules/aengine.updater.system.ixx)
 

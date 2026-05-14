@@ -163,8 +163,7 @@ namespace epochnamespace
 
             AiChat()
             {
-                epoch::ai::init_bot();
-                lines.emplace_back("bot> Ready. No AI model selected yet. Open Bottom Dock > AI, scan local models, then choose one.");
+                lines.emplace_back("bot> Ready. No AI model selected yet. Open AI Sandbox or Window > Open AI Control Surface, scan local models, then choose one.");
                 trim_lines();
             }
 
@@ -354,6 +353,7 @@ namespace epochnamespace
             std::string detachedPanelHostStatus{ "Docked panels active. Borderless panel-host routing is staged for the next context pass." };
             bool projectNotesVisible{ false };
             bool showAboutModal{ false };
+            bool showPackageManagerModal{ false };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
@@ -1260,6 +1260,10 @@ namespace epochnamespace
             if (existing != state.entities.end())
             {
                 existing->editorOnly = true;
+                existing->category = "2D";
+                existing->position = { 0.0f, 1.8f, 0.0f };
+                existing->rotation = { 0.0f, 0.0f, 0.0f };
+                existing->scale = { 6.4f, 3.6f, 0.05f };
                 state.selectedEntity = static_cast<std::size_t>(std::distance(state.entities.begin(), existing));
                 return;
             }
@@ -1268,8 +1272,9 @@ namespace epochnamespace
             canvas.name = "Canvas2D";
             canvas.type = "Canvas2D";
             canvas.category = "2D";
-            canvas.position = { 0.0f, 0.03f, 0.0f };
-            canvas.scale = { 6.4f, 0.05f, 3.6f };
+            canvas.position = { 0.0f, 1.8f, 0.0f };
+            canvas.rotation = { 0.0f, 0.0f, 0.0f };
+            canvas.scale = { 6.4f, 3.6f, 0.05f };
             canvas.editorOnly = true;
             state.entities.push_back(std::move(canvas));
             state.selectedEntity = state.entities.size() - 1u;
@@ -1359,7 +1364,7 @@ namespace epochnamespace
             if (entity.type == "Camera")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
             if (entity.type == "Canvas2D")
-                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Canvas2D;
             if (entity.category == "World" || entity.type == "Level")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
             return epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube;
@@ -1427,12 +1432,15 @@ namespace epochnamespace
             const auto camera = epochnamespace::previewgrid::camera_for(ctx);
             const float aspect = viewport.size.x / viewport.size.y;
             const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx);
+            const auto canvasDelta = epochnamespace::previewgrid::subtract(camera.eye, camera.target);
+            const float canvasDistance = std::sqrt(epochnamespace::previewgrid::dot(canvasDelta, canvasDelta));
+            const float canvasHalfHeight = (std::max)(2.0f, canvasDistance * 0.45f);
             const auto projection = cameraMode == epochnamespace::previewgrid::CameraMode::Canvas2D
                 ? epochnamespace::previewgrid::orthographic(
-                    -((std::max)(2.0f, camera.eye.y * 0.45f) * aspect),
-                    ((std::max)(2.0f, camera.eye.y * 0.45f) * aspect),
-                    -(std::max)(2.0f, camera.eye.y * 0.45f),
-                    (std::max)(2.0f, camera.eye.y * 0.45f),
+                    -(canvasHalfHeight * aspect),
+                    canvasHalfHeight * aspect,
+                    -canvasHalfHeight,
+                    canvasHalfHeight,
                     camera.nearPlane,
                     camera.farPlane)
                 : epochnamespace::previewgrid::perspective(
@@ -1885,6 +1893,58 @@ namespace epochnamespace
                     (void)ctx->add_model_safe(label.c_str(), path.c_str());
                 },
                 renderPath);
+            return 1;
+        }
+
+        [[nodiscard]] bool is_engine_arcade_scene_id(std::string_view sceneId) noexcept
+        {
+            constexpr std::array<std::string_view, 11> kSceneIds{{
+                "snake",
+                "tetris",
+                "pacman",
+                "frogger",
+                "sokoban",
+                "bejeweled",
+                "match3",
+                "puzzle",
+                "sliding",
+                "minesweep",
+                "minesweeper"
+            }};
+
+            if (sceneId == "fourty" || sceneId == "2048" || sceneId == "sandsim"
+                || sceneId == "sand" || sceneId == "cellular" || sceneId == "cell")
+            {
+                return true;
+            }
+
+            return std::find(kSceneIds.begin(), kSceneIds.end(), sceneId) != kSceneIds.end();
+        }
+
+        int script_request_engine_scene_callback(void* userData, const char* sceneId)
+        {
+            const auto* ctx = static_cast<const core::Context*>(userData);
+            if (!ctx || !sceneId || sceneId[0] == '\0')
+                return -1;
+
+            const std::string requestedScene{ sceneId };
+            if (!is_engine_arcade_scene_id(requestedScene))
+                return -1;
+
+            auto& storage = editor_storage();
+            std::scoped_lock lock(storage.mutex);
+            const auto it = storage.states.find(ctx);
+            if (it == storage.states.end())
+                return -1;
+
+            it->second.activeRuntimeScene = requestedScene;
+            it->second.projectStatus = std::string("Script selected built-in engine scene '") + requestedScene + "' for the Run button.";
+            push_editor_log(
+                it->second,
+                std::string("[script] Built-in engine scene selected: ") + requestedScene + ".");
+            push_editor_log(
+                it->second,
+                "[script] Press the centered Run button to launch it inside the engine runtime.");
             return 1;
         }
 
@@ -2776,7 +2836,8 @@ namespace epochnamespace
             const std::shared_ptr<core::Context>& ctx,
             bool writeLog)
         {
-            set_project(editor, "sandbox", writeLog);
+            if (editor.projectId != "sandbox")
+                set_project(editor, "sandbox", writeLog);
             editor.workspaceTab = EditorWorkspaceTab::AI;
             editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
             editor.projectStatus = "Self-Iteration Sandbox selected. It manipulates and tests Epoch itself, not generated game/tool projects.";
@@ -3109,6 +3170,7 @@ namespace epochnamespace
 
         it->second.openMenu = TopMenu::None;
         it->second.showAboutModal = false;
+        it->second.showPackageManagerModal = false;
         it->second.showUpdateConfirmModal = false;
         it->second.showSourceUpdateConfirmModal = false;
         it->second.previewMode = core::ScenePreviewMode::Editor;
@@ -3181,7 +3243,8 @@ namespace epochnamespace
             .log = &script_log_callback,
             .rotate_all_entities_yaw = &script_rotate_all_entities_yaw_callback,
             .queue_model_load = &script_queue_model_load_callback,
-            .project_model_asset = projectModelAsset.empty() ? nullptr : projectModelAsset.c_str()
+            .project_model_asset = projectModelAsset.empty() ? nullptr : projectModelAsset.c_str(),
+            .request_engine_scene = &script_request_engine_scene_callback
         };
 
         const std::string sourcePath = editor_resolve_script_source_path(script_name, projectRoot);
@@ -3372,6 +3435,99 @@ namespace epochnamespace
                 playTarget);
         };
 
+        std::optional<std::pair<EditorMainSurface, std::string>> pendingSurfaceChange{};
+
+        auto apply_editor_surface = [&](EditorMainSurface surface, std::string_view source)
+        {
+            editor.mainSurface = surface;
+
+            switch (surface)
+            {
+            case EditorMainSurface::Scene:
+                editor.showOutliner = true;
+                editor.showInspector = true;
+                editor.showConsoleDock = true;
+                editor.showAiChat = true;
+                editor.previewMode = core::ScenePreviewMode::Editor;
+                if (ctx && epochnamespace::previewgrid::camera_mode_for(ctx.get()) == epochnamespace::previewgrid::CameraMode::Canvas2D)
+                    epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
+                push_editor_log(editor, std::string("[editor] Scene workbench opened from ") + std::string(source) + ".");
+                break;
+            case EditorMainSurface::Game2D:
+                editor.showOutliner = true;
+                editor.showInspector = true;
+                editor.showConsoleDock = true;
+                editor.showAiChat = true;
+                editor.workspaceTab = EditorWorkspaceTab::Project;
+                editor.previewMode = core::ScenePreviewMode::Editor;
+                ensure_2d_canvas_entity(editor);
+                if (ctx)
+                {
+                    epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Canvas2D);
+                    epochnamespace::previewgrid::reset_camera(ctx.get());
+                }
+                push_editor_log(editor, "[editor] Game/2D workbench opened with the locked Canvas2D camera.");
+                break;
+            case EditorMainSurface::Assets:
+                editor.showInspector = true;
+                editor.showConsoleDock = true;
+                editor.workspaceTab = EditorWorkspaceTab::Assets;
+                push_editor_log(editor, "[assets] Asset Browser opened.");
+                break;
+            case EditorMainSurface::Project:
+                editor.showInspector = true;
+                editor.showConsoleDock = true;
+                editor.workspaceTab = EditorWorkspaceTab::Project;
+                push_editor_log(editor, "[project] Project Workspace opened.");
+                break;
+            case EditorMainSurface::AISandbox:
+                editor.workspaceTab = EditorWorkspaceTab::AI;
+                editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
+                editor.showConsoleDock = true;
+                editor.showInspector = true;
+                editor.showAiChat = true;
+                activate_self_iteration_sandbox(editor, ctx, true);
+                push_editor_log(editor, "[ai] AI Control Surface opened with Inspector and AI Chat visible.");
+                break;
+            case EditorMainSurface::Systems:
+                editor.showInspector = true;
+                editor.showConsoleDock = true;
+                editor.workspaceTab = EditorWorkspaceTab::Systems;
+                push_editor_log(editor, "[systems] Systems Workspace opened.");
+                break;
+            default:
+                break;
+            }
+        };
+
+        auto open_editor_surface = [&](EditorMainSurface surface, std::string_view source)
+        {
+            pendingSurfaceChange = std::make_pair(surface, std::string(source));
+        };
+
+        auto render_main_surface_tabs = [&]()
+        {
+            const std::array<gui::SegmentedButtonSpec, 6> tabs{{
+                { "Perspective", 118.0f, editor.mainSurface == EditorMainSurface::Scene },
+                { "Game/2D", 96.0f, editor.mainSurface == EditorMainSurface::Game2D },
+                { "Assets", 82.0f, editor.mainSurface == EditorMainSurface::Assets },
+                { "Project", 92.0f, editor.mainSurface == EditorMainSurface::Project },
+                { "AI Sandbox", 122.0f, editor.mainSurface == EditorMainSurface::AISandbox },
+                { "Systems", 90.0f, editor.mainSurface == EditorMainSurface::Systems }
+            }};
+            const std::array<EditorMainSurface, 6> surfaces{{
+                EditorMainSurface::Scene,
+                EditorMainSurface::Game2D,
+                EditorMainSurface::Assets,
+                EditorMainSurface::Project,
+                EditorMainSurface::AISandbox,
+                EditorMainSurface::Systems
+            }};
+
+            if (const auto selected = gui::tab_bar(tabs, 28.0f, 5.0f))
+                open_editor_surface(surfaces[*selected], "center tabs");
+        };
+
         gui::begin_window("", toolbar_pos, toolbar_size);
         const float toolbar_button_y = toolbar_pos.y + 10.0f;
         const float toolbar_button_h = 24.0f;
@@ -3437,64 +3593,32 @@ namespace epochnamespace
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(editor_tab, { 180.0f, tab_h }))
-        {
-            editor.mainSurface = EditorMainSurface::Scene;
-            if (ctx && epochnamespace::previewgrid::camera_mode_for(ctx.get()) == epochnamespace::previewgrid::CameraMode::Canvas2D)
-                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
-            push_editor_log(editor, "[editor] Editor mode is active.");
-        }
+            open_editor_surface(EditorMainSurface::Scene, "toolbar");
         tab_x += 180.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(runtime_tab, { 156.0f, tab_h }))
-        {
-            editor.mainSurface = EditorMainSurface::Game2D;
-            editor.workspaceTab = EditorWorkspaceTab::Project;
-            editor.previewMode = core::ScenePreviewMode::Editor;
-            ensure_2d_canvas_entity(editor);
-            if (ctx)
-            {
-                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Canvas2D);
-                epochnamespace::previewgrid::reset_camera(ctx.get());
-            }
-            push_editor_log(editor, "[editor] Game/2D workspace is active with the locked Canvas2D camera.");
-        }
+            open_editor_surface(EditorMainSurface::Game2D, "toolbar");
         tab_x += 156.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(assets_tab, { 124.0f, tab_h }))
-        {
-            editor.mainSurface = EditorMainSurface::Assets;
-            editor.workspaceTab = EditorWorkspaceTab::Assets;
-        }
+            open_editor_surface(EditorMainSurface::Assets, "toolbar");
         tab_x += 124.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(project_tab, { 164.0f, tab_h }))
-        {
-            editor.mainSurface = EditorMainSurface::Project;
-            editor.workspaceTab = EditorWorkspaceTab::Project;
-        }
+            open_editor_surface(EditorMainSurface::Project, "toolbar");
         tab_x += 164.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(ai_control_tab, { 180.0f, tab_h }))
-        {
-            editor.mainSurface = EditorMainSurface::AISandbox;
-            editor.workspaceTab = EditorWorkspaceTab::AI;
-            editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
-            editor.showAiChat = true;
-            activate_self_iteration_sandbox(editor, ctx, true);
-            push_editor_log(editor, "[ai] Self-Iteration Sandbox opened.");
-        }
+            open_editor_surface(EditorMainSurface::AISandbox, "toolbar");
         tab_x += 180.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button(systems_tab, { 124.0f, tab_h }))
-        {
-            editor.mainSurface = EditorMainSurface::Systems;
-            editor.workspaceTab = EditorWorkspaceTab::Systems;
-        }
+            open_editor_surface(EditorMainSurface::Systems, "toolbar");
 
         gui::end_window();
 
@@ -3584,10 +3708,8 @@ namespace epochnamespace
         if (layout_outliner_visible && outliner_size.x > 1.0f && outliner_size.y > 1.0f)
         {
         gui::begin_window("World Outliner", outliner_pos, outliner_size);
-        const std::array<gui::InlineButtonSpec, 4> outlinerWindowButtons{{
+        const std::array<gui::InlineButtonSpec, 2> outlinerWindowButtons{{
             { "Close", 58.0f },
-            { "Narrow", 68.0f },
-            { "Wide", 56.0f },
             { "Popout", 70.0f }
         }};
         if (const auto action = gui::inline_button_row(outlinerWindowButtons, 24.0f, 5.0f))
@@ -3599,12 +3721,6 @@ namespace epochnamespace
                 push_editor_log(editor, "[ui] World Outliner hidden. Reopen it from Window > Toggle Outliner.");
                 break;
             case 1:
-                editor.outlinerSplit = (std::max)(0.12f, editor.outlinerSplit - 0.03f);
-                break;
-            case 2:
-                editor.outlinerSplit = (std::min)(0.42f, editor.outlinerSplit + 0.03f);
-                break;
-            case 3:
                 editor.detachedPanelHostStatus = "World Outliner requested a borderless popout host; docked fallback remains active until the context-host pass lands.";
                 push_editor_log(editor, "[ui] World Outliner popout requested. Borderless context host is staged.");
                 break;
@@ -3681,10 +3797,8 @@ namespace epochnamespace
         if (layout_inspector_visible && details_size.x > 1.0f && details_size.y > 1.0f)
         {
         gui::begin_window("Inspector", details_pos, details_size);
-        const std::array<gui::InlineButtonSpec, 4> inspectorWindowButtons{{
+        const std::array<gui::InlineButtonSpec, 2> inspectorWindowButtons{{
             { "Close", 58.0f },
-            { "Narrow", 68.0f },
-            { "Wide", 56.0f },
             { "Popout", 70.0f }
         }};
         if (const auto action = gui::inline_button_row(inspectorWindowButtons, 24.0f, 5.0f))
@@ -3696,12 +3810,6 @@ namespace epochnamespace
                 push_editor_log(editor, "[ui] Inspector hidden. Reopen it from Window > Toggle Inspector.");
                 break;
             case 1:
-                editor.inspectorSplit = (std::max)(0.14f, editor.inspectorSplit - 0.03f);
-                break;
-            case 2:
-                editor.inspectorSplit = (std::min)(0.45f, editor.inspectorSplit + 0.03f);
-                break;
-            case 3:
                 editor.detachedPanelHostStatus = "Inspector requested a borderless popout host; docked fallback remains active until the context-host pass lands.";
                 push_editor_log(editor, "[ui] Inspector popout requested. Borderless context host is staged.");
                 break;
@@ -4108,35 +4216,50 @@ namespace epochnamespace
         gui::end_window();
         }
 
-        if (center_uses_scene)
+        gui::begin_window("Editor Workbench", viewport_pos, viewport_size);
+        if (editor.mainSurface != EditorMainSurface::Systems)
+            render_main_surface_tabs();
+        const bool active_center_uses_scene = main_surface_uses_scene(editor.mainSurface);
+        if (active_center_uses_scene)
         {
-            result.scene_viewport = gui::scene_viewport(main_surface_title(editor.mainSurface), viewport_pos, viewport_size);
+            const gui::Vec2 scene_pos = gui::cursor_position();
+            const gui::Vec2 scene_size{
+                (std::max)(48.0f, viewport_pos.x + viewport_size.x - scene_pos.x - 6.0f),
+                (std::max)(48.0f, viewport_pos.y + viewport_size.y - scene_pos.y - 6.0f)
+            };
+            result.scene_viewport = gui::scene_viewport(main_surface_title(editor.mainSurface), scene_pos, scene_size);
             ctx->set_scene_preview_mode(editor.previewMode);
+            const int viewportGuard = ctx->type == core::ContextType::OpenGL ? 1 : 0;
             ctx->set_scene_viewport(core::RenderViewport{
-                static_cast<int>((std::max)(0.0f, result.scene_viewport.position.x)),
-                static_cast<int>((std::max)(0.0f, result.scene_viewport.position.y)),
-                static_cast<int>((std::max)(0.0f, result.scene_viewport.size.x)),
-                static_cast<int>((std::max)(0.0f, result.scene_viewport.size.y))
+                static_cast<int>((std::max)(0.0f, result.scene_viewport.position.x)) + viewportGuard,
+                static_cast<int>((std::max)(0.0f, result.scene_viewport.position.y)) + viewportGuard,
+                (std::max)(0, static_cast<int>((std::max)(0.0f, result.scene_viewport.size.x)) - viewportGuard * 2),
+                (std::max)(0, static_cast<int>((std::max)(0.0f, result.scene_viewport.size.y)) - viewportGuard * 2)
             });
             update_scene_object_interaction(ctx, editor, result);
             publish_editor_preview_markers(ctx.get(), editor);
         }
         else
         {
-            result.scene_viewport = gui::WidgetBounds{ .position = viewport_pos, .size = viewport_size };
+            const gui::Vec2 centerSurfacePos = gui::cursor_position();
+            const gui::Vec2 centerSurfaceSize{
+                (std::max)(48.0f, viewport_pos.x + viewport_size.x - centerSurfacePos.x - 6.0f),
+                (std::max)(48.0f, viewport_pos.y + viewport_size.y - centerSurfacePos.y - 6.0f)
+            };
+            result.scene_viewport = gui::WidgetBounds{ .position = centerSurfacePos, .size = centerSurfaceSize };
             ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
             ctx->clear_scene_viewport();
 
-            gui::begin_window(main_surface_title(editor.mainSurface), viewport_pos, viewport_size);
+            gui::label(std::string(main_surface_title(editor.mainSurface)));
             const gui::Vec2 centerScrollStart = gui::cursor_position();
-            const float centerWidth = (std::max)(180.0f, viewport_size.x - 24.0f);
+            const float centerWidth = (std::max)(180.0f, centerSurfaceSize.x - 12.0f);
             const float centerScrollHeight = (std::max)(
                 48.0f,
-                viewport_pos.y + viewport_size.y - centerScrollStart.y - 4.0f);
+                viewport_pos.y + viewport_size.y - centerScrollStart.y - 6.0f);
             const std::string centerScrollId = std::string("center-surface-") + std::string(main_surface_title(editor.mainSurface));
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = centerScrollId,
-                .size = { (std::max)(80.0f, viewport_size.x - 12.0f), centerScrollHeight },
+                .size = { (std::max)(80.0f, centerSurfaceSize.x), centerScrollHeight },
                 .draw_background = false,
                 .show_scrollbar = true
             });
@@ -4413,8 +4536,8 @@ namespace epochnamespace
             }
 
             gui::end_scroll_area();
-            gui::end_window();
         }
+        gui::end_window();
 
         const bool outlinerSplitHovered = layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size);
         const bool inspectorSplitHovered = layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size);
@@ -4470,7 +4593,28 @@ namespace epochnamespace
             EditorWorkspaceTab::Systems
         }};
         if (const auto selected = gui::tab_bar(workspaceTabs))
+        {
             editor.workspaceTab = workspaceTabIds[*selected];
+            switch (editor.workspaceTab)
+            {
+            case EditorWorkspaceTab::Project:
+                open_editor_surface(EditorMainSurface::Project, "bottom dock");
+                break;
+            case EditorWorkspaceTab::Assets:
+            case EditorWorkspaceTab::Scripts:
+                open_editor_surface(EditorMainSurface::Assets, "bottom dock");
+                break;
+            case EditorWorkspaceTab::AI:
+                open_editor_surface(EditorMainSurface::AISandbox, "bottom dock");
+                break;
+            case EditorWorkspaceTab::Systems:
+                open_editor_surface(EditorMainSurface::Systems, "bottom dock");
+                break;
+            case EditorWorkspaceTab::Output:
+            default:
+                break;
+            }
+        }
 
         const bool dockUsesOuterScroll = editor.workspaceTab != EditorWorkspaceTab::Output;
         if (dockUsesOuterScroll)
@@ -4516,6 +4660,11 @@ namespace epochnamespace
             gui::property_row("[project] Template", editor.projectTemplate);
             gui::property_row("[project] Default script", activeProfile->default_script);
             gui::property_row("[project] Script source", editor_resolve_script_source_path(activeProfile->default_script, editor.projectRoot));
+            gui::property_row(
+                "[project] Runtime package",
+                activeProfile->kind == EditorProjectKind::Game && activeProfile->id != "sandbox"
+                    ? "engine_arcade local runtime-minis"
+                    : "none");
             gui::property_row("[project] Demo model", modelSummary.asset_path.empty() ? std::string("(none)") : modelSummary.asset_path);
             gui::property_row("[project] Demo model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path);
             gui::property_row("[project] Demo model exists", modelSummary.exists ? "true" : "false");
@@ -5406,10 +5555,6 @@ namespace epochnamespace
             const std::string backendGuidance = backend_runtime_guidance(ctx, supportTier);
             const std::string convergenceFocus = backend_convergence_focus(ctx);
             const float contentWidth = (std::max)(180.0f, log_size.x - 24.0f);
-            const float graphGap = 12.0f;
-            const float graphWidth = (std::max)(180.0f, (contentWidth - graphGap) * 0.5f);
-            const float graphHeight = 156.0f;
-            const float supportHeight = 72.0f;
 
             gui::property_row("[systems] Renderer", renderer_name(ctx));
             gui::property_row("[systems] Active backend", renderer_name(ctx));
@@ -5445,6 +5590,9 @@ namespace epochnamespace
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(
                 "Phase 5 evidence is mirrored here so build confidence, tool-harness activity, staged packet counts, and the review-gate contract are visible from Systems before an AI pass is allowed to promote anything.",
+                (std::max)(180.0f, log_size.x - 24.0f));
+            gui::wrapped_label(
+                "Graph surfaces live in the central Systems workspace only. The Console Dock keeps this tab to compact text diagnostics so it does not duplicate the render/task/support graph UI.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running");
             gui::property_row("[time] Frame dt", format_ms(editor.timeSnapshot.real_dt_seconds));
@@ -5515,103 +5663,6 @@ namespace epochnamespace
             gui::wrapped_label(
                 "Epoch is now formalizing a shared time spine here first: fixed-step accumulation, pause/resume, time scaling, single-step controls, and frame step budgeting are owned by the engine instead of being scattered ad hoc across contexts.",
                 (std::max)(180.0f, log_size.x - 24.0f));
-            const auto systemsOrigin = gui::cursor_position();
-
-            const auto renderCanvas = build_render_graph_surface(
-                editor.systems,
-                epoch::ai::current_provider_mode() == epoch::ai::ProviderMode::McpOperations);
-            const auto taskCanvas = build_task_graph_surface(
-                editor.systems,
-                workerCount,
-                orderedSystems.size);
-            const auto supportCanvas = build_support_tier_surface(
-                supportTier,
-                ctx && ctx->type == core::ContextType::Software);
-
-            editor.systems.renderSurface = gui::register_runtime_surface(
-                "systems-render-graph",
-                std::span<const std::uint8_t>(renderCanvas.pixels.data(), renderCanvas.pixels.size()),
-                static_cast<std::uint32_t>(renderCanvas.width),
-                static_cast<std::uint32_t>(renderCanvas.height));
-            editor.systems.taskSurface = gui::register_runtime_surface(
-                "systems-task-graph",
-                std::span<const std::uint8_t>(taskCanvas.pixels.data(), taskCanvas.pixels.size()),
-                static_cast<std::uint32_t>(taskCanvas.width),
-                static_cast<std::uint32_t>(taskCanvas.height));
-            editor.systems.supportSurface = gui::register_runtime_surface(
-                "systems-support-tier",
-                std::span<const std::uint8_t>(supportCanvas.pixels.data(), supportCanvas.pixels.size()),
-                static_cast<std::uint32_t>(supportCanvas.width),
-                static_cast<std::uint32_t>(supportCanvas.height));
-
-            const float leftX = systemsOrigin.x;
-            const float rightX = systemsOrigin.x + graphWidth + graphGap;
-            const float titleY = systemsOrigin.y + 6.0f;
-            const float controlsY = titleY + gui::line_height() + 4.0f;
-            const float imageY = controlsY + 30.0f;
-
-            gui::set_cursor({ leftX, titleY });
-            gui::label("Render / Frame Graph");
-            gui::set_cursor({ leftX, controlsY });
-            const std::array renderButtons{
-                gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
-                gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
-                gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
-                gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
-            };
-            if (const auto action = gui::inline_button_row(renderButtons, 24.0f, 6.0f))
-            {
-                switch (*action)
-                {
-                case 0: editor.systems.renderPan = (std::max)(0, editor.systems.renderPan - 64); break;
-                case 1: editor.systems.renderZoom = (std::max)(0.85f, editor.systems.renderZoom - 0.25f); break;
-                case 2: editor.systems.renderZoom = (std::min)(3.0f, editor.systems.renderZoom + 0.25f); break;
-                case 3: editor.systems.renderPan += 64; break;
-                default: break;
-                }
-            }
-            gui::set_cursor({ leftX, imageY });
-            if (editor.systems.renderSurface.is_valid())
-                gui::image(editor.systems.renderSurface, { graphWidth, graphHeight });
-            else
-                gui::wrapped_label("Render graph surface unavailable.", graphWidth);
-
-            gui::set_cursor({ rightX, titleY });
-            gui::label("Task / Thread Graph");
-            gui::set_cursor({ rightX, controlsY });
-            const std::array taskButtons{
-                gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
-                gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
-                gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
-                gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
-            };
-            if (const auto action = gui::inline_button_row(taskButtons, 24.0f, 6.0f))
-            {
-                switch (*action)
-                {
-                case 0: editor.systems.taskPan = (std::max)(0, editor.systems.taskPan - 64); break;
-                case 1: editor.systems.taskZoom = (std::max)(0.85f, editor.systems.taskZoom - 0.25f); break;
-                case 2: editor.systems.taskZoom = (std::min)(3.0f, editor.systems.taskZoom + 0.25f); break;
-                case 3: editor.systems.taskPan += 64; break;
-                default: break;
-                }
-            }
-            gui::set_cursor({ rightX, imageY });
-            if (editor.systems.taskSurface.is_valid())
-                gui::image(editor.systems.taskSurface, { graphWidth, graphHeight });
-            else
-                gui::wrapped_label("Task graph surface unavailable.", graphWidth);
-
-            const float supportY = imageY + graphHeight + 10.0f;
-            gui::set_cursor({ systemsOrigin.x, supportY });
-            gui::label("Hardware / Support Tiers");
-            gui::set_cursor({ systemsOrigin.x, supportY + gui::line_height() + 4.0f });
-            if (editor.systems.supportSurface.is_valid())
-                gui::image(editor.systems.supportSurface, { contentWidth, supportHeight });
-            else
-                gui::wrapped_label("Support tier surface unavailable.", contentWidth);
-
-            gui::set_cursor({ systemsOrigin.x, supportY + gui::line_height() + 4.0f + supportHeight + 10.0f });
             gui::property_row("[systems] Render stages", "Capture | Visibility | Surface | Lighting | Temporal | Present");
             gui::property_row("[systems] Task lanes", "Input | Systems | Scripts | AI | Output");
             gui::property_row("[systems] Lib strategy", "auto on capable hardware; developer can trim support tiers per game");
@@ -5629,16 +5680,6 @@ namespace epochnamespace
         }
         case EditorWorkspaceTab::Output:
         default:
-            gui::property_row("[info] Scene viewport", std::string(std::to_string(static_cast<int>(result.scene_viewport.size.x))
-                + "x"
-                + std::to_string(static_cast<int>(result.scene_viewport.size.y))));
-            gui::property_row("[info] Active renderer", renderer_name(ctx));
-            gui::property_row("[info] Preview mode", std::string(preview_mode_name(editor.previewMode)));
-            gui::property_row("[info] Camera mode", preview_camera_name(ctx));
-            gui::property_row("[info] Zoom", preview_zoom_text(ctx));
-            gui::property_row("[info] Viewport input", "LMB pan | RMB orbit | Wheel zoom");
-            gui::property_row("[info] Active script", editor.activeScript);
-            gui::property_row("[info] Project runtime", editor.activeRuntimeScene);
             {
                 const gui::Vec2 outputCursor = gui::cursor_position();
                 const float outputHeight = (std::max)(72.0f, bottom_pos.y + bottom_h - outputCursor.y - 12.0f);
@@ -5724,30 +5765,35 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 6), [&](gui::Vec2 pos)
+        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 7), [&](gui::Vec2 pos)
         {
             menu_item("Open Asset Browser", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
                 push_editor_log(editor, "[assets] Asset browser opened.");
             });
-            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
+            menu_item("Package Manager...", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
+                editor.showPackageManagerModal = true;
+                editor.workspaceTab = EditorWorkspaceTab::Assets;
+                push_editor_log(editor, "[assets] Package Manager opened.");
+            });
+            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
                 add_entity(editor, "cube");
             });
-            menu_item("Add Light", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
+            menu_item("Add Light", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
                 add_entity(editor, "light");
             });
-            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
+            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
                 add_entity(editor, "spawn");
             });
-            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
+            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
                 duplicate_selected_entity(editor);
             });
-            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
+            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 218.0f }, 220.0f, [&]() {
                 delete_selected_entity(editor);
             });
         });
 
-        open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, 10), [&](gui::Vec2 pos)
+        open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, 11), [&](gui::Vec2 pos)
         {
             menu_item(editor.showOutliner ? "Hide Outliner" : "Show Outliner", { pos.x + 12.0f, pos.y + 14.0f }, 248.0f, [&]() {
                 editor.showOutliner = !editor.showOutliner;
@@ -5765,25 +5811,28 @@ namespace epochnamespace
                 editor.showAiChat = !editor.showAiChat;
                 push_editor_log(editor, editor.showAiChat ? "[window] AI Chat shown." : "[window] AI Chat hidden.");
             });
-            menu_item("Reset Editor Layout", { pos.x + 12.0f, pos.y + 150.0f }, 248.0f, [&]() {
+            menu_item("Open AI Control Surface", { pos.x + 12.0f, pos.y + 150.0f }, 248.0f, [&]() {
+                open_editor_surface(EditorMainSurface::AISandbox, "Window menu");
+            });
+            menu_item("Reset Editor Layout", { pos.x + 12.0f, pos.y + 184.0f }, 248.0f, [&]() {
                 reset_editor_layout(editor);
                 push_editor_log(editor, "[window] Editor layout reset.");
             });
-            menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 184.0f }, 248.0f, [&]() {
+            menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 218.0f }, 248.0f, [&]() {
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 push_editor_log(editor, "[window] Preview mode set to Editor.");
             });
-            menu_item("Preview: None", { pos.x + 12.0f, pos.y + 218.0f }, 248.0f, [&]() {
+            menu_item("Preview: None", { pos.x + 12.0f, pos.y + 252.0f }, 248.0f, [&]() {
                 editor.previewMode = core::ScenePreviewMode::None;
                 push_editor_log(editor, "[window] Preview mode set to None.");
             });
-            menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 252.0f }, 248.0f, [&]() {
+            menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 286.0f }, 248.0f, [&]() {
                 handle_scene_tool(editor, "focus_selection");
             });
-            menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 286.0f }, 248.0f, [&]() {
+            menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 320.0f }, 248.0f, [&]() {
                 handle_scene_tool(editor, "toggle_helpers");
             });
-            menu_item("Borderless Popout Host", { pos.x + 12.0f, pos.y + 320.0f }, 248.0f, [&]() {
+            menu_item("Borderless Popout Host", { pos.x + 12.0f, pos.y + 354.0f }, 248.0f, [&]() {
                 editor.detachedPanelHostStatus = "Borderless panel-host design accepted: panels stay docked now; next pass routes selected GUI containers into linked contexts.";
                 push_editor_log(editor, "[window] Borderless popout host staged for the next context-routing pass.");
             });
@@ -5800,10 +5849,7 @@ namespace epochnamespace
                 push_editor_log(editor, "[tools] Camera mode set to FPS.");
             });
             menu_item("Camera: 2D Canvas", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
-                editor.mainSurface = EditorMainSurface::Game2D;
-                editor.previewMode = core::ScenePreviewMode::Editor;
-                ensure_2d_canvas_entity(editor);
-                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Canvas2D);
+                open_editor_surface(EditorMainSurface::Game2D, "Tools menu");
                 push_editor_log(editor, "[tools] Camera mode set to locked 2D Canvas.");
             });
             menu_item("Reset Preview Camera", { pos.x + 12.0f, pos.y + 116.0f }, 228.0f, [&]() {
@@ -5957,6 +6003,68 @@ namespace epochnamespace
             }
         }
 
+        if (editor.showPackageManagerModal)
+        {
+            const gui::Vec2 modalSize{ 640.0f, 330.0f };
+            const gui::Vec2 modalPos{
+                (std::max)(0.0f, (w - modalSize.x) * 0.5f),
+                (std::max)(0.0f, (h - modalSize.y) * 0.5f)
+            };
+            const float contentWidth = modalSize.x - 32.0f;
+            const auto* activeProfile = editor_find_project_profile(editor.projectId);
+            const bool engineArcadeEligible =
+                activeProfile
+                && activeProfile->kind == EditorProjectKind::Game
+                && activeProfile->id != "sandbox";
+            const auto projectRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
+            const auto engineArcadePackage = projectRoot / "assets" / "packages" / "engine_arcade.package.json";
+            const auto engineArcadeScript = projectRoot / "scripts" / "engine_arcade_scene.ascript.cpp";
+
+            gui::begin_modal_window(gui::ModalWindowOptions{
+                .title = "Package Manager",
+                .position = modalPos,
+                .size = modalSize,
+                .viewport_size = { w, h },
+                .dim_background = true
+            });
+            const gui::Vec2 contentPos = gui::cursor_position();
+            const float contentY = contentPos.y;
+            gui::set_cursor({ contentPos.x + 8.0f, contentY });
+            gui::wrapped_label(
+                "Local packages are reviewable engine/project assets. Downloadable source packages will later use the updater-style source build gate and must never auto-run services or bypass human approval.",
+                contentWidth);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 58.0f });
+            gui::property_row("[package] Active project", editor.projectName, 150.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 84.0f });
+            gui::property_row("[package] Engine arcade", engineArcadeEligible ? "available" : "not applicable to this project", 150.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 110.0f });
+            gui::property_row("[package] Manifest", path_exists(engineArcadePackage) ? "installed" : "missing", 150.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 136.0f });
+            gui::property_row("[package] Script asset", path_exists(engineArcadeScript) ? "installed" : "missing", 150.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 168.0f });
+            gui::wrapped_label(
+                "engine_arcade exposes the kernel-owned mini-runtimes as local runtime-mini assets for future render-to-texture cabinets, without copying the game implementations out of the engine.",
+                contentWidth);
+            gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 238.0f });
+            if (gui::button("Install Local Runtime-Minis", { 220.0f, 30.0f }))
+            {
+                if (engineArcadeEligible)
+                {
+                    repair_active_project_evidence(editor);
+                    editor.workspaceTab = EditorWorkspaceTab::Assets;
+                    push_editor_log(editor, "[package] Requested engine_arcade local runtime-mini package materialization.");
+                }
+                else
+                {
+                    push_editor_log(editor, "[package] engine_arcade applies to game project shells, not the self-iteration sandbox or tool hubs.");
+                }
+            }
+            gui::set_cursor({ contentPos.x + 244.0f, contentPos.y + 238.0f });
+            if (gui::button("Close", { 120.0f, 30.0f }))
+                editor.showPackageManagerModal = false;
+            gui::end_modal_window();
+        }
+
         if (editor.showAboutModal)
         {
             const gui::Vec2 modalSize{ 456.0f, 222.0f };
@@ -5989,6 +6097,9 @@ namespace epochnamespace
                 editor.showAboutModal = false;
             gui::end_modal_window();
         }
+
+        if (pendingSurfaceChange)
+            apply_editor_surface(pendingSurfaceChange->first, pendingSurfaceChange->second);
 
         return result;
     }

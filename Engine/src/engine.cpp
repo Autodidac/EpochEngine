@@ -28,7 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- // aengine.cppm (converted from legacy aengine.cpp)
+ // engine.cpp (module implementation unit; module names remain compatibility-stable)
  //
  // FIXES APPLIED:
  //  - No direct access to core::Context private members (ctx->hwnd).
@@ -172,7 +172,11 @@ namespace epochnamespace::core
         cfg.vulkan_count = (std::max)(0, cli::vulkan_window_count);
         cfg.opengl_count = (std::max)(0, cli::opengl_window_count);
         cfg.software_count = (std::max)(0, cli::software_window_count);
+#if defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
         cfg.parented = cli::parented_mode;
+#else
+        cfg.parented = false;
+#endif
 
         const bool defaultAutoBackendGrid =
             cfg.raylib_count == 1
@@ -2247,6 +2251,19 @@ namespace epochnamespace::core
                             });
                         };
 
+                        auto clear_before_ui_frame = [](const std::shared_ptr<core::Context>& frameCtx)
+                        {
+                            if (!frameCtx)
+                                return;
+
+                            // OpenGL owns its clear in opengl_process before scene preview + GUI queue drain.
+                            // Enqueuing a second clear here can run after the scene pass and cause flicker.
+                            if (frameCtx->type == core::ContextType::OpenGL)
+                                return;
+
+                            frameCtx->clear_safe();
+                        };
+
                         tick_time_spine();
 
                         auto begin_scene = [&](std::string_view scene_id, SessionMode return_mode)
@@ -2285,7 +2302,7 @@ namespace epochnamespace::core
                                 ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseRight);
 
                             ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
-                            ctx->clear_safe();
+                            clear_before_ui_frame(ctx);
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             const auto editor_frame = epochnamespace::editor_run(ctx);
                             publish_time_snapshot();
@@ -2396,16 +2413,14 @@ namespace epochnamespace::core
                                         editor_frame.command_argument.substr(std::string_view{ "project-exe:" }.size()));
                                     break;
                                 }
-                                if (!editor_frame.command_argument.starts_with("project:"))
+                                if (!begin_scene(editor_frame.command_argument, SessionMode::Editor))
                                 {
                                     logger::get(kEditorLog).logf(
                                         logger::LogLevel::Error,
                                         std::source_location::current(),
-                                        "Editor rejected non-project play target '{}'.",
+                                        "Editor rejected unknown play target '{}'.",
                                         editor_frame.command_argument);
-                                    break;
                                 }
-                                begin_scene(editor_frame.command_argument, SessionMode::Editor);
                                 break;
                             case epochnamespace::EditorCommand::RunScript:
                             {
@@ -2516,7 +2531,7 @@ namespace epochnamespace::core
 
                             ctx->clear_scene_viewport();
                             ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
-                            ctx->clear_safe();
+                            clear_before_ui_frame(ctx);
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             auto choice = session.menu.update_and_draw(
                                 ctx,
@@ -2557,12 +2572,10 @@ namespace epochnamespace::core
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)
                                 {
-                                    suppress_menu_present = true;
                                     switch_all_sessions_to_editor("projectlauncher");
                                 }
                                 else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
                                 {
-                                    suppress_menu_present = true;
                                     switch_all_sessions_to_editor(project_id);
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::Settings)

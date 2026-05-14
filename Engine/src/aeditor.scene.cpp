@@ -30,7 +30,7 @@
  ***********************************************/
 module;
 
- // Engine/src/aengine.editor_scene.cpp
+ // Engine/src/aeditor.scene.cpp
 
 #include <algorithm>
 #include <array>
@@ -970,7 +970,7 @@ namespace
         {
             EditorProjectKind::Tool,
             "projectlauncher",
-            "ProjectLauncher",
+            "Project Hub",
             "Projects/ProjectLauncher",
             "Projects/ProjectLauncher/worlds/launcher.epoch",
             "LauncherWorkspace",
@@ -978,7 +978,7 @@ namespace
             "Projects/ProjectLauncher/project.epoch.json",
             "tool-project",
             "editor_launcher",
-            "Editor-facing launcher profile for project selection, context setup, settings, and future engine automation.",
+            "Editor-facing project hub profile for project selection, context setup, settings, and future engine automation. Compatibility id/path remain projectlauncher/Projects/ProjectLauncher until the generated-project migration is safe.",
             "embedded-static-include or duplicated-source",
             "Engine/include",
             "Engine/assets/demo/minisponza/mini_sponza_v2.gltf"
@@ -1001,7 +1001,7 @@ namespace
         }
     }};
 
-    constexpr std::array<EditorScriptProfile, 5> kScriptProfiles{{
+    constexpr std::array<EditorScriptProfile, 6> kScriptProfiles{{
         {
             "rotate_all_entities",
             "Rotate All Entities",
@@ -1019,6 +1019,15 @@ namespace
             "Prime the active project with the default bootstrap flow",
             "Confirms the bootstrap script exists and can drive optional project-declared model loads through the engine-owned script host.",
             "Default bootstrap script for general project shells."
+        },
+        {
+            "engine_arcade_scene",
+            "Engine Arcade Scene",
+            "Engine/src/scripts/engine_arcade_scene.ascript.cpp",
+            "Validate built-in engine arcade scene scripting hook",
+            "Select an engine-owned mini-runtime for the centered Run button",
+            "Uses the script host to select built-in engine scene IDs without moving the game implementations out of the kernel engine.",
+            "Bridge script for render-to-texture arcade cabinets and other in-engine scene asset flows."
         },
         {
             "editor_launcher",
@@ -1781,8 +1790,59 @@ namespace
         std::string script_id{};
         std::string description{};
         std::string demo_model_asset{};
+        bool include_engine_arcade_package{ false };
         bool overwrite_existing{ true };
     };
+
+    [[nodiscard]] static constexpr std::string_view engine_arcade_scene_ids() noexcept
+    {
+        return "snake,tetris,pacman,frogger,sokoban,match3,sliding,minesweeper,2048,sandsim,cellular";
+    }
+
+    [[nodiscard]] static std::string make_engine_arcade_script_text(std::string_view script_api_include)
+    {
+        return std::string(script_api_include)
+            + "namespace\n"
+            + "{\n"
+            + "    void host_log(EpochScriptHost* host, const char* message)\n"
+            + "    {\n"
+            + "        if (host && host->log)\n"
+            + "            host->log(host->user_data, message);\n"
+            + "    }\n"
+            + "}\n\n"
+            + "EPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost* host)\n"
+            + "{\n"
+            + "    if (!host)\n"
+            + "        return;\n\n"
+            + "    host_log(host, \"engine_arcade_scene: package exposes kernel-owned mini-runtime scenes.\");\n"
+            + "    host_log(host, \"engine_arcade_scene: available scenes: snake,tetris,pacman,frogger,sokoban,match3,sliding,minesweeper,2048,sandsim,cellular.\");\n\n"
+            + "    if (!host->request_engine_scene)\n"
+            + "    {\n"
+            + "        host_log(host, \"engine_arcade_scene: engine scene callback unavailable.\");\n"
+            + "        return;\n"
+            + "    }\n\n"
+            + "    const int result = host->request_engine_scene(host->user_data, \"snake\");\n"
+            + "    host_log(host, result >= 0\n"
+            + "        ? \"engine_arcade_scene: selected 'snake'; use Run to launch the engine-owned scene.\"\n"
+            + "        : \"engine_arcade_scene: engine rejected built-in scene request.\");\n"
+            + "}\n";
+    }
+
+    [[nodiscard]] static std::string make_engine_arcade_package_manifest_text()
+    {
+        return std::string{
+            "{\n"
+            "  \"package_id\": \"engine_arcade\",\n"
+            "  \"display_name\": \"Engine Arcade Runtime Package\",\n"
+            "  \"kind\": \"kernel-engine-asset-script-package\",\n"
+            "  \"ownership\": \"engine-owned; project-selectable\",\n"
+            "  \"default_script\": \"engine_arcade_scene\",\n"
+            "  \"runtime_role\": \"built-in scenes for render-to-texture arcade cabinets and in-game terminals\",\n"
+            "  \"scenes\": [\"snake\", \"tetris\", \"pacman\", \"frogger\", \"sokoban\", \"match3\", \"sliding\", \"minesweeper\", \"2048\", \"sandsim\", \"cellular\"],\n"
+            "  \"source_policy\": \"do not copy game implementations into generated projects; invoke engine kernel modules through script host callbacks\"\n"
+            "}\n"
+        };
+    }
 
     [[nodiscard]] static std::string make_project_bootstrap_script_text(
         const ProjectShellSpec& spec,
@@ -1883,6 +1943,7 @@ namespace
         const fs::path include = root / "include";
         const fs::path modules = root / "modules";
         const fs::path assets = root / "assets";
+        const fs::path assetPackages = assets / "packages";
         const fs::path resource = root / "resource";
         const fs::path buildRoot = root / "build";
         const fs::path buildLogs = buildRoot / "logs";
@@ -1901,12 +1962,15 @@ namespace
             ? spec.world_file.lexically_normal()
             : resolve_repo_relative_path(spec.world_file, root);
         const fs::path scriptFile = scripts / (spec.script_id + ".ascript.cpp");
+        const fs::path engineArcadePackageFile = assetPackages / "engine_arcade.package.json";
+        const fs::path engineArcadeScriptFile = scripts / "engine_arcade_scene.ascript.cpp";
         const fs::path repoRoot = resolve_epoch_repo_root(root);
         const fs::path rootAbsolute = fs::absolute(root).lexically_normal();
         const fs::path manifestAbsolute = fs::absolute(manifest).lexically_normal();
         const fs::path repoEngineInclude = (repoRoot / "Engine" / "include").lexically_normal();
         const fs::path repoStaticLibProject = (repoRoot / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj").lexically_normal();
         const bool isSelfIterationSandbox = spec.project_id == "sandbox";
+        const bool includeEngineArcadePackage = spec.include_engine_arcade_package && !isSelfIterationSandbox;
         const std::string kindText = isSelfIterationSandbox
             ? "engine-self-iteration-sandbox"
             : std::string(spec.kind == EditorProjectKind::Tool ? "tool" : "game");
@@ -1943,6 +2007,8 @@ namespace
         fs::create_directories(include, ec);
         fs::create_directories(modules, ec);
         fs::create_directories(assets, ec);
+        if (spec.include_engine_arcade_package)
+            fs::create_directories(assetPackages, ec);
         fs::create_directories(resource, ec);
         fs::create_directories(buildLogs, ec);
         fs::create_directories(outputDebugDir, ec);
@@ -1976,12 +2042,24 @@ namespace
         const std::string demoModelLine = spec.demo_model_asset.empty()
             ? std::string{}
             : "  \"demo_model_asset\": \"" + json_escape(spec.demo_model_asset) + "\",\n";
+        const std::string packageManifestLine = includeEngineArcadePackage
+            ? std::string{ "  \"engine_asset_packages\": [\"engine_arcade\"],\n"
+                "  \"engine_arcade_scenes\": [\"snake\", \"tetris\", \"pacman\", \"frogger\", \"sokoban\", \"match3\", \"sliding\", \"minesweeper\", \"2048\", \"sandsim\", \"cellular\"],\n" }
+            : std::string{};
         const std::string readmeDemoLine = spec.demo_model_asset.empty()
             ? std::string{}
             : "- Demo model asset: " + spec.demo_model_asset + "\n";
+        const std::string readmePackageLine = includeEngineArcadePackage
+            ? "- Engine asset package: engine_arcade (kernel-owned mini-runtime scenes for render-to-texture arcade assets)\n"
+            : std::string{};
         const std::string pathsDemoLine = spec.demo_model_asset.empty()
             ? std::string{}
             : "demo_model_asset=" + spec.demo_model_asset + "\n";
+        const std::string pathsPackageLine = includeEngineArcadePackage
+            ? "engine_arcade_package=" + engineArcadePackageFile.generic_string() + "\n"
+              "engine_arcade_script=" + engineArcadeScriptFile.generic_string() + "\n"
+              "engine_arcade_scenes=" + std::string(engine_arcade_scene_ids()) + "\n"
+            : std::string{};
 
         const std::string manifestText =
             "{\n"
@@ -1993,6 +2071,7 @@ namespace
             "  \"scene\": \"" + json_escape(worldFile.generic_string()) + "\",\n"
             "  \"default_script\": \"" + json_escape(spec.script_id) + "\",\n"
             + demoModelLine
+            + packageManifestLine
             + "  \"engine_integration\": \"" + json_escape(integrationMode) + "\",\n"
             "  \"public_include_root\": \"" + json_escape(publicIncludeRoot) + "\",\n"
             "  \"engine_module_root\": \"Engine/modules\",\n"
@@ -2014,6 +2093,7 @@ namespace
             "- Scene: " + worldFile.filename().string() + "\n"
             "- " + scriptLabel + ": " + scriptFile.filename().string() + "\n"
             + readmeDemoLine
+            + readmePackageLine
             + "- Engine integration: " + integrationMode + "\n"
             "- Public include root: " + publicIncludeRoot + "\n"
             "- Engine module root: Engine/modules\n"
@@ -2035,6 +2115,7 @@ namespace
             + "scene=" + worldFile.generic_string() + "\n"
             + "default_script=" + scriptFile.generic_string() + "\n"
             + pathsDemoLine
+            + pathsPackageLine
             + "entry_source=" + entrySource.generic_string() + "\n"
             + "windows_project=" + windowsProject.generic_string() + "\n"
             + "windows_build_script=" + windowsBuildScript.generic_string() + "\n"
@@ -2050,6 +2131,8 @@ namespace
             "}\n";
 
         const std::string scriptText = make_project_bootstrap_script_text(spec, scriptApiInclude);
+        const std::string engineArcadeScriptText = make_engine_arcade_script_text(scriptApiInclude);
+        const std::string engineArcadePackageText = make_engine_arcade_package_manifest_text();
 
         const std::string entrySourceText =
             "#include <cstdlib>\n"
@@ -2349,6 +2432,8 @@ namespace
             && write_text_file_if_allowed(pathsFile, pathsText, spec.overwrite_existing)
             && write_text_file_if_allowed(worldFile, worldText, spec.overwrite_existing)
             && write_text_file_if_allowed(scriptFile, scriptText, spec.overwrite_existing)
+            && (!includeEngineArcadePackage || write_text_file_if_allowed(engineArcadePackageFile, engineArcadePackageText, spec.overwrite_existing))
+            && (!includeEngineArcadePackage || write_text_file_if_allowed(engineArcadeScriptFile, engineArcadeScriptText, spec.overwrite_existing))
             && write_text_file_if_allowed(entrySource, entrySourceText, spec.overwrite_existing)
             && write_text_file_if_allowed(cmakeFragment, cmakeText, spec.overwrite_existing)
             && write_text_file_if_allowed(cmakeLists, cmakeListsText, spec.overwrite_existing)
@@ -2574,6 +2659,7 @@ namespace epochnamespace
                 ? "Generated software/tool shell."
                 : "Generated game shell.",
             .demo_model_asset = std::string{},
+            .include_engine_arcade_package = kind == EditorProjectKind::Game,
             .overwrite_existing = true
         });
     }
@@ -2599,6 +2685,8 @@ namespace epochnamespace
 
         const fs::path root = resolve_project_root_path(fs::path{ profile->root_path });
         const fs::path manifest = root / "project.epoch.json";
+        const fs::path engineArcadePackage = root / "assets" / "packages" / "engine_arcade.package.json";
+        const fs::path engineArcadeScript = root / "scripts" / "engine_arcade_scene.ascript.cpp";
         const fs::path buildScript = generated_project_windows_build_script_path(root);
         const fs::path entrySource = generated_project_entry_source_path(root);
         const fs::path windowsProject = generated_project_windows_vcxproj_path(root);
@@ -2616,11 +2704,17 @@ namespace epochnamespace
             const std::string expectedKind = profile->id == "sandbox"
                 ? "engine-self-iteration-sandbox"
                 : std::string(profile->kind == EditorProjectKind::Tool ? "tool" : "game");
+            const bool expectsEngineArcadePackage = profile->kind == EditorProjectKind::Game && profile->id != "sandbox";
+            const bool engineArcadePackageReady =
+                !expectsEngineArcadePackage
+                || ((fs::exists(engineArcadePackage, ec) && !ec)
+                    && (fs::exists(engineArcadeScript, ec) && !ec));
             const bool manifestMatchesProfile =
                 manifestId && *manifestId == profile->id
                 && manifestKind && *manifestKind == expectedKind
                 && manifestScript && *manifestScript == profile->default_script
-                && manifestTemplate && *manifestTemplate == profile->template_family;
+                && manifestTemplate && *manifestTemplate == profile->template_family
+                && engineArcadePackageReady;
 
             if (!manifestMatchesProfile)
             {
@@ -2635,6 +2729,7 @@ namespace epochnamespace
                     .script_id = std::string(profile->default_script),
                     .description = std::string(profile->description),
                     .demo_model_asset = std::string(profile->demo_model_asset),
+                    .include_engine_arcade_package = profile->kind == EditorProjectKind::Game && profile->id != "sandbox",
                     .overwrite_existing = true
                 });
             }
@@ -2680,6 +2775,7 @@ namespace epochnamespace
             .script_id = std::string(profile->default_script),
             .description = std::string(profile->description),
             .demo_model_asset = std::string(profile->demo_model_asset),
+            .include_engine_arcade_package = profile->kind == EditorProjectKind::Game && profile->id != "sandbox",
             .overwrite_existing = false
         });
     }

@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.18-1F7A4C?style=for-the-badge" alt="Current development source v0.84.18" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.25-1F7A4C?style=for-the-badge" alt="Current development source v0.84.25" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
 </p>
 
@@ -50,6 +50,9 @@ Current feature spine:
   scripts now surfaced through the normal asset/project view.
 - First-pass project file browser, project-local script stub creation, and
   file-type asset thumbnail cards for active scene/model/image/audio/text assets.
+- Local runtime-mini package flow starting with `engine_arcade`, which exposes
+  built-in engine scenes as project asset/script options without moving their
+  kernel-engine implementations into generated projects.
 - Engine AI loop centered on `EpochBot`, local MCP/control harnesses, and an
   offline/injectable backup LLM path.
 - AI workspace domains for the Self-Iteration Sandbox, Tool Harness,
@@ -92,7 +95,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.18`.
+- Source is currently the active development line at `v0.84.25`.
 - The latest published stable runtime release is `v0.84.05`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
@@ -127,11 +130,13 @@ AI sandbox and training instructions live with the AI assets in `Engine/ai/READM
   open/close panel visibility, and first-pass draggable splitters instead of
   middleware-owned editor UI.
 - A `Game/2D` editor lane that reuses the same scene through a locked
-  orthographic Canvas2D camera and editor-only canvas plane.
+  orthographic Canvas2D camera and upright editor-only canvas plane.
 - Engine-owned C++23 scripting with project-local source resolution, validation,
   build actions, and runtime execution from the live shell.
-- Editor-visible script/file/asset surfaces so Sandbox and ProjectLauncher work
+- Editor-visible script/file/asset surfaces so Sandbox and Project Hub work
   can leave selectable paths, build/run notes, and first-pass asset cards.
+- A first Package Manager modal for local runtime-mini packages, with future
+  downloadable source packages constrained to explicit updater-style build gates.
 - Multicontext renderer orchestration across Raylib, SDL3, SFML, Vulkan,
   OpenGL, software, and headless/noop paths.
 - A Systems workspace with readable render/frame, task/thread, support-tier, and

@@ -14,7 +14,7 @@ important behavior while cleaning up the repo.
   `Engine/modules/utility.codeinspector.ixx`
 - Script compiler and reload flow:
   `Engine/modules/scripting.compiler.ixx`,
-  `Engine/src/aengine.scripting.compiler.cpp`,
+  `Engine/src/engine.scripting.compiler.cpp`,
   `Engine/modules/ascripting.system.ixx`
 - File watching:
   `Engine/modules/utility.filewatch.ixx`,
@@ -33,7 +33,7 @@ important behavior while cleaning up the repo.
 - Task graph with DOT output:
   `Engine/modules/taskgraph.dotsystem.ixx`
 - Linux OpenGL / multiplexer ownership:
-  `Engine/src/aengine.context.multiplexer.linux.cpp`,
+  `Engine/src/engine.context.host.linux.cpp`,
   `Engine/modules/opengl.context.ixx`
 
 ## Explicitly deferred

@@ -81,6 +81,32 @@ older "let it train itself" folklore:
   curated datasets live under `Engine/ai/datasets/curated/`, and eval cases live
   under `Engine/ai/evals/`.
 
+## Closed-Loop Agentic Cognition Target
+
+EpochBot is not meant to become useful by adding more prompt text to a stateless
+chat path. The target is an always-running, evidence-gated cognition loop around
+the selected model and the future engine-owned LLM runtime:
+
+1. base model for language/reasoning
+2. working memory for current goal, task stack, observations, files, tools,
+   assumptions, errors, and recent actions
+3. persistent semantic, episodic, and procedural memory
+4. retrieval/ranking that injects only relevant memory into context
+5. explicit goal stack with constraints, success conditions, and failure states
+6. planner that continuously replans from new evidence
+7. executor that performs visible tool/editor/build actions
+8. verifier that checks compilers, tests, screenshots, logs, diffs, and evals
+9. scoring that rewards verified progress and penalizes constraint violations
+10. self-state tracker for known unknowns, confidence, tools, failures, and mode
+11. attention controller for interrupts, priorities, and tool requirements
+12. real-time loop: observe, update memory, retrieve, evaluate goals, plan, act,
+    verify, commit memory, and replan
+
+Long-term memory alone is not enough. The practical intelligence jump comes from
+closed-loop agency against reality: goal, action, evidence, correction, next
+action. EpochBot must not promote memories, datasets, code changes, or
+self-status claims without visible evidence from that loop.
+
 ## Self-Iteration Sandbox Loop
 
 The current Phase 3/4 foundation is an evidence-gated self-iteration sandbox,

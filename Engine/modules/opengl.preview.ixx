@@ -1,6 +1,7 @@
 module;
 
 #include <cstddef>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -29,9 +30,11 @@ export namespace epochnamespace::openglpreview
         struct ScopedPreviewGLState final
         {
             GLboolean blendEnabled = GL_FALSE;
+            GLboolean cullFaceEnabled = GL_FALSE;
             GLboolean scissorEnabled = GL_FALSE;
             GLboolean depthTestEnabled = GL_FALSE;
             GLboolean depthMask = GL_FALSE;
+            GLint depthFunc = GL_LESS;
             GLint viewport[4]{};
             GLint scissorBox[4]{};
             GLint program = 0;
@@ -43,9 +46,11 @@ export namespace epochnamespace::openglpreview
             ScopedPreviewGLState() noexcept
             {
                 blendEnabled = glIsEnabled(GL_BLEND);
+                cullFaceEnabled = glIsEnabled(GL_CULL_FACE);
                 scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
                 depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
                 glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+                glGetIntegerv(GL_DEPTH_FUNC, &depthFunc);
                 glGetIntegerv(GL_VIEWPORT, viewport);
                 glGetIntegerv(GL_SCISSOR_BOX, scissorBox);
                 glGetIntegerv(GL_CURRENT_PROGRAM, &program);
@@ -67,9 +72,11 @@ export namespace epochnamespace::openglpreview
                 glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
                 glScissor(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
                 glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
+                glDepthFunc(static_cast<GLenum>(depthFunc));
                 glDepthMask(depthMask);
 
                 if (blendEnabled == GL_TRUE) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+                if (cullFaceEnabled == GL_TRUE) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
                 if (scissorEnabled == GL_TRUE) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
                 if (depthTestEnabled == GL_TRUE) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
             }
@@ -342,7 +349,9 @@ void main() {
                 ? (viewportWidth / static_cast<float>(viewportHeight))
                 : 1.0f;
             const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx);
-            const float canvasHalfHeight = (std::max)(2.0f, camera.eye.y * 0.45f);
+            const auto canvasDelta = epochnamespace::previewgrid::subtract(camera.eye, camera.target);
+            const float canvasDistance = std::sqrt(epochnamespace::previewgrid::dot(canvasDelta, canvasDelta));
+            const float canvasHalfHeight = (std::max)(2.0f, canvasDistance * 0.45f);
             const detail::Mat4 proj = cameraMode == epochnamespace::previewgrid::CameraMode::Canvas2D
                 ? epochnamespace::previewgrid::orthographic(
                     -(canvasHalfHeight * aspect),
@@ -363,9 +372,14 @@ void main() {
             const detail::Mat4 mvp = epochnamespace::previewgrid::multiply(proj, view);
 
             glEnable(GL_DEPTH_TEST);
-            glDepthMask(GL_TRUE);
+            glDisable(GL_CULL_FACE);
+            glDepthFunc(GL_LEQUAL);
             glUseProgram(state.sceneShader);
             glUniformMatrix4fv(state.sceneMvpLoc, 1, GL_FALSE, mvp.data());
+
+            // The grid is visual reference, not depth authority. Let objects draw over it
+            // deterministically instead of fighting coplanar/near-coplanar helper pixels.
+            glDepthMask(GL_FALSE);
             glBindVertexArray(state.sceneVao);
             glDrawElements(
                 GL_LINES,
@@ -376,6 +390,7 @@ void main() {
             auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(ctx);
             if (solidVertices.size() >= 3 && state.sceneMarkerVao && state.sceneMarkerVbo)
             {
+                glDepthMask(GL_TRUE);
                 glBindVertexArray(state.sceneMarkerVao);
                 glBindBuffer(GL_ARRAY_BUFFER, state.sceneMarkerVbo);
                 glBufferData(
@@ -396,6 +411,10 @@ void main() {
 
             if (dynamicVertices.size() >= 2 && state.sceneMarkerVao && state.sceneMarkerVbo)
             {
+                // Editor helpers are overlay controls. Drawing them without depth test avoids
+                // face-edge z-fighting and keeps selection feedback stable while orbiting.
+                glDepthMask(GL_FALSE);
+                glDisable(GL_DEPTH_TEST);
                 glBindVertexArray(state.sceneMarkerVao);
                 glBindBuffer(GL_ARRAY_BUFFER, state.sceneMarkerVbo);
                 glBufferData(

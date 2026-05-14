@@ -57,6 +57,7 @@
 #   include <functional>
 #   include <iostream>
 #   include <memory>
+#   include <mutex>
 #   include <shared_mutex>
 #   include <source_location>
 #   include <stdexcept>
@@ -1439,6 +1440,97 @@ namespace
 
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
+#else
+    struct SubCtx { HWND originalParent{}; };
+    constexpr wchar_t kEpochDockParentProp[] = L"EpochDockParent";
+    constexpr wchar_t kEpochLayoutPendingProp[] = L"EpochLayoutPending";
+    constexpr wchar_t kEpochBackendBridgeProp[] = L"EpochBackendInputBridge";
+    constexpr UINT WM_EPOCH_LAYOUT = WM_APP + 0x4A12;
+    constexpr UINT WM_EPOCH_PROXY_DOCKCMD = WM_APP + 0x4A13;
+
+    enum class ProxyDockCmd : WPARAM
+    {
+        Undock = 1,
+        MoveDetached = 2,
+        Redock = 3,
+    };
+
+    struct ProxyDockRequest
+    {
+        HWND sourceHwnd{};
+        HWND parentHwnd{};
+        int x{};
+        int y{};
+        int width{};
+        int height{};
+    };
+
+    inline void request_parent_layout(HWND) noexcept {}
+    inline void remember_gui_input_owner(HWND) noexcept {}
+    inline void forget_gui_input_owner(HWND) noexcept {}
+    [[nodiscard]] inline bool accepts_gui_keyboard_input(HWND) noexcept { return true; }
+
+    [[nodiscard]] inline HWND stored_dock_parent(HWND) noexcept { return nullptr; }
+
+    [[nodiscard]] inline RECT screen_client_rect(HWND) noexcept { return RECT{}; }
+    [[nodiscard]] inline bool point_in_rect(const RECT&, const POINT&) noexcept { return false; }
+    [[nodiscard]] inline bool should_redock_to_parent(HWND, const POINT&, const RECT&) noexcept { return false; }
+
+    [[nodiscard]] inline POINT screen_mouse_point(HWND hwnd, UINT msg, LPARAM lParam) noexcept
+    {
+        (void)hwnd;
+        if (msg == WM_NCMOUSEMOVE || msg == WM_NCLBUTTONUP || msg == WM_NCLBUTTONDOWN)
+            return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+
+        POINT pt{};
+        if (::GetCursorPos(&pt) != FALSE)
+            return pt;
+        return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+    }
+
+    [[nodiscard]] inline epochnamespace::core::WindowData* resolve_window_data_for_hwnd(HWND hwnd) noexcept
+    {
+        auto* mgr = g_activeManager;
+        return (mgr && hwnd) ? mgr->findWindowByHWND(hwnd) : nullptr;
+    }
+
+    [[nodiscard]] inline bool is_dock_drag_hotspot(HWND, LPARAM) noexcept { return false; }
+    [[nodiscard]] inline bool pointer_inside_parent_client(HWND, const POINT&) noexcept { return false; }
+    [[nodiscard]] inline bool pointer_inside_parent_dock_region(HWND, const POINT&) noexcept { return false; }
+    [[nodiscard]] inline bool drag_distance_exceeded(const POINT&, const POINT&, int = 10) noexcept { return false; }
+    [[nodiscard]] inline bool has_proxy_shell_pair(const epochnamespace::core::WindowData*) noexcept { return false; }
+    [[nodiscard]] inline bool is_sfml_proxy_candidate(const epochnamespace::core::WindowData*) noexcept { return false; }
+    [[nodiscard]] inline bool is_proxy_host_hwnd(const epochnamespace::core::WindowData*, HWND) noexcept { return false; }
+    [[nodiscard]] inline bool is_sfml_proxy_detached(const epochnamespace::core::WindowData*) noexcept { return false; }
+    [[nodiscard]] inline bool is_proxy_child_directly_docked(const epochnamespace::core::WindowData*, HWND = nullptr) noexcept { return false; }
+    [[nodiscard]] inline bool backend_uses_proxy_child(epochnamespace::core::ContextType) noexcept { return false; }
+    [[nodiscard]] inline HWND proxy_drag_frame(const epochnamespace::core::WindowData*, HWND, HWND fallback) noexcept { return fallback; }
+
+    [[nodiscard]] inline POINT force_proxy_shell_outside_parent(
+        HWND,
+        const POINT&,
+        int proposedClientLeft,
+        int proposedClientTop,
+        int,
+        int) noexcept
+    {
+        return POINT{ proposedClientLeft, proposedClientTop };
+    }
+
+    inline void dock_host_window_to_parent(HWND, HWND, int, int, int, int) noexcept {}
+    inline void apply_child_fill_layout(HWND, HWND, int, int) noexcept {}
+    inline void move_detached_top_level_shell(HWND, int, int, int, int) noexcept {}
+    inline void sync_drag_offset_to_host_window(HWND) noexcept {}
+    inline void hide_associated_host_window(const epochnamespace::core::WindowData*, HWND, HWND) noexcept {}
+    inline void restore_associated_host_window(const epochnamespace::core::WindowData*, HWND, int, int, int, int) noexcept {}
+    inline void undock_sfml_proxy_window(epochnamespace::core::WindowData*, int, int, int, int) noexcept {}
+    inline void redock_sfml_proxy_window(epochnamespace::core::WindowData*, HWND, int, int, int, int) noexcept {}
+    inline void post_proxy_host_command(const epochnamespace::core::WindowData*, ProxyDockCmd, HWND, int, int, int, int) noexcept {}
+
+    LRESULT CALLBACK BackendInputProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR)
+    {
+        return DefSubclassProc(hwnd, msg, wp, lp);
+    }
 #endif
 
     inline void cleanup_window_resources(std::unique_ptr<epochnamespace::core::WindowData>& window) noexcept
@@ -1527,6 +1619,105 @@ namespace
         HANDLE handle = static_cast<HANDLE>(thread.native_handle());
         if (!handle) return false;
         return ::WaitForSingleObject(handle, 0) == WAIT_OBJECT_0;
+    }
+
+    struct NativeTitleFpsState
+    {
+        std::wstring baseTitle{};
+        std::uint64_t frameCount = 0;
+        double fps = 0.0;
+        std::chrono::steady_clock::time_point lastSample{};
+    };
+
+    std::mutex g_nativeTitleFpsMutex;
+    std::unordered_map<const epochnamespace::core::WindowData*, NativeTitleFpsState> g_nativeTitleFps;
+
+    [[nodiscard]] std::wstring make_native_fps_title(std::wstring_view base, double fps)
+    {
+        std::wstring title{ base };
+        title += L" | host ";
+        title += std::to_wstring(static_cast<long long>(fps + 0.5));
+        title += L" FPS";
+        return title;
+    }
+
+    void set_native_title_if_alive(HWND hwnd, const std::wstring& title) noexcept
+    {
+        if (hwnd && ::IsWindow(hwnd) != FALSE)
+            ::SetWindowTextW(hwnd, title.c_str());
+    }
+
+    void record_native_title_frame(
+        epochnamespace::core::MultiContextManager* manager,
+        epochnamespace::core::WindowData& window)
+    {
+        const auto now = std::chrono::steady_clock::now();
+        std::wstring childTitle{};
+        std::wstring parentTitle{};
+        bool shouldUpdate = false;
+
+        {
+            std::scoped_lock lock(g_nativeTitleFpsMutex);
+            auto& state = g_nativeTitleFps[&window];
+            if (state.baseTitle.empty())
+            {
+                state.baseTitle = window.titleWide.empty()
+                    ? L"Epoch Context"
+                    : window.titleWide;
+                state.lastSample = now;
+            }
+
+            ++state.frameCount;
+
+            const auto elapsed = now - state.lastSample;
+            if (elapsed < std::chrono::seconds(1))
+                return;
+
+            const double seconds = std::chrono::duration<double>(elapsed).count();
+            state.fps = seconds > 0.0
+                ? static_cast<double>(state.frameCount) / seconds
+                : 0.0;
+            state.frameCount = 0;
+            state.lastSample = now;
+
+            childTitle = make_native_fps_title(state.baseTitle, state.fps);
+            parentTitle = L"Epoch Docking";
+
+            for (const auto& [_, sampled] : g_nativeTitleFps)
+            {
+                if (sampled.baseTitle.empty() || sampled.fps <= 0.0)
+                    continue;
+
+                parentTitle += L" | ";
+                parentTitle += sampled.baseTitle;
+                parentTitle += L" ";
+                parentTitle += std::to_wstring(static_cast<long long>(sampled.fps + 0.5));
+                parentTitle += L" FPS";
+            }
+
+            shouldUpdate = true;
+        }
+
+        if (!shouldUpdate)
+            return;
+
+        set_native_title_if_alive(window.hwnd, childTitle);
+        if (window.hwndChild != window.hwnd)
+            set_native_title_if_alive(window.hwndChild, childTitle);
+        if (window.host_hwnd != window.hwnd && window.host_hwnd != window.hwndChild)
+            set_native_title_if_alive(window.host_hwnd, childTitle);
+
+        if (manager)
+            set_native_title_if_alive(manager->GetParentWindow(), parentTitle);
+    }
+
+    void forget_native_title_frame_source(const epochnamespace::core::WindowData* window) noexcept
+    {
+        if (!window)
+            return;
+
+        std::scoped_lock lock(g_nativeTitleFpsMutex);
+        g_nativeTitleFps.erase(window);
     }
 }
 
@@ -2557,6 +2748,8 @@ namespace epochnamespace::core
             should_quit = windows.empty();
         }
 
+        forget_native_title_frame_source(removed.get());
+
         auto& threads = Threads();
         HWND threadKey = hwnd;
         if (!threads.contains(threadKey) && removed)
@@ -2626,6 +2819,7 @@ namespace epochnamespace::core
             if (it->thread.joinable())
                 it->thread.join();
 
+            forget_native_title_frame_source(it->window.get());
             cleanup_window_resources(it->window);
 
             it = g_pendingCleanups.erase(it);
@@ -2774,6 +2968,7 @@ namespace epochnamespace::core
         {
             if (pending.thread.joinable())
                 pending.thread.join();
+            forget_native_title_frame_source(pending.window.get());
             cleanup_window_resources(pending.window);
         }
         g_pendingCleanups.clear();
@@ -2870,6 +3065,8 @@ namespace epochnamespace::core
                 win.running = false;
                 break;
             }
+
+            record_native_title_frame(this, win);
 
             const bool backendOwnsFramePacing =
                 ctx->type == ContextType::OpenGL

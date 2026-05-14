@@ -32,6 +32,10 @@
   preview still comes from engine-owned project profiles and seed entities in
   `aeditor.scene.cpp`; do not claim scene-file authoring is complete until the
   scene parser/serializer owns preview/runtime loading.
+- Built-in mini-runtime/game modules remain in the kernel engine that ships with
+  applications. Expose them to projects as package/script assets such as
+  `engine_arcade`, not by moving their implementations into loose generated
+  project scripts.
 
 ## Roadmap Discipline
 
@@ -49,6 +53,15 @@
   stable.
 - Avoid speculative rewrites. If a roadmap item is too large for the current
   pass, add precise follow-up notes instead of pretending the phase is done.
+- Treat operator-reported runtime issues as roadmap evidence. When the user
+  reports flicker, missing panes, broken project output, confusing controls,
+  AI behavior gaps, or workflow regressions, update `Changes/roadmap.md` and
+  the relevant engine/AI docs with the observation, current evidence, and next
+  acceptance gate before the detail is lost.
+- Current churn prompt for each pass: read `Changes/roadmap.md`, pick the next
+  smallest acceptance-gated batch, document every confirmed user observation,
+  keep source/version/changelog/docs aligned, build/test what changed, and do
+  not claim completion for unverified GUI, AI, project, or renderer behavior.
 - EpochBot and helper models may generate local games, tools, apps, or server
   project code only as reviewable artifacts. They must not create or run any
   app/service that gives the model a bypass channel, self-accessible server,
@@ -57,6 +70,10 @@
 - Local game and tool execution through approved editor/MCP/harness controls is
   allowed when it is visible, evidence-captured, and does not expose a new
   model-accessible network/control surface.
+- The Package Manager direction starts with local runtime-mini packages. Future
+  downloadable repo/source packages must compile through an updater-style,
+  human-approved build/run gate and must not auto-create servers, listeners,
+  hidden control surfaces, or model-bypass channels.
 
 ## Build Commands
 
@@ -116,6 +133,24 @@
 - Hosted GitHub workflows should stay build-only/headless. Do not add GUI
   launches, desktop focus assumptions, or screenshot capture to CI without a
   runtime-safe automation path.
+
+## Active GUI And AI Churn
+
+- Track these as open work until build and manual runtime evidence says
+  otherwise: operator-confirmed flicker fixes must stay regression-tested,
+  GUI/scene composition z-order can still hide command windows or pane chrome,
+  AI Chat/Inspector/Perspective visibility drift needs eye-test confirmation,
+  graph surfaces need better information/design/performance, redundant controls
+  across panes must keep shrinking, and tabbed/dockable editor windows remain
+  incomplete.
+- The target editor shape is professional docked GUI: tabbed windows, resizable
+  panes, scrollable/selectable text views, context menus, modals, optional
+  popouts, and separate editor workspaces for scene/game, assets, projects,
+  systems, and AI sandbox operations.
+- EpochBot's target is a closed-loop agentic cognition system, not only a chat
+  prompt. Keep the architecture documented around working memory, long-term
+  memory, retrieval, goals, planner, executor, verifier, scoring, self-state,
+  attention, and a real-time observe/act/verify/learn loop.
 
 ## Linux Helper Scripts
 

@@ -581,6 +581,9 @@
     <None Include="$(MSBuildThisFileDirectory)src\scripts\project_demo_bootstrap.ascript.cpp">
       <Filter>Source Files\external scripts</Filter>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\engine_arcade_scene.ascript.cpp">
+      <Filter>Source Files\external scripts</Filter>
+    </None>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\editor_launcher.ascript.cpp">
       <Filter>Source Files\external scripts</Filter>
     </None>
@@ -611,10 +614,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aeditor.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.gui.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.gui.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.scripting.compiler.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.scripting.compiler.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\afilewatch.cpp">
@@ -626,10 +629,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderer_smoke_harness.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.linux.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.host.linux.cpp">
       <Filter>Source Files\core\crossplatform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.win.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.host.win.cpp">
       <Filter>Source Files\core\crossplatform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\saveload.system.ixx">
@@ -710,7 +713,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_buffers.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_shared_vk.ixx">
@@ -725,7 +728,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.platform.context.cpp">
       <Filter>Source Files\core\crossplatform\backends\vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.cpp">
       <Filter>Source Files\core\context</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context_buffers.cpp">

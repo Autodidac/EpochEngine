@@ -299,7 +299,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\aeditor.scene.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.cpp">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.context.cpp">
@@ -371,18 +371,18 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_render.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.linux.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.host.linux.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.context.multiplexer.win.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.host.win.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.gui.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aengine.scripting.compiler.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.gui.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.scripting.compiler.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\afilewatch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\afont.renderer.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.assert.cpp" />
@@ -415,6 +415,12 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\runtime.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\scripts\project_demo_bootstrap.ascript.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\engine_arcade_scene.ascript.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>

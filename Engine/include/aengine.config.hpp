@@ -107,7 +107,7 @@
 #if defined(__linux__)
 #   define EPOCH_SINGLE_PARENT 0
 #else
-#   define EPOCH_SINGLE_PARENT 1
+#   define EPOCH_SINGLE_PARENT 0
 #endif
 
 #define EPOCH_USING_OPENGL 1

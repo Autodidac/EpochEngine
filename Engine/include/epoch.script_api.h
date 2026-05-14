@@ -13,4 +13,5 @@ struct EpochScriptHost
     void (*rotate_all_entities_yaw)(void* user_data, float delta_degrees);
     int (*queue_model_load)(void* user_data, const char* debug_name, const char* path);
     const char* project_model_asset;
+    int (*request_engine_scene)(void* user_data, const char* scene_id);
 };

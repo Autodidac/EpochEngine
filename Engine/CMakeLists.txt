@@ -194,8 +194,8 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override packag
 set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override packaged macOS version revision")
 
 set(EPOCH_SOURCES
-    src/aengine.cpp
-    src/aengine.context.cpp
+    src/engine.cpp
+    src/engine.context.cpp
     src/context_software.cpp
     src/context_vulkan.cpp
     src/opengl.backend.cpp
@@ -219,8 +219,8 @@ set(EPOCH_SOURCES
     src/context_sdl.cpp
     src/context_raylib.cpp
     src/acontext.raylib.bridge.cpp
-    src/aengine.gui.cpp
-    src/aengine.scripting.compiler.cpp
+    src/engine.gui.cpp
+    src/engine.scripting.compiler.cpp
     src/aeditor.cpp
     src/aeditor.scene.cpp
     src/afilewatch.cpp
@@ -248,12 +248,12 @@ set(EPOCH_SOURCES
 
 if(WIN32)
     list(APPEND EPOCH_SOURCES
-        src/aengine.context.multiplexer.win.cpp
+        src/engine.context.host.win.cpp
         resource/WinResource.rc
     )
 elseif(UNIX AND NOT APPLE)
     list(APPEND EPOCH_SOURCES
-        src/aengine.context.multiplexer.linux.cpp
+        src/engine.context.host.linux.cpp
     )
 endif()
 
@@ -262,7 +262,7 @@ set_target_properties(epoch PROPERTIES OUTPUT_NAME epoch)
 
 if(MSVC)
     set_source_files_properties(
-        src/aengine.context.cpp
+        src/engine.context.cpp
         src/context_software.cpp
         src/context_vulkan.cpp
         src/software.context.cpp
@@ -280,7 +280,7 @@ if(MSVC)
     )
 
     set_source_files_properties(
-        src/aengine.context.cpp
+        src/engine.context.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj;/Zm2000"
     )

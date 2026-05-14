@@ -220,6 +220,73 @@ namespace
             return title;
         }
 
+        struct NativeTitleFpsState
+        {
+            std::wstring baseTitle{};
+            std::uint64_t frameCount = 0;
+            double fps = 0.0;
+            std::chrono::steady_clock::time_point lastSample{};
+        };
+
+        std::mutex g_nativeTitleFpsMutex;
+        std::unordered_map<const WindowData*, NativeTitleFpsState> g_nativeTitleFps;
+
+        [[nodiscard]] std::wstring make_native_fps_title(std::wstring_view base, double fps)
+        {
+            std::wstring title{ base };
+            title += L" | host ";
+            title += std::to_wstring(static_cast<long long>(fps + 0.5));
+            title += L" FPS";
+            return title;
+        }
+
+        void record_native_title_frame(Display* display, ::Window xwin, WindowData& window)
+        {
+            if (!display || !xwin)
+                return;
+
+            const auto now = std::chrono::steady_clock::now();
+            std::wstring title{};
+
+            {
+                std::scoped_lock lock(g_nativeTitleFpsMutex);
+                auto& state = g_nativeTitleFps[&window];
+                if (state.baseTitle.empty())
+                {
+                    state.baseTitle = window.titleWide.empty()
+                        ? L"Epoch Context"
+                        : window.titleWide;
+                    state.lastSample = now;
+                }
+
+                ++state.frameCount;
+
+                const auto elapsed = now - state.lastSample;
+                if (elapsed < std::chrono::seconds(1))
+                    return;
+
+                const double seconds = std::chrono::duration<double>(elapsed).count();
+                state.fps = seconds > 0.0
+                    ? static_cast<double>(state.frameCount) / seconds
+                    : 0.0;
+                state.frameCount = 0;
+                state.lastSample = now;
+                title = make_native_fps_title(state.baseTitle, state.fps);
+            }
+
+            const auto narrow = epochnamespace::text::narrow_utf8(title);
+            XStoreName(display, xwin, narrow.c_str());
+        }
+
+        void forget_native_title_frame_source(const WindowData* window) noexcept
+        {
+            if (!window)
+                return;
+
+            std::scoped_lock lock(g_nativeTitleFpsMutex);
+            g_nativeTitleFps.erase(window);
+        }
+
         void UpdateContextDimensions(Context& ctx, WindowData& win, int width, int height) noexcept
         {
             ctx.width = width;
@@ -919,6 +986,8 @@ namespace
 
     void MultiContextManager::DestroyWindowData(WindowData& win)
     {
+        forget_native_title_frame_source(&win);
+
         ::Window xwin = to_xwindow(win.hwnd);
         GLXContext glx = to_glx(win.glContext);
 
@@ -1679,6 +1748,8 @@ namespace
                 win.running = false;
                 break;
             }
+
+            record_native_title_frame(localDisplay, xwin, win);
 
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
         }

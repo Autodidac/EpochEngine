@@ -39,7 +39,8 @@ namespace epochnamespace::previewgrid
         Light,
         Spawn,
         Camera,
-        Level
+        Level,
+        Canvas2D
     };
 
     export struct Camera
@@ -292,11 +293,11 @@ namespace epochnamespace::previewgrid
         {
             return CameraRigState{
                 .mode = CameraMode::Canvas2D,
-                .focus{ 0.0f, 0.0f, 0.0f },
-                .position{ 0.0f, 18.0f, 0.0f },
+                .focus{ 0.0f, 1.8f, 0.0f },
+                .position{ 0.0f, 1.8f, 8.0f },
                 .yawDegrees = -90.0f,
-                .pitchDegrees = -90.0f,
-                .distance = 18.0f
+                .pitchDegrees = 0.0f,
+                .distance = 8.0f
             };
         }
 
@@ -371,9 +372,9 @@ namespace epochnamespace::previewgrid
             if (rig.mode == CameraMode::Canvas2D)
             {
                 return Camera{
-                    .eye = { rig.focus.x, rig.distance, rig.focus.z },
+                    .eye = { rig.focus.x, rig.focus.y, rig.focus.z + rig.distance },
                     .target = rig.focus,
-                    .up = { 0.0f, 0.0f, -1.0f },
+                    .up = { 0.0f, 1.0f, 0.0f },
                     .fovRadians = 0.48f,
                     .nearPlane = 0.1f,
                     .farPlane = 128.0f
@@ -558,7 +559,7 @@ namespace epochnamespace::previewgrid
             ? Vec3{ 1.0f, 0.0f, 0.0f }
             : detail::right_from_angles(rig.yawDegrees, rig.pitchDegrees);
         const Vec3 forward = rig.mode == CameraMode::Canvas2D
-            ? Vec3{ 0.0f, 0.0f, -1.0f }
+            ? Vec3{ 0.0f, 1.0f, 0.0f }
             : detail::flat_forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
         const float dragScale = (std::max)(0.010f, rig.distance * 0.0125f);
         rig.focus = add(rig.focus, scale(right, deltaRightPixels * dragScale));
@@ -622,7 +623,7 @@ namespace epochnamespace::previewgrid
             constexpr float kPanSpeed = 5.0f;
             constexpr float kDollySpeed = 8.5f;
             rig.focus.x += moveRight * kPanSpeed * dt;
-            rig.focus.z -= moveUp * kPanSpeed * dt;
+            rig.focus.y += moveUp * kPanSpeed * dt;
             rig.distance = (std::clamp)(rig.distance - moveForward * kDollySpeed * dt, 6.0f, 64.0f);
             detail::touch_rig(rig);
             return;
@@ -909,6 +910,10 @@ namespace epochnamespace::previewgrid
                 half.y = (std::max)(0.05f, radius * 0.08f);
                 push_box_edges(center, half, color);
                 break;
+            case ObjectPreviewPrimitive::Canvas2D:
+                half.z = (std::max)(0.025f, radius * 0.04f);
+                push_box_edges(center, half, color);
+                break;
             case ObjectPreviewPrimitive::Cube:
             default:
                 push_box_edges(center, half, color);
@@ -1023,6 +1028,10 @@ namespace epochnamespace::previewgrid
                 break;
             case ObjectPreviewPrimitive::Level:
                 half.y = (std::max)(0.05f, radius * 0.08f);
+                push_box(center, half, color);
+                break;
+            case ObjectPreviewPrimitive::Canvas2D:
+                half.z = (std::max)(0.025f, radius * 0.04f);
                 push_box(center, half, color);
                 break;
             case ObjectPreviewPrimitive::Cube:

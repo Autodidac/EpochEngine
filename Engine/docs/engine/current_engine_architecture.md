@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.18`
+Current source version: `v0.84.25`
 
 ## Architecture highlights
 
@@ -103,18 +103,41 @@ Current source version: `v0.84.18`
   generated project self-tests now have first-pass GUI/build affordances for
   visible Sandbox iteration evidence instead of relying on command-line-only
   inspection.
+- Game project shells can now expose an `engine_arcade` local runtime-mini
+  package as project assets and a script bridge while the actual mini-runtime
+  implementations remain kernel-engine modules. The Package Manager modal is
+  the first command-menu surface for these local packages; future downloadable
+  source packages must stay human-gated through updater-style build paths.
 - World Outliner, Inspector, Console Dock, and AI Chat can now be hidden,
   reopened, reset, and resized with first-pass splitters. The bottom
   Console/AI Chat split is drag-only now; the old sizing button strip has been
   removed. True borderless linked-context panel popouts remain the next
   context-host step.
+- The central editor area now has a tabbed `Editor Workbench` layer for
+  Perspective, Game/2D, Assets, Project, and AI Sandbox. Systems opens as a
+  dedicated Systems-only surface so renderer/task/support graphs are not nested
+  behind another cross-surface submenu.
+- OpenGL editor composition renders the scissored scene preview first and then
+  drains GUI commands, keeping AI Chat, Inspector, dropdowns, and scene titles
+  above 3D/2D content.
+- Opening AI Sandbox from the toolbar, bottom AI dock tab, or Window menu now
+  restores Inspector and AI Chat together before activating the sandbox, so the
+  control surface is not hidden behind stale dock visibility state.
+- `EPOCH_SINGLE_PARENT=0` is a true standalone-context mode: launch config
+  resolution must not create the parent/dock host path when that compile flag
+  is off. This keeps resize/flicker isolation honest while the parent host is
+  being debugged.
+- The main engine implementation filenames have started moving away from
+  `aengine*.cpp` toward `engine.*.cpp` source paths. Module names/imports remain
+  compatibility-stable until each follow-up batch can be built and tested.
 - Splitters now render through dedicated neutral GUI chrome instead of fake
   blank buttons, and the centered Run action rebuilds generated child projects
   before launch so stale ProjectLauncher output is not mistaken for a fresh
   build.
-- Game/2D mode now creates/selects an editor-only `Canvas2D` plane and switches
-  to a locked Canvas2D camera. OpenGL and editor selection use orthographic
-  projection for that camera mode while tile/layer tooling is still being built.
+- Game/2D mode now creates/selects an editor-only upright `Canvas2D` plane and
+  switches to a locked front-facing Canvas2D camera. OpenGL and editor selection
+  use orthographic projection for that camera mode while tile/layer tooling is
+  still being built.
 - Backend presentation is more visually coherent now that the active renderer
   base colors are being pulled toward the same darker Vulkan-style baseline,
   and SFML’s shared preview path is clipped back to the intended scene view.

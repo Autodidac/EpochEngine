@@ -343,6 +343,20 @@ engine shape and should be treated as starting truth for the next passes:
   rendering, so the remaining OpenGL present/resize flicker should be chased in
   present timing, resize timing, and panel-host composition instead of obvious
   preview state leakage. Real borderless linked-context popouts stay open work.
+- A follow-up OpenGL flicker patch removed the editor/menu queued clear from
+  OpenGL UI frames and changed preview-grid rendering so grid lines no longer
+  write depth while helper/selection lines render as overlay controls. This is
+  patched for the next manual eye test; do not mark the flicker issue closed
+  until launcher buttons, dropdowns, Perspective, Game/2D, and graph/matrix
+  scenes are manually confirmed stable.
+- After the launcher fix was manually confirmed, the next patch deferred
+  workbench tab/menu switches until the current GUI frame completes, restores
+  core panes when entering scene/game/AI/system workbenches, and adds a small
+  OpenGL scene-viewport guard band. This targets the remaining GUI/3D overlap
+  flicker and missing-pane reports. MSVC Debug/Release builds and the Sandbox
+  project self-test pass; the standalone OpenGL smoke launch was inconclusive
+  because OpenGL context initialization failed before the bounded smoke exit, so
+  it still needs manual confirmation before promotion.
 - World Outliner, Inspector, Console Dock, and AI Chat are now individually
   hideable/reopenable from Window, with first-pass draggable side and bottom
   splitters. The old Console/Chat/Dock sizing button strip has been removed;
@@ -365,6 +379,70 @@ engine shape and should be treated as starting truth for the next passes:
 - the central Asset Browser has been separated from Sandbox/script-command
   controls. It should represent project assets, while Sandbox remains the
   engine self-iteration domain and script detail stays a project/asset workflow.
+- the central editor now has a first-pass tabbed `Editor Workbench` shell for
+  Perspective, Game/2D, Assets, Project, and AI Sandbox. Systems is intentionally
+  opened as a direct Systems-only surface instead of showing the cross-surface
+  submenu again inside Systems.
+- AI Sandbox, the bottom AI dock tab, and Window > Open AI Control Surface now
+  route through the same control-surface activation path so Inspector, AI Chat,
+  and the Console Dock are reopened together before self-iteration controls are
+  shown.
+- the remaining `aengine.*` naming migration is a filename/source layout task,
+  not an internal namespace or log-category rename. Future passes should move
+  files in small, build-verified batches and update CMake/MSBuild filters
+  together.
+- the first source-implementation filename batch has moved the main engine,
+  context, GUI, scripting compiler, and context-host `.cpp` files to
+  `engine.*` paths. Module/header filenames and import names remain compatibility
+  debt for later batches.
+- Outliner and Inspector sizing is splitter-owned; stale `Narrow`/`Wide`
+  buttons have been removed, and generic scroll areas plus scroll-text panels
+  now have first-pass clickable/draggable scrollbars instead of decorative-only
+  thumbs.
+- Native context hosts now publish a one-second `host FPS` heartbeat in window
+  titles. Windows updates both child/context titles and the parent docking
+  title; Linux/X11 updates context titles. Use this to compare parent/child
+  loop cadence while chasing the remaining OpenGL flicker/double-present
+  suspicion.
+- `EPOCH_SINGLE_PARENT=0` remains a supported compile path. The Win32 context
+  host has inert fallback docking/proxy helpers for non-parented builds so
+  `StaticLib1` does not inherit parent-dock-only symbols when the single-parent
+  host is disabled.
+- `EPOCH_SINGLE_PARENT=0` must be authoritative at launch time too. The current
+  fix forces the resolved launch config to standalone contexts when the compile
+  flag disables the single-parent host, so CLI defaults cannot accidentally
+  create the parent/dock path and reproduce stale launcher/editor resize
+  behavior.
+- Game/2D now treats `Canvas2D` as an upright XY-style editor canvas with a
+  front-facing orthographic rig. This keeps it the same scene, but aligns the
+  visual plane with the intended 2D editing view instead of laying it flat like
+  a floor.
+- `ProjectLauncher` remains the compatibility id/path for generated artifacts,
+  but the editor-facing display label is now `Project Hub` to avoid confusing
+  the normal launcher, generated project shell, and project-selection workflow.
+  A full id/path migration is deferred until all generated references and docs
+  can be moved safely.
+- local runtime-mini packages now start with `engine_arcade`: generated game
+  shells can materialize an asset package manifest and script bridge that invoke
+  kernel-engine mini-runtime scenes without copying or relocating the built-in
+  game modules. The command-menu Package Manager modal is the intended GUI
+  surface for local packages first; future downloadable source packages must
+  route through an updater-style build/approval gate.
+- built-in mini-runtimes remain part of the core engine that ships with
+  applications. They should be script-invokable and usable as future
+  render-to-texture/game-arcade assets, not migrated into loose project script
+  source.
+- current GUI/render observations from manual runs: launcher flicker is reported
+  resolved, but AI Chat, Inspector, and Perspective pane visibility/title chrome
+  still need eye-test confirmation after the `v0.84.25` scene-first/GUI-over
+  composition patch. Graph surfaces also need stronger data density, design
+  polish, and performance.
+- Console Dock is only a temporary evidence/log strip. Output should remain a
+  plain scrollable log, and Systems graph UI belongs in the central Systems
+  workspace rather than duplicated inside the dock.
+- the editor still has too many duplicate paths to equivalent controls across
+  central surfaces, docks, menus, and inspectors. Keep reducing duplicate command
+  surfaces while preserving one discoverable path and one quick-access path.
 
 ## Phase Progress
 
@@ -410,7 +488,8 @@ engine shape and should be treated as starting truth for the next passes:
   generated or discovered projects should build, launch, and hand any
   declared demo model through the engine-owned script host without falling
   back to confusing sample-only behavior
-- keep the Mini Sponza demo owned by `ProjectLauncher`, while the
+- keep the Mini Sponza demo owned by the compatibility `projectlauncher`
+  artifact path while presenting it to operators as `Project Hub`; the
   Self-Iteration Sandbox stays the AI/engine-iteration shell
 - continue replacing hardcoded built-in sample assumptions with project-owned
   runtime flow
@@ -425,6 +504,10 @@ engine shape and should be treated as starting truth for the next passes:
 - keep checked-in MSVC solution projects self-contained enough to build from a
   normal VS 2022/MSBuild invocation, including explicit vcpkg triplet defaults
   when machine-global vcpkg integration leaves `$(VcpkgTriplet)` empty.
+- keep engine-owned runtime-mini packages first-class: local package metadata
+  belongs in project assets, script bridges call into engine-owned scenes, and
+  downloadable packages must use explicit updater-style source build/approval
+  instead of hidden auto-execution.
 - keep the bottom dock centered on `Project`, `Assets`, `Systems`, `AI`, and
   `Output` as evidence/status tabs, not as the final scene/editor-window model
 - promote the new first-pass draggable splitters into reusable dock/window GUI
@@ -524,9 +607,10 @@ engine shape and should be treated as starting truth for the next passes:
 - keep project evidence repair available in the Self-Iteration Sandbox domain
   so Phase 5 work can recover from missing generated shells without leaving the
   editor
-- keep the Inspector copy of AI repair/build/watcher controls as the primary
-  operator command surface; the bottom Console Dock is status/log/visual
-  feedback until dedicated AI and editor windows land
+- keep the central AI Control Surface and Inspector actions synchronized. The
+  bottom Console Dock remains status/log/visual feedback, while the Inspector is
+  a quick-command/details pane and the central AI Sandbox is the discoverable
+  operator surface until dedicated AI editor windows land.
 - promote only staged packets that include root-resolved project/build/output
   evidence; cwd-dependent evidence is considered invalid
 - train from real editor tool actions by capturing before/after state from the
@@ -542,6 +626,14 @@ engine shape and should be treated as starting truth for the next passes:
   can run through visible editor/MCP/harness controls, but apps or servers that
   expose model-accessible control surfaces, listeners, ports, or serving modes
   must require an explicit human enable/run action
+- implement EpochBot as a closed-loop agentic cognition system, not a stateless
+  chatbot. Minimum architecture: base model, working memory, persistent
+  semantic/episodic/procedural memory, retrieval/ranking, goal stack, planner,
+  tool executor, verifier, scoring/reward, self-state tracker, attention
+  controller, and real-time observe/update/retrieve/plan/act/verify/commit loop.
+- treat compiler errors, runtime logs, screenshots, file state, user
+  corrections, tool results, and evals as reality pressure. No evidence means no
+  belief, no training promotion, and no "working fine" status claim.
 - treat `Engine/ai/control/continuous_build_loop.json` as the current contract
   for the engine self-iteration control loop until a replay runner can enforce it
 - use MCP tool schemas as the canonical tool-bus contract and replay shape
@@ -604,7 +696,11 @@ engine shape and should be treated as starting truth for the next passes:
 9. Promote the first-pass file browser, script stub creator, and asset cards
    into professional bounded editor controls with decoded thumbnails and
    editable script/source panes.
-10. Continue safe include/src restructuring and MSVC/CMake synchronization
+10. Promote the Package Manager modal from local `engine_arcade` runtime-minis
+    into a reviewable package workflow for local and downloadable source
+    packages, with explicit human approval before build/run and no auto-created
+    servers or hidden model-accessible channels.
+11. Continue safe include/src restructuring and MSVC/CMake synchronization
    whenever touched areas can be normalized without collateral damage.
 
 ## Acceptance Gates

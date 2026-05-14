@@ -30,7 +30,7 @@
  ***********************************************/
 module;
 
-// Engine/src/aengine.gui.cpp
+// Engine/src/engine.gui.cpp
 
 #include <algorithm>
 #include <array>
@@ -248,12 +248,16 @@ namespace epochnamespace::gui
             std::size_t selectedLine = 0;
             bool hasSelection = false;
             std::size_t lastLineCount = 0;
+            bool draggingScrollbar = false;
+            float dragGrabOffset = 0.0f;
         };
 
         struct ScrollAreaState
         {
             float scrollY = 0.0f;
             float contentHeight = 0.0f;
+            bool draggingScrollbar = false;
+            float dragGrabOffset = 0.0f;
         };
 
         struct ScrollAreaFrame
@@ -2573,6 +2577,38 @@ namespace epochnamespace::gui
             : 0.0f;
         const float contentWidth = (std::max)(1.0f, width - scrollbarWidth - 2.0f);
 
+        if (scrollbarWidth > 0.0f)
+        {
+            const float trackX = pos.x + width - scrollbarWidth;
+            const float trackY = pos.y;
+            const float visibleRatio = height / estimatedContentHeight;
+            const float thumbHeight = (std::min)(height, (std::max)(18.0f, height * visibleRatio));
+            const float scrollRatio = maxScroll > 0.0f ? state.scrollY / maxScroll : 0.0f;
+            const float thumbY = trackY + (height - thumbHeight) * scrollRatio;
+            const bool trackHovered = point_in_rect(g_frame.mousePos, trackX, trackY, scrollbarWidth, height)
+                && point_in_active_clip(g_frame.mousePos);
+            const bool thumbHovered = point_in_rect(g_frame.mousePos, trackX, thumbY, scrollbarWidth, thumbHeight)
+                && point_in_active_clip(g_frame.mousePos);
+
+            if (g_frame.justPressed && trackHovered)
+            {
+                state.draggingScrollbar = true;
+                state.dragGrabOffset = thumbHovered
+                    ? (g_frame.mousePos.y - thumbY)
+                    : (thumbHeight * 0.5f);
+            }
+
+            if (!g_frame.mouseDown)
+                state.draggingScrollbar = false;
+
+            if (state.draggingScrollbar)
+            {
+                const float travel = (std::max)(1.0f, height - thumbHeight);
+                const float requested = (g_frame.mousePos.y - trackY - state.dragGrabOffset) / travel;
+                state.scrollY = (std::clamp)(requested, 0.0f, 1.0f) * maxScroll;
+            }
+        }
+
         g_scrollAreaStack.push_back(ScrollAreaFrame{
             .key = scroll_panel_key(id),
             .previousCursor = g_frame.cursor,
@@ -2697,6 +2733,42 @@ namespace epochnamespace::gui
 
             g_frame.mouseWheelDelta = 0;
             result.wheel_scrolled = true;
+        }
+
+        if (scrollbarWidth > 0.0f && lineCount > visibleLines)
+        {
+            const float trackX = pos.x + width - kBoxInnerPadding - scrollbarWidth;
+            const float trackY = contentY;
+            const float visibleRatio = static_cast<float>(visibleLines) / static_cast<float>(lineCount);
+            const float thumbHeight = (std::min)(contentHeight, (std::max)(18.0f, contentHeight * visibleRatio));
+            const float scrollRatio = maxFirstLine > 0
+                ? static_cast<float>(state.firstLine) / static_cast<float>(maxFirstLine)
+                : 0.0f;
+            const float thumbY = trackY + (contentHeight - thumbHeight) * scrollRatio;
+            const bool trackHovered = point_in_rect(g_frame.mousePos, trackX, trackY, scrollbarWidth, contentHeight)
+                && point_in_active_clip(g_frame.mousePos);
+            const bool thumbHovered = point_in_rect(g_frame.mousePos, trackX, thumbY, scrollbarWidth, thumbHeight)
+                && point_in_active_clip(g_frame.mousePos);
+
+            if (g_frame.justPressed && trackHovered)
+            {
+                state.draggingScrollbar = true;
+                state.dragGrabOffset = thumbHovered
+                    ? (g_frame.mousePos.y - thumbY)
+                    : (thumbHeight * 0.5f);
+            }
+
+            if (!g_frame.mouseDown)
+                state.draggingScrollbar = false;
+
+            if (state.draggingScrollbar)
+            {
+                const float travel = (std::max)(1.0f, contentHeight - thumbHeight);
+                const float requested = (g_frame.mousePos.y - trackY - state.dragGrabOffset) / travel;
+                state.firstLine = static_cast<std::size_t>(std::round((std::clamp)(requested, 0.0f, 1.0f) * static_cast<float>(maxFirstLine)));
+                state.firstLine = (std::min)(state.firstLine, maxFirstLine);
+                result.first_visible_line = state.firstLine;
+            }
         }
 
         result.first_visible_line = state.firstLine;

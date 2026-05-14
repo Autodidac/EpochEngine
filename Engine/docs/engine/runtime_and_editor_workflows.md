@@ -129,6 +129,16 @@ the same engine-owned path.
   route from the real engine binary. Use `sandbox` for the self-iteration shell
   and `projectlauncher` for the launcher shell before running the generated
   child `--project-self-test`.
+- generated game project shells can carry the `engine_arcade` local
+  runtime-mini package. The package is a project asset/script option that
+  invokes engine-owned mini-runtime scenes such as Snake/Tetris/Pacman through
+  the script host; it must not copy those implementations out of the kernel
+  engine.
+- the command-menu Package Manager is the intended modal surface for local
+  runtime-mini packages first, then explicit downloadable source packages later.
+  Downloadable source packages must compile through an updater-style human-gated
+  path and must not auto-run servers, listeners, hidden model channels, or any
+  service that bypasses operator approval.
 - Self-Iteration Sandbox controls always target the `sandbox` profile. They must
   not reuse the active ProjectLauncher/game/tool project when queueing engine
   self-iteration work.
@@ -152,6 +162,10 @@ the same engine-owned path.
   separate scene or project island.
 - entering `Game/2D` creates/selects an editor-only `Canvas2D` plane and switches
   the preview camera to the locked 2D Canvas rig
+- the `Canvas2D` plane is an upright XY-style editor canvas viewed by a
+  front-facing orthographic camera. It should not be a floor-like XZ plane; the
+  2D workspace reuses the scene view from a locked 2D perspective, similar to
+  Unity's 2D scene editing mode.
 - OpenGL and editor object selection use an orthographic projection in this mode
   so 2D editing behaves like a Unity-style scene camera locked to a 3D canvas
 - future 2D work should add tile/layer/canvas tools on top of this same
@@ -166,7 +180,8 @@ the same engine-owned path.
   - pacing / perf select
   - diagnostics
 - graph views render as engine-generated textures inside the central Systems
-  surface and the docked UI mirror
+  surface only; the bottom Console Dock keeps compact text diagnostics and does
+  not duplicate the graph UI
 - the central Systems surface gives the render/frame graph and task/thread graph
   full-width readable rows instead of tiny side-by-side thumbnails
 - graph views support pan/zoom and remain clipped when they are wider than the
@@ -175,6 +190,13 @@ the same engine-owned path.
   Game/2D keep the real 3D viewport; Project, Assets, AI Sandbox, and Systems
   switch to GUI surfaces and clear the scene viewport so those workflows do not
   have to be operated from the console dock.
+- the central work area now has a first-pass tabbed `Editor Workbench` strip for
+  Perspective, Game/2D, Assets, Project, and AI Sandbox. Systems opens as a
+  direct Systems-only surface so it does not show a redundant Perspective/Game
+  submenu inside the Systems view.
+- AI Sandbox activation is centralized: the toolbar, bottom AI dock tab, and
+  Window > Open AI Control Surface all reopen Inspector, AI Chat, and the
+  Console Dock before selecting the self-iteration sandbox.
 - `EPOCH_EDITOR_START_WORKSPACE=AI`, `Systems`, or `Assets` selects the matching
   central editor surface at startup instead of only changing the bottom dock tab.
 - splitter bars are dedicated GUI chrome rather than blank buttons. They should
@@ -254,6 +276,14 @@ the same engine-owned path.
 
 - legacy `aengine*` naming and older catch-all labels such as `multiplexer`
   should be treated as transitional debt, not as the final public structure
+- source filenames should move toward `engine.*`, `epoch.*`, or
+  subsystem-specific ownership in small tested batches. The old `aengine.*`
+  module/file names remain compatibility debt until each migration batch is
+  small enough to update CMake/MSBuild/filter references safely.
+- current completed filename batch: `engine.cpp`, `engine.context.cpp`,
+  `engine.gui.cpp`, `engine.scripting.compiler.cpp`, and
+  `engine.context.host.{win,linux}.cpp` are the active source implementation
+  paths for the former `aengine*.cpp` files
 - when a subsystem is touched, file names, module names, and exported surfaces
   should move toward consistent professional ownership instead of growing more
   orphan naming
@@ -302,9 +332,39 @@ features over forcing every integration on every machine.
   Standard/Extended tiers or explicit project opt-in
 - keep backend convergence visible in the Systems workspace so OpenGL, Vulkan,
   software, SDL, SFML, and Raylib do not drift without tooling feedback
-- OpenGL launcher/editor flicker is still an active runtime defect. It appears
-  tied to GUI/menu frame changes and must stay tracked as an OpenGL/frame
-  synchronization issue until a local manual run proves otherwise.
+- OpenGL launcher/editor flicker has been manually reported resolved for the
+  current pass, but GUI/scene composition remains guarded because z-order bugs
+  can make command windows, AI Chat, Inspector, or viewport titles appear hidden
+  behind the 3D/2D preview.
+- Native context hosts publish a `host FPS` counter in their window titles
+  during local runs. Use the parent and child/context title rates as quick
+  evidence when checking whether flicker is coming from the dock host, backend
+  process loop, or a duplicated present/composition path.
+- `v0.84.23` removes the extra queued OpenGL clear from editor/menu UI frames
+  and makes preview-grid lines non-depth-writing reference geometry. Manual
+  confirmation should test launcher press transitions, dropdown menus,
+  Perspective orbit angles, Game/2D canvas angles, and graph/matrix scenes
+  before closing this issue.
+- The same pass now defers workbench tab/menu switches until the GUI frame is
+  complete, restores the relevant docked panes when entering scene/game/AI
+  workbenches, and keeps the OpenGL scene viewport one pixel inside its GUI
+  chrome. These changes are specifically for the remaining GUI/3D overlap
+  flicker and missing-pane reports. MSVC Debug/Release builds and the Sandbox
+  project self-test pass; manual eye-test confirmation is still required because
+  the standalone OpenGL smoke launch hit `PlatformGL::make_current(final) failed`
+  before it could complete.
+- `v0.84.24` tested GUI-first OpenGL composition after the flicker fix. Manual
+  follow-up showed the launcher flicker was resolved, but GUI-first composition
+  put command/dropdown windows and pane chrome behind the scissored scene view.
+- `v0.84.25` restores scene-first / GUI-over composition for OpenGL: the
+  scissored Perspective/Game preview renders first, then queued GUI commands
+  draw AI Chat, Inspector, menu dropdowns, and scene viewport titles on top.
+  Systems graph surfaces now belong only to the central Systems workspace; the
+  bottom Console Dock stays a compact evidence/log strip.
+- When `EPOCH_SINGLE_PARENT=0`, the launch config must force standalone
+  top-level contexts even if CLI defaults still prefer parented mode. This mode
+  is used to isolate resize/flicker from the single-parent dock host, so any
+  parent-window creation in that build is a regression.
 
 ## Logging
 
@@ -397,7 +457,9 @@ editor frames and views:
   builder/verifier gates, and human approvals
 - AI Visualizer view for model state, packet replay, scene-state diffs, and
   future 3D weight/model views
-- ProjectLauncher view for project launch/update/context selection
+- Project Hub view for project launch/update/context selection. The
+  compatibility id/path may still be `projectlauncher` /
+  `Projects/ProjectLauncher` until a safe generated-artifact migration lands.
 - Build/Output view for logs, diagnostics, and release/build evidence
 - Asset Browser view for decoded image/model thumbnails, active project assets,
   and import/organization actions. The current `Assets` tab is only the first
