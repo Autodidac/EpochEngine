@@ -399,7 +399,8 @@ namespace epochnamespace::gui
         [[nodiscard]] static bool uses_deferred_gui_batch(const core::Context* ctx) noexcept
         {
             return ctx
-                && (ctx->type == core::ContextType::Software
+                && (ctx->type == core::ContextType::OpenGL
+                    || ctx->type == core::ContextType::Software
                     || ctx->type == core::ContextType::SDL
                     || ctx->type == core::ContextType::SFML
                     || ctx->type == core::ContextType::RayLib

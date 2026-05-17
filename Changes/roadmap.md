@@ -429,9 +429,9 @@ engine shape and should be treated as starting truth for the next passes:
   render-to-texture/game-arcade assets, not migrated into loose project script
   source.
 - current GUI/render observations from manual runs: launcher flicker is reported
-  resolved. The `v0.84.28` pass compares against the GitHub-good
-  multicontext baseline and removes OpenGL from the deferred GUI batch path;
-  OpenGL should render scene preview first and then drain normal queued GUI.
+  resolved. The `v0.84.29` pass keeps OpenGL scene-first composition and
+  replays the latest persistent GUI batch after the scene pass so the continuous
+  OpenGL render thread cannot alternate scene-only frames between UI ticks.
   AI Chat, Inspector, Perspective pane visibility/title chrome, and the
   transparent scene-backed workbench still need eye-test confirmation. Graph
   surfaces also need stronger data density, design polish, and performance.

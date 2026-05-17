@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.84.29]
+- Bumped the active source line to `v0.84.29` for the OpenGL GUI flicker fix.
+- Kept the confirmed OpenGL render order as `scene preview -> command queue ->
+  GUI overlay`, then restored OpenGL to the persistent GUI batch so the render
+  thread can redraw the latest editor/launcher UI every frame instead of
+  alternating scene-only frames between UI ticks.
+- Documented the root cause: OpenGL's continuous render loop can outpace GUI
+  command production, so queued one-shot GUI commands flicker unless the latest
+  GUI batch is retained and replayed after the scene pass.
+
 ## [v0.84.28]
 - Bumped the active source line to `v0.84.28` for the OpenGL composition
   rollback after comparing against the GitHub-good multicontext baseline.

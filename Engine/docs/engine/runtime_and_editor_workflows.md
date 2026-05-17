@@ -32,10 +32,11 @@ the same engine-owned path.
 - source checkout installs still use the same binary-first rule; only after
   packaged parity or absence of a newer package should they rebuild from the
   GitHub source snapshot using the platform build path
-- OpenGL editor composition follows the GitHub-good queued path: draw the
-  scene preview first, then drain the normal GUI command queue. Do not route
-  OpenGL through the deferred GUI batch unless a future pass proves the full
-  scene/GUI/popup ordering with visual evidence.
+- OpenGL editor composition is scene-first: draw the scene preview, drain
+  queued render work, then render the latest persistent GUI batch. The
+  persistent batch is required because the OpenGL render thread can run between
+  editor/UI ticks; without replaying the latest GUI batch, frames can alternate
+  between scene+GUI and scene-only, which presents as flicker.
 
 ## Project-centric runtime direction
 
