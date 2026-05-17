@@ -46,13 +46,13 @@ export module a2048like;
 
 import core.context;      // core::Context
 import context.window;    // core::WindowData
-import aengine.input;             // input::Key
+import engine.input;             // input::Key
 import atlas.manager;            // atlasmanager
 import atlas.texture;            // TextureAtlas
 import image.loader;             // a_loadImage
-import aspritehandle;             // SpriteHandle
+import spritehandle;             // SpriteHandle
 import sprite.pool;              // spritepool
-import ascene;                    // scene::Scene
+import scene;                    // scene::Scene
 import core.logger;       // logger::Logger
 import core.timer;         // timing::Timer
 

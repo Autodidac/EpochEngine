@@ -34,7 +34,7 @@ module;
 // This is the *interface* module. It must not include <windows.h> or <raylib.h>.
 // The implementation lives in a normal TU/module implementation unit.
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 #include <cstdint>
 
 export module raylib.api;

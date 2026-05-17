@@ -187,18 +187,21 @@
     <Filter Include="Source Files\core\crossplatform\backends\opengl">
       <UniqueIdentifier>{4cd8b412-3e84-43a0-b9fc-52f697ef4492}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\core\context\engine">
+      <UniqueIdentifier>{f0ad256c-4b7f-4896-b920-60642a13c3d2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\aframework.hpp">
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\framework.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\aengine.config.hpp">
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.config.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\aengine.hpp">
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\acontext.vulkan.hpp">
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\context.vulkan.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\_epoch.stl_types.hpp">
@@ -263,46 +266,46 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.components.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.handles.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.handles.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.systems.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.systems.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.version.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.version.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\a2048like.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atetrislike.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\tetrislike.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asnakelike.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\snakelike.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asokobanlike.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sokobanlike.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aslidingpuzzlelike.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\slidingpuzzlelike.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asandsim.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sandsim.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\apacmanlike.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\pacmanlike.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aminesweeperlike.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\minesweeperlike.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\amatch3like.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\match3like.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\afroggerlike.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\froggerlike.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\acellularsim.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\cellularsim.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.allocator.ixx">
@@ -332,7 +335,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.types.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aimageatlaswriter.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\imageatlaswriter.ixx">
       <Filter>Module Files\ixx\textures</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.loader.ixx">
@@ -341,7 +344,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.writer.ixx">
       <Filter>Module Files\ixx\textures</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\atexture.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\texture.ixx">
       <Filter>Module Files\ixx\textures</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atlas.manager.ixx">
@@ -350,13 +353,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atlas.texture.ixx">
       <Filter>Module Files\ixx\textures\atlas</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aspriteregistry.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\spriteregistry.ixx">
       <Filter>Module Files\ixx\textures\sprite</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sprite.pool.ixx">
       <Filter>Module Files\ixx\textures\sprite</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aspritehandle.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\spritehandle.ixx">
       <Filter>Module Files\ixx\textures\sprite</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.context.ixx">
@@ -407,7 +410,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.backend.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aopenglfreetype.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.freetype.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.platform.ixx">
@@ -416,7 +419,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.quad.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.input.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.input.ixx">
       <Filter>Module Files\ixx\core\input</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.commandqueue.ixx">
@@ -455,13 +458,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.internal_private.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aecs.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.storage.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aentity.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\entity.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.system.ixx">
@@ -470,46 +473,46 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx">
       <Filter>Module Files\ixx\updater</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.updater.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.updater.ixx">
       <Filter>Module Files\ixx\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.tools.ixx">
       <Filter>Module Files\ixx\updater</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascene.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.ixx">
       <Filter>Module Files\ixx\scene</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asceneserializer.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sceneserializer.ixx">
       <Filter>Module Files\ixx\scene</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascenesnapshot.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scenesnapshot.ixx">
       <Filter>Module Files\ixx\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.string_converter.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ampmcboundedqueue.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\mpmcboundedqueue.ixx">
       <Filter>Module Files\ixx\core\multithreading</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scripting.compiler.ixx">
       <Filter>Module Files\ixx\scripting</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aplatformpump.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platformpump.ixx">
       <Filter>Module Files\ixx\core\platform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aframework.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\framework.ixx">
       <Filter>Module Files\ixx\core\platform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.platform.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.platform.ixx">
       <Filter>Module Files\ixx\core\platform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.gui.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.gui.ixx">
       <Filter>Module Files\ixx\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\taskgraph.dotsystem.ixx">
       <Filter>Module Files\ixx\core\multithreading</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\amipmapatlas.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\mipmapatlas.ixx">
       <Filter>Module Files\ixx\textures\atlas</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\font.renderer.ixx">
@@ -521,7 +524,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.menu.ixx">
       <Filter>Module Files\ixx\gui</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\anet.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\net.ixx">
       <Filter>Module Files\ixx\core\networking</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.state.ixx">
@@ -533,13 +536,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.preview.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ascripting.system.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scripting.system.ixx">
       <Filter>Module Files\ixx\scripting</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.cli.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.cli.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.bindings.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.bindings.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.window.ixx">
@@ -548,7 +551,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.textures.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aopengltriangle.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.triangle.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.state.ixx">
@@ -557,7 +560,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.renderer.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.telemetry.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.telemetry.ixx">
       <Filter>Module Files\ixx\utilities</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx">
@@ -569,13 +572,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.platform_utils.ixx">
       <Filter>Module Files\ixx\core\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\agamecore.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\gamecore.ixx">
       <Filter>Module Files\ixx\games\gamecore</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aenduserapplication.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\enduserapplication.ixx">
       <Filter>Module Files\ixx\games\gamecore</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aapplicationmodule.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\applicationmodule.ixx">
       <Filter>Module Files\ixx\games\gamecore</Filter>
     </ClCompile>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\project_demo_bootstrap.ascript.cpp">
@@ -593,7 +596,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.entityhistory.ixx">
       <Filter>Module Files\ixx\core\ecs</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.eventsystem.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.eventsystem.ixx">
       <Filter>Module Files\ixx\events</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.context.ixx">
@@ -611,7 +614,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.platform_loader.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\crossplatform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aeditor.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.gui.cpp">
@@ -620,13 +623,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.scripting.compiler.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\afilewatch.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\filewatch.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\afont.renderer.cpp">
-      <Filter>Source Files\core</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderer_smoke_harness.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\font.renderer.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.host.linux.cpp">
@@ -641,7 +641,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\event.movement.ixx">
       <Filter>Module Files\ixx\events</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aeditor.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ixx">
       <Filter>Module Files\ixx\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.quad.ixx">
@@ -704,7 +704,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_window.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore\partitions</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\aengine.diagnostics.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.diagnostics.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epochengine.ixx">
@@ -719,25 +719,25 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_shared_vk.ixx">
       <Filter>Module Files\ixx\core\context\backends\vulkan\contextcore</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.raylib.bridge.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\raylib.bridge.cpp">
       <Filter>Source Files\core\crossplatform\backends\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.platform.descriptors.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.platform.descriptors.cpp">
       <Filter>Source Files\core\crossplatform\backends\vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.platform.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.platform.context.cpp">
       <Filter>Source Files\core\crossplatform\backends\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.cpp">
       <Filter>Source Files\core\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context_buffers.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.context_buffers.cpp">
       <Filter>Source Files\core\context\vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.context-texture.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.context-texture.cpp">
       <Filter>Source Files\core\context\vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\acontext.vulkan.dispatch_storage.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.dispatch_storage.cpp">
       <Filter>Source Files\core\context\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.assert.ixx">
@@ -842,7 +842,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.ai.ixx">
       <Filter>Module Files\ixx\epoch\ai</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\aeditor.scene.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor.scene.cpp">
       <Filter>Source Files\core\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.assert.cpp">
@@ -970,6 +970,9 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_upload_bridge.cpp">
       <Filter>Source Files\core\crossplatform\backends\opengl</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderer_smoke_harness.cpp">
+      <Filter>Source Files\external scripts</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -49,7 +49,7 @@ module;
 
 // NOTE: Keep your engine config include if it sets global compile flags.
 // Do NOT rely on it for Win32 type definitions in a module global fragment.
-#include "../include/aengine.config.hpp"
+#include "../include/engine.config.hpp"
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 // OS + GL headers in global module fragment.
@@ -132,14 +132,14 @@ import context.multiplexer;
 import context.commandqueue;
 import context.window;
 import context.type;
-import aengine.input;
-import aplatformpump;
+import engine.input;
+import platformpump;
 import atlas.manager;
 import atlas.texture;
 import core.commandline;
 import core.logger;
-import aengine.diagnostics;
-import aengine.telemetry;
+import engine.diagnostics;
+import engine.telemetry;
 import opengl.capture;
 import opengl.preview;
 

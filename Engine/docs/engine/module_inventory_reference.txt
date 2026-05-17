@@ -2,8 +2,8 @@ Epoch active inventory
 ======================
 
 Public headers
-- `Engine/include/aengine.hpp`
-- `Engine/include/aengine.config.hpp`
+- `Engine/include/engine.hpp`
+- `Engine/include/engine.config.hpp`
 - `Engine/include/epoch.config.hpp`
 - supporting API/common headers under `Engine/include/`
 

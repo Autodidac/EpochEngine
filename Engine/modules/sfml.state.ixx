@@ -44,8 +44,8 @@ module;
 #   endif
 #endif
 
-#include "../include/aengine.hpp"          // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
-#include "../include/aengine.config.hpp"   // EPOCH_USING_* macros
+#include "../include/engine.hpp"          // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
+#include "../include/engine.config.hpp"   // EPOCH_USING_* macros
 
 // If some include above already pulled windows.h, nuke the macros anyway.
 #if defined(_WIN32)
@@ -64,7 +64,7 @@ module;
 
 export module sfml.state;
 
-import aengine.platform;
+import engine.platform;
 import context.window;
 import core.timer;
 

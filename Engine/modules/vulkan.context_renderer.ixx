@@ -37,7 +37,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 export module vulkan.context:renderer;
 

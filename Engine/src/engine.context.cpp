@@ -32,7 +32,7 @@ module;
 
 // aengine.context.cpp  (module implementation unit for core.context)
 
-#include <include/aengine.config.hpp> // macros only - must stay in the global module fragment
+#include <include/engine.config.hpp> // macros only - must stay in the global module fragment
 
 #include <algorithm>
 #include <cstdint>
@@ -56,6 +56,7 @@ import utility.atomicfunction;
 #if defined(EPOCH_USING_NOOP_HEADLESS)
 import noop.context;
 #endif
+
 namespace epochnamespace::core::detail
 {
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)

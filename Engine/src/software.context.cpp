@@ -9,11 +9,11 @@ module;
 #include <utility>
 #include <vector>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 #if defined(_WIN32)
 #   ifdef EPOCH_USING_WINMAIN
-#       include "../include/aframework.hpp"
+#       include "../include/framework.hpp"
 #   endif
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN
@@ -22,7 +22,7 @@ module;
 
 module software.context;
 
-import aspritehandle;
+import spritehandle;
 import atlas.texture;
 import core.context;
 import context.commandqueue;

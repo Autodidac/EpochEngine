@@ -30,7 +30,7 @@
   source.
 - Current `.epoch` scene/world files are metadata shells. The live editor
   preview still comes from engine-owned project profiles and seed entities in
-  `aeditor.scene.cpp`; do not claim scene-file authoring is complete until the
+  `editor.scene.cpp`; do not claim scene-file authoring is complete until the
   scene parser/serializer owns preview/runtime loading.
 - Built-in mini-runtime/game modules remain in the kernel engine that ships with
   applications. Expose them to projects as package/script assets such as

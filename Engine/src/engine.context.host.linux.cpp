@@ -36,7 +36,7 @@ module;
 #if defined(__linux__)
 
 // Feature flags (defines EPOCH_USING_*)
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 // If GLAD is enabled on Linux, it must come before the GLX headers.
 #if (defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)) || defined(EPOCH_USING_SDL)
@@ -81,9 +81,9 @@ import core.logger;
 import context.window;        // WindowData
 import context.type;          // ContextType
 import core.commandline;
-import aengine.input;
-import aengine.cli;
-import aengine.telemetry;
+import engine.input;
+import engine.cli;
+import engine.telemetry;
 
 // ---- helpers ----
 import utility.string_converter;     // epochnamespace::text::narrow_utf8

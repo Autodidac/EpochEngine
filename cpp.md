@@ -35,7 +35,7 @@ module;
 
 export module epoch.example;
 
-import aengine.platform;
+import engine.platform;
 
 export namespace epoch::example
 {

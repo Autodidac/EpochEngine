@@ -31,7 +31,7 @@
 
 module; // REQUIRED global module fragment
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
+#include <include/engine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -48,14 +48,14 @@ export module gui.menu;
 // Engine headers (header units, order-sensitive)
 // ------------------------------------------------------------
 
-//import aengine.config;
+//import engine.config;
 
 import core.context;
 import context.multiplexer;
-import aengine.cli;
-import aengine.input;
-import aengine.gui;
-import aengine.version;
+import engine.cli;
+import engine.input;
+import engine.gui;
+import engine.version;
 import context.window;
 import core.context;
 import context.type;

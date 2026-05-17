@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.28)
 
 if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
     set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
@@ -141,7 +141,7 @@ function(epoch_print_build_summary)
 endfunction()
 
 add_executable(epoch_ci_headless
-    src/ci/headless_smoke.cpp
+    examples/HeadlessCI/headless_smoke.cpp
 )
 
 set_target_properties(epoch_ci_headless PROPERTIES
@@ -218,13 +218,13 @@ set(EPOCH_SOURCES
     src/context_sfml.cpp
     src/context_sdl.cpp
     src/context_raylib.cpp
-    src/acontext.raylib.bridge.cpp
+    src/raylib.bridge.cpp
     src/engine.gui.cpp
     src/engine.scripting.compiler.cpp
-    src/aeditor.cpp
-    src/aeditor.scene.cpp
-    src/afilewatch.cpp
-    src/afont.renderer.cpp
+    src/editor.cpp
+    src/editor.scene.cpp
+    src/filewatch.cpp
+    src/font.renderer.cpp
     src/core.assert.cpp
     src/core.env.cpp
     src/core.error.cpp
@@ -316,7 +316,7 @@ if(MSVC)
     )
 
     set_source_files_properties(
-        src/acontext.raylib.bridge.cpp
+        src/raylib.bridge.cpp
         PROPERTIES
             COMPILE_OPTIONS "/GL-"
     )
@@ -707,9 +707,9 @@ if(EPOCH_VULKAN_ACTIVE)
 
     if(EPOCH_VULKAN_ACTIVE)
         target_sources(epoch PRIVATE
-            src/acontext.vulkan.platform.context.cpp
-            src/acontext.vulkan.platform.descriptors.cpp
-            src/acontext.vulkan.dispatch_storage.cpp
+            src/vulkan.platform.context.cpp
+            src/vulkan.platform.descriptors.cpp
+            src/vulkan.dispatch_storage.cpp
             modules/vulkan.context_api_unit.ixx
         )
     endif()
@@ -832,7 +832,7 @@ if(NOT EPOCH_RAYLIB_ACTIVE)
     set_source_files_properties(
         src/raylib.backend.cpp
         src/context_raylib.cpp
-        src/acontext.raylib.bridge.cpp
+        src/raylib.bridge.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
 endif()

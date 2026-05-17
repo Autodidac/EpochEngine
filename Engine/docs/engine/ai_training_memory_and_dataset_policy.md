@@ -179,7 +179,7 @@ phase waiting for a cleaner helper reply.
 
 - sync with `origin/main` when possible
 - keep unrelated dirt out of the pass
-- bump `Engine/modules/aengine.version.ixx`
+- bump `Engine/modules/engine.version.ixx`
 - use a descriptive commit title without baking the version number into the
   commit message
 - document user-visible behavior in README/changelog/runtime docs

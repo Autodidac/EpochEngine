@@ -42,14 +42,14 @@ module;
 //#include "asoftrenderer_state.hpp"
 //#include "ainput.hpp"
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
+#include <include/engine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 export module software.textures;
 
 import atlas.texture;        // TextureAtlas
 import software.state;   // SoftRendState
-import aengine.platform;    // epochnamespace
-import aengine.input;       // epochnamespace::input
-//import aengine.config; // epochnamespace::input
+import engine.platform;    // epochnamespace
+import engine.input;       // epochnamespace::input
+//import engine.config; // epochnamespace::input
 
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 

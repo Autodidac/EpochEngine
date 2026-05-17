@@ -50,12 +50,12 @@ module;
 
 export module font.renderer;
 
-import aspritehandle;
+import spritehandle;
 
 // import the modules that define these types
 import core.logger;
 import atlas.texture;
-import atexture;
+import texture;
 
 namespace epochnamespace::font
 {

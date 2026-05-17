@@ -42,7 +42,7 @@ module;
 #include <vector>
 
 #if defined(_WIN32)
-#     include <include/aframework.hpp>
+#     include <include/framework.hpp>
 //#   include <windowsx.h>
 //#   include <shellapi.h>
 #   include <commctrl.h>
@@ -54,11 +54,11 @@ module;
 #   include <GL/glx.h>
 #endif
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 export module context.multiplexer;
 
-import aengine.platform;
+import engine.platform;
 import context.type;         // epochnamespace::core::ContextType
 import context.commandqueue; // epochnamespace::core::CommandQueue
 import context.window;       // epochnamespace::core::WindowData

@@ -36,13 +36,13 @@ module;
 #include <atomic>
 #include <memory>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 export module noop.context;
 
 import context.commandqueue;
 import core.context;
-import aengine.diagnostics;
+import engine.diagnostics;
 
 namespace epochnamespace::noopcontext
 {

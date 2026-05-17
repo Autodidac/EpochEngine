@@ -39,8 +39,8 @@
  //
 //#include "pch.h"
 
-#include "../include/aengine.config.hpp"
-#include "../include/aengine.hpp"
+#include "../include/engine.config.hpp"
+#include "../include/engine.hpp"
 #include "../include/epoch.runtime_bridge.hpp"
 
 #if defined(_WIN32)
@@ -86,15 +86,15 @@
 // -----------------------------
 // Engine/module imports
 // -----------------------------
-import aengine.platform;
-//import aengine.config;
+import engine.platform;
+//import engine.config;
 
 import epochengine;
 
-import aengine.cli;
-import aengine.version;
-import aengine.updater;
-import aengine.input;
+import engine.cli;
+import engine.version;
+import engine.updater;
+import engine.input;
 import engine.components;
 
 import context.multiplexer;
@@ -105,26 +105,26 @@ import core.logger;
 import core.time;
 import core.timer;
 
-import aengine.gui;
+import engine.gui;
 import gui.menu;
-import aeditor;
+import editor;
 import render.preview_grid;
 
-import ascene;
+import scene;
 
-import asnakelike;
-import atetrislike;
-import apacmanlike;
-import afroggerlike;
-import asokobanlike;
-import amatch3like;
+import snakelike;
+import tetrislike;
+import pacmanlike;
+import froggerlike;
+import sokobanlike;
+import match3like;
 
-import aslidingpuzzlelike;
-import aminesweeperlike;
+import slidingpuzzlelike;
+import minesweeperlike;
 import a2048like;
 
-import asandsim;
-import acellularsim;
+import sandsim;
+import cellularsim;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import opengl.context;

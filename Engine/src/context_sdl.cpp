@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -28,8 +28,8 @@ import core.context;
 import context.multiplexer;
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-import aengine.gui;
-import aengine.input;
+import engine.gui;
+import engine.input;
 import atlas.manager;
 import atlas.texture;
 import context.commandqueue;

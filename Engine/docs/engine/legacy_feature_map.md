@@ -9,21 +9,21 @@ important behavior while cleaning up the repo.
 - Allocator utilities:
   `Engine/modules/autility.allocator.ixx`
 - Application module registry:
-  `Engine/modules/aapplicationmodule.ixx`
+  `Engine/modules/applicationmodule.ixx`
 - Code inspection helpers:
   `Engine/modules/utility.codeinspector.ixx`
 - Script compiler and reload flow:
   `Engine/modules/scripting.compiler.ixx`,
   `Engine/src/engine.scripting.compiler.cpp`,
-  `Engine/modules/ascripting.system.ixx`
+  `Engine/modules/scripting.system.ixx`
 - File watching:
   `Engine/modules/utility.filewatch.ixx`,
-  `Engine/src/afilewatch.cpp`
+  `Engine/src/filewatch.cpp`
 - Image writing:
   `Engine/modules/image.writer.ixx`,
-  `Engine/modules/aimageatlaswriter.ixx`
+  `Engine/modules/imageatlaswriter.ixx`
 - Mipmap atlas support:
-  `Engine/modules/amipmapatlas.ixx`
+  `Engine/modules/mipmapatlas.ixx`
 - Movement events:
   `Engine/modules/event.movement.ixx`
 - String conversion:
@@ -41,7 +41,7 @@ important behavior while cleaning up the repo.
 - Scene snapshot persistence:
   the old `SceneSnapshot`, serializer, and save/load code was only a partial
   archive surface and does not map cleanly onto the current module-first
-  `ascene` API yet. It should come back only as a modern Epoch scene/history
+  `scene` API yet. It should come back only as a modern Epoch scene/history
   service, not as a direct legacy header transplant.
 
 ## Removed as archive noise

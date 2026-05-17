@@ -31,7 +31,7 @@
 
 module;
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 #if defined(_WIN32)
 #   ifndef VK_USE_PLATFORM_WIN32_KHR
@@ -47,7 +47,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/acontext.vulkan.hpp>
+#include <include/context.vulkan.hpp>
 
 export module vulkan.platform_instance;
 

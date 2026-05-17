@@ -54,7 +54,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/acontext.vulkan.hpp>
+#include <include/context.vulkan.hpp>
 
 #if defined(EPOCH_VULKAN_STANDALONE)
 #   ifndef GLFW_INCLUDE_VULKAN
@@ -79,10 +79,10 @@ import :shared_context;
 
 import context.commandqueue;
 import core.context;
-import aengine.input;
+import engine.input;
 import vulkan.camera;
 import atlas.texture;
-import aspritehandle;
+import spritehandle;
 
 namespace epochnamespace::vulkancontext
 {

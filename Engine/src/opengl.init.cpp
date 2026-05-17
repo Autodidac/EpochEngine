@@ -49,7 +49,7 @@ module;
 
 // NOTE: Keep your engine config include if it sets global compile flags.
 // Do NOT rely on it for Win32 type definitions in a module global fragment.
-#include "../include/aengine.config.hpp"
+#include "../include/engine.config.hpp"
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 // OS + GL headers in global module fragment.
@@ -132,14 +132,14 @@ import context.multiplexer;
 import context.commandqueue;
 import context.window;
 import context.type;
-import aengine.input;
-import aplatformpump;
+import engine.input;
+import platformpump;
 import atlas.manager;
 import atlas.texture;
 import core.commandline;
 import core.logger;
-import aengine.diagnostics;
-import aengine.telemetry;
+import engine.diagnostics;
+import engine.telemetry;
 import opengl.capture;
 import opengl.preview;
 
@@ -178,6 +178,26 @@ namespace epochnamespace::openglcontext
 #if defined(_WIN32)
         inline const wchar_t* gl_child_class_name() noexcept { return L"EpochGLChild"; }
 
+        inline LRESULT CALLBACK gl_child_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
+        {
+            switch (msg)
+            {
+            case WM_ERASEBKGND:
+                return 1;
+
+            case WM_PAINT:
+            {
+                PAINTSTRUCT ps{};
+                ::BeginPaint(hwnd, &ps);
+                ::EndPaint(hwnd, &ps);
+                return 0;
+            }
+
+            default:
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
+        }
+
         inline void ensure_gl_child_class_registered()
         {
             static bool s_registered = false;
@@ -185,9 +205,10 @@ namespace epochnamespace::openglcontext
 
             WNDCLASSEXW wc{};
             wc.cbSize = sizeof(wc);
-            wc.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
-            wc.lpfnWndProc = DefWindowProcW;
+            wc.style = CS_OWNDC;
+            wc.lpfnWndProc = gl_child_proc;
             wc.hInstance = ::GetModuleHandleW(nullptr);
+            wc.hbrBackground = nullptr;
             wc.lpszClassName = gl_child_class_name();
 
             // If it already exists, RegisterClassExW will fail with ERROR_CLASS_ALREADY_EXISTS.

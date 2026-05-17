@@ -78,13 +78,13 @@ the same engine-owned path.
 - backend ownership should stay equally explicit: switching the live editor to a
   different backend should tear down the inactive backend rather than leaving it
   rendering off-screen or parked in the background
-- `aeditor.scene.cpp` should own project profiles, script profiles, runtime
+- `editor.scene.cpp` should own project profiles, script profiles, runtime
   scene ids, and seed entities
-- `aeditor.cpp` should act as the live shell over that scene/project data, not
+- `editor.cpp` should act as the live shell over that scene/project data, not
   as a second hardcoded editor universe
 - current `.epoch` scene/world files are metadata shells only. They must exist
   and be surfaced as evidence, but the live preview/runtime object list is still
-  driven by `aeditor.scene.cpp` seed entities until scene-file loading,
+  driven by `editor.scene.cpp` seed entities until scene-file loading,
   serialization, and project-owned scene authoring are wired end-to-end
 - repo-root `Projects/` is a generated local-project area. The editor can use
   project manifests, build logs, output paths, and `PROJECT_NOTES.md` there as
@@ -277,13 +277,11 @@ the same engine-owned path.
 - legacy `aengine*` naming and older catch-all labels such as `multiplexer`
   should be treated as transitional debt, not as the final public structure
 - source filenames should move toward `engine.*`, `epoch.*`, or
-  subsystem-specific ownership in small tested batches. The old `aengine.*`
-  module/file names remain compatibility debt until each migration batch is
-  small enough to update CMake/MSBuild/filter references safely.
-- current completed filename batch: `engine.cpp`, `engine.context.cpp`,
-  `engine.gui.cpp`, `engine.scripting.compiler.cpp`, and
-  `engine.context.host.{win,linux}.cpp` are the active source implementation
-  paths for the former `aengine*.cpp` files
+  subsystem-specific ownership in small tested batches.
+- current completed filename batch: the former `aengine*` and `aeditor*`
+  headers/modules/source files have been moved to `engine*`, `editor*`, or
+  subsystem-owned paths in CMake and MSBuild. Keep `a2048like` as the explicit
+  module-name exception because numeric-leading modules are invalid.
 - when a subsystem is touched, file names, module names, and exported surfaces
   should move toward consistent professional ownership instead of growing more
   orphan naming
@@ -361,6 +359,9 @@ features over forcing every integration on every machine.
   draw AI Chat, Inspector, menu dropdowns, and scene viewport titles on top.
   Systems graph surfaces now belong only to the central Systems workspace; the
   bottom Console Dock stays a compact evidence/log strip.
+- `v0.84.26` keeps that composition order but makes the central workbench
+  background transparent when a scene-backed surface is active, so the retained
+  GUI batch can draw pane chrome without hiding the 3D/2D preview underneath.
 - When `EPOCH_SINGLE_PARENT=0`, the launch config must force standalone
   top-level contexts even if CLI defaults still prefer parented mode. This mode
   is used to isolate resize/flicker from the single-parent dock host, so any

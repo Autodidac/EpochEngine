@@ -1,10 +1,32 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
  ***********************************************/
 module;
 
@@ -19,15 +41,15 @@ module;
 #include <unordered_map>
 #include <unordered_set>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 export module core.commandline;
 
 import context.type;
-import aengine.version;
+import engine.version;
 import core.logger;
 import core.path;
-import aengine.platform;
+import engine.platform;
 
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1277;
 inline constexpr int DEFAULT_WINDOW_HEIGHT = 1277;

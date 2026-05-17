@@ -1,5 +1,21 @@
 # Epoch Changelog
 
+## [v0.84.26]
+- Bumped the active source line to `v0.84.26` for the repo-wide filename
+  migration sync and scene-preview recovery pass.
+- Completed the current `aengine`/`aeditor` filename migration batch across
+  CMake, MSBuild projects/filters, headers, modules, and source files while
+  preserving the explicit `a2048like` module exception because numeric-leading
+  module names are not valid.
+- Updated executable-root discovery and the glad WinMain bridge to probe the
+  renamed `engine.hpp`/`framework.hpp` headers instead of stale `a*` paths.
+- Kept OpenGL scene-first / GUI-over composition, but made the central scene
+  workbench background transparent for scene-backed surfaces so Perspective and
+  Game/2D previews are not hidden by the retained GUI batch.
+- Validation: `ConsoleApplication1` builds cleanly in MSVC Debug x64. CMake
+  configure/build validation for the Windows MSVC Debug `epoch` target is part
+  of this push gate.
+
 ## [v0.84.25]
 - Bumped the active source line to `v0.84.25` for the editor z-order and Systems
   ownership cleanup pass.
@@ -669,8 +685,8 @@
   six-context parent and could destabilize SDL during detach/redock cycles.
 - Closed the remaining honest Phase 2 checklist items by removing the editor's
   last built-in sample-script fallback from the runtime command path and
-  sourcing the default project shell state from `Engine/src/aeditor.scene.cpp`
-  instead of hardcoded sandbox strings in `Engine/src/aeditor.cpp`.
+  sourcing the default project shell state from `Engine/src/editor.scene.cpp`
+  instead of hardcoded sandbox strings in `Engine/src/editor.cpp`.
 - Updated the README promoted-window proof row so the detached-window shot and a
   live six-context desktop capture now sit side by side, making the docked vs.
   promoted state easier to compare at a glance.
@@ -1225,4 +1241,3 @@
 - Fixed the Win32 SFML redock decision to use the actual mouse-release screen point instead of stale drag history, which was leaving some full-grid runs detached even when the release returned inside the parent window.
 - Switched Win32 proxy drag tracking to the real screen cursor for detached SDL/SFML-style child drags so grabbed panes stop drifting or “running away” as their host/child relationship changes during undock.
 - Clarified the AI workspace with explicit eval-suite visibility plus staged capture and promotion paths in the editor log so the EpochBot/MCP flow stays reviewable instead of reading like blind autonomy.
-

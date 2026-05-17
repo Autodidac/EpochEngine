@@ -37,7 +37,7 @@ module;
 #include <algorithm>
 
 // Global module fragment: macros + native headers only.
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
@@ -58,7 +58,7 @@ module;
 // - DO NOT include any GL headers here.
 // - DO NOT include GL/wglext.h here.
 // This module only needs core WGL + Win32 types and functions.
-#include <aframework.hpp>
+#include <framework.hpp>
 #include <wingdi.h>
 
 #elif defined(__linux__)

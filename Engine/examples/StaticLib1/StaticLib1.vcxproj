@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -72,7 +72,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <EpochExtraDefines></EpochExtraDefines>
+    <EpochExtraDefines>
+    </EpochExtraDefines>
   </PropertyGroup>
   <PropertyGroup Condition="'$(EpochUpdaterShell)'=='true'">
     <EpochExtraDefines>EPOCH_UPDATER_SHELL_BUILD=1;$(EpochExtraDefines)</EpochExtraDefines>
@@ -99,6 +100,7 @@
     <VcpkgEnableManifest>true</VcpkgEnableManifest>
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='x64'">x64-windows</VcpkgTriplet>
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='Win32'">x86-windows</VcpkgTriplet>
+    <VcpkgManifestInstall>false</VcpkgManifestInstall>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64' or '$(Configuration)|$(Platform)'=='Release|x64'">
     <EpochVcpkgInstallRoot>$(SolutionDir)Engine\vcpkg_installed\$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
@@ -212,6 +214,134 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="StaticLib1.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\2048like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\a2048like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\applicationmodule.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\cellularsim.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\ecs.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\editor.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\enduserapplication.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.bindings.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.cli.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.diagnostics.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.eventsystem.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.gui.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.handles.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.input.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.platform.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.systems.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.telemetry.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.updater.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.version.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\entity.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\framework.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\froggerlike.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\gamecore.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\imageatlaswriter.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\match3like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\minesweeperlike.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\mipmapatlas.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\mpmcboundedqueue.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\pacmanlike.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\platformpump.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\sandsim.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\scene.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\sceneserializer.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\scenesnapshot.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\scripting.system.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\slidingpuzzlelike.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\snakelike.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\sokobanlike.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\spritehandle.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\spriteregistry.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\tetrislike.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\texture.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

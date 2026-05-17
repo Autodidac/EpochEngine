@@ -6,7 +6,7 @@ module;
 
 export module software.context;
 
-import aspritehandle;
+import spritehandle;
 import atlas.texture;
 import core.context;
 import context.commandqueue;

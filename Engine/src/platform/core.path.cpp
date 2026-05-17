@@ -142,7 +142,7 @@ namespace epoch::core::path
     {
         const path root = candidate.lexically_normal();
         return exists_noerr(root / "Engine" / "CMakeLists.txt")
-            && exists_noerr(root / "Engine" / "include" / "aengine.hpp")
+            && exists_noerr(root / "Engine" / "include" / "engine.hpp")
             && exists_noerr(root / "Engine" / "examples" / "ConsoleApplication1" / "main.cpp");
     }
 

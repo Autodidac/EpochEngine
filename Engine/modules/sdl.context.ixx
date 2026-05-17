@@ -69,7 +69,7 @@ module;
 #  endif
 #endif
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 #include <chrono>
 
@@ -78,7 +78,7 @@ module;
 export module sdl.context;
 
 // Project
-import aengine.platform;              // fine, but does NOT replace windows.h for this TU
+import engine.platform;              // fine, but does NOT replace windows.h for this TU
 import core.context;
 import context.window;
 import context.commandqueue;
@@ -91,8 +91,8 @@ import context.multiplexer;   // MakeDockable(...)
 import core.commandline;
 import core.logger;
 import image.writer;
-import aengine.diagnostics;
-import aengine.telemetry;
+import engine.diagnostics;
+import engine.telemetry;
 import render.preview_grid;
 
 // Std

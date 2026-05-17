@@ -72,7 +72,7 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 - GitHub source archives stay full source snapshots. Do not slim them down to
   imitate runtime/bootstrap packages.
 - Commit titles stay descriptive and versionless. Version numbers belong in:
-  - `Engine/modules/aengine.version.ixx`
+  - `Engine/modules/engine.version.ixx`
   - README/public version badges
   - changelog/release notes
   - release tags
@@ -387,14 +387,10 @@ engine shape and should be treated as starting truth for the next passes:
   route through the same control-surface activation path so Inspector, AI Chat,
   and the Console Dock are reopened together before self-iteration controls are
   shown.
-- the remaining `aengine.*` naming migration is a filename/source layout task,
-  not an internal namespace or log-category rename. Future passes should move
-  files in small, build-verified batches and update CMake/MSBuild filters
-  together.
-- the first source-implementation filename batch has moved the main engine,
-  context, GUI, scripting compiler, and context-host `.cpp` files to
-  `engine.*` paths. Module/header filenames and import names remain compatibility
-  debt for later batches.
+- the `aengine`/`aeditor` filename migration is now completed for the current
+  source/header/module/project-file batch, including CMake and MSBuild filters.
+  Keep `a2048like` as the explicit module-name exception because module names
+  cannot start with digits.
 - Outliner and Inspector sizing is splitter-owned; stale `Narrow`/`Wide`
   buttons have been removed, and generic scroll areas plus scroll-text panels
   now have first-pass clickable/draggable scrollbars instead of decorative-only
@@ -433,10 +429,11 @@ engine shape and should be treated as starting truth for the next passes:
   render-to-texture/game-arcade assets, not migrated into loose project script
   source.
 - current GUI/render observations from manual runs: launcher flicker is reported
-  resolved, but AI Chat, Inspector, and Perspective pane visibility/title chrome
-  still need eye-test confirmation after the `v0.84.25` scene-first/GUI-over
-  composition patch. Graph surfaces also need stronger data density, design
-  polish, and performance.
+  resolved, but AI Chat, Inspector, Perspective pane visibility/title chrome,
+  and the transparent scene-backed workbench change still need eye-test
+  confirmation after the `v0.84.26` filename/scene-preview recovery patch.
+  Graph surfaces also need stronger data density, design polish, and
+  performance.
 - Console Dock is only a temporary evidence/log strip. Output should remain a
   plain scrollable log, and Systems graph UI belongs in the central Systems
   workspace rather than duplicated inside the dock.

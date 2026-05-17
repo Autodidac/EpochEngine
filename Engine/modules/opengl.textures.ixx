@@ -50,7 +50,7 @@ module;
 // Global module fragment: macros + platform / C headers live here.
 // -----------------------------------------------------------------------------
 
-#include "../include/aengine.config.hpp"
+#include "../include/engine.config.hpp"
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
@@ -77,11 +77,11 @@ module;
 
 export module opengl.textures;
 
-import aengine.platform;
+import engine.platform;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) && (EPOCH_USING_OPENGL == 1)
 
-import aengine.cli;
+import engine.cli;
 import context.type;
 import core.context;
 import context.multiplexer;
@@ -91,9 +91,9 @@ import opengl.state;
 import opengl.quad;
 import atlas.manager;
 import atlas.texture;
-import atexture;
+import texture;
 import image.loader;
-import aspritehandle;
+import spritehandle;
 import core.logger;
 
 // If u32/u64 are yours and not from <cstdint>, you must import the module that
@@ -415,16 +415,21 @@ export namespace epochnamespace::opengltextures
 
         auto& backend = get_opengl_backend();
         epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
-        const bool hasCurrentContext = (::glGetString(GL_VERSION) != nullptr);
-        if (!hasCurrentContext) {
-            auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
-            if (!desired.valid()) {
-                desired = detail::to_platform_context(backend.glState);
-            }
-            if (!desired.valid() || !contextGuard.set(desired)) {
+
+        auto desired = detail::context_to_platform_context(core::MultiContextManager::GetCurrent().get());
+        if (!desired.valid()) {
+            desired = detail::to_platform_context(backend.glState);
+        }
+
+        const auto current = epochnamespace::openglcontext::PlatformGL::get_current();
+        if (desired.valid() && current != desired) {
+            if (!contextGuard.set(desired)) {
                 log_draw_skip("activate_context");
                 return;
             }
+        } else if (!current.valid()) {
+            log_draw_skip("missing_context");
+            return;
         }
 
         if (!ensure_created_pipeline(backend.glState)) {
@@ -432,19 +437,15 @@ export namespace epochnamespace::opengltextures
             return;
         }
 
-        GLint viewport[4] = { 0, 0, 0, 0 };
-        glGetIntegerv(GL_VIEWPORT, viewport);
-        int w = viewport[2];
-        int h = viewport[3];
-
-        if (w <= 0 || h <= 0) {
-            w = static_cast<int>(backend.glState.width);
-            h = static_cast<int>(backend.glState.height);
-        }
-        if (w <= 0 || h <= 0) {
-            if (auto ctx = core::MultiContextManager::GetCurrent()) {
-                w = (std::max)(1, ctx->get_width_safe());
-                h = (std::max)(1, ctx->get_height_safe());
+        int w = static_cast<int>(backend.glState.width);
+        int h = static_cast<int>(backend.glState.height);
+        if (auto ctx = core::MultiContextManager::GetCurrent()) {
+            if (ctx->framebufferWidth > 0 && ctx->framebufferHeight > 0) {
+                w = ctx->framebufferWidth;
+                h = ctx->framebufferHeight;
+            } else {
+                w = (std::max)(w, ctx->get_width_safe());
+                h = (std::max)(h, ctx->get_height_safe());
             }
         }
         if (w <= 0 || h <= 0) {
@@ -458,6 +459,8 @@ export namespace epochnamespace::opengltextures
 
         backend.glState.width = static_cast<unsigned int>(w);
         backend.glState.height = static_cast<unsigned int>(h);
+        glViewport(0, 0, w, h);
+        glDisable(GL_SCISSOR_TEST);
 
         const int atlasIdx = int(handle.atlasIndex);
         const int localIdx = int(handle.localIndex);

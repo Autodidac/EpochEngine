@@ -626,7 +626,7 @@ systems.
 - [Engine/src/scripts/rotate_all_entities.ascript.cpp](../Engine/src/scripts/rotate_all_entities.ascript.cpp)
 - [Engine/modules/epoch.render.preview_grid.ixx](../Engine/modules/epoch.render.preview_grid.ixx)
 - [Engine/src/engine.cpp](../Engine/src/engine.cpp)
-- [Engine/src/aeditor.cpp](../Engine/src/aeditor.cpp)
+- [Engine/src/editor.cpp](../Engine/src/editor.cpp)
 - [Engine/modules/aengine.updater.system.ixx](../Engine/modules/aengine.updater.system.ixx)
 
 ## Verification

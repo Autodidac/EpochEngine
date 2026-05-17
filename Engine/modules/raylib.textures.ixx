@@ -44,7 +44,7 @@ module;
 #include <utility>
 #include <vector>
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -64,7 +64,7 @@ import context.type;
 import atlas.manager;
 import atlas.texture;
 import image.loader;
-import atexture;
+import texture;
 import core.logger;
 import raylib.api;
 import raylib.state;

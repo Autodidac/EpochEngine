@@ -39,7 +39,7 @@ export module ecs.internal_private;
 import ecs.storage;
 import core.logger;
 import core.timer;
-import aengine.eventsystem;
+import engine.eventsystem;
 
 namespace epochnamespace::ecs::_detail
 {

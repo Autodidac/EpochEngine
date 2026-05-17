@@ -36,7 +36,7 @@
 
 module;
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 #if defined(_WIN32) && defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
@@ -47,7 +47,7 @@ module;
 #define NOMINMAX
 #endif
 
-#include <include/aframework.hpp>
+#include <include/framework.hpp>
 
 #endif
 

@@ -9,7 +9,7 @@ module;
 #include <string_view>
 #include <utility>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -19,7 +19,7 @@ module;
 #       define NOMINMAX
 #   endif
 #   ifdef EPOCH_USING_WINMAIN
-#       include "../include/aframework.hpp"
+#       include "../include/framework.hpp"
 #   endif
 #endif
 
@@ -33,7 +33,7 @@ module;
 module core.context;
 
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
-import aengine.input;
+import engine.input;
 import atlas.manager;
 import core.logger;
 import vulkan.context;

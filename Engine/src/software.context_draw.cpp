@@ -5,11 +5,11 @@ module;
 #include <cstdint>
 #include <span>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 module software.context;
 
-import aspritehandle;
+import spritehandle;
 import atlas.texture;
 import software.state;
 

@@ -62,7 +62,7 @@ module;
 #  endif
 #endif
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 #define SFML_STATIC
 #include <SFML/Graphics/RenderWindow.hpp>
@@ -87,9 +87,9 @@ import atlas.texture;
 import image.writer;
 import sfml.state;
 import sfml.textures;
-import aengine.diagnostics;
+import engine.diagnostics;
 import core.logger;
-import aengine.telemetry;
+import engine.telemetry;
 import render.preview_grid;
 
 

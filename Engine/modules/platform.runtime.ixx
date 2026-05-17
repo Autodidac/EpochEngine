@@ -36,7 +36,7 @@ module;
 export module platform.runtime;
 
 import core.logger;
-import aengine.platform;
+import engine.platform;
 import core.format;
 import perf.select;
 import perf.tier;

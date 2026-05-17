@@ -35,8 +35,8 @@ module;
 
 export module event.movement;
 
-import aengine.platform;
-import aecs;
+import engine.platform;
+import ecs;
 import ecs.storage;
 import core.logger;
 

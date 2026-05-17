@@ -34,14 +34,14 @@ module;
 #include <cstdint>
 #include <span>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 export module raylib.renderer;
 
 import raylib.state;
 import raylib.textures;
 import atlas.texture;
-import aspritehandle;
+import spritehandle;
 import raylib.api;
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)

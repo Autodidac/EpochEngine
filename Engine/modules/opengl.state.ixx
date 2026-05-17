@@ -35,7 +35,7 @@ module;
 #include <functional>
 
 // Global module fragment: macros + native headers + GL typedefs only.
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 

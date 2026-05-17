@@ -40,7 +40,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/acontext.vulkan.hpp>
+#include <include/context.vulkan.hpp>
 #include <compare>
 #include <vulkan/vulkan.hpp>
 
@@ -57,7 +57,7 @@ namespace epochnamespace::vulkancontext
 {
     void Application::createVertexBuffer()
     {
-        const auto vertices = preview_vertices_for(bound_context());
+        const auto vertices = epochnamespace::vulkancontext::preview_vertices_for(bound_context());
         if (vertices.empty())
             throw std::runtime_error("[ Vulkan ] - No vertex data available.");
 

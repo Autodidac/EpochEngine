@@ -49,7 +49,7 @@ module;
 #include <vector>
 
 // configuration
-#include "..\\include\\aengine.config.hpp"
+#include "..\\include\\engine.config.hpp"
 
 //#include "aplatform.hpp"
 //#include "aengineconfig.hpp"
@@ -59,16 +59,16 @@ module;
 //#include "atexture.hpp"
 export module sdl.textures;
 
-import aengine.platform;
-//import aengine.config;
+import engine.platform;
+//import engine.config;
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 
 import atlas.manager;
 import atlas.texture;
 import image.loader;
-import atexture;
-import aspritehandle;
+import texture;
+import spritehandle;
 import core.logger;
 
 import sdl.renderer;

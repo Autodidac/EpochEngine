@@ -9,12 +9,12 @@ module;
 #include <string_view>
 #include <utility>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 module core.context;
 
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-import aengine.input;
+import engine.input;
 import atlas.manager;
 import core.logger;
 import software.context;

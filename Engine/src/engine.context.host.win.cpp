@@ -31,11 +31,11 @@
  // context.multiplexer.win.cpp  (TU implementation; NOT a module partition)
  //
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 #if defined(_WIN32)
 #   ifdef EPOCH_USING_WINMAIN
-#       include <include/aframework.hpp>
+#       include <include/framework.hpp>
 #   endif
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN
@@ -72,19 +72,19 @@
 #endif
 
 
-import aengine.platform;
+import engine.platform;
 import utility.string_converter;
 
-import aengine.cli;
+import engine.cli;
 import core.context;
 import core.logger;
-import aengine.gui;
+import engine.gui;
 
 import context.commandqueue;
 import context.multiplexer;
 import context.type;
 import context.window;
-import aengine.telemetry;
+import engine.telemetry;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import opengl.context;

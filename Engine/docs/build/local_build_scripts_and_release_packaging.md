@@ -69,7 +69,7 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 - sync with `origin/main` if the local branch has drifted
 - keep unrelated dirt out of the commit
 - commit only stable, verified changes
-- bump `Engine/modules/aengine.version.ixx`
+- bump `Engine/modules/engine.version.ixx`
 - use a descriptive commit title without baking the version number into the
   commit message
 - rebuild `ConsoleApplication1` in both `Debug|x64` and `Release|x64`
@@ -174,7 +174,7 @@ Keep these identities separate:
 
 Version numbers belong in:
 
-- `Engine/modules/aengine.version.ixx`
+- `Engine/modules/engine.version.ixx`
 - README/public version badges
 - changelog/release notes
 - release tags

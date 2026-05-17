@@ -4,7 +4,7 @@ export module epochengine;
 
 //export import aengine;
 // export import other public-facing modules if you want:
-// export import aengine.gui;
+// export import engine.gui;
 // export import core.context;
 // primary modules
 
@@ -12,15 +12,15 @@ import core.context;
 
 import atlas.manager;
 import atlas.texture;
-import aspriteregistry;
-import atexture;
-import ascripting.system;
+import spriteregistry;
+import texture;
+import scripting.system;
 import taskgraph.dotsystem;
 import updater.system;
 import opengl.context;
 
 // application modules
-import aapplicationmodule;
+import applicationmodule;
 
 
 // this is required for module linkage

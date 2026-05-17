@@ -31,7 +31,7 @@
 
 module;
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 // This module uses Vk* and PFN_* types => MUST include Vulkan C header.
 #if defined(_WIN32)
@@ -43,12 +43,12 @@ module;
 #include <compare>
 #include <vulkan/vulkan.h>
 
-#include <include/aframework.hpp>
+#include <include/framework.hpp>
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/acontext.vulkan.hpp>
+#include <include/context.vulkan.hpp>
 
 export module vulkan.platform_dispatcher;
 

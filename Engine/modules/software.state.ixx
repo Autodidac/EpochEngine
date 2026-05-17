@@ -41,12 +41,12 @@ module;
 
 //#include "aplatform.hpp"
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros   // may bring in <windows.h>, etc.
+#include <include/engine.config.hpp> // for EPOCH_USING Macros   // may bring in <windows.h>, etc.
 //#include "arobusttime.hpp"     // time::Timer, time::createTimer(...)
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 #   if defined(_WIN32)
 #       ifdef EPOCH_USING_WINMAIN
-#         include "aframework.hpp"
+#         include "framework.hpp"
 #       endif
 #       ifndef WIN32_LEAN_AND_MEAN
 #           define WIN32_LEAN_AND_MEAN
@@ -57,7 +57,7 @@ module;
 export module software.state;
 
 
-//import aengine.platform;
+//import engine.platform;
 import core.context;
 import core.timer;
 

@@ -47,7 +47,7 @@ building during the migration.
 
 Backend-specific confirmation switches for OpenGL, SFML, SDL, Raylib, software,
 and Vulkan inherit from the master backend confirmation macro unless you
-override them locally in `aengine.config.hpp`.
+override them locally in `engine.config.hpp`.
 
 ## Backend support snapshot
 

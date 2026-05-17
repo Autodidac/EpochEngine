@@ -48,12 +48,12 @@ module;
 #   endif
 #endif
 
-#include "../include/aengine.hpp"                 // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
-#include "../include/aengine.config.hpp"          // EPOCH_USING_* macros (fix path; do not use <include/...>)
+#include "../include/engine.hpp"                 // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
+#include "../include/engine.config.hpp"          // EPOCH_USING_* macros (fix path; do not use <include/...>)
 
 #if defined(_WIN32)
 #   ifdef EPOCH_USING_WINMAIN
-#       include "aframework.hpp"
+#       include "framework.hpp"
 #   endif
 #endif
 

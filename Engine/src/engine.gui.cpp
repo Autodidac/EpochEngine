@@ -52,7 +52,7 @@ module;
 #include <utility>
 #include <vector>
 
-module aengine.gui;
+module engine.gui;
 
 import context.type;
 import core.context;
@@ -66,9 +66,9 @@ import core.path;
 import core.logger;
 import font.renderer;
 import sprite.pool;
-import aspriteregistry;
-import aspritehandle;
-import atexture;
+import spriteregistry;
+import spritehandle;
+import texture;
 
 namespace epochnamespace::gui
 {
@@ -399,7 +399,8 @@ namespace epochnamespace::gui
         [[nodiscard]] static bool uses_deferred_gui_batch(const core::Context* ctx) noexcept
         {
             return ctx
-                && (ctx->type == core::ContextType::Software
+                && (ctx->type == core::ContextType::OpenGL
+                    || ctx->type == core::ContextType::Software
                     || ctx->type == core::ContextType::SDL
                     || ctx->type == core::ContextType::SFML
                     || ctx->type == core::ContextType::RayLib
@@ -1809,6 +1810,11 @@ namespace epochnamespace::gui
 
     void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept
     {
+        begin_window(title, position, size, true);
+    }
+
+    void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background) noexcept
+    {
         if (!g_frame.ctx) return;
 
         try { ensure_resources(); }
@@ -1823,7 +1829,8 @@ namespace epochnamespace::gui
         g_frame.contentMax = { position.x + size.x, position.y + size.y };
         const auto& palette = active_palette();
 
-        draw_sprite(palette.windowBackground, position.x, position.y, size.x, size.y);
+        if (draw_background)
+            draw_sprite(palette.windowBackground, position.x, position.y, size.x, size.y);
 
         const bool hasTitleBar = !title.empty();
         float titleBarHeight = 0.0f;
@@ -2897,5 +2904,3 @@ namespace epochnamespace::gui
         return result;
     }
 } // namespace epochnamespace::gui
-
-

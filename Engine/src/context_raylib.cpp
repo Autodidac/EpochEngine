@@ -3,10 +3,10 @@
 #include <memory>
 #include <string>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
-import aengine.gui;
-import aengine.input;
+import engine.gui;
+import engine.input;
 import atlas.texture;
 import core.context;
 import image.loader;

@@ -45,7 +45,7 @@ module;
 #include <unordered_map>
 #include <vector>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 #define SFML_STATIC
@@ -54,15 +54,15 @@ module;
 
 export module sfml.textures;
 
-import aengine.platform;
+import engine.platform;
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 
 import atlas.manager;
 import atlas.texture;
 import image.loader;
-import atexture;
-import aspritehandle;
+import texture;
+import spritehandle;
 import core.logger;
 
 import sfml.state;

@@ -253,7 +253,7 @@ The working commit/push pattern is:
 
 - sync with `origin/main`
 - keep unrelated dirt out of the pass
-- bump `aengine.version.ixx`
+- bump `engine.version.ixx`
 - keep `Changes/roadmap.md` current when the steering surface changes
 - update README/docs/changelog when the behavior is user-visible
 - use a descriptive commit title without baking the version number into the

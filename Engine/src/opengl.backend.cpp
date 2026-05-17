@@ -8,12 +8,12 @@ module;
 #include <string>
 #include <string_view>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 module opengl.backend;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-import aengine.input;
+import engine.input;
 import atlas.manager;
 import atlas.texture;
 import context.commandqueue;

@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -36,8 +36,8 @@ module;
 
 export module updater.config;
 
-import aengine.platform;
-import aengine.version;
+import engine.platform;
+import engine.version;
 
 namespace epochnamespace::updater
 {
@@ -119,7 +119,7 @@ namespace epochnamespace::updater
 
     export inline std::string SOURCE_VERSION_FILE_NAME()
     {
-        return "Engine/modules/aengine.version.ixx";
+        return "Engine/modules/engine.version.ixx";
     }
 
     export inline std::string SOURCE_MAIN_FILE()
@@ -153,7 +153,7 @@ namespace epochnamespace::updater
         return std::string{ GITHUB_RAW_BASE }
             + std::string{ OWNER } + "/"
             + std::string{ REPO } + "/"
-            + std::string{ BRANCH } + "/Engine/modules/aengine.version.ixx";
+            + std::string{ BRANCH } + "/Engine/modules/engine.version.ixx";
     }
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()

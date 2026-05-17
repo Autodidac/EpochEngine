@@ -660,7 +660,7 @@ static void* get_proc(const char *namez);
 #undef APIENTRY
 #endif
 #ifdef ALMOND_USING_WINMAIN
-#include "../../../include/aframework.hpp"
+#include "../../../include/framework.hpp"
 #endif
 static HMODULE libGL;
 

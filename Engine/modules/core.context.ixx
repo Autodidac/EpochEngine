@@ -45,7 +45,7 @@ module;
 #include <utility>
 #include <vector>
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
 // Preprocessor hygiene MUST come before windows.h
@@ -60,7 +60,7 @@ module;
 #   endif
 
     // Optional: if you still need your framework helpers, include it AFTER windows.h
-#   include <include/aframework.hpp>
+#   include <include/framework.hpp>
 #   ifdef min
 #       undef min
 #   endif
@@ -78,10 +78,10 @@ import context.type;
 import context.commandqueue;
 import context.window;
 import utility.atomicfunction;
-import aengine.input;
+import engine.input;
 import atlas.texture;
 import atlas.manager;   // reacquire atlas vector inside queued draw
-import aspritehandle;
+import spritehandle;
 import image.loader;
 
 namespace epochnamespace::core
@@ -156,7 +156,6 @@ namespace epochnamespace::core
     export class Context
     {
         friend class MultiContextManager;
-        friend class aengine;
 
     public:
         using InitializeFunc = void(*)();

@@ -54,11 +54,11 @@ import :texture;
 
 import core.context;
 import core.logger;
-import aengine.diagnostics;
-import aengine.telemetry;
+import engine.diagnostics;
+import engine.telemetry;
 import atlas.manager;
 import atlas.texture;
-import aspritehandle;
+import spritehandle;
 import context.commandqueue;
 
 

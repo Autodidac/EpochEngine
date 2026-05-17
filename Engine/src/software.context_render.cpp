@@ -6,16 +6,16 @@ module;
 #include <string>
 #include <vector>
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 module software.context;
 
 import core.context;
 import context.commandqueue;
 import software.state;
-import aengine.diagnostics;
-import aengine.gui;
-import aengine.telemetry;
+import engine.diagnostics;
+import engine.gui;
+import engine.telemetry;
 import render.preview_grid;
 
 namespace epochnamespace::anativecontext

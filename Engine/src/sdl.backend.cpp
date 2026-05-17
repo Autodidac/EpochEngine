@@ -17,12 +17,12 @@ module;
 #   include <windows.h>
 #endif
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 module sdl.backend;
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-import aengine.input;
+import engine.input;
 import atlas.texture;
 import core.context;
 import core.logger;

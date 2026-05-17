@@ -35,7 +35,7 @@ module;
 #include <source_location>
 
 // Global module fragment: macros + headers only.
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
     // IMPORTANT:
@@ -49,8 +49,8 @@ module;
 
 export module opengl.renderer;
 
-import aengine.platform;
-import aengine.cli;
+import engine.platform;
+import engine.cli;
 import core.context;
 import core.logger;
 
@@ -59,7 +59,7 @@ import opengl.state;
 import opengl.quad;
 import opengl.textures;
 
-import aspritehandle;
+import spritehandle;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 

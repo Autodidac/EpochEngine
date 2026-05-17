@@ -42,13 +42,13 @@ module;
 #include <vector>
 
 //#include "aplatform.hpp"
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 export module software.renderer;
 
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
-import aengine.platform;
+import engine.platform;
 
 // Provides TexturePtr / Texture (with sample(), width/height).
 // If your textures unit is named differently, change this import to match.

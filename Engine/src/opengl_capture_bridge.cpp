@@ -1,6 +1,6 @@
 #include "opengl_capture_bridge.hpp"
 
-#include <include/aengine.config.hpp>
+#include <include/engine.config.hpp>
 
 #if defined(_MSC_VER)
 namespace epochnamespace::openglbridge

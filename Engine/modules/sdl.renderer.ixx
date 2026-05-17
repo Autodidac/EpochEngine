@@ -38,11 +38,11 @@ module;
 #include <utility>
 #include <SDL3/SDL.h>
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
+#include <include/engine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 
 export module sdl.renderer;
 
-//import aengine.config;
+//import engine.config;
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import core.context;

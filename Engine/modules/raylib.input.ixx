@@ -41,13 +41,13 @@ module;
 #include <mutex>
 #include <shared_mutex>
 
-#include <include/aengine.config.hpp> // for EPOCH_USING_RAYLIB
+#include <include/engine.config.hpp> // for EPOCH_USING_RAYLIB
 
 export module raylib.input;
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 import raylib.api;
-import aengine.input;
+import engine.input;
 
 namespace epochnamespace::raylibcontext
 {

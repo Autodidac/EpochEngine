@@ -56,7 +56,7 @@ module;
 // Win32 has BOOL CloseWindow(HWND). Raylib has void CloseWindow(void).
 // Prevent the collision in this TU by temporarily renaming Win32's symbol name during header include.
 //#   define CloseWindow CloseWindow_Win32
-#   include <include/aframework.hpp>
+#   include <include/framework.hpp>
 //#   undef CloseWindow
 
 #   include <wingdi.h> // HGLRC + wgl*
@@ -68,7 +68,7 @@ module;
 #   endif
 #endif
 
-#include <include/aengine.config.hpp> // for EPOCH_USING Macros
+#include <include/engine.config.hpp> // for EPOCH_USING Macros
 
 export module raylib.context;
 
@@ -77,7 +77,7 @@ import core.commandline;
 import core.logger;
 import context.type;
 import context.multiplexer;
-import aengine.diagnostics;
+import engine.diagnostics;
 import atlas.manager;
 import image.writer;
 import render.preview_grid;
