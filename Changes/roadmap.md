@@ -429,11 +429,11 @@ engine shape and should be treated as starting truth for the next passes:
   render-to-texture/game-arcade assets, not migrated into loose project script
   source.
 - current GUI/render observations from manual runs: launcher flicker is reported
-  resolved, but AI Chat, Inspector, Perspective pane visibility/title chrome,
-  and the transparent scene-backed workbench change still need eye-test
-  confirmation after the `v0.84.26` filename/scene-preview recovery patch.
-  Graph surfaces also need stronger data density, design polish, and
-  performance.
+  resolved. The `v0.84.27` pass restores a scene-backed default startup surface
+  because the Project evidence surface intentionally clears the scene viewport;
+  AI Chat, Inspector, Perspective pane visibility/title chrome, and the
+  transparent scene-backed workbench still need eye-test confirmation. Graph
+  surfaces also need stronger data density, design polish, and performance.
 - Console Dock is only a temporary evidence/log strip. Output should remain a
   plain scrollable log, and Systems graph UI belongs in the central Systems
   workspace rather than duplicated inside the dock.

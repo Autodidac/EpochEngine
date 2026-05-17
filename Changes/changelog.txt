@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.84.27]
+- Bumped the active source line to `v0.84.27` for the editor render recovery
+  pass after the filename migration.
+- Restored scene-backed startup behavior: when no `EPOCH_EDITOR_START_WORKSPACE`
+  override is present, the editor opens with the live Perspective surface
+  instead of the Project evidence surface that intentionally clears the scene
+  viewport.
+- Routed the bottom dock `Output` tab back to the scene workbench so the editor
+  has an obvious recovery path from evidence-only Project/System surfaces to a
+  live Perspective viewport.
+- Moved OpenGL queued work ahead of scene-preview rendering so pending backend
+  setup/upload commands are applied before the scissored Perspective/Game/2D
+  viewport draw, while GUI still renders after the scene.
+
 ## [v0.84.26]
 - Bumped the active source line to `v0.84.26` for the repo-wide filename
   migration sync and scene-preview recovery pass.

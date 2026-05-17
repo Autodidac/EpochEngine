@@ -37,6 +37,13 @@ the same engine-owned path.
 
 - the editor should play the active project and scene, not a hardcoded sample
   game menu
+- when no `EPOCH_EDITOR_START_WORKSPACE` override is set, the editor should
+  start on a scene-backed Perspective surface; evidence-only Project/System
+  surfaces may temporarily clear the scene viewport, but they must not be the
+  default first-run view
+- the bottom dock `Output` tab is also a scene-workbench recovery path; a user
+  should not need command-line arguments to get back to the live Perspective
+  viewport after inspecting project or systems evidence
 - `Play Project` should reject non-project scene ids from the editor path so the
   live shell cannot quietly fall back to built-in sample launches
 - built-in sample games should move behind project templates or script actions

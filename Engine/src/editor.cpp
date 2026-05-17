@@ -265,14 +265,14 @@ namespace epochnamespace
                     return EditorWorkspaceTab::Assets;
                 if (value == "Output" || value == "output")
                     return EditorWorkspaceTab::Output;
-                return EditorWorkspaceTab::Project;
+                return EditorWorkspaceTab::Output;
             };
 
 #if defined(_MSC_VER)
             char* rawValue = nullptr;
             std::size_t rawSize = 0;
             if (_dupenv_s(&rawValue, &rawSize, "EPOCH_EDITOR_START_WORKSPACE") != 0 || !rawValue)
-                return EditorWorkspaceTab::Project;
+                return EditorWorkspaceTab::Output;
 
             const EditorWorkspaceTab tab = parse_workspace_tab(std::string_view{ rawValue });
             std::free(rawValue);
@@ -280,7 +280,7 @@ namespace epochnamespace
 #else
             const char* const rawValue = std::getenv("EPOCH_EDITOR_START_WORKSPACE");
             if (!rawValue)
-                return EditorWorkspaceTab::Project;
+                return EditorWorkspaceTab::Output;
 
             return parse_workspace_tab(std::string_view{ rawValue });
 #endif
@@ -301,7 +301,7 @@ namespace epochnamespace
                 return EditorMainSurface::Project;
             case EditorWorkspaceTab::Output:
             default:
-                return EditorMainSurface::Project;
+                return EditorMainSurface::Scene;
             }
         }
 
@@ -4616,6 +4616,7 @@ namespace epochnamespace
                 break;
             case EditorWorkspaceTab::Output:
             default:
+                open_editor_surface(EditorMainSurface::Scene, "bottom dock");
                 break;
             }
         }
