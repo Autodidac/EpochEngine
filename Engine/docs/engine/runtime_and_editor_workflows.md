@@ -32,6 +32,10 @@ the same engine-owned path.
 - source checkout installs still use the same binary-first rule; only after
   packaged parity or absence of a newer package should they rebuild from the
   GitHub source snapshot using the platform build path
+- OpenGL editor composition follows the GitHub-good queued path: draw the
+  scene preview first, then drain the normal GUI command queue. Do not route
+  OpenGL through the deferred GUI batch unless a future pass proves the full
+  scene/GUI/popup ordering with visual evidence.
 
 ## Project-centric runtime direction
 

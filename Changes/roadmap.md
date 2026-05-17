@@ -429,8 +429,9 @@ engine shape and should be treated as starting truth for the next passes:
   render-to-texture/game-arcade assets, not migrated into loose project script
   source.
 - current GUI/render observations from manual runs: launcher flicker is reported
-  resolved. The `v0.84.27` pass restores a scene-backed default startup surface
-  because the Project evidence surface intentionally clears the scene viewport;
+  resolved. The `v0.84.28` pass compares against the GitHub-good
+  multicontext baseline and removes OpenGL from the deferred GUI batch path;
+  OpenGL should render scene preview first and then drain normal queued GUI.
   AI Chat, Inspector, Perspective pane visibility/title chrome, and the
   transparent scene-backed workbench still need eye-test confirmation. Graph
   surfaces also need stronger data density, design polish, and performance.

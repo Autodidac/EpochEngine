@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.84.28]
+- Bumped the active source line to `v0.84.28` for the OpenGL composition
+  rollback after comparing against the GitHub-good multicontext baseline.
+- Removed OpenGL from the deferred GUI batch path; OpenGL now follows the
+  previously working model where the scene preview renders first and the normal
+  queued GUI draws afterward.
+- Restored OpenGL frame order to `render_scene_preview -> queue.drain`, keeping
+  the filename migration while dropping the mistaken deferred-batch routing
+  that could leave the scene/GUI composition hidden or unstable.
+
 ## [v0.84.27]
 - Bumped the active source line to `v0.84.27` for the editor render recovery
   pass after the filename migration.
