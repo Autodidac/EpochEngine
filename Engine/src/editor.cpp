@@ -3730,29 +3730,27 @@ namespace epochnamespace
             }
         }
 
+        auto render_titlebar_close = [&](gui::Vec2 panel_pos, gui::Vec2 panel_size, auto&& close_handler)
+        {
+            if (panel_size.x < 48.0f || panel_size.y < 28.0f)
+                return;
+
+            const gui::Vec2 restore = gui::cursor_position();
+            gui::set_cursor({ panel_pos.x + (std::max)(0.0f, panel_size.x - 34.0f), restore.y });
+            if (gui::button("X", { 24.0f, 22.0f }))
+                close_handler();
+            gui::set_cursor({ restore.x, restore.y + 28.0f });
+        };
+
+        auto render_outliner_window = [&]()
+        {
         if (layout_outliner_visible && outliner_size.x > 1.0f && outliner_size.y > 1.0f)
         {
         gui::begin_window("World Outliner", outliner_pos, outliner_size);
-        const std::array<gui::InlineButtonSpec, 2> outlinerWindowButtons{{
-            { "Close", 58.0f },
-            { "Popout", 70.0f }
-        }};
-        if (const auto action = gui::inline_button_row(outlinerWindowButtons, 24.0f, 5.0f))
-        {
-            switch (*action)
-            {
-            case 0:
-                editor.showOutliner = false;
-                push_editor_log(editor, "[ui] World Outliner hidden. Reopen it from Window > Toggle Outliner.");
-                break;
-            case 1:
-                editor.detachedPanelHostStatus = "World Outliner requested a borderless popout host; docked fallback remains active until the context-host pass lands.";
-                push_editor_log(editor, "[ui] World Outliner popout requested. Borderless context host is staged.");
-                break;
-            default:
-                break;
-            }
-        }
+        render_titlebar_close(outliner_pos, outliner_size, [&]() {
+            editor.showOutliner = false;
+            push_editor_log(editor, "[ui] World Outliner hidden. Reopen it from Window > Toggle Outliner.");
+        });
         const gui::Vec2 outlinerScrollStart = gui::cursor_position();
         const float outlinerScrollHeight = (std::max)(
             48.0f,
@@ -3818,30 +3816,17 @@ namespace epochnamespace
         gui::end_scroll_area();
         gui::end_window();
         }
+        };
 
+        auto render_inspector_window = [&]()
+        {
         if (layout_inspector_visible && details_size.x > 1.0f && details_size.y > 1.0f)
         {
         gui::begin_window("Inspector", details_pos, details_size);
-        const std::array<gui::InlineButtonSpec, 2> inspectorWindowButtons{{
-            { "Close", 58.0f },
-            { "Popout", 70.0f }
-        }};
-        if (const auto action = gui::inline_button_row(inspectorWindowButtons, 24.0f, 5.0f))
-        {
-            switch (*action)
-            {
-            case 0:
-                editor.showInspector = false;
-                push_editor_log(editor, "[ui] Inspector hidden. Reopen it from Window > Toggle Inspector.");
-                break;
-            case 1:
-                editor.detachedPanelHostStatus = "Inspector requested a borderless popout host; docked fallback remains active until the context-host pass lands.";
-                push_editor_log(editor, "[ui] Inspector popout requested. Borderless context host is staged.");
-                break;
-            default:
-                break;
-            }
-        }
+        render_titlebar_close(details_pos, details_size, [&]() {
+            editor.showInspector = false;
+            push_editor_log(editor, "[ui] Inspector hidden. Reopen it from Window > Toggle Inspector.");
+        });
         const gui::Vec2 inspectorScrollStart = gui::cursor_position();
         const float inspectorScrollHeight = (std::max)(
             48.0f,
@@ -4240,6 +4225,7 @@ namespace epochnamespace
         gui::end_scroll_area();
         gui::end_window();
         }
+        };
 
         const bool active_center_uses_scene = main_surface_uses_scene(editor.mainSurface);
         gui::begin_window(
@@ -4247,8 +4233,6 @@ namespace epochnamespace
             viewport_pos,
             viewport_size,
             !active_center_uses_scene);
-        if (editor.mainSurface != EditorMainSurface::Systems)
-            render_main_surface_tabs();
         if (active_center_uses_scene)
         {
             const gui::Vec2 scene_pos = gui::cursor_position();
@@ -4340,14 +4324,73 @@ namespace epochnamespace
             case EditorMainSurface::Assets:
             {
                 gui::label("Asset Browser");
-                gui::property_row("[asset] Project root", display_project_path(editor.projectRoot), 110.0f);
-                gui::property_row("[asset] Selected", editor.selectedAssetPath.empty() ? "(none)" : display_project_path(editor.selectedAssetPath), 110.0f);
+                const auto modelSummary = editor_project_model_summary(editor.projectId);
+                gui::property_row("[assets] Project", editor.projectName, 120.0f);
+                gui::property_row("[assets] Project root", display_project_path(editor.projectRoot), 120.0f);
+                gui::property_row("[assets] Scene", display_project_path(editor.projectScenePath), 120.0f);
+                gui::property_row("[assets] Demo model", modelSummary.asset_path.empty() ? std::string("(none)") : modelSummary.asset_path, 120.0f);
+                gui::property_row("[assets] Model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path, 120.0f);
+                gui::property_row("[assets] Model parsed", modelSummary.parsed ? "true" : "false", 120.0f);
                 gui::wrapped_label(
                     "This surface is the project asset browser: scenes, models, images, text, and script files as normal project assets. Sandbox controls stay in AI Sandbox and are only for engine self-iteration.",
                     centerWidth);
-                gui::property_row("[asset] Scene", file_ready_summary(editor.projectScenePath), 110.0f);
-                gui::property_row("[asset] Runtime", editor.activeRuntimeScene, 110.0f);
-                gui::wrapped_label("Select files from the bottom Assets dock for now; the thumbnail grid/file tree will replace this text-only browser as the modular docking controls land.", centerWidth);
+
+                const auto assetEntries = collect_asset_browser_entries(editor);
+                gui::property_row("[assets] Active asset cards", std::to_string(assetEntries.size()), 120.0f);
+                for (const auto& entry : assetEntries)
+                {
+                    const std::string buttonLabel = entry.label + (entry.directory ? "" : std::format("  [{} bytes]", entry.size));
+                    if (gui::button(buttonLabel, { centerWidth, 28.0f }))
+                    {
+                        editor.selectedAssetPath = entry.path;
+                        editor.selectedProjectFile = entry.path;
+                        if (std::filesystem::path{ entry.path }.filename().string().ends_with(".ascript.cpp"))
+                        {
+                            editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
+                            editor.scriptBuildStatus = "Selected script asset: " + entry.path;
+                        }
+                        push_editor_log(editor, "[assets] Selected " + entry.path);
+                    }
+                }
+
+                if (assetEntries.empty())
+                    gui::wrapped_label("No active assets found yet. Add files under the project assets folder or use the project demo model path once it resolves.", centerWidth);
+                gui::property_row("[assets] Selected", editor.selectedAssetPath.empty() ? std::string("(none)") : editor.selectedAssetPath, 120.0f);
+
+                const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
+                gui::label("Script Assets");
+                gui::property_row("[script asset] Active", editor.activeScript, 120.0f);
+                gui::property_row("[script asset] Source", activeScriptSource, 120.0f);
+                gui::property_row(
+                    "[script asset] Source exists",
+                    std::filesystem::exists(std::filesystem::path{ activeScriptSource }) ? "true" : "false",
+                    120.0f);
+                if (const auto* activeScript = active_script_profile(editor))
+                {
+                    gui::property_row("[script asset] Build", activeScript->build_action, 120.0f);
+                    gui::property_row("[script asset] Run", "Centered Run button", 120.0f);
+                    gui::property_row("[script asset] Hint", activeScript->diagnostic_hint, 120.0f);
+                }
+                gui::wrapped_label(editor.scriptBuildStatus, centerWidth);
+                gui::property_row("[script asset] New", "type a safe id, then create a project-local .ascript.cpp", 120.0f);
+                (void)gui::edit_box(editor.newScriptName, { centerWidth, 28.0f }, 64, false);
+                if (gui::button("Create Script Asset", { (std::min)(220.0f, centerWidth), 30.0f }))
+                    create_project_script_stub(editor);
+                if (gui::button("Build Selected Script Asset", { (std::min)(240.0f, centerWidth), 30.0f }))
+                {
+                    const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
+                    editor.scriptBuildStatus = build.summary;
+                    push_editor_log(
+                        editor,
+                        std::string("[script] ")
+                        + (build.succeeded ? "Validation passed. " : "Validation failed. ")
+                        + build.summary);
+                    append_project_note(
+                        editor,
+                        "Build Script Asset",
+                        build.summary,
+                        build.succeeded ? "Script asset validation passed against the active project shell." : "Script asset validation failed; inspect script diagnostics before running.");
+                }
                 break;
             }
             case EditorMainSurface::AISandbox:
@@ -4457,6 +4500,7 @@ namespace epochnamespace
                 const auto supportCanvas = build_support_tier_surface(
                     supportTier,
                     ctx && ctx->type == core::ContextType::Software);
+                const std::string pacingHealth = pacing_health_summary(editor.timeSnapshot);
 
                 editor.systems.renderSurface = gui::register_runtime_surface(
                     "systems-render-graph",
@@ -4481,6 +4525,64 @@ namespace epochnamespace
                 gui::wrapped_label(
                     "Systems is reserved for render/backend/context routing, borderless panel hosts, diagnostics, and future node/timeline/video surfaces. It intentionally disables the 3D scene preview while open.",
                     centerWidth);
+                gui::label("Time Controls");
+                gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running", 132.0f);
+                gui::property_row("[time] Frame dt", format_ms(editor.timeSnapshot.real_dt_seconds), 132.0f);
+                gui::property_row(
+                    "[time] Fixed step",
+                    std::string(format_ms(editor.timeSnapshot.fixed_dt_seconds)) + " / " + format_rate(editor.timeSnapshot.fixed_dt_seconds),
+                    132.0f);
+                gui::property_row("[time] Simulated", format_seconds(editor.timeSnapshot.simulated_seconds), 132.0f);
+                gui::property_row("[time] Pacing health", pacingHealth, 132.0f);
+                const std::array timeButtons{
+                    gui::InlineButtonSpec{ .label = editor.timeControl.paused ? "Resume" : "Pause", .width = 74.0f },
+                    gui::InlineButtonSpec{ .label = "Step", .width = 52.0f },
+                    gui::InlineButtonSpec{ .label = "0.5x", .width = 48.0f },
+                    gui::InlineButtonSpec{ .label = "1x", .width = 42.0f },
+                    gui::InlineButtonSpec{ .label = "2x", .width = 42.0f }
+                };
+                if (const auto action = gui::inline_button_row(timeButtons, 24.0f, 6.0f))
+                {
+                    switch (*action)
+                    {
+                    case 0: editor.timeControl.paused = !editor.timeControl.paused; break;
+                    case 1: editor.timeControl.step_once = true; break;
+                    case 2: editor.timeControl.time_scale = 0.5; break;
+                    case 3: editor.timeControl.time_scale = 1.0; break;
+                    case 4: editor.timeControl.time_scale = 2.0; break;
+                    default: break;
+                    }
+                }
+                const std::array cadenceButtons{
+                    gui::InlineButtonSpec{ .label = "30 Hz", .width = 56.0f },
+                    gui::InlineButtonSpec{ .label = "60 Hz", .width = 56.0f },
+                    gui::InlineButtonSpec{ .label = "120 Hz", .width = 64.0f }
+                };
+                if (const auto action = gui::inline_button_row(cadenceButtons, 24.0f, 6.0f))
+                {
+                    switch (*action)
+                    {
+                    case 0: editor.timeControl.fixed_dt_seconds = 1.0 / 30.0; break;
+                    case 1: editor.timeControl.fixed_dt_seconds = 1.0 / 60.0; break;
+                    case 2: editor.timeControl.fixed_dt_seconds = 1.0 / 120.0; break;
+                    default: break;
+                    }
+                }
+                const std::array budgetButtons{
+                    gui::InlineButtonSpec{ .label = "4 steps", .width = 64.0f },
+                    gui::InlineButtonSpec{ .label = "8 steps", .width = 64.0f },
+                    gui::InlineButtonSpec{ .label = "12 steps", .width = 72.0f }
+                };
+                if (const auto action = gui::inline_button_row(budgetButtons, 24.0f, 6.0f))
+                {
+                    switch (*action)
+                    {
+                    case 0: editor.timeControl.max_steps_per_frame = 4; break;
+                    case 1: editor.timeControl.max_steps_per_frame = 8; break;
+                    case 2: editor.timeControl.max_steps_per_frame = 12; break;
+                    default: break;
+                    }
+                }
                 const auto systemsOrigin = gui::cursor_position();
                 const float titleY = systemsOrigin.y + 6.0f;
                 const float controlsY = titleY + gui::line_height() + 4.0f;
@@ -4568,6 +4670,9 @@ namespace epochnamespace
         }
         gui::end_window();
 
+        render_outliner_window();
+        render_inspector_window();
+
         const bool outlinerSplitHovered = layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size);
         const bool inspectorSplitHovered = layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size);
         const bool bottomSplitHovered = bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size);
@@ -4594,6 +4699,15 @@ namespace epochnamespace
         const gui::Vec2 log_size{ left_bottom_w, bottom_h };
         const gui::Vec2 chat_pos{ left_bottom_w + bottom_workspace_split_w, bottom_pos.y };
         const gui::Vec2 chat_size{ show_chat_dock ? (std::max)(0.0f, w - left_bottom_w - bottom_workspace_split_w) : 0.0f, bottom_h };
+        const gui::Vec2 workspace_split_pos{ left_bottom_w, bottom_pos.y };
+        const gui::Vec2 workspace_split_size{ bottom_workspace_split_w, bottom_h };
+        const bool workspaceSplitHovered = show_workspace_dock
+            && show_chat_dock
+            && editor_point_in_rect(mouse, workspace_split_pos, workspace_split_size);
+        if (show_workspace_dock && show_chat_dock && gui::was_mouse_pressed() && workspaceSplitHovered)
+            editor.layoutDrag = EditorLayoutDrag::Workspace;
+        if (gui::is_mouse_down() && editor.layoutDrag == EditorLayoutDrag::Workspace)
+            editor.workspaceSplit = std::clamp(mouse.x / (std::max)(1.0f, bottom_available_w), 0.30f, 0.82f);
 
         if (show_workspace_dock)
         {
@@ -4917,64 +5031,16 @@ namespace epochnamespace
             gui::property_row("[assets] Model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path);
             gui::property_row("[assets] Model parsed", modelSummary.parsed ? "true" : "false");
             gui::wrapped_label(
-                "Asset cards include scenes, models, images, text files, and project scripts. Scripts are normal project assets here, not a separate editor domain; select a script asset, build it below, then use the centered Run button.",
+                "Bottom Dock > Assets is compact status only. Use the central Asset Browser for file cards, script creation, script validation, and future thumbnail/file-tree controls.",
                 assetsContentWidth);
-
-            const auto assetEntries = collect_asset_browser_entries(editor);
-            gui::property_row("[assets] Active asset cards", std::to_string(assetEntries.size()));
-            for (const auto& entry : assetEntries)
-            {
-                const std::string buttonLabel = entry.label + (entry.directory ? "" : std::format("  [{} bytes]", entry.size));
-                if (gui::button(buttonLabel, { assetsContentWidth, 28.0f }))
-                {
-                    editor.selectedAssetPath = entry.path;
-                    editor.selectedProjectFile = entry.path;
-                    if (std::filesystem::path{ entry.path }.filename().string().ends_with(".ascript.cpp"))
-                    {
-                        editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
-                        editor.scriptBuildStatus = "Selected script asset: " + entry.path;
-                    }
-                    push_editor_log(editor, "[assets] Selected " + entry.path);
-                }
-            }
-
-            if (assetEntries.empty())
-                gui::wrapped_label("No active assets found yet. Add files under the project assets folder or use the project demo model path once it resolves.", assetsContentWidth);
             gui::property_row("[assets] Selected", editor.selectedAssetPath.empty() ? std::string("(none)") : editor.selectedAssetPath);
-
             const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
-            gui::label("Script Assets");
             gui::property_row("[script asset] Active", editor.activeScript);
             gui::property_row("[script asset] Source", activeScriptSource);
             gui::property_row(
                 "[script asset] Source exists",
                 std::filesystem::exists(std::filesystem::path{ activeScriptSource }) ? "true" : "false");
-            if (const auto* activeScript = active_script_profile(editor))
-            {
-                gui::property_row("[script asset] Build", activeScript->build_action);
-                gui::property_row("[script asset] Run", "Centered Run button");
-                gui::property_row("[script asset] Hint", activeScript->diagnostic_hint);
-            }
             gui::wrapped_label(editor.scriptBuildStatus, assetsContentWidth);
-            gui::property_row("[script asset] New", "type a safe id, then create a project-local .ascript.cpp");
-            (void)gui::edit_box(editor.newScriptName, { assetsContentWidth, 28.0f }, 64, false);
-            if (gui::button("Create Script Asset", { (std::min)(220.0f, assetsContentWidth), 30.0f }))
-                create_project_script_stub(editor);
-            if (gui::button("Build Selected Script Asset", { (std::min)(240.0f, assetsContentWidth), 30.0f }))
-            {
-                const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
-                editor.scriptBuildStatus = build.summary;
-                push_editor_log(
-                    editor,
-                    std::string("[script] ")
-                    + (build.succeeded ? "Validation passed. " : "Validation failed. ")
-                    + build.summary);
-                append_project_note(
-                    editor,
-                    "Build Script Asset",
-                    build.summary,
-                    build.succeeded ? "Script asset validation passed against the active project shell." : "Script asset validation failed; inspect script diagnostics before running.");
-            }
             break;
         }
         case EditorWorkspaceTab::AI:
@@ -4998,164 +5064,8 @@ namespace epochnamespace
             const std::string loopStage = ai_control_loop_stage(gateStatus);
             const float aiContentWidth = (std::max)(180.0f, log_size.x - 24.0f);
 
-            const std::array<gui::SegmentedButtonSpec, 7> aiDomains{{
-                { "Sandbox", 104.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Control },
-                { "Harness", 100.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling },
-                { "Assistant", 112.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine },
-                { "Launcher", 108.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Software },
-                { "Training", 104.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Training },
-                { "Viz", 64.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Visualizer },
-                { "Ops", 72.0f, editor.aiWorkspaceDomain == AiWorkspaceDomain::Ops }
-            }};
-            if (const auto selectedAiDomain = gui::tab_bar(aiDomains))
-                editor.aiWorkspaceDomain = static_cast<AiWorkspaceDomain>(*selectedAiDomain);
-
-            gui::property_row("[ai] Domain", ai_workspace_domain_name(editor.aiWorkspaceDomain));
-            const std::array<bool, 5> aiLoopReady{{
-                gateStatus.projectEvidenceReady,
-                gateStatus.buildEvidenceReady,
-                gateStatus.captureEvidenceReady,
-                gateStatus.chatPairReady,
-                gateStatus.projectEvidenceReady
-                    && gateStatus.buildEvidenceReady
-                    && gateStatus.captureEvidenceReady
-                    && gateStatus.chatPairReady
-            }};
-            const auto aiLoopCanvas = build_ai_loop_surface(
-                aiLoopReady,
-                editor.aiContinuousBuildEnabled,
-                editor.aiContinuousBuildPending.has_value());
-            editor.systems.aiLoopSurface = gui::register_runtime_surface(
-                "ai-loop-visualizer",
-                std::span<const std::uint8_t>(aiLoopCanvas.pixels.data(), aiLoopCanvas.pixels.size()),
-                static_cast<std::uint32_t>(aiLoopCanvas.width),
-                static_cast<std::uint32_t>(aiLoopCanvas.height));
-
-            if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Control)
-            {
-                gui::label("AI Loop Visualizer");
-                if (editor.systems.aiLoopSurface.is_valid())
-                    gui::image(editor.systems.aiLoopSurface, { aiContentWidth, 92.0f });
-                render_ai_control_status_panel(editor, gateStatus, loopStage, aiContentWidth);
-                if (!gateStatus.projectEvidenceReady)
-                {
-                    gui::wrapped_label(
-                        "Sandbox evidence is incomplete. Save Sandbox Evidence rebuilds the manifest/source/build-script shell from the sandbox profile before you queue the next self-iteration build.",
-                        aiContentWidth);
-                }
-                if (gui::button("Save Sandbox Evidence", { 260.0f, 30.0f }))
-                    repair_self_iteration_sandbox_evidence(editor);
-            }
-
-            gui::label("Local Model Connection");
-            render_ai_model_picker(editor, (std::min)(aiContentWidth, 420.0f));
-            gui::property_row("[model] Chat request path", "OpenAI-compatible /v1/chat/completions");
-            gui::property_row("[model] Manifest", manifest.manifest_path);
-            gui::property_row("[ai] Self-iteration contract", "Engine/ai/control/continuous_build_loop.json");
-            gui::property_row("[ai] Iteration packets", epoch::ai::iteration_packet_root());
-            gui::property_row("[ai] Research staging", epoch::ai::research_staging_root());
-            gui::property_row("[ai] Curated datasets", training.curated_dataset_root);
-            gui::property_row("[ai] Eval suites", training.eval_root);
-            gui::property_row("[ai] Raw capture", training.local_capture_jsonl);
-            gui::property_row("[ai] Tool evidence capture", training.mcp_capture_jsonl);
-            gui::property_row("[ai] Local models", training.model_root);
-            gui::property_row("[ai] Checkpoints", training.checkpoint_root);
-            gui::property_row("[ai] Active script source", activeScriptSource);
-            gui::property_row("[ai] Paths manifest", display_project_path(pathsManifest));
-            gui::property_row("[ai] Active build log", display_project_path(buildLog));
-            gui::property_row("[ai] Active output", display_project_path(outputExe));
-            gui::property_row("[ai] Runtime role", "EpochBot");
-            gui::property_row("[ai] Sandbox role", "local tool/control capture");
-            gui::property_row("[ai] Self-iteration loop", ai_control_loop_contract());
-            gui::property_row("[ai] Loop stage", loopStage);
-            gui::property_row("[ai] Seed/helper/verifier", "runtime seed + helper teacher + gated verifier");
-            gui::property_row("[ai] Promotion gate", "capture -> review/score -> curate/promote");
-            gui::property_row("[ai] Replay boundary", "staged packets only; no blind write-through");
-            gui::property_row("[ai] Evidence", "build + runtime + retained logs");
-            gui::property_row("[ai] Build evidence", ready_text(gateStatus.buildEvidenceReady));
-            gui::property_row("[ai] Project evidence", ready_text(gateStatus.projectEvidenceReady));
-            gui::property_row("[ai] Capture evidence", ready_text(gateStatus.captureEvidenceReady));
-            gui::property_row("[ai] Chat pair", ready_text(gateStatus.chatPairReady));
-            gui::property_row("[ai] Packet evidence", gateStatus.packetEvidenceSummary);
-            gui::property_row("[ai] Review gate state", gateStatus.promotionSummary);
-            const std::string captureGuidance =
-                "Raw chat captures land in " + training.local_capture_jsonl
-                + " as Git-safe staging data, tool/harness interaction snapshots land in "
-                + training.mcp_capture_jsonl
-                + ", curated JSON/JSONL stays in Engine/ai/, and outdated local checkpoints/models/caches should be deleted during training pivots when they no longer match the active data or control model.";
-            const std::string iterationGuidance =
-                "Iteration packets now stage the current project, scene, script, capture roots, model manifest, and concrete evidence paths into "
-                + epoch::ai::iteration_packet_root()
-                + " so the self-iteration loop has something explicit to build, verify, score, and either promote or discard.";
-            const std::string continuousBuildGuidance =
-                "The self-iteration watcher monitors the active project entry/script/manifest evidence, queues one child-project build at a time, and stages a fresh packet after a successful build so the AI loop can verify from current artifacts.";
-            gui::wrapped_label(
-                "Epoch separates three jobs: the normal editor builds games/software, ProjectLauncher launches those artifacts, and the Self-Iteration Sandbox is the controlled assistant/coding loop for improving Epoch itself.",
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(
-                captureGuidance.c_str(),
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(
-                "AI-assisted engine changes stay staged and reviewable here: capture first, score or inspect the result, then promote curated datasets/evals intentionally instead of allowing blind write-through automation.",
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(
-                "Phase 5 starts from explicit staged packets: the local self-iteration loop may plan and replay work from evidence, but repo changes still pass through builder/verifier/gate before promotion.",
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(
-                iterationGuidance.c_str(),
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(
-                continuousBuildGuidance.c_str(),
-                (std::max)(180.0f, log_size.x - 24.0f));
-            if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Control)
-            {
-                gui::wrapped_label(
-                    "Sandbox domain: keep the self-iteration watcher on while you edit scripts/projects, or queue one build manually. Successful builds stage packets for verifier/gate review without granting blind repo write-through.",
-                    aiContentWidth);
-            }
-            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling)
-            {
-                gui::wrapped_label(
-                    "Harness domain: select a script in Scripts, then run the AI tool harness here. The harness builds/runs it through EpochScriptHost, captures before/after editor state, records tool evidence, and stages a packet.",
-                    aiContentWidth);
-            }
-            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine)
-            {
-                gui::wrapped_label(
-                    "Assistant domain: use this as the regular game-engine assistant surface for scene/project guidance, active model inspection, selected-model chat, and safe iteration packet staging.",
-                    aiContentWidth);
-            }
-            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Software)
-            {
-                gui::wrapped_label(
-                    "Launcher domain: tracks generated project shells, build logs, child executables, and script/source evidence so the AI can reason about real software artifacts instead of just editor chat.",
-                    aiContentWidth);
-            }
-            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Training)
-            {
-                gui::wrapped_label(
-                    "Training domain: raw captures stay local until review; curated datasets and evals live under Engine/ai. Promote only records tied to build/runtime/tool evidence.",
-                    aiContentWidth);
-            }
-            else if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Visualizer)
-            {
-                gui::wrapped_label(
-                    "Visualizer domain: first-pass Phase 5 view. The cards represent planner/project evidence, builder/build evidence, verifier/capture evidence, gate/chat evidence, and final human review. Future work turns this into a separate AI window with live packet replay, scene-state diffs, and eventually a 3D weight/model view.",
-                    aiContentWidth);
-                if (editor.systems.aiLoopSurface.is_valid())
-                    gui::image(editor.systems.aiLoopSurface, { aiContentWidth, 116.0f });
-                gui::property_row("[viz] Planner", gateStatus.projectEvidenceReady ? "project evidence ready" : "blocked: project/manifest evidence missing");
-                gui::property_row("[viz] Builder", gateStatus.buildEvidenceReady ? "build/output evidence ready" : "blocked: build log/output evidence missing");
-                gui::property_row("[viz] Verifier", gateStatus.captureEvidenceReady ? "capture evidence ready" : "blocked: raw or tool evidence missing");
-                gui::property_row("[viz] Gate", gateStatus.chatPairReady ? "chat/eval candidate ready" : "blocked: assistant exchange not ready");
-                gui::property_row("[viz] Future window", "AI visualizer needs dedicated editor-window docking and 3D weight view");
-            }
-            else
-            {
-                gui::wrapped_label(
-                    "How to run: build Epoch, launch from x64/Debug, open Bottom Dock > AI, pick a domain, then use Inspector for the actual AI controls.",
-                    aiContentWidth);
-            }
+            // Bottom Dock > AI stays diagnostic-only. Controls and model
+            // selection live in the central AI Sandbox and Inspector panes.
 
             const auto currentMcpRecord = [&]() {
                 return epoch::ai::McpCaptureRecord{
@@ -5303,53 +5213,28 @@ namespace epochnamespace
             const bool showTrainingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Training;
             constexpr bool showWorkspaceActionButtons = false;
 
-            if (showSandboxControls)
-            {
-                gui::label("Sandbox Build Controls");
-                gui::property_row("[ai-build] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
-                gui::property_row("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false");
-                gui::property_row("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount));
-                gui::property_row("[ai-build] Status", editor.aiContinuousBuildStatus);
-                gui::wrapped_label(
-                    "AI action buttons are in the Inspector. This workspace stays focused on status, logs, and visual feedback.",
-                    aiContentWidth);
-            }
+            (void)showToolingControls;
+            (void)showAssistantControls;
+            (void)showLauncherControls;
+            (void)showTrainingControls;
 
-            if (showToolingControls)
-            {
-                gui::label("Tool Harness Controls");
-                gui::property_row("[ai-tool] Runs", std::to_string(editor.aiToolHarnessRunCount));
-                gui::property_row("[ai-tool] Status", editor.aiToolHarnessStatus);
-                gui::property_row("[ai-tool] State", editor_tooling_state_summary(editor));
-            }
-
-            if (showLauncherControls)
-            {
-                gui::label("ProjectLauncher Evidence");
-                gui::property_row("[launcher] Project root", display_project_path(editor.projectRoot));
-                gui::property_row("[launcher] Manifest", file_ready_summary(editor.projectManifest));
-                gui::property_row("[launcher] Build log", file_ready_summary(buildLog));
-                gui::property_row("[launcher] Output", file_ready_summary(outputExe));
-                gui::wrapped_label(
-                    "Launcher tracks generated game/software project evidence. Sandbox build controls are kept in the Sandbox tab so normal project work and engine self-iteration do not blur together.",
-                    aiContentWidth);
-            }
-
-            if (showAssistantControls)
-            {
-                gui::label("Assistant Model Actions");
-                gui::wrapped_label(
-                    "These buttons call the selected local OpenAI-compatible model. Tool evidence files are JSONL evidence logs, not a separate hidden LLM runtime.",
-                    aiContentWidth);
-            }
-
-            if (showTrainingControls)
-            {
-                gui::label("Training Promotion Controls");
-                gui::wrapped_label(
-                    "Training actions only capture or promote visible evidence. They do not call a model and they do not run servers.",
-                    aiContentWidth);
-            }
+            gui::label("AI Diagnostics");
+            gui::property_row("[ai] Domain", ai_workspace_domain_name(editor.aiWorkspaceDomain));
+            gui::property_row("[model] Provider", epoch::ai::active_provider_summary());
+            gui::property_row("[model] Selected", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name());
+            gui::property_row("[ai] Loop stage", loopStage);
+            gui::property_row("[ai] Evidence", gateStatus.packetEvidenceSummary);
+            gui::property_row("[ai-build] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+            gui::property_row("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false");
+            gui::property_row("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount));
+            gui::property_row("[ai-build] Status", editor.aiContinuousBuildStatus);
+            gui::property_row("[ai-tool] Runs", std::to_string(editor.aiToolHarnessRunCount));
+            gui::property_row("[ai-tool] Status", editor.aiToolHarnessStatus);
+            gui::property_row("[ai] Build log", display_project_path(buildLog));
+            gui::property_row("[ai] Output", display_project_path(outputExe));
+            gui::wrapped_label(
+                "Bottom Dock > AI is compact status only. Use the central AI Sandbox and Inspector for model selection, harness controls, self-iteration actions, and visualizer surfaces.",
+                aiContentWidth);
 
             if (showWorkspaceActionButtons && showSandboxControls && gui::button(editor.aiContinuousBuildEnabled ? "Pause Self-Iteration Watcher" : "Enable Self-Iteration Watcher", { 260.0f, 30.0f }))
             {
@@ -5628,61 +5513,8 @@ namespace epochnamespace
             gui::property_row("[time] Frame step cap", std::to_string(editor.timeSnapshot.max_steps_per_frame));
             gui::property_row("[time] Time scale", std::format("{:.2f}x", editor.timeSnapshot.time_scale));
             gui::property_row("[time] Pacing health", pacingHealth);
-
-            const std::array timeButtons{
-                gui::InlineButtonSpec{ .label = editor.timeControl.paused ? "Resume" : "Pause", .width = 74.0f },
-                gui::InlineButtonSpec{ .label = "Step", .width = 52.0f },
-                gui::InlineButtonSpec{ .label = "0.5x", .width = 48.0f },
-                gui::InlineButtonSpec{ .label = "1x", .width = 42.0f },
-                gui::InlineButtonSpec{ .label = "2x", .width = 42.0f }
-            };
-            if (const auto action = gui::inline_button_row(timeButtons, 24.0f, 6.0f))
-            {
-                switch (*action)
-                {
-                case 0: editor.timeControl.paused = !editor.timeControl.paused; break;
-                case 1: editor.timeControl.step_once = true; break;
-                case 2: editor.timeControl.time_scale = 0.5; break;
-                case 3: editor.timeControl.time_scale = 1.0; break;
-                case 4: editor.timeControl.time_scale = 2.0; break;
-                default: break;
-                }
-            }
-
-            const std::array cadenceButtons{
-                gui::InlineButtonSpec{ .label = "30 Hz", .width = 56.0f },
-                gui::InlineButtonSpec{ .label = "60 Hz", .width = 56.0f },
-                gui::InlineButtonSpec{ .label = "120 Hz", .width = 64.0f }
-            };
-            if (const auto action = gui::inline_button_row(cadenceButtons, 24.0f, 6.0f))
-            {
-                switch (*action)
-                {
-                case 0: editor.timeControl.fixed_dt_seconds = 1.0 / 30.0; break;
-                case 1: editor.timeControl.fixed_dt_seconds = 1.0 / 60.0; break;
-                case 2: editor.timeControl.fixed_dt_seconds = 1.0 / 120.0; break;
-                default: break;
-                }
-            }
-
-            const std::array budgetButtons{
-                gui::InlineButtonSpec{ .label = "4 steps", .width = 64.0f },
-                gui::InlineButtonSpec{ .label = "8 steps", .width = 64.0f },
-                gui::InlineButtonSpec{ .label = "12 steps", .width = 72.0f }
-            };
-            if (const auto action = gui::inline_button_row(budgetButtons, 24.0f, 6.0f))
-            {
-                switch (*action)
-                {
-                case 0: editor.timeControl.max_steps_per_frame = 4; break;
-                case 1: editor.timeControl.max_steps_per_frame = 8; break;
-                case 2: editor.timeControl.max_steps_per_frame = 12; break;
-                default: break;
-                }
-            }
-
             gui::wrapped_label(
-                "Epoch is now formalizing a shared time spine here first: fixed-step accumulation, pause/resume, time scaling, single-step controls, and frame step budgeting are owned by the engine instead of being scattered ad hoc across contexts.",
+                "Bottom Dock > Systems is diagnostic-only. Use the central Systems workspace for graph surfaces and time controls.",
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::property_row("[systems] Render stages", "Capture | Visibility | Surface | Lighting | Temporal | Present");
             gui::property_row("[systems] Task lanes", "Input | Systems | Scripts | AI | Output");
@@ -5719,6 +5551,9 @@ namespace epochnamespace
             gui::end_scroll_area();
         gui::end_window();
         }
+
+        if (show_workspace_dock && show_chat_dock && workspace_split_size.x > 1.0f && workspace_split_size.y > 1.0f)
+            gui::splitter_bar(workspace_split_pos, workspace_split_size, workspaceSplitHovered, editor.layoutDrag == EditorLayoutDrag::Workspace);
 
         if (show_chat_dock)
         {
