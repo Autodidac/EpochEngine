@@ -1449,15 +1449,11 @@ namespace epochnamespace::gui
                         const float offsetY = glyph->offset_px.y * scale;
                         const float drawX = penX + offsetX;
                         const float drawY = baseline + offsetY;
-                        const bool glyphVisible = clipped
-                            ? (drawX >= clipLeft
-                                && drawY >= clipTop
-                                && drawX + drawW <= clipRight
-                                && drawY + drawH <= clipBottom)
-                            : (drawX + drawW > clipLeft
-                                && drawY + drawH > clipTop
-                                && drawX < clipRight
-                                && drawY < clipBottom);
+                        const bool glyphVisible =
+                            drawX + drawW > clipLeft
+                            && drawY + drawH > clipTop
+                            && drawX < clipRight
+                            && drawY < clipBottom;
                         if (glyphVisible)
                         {
                             draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);

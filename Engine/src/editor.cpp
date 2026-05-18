@@ -3493,12 +3493,14 @@ namespace epochnamespace
             case EditorMainSurface::Assets:
                 editor.showInspector = true;
                 editor.showConsoleDock = true;
+                editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
                 push_editor_log(editor, "[assets] Asset Browser opened.");
                 break;
             case EditorMainSurface::Project:
                 editor.showInspector = true;
                 editor.showConsoleDock = true;
+                editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Project;
                 push_editor_log(editor, "[project] Project Workspace opened.");
                 break;
@@ -3514,6 +3516,7 @@ namespace epochnamespace
             case EditorMainSurface::Systems:
                 editor.showInspector = true;
                 editor.showConsoleDock = true;
+                editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Systems;
                 push_editor_log(editor, "[systems] Systems Workspace opened.");
                 break;
@@ -4589,17 +4592,8 @@ namespace epochnamespace
             : (show_workspace_dock ? bottom_available_w : 0.0f);
         const gui::Vec2 log_pos{ 0.0f, bottom_pos.y };
         const gui::Vec2 log_size{ left_bottom_w, bottom_h };
-        const gui::Vec2 workspace_split_pos{ left_bottom_w, bottom_pos.y };
-        const gui::Vec2 workspace_split_size{ bottom_workspace_split_w, bottom_h };
         const gui::Vec2 chat_pos{ left_bottom_w + bottom_workspace_split_w, bottom_pos.y };
         const gui::Vec2 chat_size{ show_chat_dock ? (std::max)(0.0f, w - left_bottom_w - bottom_workspace_split_w) : 0.0f, bottom_h };
-        const bool workspaceSplitHovered = show_workspace_dock
-            && show_chat_dock
-            && editor_point_in_rect(mouse, workspace_split_pos, workspace_split_size);
-        if (show_workspace_dock && show_chat_dock && gui::was_mouse_pressed() && workspaceSplitHovered)
-            editor.layoutDrag = EditorLayoutDrag::Workspace;
-        if (gui::is_mouse_down() && editor.layoutDrag == EditorLayoutDrag::Workspace)
-            editor.workspaceSplit = std::clamp(mouse.x / (std::max)(1.0f, bottom_available_w), 0.30f, 0.82f);
 
         if (show_workspace_dock)
         {
@@ -5751,13 +5745,6 @@ namespace epochnamespace
             chat.submit(std::move(text));
         }
         }
-
-        if (show_workspace_dock && show_chat_dock && workspace_split_size.x > 1.0f && workspace_split_size.y > 1.0f)
-            gui::splitter_bar(
-                workspace_split_pos,
-                workspace_split_size,
-                workspaceSplitHovered,
-                editor.layoutDrag == EditorLayoutDrag::Workspace);
 
         open_dropdown("File", TopMenu::File, dropdown_window_size(192.0f, 4), [&](gui::Vec2 pos)
         {
