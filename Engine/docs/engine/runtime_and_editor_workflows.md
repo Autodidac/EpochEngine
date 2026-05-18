@@ -374,6 +374,12 @@ features over forcing every integration on every machine.
 - `v0.84.26` keeps that composition order but makes the central workbench
   background transparent when a scene-backed surface is active, so the retained
   GUI batch can draw pane chrome without hiding the 3D/2D preview underneath.
+- `v0.84.29` issue evidence is archived in
+  `diagnostics/2026-05-17-gui-regression/README.md`. The key clue is that
+  closing World Outliner exposes the Perspective title while Inspector and AI
+  Chat remain blank, so the remaining work should stay focused on GUI
+  layout/composition and pane draw order instead of speculative renderer
+  rewrites.
 - When `EPOCH_SINGLE_PARENT=0`, the launch config must force standalone
   top-level contexts even if CLI defaults still prefer parented mode. This mode
   is used to isolate resize/flicker from the single-parent dock host, so any

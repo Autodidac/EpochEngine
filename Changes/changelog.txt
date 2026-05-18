@@ -9,6 +9,10 @@
 - Documented the root cause: OpenGL's continuous render loop can outpace GUI
   command production, so queued one-shot GUI commands flicker unless the latest
   GUI batch is retained and replayed after the scene pass.
+- Archived the current GUI regression screenshots under
+  `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/` and linked them
+  from the docs/roadmap so missing panes, duplicate Console Dock controls, and
+  scrollbar smear reports remain visible to follow-up passes.
 
 ## [v0.84.28]
 - Bumped the active source line to `v0.84.28` for the OpenGL composition

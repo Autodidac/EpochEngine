@@ -3288,11 +3288,33 @@ namespace epochnamespace
             set_project(editor, "sandbox", true);
         }
 
-        // Editor GUI layout should follow the live pane client size, not the
-        // backend framebuffer size, so parented multicontext panes do not
-        // bleed across neighbors under Windows DPI scaling.
-        const float w = static_cast<float>((std::max)(1, ctx->width));
-        const float h = static_cast<float>((std::max)(1, ctx->height));
+        auto resolve_layout_extent = [&]() noexcept
+        {
+            int resolvedWidth = ctx->get_width_safe();
+            int resolvedHeight = ctx->get_height_safe();
+
+            if ((resolvedWidth <= 1 || resolvedHeight <= 1) && ctx->windowData)
+            {
+                const int liveWidth = ctx->windowData->get_width();
+                const int liveHeight = ctx->windowData->get_height();
+                if (liveWidth > 0 && liveHeight > 0)
+                {
+                    resolvedWidth = liveWidth;
+                    resolvedHeight = liveHeight;
+                }
+            }
+
+            return gui::Vec2{
+                static_cast<float>((std::max)(1, resolvedWidth)),
+                static_cast<float>((std::max)(1, resolvedHeight))
+            };
+        };
+
+        // Editor GUI layout must follow the live client pane, not a stale
+        // startup framebuffer, or docked panes can hide Inspector/AI Chat.
+        const gui::Vec2 layoutExtent = resolve_layout_extent();
+        const float w = layoutExtent.x;
+        const float h = layoutExtent.y;
 
         auto clamp_layout = [](float value, float lo, float hi) noexcept
         {

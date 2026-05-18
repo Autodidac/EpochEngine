@@ -58,6 +58,17 @@ namespace epochnamespace::openglcontext
                 return false;
         }
 
+        const auto previousRenderContext = core::get_current_render_context();
+        core::set_current_render_context(ctx);
+        struct ResetRenderContext final
+        {
+            std::shared_ptr<core::Context> previous{};
+            ~ResetRenderContext()
+            {
+                core::set_current_render_context(std::move(previous));
+            }
+        } resetRenderContext{ previousRenderContext };
+
         int fbW = (std::max)(1, opengl_get_width());
         int fbH = (std::max)(1, opengl_get_height());
 
@@ -77,6 +88,8 @@ namespace epochnamespace::openglcontext
 
         glState.width = static_cast<unsigned int>((std::max)(1, fbW));
         glState.height = static_cast<unsigned int>((std::max)(1, fbH));
+        ctx->width = fbW;
+        ctx->height = fbH;
         ctx->framebufferWidth = fbW;
         ctx->framebufferHeight = fbH;
 

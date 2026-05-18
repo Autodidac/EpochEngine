@@ -56,6 +56,9 @@ Build-system reality to keep in mind:
   expectations
 - `engine/smoke_capture_and_screenshot_workflow.md` - capture discipline for
   proofs and README screenshots
+- `engine/diagnostics/2026-05-17-gui-regression/README.md` - current GUI
+  regression screenshot evidence for missing panes, duplicate dock controls,
+  and scrollbar/extents artifacts
 - `engine/ai_training_memory_and_dataset_policy.md` - AI storage, iteration,
   capture, and promotion rules
 - `../ai/README.md` - live AI content map and self-iteration sandbox controls

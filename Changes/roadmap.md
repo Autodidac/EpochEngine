@@ -435,6 +435,12 @@ engine shape and should be treated as starting truth for the next passes:
   AI Chat, Inspector, Perspective pane visibility/title chrome, and the
   transparent scene-backed workbench still need eye-test confirmation. Graph
   surfaces also need stronger data density, design polish, and performance.
+- Current visual evidence is now preserved at
+  `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/README.md`.
+  Acceptance gates from that set: Perspective title stays visible with World
+  Outliner open; Inspector and AI Chat draw normally; Console Dock stays compact
+  and does not duplicate central AI/Systems controls; scrollbar extents do not
+  smear at min/max scroll during resize.
 - Console Dock is only a temporary evidence/log strip. Output should remain a
   plain scrollable log, and Systems graph UI belongs in the central Systems
   workspace rather than duplicated inside the dock.

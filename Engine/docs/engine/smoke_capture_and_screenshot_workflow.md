@@ -132,6 +132,10 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - if a supposedly valid proof still shows fake wrapper ownership, oversized
   child rects, or an early maximize crash, do not update the README screenshot
   yet
+- when a runtime issue is visually diagnosed during a pass, store the relevant
+  captures under `Engine/docs/engine/diagnostics/<date>-<topic>/` with a short
+  README that names the defect and the acceptance gate. Do not leave the only
+  copy in `C:\tmp` or an operator screenshot folder.
 - when docking/redocking is under investigation, run both single-backend and
   full-grid parented harness passes before signing off
 - treat focus-only proof as incomplete for text input:

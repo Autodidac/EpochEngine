@@ -12,7 +12,6 @@ module opengl.context;
 import core.context;
 import context.commandqueue;
 import context.multiplexer;
-import engine.gui;
 
 namespace epochnamespace::openglcontext
 {
@@ -41,7 +40,6 @@ namespace epochnamespace::openglcontext
 
         openglbridge::render_scene_preview(ctx, framebufferWidth, framebufferHeight);
         (void)queue.drain();
-        (void)epochnamespace::gui::render_deferred_batch(ctx.get());
         openglbridge::capture_frame_if_requested(framebufferWidth, framebufferHeight, windowId);
     }
 

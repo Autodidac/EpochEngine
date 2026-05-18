@@ -183,6 +183,10 @@
       <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
     </Link>
+    <PostBuildEvent>
+      <Message>Copy vcpkg debug runtime DLLs</Message>
+      <Command>if exist "$(EpochVcpkgInstallRoot)debug\bin\*.dll" xcopy /Y /D "$(EpochVcpkgInstallRoot)debug\bin\*.dll" "$(OutDir)" &gt;nul</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -211,8 +215,24 @@
       <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
     </Link>
+    <PostBuildEvent>
+      <Message>Copy vcpkg release runtime DLLs</Message>
+      <Command>if exist "$(EpochVcpkgInstallRoot)bin\*.dll" xcopy /Y /D "$(EpochVcpkgInstallRoot)bin\*.dll" "$(OutDir)" &gt;nul</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="EpochCopyDebugVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ItemGroup>
+      <EpochDebugVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)debug\bin\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(EpochDebugVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochDebugVcpkgRuntimeDlls)'!=''" />
+  </Target>
+  <Target Name="EpochCopyReleaseVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ItemGroup>
+      <EpochReleaseVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)bin\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(EpochReleaseVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochReleaseVcpkgRuntimeDlls)'!=''" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
