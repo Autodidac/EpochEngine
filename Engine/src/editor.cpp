@@ -350,7 +350,7 @@ namespace epochnamespace
             bool showConsoleDock{ true };
             bool showAiChat{ true };
             EditorLayoutDrag layoutDrag{ EditorLayoutDrag::None };
-            std::string detachedPanelHostStatus{ "Docked panels active. Borderless panel-host routing is staged for the next context pass." };
+            std::string detachedPanelHostStatus{ "Docked panels active. Borderless popout routing is disabled while the editor layout is stabilized." };
             bool projectNotesVisible{ false };
             bool showAboutModal{ false };
             bool showPackageManagerModal{ false };
@@ -423,7 +423,7 @@ namespace epochnamespace
             editor.showConsoleDock = true;
             editor.showAiChat = true;
             editor.layoutDrag = EditorLayoutDrag::None;
-            editor.detachedPanelHostStatus = "Layout reset. Docked panel host is ready; borderless host work remains staged.";
+            editor.detachedPanelHostStatus = "Layout reset. Docked panels active; borderless popout routing remains disabled.";
         }
 
         struct ContextPtrEq
@@ -3345,9 +3345,9 @@ namespace epochnamespace
         const float left_max = (std::max)(left_min, (std::min)(520.0f, w * 0.46f));
         const float right_min = (std::min)(260.0f, (std::max)(0.0f, w * 0.38f));
         const float right_max = (std::max)(right_min, (std::min)(560.0f, w * 0.48f));
-        const float left_w = layout_outliner_visible ? clamp_layout(w * editor.outlinerSplit, left_min, left_max) : 0.0f;
+        const float left_w = layout_outliner_visible ? clamp_layout(w * 0.20f, left_min, left_max) : 0.0f;
         const float right_w = layout_inspector_visible ? clamp_layout(w * editor.inspectorSplit, right_min, right_max) : 0.0f;
-        const float left_split_w = layout_outliner_visible ? splitter_w : 0.0f;
+        const float left_split_w = 0.0f;
         const float right_split_w = layout_inspector_visible ? splitter_w : 0.0f;
 
         const gui::Vec2 toolbar_pos{ 0.0f, 0.0f };
@@ -3701,9 +3701,7 @@ namespace epochnamespace
         const gui::Vec2 mouse = gui::mouse_position();
         if (gui::was_mouse_pressed())
         {
-            if (layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size))
-                editor.layoutDrag = EditorLayoutDrag::Outliner;
-            else if (layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size))
+            if (layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size))
                 editor.layoutDrag = EditorLayoutDrag::Inspector;
             else if (bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size))
                 editor.layoutDrag = EditorLayoutDrag::Dock;
@@ -3715,9 +3713,6 @@ namespace epochnamespace
         {
             switch (editor.layoutDrag)
             {
-            case EditorLayoutDrag::Outliner:
-                editor.outlinerSplit = std::clamp(mouse.x / (std::max)(1.0f, w), 0.12f, 0.42f);
-                break;
             case EditorLayoutDrag::Inspector:
                 editor.inspectorSplit = std::clamp((w - mouse.x) / (std::max)(1.0f, w), 0.14f, 0.45f);
                 break;
@@ -4337,8 +4332,11 @@ namespace epochnamespace
 
                 const auto assetEntries = collect_asset_browser_entries(editor);
                 gui::property_row("[assets] Active asset cards", std::to_string(assetEntries.size()), 120.0f);
-                for (const auto& entry : assetEntries)
+                constexpr std::size_t kMaxVisibleAssetCards = 14;
+                const std::size_t visibleAssetCards = (std::min)(assetEntries.size(), kMaxVisibleAssetCards);
+                for (std::size_t assetIndex = 0; assetIndex < visibleAssetCards; ++assetIndex)
                 {
+                    const auto& entry = assetEntries[assetIndex];
                     const std::string buttonLabel = entry.label + (entry.directory ? "" : std::format("  [{} bytes]", entry.size));
                     if (gui::button(buttonLabel, { centerWidth, 28.0f }))
                     {
@@ -4351,6 +4349,13 @@ namespace epochnamespace
                         }
                         push_editor_log(editor, "[assets] Selected " + entry.path);
                     }
+                }
+                if (assetEntries.size() > visibleAssetCards)
+                {
+                    gui::property_row(
+                        "[assets] More",
+                        std::to_string(assetEntries.size() - visibleAssetCards) + " hidden until the file-tree/thumbnail browser lands",
+                        120.0f);
                 }
 
                 if (assetEntries.empty())
@@ -4521,9 +4526,9 @@ namespace epochnamespace
                 gui::label("Systems Workspace");
                 gui::property_row("[system] Renderer", renderer_name(ctx), 112.0f);
                 gui::property_row("[system] Platform", epochnamespace::GetEngineBuildTagString(), 112.0f);
-                gui::property_row("[system] Detached host", editor.detachedPanelHostStatus, 112.0f);
+                gui::property_row("[system] Panel host", editor.detachedPanelHostStatus, 112.0f);
                 gui::wrapped_label(
-                    "Systems is reserved for render/backend/context routing, borderless panel hosts, diagnostics, and future node/timeline/video surfaces. It intentionally disables the 3D scene preview while open.",
+                    "Systems is reserved for render/backend/context routing, diagnostics, and future node/timeline/video surfaces. It intentionally disables the 3D scene preview while open.",
                     centerWidth);
                 gui::label("Time Controls");
                 gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running", 132.0f);
@@ -4676,8 +4681,6 @@ namespace epochnamespace
         const bool outlinerSplitHovered = layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size);
         const bool inspectorSplitHovered = layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size);
         const bool bottomSplitHovered = bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size);
-        if (layout_outliner_visible && outliner_split_size.x > 1.0f && outliner_split_size.y > 1.0f)
-            gui::splitter_bar(outliner_split_pos, outliner_split_size, outlinerSplitHovered, editor.layoutDrag == EditorLayoutDrag::Outliner);
         if (layout_inspector_visible && inspector_split_size.x > 1.0f && inspector_split_size.y > 1.0f)
             gui::splitter_bar(inspector_split_pos, inspector_split_size, inspectorSplitHovered, editor.layoutDrag == EditorLayoutDrag::Inspector);
         if (bottom_visible && bottom_split_size.x > 1.0f && bottom_split_size.y > 1.0f)
@@ -5457,78 +5460,24 @@ namespace epochnamespace
                 ? static_cast<std::size_t>(std::thread::hardware_concurrency())
                 : std::size_t{ 6 });
             const std::string supportTier = recommended_support_tier(ctx, workerCount);
-            const std::string pacingHealth = pacing_health_summary(editor.timeSnapshot);
-            const std::string backendGuidance = backend_runtime_guidance(ctx, supportTier);
-            const std::string convergenceFocus = backend_convergence_focus(ctx);
             const float contentWidth = (std::max)(180.0f, log_size.x - 24.0f);
 
             gui::property_row("[systems] Renderer", renderer_name(ctx));
-            gui::property_row("[systems] Active backend", renderer_name(ctx));
             gui::property_row("[systems] Ownership model", backend_ownership_model(ctx));
-            gui::property_row("[systems] Editor backend target", "Single-context OpenGL");
-            gui::property_row("[systems] Launcher backend target", "Single-context software");
-            gui::property_row("[systems] Backend lifecycle", backend_lifecycle_policy());
             gui::property_row("[systems] Preview camera", preview_camera_name(ctx));
             gui::property_row("[systems] Runtime target", editor.activeRuntimeScene);
             gui::property_row("[systems] Registered systems", std::to_string(orderedSystems.size));
             gui::property_row("[systems] Worker lanes", std::to_string(workerCount));
-            gui::property_row("[systems] Compatibility target", "6-core / 1660 Ti-era desktop and modern Linux laptops by default");
             gui::property_row("[systems] Support tier", supportTier);
             gui::property_row("[build] Compiler", compiler_identity());
             gui::property_row("[build] Configuration", build_configuration_label());
-            gui::property_row("[build] Language mode", language_mode_summary());
-            gui::property_row("[build] Feature probes", feature_probe_summary());
-            gui::property_row("[build] CI contract", hosted_ci_contract());
             const std::filesystem::path phase5PacketRoot{ epoch::ai::iteration_packet_root() };
-            gui::property_row("[phase5] Evidence bridge", "Systems build truth -> AI staged packets");
             gui::property_row("[phase5] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
-            gui::property_row("[phase5] Build pending", editor.aiContinuousBuildPending ? "true" : "false");
-            gui::property_row("[phase5] Build runs", std::to_string(editor.aiContinuousBuildRunCount));
             gui::property_row("[phase5] Build status", editor.aiContinuousBuildStatus);
-            gui::property_row("[phase5] Tool runs", std::to_string(editor.aiToolHarnessRunCount));
-            gui::property_row("[phase5] Tool status", editor.aiToolHarnessStatus);
             gui::property_row("[phase5] Staged packets", staged_packet_count_summary(phase5PacketRoot));
-            gui::property_row("[phase5] Packet root", display_project_path(phase5PacketRoot));
-            gui::property_row("[phase5] Gate contract", "planner -> executor -> builder -> verifier -> gate");
-            gui::property_row("[systems] Render path", "visibility -> surface -> lighting -> temporal -> reconstruction -> present");
             gui::wrapped_label(
-                "The Systems workspace now shows engine-generated graph surfaces with pan/zoom controls. Backend ownership is also written down here so the active backend, the dock/undock contract, and the long-term single-backend shell targets stay visible instead of living only in roadmap text.",
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(
-                "Phase 5 evidence is mirrored here so build confidence, tool-harness activity, staged packet counts, and the review-gate contract are visible from Systems before an AI pass is allowed to promote anything.",
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(
-                "Graph surfaces live in the central Systems workspace only. The Console Dock keeps this tab to compact text diagnostics so it does not duplicate the render/task/support graph UI.",
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running");
-            gui::property_row("[time] Frame dt", format_ms(editor.timeSnapshot.real_dt_seconds));
-            gui::property_row("[time] Scaled dt", format_ms(editor.timeSnapshot.scaled_dt_seconds));
-            gui::property_row(
-                "[time] Fixed step",
-                std::string(format_ms(editor.timeSnapshot.fixed_dt_seconds)) + " / " + format_rate(editor.timeSnapshot.fixed_dt_seconds));
-            gui::property_row("[time] Simulated", format_seconds(editor.timeSnapshot.simulated_seconds));
-            gui::property_row("[time] Accumulator", format_ms(editor.timeSnapshot.accumulator_seconds));
-            gui::property_row("[time] Step count", std::to_string(editor.timeSnapshot.simulated_steps));
-            gui::property_row("[time] Step budget", std::to_string(editor.timeSnapshot.step_budget));
-            gui::property_row("[time] Frame step cap", std::to_string(editor.timeSnapshot.max_steps_per_frame));
-            gui::property_row("[time] Time scale", std::format("{:.2f}x", editor.timeSnapshot.time_scale));
-            gui::property_row("[time] Pacing health", pacingHealth);
-            gui::wrapped_label(
-                "Bottom Dock > Systems is diagnostic-only. Use the central Systems workspace for graph surfaces and time controls.",
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::property_row("[systems] Render stages", "Capture | Visibility | Surface | Lighting | Temporal | Present");
-            gui::property_row("[systems] Task lanes", "Input | Systems | Scripts | AI | Output");
-            gui::property_row("[systems] Lib strategy", "auto on capable hardware; developer can trim support tiers per game");
-            gui::property_row("[systems] Tier policy", "Baseline by default, Standard on stronger 6-core+ GPUs/CPUs, Extended only by project opt-in");
-            gui::property_row("[systems] Backend guidance", backendGuidance);
-            gui::property_row("[systems] Convergence focus", convergenceFocus);
-            for (auto* system : orderedSystems)
-            {
-                const auto name = system->name();
-                gui::property_row(
-                    "  system",
-                    std::string(name.data ? name.data : "", name.size));
-            }
+                "Bottom Dock > Systems is compact status only. Use the central Systems workspace for graph surfaces, time controls, backend details, and live system lists.",
+                contentWidth);
             break;
         }
         case EditorWorkspaceTab::Output:
@@ -5642,7 +5591,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, 11), [&](gui::Vec2 pos)
+        open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, 10), [&](gui::Vec2 pos)
         {
             menu_item(editor.showOutliner ? "Hide Outliner" : "Show Outliner", { pos.x + 12.0f, pos.y + 14.0f }, 248.0f, [&]() {
                 editor.showOutliner = !editor.showOutliner;
@@ -5680,10 +5629,6 @@ namespace epochnamespace
             });
             menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 320.0f }, 248.0f, [&]() {
                 handle_scene_tool(editor, "toggle_helpers");
-            });
-            menu_item("Borderless Popout Host", { pos.x + 12.0f, pos.y + 354.0f }, 248.0f, [&]() {
-                editor.detachedPanelHostStatus = "Borderless panel-host design accepted: panels stay docked now; next pass routes selected GUI containers into linked contexts.";
-                push_editor_log(editor, "[window] Borderless popout host staged for the next context-routing pass.");
             });
         });
 
