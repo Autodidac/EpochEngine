@@ -25,58 +25,6 @@ work, and a staged engine AI workspace that keeps automation reviewable.
 
 ---
 
-## The Story Of Epoch Engine
-
-Epoch Engine started as a rough creative engine idea during the final third of
-2023. The original direction was not just to build another renderer, tool
-window, or isolated experiment. The goal was to grow a unified engine platform
-where runtime systems, editor tooling, project workflows, scripting,
-AI-assisted review surfaces, renderer backends, and creative workflows could
-evolve together in one codebase.
-
-By the end of February 2024, active coding had begun with ChatGPT in the loop.
-Epoch started moving from concept into a real working codebase, with early
-systems forming around the idea of a modern project-centric engine and tooling
-platform rather than a collection of disconnected utilities.
-
-In November-December 2024, the early header-only Vulkan work was split out and
-added as a focused low-level rendering foundation. This became the first
-concrete renderer milestone and helped define the modular backend direction for
-the engine.
-
-In early 2025, Epoch went through a complete functional rewrite. Core runtime
-structure, launcher direction, project shell work, scripting surfaces, AI
-review concepts, and editor-facing systems were rebuilt around a cleaner
-project-centric foundation.
-
-During spring and summer 2025, the Vulkan renderer went through a major
-rewrite. The goal was not just to "have Vulkan," but to push the renderer
-toward a stronger engine-ready design with better pipeline structure, resource
-handling, backend isolation, and renderer integration.
-
-From December 2025 into January 2026, Epoch was rewritten and converted to
-modern C++23 for the newer engine line. This established the current language
-and architecture foundation used going forward.
-
-Over winter 2025-2026, Epoch moved into the multicontext rewrite. Renderer
-contexts, backend selection, launcher behavior, editor integration, and runtime
-presentation were reorganized into a coordinated multicontext architecture
-instead of separate backend experiments.
-
-By spring 2026, Epoch reached a base stable multicontext foundation with just
-enough support for the almost-working editor and the systems built before it.
-The current engine line ties together the launcher, project shells, scripting
-work, AI review surfaces, renderer backends, editor foundation, and
-multicontext runtime into one evolving platform.
-
-Beyond 2026, Epoch continues toward a complete project-centric runtime and
-tooling platform where the editor, renderer backends, scripting, AI-assisted
-review, project workflows, and engine systems evolve together using AI.
-
-Epoch is built from the idea that as technology improves, and as optimization
-and good programming get smarter, a better and fuller system can be fostered
-instead of settling for smaller disconnected tools.
-
 <p align="center">
   <img src="Images/readme/epoch-engine-story-v08431.png" alt="The story of Epoch Engine timeline" />
 </p>
