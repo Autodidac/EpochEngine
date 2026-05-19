@@ -120,13 +120,16 @@ namespace
         if (!viewport.valid() || ctx->scene_preview_mode() != epochnamespace::core::ScenePreviewMode::Editor)
             return;
 
-        SDL_Rect clipRect{ viewport.x, viewport.y, viewport.width, viewport.height };
+        SDL_Rect sceneViewport{ viewport.x, viewport.y, viewport.width, viewport.height };
+        (void)SDL_SetRenderViewport(s_renderer, &sceneViewport);
+
+        SDL_Rect clipRect{ 0, 0, viewport.width, viewport.height };
         (void)SDL_SetRenderClipRect(s_renderer, &clipRect);
 
         const auto clearColor = epochnamespace::previewgrid::kClearColor;
         const SDL_FRect background{
-            static_cast<float>(viewport.x),
-            static_cast<float>(viewport.y),
+            0.0f,
+            0.0f,
             static_cast<float>(viewport.width),
             static_cast<float>(viewport.height)
         };
@@ -153,6 +156,33 @@ namespace
             camera.target,
             camera.up);
         const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
+        auto draw_projected_line = [&](const auto& aVertex, const auto& bVertex) noexcept
+        {
+            float ax = 0.0f;
+            float ay = 0.0f;
+            float bx = 0.0f;
+            float by = 0.0f;
+            if (!project_preview_vertex(mvp, aVertex.position, viewport, ax, ay)
+                || !project_preview_vertex(mvp, bVertex.position, viewport, bx, by))
+            {
+                return;
+            }
+
+            ax -= static_cast<float>(viewport.x);
+            ay -= static_cast<float>(viewport.y);
+            bx -= static_cast<float>(viewport.x);
+            by -= static_cast<float>(viewport.y);
+
+            const auto color = aVertex.color;
+            (void)SDL_SetRenderDrawColor(
+                s_renderer,
+                to_sdl_channel(color.x),
+                to_sdl_channel(color.y),
+                to_sdl_channel(color.z),
+                255u);
+            (void)SDL_RenderLine(s_renderer, ax, ay, bx, by);
+        };
+
         const auto vertices = epochnamespace::previewgrid::grid_vertices();
         const auto indices = epochnamespace::previewgrid::grid_indices();
 
@@ -163,51 +193,24 @@ namespace
             if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
                 continue;
 
-            float ax = 0.0f;
-            float ay = 0.0f;
-            float bx = 0.0f;
-            float by = 0.0f;
-            if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, ax, ay)
-                || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, bx, by))
-            {
-                continue;
-            }
-
-            const auto color = vertices[firstIndex].color;
-            (void)SDL_SetRenderDrawColor(
-                s_renderer,
-                to_sdl_channel(color.x),
-                to_sdl_channel(color.y),
-                to_sdl_channel(color.z),
-                255u);
-            (void)SDL_RenderLine(s_renderer, ax, ay, bx, by);
+            draw_projected_line(vertices[firstIndex], vertices[secondIndex]);
         }
 
         const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
         const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get());
         for (std::size_t i = 0; i + 1 < markerCount; i += 2)
         {
-            float ax = 0.0f;
-            float ay = 0.0f;
-            float bx = 0.0f;
-            float by = 0.0f;
-            if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, ax, ay)
-                || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, bx, by))
-            {
-                continue;
-            }
+            draw_projected_line(markerVertices[i], markerVertices[i + 1]);
+        }
 
-            const auto color = markerVertices[i].color;
-            (void)SDL_SetRenderDrawColor(
-                s_renderer,
-                to_sdl_channel(color.x),
-                to_sdl_channel(color.y),
-                to_sdl_channel(color.z),
-                255u);
-            (void)SDL_RenderLine(s_renderer, ax, ay, bx, by);
+        const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx.get());
+        for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
+        {
+            draw_projected_line(objectVertices[i], objectVertices[i + 1]);
         }
 
         (void)SDL_SetRenderClipRect(s_renderer, nullptr);
+        (void)SDL_SetRenderViewport(s_renderer, nullptr);
     }
 
     void refresh_dimensions(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
@@ -415,42 +418,62 @@ namespace
         if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
         {
             const HWND dockParent = ::GetParent(s_hostWindow);
-            const HWND liveDockParent = dockParent ? dockParent : s_hostWindow;
-            s_dockParent = liveDockParent;
-            ::SetParent(s_childWindow, liveDockParent);
+            if (dockParent && ::IsWindow(dockParent) != FALSE)
+            {
+                s_dockParent = dockParent;
+                ::SetParent(s_childWindow, dockParent);
 
-            LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
-            style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
-            style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
-            ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-            epochnamespace::core::MakeDockable(s_childWindow, liveDockParent);
+                LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
+                style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
+                style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+                ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
+                epochnamespace::core::MakeDockable(s_childWindow, dockParent);
 
-            RECT client{};
-            const HWND sizeSource = s_hostWindow ? s_hostWindow : liveDockParent;
-            ::GetClientRect(sizeSource, &client);
-            s_width = (std::max)(1, static_cast<int>(client.right - client.left));
-            s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
+                RECT client{};
+                ::GetClientRect(s_hostWindow, &client);
+                s_width = (std::max)(1, static_cast<int>(client.right - client.left));
+                s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
 
-            ::SetWindowPos(
-                s_childWindow,
-                nullptr,
-                0,
-                0,
-                s_width,
-                s_height,
-                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                ::SetWindowPos(
+                    s_childWindow,
+                    nullptr,
+                    0,
+                    0,
+                    s_width,
+                    s_height,
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 
-            // Keep SDL's internal window/backbuffer size aligned with the dock slot
-            // before the first present so the pane does not stay blank until resize.
-            SDL_SetWindowSize(s_window, s_width, s_height);
-            ::RedrawWindow(
-                s_childWindow,
-                nullptr,
-                nullptr,
-                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+                // Keep SDL's internal window/backbuffer size aligned with the dock slot
+                // before the first present so the pane does not stay blank until resize.
+                SDL_SetWindowSize(s_window, s_width, s_height);
+                ::RedrawWindow(
+                    s_childWindow,
+                    nullptr,
+                    nullptr,
+                    RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
 
-            if (s_hostWindow != s_childWindow)
-                ::ShowWindow(s_hostWindow, SW_HIDE);
+                if (s_hostWindow != s_childWindow)
+                    ::ShowWindow(s_hostWindow, SW_HIDE);
+            }
+            else
+            {
+                s_dockParent = nullptr;
+                LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
+                style &= ~static_cast<LONG_PTR>(WS_CHILD);
+                style |= WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+                ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
+                ::SetWindowPos(
+                    s_childWindow,
+                    nullptr,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+                if (s_hostWindow != s_childWindow)
+                    ::ShowWindow(s_hostWindow, SW_HIDE);
+            }
         }
 
 #endif

@@ -240,6 +240,33 @@ namespace
                 s_window->draw(markerLines, renderStates);
         }
 
+        const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx.get());
+        if (!objectVertices.empty())
+        {
+            sf::VertexArray objectLines(sf::PrimitiveType::Lines);
+            for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
+            {
+                sf::Vector2f a{};
+                sf::Vector2f b{};
+                if (!project_preview_vertex(mvp, objectVertices[i].position, viewport, a)
+                    || !project_preview_vertex(mvp, objectVertices[i + 1].position, viewport, b))
+                {
+                    continue;
+                }
+
+                a.x -= static_cast<float>(viewport.x);
+                a.y -= static_cast<float>(viewport.y);
+                b.x -= static_cast<float>(viewport.x);
+                b.y -= static_cast<float>(viewport.y);
+
+                objectLines.append(sf::Vertex(a, to_sfml_color(objectVertices[i].color)));
+                objectLines.append(sf::Vertex(b, to_sfml_color(objectVertices[i].color)));
+            }
+
+            if (objectLines.getVertexCount() > 0)
+                s_window->draw(objectLines, renderStates);
+        }
+
         s_window->setView(previousView);
     }
 

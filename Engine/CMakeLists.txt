@@ -830,7 +830,6 @@ endif()
 
 if(NOT EPOCH_RAYLIB_ACTIVE)
     set_source_files_properties(
-        src/raylib.backend.cpp
         src/context_raylib.cpp
         src/raylib.bridge.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
@@ -839,7 +838,6 @@ endif()
 
 if(NOT EPOCH_SDL_ACTIVE)
     set_source_files_properties(
-        src/sdl.backend.cpp
         src/context_sdl.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
@@ -847,7 +845,6 @@ endif()
 
 if(NOT EPOCH_SFML_ACTIVE)
     set_source_files_properties(
-        src/sfml.backend.cpp
         src/context_sfml.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )

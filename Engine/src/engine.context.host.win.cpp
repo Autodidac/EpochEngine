@@ -2883,6 +2883,31 @@ namespace epochnamespace::core
         const int cw = clamp_positive(clientW / cols);
         const int ch = clamp_positive(clientH / rows);
 
+        const auto client_size_or_slot = [](HWND hwnd, int fallbackW, int fallbackH) noexcept
+        {
+            RECT rc{};
+            if (hwnd && ::IsWindow(hwnd) != FALSE && ::GetClientRect(hwnd, &rc))
+            {
+                const int w = clamp_positive(static_cast<int>(rc.right - rc.left));
+                const int h = clamp_positive(static_cast<int>(rc.bottom - rc.top));
+                return SIZE{ w, h };
+            }
+
+            return SIZE{ clamp_positive(fallbackW), clamp_positive(fallbackH) };
+        };
+
+        const auto redraw_window_tree = [](HWND hwnd) noexcept
+        {
+            if (!hwnd || ::IsWindow(hwnd) == FALSE)
+                return;
+
+            ::RedrawWindow(
+                hwnd,
+                nullptr,
+                nullptr,
+                RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_NOERASE);
+        };
+
         for (size_t i = 0; i < dockedWindows.size(); ++i)
         {
             const int c = static_cast<int>(i) % cols;
@@ -2900,7 +2925,6 @@ namespace epochnamespace::core
             const HWND liveHwnd = dock_slot_handle(&win, parent);
             if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
                 continue;
-            const bool needsResizeCallback = win.width != cw || win.height != ch;
 
             const bool usingHiddenHostPlaceholder =
                 win.host_hwnd
@@ -2938,8 +2962,22 @@ namespace epochnamespace::core
                 restore_associated_host_window(&win, parent, c * cw, r * ch, cw, ch);
             }
 
-            if (needsResizeCallback)
-                HandleResize(liveHwnd, cw, ch);
+            if (win.host_hwnd
+                && win.hwndChild
+                && ::IsWindow(win.host_hwnd) != FALSE
+                && ::IsWindow(win.hwndChild) != FALSE
+                && ::GetParent(win.hwndChild) == win.host_hwnd)
+            {
+                const SIZE hostClient = client_size_or_slot(win.host_hwnd, cw, ch);
+                apply_child_fill_layout(win.hwndChild, win.host_hwnd, hostClient.cx, hostClient.cy);
+                redraw_window_tree(win.hwndChild);
+            }
+
+            const SIZE liveClient = client_size_or_slot(liveHwnd, cw, ch);
+            if (win.width != liveClient.cx || win.height != liveClient.cy)
+                HandleResize(liveHwnd, liveClient.cx, liveClient.cy);
+
+            redraw_window_tree(liveHwnd);
             hide_associated_host_window(&win, liveHwnd, parent);
         }
     }
@@ -3123,6 +3161,10 @@ namespace epochnamespace::core
         case WM_SIZE:
             if (wParam != SIZE_MINIMIZED)
                 request_parent_layout(hwnd);
+            return 0;
+
+        case WM_EXITSIZEMOVE:
+            request_parent_layout(hwnd);
             return 0;
 
         case WM_EPOCH_LAYOUT:

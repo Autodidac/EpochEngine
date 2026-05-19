@@ -243,6 +243,24 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\core_context_backends.hpp">
+      <Filter>Source Files\core\context\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp">
+      <Filter>Source Files\core\context\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_context_detail.hpp">
+      <Filter>Source Files\core\context\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp">
+      <Filter>Source Files\core\context\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.hpp">
+      <Filter>Source Files\core\context\engine</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_upload_bridge.hpp">
+      <Filter>Source Files\core\context\engine</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
@@ -377,9 +395,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\sdl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.backend.ixx">
-      <Filter>Module Files\ixx\core\context\backends\sdl</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.renderer.ixx">
       <Filter>Module Files\ixx\core\context\backends\sdl</Filter>
     </ClCompile>
@@ -405,9 +420,6 @@
       <Filter>Module Files\ixx\core\context\backends\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context.ixx">
-      <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.backend.ixx">
       <Filter>Module Files\ixx\core\context\backends\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.freetype.ixx">
@@ -438,9 +450,6 @@
       <Filter>Module Files\ixx\core\context\backends\noop</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.context.ixx">
-      <Filter>Module Files\ixx\core\context\backends\sfml</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.backend.ixx">
       <Filter>Module Files\ixx\core\context\backends\sfml</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.renderer.ixx">

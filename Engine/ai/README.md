@@ -128,6 +128,20 @@ fresh packet after successful builds. That packet is the durable handoff into
 future replay, verifier scoring, and curated training promotion. It does not
 grant blind write-through to the repo.
 
+The same evidence route is available without opening the GUI:
+
+```powershell
+.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test sandbox
+.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test projectlauncher
+```
+
+Those commands materialize and build the selected shell, append an MCP-style
+tool capture to `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl`,
+and stage a packet under
+`Engine/examples/ConsoleApplication1/workspace/ai/iterations/`. The generated
+child outputs should then pass their own `--project-self-test` routes before an
+AI pass is treated as verified.
+
 The editor AI workspace also has an AI tool harness. It builds and runs the
 selected tooling script through the real `EpochScriptHost`, captures before/after
 editor state, records the result as tool evidence, and stages a packet when the

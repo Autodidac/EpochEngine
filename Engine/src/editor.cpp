@@ -3290,10 +3290,14 @@ namespace epochnamespace
 
         auto resolve_layout_extent = [&]() noexcept
         {
-            int resolvedWidth = ctx->get_width_safe();
-            int resolvedHeight = ctx->get_height_safe();
+            int resolvedWidth = 0;
+            int resolvedHeight = 0;
 
-            if ((resolvedWidth <= 1 || resolvedHeight <= 1) && ctx->windowData)
+            // Docked/direct-child backends can report stale renderer dimensions while
+            // the parent window is actively resizing. The GUI owns the full client
+            // layout, so use the live window extent first and let backend dimensions
+            // remain a fallback only for non-windowed/headless contexts.
+            if (ctx->windowData)
             {
                 const int liveWidth = ctx->windowData->get_width();
                 const int liveHeight = ctx->windowData->get_height();
@@ -3302,6 +3306,12 @@ namespace epochnamespace
                     resolvedWidth = liveWidth;
                     resolvedHeight = liveHeight;
                 }
+            }
+
+            if (resolvedWidth <= 0 || resolvedHeight <= 0)
+            {
+                resolvedWidth = ctx->get_width_safe();
+                resolvedHeight = ctx->get_height_safe();
             }
 
             return gui::Vec2{
@@ -3345,7 +3355,7 @@ namespace epochnamespace
         const float left_max = (std::max)(left_min, (std::min)(520.0f, w * 0.46f));
         const float right_min = (std::min)(260.0f, (std::max)(0.0f, w * 0.38f));
         const float right_max = (std::max)(right_min, (std::min)(560.0f, w * 0.48f));
-        const float left_w = layout_outliner_visible ? clamp_layout(w * 0.20f, left_min, left_max) : 0.0f;
+        const float left_w = layout_outliner_visible ? clamp_layout(w * editor.outlinerSplit, left_min, left_max) : 0.0f;
         const float right_w = layout_inspector_visible ? clamp_layout(w * editor.inspectorSplit, right_min, right_max) : 0.0f;
         const float left_split_w = 0.0f;
         const float right_split_w = layout_inspector_visible ? splitter_w : 0.0f;
@@ -3753,7 +3763,7 @@ namespace epochnamespace
         (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
             .id = "world-outliner-body",
             .size = { (std::max)(80.0f, outliner_size.x - 12.0f), outlinerScrollHeight },
-            .draw_background = false,
+            .draw_background = true,
             .show_scrollbar = true
         });
         const float outlinerWidth = (std::max)(150.0f, outliner_size.x - 18.0f);
@@ -3829,7 +3839,7 @@ namespace epochnamespace
         (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
             .id = editor.workspaceTab == EditorWorkspaceTab::AI ? "inspector-ai-body" : "inspector-scene-body",
             .size = { (std::max)(80.0f, details_size.x - 12.0f), inspectorScrollHeight },
-            .draw_background = false,
+            .draw_background = true,
             .show_scrollbar = true
         });
         if (editor.workspaceTab == EditorWorkspaceTab::AI)
@@ -4678,7 +4688,6 @@ namespace epochnamespace
         render_outliner_window();
         render_inspector_window();
 
-        const bool outlinerSplitHovered = layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size);
         const bool inspectorSplitHovered = layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size);
         const bool bottomSplitHovered = bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size);
         if (layout_inspector_visible && inspector_split_size.x > 1.0f && inspector_split_size.y > 1.0f)

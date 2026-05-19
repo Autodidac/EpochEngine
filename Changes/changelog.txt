@@ -1,5 +1,18 @@
 # Epoch Changelog
 
+## [v0.84.30]
+- Bumped the active source line to `v0.84.30` for the AI self-iteration
+  evidence-loop proof and backend-source cleanup pass.
+- Extended `--editor-project-self-test <id>` so the real engine materializes and
+  builds the selected generated project, appends MCP-style tool evidence, and
+  stages an AI iteration packet with project, build, output, capture, and model
+  paths for the review gate.
+- Verified the generated `Sandbox` and `ProjectLauncher` child outputs with
+  their own `--project-self-test` routes after engine-side builds.
+- Removed stale Raylib/SDL/SFML backend source/module entries that were no
+  longer part of the active backend implementation and cleaned the MSVC/CMake
+  surfaces accordingly.
+
 ## [v0.84.29]
 - Bumped the active source line to `v0.84.29` for the OpenGL GUI flicker fix.
 - Kept the confirmed OpenGL render order as `scene preview -> command queue ->

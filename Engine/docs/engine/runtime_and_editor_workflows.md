@@ -543,6 +543,13 @@ without opening GUI windows. The Sandbox route must report the
 engine-self-iteration sandbox identity; ProjectLauncher must report its launcher
 tool identity.
 
+As of `v0.84.30`, the engine-side command also appends an MCP-style tool
+capture and stages an AI iteration packet under
+`Engine/examples/ConsoleApplication1/workspace/ai/iterations/`. That packet is
+the reviewable bridge for EpochBot: it records project paths, build logs,
+outputs, capture logs, selected model metadata, and a human-gated verifier
+state before any follow-up coding pass is allowed to promote changes.
+
 ## Troubleshooting checklist
 
 - verify the expected backend/config macros are enabled

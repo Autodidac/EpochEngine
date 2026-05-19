@@ -40,6 +40,12 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_bot.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_service.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_types.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\core_context_backends.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_context_detail.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_upload_bridge.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)..\Changes\roadmap.md">
@@ -77,9 +83,6 @@
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\a2048like.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.backend.ixx">
-      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.input.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_api.ixx" />
@@ -181,9 +184,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.context.ixx">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.backend.ixx">
-      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.renderer.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.state.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.textures.ixx" />
@@ -218,9 +218,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.textures.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.context.ixx">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.backend.ixx">
-      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.renderer.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.textures.ixx" />

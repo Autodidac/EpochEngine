@@ -292,20 +292,40 @@ namespace epochnamespace::core
         }
         [[nodiscard]] RenderViewport scene_viewport() const noexcept
         {
+            for (int attempt = 0; attempt < 4; ++attempt)
+            {
+                const std::uint32_t beginRevision = sceneViewportRevision.load(std::memory_order_acquire);
+                if ((beginRevision & 1u) != 0u)
+                    continue;
+
+                RenderViewport viewport{
+                    sceneViewportX.load(std::memory_order_relaxed),
+                    sceneViewportY.load(std::memory_order_relaxed),
+                    sceneViewportWidth.load(std::memory_order_relaxed),
+                    sceneViewportHeight.load(std::memory_order_relaxed)
+                };
+
+                const std::uint32_t endRevision = sceneViewportRevision.load(std::memory_order_acquire);
+                if (beginRevision == endRevision && (endRevision & 1u) == 0u)
+                    return viewport;
+            }
+
             return RenderViewport{
-                sceneViewportX.load(std::memory_order_relaxed),
-                sceneViewportY.load(std::memory_order_relaxed),
-                sceneViewportWidth.load(std::memory_order_relaxed),
-                sceneViewportHeight.load(std::memory_order_relaxed)
+                sceneViewportX.load(std::memory_order_acquire),
+                sceneViewportY.load(std::memory_order_acquire),
+                sceneViewportWidth.load(std::memory_order_acquire),
+                sceneViewportHeight.load(std::memory_order_acquire)
             };
         }
 
         void set_scene_viewport(RenderViewport viewport) noexcept
         {
+            sceneViewportRevision.fetch_add(1u, std::memory_order_acq_rel);
             sceneViewportX.store((std::max)(0, viewport.x), std::memory_order_relaxed);
             sceneViewportY.store((std::max)(0, viewport.y), std::memory_order_relaxed);
             sceneViewportWidth.store((std::max)(0, viewport.width), std::memory_order_relaxed);
             sceneViewportHeight.store((std::max)(0, viewport.height), std::memory_order_relaxed);
+            sceneViewportRevision.fetch_add(1u, std::memory_order_release);
         }
 
         void clear_scene_viewport() noexcept
@@ -623,6 +643,7 @@ namespace epochnamespace::core
         std::atomic<int> sceneViewportY{ 0 };
         std::atomic<int> sceneViewportWidth{ 0 };
         std::atomic<int> sceneViewportHeight{ 0 };
+        std::atomic<std::uint32_t> sceneViewportRevision{ 0 };
         std::atomic<std::uint8_t> scenePreviewMode{ static_cast<std::uint8_t>(ScenePreviewMode::None) };
 
         // virtual design canvas

@@ -332,6 +332,10 @@ engine shape and should be treated as starting truth for the next passes:
 - the checked-in engine now exposes `--editor-project-self-test <id>` so Sandbox
   and ProjectLauncher shells can be materialized and built from the real engine
   before their generated child `--project-self-test` paths are run
+- `v0.84.30` extends that self-test route into the AI evidence loop: the engine
+  now appends MCP-style tool captures and stages review-gated iteration packets
+  for Sandbox and ProjectLauncher, giving EpochBot a real materialize -> build
+  -> capture -> packet path to inspect before proposing the next pass
 - Self-Iteration Sandbox controls now force the `sandbox` profile and rewrite
   stale generated shell identity when manifest id/script/template evidence does
   not match the selected profile. Sandbox is for manipulating/testing Epoch
