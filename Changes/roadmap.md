@@ -141,8 +141,32 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - The software renderer is the fallback and headless-validation backend.
 - Vulkan remains the future explicit graphics backend until runtime support is
   fully stabilized.
+- Direct3D/D3D12 is a renderer-parity target and reserved backend surface only;
+  do not describe it as active until a real device/context/shader/resource path
+  is promoted and validated.
 - Raylib, SDL, and SFML remain context/backend compatibility and validation
   lanes, especially for docking, popout, and backend ownership checks.
+
+### Renderer Feature Matrix
+
+- `Engine/docs/engine/renderer_feature_matrix.md` owns the imported
+  OpenGL/Vulkan/Direct3D feature-family list and separates what Epoch already
+  has from missing renderer work.
+- Already-present or partial foundations include context/window bootstrap,
+  frame clear/present, primitive preview geometry, shader setup, uniforms,
+  vertex/index buffers, transforms, camera controls, texture/atlas upload,
+  basic material/light placeholders, debug/logging, partial 3D picking,
+  capture/runtime-surface plumbing, text/UI rendering, and platform window
+  layers.
+- Missing renderer work is grouped into baseline renderer completion, shadows
+  and lighting, deferred/post-processing, animation/geometry/particles, and
+  GPU-driven diagnostics rather than being treated as 61 isolated tasks.
+- OpenGL should prove feature behavior first where practical, while the engine
+  abstraction is shaped around the explicit Vulkan/D3D resource model:
+  buffers, textures, samplers, pipelines, binding sets, render targets, command
+  submission, synchronization, and debug/profiling hooks.
+- Direct3D/D3D12 equivalents belong in the design matrix now, but no D3D smoke
+  lane or support claim exists until the backend is deliberately promoted.
 
 ### Future Feature Gates
 
@@ -540,6 +564,8 @@ engine shape and should be treated as starting truth for the next passes:
 
 - deepen pacing diagnostics, perf-select guidance, and hardware guidance in the
   Systems workspace
+- surface the renderer feature matrix in Systems as present/partial/missing
+  backend capability status before claiming new renderer features complete
 - keep compiler/language/CI validation status visible in Systems so build
   confidence stays tied to the live editor surface
 - use that build-confidence baseline to feed the AI workspace with current
@@ -657,6 +683,10 @@ engine shape and should be treated as starting truth for the next passes:
 
 - complete the primitive/object system as a real engine-owned authoring/runtime
   path
+- align primitive/material/light growth with the renderer feature matrix:
+  formal materials, multiple lights, render targets, model import, normal maps,
+  cubemaps, shadows, and instancing should land as engine-facing feature
+  families instead of one-off preview hacks
 - build from the current ambient-solid primitive preview baseline toward true
   ECS-owned cube/light/material components instead of falling back to abstract
   helper glyphs
@@ -688,7 +718,8 @@ engine shape and should be treated as starting truth for the next passes:
 1. Keep GitHub/workflow reliability and local/hosted build truth aligned after
    the headless plus Linux Clang engine split.
 2. Strengthen the Systems workspace with deeper pacing diagnostics and backend
-   convergence guidance.
+   convergence guidance, including present/partial/missing renderer feature
+   status from the feature matrix.
 3. Carry the time spine deeper into runtime and scene ownership.
 4. Tighten the AI capture, replay, review, and promotion loop until
    Phase 5 can run from staged packets with builder/verifier gates and visible
@@ -720,6 +751,9 @@ engine shape and should be treated as starting truth for the next passes:
   into a fake demo shell.
 - The Systems workspace shows real graph/tooling surfaces plus time
   diagnostics.
+- Renderer feature support is tracked through the feature matrix and only
+  marked complete after backend-specific validation or an explicit deferral
+  note.
 - The engine owns one shared simulation clock and exposes real time controls.
 - Multicontext proof stays honest:
   all six panes are real, detached shells behave like real top-level windows,

@@ -48,6 +48,10 @@ Current source version: `v0.84.30`
   atlas instead of relying on text-only diagnostics or the bottom dock. Systems
   keeps render/frame flow, task/thread scheduling, and support-tier status in
   readable graph rows.
+- **Renderer feature direction**: `renderer_feature_matrix.md` now tracks the
+  imported OpenGL/Vulkan/Direct3D feature families, separates existing/partial
+  engine coverage from missing renderer backlog work, and keeps Direct3D as a
+  parity target rather than an active backend promise.
 - **Migration map**: formerly archived compatibility surfaces are now either
   preserved in active modules or called out explicitly in
   `Engine/docs/engine/legacy_feature_map.md`.
@@ -147,6 +151,9 @@ Current source version: `v0.84.30`
 - Vulkan is present but should still be treated as a migration/integration path,
   not the default renderer, even though the editor palette, editor grid preview,
   and GUI presentation have been brought closer to the OpenGL baseline.
+- Direct3D/D3D12 remains reserved scaffolding only. Do not describe it as an
+  active renderer until a real context/device/shader/resource path is promoted
+  and validated.
 - A few minor archival and compatibility surfaces still exist and should be
   changed carefully.
 - Backend fixes are usually safest when applied locally to the affected backend

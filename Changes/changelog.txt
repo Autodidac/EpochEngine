@@ -3,6 +3,10 @@
 ## [v0.84.30]
 - Bumped the active source line to `v0.84.30` for the AI self-iteration
   evidence-loop proof and backend-source cleanup pass.
+- Added the renderer feature matrix doc that folds the OpenGL/Vulkan/Direct3D
+  feature-family inventory into the roadmap, removes already-present engine
+  foundations from the new-work backlog, and keeps Direct3D/D3D12 documented as
+  a parity target rather than an active backend claim.
 - Extended `--editor-project-self-test <id>` so the real engine materializes and
   builds the selected generated project, appends MCP-style tool evidence, and
   stages an AI iteration packet with project, build, output, capture, and model

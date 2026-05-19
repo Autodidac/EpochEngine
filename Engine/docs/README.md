@@ -52,6 +52,8 @@ Build-system reality to keep in mind:
   guidance
 - `engine/backend_menu_overlay_status.md` - backend GUI parity and caution
   notes
+- `engine/renderer_feature_matrix.md` - OpenGL/Vulkan/Direct3D feature-family
+  map with existing coverage separated from renderer backlog work
 - `engine/renderer_regression_smoke_plan.md` - repeatable backend smoke
   expectations
 - `engine/smoke_capture_and_screenshot_workflow.md` - capture discipline for

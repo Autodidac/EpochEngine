@@ -1,0 +1,149 @@
+# Renderer Feature Matrix And Backlog
+
+This document folds the external OpenGL / Vulkan / Direct3D feature inventory
+into Epoch's active renderer roadmap. It intentionally removes capabilities that
+Epoch already has in some usable form from the "new work" list, while still
+calling out partial coverage that needs hardening before it can be treated as a
+full renderer feature.
+
+## Policy
+
+- C++23 remains the default engine baseline.
+- OpenGL is the proving backend for editor/runtime renderer work right now.
+- Vulkan remains an explicit graphics migration path, not the default runtime
+  renderer.
+- Direct3D/D3D12 is a parity target and reserved backend surface only. It is not
+  an active renderer until the build, context, shader, and resource layers are
+  intentionally promoted.
+- The abstraction should follow the Vulkan/D3D model: explicit buffers,
+  textures, samplers, pipelines, bindings, command submission, render targets,
+  synchronization, and debug/profiling hooks. OpenGL should emulate that model
+  instead of pushing the engine toward legacy implicit OpenGL state.
+- Each feature must be validated by at least one stable backend before it is
+  marked complete. Cross-backend parity follows after the engine-facing API is
+  stable.
+
+## Already Present Or Partially Present
+
+These are not new roadmap items, but several still need cleanup, stronger
+coverage, or cross-backend parity.
+
+| Feature family | Current Epoch status | Notes |
+| --- | --- | --- |
+| Window/context bootstrap | Present | OpenGL, Raylib, SDL, SFML, Vulkan, software, and noop/headless paths exist. Normal editor use is converging toward one active backend at a time. |
+| Frame begin / clear / present | Present, still regression-sensitive | OpenGL composition and GUI replay were recently stabilized; continue keeping flicker and resize in smoke coverage. |
+| Basic primitives | Present | Triangles, quads, grid/marker primitives, cubes, lights, Canvas2D, and editor helper geometry exist. |
+| Shader pipeline | Present for OpenGL/Vulkan paths | OpenGL shader setup and Vulkan SPIR-V assets exist; Direct3D/HLSL remains future parity work. |
+| Uniforms / UBO-style data | Present/partial | OpenGL uniforms and Vulkan uniform/descriptors exist; the engine-facing binding model still needs formalization. |
+| Vertex buffers / indexed drawing / VAO-equivalent | Present/partial | OpenGL and Vulkan carry buffer/index paths; the shared render-device API is still early. |
+| Transforms / projection / camera | Present | Perspective camera, Canvas2D camera, preview camera math, object transform data, and editor camera controls exist. |
+| Quaternion/API-neutral camera math | Partial | Camera behavior exists; stronger math ownership and test coverage are still needed before calling this complete. |
+| Texture mapping / samplers / atlases | Present/partial | Atlas, upload, GUI font, Vulkan texture, and backend texture modules exist; sampler policy and filtering choices need a renderer-level contract. |
+| Materials / basic lighting | Partial | Ambient-solid primitives and basic light entities exist. Full material resources, specular paths, and multiple light types remain backlog. |
+| Debugging support | Partial | Logging, Systems diagnostics, Vulkan validation messaging, host FPS title diagnostics, screenshots, and smoke docs exist. GPU debug markers/query plumbing remain backlog. |
+| 3D picking | Partial | Editor object selection exists, but full ID-target/depth/ray picking is not complete. |
+| Framebuffers / render targets / capture | Partial | Swapchains, Vulkan framebuffers, capture bridges, and runtime surfaces exist. General render-to-texture assets need a proper engine-facing API. |
+| Text and UI rendering | Present/partial | Engine-owned GUI, font atlas, scroll views, tab bars, splitters, and runtime-surface textures exist. Professional dock/window polish remains active GUI work. |
+| Platform window layer | Present | Win32 and Linux/X11 host paths exist with backend-specific context ownership. |
+
+## Missing Renderer Feature Backlog
+
+The source feature list maps 61 OpenGL families to Vulkan and Direct3D
+equivalents. After removing the present/partial foundations above, the missing
+work should be grouped this way instead of tackled as an unstructured checklist.
+
+### Baseline Renderer Completion
+
+- Formal renderer resource model: buffer, texture, sampler, material, pipeline,
+  binding set, render target, pass, command list, and synchronization handles.
+- Formal material system with diffuse/specular parameters and texture slots.
+- Multiple point lights and spot lights.
+- Model import through an explicit chosen importer path, such as Assimp or a
+  hardened glTF stack, with asset-browser evidence and project/runtime handoff.
+- Normal mapping with tangent data and material binding.
+- Cubemap / skybox support.
+- Billboarding for sprites, icons, particles, and debug helpers.
+- Instanced rendering.
+- OpenGL Direct State Access style cleanup where available.
+- Render-to-texture assets for in-game surfaces such as arcade cabinets and
+  editor previews.
+
+### Shadows And Lighting
+
+- Basic shadow mapping.
+- PCF soft shadows.
+- Point-light shadow maps.
+- Directional-light shadow maps.
+- Cascaded shadow maps.
+- Polygon offset/depth-bias policy including clamp support where available.
+
+### Deferred And Post Processing
+
+- Deferred shading / G-buffer.
+- Screen-space ambient occlusion.
+- SSAO depth reconstruction.
+- Object motion blur through velocity buffers.
+- Toon shading and rim lighting.
+- Silhouette/edge detection.
+- Stencil shadow volumes.
+
+### Animation, Geometry, And Particles
+
+- Skeletal animation with joint matrices and skinned vertex data.
+- Geometry shader path where useful, but do not require it for normal runtime.
+- Tessellation control/evaluation or hull/domain shader equivalents.
+- PN-triangle tessellation.
+- Particle system.
+- Transform-feedback particles where OpenGL makes sense; prefer compute/storage
+  buffer designs for Vulkan/D3D-style backends.
+
+### GPU-Driven And Diagnostics
+
+- Indirect drawing / GPU-driven batches.
+- Pipeline statistics and GPU query plumbing.
+- Transform-feedback overflow or stream-output statistics where supported.
+- Anisotropic texture filtering.
+- Backend debug markers and external tool integration such as Vulkan debug
+  utils, PIX-ready D3D markers when D3D is promoted, and OpenGL debug output.
+
+## Cross-API Mapping Rule
+
+When a feature is selected for implementation, record the active backend mapping
+before coding:
+
+| Engine feature | OpenGL shape | Vulkan shape | Direct3D shape |
+| --- | --- | --- | --- |
+| Resource binding | Program uniforms, UBOs, texture units, DSA where available | Descriptor sets, push constants, UBO/SSBO/image descriptors | Root signature, CBV/SRV/UAV/samplers |
+| Pipeline | Program + VAO + GL state object discipline | Graphics/compute pipeline objects | PSO + input layout + root signature |
+| Render target | FBO/color/depth attachments | Image views + render pass/dynamic rendering/framebuffer | RTV/DSV resources |
+| Draw submission | glDraw*, glDraw*Instanced, indirect variants | vkCmdDraw*, vkCmdDrawIndirect* | Draw*, DrawInstanced, ExecuteIndirect |
+| Debug/profiling | GL debug output + timer/stat queries | Validation layers + debug utils + query pools | Debug layer + PIX markers + query heaps |
+
+Do not add a feature to only one backend without also documenting the intended
+equivalent in this table or in the feature's implementation note.
+
+## Recommended Implementation Order
+
+1. Finish the explicit render-device abstraction and material/light resource
+   model around the features Epoch already partially has.
+2. Promote render-to-texture assets and model import so editor/project workflows
+   can use real assets instead of placeholder surfaces.
+3. Add instancing, normal maps, skybox/cubemap, and multiple-light support.
+4. Add the first shadow-map path, then PCF and directional/point variants.
+5. Add deferred G-buffer and SSAO once render targets and materials are stable.
+6. Add skeletal animation and particle systems after model import and buffers
+   are settled.
+7. Add advanced GPU-driven, query, tessellation, and post-processing features
+   only after smoke coverage can prove they do not destabilize the editor.
+
+## Acceptance Gates
+
+- The Systems workspace can report which renderer features are present, partial,
+  or missing for each active backend.
+- A feature cannot be marked complete until OpenGL and at least one non-OpenGL
+  path either pass or explicitly document why they are deferred.
+- Renderer features must not regress the editor GUI composition contract: scene
+  preview first, latest GUI overlay after it, stable panes, and no hidden
+  backend ownership surprises.
+- Feature work must update this matrix, the roadmap, and the relevant smoke
+  plan before a release note claims support.

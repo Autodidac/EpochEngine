@@ -12,6 +12,7 @@ This plan defines the minimum smoke coverage for Epoch's active render backends.
 | SFML | Startup, GL context ownership, atlas upload, shutdown |
 | Software | Resize, atlas rebuild, present path |
 | Vulkan | Build-only or isolated validation until runtime support is finished |
+| Direct3D/D3D12 | Reserved parity target only; no runtime smoke until promoted |
 
 ## Pass criteria
 
@@ -26,4 +27,6 @@ This plan defines the minimum smoke coverage for Epoch's active render backends.
 - Run smoke coverage after backend startup/shutdown changes.
 - Run smoke coverage after atlas or menu overlay changes.
 - Treat Vulkan separately from the stable desktop backends until it graduates from experimental status.
+- Treat Direct3D/D3D12 as a documented parity target, not an active smoke lane,
+  until the backend is intentionally promoted beyond reserved scaffolding.
 - Hosted CI may use `epoch_ci_headless` as a no-window canary, but that target is not renderer proof. It confirms the public script-host surface and repo path probes while full renderer confidence still comes from Windows full-stack builds and local runtime smoke.
