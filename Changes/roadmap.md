@@ -19,8 +19,10 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 3. Validation must come from asset-bearing outputs and clean up after itself.
 4. Packaged/runtime path logic must resolve from the executable path first, not
    the working directory.
-5. Parented multicontext UI must expose one honest pane per backend. Nested
-   backend child windows remain implementation detail.
+5. Multicontext UI must converge toward first-class individual context panes,
+   like an IDE/MSVC-style tool shell where each visible surface has one clear
+   owner. Nested backend child windows remain backend-specific implementation
+   detail, not the user-facing model.
 6. Broad hardware support stays the default. Heavy features remain tiered or
    opt-in.
 7. Research imports are staged first, reviewed second, and promoted only when
@@ -137,15 +139,36 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 
 ### Backend Roles
 
-- OpenGL is the stable editor/runtime GPU backend for now.
-- The software renderer is the fallback and headless-validation backend.
-- Vulkan remains the future explicit graphics backend until runtime support is
-  fully stabilized.
-- Direct3D/D3D12 is a renderer-parity target and reserved backend surface only;
-  do not describe it as active until a real device/context/shader/resource path
-  is promoted and validated.
+- OpenGL is the stable editor/runtime GPU backend for now and remains the
+  comparison point while the Windows-native renderer comes online.
+- The software renderer is being retired from "peer desktop renderer" status.
+  Its target role is safe-launch, debug/error-message GUI, capture diagnostics,
+  and headless validation when GPU backends are unavailable.
+- Direct3D/D3D12 is the Windows-native renderer replacement track. It should
+  replace software as the normal Windows fallback/product renderer only after a
+  real device/context/swapchain/shader/resource path is promoted and validated.
+- Vulkan remains the future explicit cross-platform graphics backend until
+  runtime support is fully stabilized.
 - Raylib, SDL, and SFML remain context/backend compatibility and validation
   lanes, especially for docking, popout, and backend ownership checks.
+
+### Multicontext Windowing Direction
+
+- The target shape is an MSVC-style professional editor shell made from
+  explicit, independently owned context surfaces: Scene/Perspective, Game/2D,
+  Inspector, AI Chat, Asset Browser, Systems, Build/Output, and future popout
+  hosts.
+- "One visible context, one owner" is the rule. Proxy shells, hidden helpers,
+  and backend-specific host children are allowed only as documented bridge
+  details while a backend is being brought into the common shell.
+- Command menus, modals, and diagnostics must always draw above scene contexts
+  without flicker or z-order fighting.
+- Multicontext validation must include normal windowed, maximize/restore,
+  detach/redock, and backend-specific shutdown/recreate paths before a branch is
+  called stable.
+- Linux/WSL parity follows the same product contract: current Windows changes
+  must be reflected in the Clang/Linux build path and release notes before new
+  screenshots or runtime packages are promoted.
 
 ### Renderer Feature Matrix
 
@@ -468,6 +491,20 @@ engine shape and should be treated as starting truth for the next passes:
   Perspective pane visibility/title chrome, and the transparent scene-backed
   workbench still need continued eye-test confirmation. Graph surfaces also need
   stronger data density, design polish, and performance.
+- `v0.84.33` extends that safety guard without disturbing the confirmed
+  OpenGL frame order: module SDL/SFML previews now consume the shared preview
+  marker line data instead of staying grid-only, and Systems graph controls have
+  a longer repeat guard. MSVC `ConsoleApplication1` Debug builds cleanly and
+  standalone OpenGL editor smoke exits cleanly. Parented multicontext editor
+  smoke still times out, and parented `--smoke --capture` writes captures but
+  does not exit before timeout, so multicontext shutdown remains an open
+  acceptance gate.
+- `v0.84.34` narrows the parented maximize/resize fix: proxy-host SDL/SFML
+  window moves remain asynchronous, while direct child renderers such as Raylib,
+  OpenGL, Vulkan, and software get immediate parent-grid sizing again. MSVC
+  `ConsoleApplication1` Debug builds cleanly, and a parented multicontext
+  maximize/restore smoke completed without crashing. Raylib resize convergence
+  still needs operator eye-test confirmation before the branch is called done.
 - Current visual evidence is now preserved at
   `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/README.md`.
   Acceptance gates from that set: Perspective title stays visible with World
@@ -503,18 +540,23 @@ engine shape and should be treated as starting truth for the next passes:
 
 ### 1. Runtime And Multicontext Ownership
 
-- keep SDL, SFML, Raylib, Vulkan, OpenGL, and software behavior converging
-  instead of drifting into backend-specific hacks
+- keep SDL, SFML, Raylib, Vulkan, OpenGL, and the software fallback behavior
+  converging instead of drifting into undocumented backend-specific hacks
+- start the Windows Direct3D/D3D12 renderer path as the future native desktop
+  replacement for software-as-product-renderer, without claiming runtime support
+  until the first device/context/swapchain/shader/resource slice is validated
 - finish IDE-class docking/popout behavior so detach, input ownership, z-order,
   redock, and startup presentation remain stable
 - eliminate remaining OpenGL flicker in both single-context and multicontext
   modes; menu open/close activity and software-context interaction are known
   repro amplifiers and should be investigated before cosmetic-only fixes
-- keep maximize/restore in the renderer-windowing repro matrix; maximize can
-  still break parented multicontext layout and must be fixed before claiming
-  docking stability
+- keep maximize/restore in the renderer-windowing repro matrix; the current
+  parented smoke no longer crashes, but each backend still needs operator
+  eye-test confirmation that resize convergence is fast and correctly clipped
 - fix the Raylib redock crash that can still bring down the parent editor
   process during backend-window docking tests
+- fix SDL and software multicontext scene visibility so those panes either
+  render honest scene content or explicitly report fallback/debug-only mode
 - tighten terminology so runtime/module/doc names stop leaning on ambiguous
   legacy words like `multiplexer`
 
@@ -764,6 +806,12 @@ engine shape and should be treated as starting truth for the next passes:
 - Multicontext proof stays honest:
   all six panes are real, detached shells behave like real top-level windows,
   and helper hosts do not linger incorrectly.
+- Software fallback proof stays honest: safe-launch/error/debug UI can run when
+  GPU paths fail, but software is not advertised as the long-term Windows
+  production renderer once Direct3D is promoted.
+- Direct3D/D3D12 is not advertised as active until a Windows build creates a
+  device/context/swapchain, clears/presents, owns shaders/resources, and passes
+  the same editor visibility/screenshot gate as OpenGL.
 - Asset, shader, script, log, and workspace resolution work from executable
   path instead of working-directory luck.
 - Visual Studio, repo-root CMake, and CI stay aligned closely enough that file

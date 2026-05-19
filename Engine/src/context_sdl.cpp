@@ -120,16 +120,13 @@ namespace
         if (!viewport.valid() || ctx->scene_preview_mode() != epochnamespace::core::ScenePreviewMode::Editor)
             return;
 
-        SDL_Rect sceneViewport{ viewport.x, viewport.y, viewport.width, viewport.height };
-        (void)SDL_SetRenderViewport(s_renderer, &sceneViewport);
-
-        SDL_Rect clipRect{ 0, 0, viewport.width, viewport.height };
+        SDL_Rect clipRect{ viewport.x, viewport.y, viewport.width, viewport.height };
         (void)SDL_SetRenderClipRect(s_renderer, &clipRect);
 
         const auto clearColor = epochnamespace::previewgrid::kClearColor;
         const SDL_FRect background{
-            0.0f,
-            0.0f,
+            static_cast<float>(viewport.x),
+            static_cast<float>(viewport.y),
             static_cast<float>(viewport.width),
             static_cast<float>(viewport.height)
         };
@@ -168,11 +165,6 @@ namespace
                 return;
             }
 
-            ax -= static_cast<float>(viewport.x);
-            ay -= static_cast<float>(viewport.y);
-            bx -= static_cast<float>(viewport.x);
-            by -= static_cast<float>(viewport.y);
-
             const auto color = aVertex.color;
             (void)SDL_SetRenderDrawColor(
                 s_renderer,
@@ -210,7 +202,6 @@ namespace
         }
 
         (void)SDL_SetRenderClipRect(s_renderer, nullptr);
-        (void)SDL_SetRenderViewport(s_renderer, nullptr);
     }
 
     void refresh_dimensions(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
@@ -548,6 +539,30 @@ namespace
         state.renderFaulted = false;
         state.mark_should_close(false);
         state.window.sdl_window = nullptr;
+#if defined(_WIN32)
+        if (s_childWindow && ::IsWindow(s_childWindow) != FALSE)
+        {
+            ::ShowWindow(s_childWindow, SW_HIDE);
+            if (::GetParent(s_childWindow))
+            {
+                LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
+                style &= ~static_cast<LONG_PTR>(WS_CHILD);
+                style |= WS_POPUP;
+                ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
+                ::SetParent(s_childWindow, nullptr);
+                ::SetWindowPos(
+                    s_childWindow,
+                    nullptr,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_HIDEWINDOW);
+            }
+        }
+        if (s_hostWindow && s_hostWindow != s_childWindow && ::IsWindow(s_hostWindow) != FALSE)
+            ::ShowWindow(s_hostWindow, SW_HIDE);
+#endif
         if (s_renderer)
         {
             SDL_DestroyRenderer(s_renderer);
@@ -577,8 +592,17 @@ namespace
             return false;
 
         auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
-        if (state.renderFaulted || state.shouldClose || state.window.get_should_close())
+        const bool closeRequested =
+            state.renderFaulted
+            || state.shouldClose
+            || state.window.get_should_close()
+            || (ctx->windowData && ctx->windowData->get_should_close());
+        if (closeRequested)
+        {
+            request_host_shutdown(ctx);
+            queue.clear();
             return false;
+        }
 
 #if defined(_WIN32)
         if (s_childWindow && ::IsWindow(s_childWindow) == FALSE)
@@ -619,9 +643,9 @@ namespace
         SDL_RenderClear(s_renderer);
 
         epochnamespace::atlasmanager::process_pending_uploads(epochnamespace::core::ContextType::SDL);
-        render_scene_preview(ctx);
         (void)queue.drain();
         (void)epochnamespace::gui::render_deferred_batch(ctx.get());
+        render_scene_preview(ctx);
         epochnamespace::sdlcontext::end_frame();
         if (state.renderFaulted)
         {

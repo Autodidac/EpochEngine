@@ -323,7 +323,7 @@ namespace epochnamespace::core::cli
         sfml_window_count = 1;
         vulkan_window_count = 1;
         opengl_window_count = 1;
-        software_window_count = 1;
+        software_window_count = 0;
 
         if (selected == BackendSelection::Auto)
             return true;

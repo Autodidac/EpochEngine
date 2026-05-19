@@ -142,6 +142,11 @@ namespace epochnamespace::openglbackend
         {
             if (!ctx)
                 return false;
+            if (ctx->windowData && ctx->windowData->get_should_close())
+            {
+                queue.clear();
+                return false;
+            }
             return openglcontext::opengl_process(ctx, queue);
         }
     }

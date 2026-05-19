@@ -13,10 +13,12 @@ the same engine-owned path.
   in `../build/build_configuration_flags.md`
 - the Windows parented multicontext host should fit the active desktop work area
   by default so the full context matrix remains visible on baseline hardware
-- the longer-term shell default should converge toward one active backend at a
-  time: editor favors a single-context OpenGL path, launcher favors a
-  single-context software path, backend switching is explicit, and inactive
-  backends must be torn down instead of running hidden behind the active shell
+- the longer-term shell default should converge toward explicit, independently
+  owned context surfaces rather than a mixed hidden/proxy shell: editor favors a
+  stable OpenGL scene path today, Windows should gain a Direct3D/D3D12 native
+  renderer path, software remains safe-launch/debug GUI fallback, backend
+  switching is explicit, and inactive backends must be torn down instead of
+  running hidden behind the active shell
 - packaged Linux releases should follow that same main-runtime rule: the normal
   packaged `epoch` entry is the product path, while updater-shell mode remains
   an explicit bootstrap build instead of the default Linux release identity
@@ -228,6 +230,9 @@ the same engine-owned path.
 - support-tier diagnostics should stay visible beside renderer stage flow and
   worker-count information so compatibility policy is visible in the editor
 - docked backend hosts should present one clean pane per active context
+- the target GUI shape is MSVC/IDE-like: visible context panes, ordinary
+  close/resize affordances, modal/menu layers over scene views, and no duplicate
+  console-only control surfaces for editor-critical actions
 - the stable Windows top-row contract is visible real child panes:
   `GLFW30`, `SDL_app`, and `SFML_Window`
 - helper `EpochChild` wrappers are implementation detail only:
@@ -341,7 +346,8 @@ features over forcing every integration on every machine.
   shadowing, sparse-resource-heavy flows, and similar techniques behind
   Standard/Extended tiers or explicit project opt-in
 - keep backend convergence visible in the Systems workspace so OpenGL, Vulkan,
-  software, SDL, SFML, and Raylib do not drift without tooling feedback
+  the software fallback, SDL, SFML, Raylib, and future Direct3D do not drift
+  without tooling feedback
 - OpenGL launcher/editor flicker has been manually reported resolved for the
   current pass, but GUI/scene composition remains guarded because z-order bugs
   can make command windows, AI Chat, Inspector, or viewport titles appear hidden
@@ -386,6 +392,26 @@ features over forcing every integration on every machine.
   scene-viewport blanking during workbench switches, and adds a short cooldown
   around Systems graph controls. Raylib redock crash and multicontext
   maximize/restore remain open blockers for the stable branch.
+- `v0.84.32` records the next architecture direction before risky code churn:
+  keep the current multicontext baseline stable, move the editor shell toward
+  first-class individual context panes, retire software to safe-launch/debug
+  GUI fallback, and begin the Windows Direct3D/D3D12 renderer track as the
+  eventual native replacement for software-as-product-renderer. Do not claim D3D
+  runtime support until a real device/context/swapchain/shader/resource slice is
+  built and screenshot-validated.
+- `v0.84.33` keeps that baseline conservative: module SDL/SFML previews now
+  use the shared preview marker data instead of grid-only rendering, and Systems
+  graph controls have a longer repeat guard. MSVC `ConsoleApplication1`
+  `Debug|x64` builds cleanly and standalone OpenGL editor smoke exits cleanly.
+  Parented multicontext editor smoke still times out, and parented
+  `--smoke --capture` writes proof captures but does not shut down before
+  timeout, so smoke shutdown is still an open multicontext acceptance gate.
+- `v0.84.34` keeps the proxy-host crash guard but restores immediate parent-grid
+  sizing for direct child renderers. SDL/SFML proxy hosts still move
+  asynchronously; Raylib, OpenGL, Vulkan, and software panes should resize with
+  the parent more directly. A parented multicontext maximize/restore smoke
+  completed without crashing, but Raylib resize speed still needs operator
+  confirmation.
 - When `EPOCH_SINGLE_PARENT=0`, the launch config must force standalone
   top-level contexts even if CLI defaults still prefer parented mode. This mode
   is used to isolate resize/flicker from the single-parent dock host, so any
@@ -512,6 +538,10 @@ Current editor-shell gaps:
 - separate editor windows/domains are still needed inside the application:
   project/game editor, software/tool editor, self-iteration sandbox, and AI
   visualizer should be independently launchable/dockable surfaces
+- the software/tool editor name does not mean the software renderer is a normal
+  production backend. The software renderer's target role is safe launch,
+  debug/error messages, capture diagnostics, and headless validation; Windows
+  native rendering should move through Direct3D/D3D12 once promoted.
 - borderless linked-context popouts should be built as explicit panel hosts for
   GUI containers such as Inspector, Asset Browser, Code Editor, AI Visualizer,
   and Build/Output. They must be operator-opened, visible, redockable, and

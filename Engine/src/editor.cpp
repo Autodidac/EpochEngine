@@ -4530,6 +4530,7 @@ namespace epochnamespace
                 const float graphWidth = (std::max)(260.0f, centerWidth);
                 const float graphHeight = 208.0f;
                 const float supportHeight = 96.0f;
+                constexpr int kGraphInputCooldownFrames = 6;
                 if (editor.systems.graphInputCooldownFrames > 0)
                     --editor.systems.graphInputCooldownFrames;
 
@@ -4651,7 +4652,7 @@ namespace epochnamespace
                     case 3: editor.systems.renderPan += 64; break;
                     default: break;
                     }
-                    editor.systems.graphInputCooldownFrames = 2;
+                    editor.systems.graphInputCooldownFrames = kGraphInputCooldownFrames;
                 }
                 gui::set_cursor({ systemsOrigin.x, imageY });
                 if (editor.systems.renderSurface.is_valid())
@@ -4683,7 +4684,7 @@ namespace epochnamespace
                     case 3: editor.systems.taskPan += 64; break;
                     default: break;
                     }
-                    editor.systems.graphInputCooldownFrames = 2;
+                    editor.systems.graphInputCooldownFrames = kGraphInputCooldownFrames;
                 }
                 gui::set_cursor({ systemsOrigin.x, taskImageY });
                 if (editor.systems.taskSurface.is_valid())

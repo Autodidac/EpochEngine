@@ -187,7 +187,7 @@
     <Filter Include="Source Files\core\crossplatform\backends\opengl">
       <UniqueIdentifier>{4cd8b412-3e84-43a0-b9fc-52f697ef4492}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\core\context\engine">
+    <Filter Include="Header Files\engine">
       <UniqueIdentifier>{f0ad256c-4b7f-4896-b920-60642a13c3d2}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -244,22 +244,22 @@
       <Filter>Resource Files</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\core_context_backends.hpp">
-      <Filter>Source Files\core\context\engine</Filter>
+      <Filter>Header Files\engine</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp">
-      <Filter>Source Files\core\context\engine</Filter>
+      <Filter>Header Files\engine</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_context_detail.hpp">
-      <Filter>Source Files\core\context\engine</Filter>
+      <Filter>Header Files\engine</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp">
-      <Filter>Source Files\core\context\engine</Filter>
+      <Filter>Header Files\engine</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.hpp">
-      <Filter>Source Files\core\context\engine</Filter>
+      <Filter>Header Files\engine</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_upload_bridge.hpp">
-      <Filter>Source Files\core\context\engine</Filter>
+      <Filter>Header Files\engine</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -135,6 +135,7 @@ namespace epochnamespace::core
         bool should_close = false;
         bool isFloating = false;
         std::atomic_bool firstPresentComplete = false;
+        std::atomic_uint64_t resizeGeneration{ 0 };
 
         std::function<void(int, int)> onResize{};
 

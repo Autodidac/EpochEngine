@@ -85,6 +85,12 @@ namespace epochnamespace::core::detail
             if (!current)
                 return false;
 
+            if (current->windowData && current->windowData->get_should_close())
+            {
+                queue.clear();
+                return false;
+            }
+
             epochnamespace::raylibcontext::raylib_process();
             if (!epochnamespace::raylibcontext::raylib_is_running())
                 return false;
@@ -99,8 +105,8 @@ namespace epochnamespace::core::detail
 
             epochnamespace::raylib_api::begin_drawing();
             epochnamespace::raylib_api::clear_background({ 0, 0, 0, 255 });
-            epochnamespace::raylibcontext::raylib_render_scene_preview(current);
             (void)queue.drain();
+            epochnamespace::raylibcontext::raylib_render_scene_preview(current);
             (void)epochnamespace::gui::render_deferred_batch(current.get());
             epochnamespace::raylib_api::end_drawing();
 

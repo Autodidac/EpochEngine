@@ -332,6 +332,39 @@ export namespace epochnamespace::sfmlcontext
             if (lines.getVertexCount() > 0)
                 sfmlcontext.window->draw(lines, renderStates);
 
+            const auto appendPreviewLines = [&](const auto& lineVertices, std::size_t vertexCount)
+            {
+                for (std::size_t i = 0; i + 1 < vertexCount; i += 2)
+                {
+                    sf::Vector2f a{};
+                    sf::Vector2f b{};
+                    if (!project_preview_vertex(mvp, lineVertices[i].position, viewport, a)
+                        || !project_preview_vertex(mvp, lineVertices[i + 1].position, viewport, b))
+                    {
+                        continue;
+                    }
+
+                    a.x -= static_cast<float>(viewport.x);
+                    a.y -= static_cast<float>(viewport.y);
+                    b.x -= static_cast<float>(viewport.x);
+                    b.y -= static_cast<float>(viewport.y);
+
+                    lines.append(sf::Vertex(a, to_sfml_color(lineVertices[i].color)));
+                    lines.append(sf::Vertex(b, to_sfml_color(lineVertices[i].color)));
+                }
+            };
+
+            lines.clear();
+            const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
+            appendPreviewLines(
+                markerVertices,
+                epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get()));
+            const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx.get());
+            appendPreviewLines(objectVertices, objectVertices.size());
+
+            if (lines.getVertexCount() > 0)
+                sfmlcontext.window->draw(lines, renderStates);
+
             sfmlcontext.window->setView(previousView);
         }
     }

@@ -64,7 +64,13 @@ namespace epochnamespace::anativecontext::detail
         }
     }
 
-    void draw_line(int x0, int y0, int x1, int y1, std::uint32_t color) noexcept
+    void draw_line(
+        int x0,
+        int y0,
+        int x1,
+        int y1,
+        std::uint32_t color,
+        const core::RenderViewport& viewport) noexcept
     {
         auto& sr = s_softrendererstate;
         if (sr.framebuffer.empty() || sr.width <= 0 || sr.height <= 0)
@@ -78,7 +84,14 @@ namespace epochnamespace::anativecontext::detail
 
         for (;;)
         {
-            if (x0 >= 0 && x0 < sr.width && y0 >= 0 && y0 < sr.height)
+            if (x0 >= viewport.x
+                && x0 < viewport.x + viewport.width
+                && y0 >= viewport.y
+                && y0 < viewport.y + viewport.height
+                && x0 >= 0
+                && x0 < sr.width
+                && y0 >= 0
+                && y0 < sr.height)
             {
                 sr.framebuffer[
                     static_cast<std::size_t>(y0) * static_cast<std::size_t>(sr.width)
@@ -235,7 +248,8 @@ namespace epochnamespace::anativecontext::detail
                 static_cast<int>(std::lround(ay)),
                 static_cast<int>(std::lround(bx)),
                 static_cast<int>(std::lround(by)),
-                pack_color(color.x, color.y, color.z, 1.0f));
+                pack_color(color.x, color.y, color.z, 1.0f),
+                viewport);
         }
 
         const auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(&ctx);
@@ -286,7 +300,8 @@ namespace epochnamespace::anativecontext::detail
                 static_cast<int>(std::lround(ay)),
                 static_cast<int>(std::lround(bx)),
                 static_cast<int>(std::lround(by)),
-                pack_color(color.x, color.y, color.z, 1.0f));
+                pack_color(color.x, color.y, color.z, 1.0f),
+                viewport);
         }
 
         const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(&ctx);
@@ -308,7 +323,8 @@ namespace epochnamespace::anativecontext::detail
                 static_cast<int>(std::lround(ay)),
                 static_cast<int>(std::lround(bx)),
                 static_cast<int>(std::lround(by)),
-                pack_color(color.x, color.y, color.z, 1.0f));
+                pack_color(color.x, color.y, color.z, 1.0f),
+                viewport);
         }
     }
 

@@ -11,6 +11,7 @@ module;
 module software.context;
 
 import core.context;
+import core.commandline;
 import context.commandqueue;
 import software.state;
 import engine.diagnostics;
@@ -40,6 +41,28 @@ namespace epochnamespace::anativecontext
     bool softrenderer_process(core::Context& ctx, core::CommandQueue& queue)
     {
         auto& sr = s_softrendererstate;
+        const bool closeRequested =
+            !sr.running
+            || (ctx.windowData && ctx.windowData->get_should_close());
+        if (closeRequested)
+        {
+            sr.running = false;
+            queue.clear();
+            return false;
+        }
+        if (core::cli::smoke_requested && !core::cli::capture_requested)
+        {
+            ++sr.smokeFrames;
+            if (sr.smokeFrames >= 3u)
+            {
+                sr.running = false;
+                if (ctx.windowData)
+                    ctx.windowData->set_should_close(true);
+                queue.clear();
+                return false;
+            }
+        }
+
         detail::refresh_dimensions(ctx);
 
         std::uintptr_t windowId = 0;
@@ -139,6 +162,8 @@ namespace epochnamespace::anativecontext
                 if (auto liveContext = std::reinterpret_pointer_cast<epochnamespace::core::Context>(ctx.windowData->context))
                     ::epochnamespace::gui::render_deferred_batch(liveContext.get());
             }
+
+            detail::render_scene_preview(ctx);
 
             sr.lastGuiGeneration = guiGeneration;
             sr.lastCameraRevision = cameraRevision;

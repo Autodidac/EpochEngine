@@ -596,7 +596,11 @@ namespace
             clientPos.y,
             clientW,
             clientH,
-            SWP_NOZORDER | SWP_NOACTIVATE | (needsChildStyle || currentParent != parent ? SWP_FRAMECHANGED : 0) | SWP_SHOWWINDOW);
+            SWP_NOZORDER
+            | SWP_NOACTIVATE
+            | SWP_ASYNCWINDOWPOS
+            | (needsChildStyle || currentParent != parent ? SWP_FRAMECHANGED : 0)
+            | SWP_SHOWWINDOW);
     }
 
     // Dock/undock requests must be processed on the window's owning thread.
@@ -777,11 +781,13 @@ namespace
         int clientW,
         int clientH) noexcept
     {
+        if (!window)
+            return;
+
         if (window->type == epochnamespace::core::ContextType::SDL
             && uses_visible_proxy_host(window))
         {
-            if (!window
-                || !parent
+            if (!parent
                 || ::IsWindow(parent) == FALSE
                 || !window->host_hwnd
                 || !window->hwndChild
@@ -832,8 +838,7 @@ namespace
 
     [[nodiscard]] inline bool backend_uses_proxy_child(epochnamespace::core::ContextType type) noexcept
     {
-        return type == epochnamespace::core::ContextType::RayLib
-            || type == epochnamespace::core::ContextType::SDL
+        return type == epochnamespace::core::ContextType::SDL
             || type == epochnamespace::core::ContextType::SFML;
     }
 
@@ -933,7 +938,7 @@ namespace
             0,
             clientW,
             clientH,
-            SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
     }
 
     inline void position_top_level_shell(
@@ -1155,7 +1160,8 @@ namespace
             apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
             ::ShowWindow(window->host_hwnd, SW_SHOWNA);
             ::ShowWindow(window->hwndChild, SW_SHOWNA);
-            ::SetFocus(window->hwndChild ? window->hwndChild : window->host_hwnd);
+            if (proxy_drag_owns_host(window))
+                ::SetFocus(window->hwndChild ? window->hwndChild : window->host_hwnd);
         }
         else
         {
@@ -1180,7 +1186,8 @@ namespace
                     clientH);
                 ::ShowWindow(window->host_hwnd, SW_HIDE);
             }
-            ::SetFocus(window->hwndChild);
+            if (proxy_drag_owns_host(window))
+                ::SetFocus(window->hwndChild);
         }
 
 #if defined(_DEBUG)
@@ -1619,6 +1626,31 @@ namespace
         HANDLE handle = static_cast<HANDLE>(thread.native_handle());
         if (!handle) return false;
         return ::WaitForSingleObject(handle, 0) == WAIT_OBJECT_0;
+    }
+
+    inline void pump_pending_host_messages() noexcept
+    {
+        MSG msg{};
+        while (::PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE)
+        {
+            if (msg.message == WM_QUIT)
+                continue;
+
+            ::TranslateMessage(&msg);
+            ::DispatchMessageW(&msg);
+        }
+    }
+
+    inline void join_thread_with_message_pump(std::thread& thread) noexcept
+    {
+        while (thread.joinable() && !thread_finished(thread))
+        {
+            pump_pending_host_messages();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+
+        if (thread.joinable())
+            thread.join();
     }
 
     struct NativeTitleFpsState
@@ -2600,6 +2632,7 @@ namespace epochnamespace::core
         core::ContextType contextType = core::ContextType::None;
         std::uintptr_t windowId = 0;
         WindowData* window = nullptr;
+        std::uint64_t resizeGeneration = 0;
 
         {
             std::scoped_lock lock(windowsMutex);
@@ -2608,8 +2641,12 @@ namespace epochnamespace::core
             if (it == windows.end()) return;
 
             window = it->get();
+            if (window->width == clampedWidth && window->height == clampedHeight)
+                return;
+
             window->width = clampedWidth;
             window->height = clampedHeight;
+            resizeGeneration = window->resizeGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
 
             if (window->context)
             {
@@ -2638,10 +2675,15 @@ namespace epochnamespace::core
                 cb = std::move(resizeCallback),
                 contextType,
                 windowId,
+                resizeGeneration,
+                window,
                 w = clampedWidth,
                 h = clampedHeight
             ]() mutable
                 {
+                    if (window && window->resizeGeneration.load(std::memory_order_acquire) != resizeGeneration)
+                        return;
+
                     telemetry::emit_counter(
                         "renderer.resize.count",
                         1,
@@ -2693,6 +2735,9 @@ namespace epochnamespace::core
                             startupDelay.count());
                         std::this_thread::sleep_for(startupDelay);
                     }
+
+                    if (!running.load(std::memory_order_acquire))
+                        return;
 
                     WindowData* win = nullptr;
                     {
@@ -2912,6 +2957,10 @@ namespace epochnamespace::core
         {
             const int c = static_cast<int>(i) % cols;
             const int r = static_cast<int>(i) / cols;
+            const int slotX = c * cw;
+            const int slotY = r * ch;
+            POINT slotScreen{ slotX, slotY };
+            ::ClientToScreen(parent, &slotScreen);
 
             WindowData& win = *dockedWindows[i];
             if ((win.type == ContextType::SDL || win.type == ContextType::SFML)
@@ -2919,7 +2968,7 @@ namespace epochnamespace::core
                 && ::GetParent(win.host_hwnd) == parent
                 && ::GetParent(win.hwndChild) == win.host_hwnd)
             {
-                redock_sfml_proxy_window(&win, parent, c * cw, r * ch, cw, ch);
+                redock_sfml_proxy_window(&win, parent, slotScreen.x, slotScreen.y, cw, ch);
             }
 
             const HWND liveHwnd = dock_slot_handle(&win, parent);
@@ -2938,10 +2987,13 @@ namespace epochnamespace::core
                         && (!win.hwndChild || ::IsWindow(win.hwndChild) == FALSE))
                 );
 
-            ::SetWindowPos(liveHwnd, nullptr, c * cw, r * ch, cw, ch,
-                usingHiddenHostPlaceholder
-                    ? (SWP_NOZORDER | SWP_NOACTIVATE)
-                    : (SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW));
+            UINT layoutFlags = SWP_NOZORDER | SWP_NOACTIVATE;
+            if (win.type == ContextType::SDL || win.type == ContextType::SFML)
+                layoutFlags |= SWP_ASYNCWINDOWPOS;
+            if (!usingHiddenHostPlaceholder)
+                layoutFlags |= SWP_SHOWWINDOW;
+
+            ::SetWindowPos(liveHwnd, nullptr, slotX, slotY, cw, ch, layoutFlags);
 
             if (usingHiddenHostPlaceholder)
                 ::ShowWindow(liveHwnd, SW_HIDE);
@@ -2959,7 +3011,7 @@ namespace epochnamespace::core
                 && ::IsWindow(win.host_hwnd) != FALSE
                 && ::GetParent(win.host_hwnd) != parent)
             {
-                restore_associated_host_window(&win, parent, c * cw, r * ch, cw, ch);
+                restore_associated_host_window(&win, parent, slotScreen.x, slotScreen.y, cw, ch);
             }
 
             if (win.host_hwnd
@@ -2995,17 +3047,57 @@ namespace epochnamespace::core
 
                 w->running = false;
                 w->set_should_close(true);
+                if (auto liveContext = typed_context(w->context);
+                    liveContext && liveContext->windowData == w.get())
+                {
+                    liveContext->windowData->set_should_close(true);
+                }
             }
         }
 
         for (auto& [hwnd, th] : g_threads)
-            if (th.joinable()) th.join();
+        {
+            core::ContextType joinType = core::ContextType::None;
+            std::string joinTitle{};
+            {
+                std::scoped_lock lock(windowsMutex);
+                for (const auto& w : windows)
+                {
+                    if (!w || !matches_window_handle(w.get(), hwnd))
+                        continue;
+
+                    joinType = w->type;
+                    joinTitle = w->titleNarrow;
+                    break;
+                }
+            }
+#if defined(_DEBUG)
+            if (th.joinable())
+            {
+                epochnamespace::logger::get(kLogSys).logf(
+                    epochnamespace::logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "StopAll joining render thread hwnd={} type={} title='{}'",
+                    static_cast<void*>(hwnd),
+                    static_cast<int>(joinType),
+                    joinTitle);
+            }
+#endif
+            join_thread_with_message_pump(th);
+#if defined(_DEBUG)
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "StopAll joined render thread hwnd={}",
+                static_cast<void*>(hwnd));
+#endif
+        }
         g_threads.clear();
 
         for (auto& pending : g_pendingCleanups)
         {
             if (pending.thread.joinable())
-                pending.thread.join();
+                join_thread_with_message_pump(pending.thread);
             forget_native_title_frame_source(pending.window.get());
             cleanup_window_resources(pending.window);
         }
@@ -3028,6 +3120,12 @@ namespace epochnamespace::core
         MultiContextManager::SetCurrent(ctx);
 
         struct ResetGuard { ~ResetGuard() { MultiContextManager::SetCurrent(nullptr); } } resetGuard;
+
+        if (!running.load(std::memory_order_acquire) || win.get_should_close())
+        {
+            win.running = false;
+            return;
+        }
 
         // Raylib must be created+initialized on the SAME thread that will render it.
         // SDL/SFML use their registered backend lifecycle directly.
@@ -3080,7 +3178,7 @@ namespace epochnamespace::core
             ctx->process = nullptr;
         }
 
-        while (running.load(std::memory_order_acquire) && win.running)
+        while (running.load(std::memory_order_acquire) && win.running && !win.get_should_close())
         {
             bool keepRunning = true;
 

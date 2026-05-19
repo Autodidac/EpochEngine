@@ -35,6 +35,12 @@ namespace epochnamespace::openglcontext
         if (!ctx)
             return false;
 
+        if (ctx->windowData && ctx->windowData->get_should_close())
+        {
+            queue.clear();
+            return false;
+        }
+
         std::uintptr_t windowId = 0u;
 #if defined(_WIN32)
         if (ctx->windowData)
@@ -102,6 +108,8 @@ namespace epochnamespace::openglcontext
 
         opengl_clear();
         opengl_render_active_frame(ctx, queue, fbW, fbH, windowId);
+        if (ctx->windowData && ctx->windowData->get_should_close())
+            return false;
         PlatformGL::swap_buffers(guard.target());
         ++glState.frameCount;
 

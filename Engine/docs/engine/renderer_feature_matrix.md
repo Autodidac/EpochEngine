@@ -12,9 +12,12 @@ full renderer feature.
 - OpenGL is the proving backend for editor/runtime renderer work right now.
 - Vulkan remains an explicit graphics migration path, not the default runtime
   renderer.
-- Direct3D/D3D12 is a parity target and reserved backend surface only. It is not
-  an active renderer until the build, context, shader, and resource layers are
-  intentionally promoted.
+- Direct3D/D3D12 is the Windows-native renderer replacement track for the old
+  software-as-product-renderer role. It is still not an active renderer until
+  the build, context, swapchain, shader, and resource layers are intentionally
+  promoted and validated.
+- The software renderer is a safe-launch/debug GUI and headless-validation
+  fallback, not the long-term Windows production renderer target.
 - The abstraction should follow the Vulkan/D3D model: explicit buffers,
   textures, samplers, pipelines, bindings, command submission, render targets,
   synchronization, and debug/profiling hooks. OpenGL should emulate that model
@@ -30,7 +33,7 @@ coverage, or cross-backend parity.
 
 | Feature family | Current Epoch status | Notes |
 | --- | --- | --- |
-| Window/context bootstrap | Present | OpenGL, Raylib, SDL, SFML, Vulkan, software, and noop/headless paths exist. Normal editor use is converging toward one active backend at a time. |
+| Window/context bootstrap | Present | OpenGL, Raylib, SDL, SFML, Vulkan, software fallback, and noop/headless paths exist. Normal editor use is converging toward explicit first-class context panes with inactive backends torn down rather than hidden. Direct3D/D3D12 is planned, not active. |
 | Frame begin / clear / present | Present, still regression-sensitive | OpenGL composition and GUI replay were recently stabilized; continue keeping flicker and resize in smoke coverage. |
 | Basic primitives | Present | Triangles, quads, grid/marker primitives, cubes, lights, Canvas2D, and editor helper geometry exist. |
 | Shader pipeline | Present for OpenGL/Vulkan paths | OpenGL shader setup and Vulkan SPIR-V assets exist; Direct3D/HLSL remains future parity work. |

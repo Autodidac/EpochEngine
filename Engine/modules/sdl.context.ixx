@@ -323,6 +323,44 @@ export namespace epochnamespace::sdlcontext
                 }
             }
 
+            const auto drawPreviewLines = [&](const auto& lineVertices, std::size_t vertexCount) noexcept
+            {
+                for (std::size_t i = 0; i + 1 < vertexCount; i += 2)
+                {
+                    float ax = 0.0f;
+                    float ay = 0.0f;
+                    float bx = 0.0f;
+                    float by = 0.0f;
+                    if (!project_preview_vertex(mvp, lineVertices[i].position, viewport, ax, ay)
+                        || !project_preview_vertex(mvp, lineVertices[i + 1].position, viewport, bx, by))
+                    {
+                        continue;
+                    }
+
+                    const auto color = lineVertices[i].color;
+                    (void)SDL_SetRenderDrawColor(
+                        sdl_renderer.renderer,
+                        to_sdl_channel(color.x),
+                        to_sdl_channel(color.y),
+                        to_sdl_channel(color.z),
+                        255u);
+                    if (!SDL_RenderLine(sdl_renderer.renderer, ax, ay, bx, by))
+                    {
+                        check_sdl_error("SDL_RenderLine");
+                        state::get_sdl_state().renderFaulted = true;
+                        break;
+                    }
+                }
+            };
+
+            const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
+            drawPreviewLines(
+                markerVertices,
+                epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get()));
+
+            const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx.get());
+            drawPreviewLines(objectVertices, objectVertices.size());
+
             (void)SDL_SetRenderClipRect(sdl_renderer.renderer, nullptr);
         }
     }

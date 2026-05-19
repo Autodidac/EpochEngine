@@ -1,5 +1,47 @@
 # Epoch Changelog
 
+## [v0.84.34]
+- Bumped the active source line to `v0.84.34` for the multicontext
+  maximize/resize stabilization pass.
+- Kept proxy-host SDL/SFML dock moves asynchronous while restoring immediate
+  parent-grid sizing for direct child renderers such as Raylib, OpenGL, Vulkan,
+  and the software fallback so maximize/restore converges faster without
+  regressing the proxy crash guard.
+- Validation: `ConsoleApplication1` `Debug|x64` built cleanly with MSBuild, and
+  a parented multicontext maximize/restore smoke completed without crashing and
+  wrote `C:\tmp\epoch-multicontext-raylib-resize-smoke.png`.
+
+## [v0.84.33]
+- Bumped the active source line to `v0.84.33` after the conservative
+  multicontext preview-parity and Systems graph-control safety pass.
+- Brought the module SDL and SFML scene-preview paths up to the same shared
+  preview marker data used by the source-backed preview renderers, so Linux and
+  module-first builds do not regress to grid-only views while Windows keeps the
+  stable renderer checkpoint intact.
+- Increased the central Systems graph input cooldown so rapid render/task graph
+  zoom presses cannot churn runtime graph surfaces every couple of frames.
+- Validation: `ConsoleApplication1` `Debug|x64` built cleanly with MSBuild and
+  standalone OpenGL editor smoke exited cleanly. Parented multicontext editor
+  smoke timed out, and parented `--smoke --capture` wrote captures but also did
+  not exit before timeout, so multicontext shutdown remains an open bug rather
+  than a passed gate.
+
+## [v0.84.32]
+- Bumped the active source line to `v0.84.32` for the next multicontext
+  architecture contract pass.
+- Documented the MSVC/IDE-style context-shell direction: visible editor
+  surfaces should be first-class, individually owned panes instead of a mixed
+  hidden/proxy model.
+- Reframed the software renderer as safe-launch, debug/error-message GUI,
+  capture diagnostics, and headless-validation fallback rather than the
+  long-term Windows product renderer.
+- Promoted Direct3D/D3D12 from generic parity wording into the planned
+  Windows-native renderer replacement track, while keeping it explicitly
+  non-active until device/context/swapchain/shader/resource support is built and
+  screenshot-validated.
+- Added Linux/WSL parity and release/screenshot follow-through notes so future
+  packages and captures wait for the Windows multicontext shape to stabilize.
+
 ## [v0.84.31]
 - Bumped the active source line to `v0.84.31` for the stable multicontext
   checkpoint after the operator-confirmed OpenGL editor frame-order pass.

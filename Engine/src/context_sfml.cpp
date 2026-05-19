@@ -558,6 +558,31 @@ namespace
         state.running = false;
         state.mark_should_close(false);
 
+#if defined(_WIN32)
+        if (s_childWindow && ::IsWindow(s_childWindow) != FALSE)
+        {
+            ::ShowWindow(s_childWindow, SW_HIDE);
+            if (::GetParent(s_childWindow))
+            {
+                LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
+                style &= ~static_cast<LONG_PTR>(WS_CHILD);
+                style |= WS_POPUP;
+                ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
+                ::SetParent(s_childWindow, nullptr);
+                ::SetWindowPos(
+                    s_childWindow,
+                    nullptr,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_HIDEWINDOW);
+            }
+        }
+        if (s_hostWindow && s_hostWindow != s_childWindow && ::IsWindow(s_hostWindow) != FALSE)
+            ::ShowWindow(s_hostWindow, SW_HIDE);
+#endif
+
         if (s_window && s_window->isOpen())
             s_window->close();
         s_window.reset();
@@ -582,6 +607,18 @@ namespace
     {
         if (!ctx || !s_window || !s_window->isOpen())
             return false;
+
+        auto& state = epochnamespace::sfmlcontext::state::s_sfmlstate;
+        const bool closeRequested =
+            state.shouldClose
+            || state.window.get_should_close()
+            || (ctx->windowData && ctx->windowData->get_should_close());
+        if (closeRequested)
+        {
+            request_host_shutdown(ctx);
+            queue.clear();
+            return false;
+        }
 
 #if defined(_WIN32)
         if (s_childWindow && ::IsWindow(s_childWindow) == FALSE)
@@ -636,9 +673,9 @@ namespace
             static_cast<sf::Uint8>(clearColor[3] * 255.0f)));
 
         s_window->resetGLStates();
-        render_scene_preview(ctx);
-        s_window->resetGLStates();
         (void)queue.drain();
+        s_window->resetGLStates();
+        render_scene_preview(ctx);
         s_window->resetGLStates();
         (void)epochnamespace::gui::render_deferred_batch(ctx.get());
         s_window->display();
