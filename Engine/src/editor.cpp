@@ -350,6 +350,8 @@ namespace epochnamespace
             bool showConsoleDock{ true };
             bool showAiChat{ true };
             EditorLayoutDrag layoutDrag{ EditorLayoutDrag::None };
+            int surfaceSettleFrames{ 0 };
+            gui::Vec2 lastLayoutExtent{};
             std::string detachedPanelHostStatus{ "Docked panels active. Borderless popout routing is disabled while the editor layout is stabilized." };
             bool projectNotesVisible{ false };
             bool showAboutModal{ false };
@@ -423,6 +425,8 @@ namespace epochnamespace
             editor.showConsoleDock = true;
             editor.showAiChat = true;
             editor.layoutDrag = EditorLayoutDrag::None;
+            editor.surfaceSettleFrames = 0;
+            editor.lastLayoutExtent = {};
             editor.detachedPanelHostStatus = "Layout reset. Docked panels active; borderless popout routing remains disabled.";
         }
 
@@ -3325,6 +3329,14 @@ namespace epochnamespace
         const gui::Vec2 layoutExtent = resolve_layout_extent();
         const float w = layoutExtent.x;
         const float h = layoutExtent.y;
+        if (editor.lastLayoutExtent.x > 0.0f
+            && editor.lastLayoutExtent.y > 0.0f
+            && (std::abs(editor.lastLayoutExtent.x - layoutExtent.x) > 1.0f
+                || std::abs(editor.lastLayoutExtent.y - layoutExtent.y) > 1.0f))
+        {
+            editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
+        }
+        editor.lastLayoutExtent = layoutExtent;
 
         auto clamp_layout = [](float value, float lo, float hi) noexcept
         {
@@ -3357,7 +3369,7 @@ namespace epochnamespace
         const float right_max = (std::max)(right_min, (std::min)(560.0f, w * 0.48f));
         const float left_w = layout_outliner_visible ? clamp_layout(w * editor.outlinerSplit, left_min, left_max) : 0.0f;
         const float right_w = layout_inspector_visible ? clamp_layout(w * editor.inspectorSplit, right_min, right_max) : 0.0f;
-        const float left_split_w = 0.0f;
+        const float left_split_w = layout_outliner_visible ? splitter_w : 0.0f;
         const float right_split_w = layout_inspector_visible ? splitter_w : 0.0f;
 
         const gui::Vec2 toolbar_pos{ 0.0f, 0.0f };
@@ -3471,7 +3483,10 @@ namespace epochnamespace
 
         auto apply_editor_surface = [&](EditorMainSurface surface, std::string_view source)
         {
+            const bool changedSurface = editor.mainSurface != surface;
             editor.mainSurface = surface;
+            if (changedSurface)
+                editor.surfaceSettleFrames = 1;
 
             switch (surface)
             {
@@ -3711,7 +3726,9 @@ namespace epochnamespace
         const gui::Vec2 mouse = gui::mouse_position();
         if (gui::was_mouse_pressed())
         {
-            if (layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size))
+            if (layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size))
+                editor.layoutDrag = EditorLayoutDrag::Outliner;
+            else if (layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size))
                 editor.layoutDrag = EditorLayoutDrag::Inspector;
             else if (bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size))
                 editor.layoutDrag = EditorLayoutDrag::Dock;
@@ -3723,11 +3740,17 @@ namespace epochnamespace
         {
             switch (editor.layoutDrag)
             {
+            case EditorLayoutDrag::Outliner:
+                editor.outlinerSplit = std::clamp(mouse.x / (std::max)(1.0f, w), 0.12f, 0.42f);
+                editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
+                break;
             case EditorLayoutDrag::Inspector:
                 editor.inspectorSplit = std::clamp((w - mouse.x) / (std::max)(1.0f, w), 0.14f, 0.45f);
+                editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
                 break;
             case EditorLayoutDrag::Dock:
                 editor.dockSplit = std::clamp((h - mouse.y) / (std::max)(1.0f, h), 0.14f, 0.58f);
+                editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
                 break;
             case EditorLayoutDrag::None:
             default:
@@ -4233,19 +4256,31 @@ namespace epochnamespace
         };
 
         const bool active_center_uses_scene = main_surface_uses_scene(editor.mainSurface);
+        const bool settlingCenterSurface = editor.surfaceSettleFrames > 0;
         gui::begin_window(
             active_center_uses_scene ? std::string_view{} : std::string_view{ "Editor Workbench" },
             viewport_pos,
             viewport_size,
             !active_center_uses_scene);
-        if (active_center_uses_scene)
+        if (settlingCenterSurface)
         {
+            --editor.surfaceSettleFrames;
+            result.scene_viewport = gui::WidgetBounds{ .position = gui::cursor_position(), .size = { 0.0f, 0.0f } };
+            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+            ctx->clear_scene_viewport();
+            gui::label(std::string(main_surface_title(editor.mainSurface)));
+            gui::wrapped_label("Updating editor workspace layout...", (std::max)(180.0f, viewport_size.x - 24.0f));
+        }
+        else if (active_center_uses_scene)
+        {
+            const std::string_view sceneTitle = main_surface_title(editor.mainSurface);
+            gui::label(std::string(sceneTitle));
             const gui::Vec2 scene_pos = gui::cursor_position();
             const gui::Vec2 scene_size{
-                (std::max)(48.0f, viewport_pos.x + viewport_size.x - scene_pos.x - 6.0f),
-                (std::max)(48.0f, viewport_pos.y + viewport_size.y - scene_pos.y - 6.0f)
+                (std::max)(48.0f, viewport_pos.x + viewport_size.x - scene_pos.x),
+                (std::max)(48.0f, viewport_pos.y + viewport_size.y - scene_pos.y)
             };
-            result.scene_viewport = gui::scene_viewport(main_surface_title(editor.mainSurface), scene_pos, scene_size);
+            result.scene_viewport = gui::scene_viewport({}, scene_pos, scene_size);
             ctx->set_scene_preview_mode(editor.previewMode);
             const int viewportGuard = ctx->type == core::ContextType::OpenGL ? 1 : 0;
             ctx->set_scene_viewport(core::RenderViewport{
@@ -4686,10 +4721,12 @@ namespace epochnamespace
         gui::end_window();
 
         render_outliner_window();
-        render_inspector_window();
 
+        const bool outlinerSplitHovered = layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size);
         const bool inspectorSplitHovered = layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size);
         const bool bottomSplitHovered = bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size);
+        if (layout_outliner_visible && outliner_split_size.x > 1.0f && outliner_split_size.y > 1.0f)
+            gui::splitter_bar(outliner_split_pos, outliner_split_size, outlinerSplitHovered, editor.layoutDrag == EditorLayoutDrag::Outliner);
         if (layout_inspector_visible && inspector_split_size.x > 1.0f && inspector_split_size.y > 1.0f)
             gui::splitter_bar(inspector_split_pos, inspector_split_size, inspectorSplitHovered, editor.layoutDrag == EditorLayoutDrag::Inspector);
         if (bottom_visible && bottom_split_size.x > 1.0f && bottom_split_size.y > 1.0f)
@@ -5538,6 +5575,8 @@ namespace epochnamespace
             chat.submit(std::move(text));
         }
         }
+
+        render_inspector_window();
 
         open_dropdown("File", TopMenu::File, dropdown_window_size(192.0f, 4), [&](gui::Vec2 pos)
         {

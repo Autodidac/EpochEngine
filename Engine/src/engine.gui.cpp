@@ -1846,14 +1846,19 @@ namespace epochnamespace::gui
                 kTitleScale);
         }
 
-        g_frame.contentMin = {
-            position.x + kContentPadding,
-            position.y + titleBarHeight + kContentPadding
-        };
-        g_frame.contentMax = {
-            position.x + (std::max)(kContentPadding, size.x - kContentPadding),
-            position.y + (std::max)(titleBarHeight + kContentPadding, size.y - kContentPadding)
-        };
+        const bool fullBleedContent = !draw_background && title.empty();
+        g_frame.contentMin = fullBleedContent
+            ? position
+            : Vec2{
+                position.x + kContentPadding,
+                position.y + titleBarHeight + kContentPadding
+            };
+        g_frame.contentMax = fullBleedContent
+            ? Vec2{ position.x + (std::max)(0.0f, size.x), position.y + (std::max)(0.0f, size.y) }
+            : Vec2{
+                position.x + (std::max)(kContentPadding, size.x - kContentPadding),
+                position.y + (std::max)(titleBarHeight + kContentPadding, size.y - kContentPadding)
+            };
 
         set_cursor(g_frame.contentMin);
     }
@@ -1901,23 +1906,27 @@ namespace epochnamespace::gui
         const float height = (std::max)(0.0f, size.y);
         const float border = 2.0f;
 
-        const float titleHeight = line_advance_amount(kTitleScale);
-        const float titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
-        const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
+        const bool hasTitleBar = !title.empty();
+        const float titleHeight = hasTitleBar ? line_advance_amount(kTitleScale) : 0.0f;
+        const float titleBarHeight = hasTitleBar ? (titleHeight + 2.0f * kTitleBarPadding) : 0.0f;
+        if (hasTitleBar)
+        {
+            const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
+            draw_sprite(palette.titleBar, position.x, position.y, width, titleBarHeight);
+            const std::string fittedTitle = fit_text_to_width(
+                title,
+                (std::max)(1.0f, width - 2.0f * kContentPadding),
+                kTitleScale);
+            draw_text_line(
+                fittedTitle.empty() ? title : std::string_view{ fittedTitle },
+                position.x + kContentPadding,
+                titleTextY,
+                kTitleScale);
+        }
 
-        draw_sprite(palette.titleBar, position.x, position.y, width, titleBarHeight);
-        const std::string fittedTitle = fit_text_to_width(
-            title,
-            (std::max)(1.0f, width - 2.0f * kContentPadding),
-            kTitleScale);
-        draw_text_line(
-            fittedTitle.empty() ? title : std::string_view{ fittedTitle },
-            position.x + kContentPadding,
-            titleTextY,
-            kTitleScale);
-
-        const float contentY = position.y + titleBarHeight;
-        const float contentHeight = (std::max)(0.0f, height - titleBarHeight - border);
+        const float topBorderHeight = hasTitleBar ? 0.0f : border;
+        const float contentY = position.y + titleBarHeight + topBorderHeight;
+        const float contentHeight = (std::max)(0.0f, height - titleBarHeight - topBorderHeight - border);
         const float contentWidth = (std::max)(0.0f, width - border * 2.0f);
 
         const core::RenderPath renderPath = render_path_for_context(g_frame.ctx);
@@ -1952,6 +1961,14 @@ namespace epochnamespace::gui
         }
         if (height > border)
         {
+            if (!hasTitleBar)
+            {
+                draw_sprite(palette.panelBackground,
+                    position.x,
+                    position.y,
+                    width,
+                    border);
+            }
             draw_sprite(palette.panelBackground,
                 position.x,
                 position.y + (std::max)(0.0f, height - border),
