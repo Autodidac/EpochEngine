@@ -38,7 +38,9 @@ namespace epochnamespace::openglcontext
             }
         } scoped{ previousContext };
 
-        (void)queue.drain();
+        const bool overlayPriority = ctx->gui_overlay_priority();
+        if (!overlayPriority)
+            (void)queue.drain();
         openglbridge::render_scene_preview(ctx, framebufferWidth, framebufferHeight);
         (void)queue.drain();
         openglbridge::capture_frame_if_requested(framebufferWidth, framebufferHeight, windowId);

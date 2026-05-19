@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.84.31]
+- Bumped the active source line to `v0.84.31` for the stable multicontext
+  checkpoint after the operator-confirmed OpenGL editor frame-order pass.
+- Added an overlay-priority guard so top command menus and modal windows can
+  render after the scissored OpenGL scene without reverting the stable
+  scene-first/GUI-over frame order.
+- Removed the visible scene-viewport blanking during editor surface/layout
+  settling and applied workbench surface changes before the center panel draws,
+  reducing the flip/switch frames seen when moving through Systems and back.
+- Added a small graph-control cooldown so rapid Systems task/render graph zoom
+  button presses do not churn runtime graph surfaces every frame.
+- Stable multicontext branch status: this checkpoint is good enough to preserve,
+  but Raylib docking crash and multicontext maximize/restore remain open
+  blockers before that branch is considered finished.
+
 ## [v0.84.30]
 - Bumped the active source line to `v0.84.30` for the AI self-iteration
   evidence-loop proof and backend-source cleanup pass.

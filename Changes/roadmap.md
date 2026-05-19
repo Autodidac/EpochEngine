@@ -460,9 +460,14 @@ engine shape and should be treated as starting truth for the next passes:
   resolved. The `v0.84.29` pass keeps OpenGL scene-first composition and
   replays the latest persistent GUI batch after the scene pass so the continuous
   OpenGL render thread cannot alternate scene-only frames between UI ticks.
-  AI Chat, Inspector, Perspective pane visibility/title chrome, and the
-  transparent scene-backed workbench still need eye-test confirmation. Graph
-  surfaces also need stronger data density, design polish, and performance.
+  `v0.84.31` is the stable checkpoint to preserve: command menus/modals request
+  overlay-priority drawing, workbench surface changes apply before the center
+  panel draws, visible scene-viewport blanking during surface settling is
+  removed, and Systems graph buttons have a small input cooldown so repeated
+  presses do not churn graph surfaces every frame. AI Chat, Inspector,
+  Perspective pane visibility/title chrome, and the transparent scene-backed
+  workbench still need continued eye-test confirmation. Graph surfaces also need
+  stronger data density, design polish, and performance.
 - Current visual evidence is now preserved at
   `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/README.md`.
   Acceptance gates from that set: Perspective title stays visible with World
@@ -506,7 +511,8 @@ engine shape and should be treated as starting truth for the next passes:
   modes; menu open/close activity and software-context interaction are known
   repro amplifiers and should be investigated before cosmetic-only fixes
 - keep maximize/restore in the renderer-windowing repro matrix; maximize can
-  still crash the editor and must be fixed before claiming docking stability
+  still break parented multicontext layout and must be fixed before claiming
+  docking stability
 - fix the Raylib redock crash that can still bring down the parent editor
   process during backend-window docking tests
 - tighten terminology so runtime/module/doc names stop leaning on ambiguous

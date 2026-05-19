@@ -343,6 +343,16 @@ namespace epochnamespace::core
             scenePreviewMode.store(static_cast<std::uint8_t>(mode), std::memory_order_relaxed);
         }
 
+        [[nodiscard]] bool gui_overlay_priority() const noexcept
+        {
+            return guiOverlayPriority.load(std::memory_order_relaxed);
+        }
+
+        void set_gui_overlay_priority(bool enabled) noexcept
+        {
+            guiOverlayPriority.store(enabled, std::memory_order_relaxed);
+        }
+
         bool is_key_held_safe(input::Key k) const noexcept
         {
         #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
@@ -645,6 +655,7 @@ namespace epochnamespace::core
         std::atomic<int> sceneViewportHeight{ 0 };
         std::atomic<std::uint32_t> sceneViewportRevision{ 0 };
         std::atomic<std::uint8_t> scenePreviewMode{ static_cast<std::uint8_t>(ScenePreviewMode::None) };
+        std::atomic_bool guiOverlayPriority{ false };
 
         // virtual design canvas
         int virtualWidth = 400;

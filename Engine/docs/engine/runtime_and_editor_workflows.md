@@ -380,6 +380,12 @@ features over forcing every integration on every machine.
   Chat remain blank, so the remaining work should stay focused on GUI
   layout/composition and pane draw order instead of speculative renderer
   rewrites.
+- `v0.84.31` is the stable multicontext checkpoint to preserve before the next
+  risky pass. It keeps OpenGL scene-first / GUI-over frame order, adds an
+  overlay-priority path for command menus and modals, removes visible
+  scene-viewport blanking during workbench switches, and adds a short cooldown
+  around Systems graph controls. Raylib redock crash and multicontext
+  maximize/restore remain open blockers for the stable branch.
 - When `EPOCH_SINGLE_PARENT=0`, the launch config must force standalone
   top-level contexts even if CLI defaults still prefer parented mode. This mode
   is used to isolate resize/flicker from the single-parent dock host, so any

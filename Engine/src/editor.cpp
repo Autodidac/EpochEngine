@@ -140,6 +140,7 @@ namespace epochnamespace
             float taskZoom{ 1.15f };
             int renderPan{ 0 };
             int taskPan{ 0 };
+            int graphInputCooldownFrames{ 0 };
             SpriteHandle renderSurface{};
             SpriteHandle taskSurface{};
             SpriteHandle supportSurface{};
@@ -3479,8 +3480,6 @@ namespace epochnamespace
                 playTarget);
         };
 
-        std::optional<std::pair<EditorMainSurface, std::string>> pendingSurfaceChange{};
-
         auto apply_editor_surface = [&](EditorMainSurface surface, std::string_view source)
         {
             const bool changedSurface = editor.mainSurface != surface;
@@ -3552,7 +3551,7 @@ namespace epochnamespace
 
         auto open_editor_surface = [&](EditorMainSurface surface, std::string_view source)
         {
-            pendingSurfaceChange = std::make_pair(surface, std::string(source));
+            apply_editor_surface(surface, source);
         };
 
         auto render_main_surface_tabs = [&]()
@@ -4256,22 +4255,14 @@ namespace epochnamespace
         };
 
         const bool active_center_uses_scene = main_surface_uses_scene(editor.mainSurface);
-        const bool settlingCenterSurface = editor.surfaceSettleFrames > 0;
+        if (editor.surfaceSettleFrames > 0)
+            --editor.surfaceSettleFrames;
         gui::begin_window(
             active_center_uses_scene ? std::string_view{} : std::string_view{ "Editor Workbench" },
             viewport_pos,
             viewport_size,
             !active_center_uses_scene);
-        if (settlingCenterSurface)
-        {
-            --editor.surfaceSettleFrames;
-            result.scene_viewport = gui::WidgetBounds{ .position = gui::cursor_position(), .size = { 0.0f, 0.0f } };
-            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
-            ctx->clear_scene_viewport();
-            gui::label(std::string(main_surface_title(editor.mainSurface)));
-            gui::wrapped_label("Updating editor workspace layout...", (std::max)(180.0f, viewport_size.x - 24.0f));
-        }
-        else if (active_center_uses_scene)
+        if (active_center_uses_scene)
         {
             const std::string_view sceneTitle = main_surface_title(editor.mainSurface);
             gui::label(std::string(sceneTitle));
@@ -4539,6 +4530,8 @@ namespace epochnamespace
                 const float graphWidth = (std::max)(260.0f, centerWidth);
                 const float graphHeight = 208.0f;
                 const float supportHeight = 96.0f;
+                if (editor.systems.graphInputCooldownFrames > 0)
+                    --editor.systems.graphInputCooldownFrames;
 
                 const auto renderCanvas = build_render_graph_surface(
                     editor.systems,
@@ -4647,7 +4640,8 @@ namespace epochnamespace
                     gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
                     gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
                 };
-                if (const auto action = gui::inline_button_row(renderButtons, 24.0f, 6.0f))
+                if (const auto action = gui::inline_button_row(renderButtons, 24.0f, 6.0f);
+                    action && editor.systems.graphInputCooldownFrames == 0)
                 {
                     switch (*action)
                     {
@@ -4657,6 +4651,7 @@ namespace epochnamespace
                     case 3: editor.systems.renderPan += 64; break;
                     default: break;
                     }
+                    editor.systems.graphInputCooldownFrames = 2;
                 }
                 gui::set_cursor({ systemsOrigin.x, imageY });
                 if (editor.systems.renderSurface.is_valid())
@@ -4677,7 +4672,8 @@ namespace epochnamespace
                     gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
                     gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
                 };
-                if (const auto action = gui::inline_button_row(taskButtons, 24.0f, 6.0f))
+                if (const auto action = gui::inline_button_row(taskButtons, 24.0f, 6.0f);
+                    action && editor.systems.graphInputCooldownFrames == 0)
                 {
                     switch (*action)
                     {
@@ -4687,6 +4683,7 @@ namespace epochnamespace
                     case 3: editor.systems.taskPan += 64; break;
                     default: break;
                     }
+                    editor.systems.graphInputCooldownFrames = 2;
                 }
                 gui::set_cursor({ systemsOrigin.x, taskImageY });
                 if (editor.systems.taskSurface.is_valid())
@@ -5578,6 +5575,14 @@ namespace epochnamespace
 
         render_inspector_window();
 
+        const bool overlayPriority =
+            editor.openMenu != TopMenu::None
+            || editor.showAboutModal
+            || editor.showPackageManagerModal
+            || editor.showUpdateConfirmModal
+            || editor.showSourceUpdateConfirmModal;
+        ctx->set_gui_overlay_priority(overlayPriority);
+
         open_dropdown("File", TopMenu::File, dropdown_window_size(192.0f, 4), [&](gui::Vec2 pos)
         {
             menu_item("Open Launcher", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
@@ -5939,9 +5944,6 @@ namespace epochnamespace
                 editor.showAboutModal = false;
             gui::end_modal_window();
         }
-
-        if (pendingSurfaceChange)
-            apply_editor_surface(pendingSurfaceChange->first, pendingSurfaceChange->second);
 
         return result;
     }
