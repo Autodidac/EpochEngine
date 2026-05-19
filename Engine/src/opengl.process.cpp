@@ -38,6 +38,7 @@ namespace epochnamespace::openglcontext
             }
         } scoped{ previousContext };
 
+        (void)queue.drain();
         openglbridge::render_scene_preview(ctx, framebufferWidth, framebufferHeight);
         (void)queue.drain();
         openglbridge::capture_frame_if_requested(framebufferWidth, framebufferHeight, windowId);
