@@ -163,6 +163,10 @@ the same engine-owned path.
   project before launch. If the build fails, launch is canceled so stale
   `Projects/**/bin/...` outputs are not mistaken for the result of the current
   run.
+- generated project builds are serialized inside the editor process. Until
+  ProjectLauncher/Sandbox child builds have isolated engine-object/module/PDB
+  output directories, a second Run/build request should fail visibly instead of
+  racing the active build over shared `StaticLib1` outputs.
 - the Project workspace should also surface simple existence checks for the
   manifest, entry source, build script, `project.paths.txt`, expected output,
   build log, and active script source so the user can tell whether the shell is
@@ -246,6 +250,9 @@ the same engine-owned path.
   rather than a live proxy child, so harness and runtime checks should judge it
   by that honest ownership model instead of forcing the SDL/SFML proxy-child
   expectations onto it
+- Raylib dock/undock/redock commands must be executed on the Raylib owner
+  thread. The Win32 dock proc may queue those commands, but it must not mutate
+  the GLFW/Raylib child HWND directly from the parent host thread.
 - when validating Win32 parented multicontext behavior, a live window-tree probe
   should show the real backend child classes as visible pane owners and helper
   wrappers hidden in the docked state
@@ -417,6 +424,11 @@ features over forcing every integration on every machine.
   replays GUI, and replaces Software as the normal sixth Windows README proof
   pane. Software stays available for safe-launch/debug GUI, capture diagnostics,
   and headless validation.
+- The same `v0.84.35` line now serializes editor Run builds, validates
+  ProjectLauncher and Sandbox child `--project-self-test` paths when built
+  serially, and queues Raylib redock operations through the backend owner
+  thread. Linux Clang build/headless CTest is green with DirectX disabled, but
+  WSL visual capture is not release-proof yet.
 - When `EPOCH_SINGLE_PARENT=0`, the launch config must force standalone
   top-level contexts even if CLI defaults still prefer parented mode. This mode
   is used to isolate resize/flicker from the single-parent dock host, so any

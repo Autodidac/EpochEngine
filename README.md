@@ -62,6 +62,9 @@ For engine/tooling developers:
 
 - Source is currently the active development line at `v0.84.35`.
 - The latest published stable runtime release is `v0.84.05`.
+- A local Windows `v0.84.35` runtime package has been staged and version-smoked;
+  online release publication still requires authenticated release tooling and
+  the Linux visual-release gate below.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
 - Bootstrap updater-shell releases are separate from the main runtime package
@@ -156,6 +159,11 @@ WSL/Linux editor proof, latest asset-bearing visual capture:
 <p align="center">
   <img src="Images/readme/linux-opengl-v08386.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />
 </p>
+
+`v0.84.35` WSL Clang build/headless validation is green with DirectX disabled,
+but the current WSL visual proof is not yet release-ready: OpenGL capture is
+black on this workstation, SFML hits a GLX make-current failure, and software
+does not emit a capture file in that lane.
 
 ## Quick Start
 

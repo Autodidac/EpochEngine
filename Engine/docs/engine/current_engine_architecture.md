@@ -37,6 +37,10 @@ Current source version: `v0.84.35`
   child builds now expose non-GUI self-tests, and the checked-in engine exposes
   `--editor-project-self-test <id>`, so project shells can be materialized,
   built, and verified without pretending a GUI launch happened.
+- **Generated project build gate**: editor Run/build requests are serialized
+  while generated child projects still share the checked-in engine
+  `StaticLib1` module/PDB output surface. A second request should fail visibly
+  instead of corrupting the active build.
 - **Executable-root runtime resolution**: fonts, scripts, shaders, captures,
   workspace paths, and updater scratch roots are being normalized around one
   executable-root/runtime-root resolver instead of cwd guesses.
@@ -162,6 +166,11 @@ Current source version: `v0.84.35`
 - Raylib parent/docking work should continue to respect GLFW/raylib ownership of
   the native GL context instead of swapping in fresh Win32 DC handles after
   initialization.
+- Raylib dock/redock changes must stay owner-thread queued. Direct parent-host
+  Win32 mutation of the GLFW/Raylib child is a known crash-risk pattern.
+- Linux Clang build/headless validation is current for `v0.84.35`, but Linux
+  visual proof is not current: WSL OpenGL capture is black, SFML hits a GLX
+  make-current failure, and software emits no capture in the tested lane.
 - The `Assets` workspace currently uses file-type cards, not decoded image/model
   preview thumbnails. Full thumbnail decoding/render previews remain next-pass
   GUI/asset-browser work.

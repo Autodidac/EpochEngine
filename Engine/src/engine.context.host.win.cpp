@@ -1251,6 +1251,85 @@ namespace
 #endif
     }
 
+    [[nodiscard]] inline bool backend_requires_owner_thread_dock_commands(
+        const epochnamespace::core::WindowData* window) noexcept
+    {
+        return window
+            && window->type == epochnamespace::core::ContextType::RayLib;
+    }
+
+    [[nodiscard]] inline HWND owner_thread_dock_handle(
+        const epochnamespace::core::WindowData* window) noexcept
+    {
+        if (!window)
+            return nullptr;
+
+        if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+            return window->hwndChild;
+        if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+            return window->hwnd;
+        if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+            return window->host_hwnd;
+        return nullptr;
+    }
+
+    [[nodiscard]] inline bool post_owner_thread_dock_command(
+        epochnamespace::core::WindowData* window,
+        ProxyDockCmd command,
+        HWND parent,
+        int x,
+        int y,
+        int width,
+        int height) noexcept
+    {
+        if (!backend_requires_owner_thread_dock_commands(window))
+            return false;
+
+        const HWND target = owner_thread_dock_handle(window);
+        if (!target)
+            return false;
+
+        if (command == ProxyDockCmd::Redock
+            && (!parent || ::IsWindow(parent) == FALSE))
+        {
+            return false;
+        }
+
+        window->commandQueue.enqueue([window, target, command, parent, x, y, width, height]()
+            {
+                if (!window || !target || ::IsWindow(target) == FALSE)
+                    return;
+
+                switch (command)
+                {
+                case ProxyDockCmd::Undock:
+                    window->isFloating = true;
+                    if (parent && ::IsWindow(parent) != FALSE)
+                        ::SetPropW(target, kEpochDockParentProp, parent);
+                    position_top_level_shell(target, x, y, width, height);
+                    break;
+
+                case ProxyDockCmd::MoveDetached:
+                    window->isFloating = true;
+                    move_detached_top_level_shell(target, x, y, width, height);
+                    break;
+
+                case ProxyDockCmd::Redock:
+                    window->isFloating = false;
+                    dock_host_window_to_parent(target, parent, x, y, width, height);
+                    hide_associated_host_window(window, target, parent);
+                    ::ShowWindow(target, SW_SHOWNA);
+                    ::SetFocus(target);
+                    break;
+                }
+
+                window->hwnd = target;
+                window->hwndChild = target;
+                window->set_size(width, height);
+            });
+        return true;
+    }
+
     inline void forward_gui_input_message(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
     {
         const auto ctx = resolve_gui_context_for_hwnd(hwnd);
@@ -3632,6 +3711,24 @@ namespace epochnamespace::core
                             ::SetFocus(hwnd);
                         }
                     }
+                    else if (window && backend_requires_owner_thread_dock_commands(window))
+                    {
+                        drag.proxyUndockPending = false;
+                        drag.proxyRedockPending = false;
+                        if (::GetParent(hwnd) != drag.originalParent || window->isFloating)
+                        {
+                            post_owner_thread_dock_command(
+                                window,
+                                ProxyDockCmd::Redock,
+                                drag.originalParent,
+                                newX,
+                                newY,
+                                wndW,
+                                wndH);
+                            if (auto* mgr = s_activeInstance)
+                                mgr->HandleResize(hwnd, wndW, wndH);
+                        }
+                    }
                     else if (::GetParent(hwnd) != drag.originalParent)
                     {
                         dock_host_window_to_parent(
@@ -3735,6 +3832,32 @@ namespace epochnamespace::core
                             ::SetFocus(window->host_hwnd);
                         }
                     }
+                    else if (window
+                        && backend_requires_owner_thread_dock_commands(window)
+                        && (::GetParent(hwnd) == drag.originalParent || !window->isFloating))
+                    {
+                        if (::IsZoomed(drag.originalParent) != FALSE)
+                            ::ShowWindow(drag.originalParent, SW_RESTORE);
+                        const POINT escaped = force_proxy_shell_outside_parent(
+                            drag.originalParent,
+                            pt,
+                            newX,
+                            newY,
+                            clientW,
+                            clientH);
+                        if (!drag.proxyUndockPending)
+                        {
+                            post_owner_thread_dock_command(
+                                window,
+                                ProxyDockCmd::Undock,
+                                drag.originalParent,
+                                escaped.x,
+                                escaped.y,
+                                clientW,
+                                clientH);
+                            drag.proxyUndockPending = true;
+                        }
+                    }
                     else if (::GetParent(hwnd) == drag.originalParent)
                     {
                         if (::IsZoomed(drag.originalParent) != FALSE)
@@ -3769,6 +3892,17 @@ namespace epochnamespace::core
                         ::SetForegroundWindow(hwnd);
                         ::SetFocus(hwnd);
                     }
+                    else if (window && backend_requires_owner_thread_dock_commands(window))
+                    {
+                        post_owner_thread_dock_command(
+                            window,
+                            ProxyDockCmd::MoveDetached,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            clientW,
+                            clientH);
+                    }
                     else
                     {
                         ::SetWindowPos(hwnd, nullptr, newX, newY, 0, 0,
@@ -3778,8 +3912,22 @@ namespace epochnamespace::core
             }
             else
             {
-                ::SetWindowPos(hwnd, nullptr, newX, newY, 0, 0,
-                    SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+                if (window && backend_requires_owner_thread_dock_commands(window))
+                {
+                    post_owner_thread_dock_command(
+                        window,
+                        ProxyDockCmd::MoveDetached,
+                        nullptr,
+                        newX,
+                        newY,
+                        clientW,
+                        clientH);
+                }
+                else
+                {
+                    ::SetWindowPos(hwnd, nullptr, newX, newY, 0, 0,
+                        SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
             }
 
             return 0;
@@ -4006,6 +4154,17 @@ namespace epochnamespace::core
                         if (window && is_sfml_proxy_detached(window))
                         {
                             post_proxy_host_command(
+                                window,
+                                ProxyDockCmd::Redock,
+                                originalParent,
+                                wndRect.left,
+                                wndRect.top,
+                                clientW,
+                                clientH);
+                        }
+                        else if (window && backend_requires_owner_thread_dock_commands(window))
+                        {
+                            post_owner_thread_dock_command(
                                 window,
                                 ProxyDockCmd::Redock,
                                 originalParent,

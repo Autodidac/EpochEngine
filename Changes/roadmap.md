@@ -527,6 +527,31 @@ engine shape and should be treated as starting truth for the next passes:
     `directx.gui.cpp`. Remaining DirectX work is renderer-resource parity, real
     depth/resource ownership, and any operator-observed GUI flicker in the D3D11
     pane, not basic context creation.
+- The Run button now serializes generated project builds inside the editor
+  process. A duplicate Run/build request returns a visible failure instead of
+  launching a second ProjectLauncher/Sandbox build that can collide over shared
+  `StaticLib1` clean logs, module IFC/BMI state, or PDB outputs.
+- ProjectLauncher and Sandbox generated outputs both build and pass their
+  generated `--project-self-test` when run serially. A deliberate parallel
+  ProjectLauncher/Sandbox build reproduced the prior shared-output collision,
+  confirming that editor Run actions must stay serialized until generated child
+  builds have isolated engine-object directories.
+- Raylib redock crash work has moved from direct cross-thread Win32 mutation to
+  owner-thread dock command routing through the Raylib render command queue.
+  The patch builds cleanly; the acceptance gate is still live multicontext
+  drag-out/redock confirmation with no parent crash.
+- WSL/Linux status for `v0.84.35`: repo-root `ninja-clang-debug` builds and
+  `epoch_ci_headless` passes with DirectX disabled. Linux visual proof is not
+  release-ready yet because WSL OpenGL capture produced a black BMP, SFML hit a
+  GLX make-current failure, and software emitted no capture file. Do not replace
+  the README Linux proof or publish the Linux runtime asset until an honest
+  Linux/WSLg or native Linux visual smoke exists.
+- A local Windows runtime package was staged at
+  `C:\tmp\epoch_release\epoch_win10_x64_v0.84.35.zip` with app-local backend
+  DLLs, assets, and VC143 CRT DLLs, and the staged executable reported
+  `Epoch v0.84.35`. Online release publication remains blocked in this
+  environment by missing GitHub CLI authentication; source/docs can still be
+  pushed.
 - Current visual evidence is now preserved at
   `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/README.md`.
   Acceptance gates from that set: Perspective title stays visible with World
@@ -581,6 +606,8 @@ engine shape and should be treated as starting truth for the next passes:
   eye-test confirmation that resize convergence is fast and correctly clipped
 - fix the Raylib redock crash that can still bring down the parent editor
   process during backend-window docking tests
+- finish the owner-thread Raylib redock validation by live-testing detach,
+  redock, maximize/restore, and shutdown after the queued command patch
 - fix SDL and software multicontext scene visibility so those panes either
   render honest scene content or explicitly report fallback/debug-only mode
 - tighten terminology so runtime/module/doc names stop leaning on ambiguous

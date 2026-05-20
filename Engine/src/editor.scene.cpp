@@ -44,6 +44,7 @@ module;
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <cstring>
 #include <span>
@@ -2814,6 +2815,18 @@ namespace epochnamespace
 #endif
         const fs::path logPath = generated_project_build_log_path(root);
         const fs::path outputPath = generated_project_output_path(root);
+
+        static std::mutex generatedProjectBuildMutex;
+        std::unique_lock buildLock{ generatedProjectBuildMutex, std::try_to_lock };
+        if (!buildLock.owns_lock())
+        {
+            return {
+                false,
+                "Another generated project build is already running. Wait for that build to finish before pressing Run again.",
+                outputPath.generic_string(),
+                logPath.generic_string()
+            };
+        }
 
         std::error_code ec;
         if (!fs::exists(scriptPath, ec) || ec)

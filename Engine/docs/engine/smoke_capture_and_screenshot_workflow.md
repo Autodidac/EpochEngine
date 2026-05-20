@@ -60,6 +60,11 @@ When the pass is multicontext-specific, validate:
 - for Raylib dock probes, treat the docked state as valid when the visible
   `GLFW30` child is parented directly into the grid and the parked `EpochChild`
   helper host remains hidden under the parent with no proxy child in use
+- for Raylib redock probes after `v0.84.35`, remember that undock/move/redock
+  commands are routed through the Raylib owner/render thread command queue.
+  Do not reintroduce direct cross-thread `SetParent` / style / position changes
+  against the GLFW/Raylib child from the Win32 dock proc just to make a harness
+  sample immediate.
 - for proxy-host backends, verify the helper `EpochChild` host reattaches to the
   parent and stays hidden after redock; do not sign off if the host remains a
   visible or top-level orphan after the drag cycle
@@ -147,6 +152,10 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
   other edit boxes
 - if the same pass touches Linux/WSL2/WSLg launcher or parented behavior,
   document whether that path was actually revalidated or still needs follow-up
+- if WSL visual capture is black or the GLX backend crashes, keep the Linux
+  result as build/headless proof only. Do not refresh README Linux screenshots
+  or publish a Linux runtime asset until a real WSLg/native-Linux visual smoke
+  produces an honest non-black frame.
 - when operator-provided specialty screenshots are promoted into README proof,
   copy them into `Images/readme/` with versioned names and keep the original
   screenshots untouched.
@@ -237,6 +246,11 @@ Expected smoke behavior:
   not rely on the target machine already having the redistributable installed
 - smoke the staged packaged folder with `--version` before uploading
 - smoke the no-args packaged entry path once before uploading
+- generated ProjectLauncher/Sandbox child builds share checked-in engine
+  `StaticLib1` outputs today; run generated project builds serially until their
+  engine-object/module/PDB outputs are isolated. Parallel child builds can fail
+  on `StaticLib1` clean logs, module IFC/BMI files, or PDB locks and should not
+  be mistaken for a broken generated project by itself.
 - Linux/WSL2 packaged assets must report the same version as the tagged source
   commit they were built from
 - Linux/WSL2 packaged assets should boot the main runtime path by default;

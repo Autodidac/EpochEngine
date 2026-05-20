@@ -34,10 +34,24 @@
   5 can proceed from working memory, staged packets, visible execution,
   verification, scoring, and human gates instead of another prompt-only chat
   surface.
+- Serialized generated project builds from the editor Run path so rapid or
+  duplicate Run/build requests refuse a second build instead of racing
+  ProjectLauncher/Sandbox over the shared `StaticLib1` module/PDB/clean outputs.
+- Routed Raylib dock/undock/redock window commands through the Raylib owner
+  thread command queue so the Win32 host no longer mutates the GLFW/Raylib child
+  HWND cross-thread during redock tests.
+- Staged and version-smoked a local Windows runtime package at
+  `C:\tmp\epoch_release\epoch_win10_x64_v0.84.35.zip`; online publication still
+  requires authenticated GitHub release tooling and a release gate decision.
 - Validation: `ConsoleApplication1` Debug and Release MSBuild builds passed,
   `HeadlessCI` Debug passed, `cmake --preset windows-msvc-debug` configured and
-  built, `ctest --preset windows-msvc-debug --output-on-failure` passed, and WSL
-  `ninja-clang-debug` configure/build/ctest passed with DirectX disabled.
+  built, `ctest --preset windows-msvc-debug --output-on-failure` passed,
+  ProjectLauncher and Sandbox generated child builds plus `--project-self-test`
+  passed serially, WSL `ninja-clang-debug` build/ctest passed with DirectX
+  disabled, and the staged Windows package reported `Epoch v0.84.35`.
+- WSL visual release proof is still blocked: OpenGL `--smoke --capture` produced
+  an invalid black BMP, SFML hit a WSL/GLX `BadAccess` make-current failure, and
+  the software fallback did not emit a capture file in that lane.
 
 ## [v0.84.34]
 - Bumped the active source line to `v0.84.34` for the multicontext

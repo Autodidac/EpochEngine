@@ -73,6 +73,12 @@ ctest --preset ninja-gcc-debug --output-on-failure
   configure, build, and ctest passing. DirectX is correctly disabled on Linux;
   OpenGL, SFML, and software fallback remain the current build-time Linux
   renderer coverage in the tested environment.
+- Follow-up `v0.84.35` WSL validation confirmed the built Linux binary reports
+  `Epoch v0.84.35` and `epoch_ci_headless` passes. Visual proof is still blocked
+  on this workstation: OpenGL `--smoke --capture` emitted a black BMP, SFML
+  failed in GLX `MakeCurrent` with `BadAccess`, and software did not emit a
+  capture file. Treat Linux as build/headless green but not screenshot/release
+  proof-complete until WSLg/native Linux visual smoke is fixed.
 - Packaged Linux/WSL release assets should be versioned `.tar.gz` runtime
   archives. The normal packaged entry is `epoch`; updater-shell mode is a
   separate bootstrap variant, not the default Linux runtime identity.
