@@ -41,9 +41,10 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_bot.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_service.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_types.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\core_context_backends.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp" />
+      <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_types.hpp" />
+      <ClInclude Include="$(MSBuildThisFileDirectory)src\core_context_backends.hpp" />
+      <ClInclude Include="$(MSBuildThisFileDirectory)src\directx_context_detail.hpp" />
+      <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_context_detail.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.hpp" />
@@ -353,6 +354,18 @@
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.context.cpp">
+      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.device.cpp">
+      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.gui.cpp">
+      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.preview.cpp">
+      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.state.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\raylib.bridge.cpp">

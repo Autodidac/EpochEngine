@@ -16,9 +16,10 @@ full renderer feature.
   software-as-product-renderer role. It is screenshot-proven for context,
   swapchain, clear/present, basic shader preview rendering, scene-preview
   gating, GUI replay, and whole-primitive clipping for preview line/triangle
-  buffers, but still needs the formal renderer resource API, depth ownership,
-  and module/source split before it is feature-complete. It is disabled on
-  Linux/WSL.
+  buffers. It now has real split implementation units for context bridging,
+  state/lifetime, device/shader setup, preview geometry, and GUI atlas/sprite
+  replay, but still needs the formal renderer resource API and depth ownership
+  before it is feature-complete. It is disabled on Linux/WSL.
 - D3D12 remains planned until its own build, context, swapchain, shader, and
   resource layers are intentionally promoted and validated.
 - The software renderer is a safe-launch/debug GUI and headless-validation

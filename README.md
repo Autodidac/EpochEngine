@@ -8,13 +8,9 @@
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
 </p>
 
-<img align="left" src="Images/567.png" width="110px"/>
-
-**Epoch Engine** is a professional **C++23 game engine and creative software
-platform** for games, editors, tools, automation, and AI-assisted workflows
-from one codebase. The active source tree is centered on a project-centric
-runtime, engine-owned UI/text tooling, C++23 scripting, multicontext renderer
-work, and a staged engine AI workspace that keeps automation reviewable.
+<p align="center">
+  <img src="Images/readme/epoch-engine-overview-v08435.png" alt="Epoch Engine overview card" />
+</p>
 
 <p align="left">
   <img src="https://img.shields.io/badge/Project--Centric_Runtime-1F6F78?style=for-the-badge" alt="Project-centric runtime" />

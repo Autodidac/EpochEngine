@@ -148,9 +148,10 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   and headless validation when GPU backends are unavailable.
 - DirectX/D3D11 is now the first Windows-native renderer slice in the normal
   Windows multicontext proof. It owns a real device/swapchain/render target,
-  basic shader preview path, and GUI replay path, but still needs deeper
-  renderer-resource parity and a real module/source split before it is treated
-  as feature-complete. D3D12 stays a future explicit renderer track.
+  basic shader preview path, GUI replay path, and real split implementation
+  units for state, device setup, preview geometry, and GUI atlas/sprite replay,
+  but still needs deeper renderer-resource parity before it is treated as
+  feature-complete. D3D12 stays a future explicit renderer track.
 - Vulkan remains the future explicit cross-platform graphics backend until
   runtime support is fully stabilized.
 - Raylib, SDL, and SFML remain context/backend compatibility and validation
@@ -520,9 +521,12 @@ engine shape and should be treated as starting truth for the next passes:
   repainted by D3D11 grid/object geometry. The angle-dependent DirectX floating
   diagonal artifact was traced to partial primitive clipping and fixed by
   appending D3D11 preview lines/triangles only when every vertex in that
-  primitive survives projection. Remaining DirectX work is renderer-resource
-  parity, real depth/resource ownership, the module/source split, and any
-  operator-observed GUI flicker in the D3D11 pane, not basic context creation.
+    primitive survives projection. The first DirectX source split now keeps the
+    public `directx.context` interface while moving behavior into
+    `directx.state.cpp`, `directx.device.cpp`, `directx.preview.cpp`, and
+    `directx.gui.cpp`. Remaining DirectX work is renderer-resource parity, real
+    depth/resource ownership, and any operator-observed GUI flicker in the D3D11
+    pane, not basic context creation.
 - Current visual evidence is now preserved at
   `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/README.md`.
   Acceptance gates from that set: Perspective title stays visible with World
@@ -563,9 +567,10 @@ engine shape and should be treated as starting truth for the next passes:
 - continue the Windows DirectX renderer path from the validated D3D11
   device/swapchain/shader slice toward a real engine-facing resource API, while
   keeping D3D12 as future explicit renderer work
-- split the DirectX implementation into the same kind of owned module/source
-  surfaces as the mature backends after the first-pass D3D11 behavior is stable;
-  do not add empty placeholder DirectX modules just to make the tree look even
+- keep the DirectX implementation split behavior-owned instead of returning to a
+  monolith: public context bridge, state/lifetime, device/shader setup, preview,
+  and GUI replay each have a real source file now; do not add empty placeholder
+  DirectX modules just to make the tree look even
 - finish IDE-class docking/popout behavior so detach, input ownership, z-order,
   redock, and startup presentation remain stable
 - eliminate remaining OpenGL flicker in both single-context and multicontext

@@ -35,9 +35,10 @@ From the archived work in this file, a few themes are clear:
   project-centric runtime and editor that can launch, build, script, inspect,
   and iterate from one engine-owned workflow.
 - The rendering stack has expanded into a real multicontext desktop tool
-  surface across Raylib, SDL3, SFML3, Vulkan, OpenGL, and Software, with the
-  harder work focused on honest docking, undocking, redocking, startup, and
-  shutdown behavior rather than fake placeholders.
+  surface across Raylib, SDL3, SFML3, Vulkan, OpenGL, and DirectX, with Software
+  preserved as a fallback/debug/headless lane. The harder work remains honest
+  docking, undocking, redocking, startup, and shutdown behavior rather than fake
+  placeholders.
 - The updater story matured from a fragile one-off replacement path into a real
   bootstrap/runtime flow with managed rebuilds, source fallback, packaged
   assets, and cross-platform release alignment.

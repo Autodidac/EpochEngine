@@ -79,8 +79,8 @@ override them locally in `engine.config.hpp`.
   preview path now tracks the OpenGL editor palette more closely, but it is
   still not the stable default renderer.
 - DirectX-enabled builds: active Windows-only first-pass D3D11 backend. It is
-  valid for multicontext preview/GUI proof, but renderer-resource/material
-  parity and the deeper module/source split remain experimental.
+  valid for multicontext preview/GUI proof and now has split implementation
+  units, but renderer-resource/material/depth parity remains experimental.
 - Linux/WSL builds: DirectX must remain disabled. Use Clang full-engine presets
   for Linux renderer validation and GCC headless presets unless intentionally
   testing the experimental GNU module path.

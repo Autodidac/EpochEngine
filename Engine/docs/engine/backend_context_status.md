@@ -41,13 +41,15 @@ This is the current high-level status of the context and renderer stack.
 - DirectX is intentionally Windows-only. CMake/MSBuild must keep it disabled on
   Linux and WSL; Linux parity means the repo still builds and runs the
   non-DirectX lanes, not that D3D11 is available there.
-- DirectX currently has a first-pass module shape (`directx.context`) and one
-  implementation source. The follow-up split should move real owned code into
-  `directx.state`, `directx.renderer`, `directx.textures`, and/or
-  `directx.preview` only when those modules own real behavior.
+- DirectX now keeps the public `directx.context` module interface while splitting
+  real behavior across implementation units: `directx.context.cpp` for the
+  exported bridge, `directx.state.cpp` for lifetime/resize/render-target state,
+  `directx.device.cpp` for D3D11 device and shader setup, `directx.preview.cpp`
+  for editor preview geometry, and `directx.gui.cpp` for GUI atlas/sprite replay.
 - DirectX still needs the next real renderer-resource step: depth/stencil,
-  resource lifetime, material/pipeline ownership, and module split should move
-  together instead of papering over the current first-pass source shape.
+  resource lifetime, material/pipeline ownership, and deeper engine-facing
+  renderer-resource APIs should move together instead of papering over the
+  current first-pass renderer surface.
 - Treat Vulkan and a few minor archival helpers as incomplete until their paths
   are explicitly finished and tested.
 - Treat D3D12 as planned Windows-native renderer work, not as an active backend,

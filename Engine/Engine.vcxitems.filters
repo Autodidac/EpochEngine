@@ -252,6 +252,9 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\core_context_backends.hpp">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\directx_context_detail.hpp">
+      <Filter>Header Files\engine</Filter>
+    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
@@ -972,6 +975,18 @@
       <Filter>Source Files\core\context\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.context.cpp">
+      <Filter>Source Files\core\context\directx</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.device.cpp">
+      <Filter>Source Files\core\context\directx</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.gui.cpp">
+      <Filter>Source Files\core\context\directx</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.preview.cpp">
+      <Filter>Source Files\core\context\directx</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.state.cpp">
       <Filter>Source Files\core\context\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\context_software.cpp">

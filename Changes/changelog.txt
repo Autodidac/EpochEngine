@@ -23,10 +23,13 @@
   line and triangle primitives before appending them to D3D11 draw buffers, so
   a single clipped endpoint can no longer pair with an unrelated later vertex
   and produce long floating diagonal artifacts.
+- Split the first-pass DirectX implementation out of the monolithic source file
+  into owned backend implementation units for state/lifetime, device/shader
+  setup, preview geometry, GUI atlas/sprite replay, and the public context
+  bridge while keeping the existing `directx.context` module interface stable.
 - Documented that DirectX is Windows-only and intentionally disabled for Linux
   and WSL builds; the current DirectX source shape is a first-pass backend slice
-  and still needs a future module split that mirrors the mature backend layout
-  instead of fake placeholder modules.
+  and now has real implementation files instead of fake placeholder modules.
 - Added the next-pass EpochBot control-loop prompt and acceptance shape so Phase
   5 can proceed from working memory, staged packets, visible execution,
   verification, scoring, and human gates instead of another prompt-only chat

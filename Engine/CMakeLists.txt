@@ -200,6 +200,10 @@ set(EPOCH_SOURCES
     src/context_software.cpp
     src/context_vulkan.cpp
     src/directx.context.cpp
+    src/directx.device.cpp
+    src/directx.gui.cpp
+    src/directx.preview.cpp
+    src/directx.state.cpp
     src/opengl.backend.cpp
     src/opengl.context.cpp
     src/opengl.init.cpp
@@ -307,6 +311,12 @@ if(MSVC)
         src/context_sfml.cpp
         src/context_sdl.cpp
         src/context_raylib.cpp
+        src/context_directx.cpp
+        src/directx.context.cpp
+        src/directx.device.cpp
+        src/directx.gui.cpp
+        src/directx.preview.cpp
+        src/directx.state.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj;/Zm2000;/GL-"
     )
@@ -871,6 +881,10 @@ if(NOT EPOCH_DIRECTX_ACTIVE)
     set_source_files_properties(
         src/context_directx.cpp
         src/directx.context.cpp
+        src/directx.device.cpp
+        src/directx.gui.cpp
+        src/directx.preview.cpp
+        src/directx.state.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
 endif()
