@@ -19,6 +19,10 @@
   valid scene viewport before drawing grid/object geometry, preventing the D3D11
   scene from bleeding through launcher-only GUI surfaces while keeping the
   editor scene visible.
+- Fixed the angle-dependent DirectX preview line corruption by clipping whole
+  line and triangle primitives before appending them to D3D11 draw buffers, so
+  a single clipped endpoint can no longer pair with an unrelated later vertex
+  and produce long floating diagonal artifacts.
 - Documented that DirectX is Windows-only and intentionally disabled for Linux
   and WSL builds; the current DirectX source shape is a first-pass backend slice
   and still needs a future module split that mirrors the mature backend layout

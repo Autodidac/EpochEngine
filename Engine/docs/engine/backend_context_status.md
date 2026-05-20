@@ -34,8 +34,10 @@ This is the current high-level status of the context and renderer stack.
   SFML, Vulkan, OpenGL, and DirectX. DirectX owns a real D3D11
   device/swapchain/render target, renders editor preview markers, replays the
   GUI batch, skips scene geometry when the editor has not published a valid
-  scene viewport, and passed README screenshot startup proof. Software remains
-  fallback/debug/headless validation rather than the normal Windows product pane.
+  scene viewport, clips preview geometry as whole primitives to avoid
+  angle-dependent floating line artifacts, and passed README screenshot startup
+  proof. Software remains fallback/debug/headless validation rather than the
+  normal Windows product pane.
 - DirectX is intentionally Windows-only. CMake/MSBuild must keep it disabled on
   Linux and WSL; Linux parity means the repo still builds and runs the
   non-DirectX lanes, not that D3D11 is available there.
@@ -43,6 +45,9 @@ This is the current high-level status of the context and renderer stack.
   implementation source. The follow-up split should move real owned code into
   `directx.state`, `directx.renderer`, `directx.textures`, and/or
   `directx.preview` only when those modules own real behavior.
+- DirectX still needs the next real renderer-resource step: depth/stencil,
+  resource lifetime, material/pipeline ownership, and module split should move
+  together instead of papering over the current first-pass source shape.
 - Treat Vulkan and a few minor archival helpers as incomplete until their paths
   are explicitly finished and tested.
 - Treat D3D12 as planned Windows-native renderer work, not as an active backend,

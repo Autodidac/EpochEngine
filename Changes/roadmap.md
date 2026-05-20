@@ -517,9 +517,12 @@ engine shape and should be treated as starting truth for the next passes:
   MSBuild Debug/Release, HeadlessCI, CMake/MSVC configure/build/ctest, and WSL
   Clang configure/build/ctest passed for this checkpoint. DirectX scene drawing
   now honors the editor scene-preview gate so launcher-only GUI surfaces are not
-  repainted by D3D11 grid/object geometry. Remaining DirectX work is
-  renderer-resource parity, the module/source split, and any operator-observed
-  GUI flicker in the D3D11 pane, not basic context creation.
+  repainted by D3D11 grid/object geometry. The angle-dependent DirectX floating
+  diagonal artifact was traced to partial primitive clipping and fixed by
+  appending D3D11 preview lines/triangles only when every vertex in that
+  primitive survives projection. Remaining DirectX work is renderer-resource
+  parity, real depth/resource ownership, the module/source split, and any
+  operator-observed GUI flicker in the D3D11 pane, not basic context creation.
 - Current visual evidence is now preserved at
   `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/README.md`.
   Acceptance gates from that set: Perspective title stays visible with World
@@ -784,8 +787,10 @@ engine shape and should be treated as starting truth for the next passes:
 1. Preserve the `v0.84.35` multicontext checkpoint: Raylib, SDL, SFML, Vulkan,
    OpenGL, and DirectX must keep real panes, visible scene previews, Inspector,
    AI Chat, and stable GUI-over-scene composition. DirectX launcher bleed-through
-   is guarded by the scene-preview gate; any remaining mismatched clear/color
-   behavior must be captured and fixed or explicitly deferred with proof.
+   is guarded by the scene-preview gate, and angle-dependent DirectX primitive
+   pairing artifacts are guarded by whole-primitive clipping. Any remaining
+   mismatched clear/color/depth behavior must be captured and fixed or
+   explicitly deferred with proof.
 2. Keep GitHub/workflow reliability and local/hosted build truth aligned after
    the headless plus Linux Clang engine split.
 3. Move Phase 5 to the front: implement the smallest real EpochBot closed-loop

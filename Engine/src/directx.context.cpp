@@ -540,8 +540,8 @@ float4 PSMain(PSIn input) : SV_Target
         return create_render_target(state);
     }
 
-    bool append_clip_vertex(
-        std::vector<DirectXVertex>& out,
+    bool make_clip_vertex(
+        DirectXVertex& out,
         const epochnamespace::previewgrid::Mat4& mvp,
         const epochnamespace::previewgrid::Vertex& vertex) noexcept
     {
@@ -550,7 +550,10 @@ float4 PSMain(PSIn input) : SV_Target
             return false;
 
         clip.z = (clip.z + clip.w) * 0.5f;
-        out.push_back(DirectXVertex{
+        if (!std::isfinite(clip.x) || !std::isfinite(clip.y) || !std::isfinite(clip.z) || !std::isfinite(clip.w))
+            return false;
+
+        out = DirectXVertex{
             .x = clip.x,
             .y = clip.y,
             .z = clip.z,
@@ -558,7 +561,46 @@ float4 PSMain(PSIn input) : SV_Target
             .r = vertex.color.x,
             .g = vertex.color.y,
             .b = vertex.color.z
-        });
+        };
+        return true;
+    }
+
+    bool append_clip_line(
+        std::vector<DirectXVertex>& out,
+        const epochnamespace::previewgrid::Mat4& mvp,
+        const epochnamespace::previewgrid::Vertex& first,
+        const epochnamespace::previewgrid::Vertex& second)
+    {
+        DirectXVertex a{};
+        DirectXVertex b{};
+        if (!make_clip_vertex(a, mvp, first) || !make_clip_vertex(b, mvp, second))
+            return false;
+
+        out.push_back(a);
+        out.push_back(b);
+        return true;
+    }
+
+    bool append_clip_triangle(
+        std::vector<DirectXVertex>& out,
+        const epochnamespace::previewgrid::Mat4& mvp,
+        const epochnamespace::previewgrid::Vertex& first,
+        const epochnamespace::previewgrid::Vertex& second,
+        const epochnamespace::previewgrid::Vertex& third)
+    {
+        DirectXVertex a{};
+        DirectXVertex b{};
+        DirectXVertex c{};
+        if (!make_clip_vertex(a, mvp, first)
+            || !make_clip_vertex(b, mvp, second)
+            || !make_clip_vertex(c, mvp, third))
+        {
+            return false;
+        }
+
+        out.push_back(a);
+        out.push_back(b);
+        out.push_back(c);
         return true;
     }
 
@@ -626,22 +668,28 @@ float4 PSMain(PSIn input) : SV_Target
             if (first >= gridVertices.size() || second >= gridVertices.size())
                 continue;
 
-            (void)append_clip_vertex(lines, mvp, gridVertices[first]);
-            (void)append_clip_vertex(lines, mvp, gridVertices[second]);
+            (void)append_clip_line(lines, mvp, gridVertices[first], gridVertices[second]);
         }
 
         const auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(&ctx);
-        for (const auto& vertex : solidVertices)
-            (void)append_clip_vertex(solid, mvp, vertex);
+        for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
+        {
+            (void)append_clip_triangle(
+                solid,
+                mvp,
+                solidVertices[i],
+                solidVertices[i + 1],
+                solidVertices[i + 2]);
+        }
 
         const auto focusVertices = epochnamespace::previewgrid::look_marker_vertices_for(&ctx);
         const std::size_t focusCount = epochnamespace::previewgrid::look_marker_vertex_count_for(&ctx);
-        for (std::size_t i = 0; i < focusCount && i < focusVertices.size(); ++i)
-            (void)append_clip_vertex(lines, mvp, focusVertices[i]);
+        for (std::size_t i = 0; i + 1 < focusCount && i + 1 < focusVertices.size(); i += 2)
+            (void)append_clip_line(lines, mvp, focusVertices[i], focusVertices[i + 1]);
 
         const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(&ctx);
-        for (const auto& vertex : objectVertices)
-            (void)append_clip_vertex(lines, mvp, vertex);
+        for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
+            (void)append_clip_line(lines, mvp, objectVertices[i], objectVertices[i + 1]);
     }
 
     D3D11_VIEWPORT full_window_viewport(const DirectXState& state) noexcept

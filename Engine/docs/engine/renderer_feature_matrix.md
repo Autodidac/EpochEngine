@@ -15,8 +15,10 @@ full renderer feature.
 - DirectX/D3D11 is the first active Windows-native renderer slice for the old
   software-as-product-renderer role. It is screenshot-proven for context,
   swapchain, clear/present, basic shader preview rendering, scene-preview
-  gating, and GUI replay, but still needs the formal renderer resource API and
-  module/source split before it is feature-complete. It is disabled on Linux/WSL.
+  gating, GUI replay, and whole-primitive clipping for preview line/triangle
+  buffers, but still needs the formal renderer resource API, depth ownership,
+  and module/source split before it is feature-complete. It is disabled on
+  Linux/WSL.
 - D3D12 remains planned until its own build, context, swapchain, shader, and
   resource layers are intentionally promoted and validated.
 - The software renderer is a safe-launch/debug GUI and headless-validation
@@ -38,7 +40,7 @@ coverage, or cross-backend parity.
 | --- | --- | --- |
 | Window/context bootstrap | Present | OpenGL, Raylib, SDL, SFML, Vulkan, DirectX/D3D11, software fallback, and noop/headless paths exist. Normal editor use is converging toward explicit first-class context panes with inactive backends torn down rather than hidden. D3D12 is planned, not active. |
 | Frame begin / clear / present | Present, still regression-sensitive | OpenGL composition and GUI replay were recently stabilized; continue keeping flicker and resize in smoke coverage. |
-| Basic primitives | Present | Triangles, quads, grid/marker primitives, cubes, lights, Canvas2D, and editor helper geometry exist. |
+| Basic primitives | Present | Triangles, quads, grid/marker primitives, cubes, lights, Canvas2D, and editor helper geometry exist. DirectX/D3D11 now clips preview lines and triangles as complete primitives so one clipped endpoint cannot corrupt later line-list pairs. |
 | Shader pipeline | Present/partial | OpenGL shader setup, Vulkan SPIR-V assets, and DirectX/D3D11 first-pass HLSL preview shaders exist. Formal cross-backend shader/pipeline ownership remains backlog. |
 | Uniforms / UBO-style data | Present/partial | OpenGL uniforms and Vulkan uniform/descriptors exist; the engine-facing binding model still needs formalization. |
 | Vertex buffers / indexed drawing / VAO-equivalent | Present/partial | OpenGL, Vulkan, and DirectX/D3D11 carry first-pass buffer/index paths; the shared render-device API is still early. |
