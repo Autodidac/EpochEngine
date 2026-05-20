@@ -129,7 +129,8 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   can ICE while writing full-engine C++ module BMIs; full Linux editor/runtime
   builds should use Clang until GCC module support stabilizes.
 - Linux/Clang 18 is the current full-engine Linux rendering build lane, with
-  OpenGL, software renderer, and SFML validated as build-time backends.
+  OpenGL, software renderer, and SFML validated as build-time backends. DirectX
+  remains explicitly Windows-only and must stay disabled for Linux/WSL presets.
 - CMake is authoritative for cross-platform builds and project-wide presets.
 - Visual Studio project/filter files must not drift from filesystem and CMake
   whenever files are moved or added.
@@ -148,8 +149,8 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - DirectX/D3D11 is now the first Windows-native renderer slice in the normal
   Windows multicontext proof. It owns a real device/swapchain/render target,
   basic shader preview path, and GUI replay path, but still needs deeper
-  renderer-resource parity before it is treated as feature-complete. D3D12 stays
-  a future explicit renderer track.
+  renderer-resource parity and a real module/source split before it is treated
+  as feature-complete. D3D12 stays a future explicit renderer track.
 - Vulkan remains the future explicit cross-platform graphics backend until
   runtime support is fully stabilized.
 - Raylib, SDL, and SFML remain context/backend compatibility and validation
@@ -514,9 +515,11 @@ engine shape and should be treated as starting truth for the next passes:
   proof is Raylib, SDL, SFML, Vulkan, OpenGL, and DirectX. Software remains a
   safe-launch/debug/headless fallback instead of a normal Windows product pane.
   MSBuild Debug/Release, HeadlessCI, CMake/MSVC configure/build/ctest, and WSL
-  Clang configure/build/ctest passed for this checkpoint. Remaining DirectX work
-  is renderer-resource parity and any operator-observed GUI flicker in the D3D11
-  pane, not basic context creation.
+  Clang configure/build/ctest passed for this checkpoint. DirectX scene drawing
+  now honors the editor scene-preview gate so launcher-only GUI surfaces are not
+  repainted by D3D11 grid/object geometry. Remaining DirectX work is
+  renderer-resource parity, the module/source split, and any operator-observed
+  GUI flicker in the D3D11 pane, not basic context creation.
 - Current visual evidence is now preserved at
   `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/README.md`.
   Acceptance gates from that set: Perspective title stays visible with World
@@ -557,6 +560,9 @@ engine shape and should be treated as starting truth for the next passes:
 - continue the Windows DirectX renderer path from the validated D3D11
   device/swapchain/shader slice toward a real engine-facing resource API, while
   keeping D3D12 as future explicit renderer work
+- split the DirectX implementation into the same kind of owned module/source
+  surfaces as the mature backends after the first-pass D3D11 behavior is stable;
+  do not add empty placeholder DirectX modules just to make the tree look even
 - finish IDE-class docking/popout behavior so detach, input ownership, z-order,
   redock, and startup presentation remain stable
 - eliminate remaining OpenGL flicker in both single-context and multicontext
@@ -778,8 +784,8 @@ engine shape and should be treated as starting truth for the next passes:
 1. Preserve the `v0.84.35` multicontext checkpoint: Raylib, SDL, SFML, Vulkan,
    OpenGL, and DirectX must keep real panes, visible scene previews, Inspector,
    AI Chat, and stable GUI-over-scene composition. DirectX launcher bleed-through
-   or mismatched clear/color behavior is a release blocker until fixed or
-   explicitly deferred with proof.
+   is guarded by the scene-preview gate; any remaining mismatched clear/color
+   behavior must be captured and fixed or explicitly deferred with proof.
 2. Keep GitHub/workflow reliability and local/hosted build truth aligned after
    the headless plus Linux Clang engine split.
 3. Move Phase 5 to the front: implement the smallest real EpochBot closed-loop

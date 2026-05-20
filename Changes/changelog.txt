@@ -15,6 +15,14 @@
   context specialty shots.
 - Locked DirectX composition to scene-first / GUI-over ordering so command menus
   and launcher/editor GUI surfaces stay in front of the D3D11 scene pass.
+- Corrected the DirectX preview pass to honor `ScenePreviewMode::Editor` and a
+  valid scene viewport before drawing grid/object geometry, preventing the D3D11
+  scene from bleeding through launcher-only GUI surfaces while keeping the
+  editor scene visible.
+- Documented that DirectX is Windows-only and intentionally disabled for Linux
+  and WSL builds; the current DirectX source shape is a first-pass backend slice
+  and still needs a future module split that mirrors the mature backend layout
+  instead of fake placeholder modules.
 - Added the next-pass EpochBot control-loop prompt and acceptance shape so Phase
   5 can proceed from working memory, staged packets, visible execution,
   verification, scoring, and human gates instead of another prompt-only chat

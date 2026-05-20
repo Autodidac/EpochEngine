@@ -11,7 +11,7 @@ This is the current high-level status of the context and renderer stack.
 | `raylib.*` | Active | Active and feature-rich, especially for docked-window workflows. |
 | `sfml.*` | Active | Supported, but still more delicate due to GL/context behavior and dock-host activation order. |
 | `software.*` | Fallback | Safe-launch, debug/error-message GUI, capture diagnostics, and headless validation path. Do not treat it as the long-term Windows production renderer once Direct3D is promoted. |
-| `directx.*` / D3D11 | Active first pass | Windows-native renderer slice with device/swapchain/render-target ownership, basic shader preview rendering, GUI replay, and v0.84.35 multicontext screenshot proof. |
+| `directx.*` / D3D11 | Active first pass | Windows-native renderer slice with device/swapchain/render-target ownership, basic shader preview rendering, GUI replay, scene-preview gating, and v0.84.35 multicontext screenshot proof. |
 | D3D12 | Planned | Future explicit Windows renderer track. Do not claim D3D12 support until a separate device/context/swapchain/shader/resource path is implemented and validated. |
 | `noop.context` | Minimal | Headless placeholder. |
 | `vulkan.*` | Experimental | Under active migration, not a stable default backend. |
@@ -33,8 +33,16 @@ This is the current high-level status of the context and renderer stack.
 - Current `v0.84.35` evidence: Windows six-context proof now uses Raylib, SDL,
   SFML, Vulkan, OpenGL, and DirectX. DirectX owns a real D3D11
   device/swapchain/render target, renders editor preview markers, replays the
-  GUI batch, and passed README screenshot startup proof. Software remains
+  GUI batch, skips scene geometry when the editor has not published a valid
+  scene viewport, and passed README screenshot startup proof. Software remains
   fallback/debug/headless validation rather than the normal Windows product pane.
+- DirectX is intentionally Windows-only. CMake/MSBuild must keep it disabled on
+  Linux and WSL; Linux parity means the repo still builds and runs the
+  non-DirectX lanes, not that D3D11 is available there.
+- DirectX currently has a first-pass module shape (`directx.context`) and one
+  implementation source. The follow-up split should move real owned code into
+  `directx.state`, `directx.renderer`, `directx.textures`, and/or
+  `directx.preview` only when those modules own real behavior.
 - Treat Vulkan and a few minor archival helpers as incomplete until their paths
   are explicitly finished and tested.
 - Treat D3D12 as planned Windows-native renderer work, not as an active backend,

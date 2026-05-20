@@ -14,8 +14,9 @@ full renderer feature.
   renderer.
 - DirectX/D3D11 is the first active Windows-native renderer slice for the old
   software-as-product-renderer role. It is screenshot-proven for context,
-  swapchain, clear/present, basic shader preview rendering, and GUI replay, but
-  still needs the formal renderer resource API before it is feature-complete.
+  swapchain, clear/present, basic shader preview rendering, scene-preview
+  gating, and GUI replay, but still needs the formal renderer resource API and
+  module/source split before it is feature-complete. It is disabled on Linux/WSL.
 - D3D12 remains planned until its own build, context, swapchain, shader, and
   resource layers are intentionally promoted and validated.
 - The software renderer is a safe-launch/debug GUI and headless-validation

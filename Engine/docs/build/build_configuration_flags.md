@@ -17,7 +17,7 @@ building during the migration.
 | `EPOCH_ENABLE_OPENGL` | On | Enable the primary OpenGL renderer path. |
 | `EPOCH_ENABLE_SOFTWARE_RENDERER` | On | Enable the software fallback renderer. |
 | `EPOCH_ENABLE_VULKAN` | On | Enable the experimental Vulkan build path. |
-| `EPOCH_ENABLE_DIRECTX` | On on Windows, off elsewhere | Enable the first-pass Windows DirectX/D3D11 renderer path. |
+| `EPOCH_ENABLE_DIRECTX` | On on Windows, off elsewhere | Enable the first-pass Windows DirectX/D3D11 renderer path. Keep this off on Linux/WSL. |
 | `EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES` | Off | Turn missing optional backend deps into configure errors. |
 
 ## Entry points
@@ -80,7 +80,10 @@ override them locally in `engine.config.hpp`.
   still not the stable default renderer.
 - DirectX-enabled builds: active Windows-only first-pass D3D11 backend. It is
   valid for multicontext preview/GUI proof, but renderer-resource/material
-  parity remains experimental.
+  parity and the deeper module/source split remain experimental.
+- Linux/WSL builds: DirectX must remain disabled. Use Clang full-engine presets
+  for Linux renderer validation and GCC headless presets unless intentionally
+  testing the experimental GNU module path.
 - Renderer-less builds: disabling both OpenGL and software rendering leaves the
   atlas/texture path without a supported submission backend.
 

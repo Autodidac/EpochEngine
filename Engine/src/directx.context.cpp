@@ -941,18 +941,23 @@ namespace epochnamespace::directxcontext
         queue.drain();
         (void)epochnamespace::gui::render_deferred_batch(ctx.get());
 
-        std::vector<DirectXVertex> solid{};
-        std::vector<DirectXVertex> lines{};
-        solid.reserve(256);
-        lines.reserve(512);
-        build_preview_geometry(*ctx, state, solid, lines);
-        const D3D11_VIEWPORT previewViewport = scene_viewport_for(*ctx, state);
-        state.immediate->RSSetViewports(1, &previewViewport);
-        state.immediate->IASetInputLayout(state.inputLayout);
-        state.immediate->VSSetShader(state.vertexShader, nullptr, 0);
-        state.immediate->PSSetShader(state.pixelShader, nullptr, 0);
-        draw_vertices(state, solid, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        draw_vertices(state, lines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+        const auto sceneViewport = ctx->scene_viewport();
+        if (ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor
+            && sceneViewport.valid())
+        {
+            std::vector<DirectXVertex> solid{};
+            std::vector<DirectXVertex> lines{};
+            solid.reserve(256);
+            lines.reserve(512);
+            build_preview_geometry(*ctx, state, solid, lines);
+            const D3D11_VIEWPORT previewViewport = scene_viewport_for(*ctx, state);
+            state.immediate->RSSetViewports(1, &previewViewport);
+            state.immediate->IASetInputLayout(state.inputLayout);
+            state.immediate->VSSetShader(state.vertexShader, nullptr, 0);
+            state.immediate->PSSetShader(state.pixelShader, nullptr, 0);
+            draw_vertices(state, solid, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            draw_vertices(state, lines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+        }
 
         (void)state.swapchain->Present(1, 0);
 
