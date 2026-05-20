@@ -931,6 +931,16 @@ namespace epochnamespace::directxcontext
         state.immediate->OMSetRenderTargets(1, &state.renderTarget, nullptr);
         state.immediate->ClearRenderTargetView(state.renderTarget, clear);
 
+        const D3D11_VIEWPORT viewport = full_window_viewport(state);
+        state.immediate->RSSetViewports(1, &viewport);
+        state.immediate->RSSetState(state.rasterizer);
+        state.immediate->IASetInputLayout(state.inputLayout);
+        state.immediate->VSSetShader(state.vertexShader, nullptr, 0);
+        state.immediate->PSSetShader(state.pixelShader, nullptr, 0);
+
+        queue.drain();
+        (void)epochnamespace::gui::render_deferred_batch(ctx.get());
+
         std::vector<DirectXVertex> solid{};
         std::vector<DirectXVertex> lines{};
         solid.reserve(256);
@@ -943,16 +953,6 @@ namespace epochnamespace::directxcontext
         state.immediate->PSSetShader(state.pixelShader, nullptr, 0);
         draw_vertices(state, solid, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         draw_vertices(state, lines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
-
-        const D3D11_VIEWPORT viewport = full_window_viewport(state);
-        state.immediate->RSSetViewports(1, &viewport);
-        state.immediate->RSSetState(state.rasterizer);
-        state.immediate->IASetInputLayout(state.inputLayout);
-        state.immediate->VSSetShader(state.vertexShader, nullptr, 0);
-        state.immediate->PSSetShader(state.pixelShader, nullptr, 0);
-
-        queue.drain();
-        (void)epochnamespace::gui::render_deferred_batch(ctx.get());
 
         (void)state.swapchain->Present(1, 0);
 
