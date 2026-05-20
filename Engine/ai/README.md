@@ -128,6 +128,56 @@ fresh packet after successful builds. That packet is the durable handoff into
 future replay, verifier scoring, and curated training promotion. It does not
 grant blind write-through to the repo.
 
+## Next AI Implementation Pass
+
+After the v0.84.35 DirectX/multicontext checkpoint, the next focused AI pass is
+to turn the existing sandbox controls into the first real EpochBot control loop.
+That pass should not spend time inventing another prompt surface. It should wire
+the current evidence paths into a visible, reviewable loop:
+
+1. `WorkingMemory`: active goal, current project, staged files, recent events,
+   selected model, open editor surface, last tool action, known blockers, and
+   active hard rules.
+2. `LongTermMemory`: curated facts, episodic build/run history, procedural
+   tool recipes, and exact file/project indexes. Vector recall is optional
+   support, not the only memory.
+3. `Retriever`: ranks memory by recency, relevance, authority, and current goal,
+   then injects only the useful slice into a model/tool request.
+4. `Planner`: proposes one bounded pass from the goal and evidence, with clear
+   success and failure conditions.
+5. `Executor`: runs only approved editor/build/tool actions through the visible
+   harness and records stdout, stderr, file diffs, screenshots, scene state, and
+   exit codes.
+6. `Verifier`: checks compiler/test/runtime/screenshot/log evidence and rejects
+   vague self-status claims.
+7. `Scorer`: rewards verified progress and penalizes constraint violations,
+   unrelated churn, missing evidence, and repeated failures.
+8. `Gate`: requires human approval before source promotion, dataset promotion,
+   server/listener activation, or any bypass-capable runtime.
+
+The first usable milestone is not autonomous repo mutation. It is an
+operator-visible loop where EpochBot can:
+
+- inspect the active project and scene state
+- propose one small improvement
+- run a sandbox build/test or scene-training task
+- show exactly what changed and where
+- ask for approval before promotion
+- append notes, packet evidence, and curated training candidates
+
+Minimal next-pass prompt:
+
+```text
+Read AGENTS.md, Changes/roadmap.md, Engine/ai/README.md, and
+Engine/ai/control/continuous_build_loop.json. Preserve the v0.84.35
+multicontext checkpoint. Implement the smallest working EpochBot closed-loop
+control slice: working memory, staged goal packet, visible executor action,
+verifier evidence, score/gate result, and updated notes in the AI Sandbox. Do
+not add hidden autonomy, auto servers, bypass channels, or unreviewed dataset
+promotion. Build, run the editor from x64/Debug, capture proof, update docs, and
+commit only after the GUI and AI evidence are verified.
+```
+
 The same evidence route is available without opening the GUI:
 
 ```powershell

@@ -13,6 +13,12 @@
 - Refreshed README proof images from asset-bearing v0.84.35 runs, including the
   six-context grid, per-backend startup captures, and operator-provided floating
   context specialty shots.
+- Locked DirectX composition to scene-first / GUI-over ordering so command menus
+  and launcher/editor GUI surfaces stay in front of the D3D11 scene pass.
+- Added the next-pass EpochBot control-loop prompt and acceptance shape so Phase
+  5 can proceed from working memory, staged packets, visible execution,
+  verification, scoring, and human gates instead of another prompt-only chat
+  surface.
 - Validation: `ConsoleApplication1` Debug and Release MSBuild builds passed,
   `HeadlessCI` Debug passed, `cmake --preset windows-msvc-debug` configured and
   built, `ctest --preset windows-msvc-debug --output-on-failure` passed, and WSL

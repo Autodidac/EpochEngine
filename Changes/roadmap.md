@@ -775,18 +775,24 @@ engine shape and should be treated as starting truth for the next passes:
 
 ## Current Push Order
 
-1. Keep GitHub/workflow reliability and local/hosted build truth aligned after
+1. Preserve the `v0.84.35` multicontext checkpoint: Raylib, SDL, SFML, Vulkan,
+   OpenGL, and DirectX must keep real panes, visible scene previews, Inspector,
+   AI Chat, and stable GUI-over-scene composition. DirectX launcher bleed-through
+   or mismatched clear/color behavior is a release blocker until fixed or
+   explicitly deferred with proof.
+2. Keep GitHub/workflow reliability and local/hosted build truth aligned after
    the headless plus Linux Clang engine split.
-2. Strengthen the Systems workspace with deeper pacing diagnostics and backend
+3. Move Phase 5 to the front: implement the smallest real EpochBot closed-loop
+   control slice using the current sandbox/evidence paths. Required parts are
+   working memory, staged goal packet, visible executor action, verifier
+   evidence, score/gate result, notes update, and no hidden autonomy.
+4. Strengthen the Systems workspace with deeper pacing diagnostics and backend
    convergence guidance, including present/partial/missing renderer feature
    status from the feature matrix.
-3. Carry the time spine deeper into runtime and scene ownership.
-4. Tighten the AI capture, replay, review, and promotion loop until
-   Phase 5 can run from staged packets with builder/verifier gates and visible
-   script/file/asset evidence inside the editor.
-5. Keep UI/editor maturity moving forward, especially text/input reliability,
+5. Carry the time spine deeper into runtime and scene ownership.
+6. Keep UI/editor maturity moving forward, especially text/input reliability,
    shell polish, drag/drop, and backend-window stability.
-6. Complete the primitive/object system and keep it aligned with the project
+7. Complete the primitive/object system and keep it aligned with the project
    runtime shell.
 7. Replace metadata-only `.epoch` scene shells with real project-owned
    scene loading, editing, saving, and play/runtime handoff.
