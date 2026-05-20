@@ -541,17 +541,21 @@ engine shape and should be treated as starting truth for the next passes:
   The patch builds cleanly; the acceptance gate is still live multicontext
   drag-out/redock confirmation with no parent crash.
 - WSL/Linux status for `v0.84.35`: repo-root `ninja-clang-debug` builds and
-  `epoch_ci_headless` passes with DirectX disabled. Linux visual proof is not
-  release-ready yet because WSL OpenGL capture produced a black BMP, SFML hit a
+  `epoch_ci_headless` passes with DirectX disabled. A Linux runtime package was
+  staged at `C:\tmp\epoch_release\epoch_linux_x64_v0.84.35.tar.gz`; the staged
+  package reports `Epoch v0.84.35` and passes `epoch_ci_headless .` after
+  including source-shaped `Engine/assets`, `Engine/resource`, and
+  `Engine/ai/control` runtime support paths. Linux visual screenshot proof is
+  still not release-ready because WSL OpenGL capture produced a black BMP, WSLg
+  desktop capture APIs are unavailable/failing on this workstation, SFML hit a
   GLX make-current failure, and software emitted no capture file. Do not replace
-  the README Linux proof or publish the Linux runtime asset until an honest
-  Linux/WSLg or native Linux visual smoke exists.
+  the README Linux proof until an honest Linux/WSLg or native Linux visual smoke
+  exists.
 - A local Windows runtime package was staged at
   `C:\tmp\epoch_release\epoch_win10_x64_v0.84.35.zip` with app-local backend
   DLLs, assets, and VC143 CRT DLLs, and the staged executable reported
-  `Epoch v0.84.35`. Online release publication remains blocked in this
-  environment by missing GitHub CLI authentication; source/docs can still be
-  pushed.
+  `Epoch v0.84.35`. GitHub CLI authentication was restored from the existing git
+  credential path for publishing the `v0.84.35` release assets.
 - Current visual evidence is now preserved at
   `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/README.md`.
   Acceptance gates from that set: Perspective title stays visible with World

@@ -5,7 +5,7 @@
 
 <p align="left">
   <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.35-1F7A4C?style=for-the-badge" alt="Current development source v0.84.35" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.35-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.35" />
 </p>
 
 <p align="center">
@@ -61,10 +61,9 @@ For engine/tooling developers:
 ## Current Snapshot
 
 - Source is currently the active development line at `v0.84.35`.
-- The latest published stable runtime release is `v0.84.05`.
-- A local Windows `v0.84.35` runtime package has been staged and version-smoked;
-  online release publication still requires authenticated release tooling and
-  the Linux visual-release gate below.
+- The latest published stable runtime release is `v0.84.35`.
+- Windows and Linux `v0.84.35` runtime packages have been staged and
+  version-smoked; the Linux package also passes its packaged headless contract.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
 - Bootstrap updater-shell releases are separate from the main runtime package
@@ -161,9 +160,11 @@ WSL/Linux editor proof, latest asset-bearing visual capture:
 </p>
 
 `v0.84.35` WSL Clang build/headless validation is green with DirectX disabled,
-but the current WSL visual proof is not yet release-ready: OpenGL capture is
-black on this workstation, SFML hits a GLX make-current failure, and software
-does not emit a capture file in that lane.
+and the Linux package version/headless-smokes from its staged runtime folder.
+The current WSL visual proof is not yet release-ready: OpenGL capture is black
+on this workstation, WSLg desktop capture APIs are unavailable/failing here,
+SFML hits a GLX make-current failure, and software does not emit a capture file
+in that lane.
 
 ## Quick Start
 

@@ -254,6 +254,10 @@ Before publishing a Linux/WSL2 asset:
 - include the runtime executable, required shared libraries, assets, shaders,
   and scripts in the staged package instead of assuming the repo tree exists
   beside the executable
+- for `v0.84.35`, the packaged headless contract also expects source-shaped
+  `Engine/assets`, `Engine/resource`, and `Engine/ai/control` paths beside the
+  runtime; keep those paths until the packaged headless probe is made
+  executable-root aware
 - keep any Linux bootstrap drop separate, for example
   `epoch_updater_shell_only_linux_x64_vX.Y.Z.tar.gz`
 - keep the Linux naming and published-version story aligned with Windows so the
