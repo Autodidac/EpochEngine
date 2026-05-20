@@ -69,6 +69,10 @@ ctest --preset ninja-gcc-debug --output-on-failure
   engine-local presets remain available for legacy local workflows.
 - Use Clang for Linux full-engine rendering builds today. Use GCC presets for
   headless validation unless you are explicitly investigating the GNU module path.
+- `v0.84.35` revalidated the repo-root `ninja-clang-debug` path from WSL with
+  configure, build, and ctest passing. DirectX is correctly disabled on Linux;
+  OpenGL, SFML, and software fallback remain the current build-time Linux
+  renderer coverage in the tested environment.
 - Packaged Linux/WSL release assets should be versioned `.tar.gz` runtime
   archives. The normal packaged entry is `epoch`; updater-shell mode is a
   separate bootstrap variant, not the default Linux runtime identity.

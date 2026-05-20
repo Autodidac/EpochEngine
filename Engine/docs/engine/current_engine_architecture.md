@@ -6,14 +6,15 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.31`
+Current source version: `v0.84.35`
 
 ## Architecture highlights
 
 - **Multi-context runtime**: the shared context layer and multiplexer coordinate
   backend-owned windows, command queues, and render-thread work.
-- **Backend stack**: OpenGL, SDL, Raylib, SFML, software, and noop/headless are
-  all represented in the active engine tree; Vulkan remains experimental.
+- **Backend stack**: OpenGL, DirectX/D3D11, SDL, Raylib, SFML, software fallback,
+  and noop/headless are all represented in the active engine tree; Vulkan
+  remains experimental.
 - **Custom UI on automated texture/atlas plumbing**: GUI layout, atlas upload,
   sprite submission, clipped panels, tab bars, scroll text, arbitrary scroll
   areas, dock visibility, first-pass splitter resize state, generated runtime
@@ -50,8 +51,8 @@ Current source version: `v0.84.31`
   readable graph rows.
 - **Renderer feature direction**: `renderer_feature_matrix.md` now tracks the
   imported OpenGL/Vulkan/Direct3D feature families, separates existing/partial
-  engine coverage from missing renderer backlog work, and keeps Direct3D as a
-  parity target rather than an active backend promise.
+  engine coverage from missing renderer backlog work, and records DirectX/D3D11
+  as an active first-pass Windows renderer while D3D12 remains future work.
 - **Migration map**: formerly archived compatibility surfaces are now either
   preserved in active modules or called out explicitly in
   `Engine/docs/engine/legacy_feature_map.md`.
@@ -69,9 +70,9 @@ Current source version: `v0.84.31`
   moving the legacy tree under `Engine/`.
 - Startup and shutdown behavior are getting more disciplined as backend-local
   diagnostics and hot-path logging are trimmed back out of the render loop.
-- SDL and Software now share the same editor preview-grid geometry/palette path
-  as the GPU editor previews, which tightens backend parity for scene-view
-  smoke tests.
+- SDL, Software fallback, and DirectX now share enough editor preview-grid
+  geometry/palette behavior to support scene-view smoke tests, while DirectX
+  also proves the Windows-native renderer track with D3D11 preview rendering.
 - Parent-window shutdown now behaves more like a real engine host lifecycle:
   docked children are marked for close and the session exits instead of leaving
   a dead console/process behind.
@@ -151,9 +152,9 @@ Current source version: `v0.84.31`
 - Vulkan is present but should still be treated as a migration/integration path,
   not the default renderer, even though the editor palette, editor grid preview,
   and GUI presentation have been brought closer to the OpenGL baseline.
-- Direct3D/D3D12 remains reserved scaffolding only. Do not describe it as an
-  active renderer until a real context/device/shader/resource path is promoted
-  and validated.
+- DirectX/D3D11 is active first-pass Windows proof, not yet a complete renderer
+  resource API. D3D12 remains reserved scaffolding until a separate
+  context/device/shader/resource path is promoted and validated.
 - A few minor archival and compatibility surfaces still exist and should be
   changed carefully.
 - Backend fixes are usually safest when applied locally to the affected backend

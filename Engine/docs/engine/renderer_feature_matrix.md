@@ -12,10 +12,12 @@ full renderer feature.
 - OpenGL is the proving backend for editor/runtime renderer work right now.
 - Vulkan remains an explicit graphics migration path, not the default runtime
   renderer.
-- Direct3D/D3D12 is the Windows-native renderer replacement track for the old
-  software-as-product-renderer role. It is still not an active renderer until
-  the build, context, swapchain, shader, and resource layers are intentionally
-  promoted and validated.
+- DirectX/D3D11 is the first active Windows-native renderer slice for the old
+  software-as-product-renderer role. It is screenshot-proven for context,
+  swapchain, clear/present, basic shader preview rendering, and GUI replay, but
+  still needs the formal renderer resource API before it is feature-complete.
+- D3D12 remains planned until its own build, context, swapchain, shader, and
+  resource layers are intentionally promoted and validated.
 - The software renderer is a safe-launch/debug GUI and headless-validation
   fallback, not the long-term Windows production renderer target.
 - The abstraction should follow the Vulkan/D3D model: explicit buffers,
@@ -33,19 +35,19 @@ coverage, or cross-backend parity.
 
 | Feature family | Current Epoch status | Notes |
 | --- | --- | --- |
-| Window/context bootstrap | Present | OpenGL, Raylib, SDL, SFML, Vulkan, software fallback, and noop/headless paths exist. Normal editor use is converging toward explicit first-class context panes with inactive backends torn down rather than hidden. Direct3D/D3D12 is planned, not active. |
+| Window/context bootstrap | Present | OpenGL, Raylib, SDL, SFML, Vulkan, DirectX/D3D11, software fallback, and noop/headless paths exist. Normal editor use is converging toward explicit first-class context panes with inactive backends torn down rather than hidden. D3D12 is planned, not active. |
 | Frame begin / clear / present | Present, still regression-sensitive | OpenGL composition and GUI replay were recently stabilized; continue keeping flicker and resize in smoke coverage. |
 | Basic primitives | Present | Triangles, quads, grid/marker primitives, cubes, lights, Canvas2D, and editor helper geometry exist. |
-| Shader pipeline | Present for OpenGL/Vulkan paths | OpenGL shader setup and Vulkan SPIR-V assets exist; Direct3D/HLSL remains future parity work. |
+| Shader pipeline | Present/partial | OpenGL shader setup, Vulkan SPIR-V assets, and DirectX/D3D11 first-pass HLSL preview shaders exist. Formal cross-backend shader/pipeline ownership remains backlog. |
 | Uniforms / UBO-style data | Present/partial | OpenGL uniforms and Vulkan uniform/descriptors exist; the engine-facing binding model still needs formalization. |
-| Vertex buffers / indexed drawing / VAO-equivalent | Present/partial | OpenGL and Vulkan carry buffer/index paths; the shared render-device API is still early. |
+| Vertex buffers / indexed drawing / VAO-equivalent | Present/partial | OpenGL, Vulkan, and DirectX/D3D11 carry first-pass buffer/index paths; the shared render-device API is still early. |
 | Transforms / projection / camera | Present | Perspective camera, Canvas2D camera, preview camera math, object transform data, and editor camera controls exist. |
 | Quaternion/API-neutral camera math | Partial | Camera behavior exists; stronger math ownership and test coverage are still needed before calling this complete. |
 | Texture mapping / samplers / atlases | Present/partial | Atlas, upload, GUI font, Vulkan texture, and backend texture modules exist; sampler policy and filtering choices need a renderer-level contract. |
 | Materials / basic lighting | Partial | Ambient-solid primitives and basic light entities exist. Full material resources, specular paths, and multiple light types remain backlog. |
 | Debugging support | Partial | Logging, Systems diagnostics, Vulkan validation messaging, host FPS title diagnostics, screenshots, and smoke docs exist. GPU debug markers/query plumbing remain backlog. |
 | 3D picking | Partial | Editor object selection exists, but full ID-target/depth/ray picking is not complete. |
-| Framebuffers / render targets / capture | Partial | Swapchains, Vulkan framebuffers, capture bridges, and runtime surfaces exist. General render-to-texture assets need a proper engine-facing API. |
+| Framebuffers / render targets / capture | Partial | OpenGL/Vulkan/DirectX swapchain or framebuffer paths, capture bridges, and runtime surfaces exist. General render-to-texture assets need a proper engine-facing API. |
 | Text and UI rendering | Present/partial | Engine-owned GUI, font atlas, scroll views, tab bars, splitters, and runtime-surface textures exist. Professional dock/window polish remains active GUI work. |
 | Platform window layer | Present | Win32 and Linux/X11 host paths exist with backend-specific context ownership. |
 

@@ -2060,10 +2060,11 @@ namespace epochnamespace::core
         int SFMLWinCount,
         int VulkanWinCount,
         int OpenGLWinCount,
+        int DirectXWinCount,
         int SoftwareWinCount,
         bool parented)
     {
-        const int totalRequested = RayLibWinCount + SDLWinCount + SFMLWinCount + VulkanWinCount + OpenGLWinCount + SoftwareWinCount;
+        const int totalRequested = RayLibWinCount + SDLWinCount + SFMLWinCount + VulkanWinCount + OpenGLWinCount + DirectXWinCount + SoftwareWinCount;
         if (totalRequested <= 0) return false;
 
         uiThreadId = ::GetCurrentThreadId();
@@ -2420,6 +2421,17 @@ namespace epochnamespace::core
 #endif
                         break;
 #endif
+#if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
+                    case ContextType::DirectX:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+                        epochnamespace::logger::get(kLogSys).logf(
+                            epochnamespace::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Deferring DirectX init to render thread. host={}",
+                            static_cast<void*>(hwnd));
+#endif
+                        break;
+#endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                     case ContextType::RayLib:
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
@@ -2485,6 +2497,9 @@ namespace epochnamespace::core
 #endif
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         make_backend_windows(ContextType::OpenGL, OpenGLWinCount);
+#endif
+#if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
+        make_backend_windows(ContextType::DirectX, DirectXWinCount);
 #endif
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
@@ -2903,7 +2918,8 @@ namespace epochnamespace::core
             case ContextType::SFML: return 2;
             case ContextType::Vulkan: return 3;
             case ContextType::OpenGL: return 4;
-            case ContextType::Software: return 5;
+            case ContextType::DirectX: return 5;
+            case ContextType::Software: return 6;
             default: return 99;
             }
         };

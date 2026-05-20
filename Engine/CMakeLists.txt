@@ -123,7 +123,7 @@ function(epoch_print_build_summary)
     set(_epoch_active_backends "headless-only")
     if(DEFINED EPOCH_RAYLIB_ACTIVE)
         set(_epoch_active_backends
-            "Raylib=${EPOCH_RAYLIB_ACTIVE}; SDL=${EPOCH_SDL_ACTIVE}; SFML=${EPOCH_SFML_ACTIVE}; Vulkan=${EPOCH_VULKAN_ACTIVE}; OpenGL=${EPOCH_OPENGL_ACTIVE}; Software=${EPOCH_SOFTWARE_RENDERER_ACTIVE}")
+            "Raylib=${EPOCH_RAYLIB_ACTIVE}; SDL=${EPOCH_SDL_ACTIVE}; SFML=${EPOCH_SFML_ACTIVE}; Vulkan=${EPOCH_VULKAN_ACTIVE}; OpenGL=${EPOCH_OPENGL_ACTIVE}; DirectX=${EPOCH_DIRECTX_ACTIVE}; Software=${EPOCH_SOFTWARE_RENDERER_ACTIVE}")
     endif()
 
     message(STATUS "Epoch build summary")
@@ -196,8 +196,10 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override pac
 set(EPOCH_SOURCES
     src/engine.cpp
     src/engine.context.cpp
+    src/context_directx.cpp
     src/context_software.cpp
     src/context_vulkan.cpp
+    src/directx.context.cpp
     src/opengl.backend.cpp
     src/opengl.context.cpp
     src/opengl.init.cpp
@@ -500,12 +502,17 @@ if(UNIX AND NOT APPLE)
     # is fully mirrored to the working Windows implementation.
     set(EPOCH_DEFAULT_ENABLE_VULKAN OFF)
 endif()
+set(EPOCH_DEFAULT_ENABLE_DIRECTX OFF)
+if(WIN32)
+    set(EPOCH_DEFAULT_ENABLE_DIRECTX ON)
+endif()
 
 epoch_option(ENABLE_RAYLIB ON "Enable the Raylib backend")
 epoch_option(ENABLE_SDL ON "Enable the SDL backend")
 epoch_option(ENABLE_SFML ON "Enable the SFML backend")
 epoch_option(ENABLE_VULKAN ${EPOCH_DEFAULT_ENABLE_VULKAN} "Enable the Vulkan backend")
 epoch_option(ENABLE_OPENGL ON "Enable the OpenGL backend")
+epoch_option(ENABLE_DIRECTX ${EPOCH_DEFAULT_ENABLE_DIRECTX} "Enable the Windows DirectX/D3D11 preview backend")
 epoch_option(ENABLE_SOFTWARE_RENDERER ON "Enable the software renderer backend")
 epoch_option(UPDATER_SHELL_BUILD OFF "Build the lightweight updater shell by default")
 epoch_option(REQUIRE_OPTIONAL_DEPENDENCIES OFF "Treat missing optional backend dependencies as a configuration error")
@@ -515,7 +522,13 @@ set(EPOCH_SDL_ACTIVE ${EPOCH_ENABLE_SDL})
 set(EPOCH_SFML_ACTIVE ${EPOCH_ENABLE_SFML})
 set(EPOCH_VULKAN_ACTIVE ${EPOCH_ENABLE_VULKAN})
 set(EPOCH_OPENGL_ACTIVE ${EPOCH_ENABLE_OPENGL})
+set(EPOCH_DIRECTX_ACTIVE ${EPOCH_ENABLE_DIRECTX})
 set(EPOCH_SOFTWARE_RENDERER_ACTIVE ${EPOCH_ENABLE_SOFTWARE_RENDERER})
+
+if(NOT WIN32)
+    set(EPOCH_DIRECTX_ACTIVE OFF)
+    set(EPOCH_ENABLE_DIRECTX OFF CACHE BOOL "Enable the Windows DirectX/D3D11 preview backend" FORCE)
+endif()
 
 if(NOT EPOCH_RAYLIB_ACTIVE)
     list(FILTER EPOCH_SOURCES EXCLUDE REGEX [[src/acontext\.raylib\..*\.cpp$]])
@@ -809,6 +822,10 @@ if(NOT EPOCH_VULKAN_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])vulkan\.]])
 endif()
 
+if(NOT EPOCH_DIRECTX_ACTIVE)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])directx\.]])
+endif()
+
 epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])vulkan\.context_api_unit\.ixx$]])
 epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])almondshell\.ixx$]])
 
@@ -850,6 +867,14 @@ if(NOT EPOCH_SFML_ACTIVE)
     )
 endif()
 
+if(NOT EPOCH_DIRECTX_ACTIVE)
+    set_source_files_properties(
+        src/context_directx.cpp
+        src/directx.context.cpp
+        PROPERTIES HEADER_FILE_ONLY TRUE
+    )
+endif()
+
 target_sources(epoch PRIVATE
     FILE_SET epoch_modules TYPE CXX_MODULES
         BASE_DIRS ${EPOCH_MODULE_DIR}
@@ -877,9 +902,15 @@ target_compile_definitions(epoch PRIVATE
     $<$<BOOL:${EPOCH_VULKAN_ACTIVE}>:GLM_FORCE_RADIANS>
     $<$<BOOL:${EPOCH_OPENGL_ACTIVE}>:EPOCH_FORCE_ENABLE_OPENGL>
     $<$<NOT:$<BOOL:${EPOCH_OPENGL_ACTIVE}>>:EPOCH_FORCE_DISABLE_OPENGL>
+    $<$<BOOL:${EPOCH_DIRECTX_ACTIVE}>:EPOCH_FORCE_ENABLE_DIRECTX>
+    $<$<NOT:$<BOOL:${EPOCH_DIRECTX_ACTIVE}>>:EPOCH_FORCE_DISABLE_DIRECTX>
     $<$<BOOL:${EPOCH_SOFTWARE_RENDERER_ACTIVE}>:EPOCH_FORCE_ENABLE_SOFTWARE_RENDERER>
     $<$<NOT:$<BOOL:${EPOCH_SOFTWARE_RENDERER_ACTIVE}>>:EPOCH_FORCE_DISABLE_SOFTWARE_RENDERER>
 )
+
+if(WIN32 AND EPOCH_DIRECTX_ACTIVE)
+    target_link_libraries(epoch PRIVATE d3d11 dxgi d3dcompiler)
+endif()
 
 find_package(glm CONFIG QUIET)
 if(glm_FOUND)

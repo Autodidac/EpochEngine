@@ -1890,6 +1890,7 @@ namespace epochnamespace
                 (ctx->type == core::ContextType::OpenGL) ? core::RenderPath::OpenGL
                 : (ctx->type == core::ContextType::SFML) ? core::RenderPath::SFML
                 : (ctx->type == core::ContextType::Vulkan) ? core::RenderPath::Vulkan
+                : (ctx->type == core::ContextType::DirectX) ? core::RenderPath::DirectX
                 : core::RenderPath::Unknown;
 
             ctx->windowData->commandQueue.enqueue(
@@ -1965,6 +1966,7 @@ namespace epochnamespace
             case core::ContextType::RayLib: return "Raylib";
             case core::ContextType::SDL: return "SDL";
             case core::ContextType::SFML: return "SFML";
+            case core::ContextType::DirectX: return "DirectX";
             case core::ContextType::Software: return "Software";
             default: return "Unknown";
             }

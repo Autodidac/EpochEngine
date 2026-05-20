@@ -123,6 +123,10 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - refresh the README multicontext proof at least every 10th feature version, or
   sooner whenever visible renderer color, layout, or docking behavior changes
   enough that the existing proof is misleading
+- `v0.84.35` README proof uses Raylib, SDL, SFML, Vulkan, OpenGL, and DirectX
+  as the normal Windows six-context set. Software remains fallback/debug/headless
+  proof and should not replace DirectX in the README multicontext lineup unless
+  the pass is specifically proving safe-launch behavior.
 - the current PowerShell harness screenshot is diagnostic proof, not the final
   long-term screenshot system; the target remains an engine-owned parent-window
   proof path for fullscreen multicontext captures
@@ -143,6 +147,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
   other edit boxes
 - if the same pass touches Linux/WSL2/WSLg launcher or parented behavior,
   document whether that path was actually revalidated or still needs follow-up
+- when operator-provided specialty screenshots are promoted into README proof,
+  copy them into `Images/readme/` with versioned names and keep the original
+  screenshots untouched.
 
 ## AI smoke prompts
 

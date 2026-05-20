@@ -91,6 +91,9 @@
     <Filter Include="Module Files\ixx\core\context\backends\vulkan">
       <UniqueIdentifier>{de3e8c0b-4f63-41ae-bdce-6545e23a2c76}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Module Files\ixx\core\context\backends\directx">
+      <UniqueIdentifier>{4a0163bc-629e-4391-bf0e-49b4de63fc61}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Module Files\ixx\games\gamecore">
       <UniqueIdentifier>{52ee0543-9b00-43b5-b44c-726f6cd8cfd9}</UniqueIdentifier>
     </Filter>
@@ -183,6 +186,9 @@
     </Filter>
     <Filter Include="Source Files\core\context\sfml">
       <UniqueIdentifier>{2252e37f-66ec-467a-99f9-fd4923fde33a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\core\context\directx">
+      <UniqueIdentifier>{ee2b6d4a-65e4-42eb-bf8b-2d314c5429fc}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\core\crossplatform\backends\opengl">
       <UniqueIdentifier>{4cd8b412-3e84-43a0-b9fc-52f697ef4492}</UniqueIdentifier>
@@ -382,6 +388,9 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.context.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\directx.context.ixx">
+      <Filter>Module Files\ixx\core\context\backends\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.backend.ixx">
       <Filter>Module Files\ixx\core\context\backends\opengl</Filter>
@@ -958,6 +967,12 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\context_sdl.cpp">
       <Filter>Source Files\core\context\sdl</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_directx.cpp">
+      <Filter>Source Files\core\context\directx</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.context.cpp">
+      <Filter>Source Files\core\context\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\context_software.cpp">
       <Filter>Source Files\core\context\software</Filter>

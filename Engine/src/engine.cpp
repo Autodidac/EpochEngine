@@ -160,7 +160,8 @@ namespace epochnamespace::core
         int sfml_count = 1;
         int vulkan_count = 1;
         int opengl_count = 1;
-        int software_count = 1;
+        int directx_count = 0;
+        int software_count = 0;
         bool parented = (EPOCH_SINGLE_PARENT == 1);
     };
 
@@ -172,6 +173,7 @@ namespace epochnamespace::core
         cfg.sfml_count = (std::max)(0, cli::sfml_window_count);
         cfg.vulkan_count = (std::max)(0, cli::vulkan_window_count);
         cfg.opengl_count = (std::max)(0, cli::opengl_window_count);
+        cfg.directx_count = (std::max)(0, cli::directx_window_count);
         cfg.software_count = (std::max)(0, cli::software_window_count);
 #if defined(EPOCH_SINGLE_PARENT) && (EPOCH_SINGLE_PARENT == 1)
         cfg.parented = cli::parented_mode;
@@ -185,7 +187,8 @@ namespace epochnamespace::core
             && cfg.sfml_count == 1
             && cfg.vulkan_count == 1
             && cfg.opengl_count == 1
-            && cfg.software_count == 1;
+            && cfg.directx_count == 1
+            && cfg.software_count == 0;
 
         if (!cli::backend_selection_explicit && defaultAutoBackendGrid)
         {
@@ -194,6 +197,7 @@ namespace epochnamespace::core
             cfg.sfml_count = 0;
             cfg.vulkan_count = 0;
             cfg.opengl_count = 0;
+            cfg.directx_count = 0;
             cfg.software_count = 0;
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
             cfg.opengl_count = 1;
@@ -208,6 +212,7 @@ namespace epochnamespace::core
             cfg.sfml_count +
             cfg.vulkan_count +
             cfg.opengl_count +
+            cfg.directx_count +
             cfg.software_count;
 
         if (total_requested > 0)
@@ -647,7 +652,8 @@ namespace epochnamespace::core
         case epochnamespace::core::ContextType::SFML: return 2;
         case epochnamespace::core::ContextType::Vulkan: return 3;
         case epochnamespace::core::ContextType::OpenGL: return 4;
-        case epochnamespace::core::ContextType::Software: return 5;
+        case epochnamespace::core::ContextType::DirectX: return 5;
+        case epochnamespace::core::ContextType::Software: return 6;
         default: return 99;
         }
     }
@@ -2881,6 +2887,7 @@ namespace epochnamespace::core
                     launch_cfg.sfml_count,
                     launch_cfg.vulkan_count,
                     launch_cfg.opengl_count,
+                    launch_cfg.directx_count,
                     launch_cfg.software_count,
                     launch_cfg.parented
                 );
@@ -2946,6 +2953,7 @@ namespace epochnamespace::core
                     launch_cfg.sfml_count,
                     launch_cfg.vulkan_count,
                     launch_cfg.opengl_count,
+                    launch_cfg.directx_count,
                     launch_cfg.software_count,
                     launch_cfg.parented
                 );
@@ -3047,6 +3055,7 @@ namespace epochnamespace::core
                     launch_cfg.sfml_count,
                     launch_cfg.vulkan_count,
                     launch_cfg.opengl_count,
+                    launch_cfg.directx_count,
                     launch_cfg.software_count,
                     launch_cfg.parented
                 );
@@ -3121,6 +3130,7 @@ namespace epochnamespace::core
                     launch_cfg.sfml_count,
                     launch_cfg.vulkan_count,
                     launch_cfg.opengl_count,
+                    launch_cfg.directx_count,
                     launch_cfg.software_count,
                     launch_cfg.parented
                 );

@@ -2,10 +2,10 @@ param(
     [ValidateSet('Full','Single')]
     [string]$Mode = 'Full',
 
-    [ValidateSet('raylib','sdl','sfml','vulkan','opengl','software')]
+    [ValidateSet('raylib','sdl','sfml','vulkan','opengl','directx','software')]
     [string]$Backend = 'raylib',
 
-    [ValidateSet('','raylib','sdl','sfml','vulkan','opengl','software')]
+    [ValidateSet('','raylib','sdl','sfml','vulkan','opengl','directx','software')]
     [string]$FocusedBackend = '',
 
     [ValidateSet('Debug','Release')]
@@ -436,14 +436,47 @@ function Invoke-UndockRedock(
     $before = Get-DragContractSnapshot -DockHandle $DockHandle -ParentHwnd $ParentHwnd -ProxyHostHandle $ProxyHostHandle -ProxyChildHandle $ProxyChildHandle -ProcessId $ProcessId
     $useProxyContract = $before.UseProxyContract
     $dockRect = if ($DockHandle -ne [IntPtr]::Zero -and [EpochWin32Harness]::IsWindow($DockHandle)) { Get-WindowRectObject $DockHandle } else { $null }
+    $proxyHostVisible = $ProxyHostHandle -ne [IntPtr]::Zero -and
+        [EpochWin32Harness]::IsWindow($ProxyHostHandle) -and
+        [EpochWin32Harness]::IsWindowVisible($ProxyHostHandle)
+    $proxyChildVisible = $ProxyChildHandle -ne [IntPtr]::Zero -and
+        [EpochWin32Harness]::IsWindow($ProxyChildHandle) -and
+        [EpochWin32Harness]::IsWindowVisible($ProxyChildHandle)
+
+    $dragHandle = [IntPtr]::Zero
+    $dragHandleKind = ''
+    if ($useProxyContract -and $proxyHostVisible) {
+        $dragHandle = $ProxyHostHandle
+        $dragHandleKind = 'proxy-host'
+    } elseif ($DockHandle -ne [IntPtr]::Zero -and
+        [EpochWin32Harness]::IsWindow($DockHandle) -and
+        $DockHandle -ne $ParentHwnd) {
+        $dragHandle = $DockHandle
+        $dragHandleKind = 'dock'
+    } elseif ($useProxyContract -and $proxyChildVisible) {
+        $dragHandle = $ProxyChildHandle
+        $dragHandleKind = 'proxy-child'
+    } else {
+        throw "No valid dock/backend drag handle was found; refusing to drag the parent window."
+    }
+
+    if ($dragHandle -eq $ParentHwnd) {
+        throw "Harness selected the parent as the drag handle; refusing misleading dock proof."
+    }
+
+    $dragRect = Get-WindowRectObject $dragHandle
+    if (-not $dragRect) {
+        throw "Selected drag handle '$dragHandleKind' has no window rect."
+    }
+
     $virtualRect = Get-VirtualScreenRect
     $spaceRight = if ($parentRect) { $virtualRect.Right - $parentRect.Right } else { 0 }
     $spaceLeft = if ($parentRect) { $parentRect.Left - $virtualRect.Left } else { 0 }
     $escapeRight = $spaceRight -ge $spaceLeft
     $startX = 20
     $startY = 10
-    $dragStartScreenX = if ($dockRect) { $dockRect.Left + $startX } else { $parentRect.Left + $startX }
-    $dragStartScreenY = if ($dockRect) { $dockRect.Top + $startY } else { $parentRect.Top + $startY }
+    $dragStartScreenX = $dragRect.Left + $startX
+    $dragStartScreenY = $dragRect.Top + $startY
     Set-WindowForeground $ParentHwnd
     Set-ScreenCursorPoint $dragStartScreenX $dragStartScreenY
     Start-Sleep -Milliseconds 180
@@ -542,6 +575,9 @@ function Invoke-UndockRedock(
 
     [pscustomobject]@{
         ContractMode = if ($useProxyContract) { 'proxy-release-redock' } else { 'direct-live-redock' }
+        DragHandle = $dragHandle
+        DragHandleKind = $dragHandleKind
+        DragHandleRect = $dragRect
         MidDragScreenshotPath = $MidDragScreenshotPath
         BeforeDocked = $before.Docked
         MidTopLevel = $mid.MidTopLevel
@@ -785,6 +821,12 @@ if (-not (Test-Path $exe)) {
 }
 
 $args = @('--editor')
+if ($Mode -eq 'Full') {
+    $args += '--backend'
+    $args += 'auto'
+    $args += '--window-mode'
+    $args += 'parented'
+}
 if ($Mode -eq 'Single') {
     $args += '--parented'
     $args += '--backend'
@@ -821,7 +863,7 @@ Start-Sleep -Milliseconds 2200
 Start-Sleep -Milliseconds 2200
 
     $needles = if ($Mode -eq 'Full') {
-        @('GLFW','SDL','SFML','Vulkan','OpenGL','Software')
+        @('GLFW','SDL','SFML','Vulkan','OpenGL','DirectX')
     } else {
         switch ($Backend) {
             'raylib' { @('GLFW') }
@@ -829,6 +871,7 @@ Start-Sleep -Milliseconds 2200
             'sfml' { @('SFML') }
             'vulkan' { @('Vulkan') }
             'opengl' { @('OpenGL') }
+            'directx' { @('DirectX') }
             'software' { @('Software') }
         }
     }
@@ -923,9 +966,9 @@ Start-Sleep -Milliseconds 2200
 
     $backendChecks = @()
     foreach ($item in @(
-        @{ Name = 'raylib'; DockHandle = $(if ($rayChild) { $rayChild.Hwnd } elseif ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($rayChild) { $rayChild.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = [IntPtr]::Zero },
-        @{ Name = 'sdl'; DockHandle = $(if ($sdlChild -and ($sdlHost -eq $null -or -not $sdlHost.Visible)) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } elseif ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }) },
-        @{ Name = 'sfml'; DockHandle = $(if ($sfmlChild -and ($sfmlHost -eq $null -or -not $sfmlHost.Visible)) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } elseif ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }) }
+        @{ Name = 'raylib'; DockHandle = $(if ($rayHost) { $rayHost.Hwnd } elseif ($rayChild) { $rayChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($rayChild) { $rayChild.Hwnd } elseif ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($rayHost) { $rayHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($rayChild) { $rayChild.Hwnd } else { [IntPtr]::Zero }) },
+        @{ Name = 'sdl'; DockHandle = $(if ($sdlHost) { $sdlHost.Hwnd } elseif ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sdlChild) { $sdlChild.Hwnd } elseif ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sdlHost) { $sdlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sdlChild) { $sdlChild.Hwnd } else { [IntPtr]::Zero }) },
+        @{ Name = 'sfml'; DockHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } elseif ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }); FocusHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } elseif ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); HostHandle = $(if ($sfmlHost) { $sfmlHost.Hwnd } else { [IntPtr]::Zero }); ChildHandle = $(if ($sfmlChild) { $sfmlChild.Hwnd } else { [IntPtr]::Zero }) }
     )) {
         if ($Mode -eq 'Single' -and $item.Name -ne $Backend) { continue }
         if ($Mode -eq 'Full' -and -not [string]::IsNullOrWhiteSpace($FocusedBackend) -and $item.Name -ne $FocusedBackend) { continue }

@@ -8,6 +8,7 @@
   <PropertyGroup>
     <EpochUseRaylib Condition="'$(EpochUseRaylib)'==''">true</EpochUseRaylib>
     <EpochUseSfml Condition="'$(EpochUseSfml)'==''">true</EpochUseSfml>
+    <EpochUseDirectX Condition="'$(EpochUseDirectX)'==''">true</EpochUseDirectX>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -17,6 +18,7 @@
     <Link>
       <AdditionalDependencies Condition="'$(EpochUseRaylib)'=='true'">%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(EpochUseSfml)'=='true'">%(AdditionalDependencies);sfml-graphics.lib;sfml-window.lib;sfml-system.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(EpochUseDirectX)'=='true'">%(AdditionalDependencies);d3d11.lib;dxgi.lib;d3dcompiler.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -133,6 +135,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.multiplexer.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.type.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.window.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\directx.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context.ixx">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
@@ -344,6 +347,12 @@
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\context_raylib.cpp">
+      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_directx.cpp">
+      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.context.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\raylib.bridge.cpp">

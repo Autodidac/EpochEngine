@@ -140,6 +140,7 @@ namespace epochnamespace::core
         {
         case ContextType::Vulkan:
         case ContextType::OpenGL:
+        case ContextType::DirectX:
         case ContextType::RayLib:
         case ContextType::SDL:
         case ContextType::SFML:
@@ -584,6 +585,7 @@ namespace epochnamespace::core
             const core::RenderPath renderPath =
                 (type == core::ContextType::OpenGL) ? core::RenderPath::OpenGL
                 : (type == core::ContextType::SFML) ? core::RenderPath::SFML
+                : (type == core::ContextType::DirectX) ? core::RenderPath::DirectX
                 : core::RenderPath::Unknown;
 
             const auto draw_fn = draw_sprite;

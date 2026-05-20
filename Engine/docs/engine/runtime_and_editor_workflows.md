@@ -15,10 +15,10 @@ the same engine-owned path.
   by default so the full context matrix remains visible on baseline hardware
 - the longer-term shell default should converge toward explicit, independently
   owned context surfaces rather than a mixed hidden/proxy shell: editor favors a
-  stable OpenGL scene path today, Windows should gain a Direct3D/D3D12 native
-  renderer path, software remains safe-launch/debug GUI fallback, backend
-  switching is explicit, and inactive backends must be torn down instead of
-  running hidden behind the active shell
+  stable OpenGL scene path today, Windows now has a first DirectX/D3D11 native
+  renderer path, D3D12 remains future work, software remains safe-launch/debug
+  GUI fallback, backend switching is explicit, and inactive backends must be torn
+  down instead of running hidden behind the active shell
 - packaged Linux releases should follow that same main-runtime rule: the normal
   packaged `epoch` entry is the product path, while updater-shell mode remains
   an explicit bootstrap build instead of the default Linux release identity
@@ -346,7 +346,7 @@ features over forcing every integration on every machine.
   shadowing, sparse-resource-heavy flows, and similar techniques behind
   Standard/Extended tiers or explicit project opt-in
 - keep backend convergence visible in the Systems workspace so OpenGL, Vulkan,
-  the software fallback, SDL, SFML, Raylib, and future Direct3D do not drift
+  DirectX, the software fallback, SDL, SFML, Raylib, and future D3D12 do not drift
   without tooling feedback
 - OpenGL launcher/editor flicker has been manually reported resolved for the
   current pass, but GUI/scene composition remains guarded because z-order bugs
@@ -412,6 +412,11 @@ features over forcing every integration on every machine.
   the parent more directly. A parented multicontext maximize/restore smoke
   completed without crashing, but Raylib resize speed still needs operator
   confirmation.
+- `v0.84.35` promotes DirectX/D3D11 into the Windows multicontext proof set.
+  DirectX owns a D3D11 device/swapchain/render target, renders preview markers,
+  replays GUI, and replaces Software as the normal sixth Windows README proof
+  pane. Software stays available for safe-launch/debug GUI, capture diagnostics,
+  and headless validation.
 - When `EPOCH_SINGLE_PARENT=0`, the launch config must force standalone
   top-level contexts even if CLI defaults still prefer parented mode. This mode
   is used to isolate resize/flicker from the single-parent dock host, so any
@@ -541,7 +546,8 @@ Current editor-shell gaps:
 - the software/tool editor name does not mean the software renderer is a normal
   production backend. The software renderer's target role is safe launch,
   debug/error messages, capture diagnostics, and headless validation; Windows
-  native rendering should move through Direct3D/D3D12 once promoted.
+  native rendering is now moving through the first DirectX/D3D11 slice, with
+  D3D12 still future work.
 - borderless linked-context popouts should be built as explicit panel hosts for
   GUI containers such as Inspector, Asset Browser, Code Editor, AI Visualizer,
   and Build/Output. They must be operator-opened, visible, redockable, and
@@ -593,6 +599,9 @@ state before any follow-up coding pass is allowed to promote changes.
 - prefer engine-owned capture output over ad hoc desktop grabs
 - treat black or invalid software captures as failed proof that needs
   investigation, not as a successful screenshot
+- treat DirectX screenshots as valid Windows product-renderer proof only when
+  the pane shows real editor preview content, Inspector, AI Chat, and normal GUI
+  chrome from an asset-bearing output directory.
 - keep Windows resources under `Engine/resource/`
 - keep local compiled AI artifacts out of the repo
 - when investigating backend issues, prefer backend-local fixes over broad

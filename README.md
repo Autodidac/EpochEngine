@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.34-1F7A4C?style=for-the-badge" alt="Current development source v0.84.34" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.35-1F7A4C?style=for-the-badge" alt="Current development source v0.84.35" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.05-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.05" />
 </p>
 
@@ -58,12 +58,13 @@ For engine/tooling developers:
 - local MSVC runtime outputs usually live under `x64/Debug/` and `x64/Release/`
 - Windows multicontext validation should run from asset-bearing output folders,
   not from the repo root
-- the repo is moving toward one active backend at a time in normal use:
-  editor -> OpenGL, launcher -> software, with explicit switching and teardown
+- the repo is moving toward one active product backend at a time in normal use:
+  editor -> OpenGL today, Windows-native product rendering -> DirectX/D3D11 as
+  it matures, and software kept as fallback/debug/headless support
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.34`.
+- Source is currently the active development line at `v0.84.35`.
 - The latest published stable runtime release is `v0.84.05`.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
@@ -124,38 +125,37 @@ These proof images come from asset-bearing outputs, not stripped updater-shell
 builds.
 
 - A valid Windows six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
-  `Vulkan`, `OpenGL`, and `Software`.
-- The undock proof must show a real promoted window outside the parent.
-- The redock proof beside it is a live desktop capture so the detached and
-  returned states can be compared directly.
+  `Vulkan`, `OpenGL`, and `DirectX`.
+- The floating-window proofs must show real promoted context windows outside
+  the parent instead of fake launcher wrappers.
 - The Linux proof comes from an asset-bearing WSL build output, not a source
   tree launched without runtime assets.
 
-Windows fullscreen six-context multicontext proof, source `v0.83.87`:
+Windows fullscreen six-context multicontext proof, source `v0.84.35`:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08387.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
+  <img src="Images/readme/windows-multicontext-editor-v08435.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
 </p>
 
 Current Windows per-backend startup proofs:
 
 <p align="center">
-  <a href="Images/readme/windows-raylib-v08387.png"><img src="Images/readme/windows-raylib-v08387.png" alt="Epoch Windows Raylib editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-sdl-v08387.png"><img src="Images/readme/windows-sdl-v08387.png" alt="Epoch Windows SDL editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-sfml-v08387.png"><img src="Images/readme/windows-sfml-v08387.png" alt="Epoch Windows SFML editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-vulkan-v08387.png"><img src="Images/readme/windows-vulkan-v08387.png" alt="Epoch Windows Vulkan editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-opengl-v08387.png"><img src="Images/readme/windows-opengl-v08387.png" alt="Epoch Windows OpenGL editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-software-v08387.png"><img src="Images/readme/windows-software-v08387.png" alt="Epoch Windows Software editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-raylib-v08435.png"><img src="Images/readme/windows-raylib-v08435.png" alt="Epoch Windows Raylib editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-sdl-v08435.png"><img src="Images/readme/windows-sdl-v08435.png" alt="Epoch Windows SDL editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-sfml-v08435.png"><img src="Images/readme/windows-sfml-v08435.png" alt="Epoch Windows SFML editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-vulkan-v08435.png"><img src="Images/readme/windows-vulkan-v08435.png" alt="Epoch Windows Vulkan editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-opengl-v08435.png"><img src="Images/readme/windows-opengl-v08435.png" alt="Epoch Windows OpenGL editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-directx-v08435.png"><img src="Images/readme/windows-directx-v08435.png" alt="Epoch Windows DirectX editor proof" width="15.6%" /></a>
 </p>
 
-Windows promoted-window undock proof, live validation:
+Windows promoted-window and floating-context proof, live validation:
 
 <p align="center">
-  <img src="Images/readme/windows-undock-proof-v08385.png" alt="Epoch Windows promoted-window undock proof" width="49%" />
-  <img src="Images/readme/windows-redock-proof-v08387.png" alt="Epoch Windows six-context live redock validation proof" width="49%" />
+  <img src="Images/readme/windows-multicontext-directx-floating-v08435.png" alt="Epoch Windows DirectX floating-context proof" width="49%" />
+  <img src="Images/readme/windows-multicontext-floating-layout-v08435.png" alt="Epoch Windows multicontext floating layout proof" width="49%" />
 </p>
 
-WSL/Linux editor proof, latest asset-bearing WSL capture:
+WSL/Linux editor proof, latest asset-bearing visual capture:
 
 <p align="center">
   <img src="Images/readme/linux-opengl-v08386.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />

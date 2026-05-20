@@ -107,6 +107,8 @@ namespace epochnamespace::gui
                 return core::RenderPath::SFML;
             case core::ContextType::Vulkan:
                 return core::RenderPath::Vulkan;
+            case core::ContextType::DirectX:
+                return core::RenderPath::DirectX;
             default:
                 return core::RenderPath::Unknown;
             }
@@ -124,6 +126,7 @@ namespace epochnamespace::gui
             case core::ContextType::RayLib:
             case core::ContextType::SFML:
             case core::ContextType::SDL:
+            case core::ContextType::DirectX:
             case core::ContextType::Software:
                 return true;
             default:
@@ -150,6 +153,8 @@ namespace epochnamespace::gui
                 return "OpenGL";
             case core::ContextType::Vulkan:
                 return "Vulkan";
+            case core::ContextType::DirectX:
+                return "DirectX";
             default:
                 return "Scene";
             }
@@ -403,7 +408,8 @@ namespace epochnamespace::gui
                     || ctx->type == core::ContextType::SDL
                     || ctx->type == core::ContextType::SFML
                     || ctx->type == core::ContextType::RayLib
-                    || ctx->type == core::ContextType::Vulkan);
+                    || ctx->type == core::ContextType::Vulkan
+                    || ctx->type == core::ContextType::DirectX);
         }
 
         [[nodiscard]] static bool same_queued_draw(

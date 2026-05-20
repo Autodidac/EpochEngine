@@ -429,9 +429,11 @@ namespace
         int SFMLWinCount,
         int VulkanWinCount,
         int OpenGLWinCount,
+        int DirectXWinCount,
         int SoftwareWinCount,
         bool parented)
     {
+        (void)DirectXWinCount;
         const int totalRequested =
             RayLibWinCount + SDLWinCount + SFMLWinCount + VulkanWinCount + OpenGLWinCount + SoftwareWinCount;
         const bool effectiveParented = false;

@@ -12,7 +12,8 @@ This plan defines the minimum smoke coverage for Epoch's active render backends.
 | SFML | Startup, GL context ownership, atlas upload, shutdown |
 | Software | Safe-launch/debug GUI fallback, error-message visibility, capture/headless validation |
 | Vulkan | Build-only or isolated validation until runtime support is finished |
-| Direct3D/D3D12 | Planned Windows-native renderer track; no runtime smoke until device/context/swapchain/shader/resource support is promoted |
+| DirectX/D3D11 | Startup, resize, D3D11 device/swapchain/render-target ownership, GUI replay, scene visibility, present/shutdown |
+| D3D12 | Planned Windows-native renderer track; no runtime smoke until device/context/swapchain/shader/resource support is promoted |
 
 ## Pass criteria
 
@@ -29,9 +30,8 @@ This plan defines the minimum smoke coverage for Epoch's active render backends.
 - Run smoke coverage after backend startup/shutdown changes.
 - Run smoke coverage after atlas or menu overlay changes.
 - Treat Vulkan separately from the stable desktop backends until it graduates from experimental status.
-- Treat Direct3D/D3D12 as the planned Windows-native renderer track, not an
-  active smoke lane, until the backend is intentionally promoted beyond reserved
-  scaffolding.
+- Treat DirectX/D3D11 as an active first-pass Windows smoke lane after v0.84.35.
+  Treat D3D12 as planned until it is intentionally promoted beyond scaffolding.
 - Treat Software as fallback/debug proof. It should continue to report clear
   safe-launch diagnostics, but it should not block Direct3D replacing it as the
   normal Windows product renderer once D3D is real.
@@ -39,8 +39,8 @@ This plan defines the minimum smoke coverage for Epoch's active render backends.
 
 ## Current Open Smoke Issue
 
-- `v0.84.34`: `ConsoleApplication1` `Debug|x64` builds cleanly, SDL/software
-  scene-visibility smokes now render real scene previews again, and a parented
-  multicontext maximize/restore smoke did not crash. Keep clean smoke shutdown,
-  Raylib resize convergence, and backend-by-backend maximize eye tests as open
-  gates before the next release screenshot pass.
+- `v0.84.35`: `ConsoleApplication1` Debug/Release builds, HeadlessCI, CMake/MSVC
+  configure/build/ctest, and WSL Clang configure/build/ctest passed. README
+  proof now shows Raylib, SDL, SFML, Vulkan, OpenGL, and DirectX. Keep clean
+  smoke shutdown, DirectX GUI flicker eye tests, and backend-by-backend maximize
+  checks in the repro matrix before cutting wider releases.

@@ -1,5 +1,23 @@
 # Epoch Changelog
 
+## [v0.84.35]
+- Bumped the active source line to `v0.84.35` for the DirectX multicontext proof
+  lane and README screenshot refresh.
+- Added the first Windows DirectX/D3D11 backend slice: context registration,
+  device/swapchain/render-target ownership, basic HLSL preview rendering,
+  deferred GUI replay, command-line/backend selection, CMake/MSVC project
+  entries, and multicontext harness coverage.
+- Replaced Software with DirectX in the normal Windows six-context README proof
+  while keeping Software documented as safe-launch/debug GUI, capture, and
+  headless fallback.
+- Refreshed README proof images from asset-bearing v0.84.35 runs, including the
+  six-context grid, per-backend startup captures, and operator-provided floating
+  context specialty shots.
+- Validation: `ConsoleApplication1` Debug and Release MSBuild builds passed,
+  `HeadlessCI` Debug passed, `cmake --preset windows-msvc-debug` configured and
+  built, `ctest --preset windows-msvc-debug --output-on-failure` passed, and WSL
+  `ninja-clang-debug` configure/build/ctest passed with DirectX disabled.
+
 ## [v0.84.34]
 - Bumped the active source line to `v0.84.34` for the multicontext
   maximize/resize stabilization pass.

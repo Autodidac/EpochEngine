@@ -92,6 +92,9 @@ GitHub CI/workflow discipline:
 - keep the Linux Clang engine lane as build-only graphics coverage: it should
   build the real `epoch` target with runner-safe OpenGL/software/SFML
   dependencies, then run headless CTest without opening windows
+- `v0.84.35` Windows proof adds DirectX/D3D11 to the local multicontext screenshot
+  matrix. DirectX is Windows-only and should be disabled automatically for Linux
+  packages and hosted Linux lanes.
 - keep Linux/GCC hosted and local shared presets headless by default until GCC
   module BMI writing is reliable enough for full-engine validation
 - keep workflow action runtimes current so the repo does not drift onto stale
@@ -290,6 +293,10 @@ before finishing:
 - a proof run must come from `x64/Debug` or `x64/Release` with assets present
 - if the same pass touches Linux/WSL2/WSLg behavior, document whether that path
   was also revalidated or still needs follow-up
+- for README proof refreshes after `v0.84.35`, the normal Windows six-context
+  public lineup is Raylib, SDL, SFML, Vulkan, OpenGL, and DirectX; Software
+  belongs in fallback/debug/headless proof unless the release explicitly tests
+  safe-launch behavior
 - do not waive MSVC warnings as harmless drift; mixed module units should keep
   the global module fragment limited to preprocessor directives only, and new
   warnings should be fixed or explicitly justified before sign-off

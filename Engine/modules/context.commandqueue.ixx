@@ -62,7 +62,8 @@ export namespace epochnamespace::core
         SFML = 1,
         // OpenGL indicates explicit OpenGL calls that should avoid SFML state resets.
         OpenGL = 2,
-        Vulkan = 4
+        Vulkan = 4,
+        DirectX = 8
     };
 
     struct CommandQueue
@@ -144,6 +145,11 @@ export namespace epochnamespace::core
         [[nodiscard]] bool has_vulkan_draws_snapshot() const noexcept
         {
             return (render_flags_snapshot() & static_cast<std::uint8_t>(RenderPath::Vulkan)) != 0u;
+        }
+
+        [[nodiscard]] bool has_directx_draws_snapshot() const noexcept
+        {
+            return (render_flags_snapshot() & static_cast<std::uint8_t>(RenderPath::DirectX)) != 0u;
         }
 
         // Optional: run at most one command (useful for budgeted pumping)

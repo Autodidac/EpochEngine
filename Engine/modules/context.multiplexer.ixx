@@ -127,6 +127,7 @@ namespace epochnamespace::core
             int SFMLWinCount = 0,
             int VulkanWinCount = 0,
             int OpenGLWinCount = 0,
+            int DirectXWinCount = 0,
             int SoftwareWinCount = 0,
             bool parented = true);
 
@@ -211,6 +212,7 @@ namespace epochnamespace::core
             int SFMLWinCount = 0,
             int VulkanWinCount = 0,
             int OpenGLWinCount = 0,
+            int DirectXWinCount = 0,
             int SoftwareWinCount = 0,
             bool parented = false);
 
@@ -279,7 +281,7 @@ namespace epochnamespace::core
         using RenderCommand = std::function<void()>;
 
         static void ShowConsole() {}
-        bool Initialize(HINSTANCE, int, int, int, int, int, int, bool) { return false; }
+        bool Initialize(HINSTANCE, int, int, int, int, int, int, int, bool) { return false; }
         void StopAll() {}
         bool IsRunning() const noexcept { return false; }
         void StopRunning() noexcept {}

@@ -74,6 +74,9 @@ namespace epochnamespace::core::detail
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
     void register_vulkan_backend();
 #endif
+#if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
+    void register_directx_backend();
+#endif
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
     void register_software_backend();
 #endif
@@ -222,6 +225,10 @@ namespace epochnamespace::core
 
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
         detail::register_vulkan_backend();
+#endif
+
+#if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
+        detail::register_directx_backend();
 #endif
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)

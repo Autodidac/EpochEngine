@@ -118,6 +118,7 @@ namespace epochnamespace::core::cli
             SFML,
             RayLib,
             Vulkan,
+            DirectX,
             Software,
         };
 
@@ -193,6 +194,7 @@ namespace epochnamespace::core::cli
             if (lowered == "sfml") return BackendSelection::SFML;
             if (lowered == "raylib" || lowered == "ray") return BackendSelection::RayLib;
             if (lowered == "vulkan" || lowered == "vk") return BackendSelection::Vulkan;
+            if (lowered == "directx" || lowered == "dx" || lowered == "d3d" || lowered == "d3d11") return BackendSelection::DirectX;
             if (lowered == "software" || lowered == "cpu") return BackendSelection::Software;
 
             return BackendSelection::Auto;
@@ -250,6 +252,11 @@ namespace epochnamespace::core::cli
     export inline int sfml_window_count = 1;
     export inline int vulkan_window_count = 1;
     export inline int opengl_window_count = 1;
+#if defined(_WIN32)
+    export inline int directx_window_count = 1;
+#else
+    export inline int directx_window_count = 0;
+#endif
     export inline int software_window_count = 1;
 
     export [[nodiscard]] inline std::filesystem::path capture_output_root()
@@ -323,6 +330,11 @@ namespace epochnamespace::core::cli
         sfml_window_count = 1;
         vulkan_window_count = 1;
         opengl_window_count = 1;
+#if defined(_WIN32)
+        directx_window_count = 1;
+#else
+        directx_window_count = 0;
+#endif
         software_window_count = 0;
 
         if (selected == BackendSelection::Auto)
@@ -333,6 +345,7 @@ namespace epochnamespace::core::cli
         sfml_window_count = 0;
         vulkan_window_count = 0;
         opengl_window_count = 0;
+        directx_window_count = 0;
         software_window_count = 0;
 
         switch (selected)
@@ -342,6 +355,13 @@ namespace epochnamespace::core::cli
         case BackendSelection::SFML:    sfml_window_count = 1;    break;
         case BackendSelection::RayLib:  raylib_window_count = 1;  break;
         case BackendSelection::Vulkan:  vulkan_window_count = 1;  break;
+        case BackendSelection::DirectX:
+#if defined(_WIN32)
+            directx_window_count = 1;
+            break;
+#else
+            return false;
+#endif
         case BackendSelection::Software: software_window_count = 1; break;
         case BackendSelection::Auto:
         default:
@@ -468,6 +488,7 @@ namespace epochnamespace::core::cli
                     "  --parented                 Shortcut for --window-mode parented\n"
                     "  --standalone               Shortcut for --window-mode standalone\n"
                     "  --renderer <backend|auto>  Select one backend; auto requests the backend grid\n"
+                    "                             Backends: auto, opengl, directx/d3d11, vulkan, raylib, sdl, sfml, software\n"
                     "  --backend <backend|auto>   Alias for --renderer\n"
                     "  --scene <name>             Optional scene hint for smoke tooling\n"
                     "  --capture                  Optional capture hint for smoke tooling\n"

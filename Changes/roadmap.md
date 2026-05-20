@@ -141,12 +141,15 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 
 - OpenGL is the stable editor/runtime GPU backend for now and remains the
   comparison point while the Windows-native renderer comes online.
-- The software renderer is being retired from "peer desktop renderer" status.
+- The software renderer is retired from "peer desktop renderer" status for the
+  normal Windows multicontext proof.
   Its target role is safe-launch, debug/error-message GUI, capture diagnostics,
   and headless validation when GPU backends are unavailable.
-- Direct3D/D3D12 is the Windows-native renderer replacement track. It should
-  replace software as the normal Windows fallback/product renderer only after a
-  real device/context/swapchain/shader/resource path is promoted and validated.
+- DirectX/D3D11 is now the first Windows-native renderer slice in the normal
+  Windows multicontext proof. It owns a real device/swapchain/render target,
+  basic shader preview path, and GUI replay path, but still needs deeper
+  renderer-resource parity before it is treated as feature-complete. D3D12 stays
+  a future explicit renderer track.
 - Vulkan remains the future explicit cross-platform graphics backend until
   runtime support is fully stabilized.
 - Raylib, SDL, and SFML remain context/backend compatibility and validation
@@ -188,8 +191,9 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   abstraction is shaped around the explicit Vulkan/D3D resource model:
   buffers, textures, samplers, pipelines, binding sets, render targets, command
   submission, synchronization, and debug/profiling hooks.
-- Direct3D/D3D12 equivalents belong in the design matrix now, but no D3D smoke
-  lane or support claim exists until the backend is deliberately promoted.
+- DirectX/D3D11 now has a first-pass Windows smoke lane and support claim for
+  context/swapchain/preview/GUI proof. D3D12 equivalents stay in the design
+  matrix until that backend is deliberately promoted.
 
 ### Future Feature Gates
 
@@ -505,6 +509,14 @@ engine shape and should be treated as starting truth for the next passes:
   `ConsoleApplication1` Debug builds cleanly, and a parented multicontext
   maximize/restore smoke completed without crashing. Raylib resize convergence
   still needs operator eye-test confirmation before the branch is called done.
+- `v0.84.35` promotes the first DirectX/D3D11 backend slice into the Windows
+  multicontext proof and refreshes the README screenshots: the normal six-pane
+  proof is Raylib, SDL, SFML, Vulkan, OpenGL, and DirectX. Software remains a
+  safe-launch/debug/headless fallback instead of a normal Windows product pane.
+  MSBuild Debug/Release, HeadlessCI, CMake/MSVC configure/build/ctest, and WSL
+  Clang configure/build/ctest passed for this checkpoint. Remaining DirectX work
+  is renderer-resource parity and any operator-observed GUI flicker in the D3D11
+  pane, not basic context creation.
 - Current visual evidence is now preserved at
   `Engine/docs/engine/diagnostics/2026-05-17-gui-regression/README.md`.
   Acceptance gates from that set: Perspective title stays visible with World
@@ -540,11 +552,11 @@ engine shape and should be treated as starting truth for the next passes:
 
 ### 1. Runtime And Multicontext Ownership
 
-- keep SDL, SFML, Raylib, Vulkan, OpenGL, and the software fallback behavior
+- keep SDL, SFML, Raylib, Vulkan, OpenGL, DirectX, and the software fallback behavior
   converging instead of drifting into undocumented backend-specific hacks
-- start the Windows Direct3D/D3D12 renderer path as the future native desktop
-  replacement for software-as-product-renderer, without claiming runtime support
-  until the first device/context/swapchain/shader/resource slice is validated
+- continue the Windows DirectX renderer path from the validated D3D11
+  device/swapchain/shader slice toward a real engine-facing resource API, while
+  keeping D3D12 as future explicit renderer work
 - finish IDE-class docking/popout behavior so detach, input ownership, z-order,
   redock, and startup presentation remain stable
 - eliminate remaining OpenGL flicker in both single-context and multicontext
@@ -809,9 +821,10 @@ engine shape and should be treated as starting truth for the next passes:
 - Software fallback proof stays honest: safe-launch/error/debug UI can run when
   GPU paths fail, but software is not advertised as the long-term Windows
   production renderer once Direct3D is promoted.
-- Direct3D/D3D12 is not advertised as active until a Windows build creates a
-  device/context/swapchain, clears/presents, owns shaders/resources, and passes
-  the same editor visibility/screenshot gate as OpenGL.
+- DirectX/D3D11 is advertised only as a first-pass active Windows backend until
+  it grows the full renderer resource/material/render-target API. D3D12 remains
+  unpromoted until a separate Windows build proves device/context/swapchain,
+  clear/present, shaders/resources, and editor screenshot gates.
 - Asset, shader, script, log, and workspace resolution work from executable
   path instead of working-directory luck.
 - Visual Studio, repo-root CMake, and CI stay aligned closely enough that file

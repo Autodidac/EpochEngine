@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.23`
+Current source version: `v0.84.35`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -17,6 +17,7 @@ building during the migration.
 | `EPOCH_ENABLE_OPENGL` | On | Enable the primary OpenGL renderer path. |
 | `EPOCH_ENABLE_SOFTWARE_RENDERER` | On | Enable the software fallback renderer. |
 | `EPOCH_ENABLE_VULKAN` | On | Enable the experimental Vulkan build path. |
+| `EPOCH_ENABLE_DIRECTX` | On on Windows, off elsewhere | Enable the first-pass Windows DirectX/D3D11 renderer path. |
 | `EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES` | Off | Turn missing optional backend deps into configure errors. |
 
 ## Entry points
@@ -46,7 +47,7 @@ building during the migration.
 | `EPOCH_VULKAN_RUNTIME_DIAGNOSTICS` | Off | Enable the ad hoc Vulkan runtime trace file used for deep troubleshooting. |
 
 Backend-specific confirmation switches for OpenGL, SFML, SDL, Raylib, software,
-and Vulkan inherit from the master backend confirmation macro unless you
+DirectX, and Vulkan inherit from the master backend confirmation macro unless you
 override them locally in `engine.config.hpp`.
 
 ## Backend support snapshot
@@ -59,13 +60,14 @@ override them locally in `engine.config.hpp`.
 | Renderer | `EPOCH_USING_OPENGL` | On | Active primary GPU path |
 | Renderer | `EPOCH_USING_SOFTWARE_RENDERER` | On | Active fallback/validation path |
 | Renderer | `EPOCH_USING_VULKAN` | On | Experimental / active preview path |
-| Renderer | `EPOCH_USING_DIRECTX` | Off | Reserved / not implemented |
+| Renderer | `EPOCH_USING_DIRECTX` | On on Windows | Active first-pass D3D11 preview and GUI replay path |
 | Headless | `EPOCH_USING_NOOP_HEADLESS` | Off | Minimal placeholder path |
 
 ## Safe combinations
 
-- Default desktop builds: SDL + Raylib + SFML contexts with OpenGL and software
-  rendering available.
+- Default Windows desktop builds: SDL + Raylib + SFML contexts with OpenGL,
+  DirectX, Vulkan, and software fallback rendering available when dependencies
+  are present.
 - Headless/tooling builds: define `EPOCH_MAIN_HEADLESS` and keep only the
   backends you need for asset or script workflows.
 - Reduced builds: disabling individual context providers is fine as long as at
@@ -76,7 +78,9 @@ override them locally in `engine.config.hpp`.
 - Vulkan-enabled builds: the codebase contains active Vulkan work, and the
   preview path now tracks the OpenGL editor palette more closely, but it is
   still not the stable default renderer.
-- DirectX-enabled builds: reserved scaffolding only.
+- DirectX-enabled builds: active Windows-only first-pass D3D11 backend. It is
+  valid for multicontext preview/GUI proof, but renderer-resource/material
+  parity remains experimental.
 - Renderer-less builds: disabling both OpenGL and software rendering leaves the
   atlas/texture path without a supported submission backend.
 
@@ -90,8 +94,7 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.84.16` is the current source line above the published `v0.84.05`
-  packaged release.
+- `v0.84.35` is the current source line for the DirectX multicontext proof pass.
 - Normal desktop/runtime builds should stay on the main runtime path by default.
 - `EPOCH_UPDATER_SHELL_BUILD` is now an explicit bootstrap-mode switch, not the
   default identity for packaged Linux or Windows releases.

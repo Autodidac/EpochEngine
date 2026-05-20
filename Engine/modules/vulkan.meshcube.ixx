@@ -82,7 +82,8 @@ namespace epochnamespace::vulkancontext
         const auto source = epochnamespace::previewgrid::grid_vertices();
         const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx);
         const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx);
-        out.reserve(source.size() + markerCount);
+        const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx);
+        out.reserve(source.size() + markerCount + objectVertices.size());
 
         for (const auto& vertex : source)
         {
@@ -104,6 +105,16 @@ namespace epochnamespace::vulkancontext
             });
         }
 
+        for (const auto& vertex : objectVertices)
+        {
+            const auto color = preview_color_to_vulkan(vertex.color);
+            out.push_back(Vertex{
+                { vertex.position.x, vertex.position.y, vertex.position.z },
+                { color[0], color[1], color[2] },
+                { 0.0f, 0.0f }
+            });
+        }
+
         return out;
     }
 
@@ -112,19 +123,22 @@ namespace epochnamespace::vulkancontext
     {
         std::vector<std::uint16_t> out{};
         const auto source = epochnamespace::previewgrid::grid_indices();
-        out.reserve(source.size() + 8u);
+        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx);
+        const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx);
+        out.reserve(source.size() + markerCount + objectVertices.size());
 
         for (const auto index : source)
             out.push_back(static_cast<std::uint16_t>(index));
-
-        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx);
-        if (markerCount == 0)
-            return out;
 
         const std::uint16_t baseVertex =
             static_cast<std::uint16_t>(epochnamespace::previewgrid::grid_vertices().size());
         for (std::uint16_t i = 0; i < static_cast<std::uint16_t>(markerCount); ++i)
             out.push_back(static_cast<std::uint16_t>(baseVertex + i));
+
+        const std::uint16_t objectBase =
+            static_cast<std::uint16_t>(baseVertex + markerCount);
+        for (std::uint16_t i = 0; i < static_cast<std::uint16_t>(objectVertices.size()); ++i)
+            out.push_back(static_cast<std::uint16_t>(objectBase + i));
 
         return out;
     }

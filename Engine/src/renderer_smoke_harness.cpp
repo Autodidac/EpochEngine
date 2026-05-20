@@ -110,7 +110,11 @@ namespace
     [[nodiscard]] std::vector<Scenario> build_matrix(const HarnessOptions& options)
     {
         static constexpr std::string_view backends[] = {
+#if defined(_WIN32)
+            "opengl", "sdl", "sfml", "raylib", "vulkan", "directx", "software"
+#else
             "opengl", "sdl", "sfml", "raylib", "vulkan", "software"
+#endif
         };
 
         static constexpr std::string_view modes[] = {
