@@ -73,7 +73,6 @@ namespace epoch::ai
     {
         Bot* g_bot = nullptr;
         ProviderMode g_providerMode = ProviderMode::LmStudioOracle;
-        std::string g_selectedModel{};
         static std::string read_env_var(const char* name)
         {
 #if defined(_WIN32)
@@ -122,9 +121,29 @@ namespace epoch::ai
             return "http://localhost:1234";
         }
 
+        static std::string configured_model()
+        {
+            constexpr const char* candidates[] = {
+                "EPOCH_AI_MODEL",
+                "EPOCH_OPENAI_MODEL",
+                "LM_STUDIO_MODEL",
+                "OPENAI_MODEL"
+            };
+            for (const char* name : candidates)
+            {
+                std::string value = trim_env_value(read_env_var(name));
+                if (!value.empty())
+                    return value;
+            }
+            return {};
+        }
+
         std::string g_selectedEndpoint{ configured_endpoint() };
+        std::string g_selectedModel{ configured_model() };
         std::vector<std::string> g_detectedModels{};
-        std::string g_modelDetectionStatus{ "Not scanned." };
+        std::string g_modelDetectionStatus = g_selectedModel.empty()
+            ? std::string{ "Not scanned." }
+            : std::string{ "Configured model: " } + g_selectedModel;
 
         static bool ends_with(std::string_view s, std::string_view suf)
         {
@@ -1399,11 +1418,24 @@ namespace epoch::ai
         g_detectedModels = fetch_detected_models(g_selectedEndpoint);
         if (g_detectedModels.empty())
         {
-            g_modelDetectionStatus = "No local models detected. Start LM Studio, Ollama, or another OpenAI-compatible API and check endpoint.";
+            g_modelDetectionStatus = g_selectedModel.empty()
+                ? "No local models detected. Start LM Studio, Ollama, or another OpenAI-compatible API and check endpoint."
+                : "Configured model '" + g_selectedModel + "' is selected, but no local model inventory was detected at the endpoint.";
         }
         else
         {
-            g_modelDetectionStatus = "Detected " + std::to_string(g_detectedModels.size()) + " local model(s); select one to enable chat/tooling.";
+            if (!g_selectedModel.empty())
+            {
+                const bool selectedAvailable =
+                    std::find(g_detectedModels.begin(), g_detectedModels.end(), g_selectedModel) != g_detectedModels.end();
+                g_modelDetectionStatus = selectedAvailable
+                    ? "Selected model: " + g_selectedModel + " (" + std::to_string(g_detectedModels.size()) + " local model(s) detected)."
+                    : "Configured model '" + g_selectedModel + "' was not reported by the endpoint; verify the model name before trusting chat/tooling.";
+            }
+            else
+            {
+                g_modelDetectionStatus = "Detected " + std::to_string(g_detectedModels.size()) + " local model(s); select one to enable chat/tooling.";
+            }
         }
 
         return g_detectedModels;

@@ -209,7 +209,10 @@ The local chat path is explicit: the editor scans `/v1/models` and sends chat
 requests to `/v1/chat/completions` on the configured local endpoint. The default
 endpoint is `http://localhost:1234`; override it with `EPOCH_AI_ENDPOINT`,
 `EPOCH_OPENAI_BASE_URL`, `LM_STUDIO_BASE_URL`, or `OPENAI_BASE_URL` before
-launching the editor. Tool evidence capture files, including the legacy
+launching the editor. CLI/self-iteration runs may also set the explicit model
+with `EPOCH_AI_MODEL`, `EPOCH_OPENAI_MODEL`, `LM_STUDIO_MODEL`, or
+`OPENAI_MODEL`; this is an operator-selected override, not a first-detected
+model fallback. Tool evidence capture files, including the legacy
 `mcp_capture.jsonl` path, are evidence logs, not a hidden second model runtime.
 
 ## Server And Addon Safety
@@ -235,6 +238,9 @@ tracked source.
 EpochBot must not answer that self-iteration, training, or tooling is "working
 fine" unless it can cite concrete evidence: a staged packet, build log, runtime
 capture, tool evidence capture, scene state change, eval output, or retained operator note.
+Helper-model replies that do not cite packet/build/output/verifier evidence are
+proposal noise and must be rejected by review/eval gates instead of promoted
+into training data or source changes.
 The editor now exposes a `Stage Sandbox Scene Training Task` action so the bot can
 be given watchable 3D scene-edit/test exercises without confusing that sandbox
 with ProjectLauncher game/software work.

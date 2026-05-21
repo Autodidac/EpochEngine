@@ -771,6 +771,9 @@ engine shape and should be treated as starting truth for the next passes:
   output without mutating normal game/editor projects by accident
 - keep local model activation operator-gated; no first-detected model fallback,
   no hidden helper identity, and no chat/tool execution before selection
+- allow CLI/self-iteration runs to record an explicit operator-selected helper
+  model through environment configuration, while keeping model discovery and
+  activation separate in the GUI and rejecting first-detected-model fallback
 - keep bypass-capable runtime activation operator-gated: local game/tool tests
   can run through visible editor/MCP/harness controls, but apps or servers that
   expose model-accessible control surfaces, listeners, ports, or serving modes
@@ -783,6 +786,9 @@ engine shape and should be treated as starting truth for the next passes:
 - treat compiler errors, runtime logs, screenshots, file state, user
   corrections, tool results, and evals as reality pressure. No evidence means no
   belief, no training promotion, and no "working fine" status claim.
+- reject helper-model self-iteration drafts that do not cite packet/build/output
+  evidence, verifier results, or eval gates; weak local model output can guide a
+  supervised pass but cannot promote itself into training data or source changes.
 - treat `Engine/ai/control/continuous_build_loop.json` as the current contract
   for the engine self-iteration control loop until a replay runner can enforce it
 - use MCP tool schemas as the canonical tool-bus contract and replay shape

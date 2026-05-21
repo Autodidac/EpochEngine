@@ -65,6 +65,20 @@
   Linux package is build, CTest, headless smoke, and version validated.
 - Sanitized public README/release docs so workstation-specific Linux capture
   debugging details stay out of project-facing release proof.
+- Added explicit CLI/self-iteration helper-model selection through
+  `EPOCH_AI_MODEL`, `EPOCH_OPENAI_MODEL`, `LM_STUDIO_MODEL`, or `OPENAI_MODEL`
+  so sandbox packets can record an operator-selected local reviewer such as
+  Nemotron without falling back to first-detected model activation.
+- Added a CLI self-test project-note handoff so `--editor-project-self-test`
+  leaves visible Sandbox/ProjectLauncher evidence notes with packet, build-log,
+  output, script, and human-gate paths after the materialize/build pass.
+- Extended `--editor-project-self-test` into a full verifier step by running the
+  generated child project's `--project-self-test`, capturing
+  `Projects/<id>/logs/project-self-test.log`, adding that log to the staged
+  packet, and blocking the gate if the child self-test fails.
+- Added an eval guard for rejecting low-evidence helper-model self-iteration
+  drafts, keeping weak local replies out of curated training data or source
+  promotion unless they cite packet/build/output/verifier evidence.
 
 ## [v0.84.34]
 - Bumped the active source line to `v0.84.34` for the multicontext

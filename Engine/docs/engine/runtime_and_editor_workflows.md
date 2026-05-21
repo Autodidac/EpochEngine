@@ -142,7 +142,11 @@ the same engine-owned path.
 - the checked-in engine exposes `--editor-project-self-test <id>` for the same
   route from the real engine binary. Use `sandbox` for the self-iteration shell
   and `projectlauncher` for the launcher shell before running the generated
-  child `--project-self-test`.
+  child `--project-self-test`. The route now materializes, builds, runs the
+  generated child `--project-self-test`, stages a packet, appends tool capture,
+  and writes project notes. If the pass should bind to a local helper model, set
+  `EPOCH_AI_MODEL` or a compatible explicit model variable before launch;
+  discovery still remains separate from activation.
 - generated game project shells can carry the `engine_arcade` local
   runtime-mini package. The package is a project asset/script option that
   invokes engine-owned mini-runtime scenes such as Snake/Tetris/Pacman through
@@ -486,6 +490,10 @@ Data rules:
 - helper-first passes may probe `/v1/models` at the start of a phase, but the
   engine must not auto-name or activate a model from discovery. Only the
   operator-selected model is the active helper model for chat/planning.
+- CLI/self-iteration passes can use `EPOCH_AI_MODEL`, `EPOCH_OPENAI_MODEL`,
+  `LM_STUDIO_MODEL`, or `OPENAI_MODEL` as an explicit operator-selected helper
+  identity. This exists so evidence packets can record the reviewer model during
+  non-GUI runs without reverting to first-model auto-selection.
 - additional loaded helpers may be used only as explicitly allowed drafting or
   review lanes, and their output remains proposal material until build/runtime
   evidence and human review promote it

@@ -126,6 +126,12 @@ pair itself: probe `/v1/models`, use only operator-allowed helpers for bounded
 drafting/review, and keep the in-engine/runtime path disabled until the operator
 selects the active model in the editor.
 
+CLI and self-iteration runs can bind the same explicit selection with
+`EPOCH_AI_MODEL`, `EPOCH_OPENAI_MODEL`, `LM_STUDIO_MODEL`, or `OPENAI_MODEL`
+before launch. That is a deliberate operator override for a known local model
+such as `nvidia/nemotron-3-nano-4b`; it must not become an automatic
+first-discovered-model selection path.
+
 For the current April 2026 workstation passes, LM Studio can provide multiple
 parallel helper lanes. Treat those lanes as drafting/review acceleration, not
 as automatic EpochBot model selection.
@@ -160,6 +166,11 @@ The engine runtime itself must follow the selected-model rule: if a Responses
 API call comes back empty because the selected model rejects the reasoning
 configuration, retry without the reasoning field so the AI dock still shows a
 visible answer.
+
+Low-capacity helper replies are never promotion evidence by themselves. A reply
+that does not cite a staged packet path, build log, output executable, verifier
+result, runtime/capture evidence, or eval gate must be treated as a rejected
+draft and kept out of curated training records.
 
 Any generated app, server, listener, port bind, model-accessible control
 surface, or hidden bypass channel must remain inert until an explicit human

@@ -19,6 +19,11 @@
     "Avoid recursive self-training on unverified generated data. Synthetic records must be labeled, mixed with real evidence, and gated by evals before promotion.",
     "Maintain separate training and eval material so prompt/model changes can be measured instead of trusted by feel."
   ],
+  "selected_model_policy": {
+    "gui_activation": "model discovery is separate from activation; the operator must choose a model before chat/tooling is active",
+    "cli_activation": "non-GUI self-iteration may use EPOCH_AI_MODEL, EPOCH_OPENAI_MODEL, LM_STUDIO_MODEL, or OPENAI_MODEL as an explicit operator-selected reviewer model",
+    "forbidden_fallback": "do not activate the first discovered model automatically"
+  },
   "loop": [
     {
       "stage": "planner",
@@ -64,6 +69,7 @@
     "Never treat failed builds as positive training examples unless explicitly labeled as failure-analysis data.",
     "Never allow blind repo write-through from planner or executor output.",
     "Never accept EpochBot saying it is working fine unless the answer cites visible tool, build, scene, packet, log, or capture evidence.",
+    "Reject helper-model plans that cite no staged packet, build log, output executable, verifier result, runtime capture, or eval gate.",
     "Keep self-iteration sandbox tasks separate from normal ProjectLauncher game/software editing unless the operator explicitly approves a project/editor change.",
     "Apps and server projects may be generated or edited as artifacts, but any app/service that exposes a model-accessible control surface, server process, listener, port, or network-serving mode requires an explicit human run/enable action.",
     "Every promoted record must be traceable to a staged packet, build log, runtime capture, MCP capture, or eval case.",
