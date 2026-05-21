@@ -46,6 +46,9 @@ This is the current high-level status of the context and renderer stack.
   exported bridge, `directx.state.cpp` for lifetime/resize/render-target state,
   `directx.device.cpp` for D3D11 device and shader setup, `directx.preview.cpp`
   for editor preview geometry, and `directx.gui.cpp` for GUI atlas/sprite replay.
+- Shared editor preview projection now lives in `render.preview_grid`; backend
+  preview renderers should call that spine for perspective vs Canvas2D
+  orthographic selection instead of keeping backend-local projection branches.
 - DirectX still needs the next real renderer-resource step: depth/stencil,
   resource lifetime, material/pipeline ownership, and deeper engine-facing
   renderer-resource APIs should move together instead of papering over the

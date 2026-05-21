@@ -1436,23 +1436,7 @@ namespace epochnamespace
 
             const auto camera = epochnamespace::previewgrid::camera_for(ctx);
             const float aspect = viewport.size.x / viewport.size.y;
-            const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx);
-            const auto canvasDelta = epochnamespace::previewgrid::subtract(camera.eye, camera.target);
-            const float canvasDistance = std::sqrt(epochnamespace::previewgrid::dot(canvasDelta, canvasDelta));
-            const float canvasHalfHeight = (std::max)(2.0f, canvasDistance * 0.45f);
-            const auto projection = cameraMode == epochnamespace::previewgrid::CameraMode::Canvas2D
-                ? epochnamespace::previewgrid::orthographic(
-                    -(canvasHalfHeight * aspect),
-                    canvasHalfHeight * aspect,
-                    -canvasHalfHeight,
-                    canvasHalfHeight,
-                    camera.nearPlane,
-                    camera.farPlane)
-                : epochnamespace::previewgrid::perspective(
-                    camera.fovRadians,
-                    aspect,
-                    camera.nearPlane,
-                    camera.farPlane);
+            const auto projection = epochnamespace::previewgrid::projection_for(ctx, aspect, camera);
             const auto view = epochnamespace::previewgrid::look_at(
                 camera.eye,
                 camera.target,

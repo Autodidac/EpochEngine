@@ -259,11 +259,10 @@ namespace epochnamespace::vulkancontext
 
         if (editorPreview)
         {
-            const auto previewProj = epochnamespace::previewgrid::perspective(
-                previewCamera.fovRadians,
+            const auto previewProj = epochnamespace::previewgrid::projection_for(
+                ctx,
                 aspect,
-                previewCamera.nearPlane,
-                previewCamera.farPlane);
+                previewCamera);
             const auto previewView = epochnamespace::previewgrid::look_at(
                 previewCamera.eye,
                 previewCamera.target,

@@ -590,6 +590,34 @@ namespace epochnamespace::previewgrid
         return detail::camera_from_rig(it->second);
     }
 
+    export [[nodiscard]] inline Mat4 projection_for(
+        const void* ctxKey,
+        float aspect,
+        const Camera& camera) noexcept
+    {
+        const float safeAspect = (std::max)(0.001f, aspect);
+        if (camera_mode_for(ctxKey) == CameraMode::Canvas2D)
+        {
+            const auto delta = subtract(camera.eye, camera.target);
+            const float distance = std::sqrt(dot(delta, delta));
+            const float halfHeight = (std::max)(2.0f, distance * 0.42f);
+            const float halfWidth = halfHeight * safeAspect;
+            return orthographic(
+                -halfWidth,
+                halfWidth,
+                -halfHeight,
+                halfHeight,
+                camera.nearPlane,
+                camera.farPlane);
+        }
+
+        return perspective(
+            camera.fovRadians,
+            safeAspect,
+            camera.nearPlane,
+            camera.farPlane);
+    }
+
     export inline void step_camera(
         const void* ctxKey,
         float deltaTime,

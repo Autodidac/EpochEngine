@@ -212,11 +212,7 @@ namespace epochnamespace::anativecontext::detail
         const float aspect = viewport.height > 0
             ? (viewport.width / static_cast<float>(viewport.height))
             : 1.0f;
-        const auto proj = epochnamespace::previewgrid::perspective(
-            camera.fovRadians,
-            aspect,
-            camera.nearPlane,
-            camera.farPlane);
+        const auto proj = epochnamespace::previewgrid::projection_for(&ctx, aspect, camera);
         const auto view = epochnamespace::previewgrid::look_at(
             camera.eye,
             camera.target,

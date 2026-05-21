@@ -527,10 +527,14 @@ engine shape and should be treated as starting truth for the next passes:
   `directx.gui.cpp`. Remaining DirectX work is renderer-resource parity, real
   depth/resource ownership, and any operator-observed GUI flicker in the D3D11
   pane, not basic context creation.
-- Raylib, SDL, and SFML fallback preview paths now share the same Canvas2D
-  orthographic camera behavior as OpenGL and DirectX. The Game/2D acceptance
-  gate is that all normal multicontext panes show the 2D canvas head-on instead
-  of leaving Raylib/SDL/SFML in tilted editor perspective.
+- Canvas2D projection ownership has moved into `render.preview_grid` via one
+  shared projection helper. Editor picking, OpenGL, DirectX, Raylib, SDL, SFML,
+  Vulkan, and the software preview fallback now consume the same Canvas2D
+  orthographic framing instead of duplicating backend-local perspective/2D
+  branches. The Game/2D acceptance gate is that all normal multicontext panes
+  show the 2D canvas head-on instead of leaving Raylib/SDL/SFML/Vulkan in
+  tilted editor perspective; this pass is build-validated and still needs the
+  operator multicontext eye-test.
 - The Run button now serializes generated project builds inside the editor
   process. A duplicate Run/build request returns a visible failure instead of
   launching a second ProjectLauncher/Sandbox build that can collide over shared

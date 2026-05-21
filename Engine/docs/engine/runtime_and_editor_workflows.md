@@ -185,8 +185,11 @@ the same engine-owned path.
   front-facing orthographic camera. It should not be a floor-like XZ plane; the
   2D workspace reuses the scene view from a locked 2D perspective, similar to
   Unity's 2D scene editing mode.
-- OpenGL and editor object selection use an orthographic projection in this mode
-  so 2D editing behaves like a Unity-style scene camera locked to a 3D canvas
+- `render.preview_grid` owns the Canvas2D projection helper. Editor object
+  selection and the OpenGL, DirectX, Raylib, SDL, SFML, Vulkan, and
+  software-preview paths should all use that helper so 2D editing behaves like
+  a Unity-style scene camera locked to a 3D canvas instead of drifting per
+  backend.
 - future 2D work should add tile/layer/canvas tools on top of this same
   entity/project spine
 

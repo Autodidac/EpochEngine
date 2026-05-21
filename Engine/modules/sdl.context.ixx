@@ -278,26 +278,7 @@ export namespace epochnamespace::sdlcontext
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;
-            const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx.get());
-            const auto proj = cameraMode == epochnamespace::previewgrid::CameraMode::Canvas2D
-                ? [&]()
-                {
-                    const auto delta = epochnamespace::previewgrid::subtract(camera.eye, camera.target);
-                    const float distance = std::sqrt(epochnamespace::previewgrid::dot(delta, delta));
-                    const float halfHeight = (std::max)(2.0f, distance * 0.45f);
-                    return epochnamespace::previewgrid::orthographic(
-                        -(halfHeight * aspect),
-                        halfHeight * aspect,
-                        -halfHeight,
-                        halfHeight,
-                        camera.nearPlane,
-                        camera.farPlane);
-                }()
-                : epochnamespace::previewgrid::perspective(
-                    camera.fovRadians,
-                    aspect,
-                    camera.nearPlane,
-                    camera.farPlane);
+            const auto proj = epochnamespace::previewgrid::projection_for(ctx.get(), aspect, camera);
             const auto view = epochnamespace::previewgrid::look_at(
                 camera.eye,
                 camera.target,

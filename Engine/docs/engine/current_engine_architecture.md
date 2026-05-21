@@ -144,9 +144,10 @@ Current source version: `v0.84.35`
   before launch so stale ProjectLauncher output is not mistaken for a fresh
   build.
 - Game/2D mode now creates/selects an editor-only upright `Canvas2D` plane and
-  switches to a locked front-facing Canvas2D camera. OpenGL and editor selection
-  use orthographic projection for that camera mode while tile/layer tooling is
-  still being built.
+  switches to a locked front-facing Canvas2D camera. Projection selection is
+  owned by `render.preview_grid`, so editor picking and the OpenGL, DirectX,
+  Raylib, SDL, SFML, Vulkan, and software-preview paths share the same Canvas2D
+  orthographic framing while tile/layer tooling is still being built.
 - Backend presentation is more visually coherent now that the active renderer
   base colors are being pulled toward the same darker Vulkan-style baseline,
   and SFML’s shared preview path is clipped back to the intended scene view.

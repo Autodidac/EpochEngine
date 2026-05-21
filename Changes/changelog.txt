@@ -43,6 +43,10 @@
 - Matched Raylib, SDL, and SFML fallback preview rendering to the OpenGL/DirectX
   Canvas2D behavior by switching their Game/2D camera path to orthographic mode
   instead of leaving those contexts in tilted 3D perspective.
+- Centralized preview projection selection in `render.preview_grid` so
+  Canvas2D orthographic framing is now shared by editor picking, OpenGL,
+  DirectX, Raylib, SDL, SFML, Vulkan, and the software preview fallback instead
+  of being reimplemented with backend-local math.
 - Routed Raylib dock/undock/redock window commands through the Raylib owner
   thread command queue so the Win32 host no longer mutates the GLFW/Raylib child
   HWND cross-thread during redock tests.

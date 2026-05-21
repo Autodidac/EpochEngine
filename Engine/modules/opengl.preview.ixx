@@ -348,23 +348,7 @@ void main() {
             const float aspect = viewportHeight > 0
                 ? (viewportWidth / static_cast<float>(viewportHeight))
                 : 1.0f;
-            const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx);
-            const auto canvasDelta = epochnamespace::previewgrid::subtract(camera.eye, camera.target);
-            const float canvasDistance = std::sqrt(epochnamespace::previewgrid::dot(canvasDelta, canvasDelta));
-            const float canvasHalfHeight = (std::max)(2.0f, canvasDistance * 0.45f);
-            const detail::Mat4 proj = cameraMode == epochnamespace::previewgrid::CameraMode::Canvas2D
-                ? epochnamespace::previewgrid::orthographic(
-                    -(canvasHalfHeight * aspect),
-                    canvasHalfHeight * aspect,
-                    -canvasHalfHeight,
-                    canvasHalfHeight,
-                    camera.nearPlane,
-                    camera.farPlane)
-                : epochnamespace::previewgrid::perspective(
-                    camera.fovRadians,
-                    aspect,
-                    camera.nearPlane,
-                    camera.farPlane);
+            const detail::Mat4 proj = epochnamespace::previewgrid::projection_for(ctx, aspect, camera);
             const detail::Mat4 view = epochnamespace::previewgrid::look_at(
                 camera.eye,
                 camera.target,

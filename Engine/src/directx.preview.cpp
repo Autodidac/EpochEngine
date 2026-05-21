@@ -131,32 +131,6 @@ namespace epochnamespace::directxcontext::detail
             return true;
         }
 
-        previewgrid::Mat4 preview_projection(
-            const core::Context& ctx,
-            const float aspect,
-            const previewgrid::Camera& camera) noexcept
-        {
-            if (previewgrid::camera_mode_for(&ctx) == previewgrid::CameraMode::Canvas2D)
-            {
-                const auto delta = previewgrid::subtract(camera.eye, camera.target);
-                const float distance = std::sqrt(previewgrid::dot(delta, delta));
-                const float halfHeight = (std::max)(2.0f, distance * 0.42f);
-                const float halfWidth = halfHeight * aspect;
-                return previewgrid::orthographic(
-                    -halfWidth,
-                    halfWidth,
-                    -halfHeight,
-                    halfHeight,
-                    camera.nearPlane,
-                    camera.farPlane);
-            }
-
-            return previewgrid::perspective(
-                camera.fovRadians,
-                aspect,
-                camera.nearPlane,
-                camera.farPlane);
-        }
     }
 
     void draw_vertices(
@@ -207,7 +181,7 @@ namespace epochnamespace::directxcontext::detail
         const float aspect = viewport.height > 0
             ? (viewport.width / static_cast<float>(viewport.height))
             : 1.0f;
-        const auto proj = preview_projection(ctx, aspect, camera);
+        const auto proj = previewgrid::projection_for(&ctx, aspect, camera);
         const auto view = previewgrid::look_at(
             camera.eye,
             camera.target,
