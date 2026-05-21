@@ -163,10 +163,11 @@ the same engine-owned path.
   project before launch. If the build fails, launch is canceled so stale
   `Projects/**/bin/...` outputs are not mistaken for the result of the current
   run.
-- generated project builds are serialized inside the editor process. Until
+- generated project builds are serialized inside the editor process, and emitted
+  Windows `build_project.ps1` scripts also take a repo-level build lock. Until
   ProjectLauncher/Sandbox child builds have isolated engine-object/module/PDB
-  output directories, a second Run/build request should fail visibly instead of
-  racing the active build over shared `StaticLib1` outputs.
+  output directories, every generated child build must either hold that lock or
+  fail visibly instead of racing over shared `StaticLib1` outputs.
 - the Project workspace should also surface simple existence checks for the
   manifest, entry source, build script, `project.paths.txt`, expected output,
   build log, and active script source so the user can tell whether the shell is

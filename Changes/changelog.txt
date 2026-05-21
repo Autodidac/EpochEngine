@@ -37,6 +37,12 @@
 - Serialized generated project builds from the editor Run path so rapid or
   duplicate Run/build requests refuse a second build instead of racing
   ProjectLauncher/Sandbox over the shared `StaticLib1` module/PDB/clean outputs.
+- Added the same generated-project build lock to emitted Windows child build
+  scripts so manual ProjectLauncher/Sandbox builds serialize across processes
+  instead of colliding on shared MSVC module/PDB/clean outputs.
+- Matched Raylib, SDL, and SFML fallback preview rendering to the OpenGL/DirectX
+  Canvas2D behavior by switching their Game/2D camera path to orthographic mode
+  instead of leaving those contexts in tilted 3D perspective.
 - Routed Raylib dock/undock/redock window commands through the Raylib owner
   thread command queue so the Win32 host no longer mutates the GLFW/Raylib child
   HWND cross-thread during redock tests.
@@ -51,10 +57,10 @@
   ProjectLauncher and Sandbox generated child builds plus `--project-self-test`
   passed serially, WSL `ninja-clang-debug` build/ctest passed with DirectX
   disabled, and the staged Windows/Linux packages reported `Epoch v0.84.35`.
-- WSL visual screenshot proof is still blocked: OpenGL `--smoke --capture`
-  produced an invalid black BMP, WSLg `grim`/X11 root capture paths are blocked
-  on this workstation, SFML hit a WSL/GLX `BadAccess` make-current failure, and
-  the software fallback did not emit a capture file in that lane.
+- Linux visual screenshot refresh remains a follow-up gate; the `v0.84.35`
+  Linux package is build, CTest, headless smoke, and version validated.
+- Sanitized public README/release docs so workstation-specific Linux capture
+  debugging details stay out of project-facing release proof.
 
 ## [v0.84.34]
 - Bumped the active source line to `v0.84.34` for the multicontext

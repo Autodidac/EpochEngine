@@ -168,9 +168,9 @@ Current source version: `v0.84.35`
   initialization.
 - Raylib dock/redock changes must stay owner-thread queued. Direct parent-host
   Win32 mutation of the GLFW/Raylib child is a known crash-risk pattern.
-- Linux Clang build/headless validation is current for `v0.84.35`, but Linux
-  visual proof is not current: WSL OpenGL capture is black, SFML hits a GLX
-  make-current failure, and software emits no capture in the tested lane.
+- Linux Clang build/headless validation is current for `v0.84.35`; refreshed
+  Linux/WSLg or native Linux visual proof remains a follow-up gate before README
+  screenshots are replaced.
 - The `Assets` workspace currently uses file-type cards, not decoded image/model
   preview thumbnails. Full thumbnail decoding/render previews remain next-pass
   GUI/asset-browser work.

@@ -247,10 +247,11 @@ Expected smoke behavior:
 - smoke the staged packaged folder with `--version` before uploading
 - smoke the no-args packaged entry path once before uploading
 - generated ProjectLauncher/Sandbox child builds share checked-in engine
-  `StaticLib1` outputs today; run generated project builds serially until their
-  engine-object/module/PDB outputs are isolated. Parallel child builds can fail
-  on `StaticLib1` clean logs, module IFC/BMI files, or PDB locks and should not
-  be mistaken for a broken generated project by itself.
+  `StaticLib1` outputs today; editor Run and emitted Windows build scripts now
+  serialize through the generated-project build lock until their
+  engine-object/module/PDB outputs are isolated. If a hand-run child build skips
+  that lock, failures on `StaticLib1` clean logs, module IFC/BMI files, or PDB
+  locks should be treated as a build-lane collision first.
 - Linux/WSL2 packaged assets must report the same version as the tagged source
   commit they were built from
 - Linux/WSL2 packaged assets should boot the main runtime path by default;

@@ -521,21 +521,28 @@ engine shape and should be treated as starting truth for the next passes:
   repainted by D3D11 grid/object geometry. The angle-dependent DirectX floating
   diagonal artifact was traced to partial primitive clipping and fixed by
   appending D3D11 preview lines/triangles only when every vertex in that
-    primitive survives projection. The first DirectX source split now keeps the
-    public `directx.context` interface while moving behavior into
-    `directx.state.cpp`, `directx.device.cpp`, `directx.preview.cpp`, and
-    `directx.gui.cpp`. Remaining DirectX work is renderer-resource parity, real
-    depth/resource ownership, and any operator-observed GUI flicker in the D3D11
-    pane, not basic context creation.
+  primitive survives projection. The first DirectX source split now keeps the
+  public `directx.context` interface while moving behavior into
+  `directx.state.cpp`, `directx.device.cpp`, `directx.preview.cpp`, and
+  `directx.gui.cpp`. Remaining DirectX work is renderer-resource parity, real
+  depth/resource ownership, and any operator-observed GUI flicker in the D3D11
+  pane, not basic context creation.
+- Raylib, SDL, and SFML fallback preview paths now share the same Canvas2D
+  orthographic camera behavior as OpenGL and DirectX. The Game/2D acceptance
+  gate is that all normal multicontext panes show the 2D canvas head-on instead
+  of leaving Raylib/SDL/SFML in tilted editor perspective.
 - The Run button now serializes generated project builds inside the editor
   process. A duplicate Run/build request returns a visible failure instead of
   launching a second ProjectLauncher/Sandbox build that can collide over shared
   `StaticLib1` clean logs, module IFC/BMI state, or PDB outputs.
+- Generated Windows child build scripts now carry a repo-level lock as well, so
+  manual ProjectLauncher/Sandbox builds launched outside the editor wait for the
+  shared MSVC engine build lane instead of corrupting shared logs/libs/PDBs.
 - ProjectLauncher and Sandbox generated outputs both build and pass their
   generated `--project-self-test` when run serially. A deliberate parallel
   ProjectLauncher/Sandbox build reproduced the prior shared-output collision,
-  confirming that editor Run actions must stay serialized until generated child
-  builds have isolated engine-object directories.
+  confirming that generated child builds either need the shared lock or fully
+  isolated engine-object directories.
 - Raylib redock crash work has moved from direct cross-thread Win32 mutation to
   owner-thread dock command routing through the Raylib render command queue.
   The patch builds cleanly; the acceptance gate is still live multicontext
@@ -545,12 +552,11 @@ engine shape and should be treated as starting truth for the next passes:
   staged at `C:\tmp\epoch_release\epoch_linux_x64_v0.84.35.tar.gz`; the staged
   package reports `Epoch v0.84.35` and passes `epoch_ci_headless .` after
   including source-shaped `Engine/assets`, `Engine/resource`, and
-  `Engine/ai/control` runtime support paths. Linux visual screenshot proof is
-  still not release-ready because WSL OpenGL capture produced a black BMP, WSLg
-  desktop capture APIs are unavailable/failing on this workstation, SFML hit a
-  GLX make-current failure, and software emitted no capture file. Do not replace
-  the README Linux proof until an honest Linux/WSLg or native Linux visual smoke
-  exists.
+  `Engine/ai/control` runtime support paths. Linux visual screenshot refresh
+  remains a follow-up gate; do not replace the README Linux proof until an
+  honest Linux/WSLg or native Linux visual smoke exists. Keep any
+  workstation-specific capture failure notes in local/pass context rather than
+  public release copy.
 - A local Windows runtime package was staged at
   `C:\tmp\epoch_release\epoch_win10_x64_v0.84.35.zip` with app-local backend
   DLLs, assets, and VC143 CRT DLLs, and the staged executable reported

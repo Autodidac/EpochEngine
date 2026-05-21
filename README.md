@@ -161,10 +161,8 @@ WSL/Linux editor proof, latest asset-bearing visual capture:
 
 `v0.84.35` WSL Clang build/headless validation is green with DirectX disabled,
 and the Linux package version/headless-smokes from its staged runtime folder.
-The current WSL visual proof is not yet release-ready: OpenGL capture is black
-on this workstation, WSLg desktop capture APIs are unavailable/failing here,
-SFML hits a GLX make-current failure, and software does not emit a capture file
-in that lane.
+The current README Linux image remains the last honest visual proof; refreshed
+Linux/WSLg or native Linux screenshot proof is still a follow-up gate.
 
 ## Quick Start
 

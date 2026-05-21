@@ -409,7 +409,9 @@ namespace epochnamespace::raylibcontext
                     static_cast<std::uint8_t>((std::clamp)(clearColor[3], 0.0f, 1.0f) * 255.0f)
                 });
 
-            if (epochnamespace::raylib_api::has_loaded_models())
+            const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx.get());
+            if (epochnamespace::raylib_api::has_loaded_models()
+                && cameraMode != epochnamespace::previewgrid::CameraMode::Canvas2D)
             {
                 constexpr float kRadiansToDegrees = 57.29577951308232f;
                 const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
@@ -442,11 +444,25 @@ namespace epochnamespace::raylibcontext
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;
-            const auto proj = epochnamespace::previewgrid::perspective(
-                camera.fovRadians,
-                aspect,
-                camera.nearPlane,
-                camera.farPlane);
+            const auto proj = cameraMode == epochnamespace::previewgrid::CameraMode::Canvas2D
+                ? [&]()
+                {
+                    const auto delta = epochnamespace::previewgrid::subtract(camera.eye, camera.target);
+                    const float distance = std::sqrt(epochnamespace::previewgrid::dot(delta, delta));
+                    const float halfHeight = (std::max)(2.0f, distance * 0.45f);
+                    return epochnamespace::previewgrid::orthographic(
+                        -(halfHeight * aspect),
+                        halfHeight * aspect,
+                        -halfHeight,
+                        halfHeight,
+                        camera.nearPlane,
+                        camera.farPlane);
+                }()
+                : epochnamespace::previewgrid::perspective(
+                    camera.fovRadians,
+                    aspect,
+                    camera.nearPlane,
+                    camera.farPlane);
             const auto view = epochnamespace::previewgrid::look_at(
                 camera.eye,
                 camera.target,

@@ -78,12 +78,8 @@ ctest --preset ninja-gcc-debug --output-on-failure
   `C:\tmp\epoch_release\epoch_linux_x64_v0.84.35.tar.gz` also reports
   `Epoch v0.84.35` and passes `./epoch_ci_headless .` from the package root
   after including `Engine/assets`, `Engine/resource`, and `Engine/ai/control`.
-  Visual proof is still blocked on this workstation: OpenGL
-  `--smoke --capture` emitted a black BMP, WSLg desktop capture is
-  unavailable/failing, SFML failed in GLX `MakeCurrent` with `BadAccess`, and
-  software did not emit a capture file. Treat Linux as build/headless/package
-  green but not screenshot-proof-complete until WSLg/native Linux visual smoke
-  is fixed.
+  Treat Linux as build/headless/package green; refreshed Linux visual proof
+  remains a follow-up gate before replacing README screenshots.
 - Packaged Linux/WSL release assets should be versioned `.tar.gz` runtime
   archives. The normal packaged entry is `epoch`; updater-shell mode is a
   separate bootstrap variant, not the default Linux runtime identity.
