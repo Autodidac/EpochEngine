@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.35`
+Current source version: `v0.84.36`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -97,7 +97,8 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.84.35` is the current source line for the DirectX multicontext proof pass.
+- `v0.84.36` is the current source line for the corrected asset-bearing release
+  packaging pass.
 - Normal desktop/runtime builds should stay on the main runtime path by default.
 - `EPOCH_UPDATER_SHELL_BUILD` is now an explicit bootstrap-mode switch, not the
   default identity for packaged Linux or Windows releases.

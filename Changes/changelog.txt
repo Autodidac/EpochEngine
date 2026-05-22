@@ -1,5 +1,26 @@
 # Epoch Changelog
 
+## [v0.84.36]
+- Bumped the active source and stable release line to `v0.84.36` for the
+  corrected asset-bearing runtime package refresh.
+- Corrected the release packaging contract after the previous package refresh
+  proved too narrow: Windows and Linux runtime assets must include the
+  executable-root assets plus the example `ConsoleApplication1` assets,
+  atlases, and workspace tree that the current runtime/editor probes still
+  resolve through.
+- The release staging shape now carries both direct package executables and
+  `x64/Release`-style Windows entry folders so downloaded packages match the
+  runtime layout expected by the editor, examples, and asset-root resolver.
+- Documentation now calls out this asset layout explicitly so future release
+  refreshes do not ship stripped CMake-only packages that pass `--version` but
+  fail normal launcher/editor asset lookup.
+- Validation: Windows CMake Release `epoch` and `epoch_ci_headless` built,
+  `ctest --preset windows-msvc-release --output-on-failure` passed, Linux Clang
+  Release rebuilt with DirectX disabled, Linux `epoch --version`,
+  `epoch_ci_headless`, and CTest passed, and the corrected staged Windows/Linux
+  packages both report `Epoch v0.84.36` with packaged headless smoke passing
+  from the package root.
+
 ## [v0.84.35]
 - Fixed the hosted Linux/GCC CMake lane by making `epoch_ci_headless`
   genuinely module-free when `EPOCH_CI_HEADLESS_ONLY=ON` and GCC full-engine

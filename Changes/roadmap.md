@@ -79,6 +79,12 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 - Packaged runtime assets use versioned platform names:
   - `epoch_win10_x64_vX.Y.Z.zip`
   - `epoch_linux_x64_vX.Y.Z.tar.gz`
+- Release packages must be asset-bearing runtime layouts, not stripped CMake
+  executable folders. Until the asset resolver is fully consolidated, packages
+  must carry executable-root `assets/`, `Engine/assets`, `Engine/resource`,
+  `Engine/ai/control`, and the current
+  `Engine/examples/ConsoleApplication1` assets/atlases/workspace tree; Windows
+  packages must also expose an `x64/Release`-style entry folder.
 - The updater must resolve the active install type before replacing files:
   - packaged Windows runtime: install the newest matching `.zip` runtime asset
   - packaged Linux/WSL runtime: install the newest matching `.tar.gz` runtime asset

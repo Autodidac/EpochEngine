@@ -214,7 +214,22 @@ and the packaged asset filename itself.
 
 Before publishing a Windows packaged runtime zip:
 
-- stage from `x64/Release/`, not from a source folder
+- stage from the asset-bearing runtime layout, not from a stripped source or
+  CMake executable folder alone
+- include an `x64/Release/`-style entry folder for the Windows package, with
+  the runnable executable and colocated runtime assets present there
+- include the example runtime asset tree currently used by the editor and
+  launcher probes:
+  `Engine/examples/ConsoleApplication1/assets`,
+  `Engine/examples/ConsoleApplication1/atlases`, and
+  `Engine/examples/ConsoleApplication1/workspace`
+- include the executable-root `assets/` path, `Engine/assets`, `Engine/resource`,
+  and `Engine/ai/control` until the asset resolver and packaged headless probe
+  are fully consolidated around a single package-root contract
+- if CMake output is used as the executable source, copy that executable into
+  the package's `x64/Release/` entry folder as well as the package root; do not
+  ship a CMake-only folder that lacks the example/runtime asset layout
+- stage from `x64/Release/` when the MSBuild output is the release source
 - copy the required backend DLLs beside `ConsoleApplication1.exe`
 - copy the full VC143 CRT payload from
   `C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC\<version>\x64\Microsoft.VC143.CRT\`
@@ -252,12 +267,14 @@ Before publishing a Linux/WSL2 asset:
   instead of accidentally shipping an updater-shell-only bootstrap
 - do not quietly reuse an older Linux artifact after source has changed
 - include the runtime executable, required shared libraries, assets, shaders,
-  and scripts in the staged package instead of assuming the repo tree exists
-  beside the executable
-- for `v0.84.35`, the packaged headless contract also expects source-shaped
-  `Engine/assets`, `Engine/resource`, and `Engine/ai/control` paths beside the
-  runtime; keep those paths until the packaged headless probe is made
-  executable-root aware
+  scripts, `Engine/assets`, `Engine/resource`, `Engine/ai/control`, and the
+  current `Engine/examples/ConsoleApplication1` assets/atlases/workspace tree
+  in the staged package instead of assuming the repo tree exists beside the
+  executable
+- for `v0.84.36` and the current packaged headless contract, source-shaped
+  `Engine/assets`, `Engine/resource`, and `Engine/ai/control` paths are still
+  expected beside the package root; keep those paths until the packaged
+  headless probe is made executable-root aware
 - keep any Linux bootstrap drop separate, for example
   `epoch_updater_shell_only_linux_x64_vX.Y.Z.tar.gz`
 - keep the Linux naming and published-version story aligned with Windows so the
