@@ -150,6 +150,10 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - Linux/GCC is currently a headless validation lane by default because GCC 14
   can ICE while writing full-engine C++ module BMIs; full Linux editor/runtime
   builds should use Clang until GCC module support stabilizes.
+- The GCC headless lane must stay module-free unless
+  `EPOCH_ALLOW_GCC_MODULE_ENGINE=ON` is explicitly enabled. `epoch_ci_headless`
+  uses a dedicated logger shim in that lane so hosted GCC can configure, build,
+  and run the smoke contract without CMake C++ module dependency scanning.
 - Linux/Clang 18 is the current full-engine Linux rendering build lane, with
   single-context OpenGL as the WSL-proven editor/runtime path. Do not auto-fall
   back to Vulkan in WSL; Vulkan remains explicit validation work on Linux/WSL

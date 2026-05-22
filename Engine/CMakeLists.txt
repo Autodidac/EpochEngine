@@ -140,23 +140,45 @@ function(epoch_print_build_summary)
     message(STATUS "  Active backends: ${_epoch_active_backends}")
 endfunction()
 
-add_executable(epoch_ci_headless
+set(EPOCH_CI_HEADLESS_SOURCES
     examples/HeadlessCI/headless_smoke.cpp
-    src/core.log.cpp
-    src/core.time.cpp
 )
 
-set_target_properties(epoch_ci_headless PROPERTIES
-    CXX_SCAN_FOR_MODULES ON
-)
+set(EPOCH_CI_HEADLESS_USES_MODULE_LOG ON)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT WIN32 AND EPOCH_CI_HEADLESS_ONLY AND NOT EPOCH_ALLOW_GCC_MODULE_ENGINE)
+    set(EPOCH_CI_HEADLESS_USES_MODULE_LOG OFF)
+endif()
 
-target_sources(epoch_ci_headless PRIVATE
-    FILE_SET epoch_ci_headless_modules TYPE CXX_MODULES
-        BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-        FILES
-            ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
-            ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
-)
+if(EPOCH_CI_HEADLESS_USES_MODULE_LOG)
+    list(APPEND EPOCH_CI_HEADLESS_SOURCES
+        src/core.log.cpp
+        src/core.time.cpp
+    )
+else()
+    list(APPEND EPOCH_CI_HEADLESS_SOURCES
+        src/core.log.headless.cpp
+    )
+endif()
+
+add_executable(epoch_ci_headless ${EPOCH_CI_HEADLESS_SOURCES})
+
+if(EPOCH_CI_HEADLESS_USES_MODULE_LOG)
+    set_target_properties(epoch_ci_headless PROPERTIES
+        CXX_SCAN_FOR_MODULES ON
+    )
+
+    target_sources(epoch_ci_headless PRIVATE
+        FILE_SET epoch_ci_headless_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+            FILES
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
+    )
+else()
+    set_target_properties(epoch_ci_headless PROPERTIES
+        CXX_SCAN_FOR_MODULES OFF
+    )
+endif()
 
 target_include_directories(epoch_ci_headless PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

@@ -6,12 +6,10 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <utility>
 
 extern "C" void core_log_write(std::uint32_t lvl, const char* tag_utf8, const char* msg_utf8);
 
@@ -39,16 +37,29 @@ namespace
         core_log_write(kLogError, kLogTag, text.c_str());
     }
 
-    template <typename... Args>
-    void LogInfo(std::format_string<Args...> fmt, Args&&... args)
+    void LogInfoPair(std::string_view label, std::string_view value)
     {
-        LogInfo(std::format(fmt, std::forward<Args>(args)...));
+        std::string text;
+        text.reserve(label.size() + value.size() + 2u);
+        text.append(label);
+        text.append(": ");
+        text.append(value);
+        LogInfo(text);
     }
 
-    template <typename... Args>
-    void LogError(std::format_string<Args...> fmt, Args&&... args)
+    void LogInfoPair(std::string_view label, int value)
     {
-        LogError(std::format(fmt, std::forward<Args>(args)...));
+        LogInfoPair(label, std::to_string(value));
+    }
+
+    void LogErrorPair(std::string_view label, std::string_view value)
+    {
+        std::string text;
+        text.reserve(label.size() + value.size() + 2u);
+        text.append(label);
+        text.append(": ");
+        text.append(value);
+        LogError(text);
     }
 
     void SmokeLog(void* userData, const char* message)
@@ -74,7 +85,13 @@ namespace
             return 0;
         }
 
-        LogInfo("queued model '{}' from {}", debugName, path);
+        std::string text;
+        text.reserve(std::strlen(debugName) + std::strlen(path) + 24u);
+        text.append("queued model '");
+        text.append(debugName);
+        text.append("' from ");
+        text.append(path);
+        LogInfo(text);
         return 1;
     }
 
@@ -114,10 +131,10 @@ namespace
         const auto demoDir = assetsDir / "demo";
 
         const std::string repoRootText = repoRoot.string();
-        LogInfo("repo probe: {}", repoRootText);
-        LogInfo("Engine present: {}", std::filesystem::exists(engineDir) ? 1 : 0);
-        LogInfo("Engine/assets present: {}", std::filesystem::exists(assetsDir) ? 1 : 0);
-        LogInfo("demo assets present: {}", std::filesystem::exists(demoDir) ? 1 : 0);
+        LogInfoPair("repo probe", repoRootText);
+        LogInfoPair("Engine present", std::filesystem::exists(engineDir) ? 1 : 0);
+        LogInfoPair("Engine/assets present", std::filesystem::exists(assetsDir) ? 1 : 0);
+        LogInfoPair("demo assets present", std::filesystem::exists(demoDir) ? 1 : 0);
 
         // Hosted CI must stay asset-light, so this is an informational probe.
         return true;
@@ -130,7 +147,7 @@ namespace
         if (!in)
         {
             const std::string contractText = contractPath.string();
-            LogError("missing AI control contract: {}", contractText);
+            LogErrorPair("missing AI control contract", contractText);
             return false;
         }
 
@@ -143,10 +160,10 @@ namespace
             content.find("Never allow blind repo write-through") != std::string::npos;
 
         const std::string contractText = contractPath.string();
-        LogInfo("AI control contract: {}", contractText);
-        LogInfo("AI control stages present: {}",
+        LogInfoPair("AI control contract", contractText);
+        LogInfoPair("AI control stages present",
             (hasPlanner && hasBuilder && hasVerifier && hasGate) ? 1 : 0);
-        LogInfo("AI control gate policy present: {}",
+        LogInfoPair("AI control gate policy present",
             hasNoBlindWriteThrough ? 1 : 0);
 
         return hasPlanner && hasBuilder && hasVerifier && hasGate && hasNoBlindWriteThrough;

@@ -44,7 +44,9 @@ cmake --build --preset ninja-gcc-debug
 The GCC presets intentionally route to `epoch_ci_headless` by default because
 GCC 14 can ICE while writing full-engine C++ module BMIs. Only opt into the
 full GNU module build with `-DEPOCH_ALLOW_GCC_MODULE_ENGINE=ON` when you are
-testing compiler/module behavior locally.
+testing compiler/module behavior locally. In the default GCC headless lane,
+`epoch_ci_headless` is intentionally module-free and uses a small C ABI logger
+shim so CMake does not need compiler import-graph discovery.
 
 ## Linux (Clang Full Engine)
 
@@ -68,7 +70,9 @@ cmake --build --preset macos-release
 
 ## Notes
 
-- Presets already enable module scanning and set up the expected binary/install directories.
+- Presets already enable module scanning and set up the expected binary/install
+  directories except for the GCC headless smoke target, which disables scanning
+  by design.
 - C++23 remains the default baseline; `*-cpp26-*` presets are optional
   `/std:c++latest` or `-std=c++2c` validation lanes only.
 - Clean the build directory when you switch compilers or heavily rename module surfaces.
