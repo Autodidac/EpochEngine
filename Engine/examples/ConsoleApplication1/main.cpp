@@ -62,7 +62,9 @@ inline auto sanity() {
 //#endif
 //
 //    if (epochnamespace::updater::check_for_updates(urls::version_url)) {
-//        std::cout << "[INFO] New version available!\n";
+//        log.log(epochnamespace::logger::LogLevel::INFO,
+//            "[Engine] New version available.",
+//            std::source_location::current());
 //        epochnamespace::updater::update_project(urls::version_url, urls::binary_url);
 //    }
 //    else {
@@ -72,7 +74,9 @@ inline auto sanity() {
 //#else
 //        system("clear");
 //#endif
-//        std::cout << "[INFO] No updates available.\n";
+//        log.log(epochnamespace::logger::LogLevel::INFO,
+//            "[Engine] No updates available.",
+//            std::source_location::current());
 //    }
 
 
@@ -103,7 +107,9 @@ inline auto sanity() {
     std::string scriptName = "editor_launcher";
 
     if (!epochnamespace::scripting::load_or_reload_script(scriptName, scheduler)) {
-        std::cerr << "[Engine] Initial script load failed.\n";
+        log.log(epochnamespace::logger::LogLevel::ERROR,
+            "[Engine] Initial script load failed.",
+            std::source_location::current());
     }
 
     auto lastCheck = std::filesystem::last_write_time("src/scripts/" + scriptName + ".ascript.cpp");
@@ -112,7 +118,9 @@ inline auto sanity() {
     while (true) {
         auto now = std::filesystem::last_write_time("src/scripts/" + scriptName + ".ascript.cpp");
         if (now != lastCheck) {
-            std::cout << "\n[Engine] Detected change in script source, recompiling...\n";
+            log.log(epochnamespace::logger::LogLevel::INFO,
+                "[Engine] Detected change in script source, recompiling.",
+                std::source_location::current());
             epochnamespace::scripting::load_or_reload_script(scriptName, scheduler);
             lastCheck = now;
         }

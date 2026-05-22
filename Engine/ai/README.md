@@ -57,6 +57,10 @@ local LLMs act as teachers/reviewers over evidence, not as hidden authority.
 Epoch's AI loop should follow current practical agent guidance rather than
 older "let it train itself" folklore:
 
+- Treat AI code, datasets, evals, tools, and UI surfaces as production engine
+  work. Experimental learning loops must still be bounded, reviewable,
+  evidence-captured, and reversible; no fake autonomy or unverifiable training
+  claim should be presented as progress.
 - Keep agent workflows simple, composable, and inspectable. The live loop is a
   staged workflow, not a swarm of hidden autonomous agents.
 - Treat model/tool integration as a controlled tool-calling loop: the model can
@@ -107,10 +111,10 @@ closed-loop agency against reality: goal, action, evidence, correction, next
 action. EpochBot must not promote memories, datasets, code changes, or
 self-status claims without visible evidence from that loop.
 
-## Self-Iteration Sandbox Loop
+## Engine Self-Iteration Loop
 
-The current Phase 3/4 foundation is an evidence-gated self-iteration sandbox,
-not blind self-modifying autonomy and not the normal game/software editor:
+The current Phase 3/4 foundation is an evidence-gated engine self-iteration
+lane, not blind self-modifying autonomy and not the normal game/software editor:
 
 1. planner produces or updates an explicit staged packet
 2. executor proposes work only from the staged packet and current operator goal
@@ -124,9 +128,59 @@ The live contract is stored in:
 
 The editor AI workspace now has a continuous build lane that watches active
 project/script evidence, runs one child-project build at a time, and stages a
-fresh packet after successful builds. That packet is the durable handoff into
-future replay, verifier scoring, and curated training promotion. It does not
-grant blind write-through to the repo.
+fresh packet after successful builds. The current compatibility profile id is
+`sandbox`, but generated child artifacts present as `EpochEngine` because this is
+the engine-upgrade lane rather than a separate game project. That packet is the
+durable handoff into future replay, verifier scoring, and curated training
+promotion. It does not grant blind write-through to the repo.
+
+The engine also exposes `--editor-ai-gate-self-test` as a deterministic guard
+for helper-model review quality. It rejects status-only replies, missing
+verifier evidence, bypass/server requests, and any self-iteration reply that
+tries to promote without human approval. Keep this check green before allowing
+local helpers such as Nemotron to supervise EpochBot packets.
+
+## Measured Training And Eval Scorecard
+
+EpochBot should be moved toward frontier-style coding behavior by measured
+supervision, not by trusting a low-capacity helper that says it is fine. As of
+May 21, 2026, the production path is:
+
+1. collect verified editor/build/tool traces
+2. train or adapt candidate 4B/20B models on curated traces only
+3. evaluate with project-specific tasks, external coding/reasoning harnesses,
+   and visual/runtime checks
+4. promote only when scores improve without new safety or workflow regressions
+
+Track these metrics before any helper output becomes curated data:
+
+- `gate_accuracy`: accepted/rejected helper-review decisions match labels
+- `false_accept_rate`: unsafe or low-evidence replies accepted by mistake
+- `false_reject_rate`: valid evidence-backed replies rejected by mistake
+- `evidence_coverage`: packet/build/output/verifier/capture paths all present
+- `tool_trace_coverage`: action/result/error/file-diff records captured
+- `build_pass_rate`: generated project or engine build passed
+- `runtime_smoke_pass_rate`: child self-test or smoke proof passed
+- `self_iteration_completion_rate`: watcher/build/gate reaches a final state
+- `training_promotion_rate`: only reviewed traces enter curated datasets
+- `server_bypass_block_rate`: model-accessible server/listener requests blocked
+- `regression_rate`: accepted changes later break build, GUI, or runtime proof
+
+The repo-safe scorecard seed lives at:
+
+- `Engine/ai/evals/epochbot_scorecard.json`
+
+Useful current references for the summer 2026 target are OpenAI eval/agent-eval
+guidance, Hugging Face TRL for supervised/preference/RL-style post-training,
+EleutherAI `lm-evaluation-harness` for model eval plumbing, and SWE-bench style
+coding benchmarks. These are guidance inputs, not authority over Epoch's local
+evidence gate.
+
+For the current self-iteration lane, "finished" means all of the following are
+true in the same packet: project manifest exists, build log exists, output
+artifact exists, generated child self-test/verifier passed, UI gate state is
+visible, no required evidence path is marked `[missing]`, and promotion still
+waits for human approval.
 
 ## Next AI Implementation Pass
 
@@ -214,6 +268,10 @@ with `EPOCH_AI_MODEL`, `EPOCH_OPENAI_MODEL`, `LM_STUDIO_MODEL`, or
 `OPENAI_MODEL`; this is an operator-selected override, not a first-detected
 model fallback. Tool evidence capture files, including the legacy
 `mcp_capture.jsonl` path, are evidence logs, not a hidden second model runtime.
+If a selected model returns blank visible assistant content and only
+`reasoning_content`, EpochBot rejects that reply as a model/API configuration
+failure. Hidden reasoning is never displayed as chat and is never promoted as
+curated assistant training data.
 
 ## Server And Addon Safety
 
@@ -241,11 +299,11 @@ capture, tool evidence capture, scene state change, eval output, or retained ope
 Helper-model replies that do not cite packet/build/output/verifier evidence are
 proposal noise and must be rejected by review/eval gates instead of promoted
 into training data or source changes.
-The editor now exposes a `Stage Sandbox Scene Training Task` action so the bot can
-be given watchable 3D scene-edit/test exercises without confusing that sandbox
-with ProjectLauncher game/software work.
+The editor now exposes a `Stage Scene Training Task`/engine-scene packet action
+so the bot can be given watchable 3D scene-edit/test exercises without confusing
+the engine self-iteration lane with ProjectLauncher game/software work.
 
-## Running The AI Sandbox Controls
+## Running The Engine AI Controls
 
 From a developer checkout:
 
@@ -256,13 +314,16 @@ From a developer checkout:
 3. Launch the editor executable:
    For the Visual Studio solution build: `x64/Debug/ConsoleApplication1.exe`.
    For the CMake preset build: `build/windows-msvc-debug/Engine/Debug/epoch.exe`.
-4. Open the bottom `Console Dock`, select `AI`, and use the AI domain tabs for
-   status, model inventory, visual feedback, and logs.
+4. Open the central `AI Sandbox`/Engine AI surface for EpochBot chat, model
+   selection, evidence status, and self-iteration controls. The Inspector may
+   mirror the current command set. Bottom `Console Dock -> AI` remains compact
+   evidence/status output only; World Outliner should stay focused on scene
+   hierarchy plus compact bot status, not duplicate the full AI workspace.
 5. Use `Scripts` to create/select/build/run project-local script stubs and the
    shallow project file browser. Use `Assets` to inspect first-pass file-type
    cards for active scene/model/image/audio/text assets.
 6. Use the Inspector for the actual AI command buttons:
-   - `Sandbox`: self-iteration watcher, manual build queue, and scene-training packets
+   - `Engine Self-Iteration`: watcher, manual build queue, and scene-training packets
    - `Harness`: run selected scripts through the editor tool harness
    - `Assistant`: selected-model planning and evidence packet staging
    - `Launcher`: generated project/build/source evidence repair
@@ -274,21 +335,24 @@ From a developer checkout:
 
 Suggested first run:
 
-1. In `Project`, create or select a generated project shell such as `Sandbox`.
+1. In `Project`, select the built-in engine self-iteration lane. It still uses
+   the `sandbox` compatibility id/root, but generated artifacts and verifier
+   output present as `EpochEngine`.
 2. In `Scripts`, create a project script stub or select an existing script, then
    use `Build Selected Script` and `Run Selected Script` so the project notes and
    output log show visible evidence.
 3. In `Assets`, confirm the scene/model/asset cards for the active project and
    select any asset path that should be part of the iteration evidence.
-4. In `Bottom Dock -> AI`, select `Sandbox`, then use the Inspector to click
-   `Enable Self-Iteration Watcher` or `Queue Sandbox Build Pass`.
+4. In the central Engine AI surface or World Outliner `EpochBot` tab, inspect
+   the current loop gate. Use the Inspector to click
+   `Arm Evidence Watcher` or `Queue Engine Build Pass`.
 5. In `Bottom Dock -> AI`, select `Harness`, then use the Inspector to click
    `Run AI Tool Harness`.
 6. Inspect the `Output` dock tab and `Project -> Show Project Notes` for
    build/tool logs, selected file paths, and human-readable change notes.
 7. Review staged packets under
    `Engine/examples/ConsoleApplication1/workspace/research/staged/iteration_packets/`.
-8. Use `Stage Sandbox Scene Training Task` when EpochBot needs a watchable
+8. Use `Stage Scene Training Task` when EpochBot needs a watchable
    3D edit/test exercise before training or evaluation.
 9. Promote only reviewed, evidence-backed captures from `AI -> Training`.
 
@@ -296,3 +360,9 @@ The AI sandbox should be boringly explicit: it can watch, build, run approved
 local games/tools, capture evidence, and stage packets, but curated training,
 eval promotion, and bypass-capable app/server runtime activation remain
 review-gated actions.
+
+The evidence watcher is intentionally manual-gated. It may observe and refresh
+evidence state, but it must not start background build loops or self-promote
+source changes after a file change. Kernel/driver-level instability, repeated
+build loops, or missing output evidence should leave the gate blocked until the
+operator explicitly queues one build/tool pass and reviews the result.

@@ -126,4 +126,5 @@ export namespace epoch::ai
     [[nodiscard]] bool promote_mcp_capture_record(const McpCaptureRecord& record, std::string_view dataset_name = "epoch_mcp_curated");
     [[nodiscard]] bool promote_dataset_record(const DatasetRecord& record, std::string_view dataset_name = "epoch_editor_curated");
     [[nodiscard]] bool promote_eval_case(const EvalCase& record, std::string_view suite_name = "editor_ai_smoke");
+    [[nodiscard]] HelperReviewGateResult classify_helper_review_reply(std::string_view reply);
 }

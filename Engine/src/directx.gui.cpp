@@ -3,13 +3,7 @@ module;
 #include <include/engine.config.hpp>
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "framework.hpp"
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #endif
@@ -17,6 +11,7 @@ module;
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <cmath>
 #include <functional>
 #include <mutex>
 #include <span>
@@ -37,6 +32,83 @@ namespace epochnamespace::directxcontext::detail
 {
     namespace
     {
+        constexpr float kMinGuiSpriteExtent = 0.5f;
+        constexpr float kMaxGuiSpriteExtent = 65536.0f;
+
+        struct ClippedGuiSprite
+        {
+            float x{};
+            float y{};
+            float w{};
+            float h{};
+            float u0{};
+            float u1{};
+            float v0{};
+            float v1{};
+        };
+
+        [[nodiscard]] bool clip_gui_sprite_to_framebuffer(
+            const AtlasRegion& region,
+            const float fbW,
+            const float fbH,
+            const float x,
+            const float y,
+            const float w,
+            const float h,
+            ClippedGuiSprite& out) noexcept
+        {
+            if (!std::isfinite(fbW) || !std::isfinite(fbH) || fbW <= 0.0f || fbH <= 0.0f)
+                return false;
+            if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(w) || !std::isfinite(h)
+                || w < kMinGuiSpriteExtent || h < kMinGuiSpriteExtent
+                || w > kMaxGuiSpriteExtent || h > kMaxGuiSpriteExtent)
+            {
+                return false;
+            }
+            if (!std::isfinite(region.u1) || !std::isfinite(region.u2)
+                || !std::isfinite(region.v1) || !std::isfinite(region.v2)
+                || region.u2 <= region.u1 || region.v2 <= region.v1)
+            {
+                return false;
+            }
+
+            const float left = x;
+            const float top = y;
+            const float right = x + w;
+            const float bottom = y + h;
+            if (right <= 0.0f || bottom <= 0.0f || left >= fbW || top >= fbH)
+                return false;
+
+            const float clippedLeft = (std::clamp)(left, 0.0f, fbW);
+            const float clippedTop = (std::clamp)(top, 0.0f, fbH);
+            const float clippedRight = (std::clamp)(right, 0.0f, fbW);
+            const float clippedBottom = (std::clamp)(bottom, 0.0f, fbH);
+            const float clippedW = clippedRight - clippedLeft;
+            const float clippedH = clippedBottom - clippedTop;
+            if (clippedW < kMinGuiSpriteExtent || clippedH < kMinGuiSpriteExtent)
+                return false;
+
+            const float invW = 1.0f / w;
+            const float invH = 1.0f / h;
+            const float uSpan = region.u2 - region.u1;
+            const float sourceV0 = 1.0f - region.v2;
+            const float sourceV1 = 1.0f - region.v1;
+            const float vSpan = sourceV1 - sourceV0;
+
+            out.x = clippedLeft;
+            out.y = clippedTop;
+            out.w = clippedW;
+            out.h = clippedH;
+            out.u0 = region.u1 + (clippedLeft - left) * invW * uSpan;
+            out.u1 = region.u1 + (clippedRight - left) * invW * uSpan;
+            out.v0 = sourceV0 + (clippedTop - top) * invH * vSpan;
+            out.v1 = sourceV0 + (clippedBottom - top) * invH * vSpan;
+            return std::isfinite(out.x) && std::isfinite(out.y)
+                && std::isfinite(out.w) && std::isfinite(out.h)
+                && std::isfinite(out.u0) && std::isfinite(out.u1)
+                && std::isfinite(out.v0) && std::isfinite(out.v1);
+        }
+
         bool ensure_sprite_vertex_capacity(DirectXState& state, const std::size_t count)
         {
             if (count == 0)
@@ -134,6 +206,11 @@ namespace epochnamespace::directxcontext::detail
     {
         if (!sprite.is_valid())
             return;
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(w) || !std::isfinite(h)
+            || w <= 0.0f || h <= 0.0f)
+        {
+            return;
+        }
 
         auto ctx = core::get_current_render_context();
         if (!ctx)
@@ -169,21 +246,18 @@ namespace epochnamespace::directxcontext::detail
 
         const float fbW = static_cast<float>((std::max)(1, state.width));
         const float fbH = static_cast<float>((std::max)(1, state.height));
-        const bool widthNormalized = w > 0.0f && w <= 1.0f;
-        const bool heightNormalized = h > 0.0f && h <= 1.0f;
-        const float drawW = widthNormalized ? (std::max)(1.0f, w * fbW) : w;
-        const float drawH = heightNormalized ? (std::max)(1.0f, h * fbH) : h;
-        const float drawX = (widthNormalized && x >= 0.0f && x <= 1.0f) ? x * fbW : x;
-        const float drawY = (heightNormalized && y >= 0.0f && y <= 1.0f) ? y * fbH : y;
+        ClippedGuiSprite clipped{};
+        if (!clip_gui_sprite_to_framebuffer(region, fbW, fbH, x, y, w, h, clipped))
+            return;
 
-        const float x0 = (drawX / fbW) * 2.0f - 1.0f;
-        const float x1 = ((drawX + drawW) / fbW) * 2.0f - 1.0f;
-        const float y0 = 1.0f - (drawY / fbH) * 2.0f;
-        const float y1 = 1.0f - ((drawY + drawH) / fbH) * 2.0f;
-        const float u0 = region.u1;
-        const float u1 = region.u2;
-        const float v0 = 1.0f - region.v2;
-        const float v1 = 1.0f - region.v1;
+        const float x0 = (clipped.x / fbW) * 2.0f - 1.0f;
+        const float x1 = ((clipped.x + clipped.w) / fbW) * 2.0f - 1.0f;
+        const float y0 = 1.0f - (clipped.y / fbH) * 2.0f;
+        const float y1 = 1.0f - ((clipped.y + clipped.h) / fbH) * 2.0f;
+        const float u0 = clipped.u0;
+        const float u1 = clipped.u1;
+        const float v0 = clipped.v0;
+        const float v1 = clipped.v1;
 
         const DirectXSpriteVertex vertices[] = {
             { x0, y0, 0.0f, 1.0f, u0, v0 },

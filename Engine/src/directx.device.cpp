@@ -3,13 +3,7 @@ module;
 #include <include/engine.config.hpp>
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "framework.hpp"
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #endif

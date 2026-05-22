@@ -142,13 +142,24 @@ endfunction()
 
 add_executable(epoch_ci_headless
     examples/HeadlessCI/headless_smoke.cpp
+    src/core.log.cpp
+    src/core.time.cpp
 )
 
 set_target_properties(epoch_ci_headless PROPERTIES
-    CXX_SCAN_FOR_MODULES OFF
+    CXX_SCAN_FOR_MODULES ON
+)
+
+target_sources(epoch_ci_headless PRIVATE
+    FILE_SET epoch_ci_headless_modules TYPE CXX_MODULES
+        BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+        FILES
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
 )
 
 target_include_directories(epoch_ci_headless PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
@@ -390,6 +401,16 @@ endif()
 
 add_executable(epoch_renderer_smoke EXCLUDE_FROM_ALL
     src/renderer_smoke_harness.cpp
+    src/core.log.cpp
+    src/core.time.cpp
+)
+
+target_sources(epoch_renderer_smoke PRIVATE
+    FILE_SET epoch_renderer_smoke_modules TYPE CXX_MODULES
+        BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+        FILES
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
 )
 
 epoch_apply_version_overrides(epoch_renderer_smoke)

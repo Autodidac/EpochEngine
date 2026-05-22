@@ -35,8 +35,8 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <iostream>
 #include <mutex>
+#include <ostream>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -264,8 +264,9 @@ export namespace epochnamespace::diagnostics {
         }
     }
 
-    inline void log_context_dimensions_if_changed(const ContextDimensionSnapshot& snapshot,
-        std::ostream& output = std::cout)
+    inline bool build_context_dimensions_message_if_changed(
+        const ContextDimensionSnapshot& snapshot,
+        std::string& message)
     {
         struct CachedDimensions
         {
@@ -285,7 +286,7 @@ export namespace epochnamespace::diagnostics {
 
         if (!snapshot.contextId)
         {
-            return;
+            return false;
         }
 
         std::scoped_lock lock(s_mutex);
@@ -303,7 +304,7 @@ export namespace epochnamespace::diagnostics {
 
         if (!changed)
         {
-            return;
+            return false;
         }
 
         record.initialised = true;
@@ -316,23 +317,39 @@ export namespace epochnamespace::diagnostics {
         record.virtualWidth = snapshot.virtualWidth;
         record.virtualHeight = snapshot.virtualHeight;
 
-        std::ostringstream message;
-        message << "backend=" << (record.backendName.empty() ? "(unnamed)" : record.backendName)
+        std::ostringstream out;
+        out << "backend=" << (record.backendName.empty() ? "(unnamed)" : record.backendName)
             << " type=" << to_string(record.type)
             << " logical=" << record.logicalWidth << 'x' << record.logicalHeight
             << " framebuffer=" << record.framebufferWidth << 'x' << record.framebufferHeight
             << " virtual=" << record.virtualWidth << 'x' << record.virtualHeight;
 
-        if (std::addressof(output) == std::addressof(std::cout))
-        {
-            logger::info("Context.Dims", message.str());
-            return;
-        }
-
-        output << "[Context][Dims] " << message.str() << '\n';
+        message = out.str();
+        return true;
     }
 
-    inline void print_engine_configuration_summary(std::ostream& output = std::cout)
+    inline void log_context_dimensions_if_changed(const ContextDimensionSnapshot& snapshot)
+    {
+        std::string message;
+        if (build_context_dimensions_message_if_changed(snapshot, message))
+            logger::info("Context.Dims", message);
+    }
+
+    inline void write_context_dimensions_if_changed(const ContextDimensionSnapshot& snapshot,
+        std::ostream& output)
+    {
+        std::string message;
+        if (build_context_dimensions_message_if_changed(snapshot, message))
+            output << "[Context][Dims] " << message << '\n';
+    }
+
+    inline void log_context_dimensions_if_changed(const ContextDimensionSnapshot& snapshot,
+        std::ostream& output)
+    {
+        write_context_dimensions_if_changed(snapshot, output);
+    }
+
+    [[nodiscard]] inline std::string engine_configuration_summary_text()
     {
         const EngineConfigurationSnapshot snapshot = capture_engine_configuration();
 
@@ -386,12 +403,21 @@ export namespace epochnamespace::diagnostics {
                 << " Update aengineconfig.hpp before launching.\n";
         }
 
-        if (std::addressof(output) == std::addressof(std::cout))
-        {
-            logger::info("Engine.Config", report.str());
-            return;
-        }
+        return report.str();
+    }
 
-        output << report.str();
+    inline void print_engine_configuration_summary()
+    {
+        logger::info("Engine.Config", engine_configuration_summary_text());
+    }
+
+    inline void write_engine_configuration_summary(std::ostream& output)
+    {
+        output << engine_configuration_summary_text();
+    }
+
+    inline void print_engine_configuration_summary(std::ostream& output)
+    {
+        write_engine_configuration_summary(output);
     }
 } // namespace epochnamespace::diagnostics

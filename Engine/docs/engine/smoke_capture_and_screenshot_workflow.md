@@ -156,6 +156,15 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
   result as build/headless proof only. Do not refresh README Linux screenshots
   or publish a Linux runtime asset until a real WSLg/native-Linux visual smoke
   produces an honest non-black frame.
+- for Linux/WSL single-OpenGL editor proof, use the editor surface explicitly:
+  `epoch --renderer opengl --standalone --editor --smoke --capture`.
+  A plain runtime smoke can exit correctly while writing a black capture because
+  it does not necessarily open the editor/workbench surface being proven.
+- `v0.84.35` revalidated Ubuntu WSL2/WSLg with accelerated OpenGL 4.2, Linux
+  Clang build/CTest, and a non-black single OpenGL editor capture. If that path
+  regresses, start by checking WSL distro visibility, `DISPLAY`,
+  `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, and `glxinfo -B` before changing engine
+  code.
 - when operator-provided specialty screenshots are promoted into README proof,
   copy them into `Images/readme/` with versioned names and keep the original
   screenshots untouched.
@@ -197,8 +206,11 @@ Expected smoke behavior:
   while the engine runtime itself stays on the selected editor model
 - prefer LM Studio `/v1/responses` for offloaded helper drafts, while keeping
   the engine runtime itself on the selected local model for parity
-- if a helper returns blank `content` but useful `reasoning_content`, harvest
-  that output for drafting/review instead of discarding the helper pass
+- if a helper returns blank `content` with only `reasoning_content`, treat the
+  pass as a model/API configuration failure for user-visible chat. Do not
+  surface or harvest hidden reasoning as an assistant answer; retry with a
+  content-producing model/configuration or keep the pass as private diagnostic
+  evidence outside training promotion.
 - if allowed helpers split text and vision strengths, keep the selected editor
   model as runtime parity and use the vision-capable helper for screenshot
   review, pane/layout checks, and color/parity triage

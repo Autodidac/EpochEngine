@@ -313,6 +313,7 @@ namespace epochnamespace::core::cli
         bool force_update = false;
         bool editor_requested = false;
         bool editor_project_self_test_requested = false;
+        bool editor_ai_gate_self_test_requested = false;
         RuntimePath runtime = RuntimePath::Epoch;
         std::string editor_project_self_test_id{};
     };
@@ -480,6 +481,8 @@ namespace epochnamespace::core::cli
                     "  --editor                   Start the editor interface\n"
                     "  --editor-project-self-test <id>\n"
                     "                             Materialize and build an editor project shell, then exit\n"
+                    "  --editor-ai-gate-self-test\n"
+                    "                             Run deterministic self-iteration helper gate checks, then exit\n"
                     "  --menu                     Start the menu + games loop\n"
                     "  --runtime <epoch|legacy>   Select epoch-native or legacy parity runtime\n"
                     "  --epoch-native             Shortcut for --runtime epoch\n"
@@ -551,6 +554,10 @@ namespace epochnamespace::core::cli
                     result.editor_project_self_test_requested = true;
                     result.editor_project_self_test_id = std::string(parsed);
                 }
+            }
+            else if (key == "--editor-ai-gate-self-test"sv)
+            {
+                result.editor_ai_gate_self_test_requested = true;
             }
             else if (key == "--menu"sv)
             {

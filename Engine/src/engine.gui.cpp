@@ -37,9 +37,9 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <cmath>
 #include <filesystem>
-#include <iostream>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -51,6 +51,10 @@ module;
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#if defined(_WIN32)
+#include "framework.hpp"
+#endif
 
 module engine.gui;
 
@@ -86,6 +90,8 @@ namespace epochnamespace::gui
     constexpr float       kButtonTextClipInset = 2.0f;
     constexpr float       kTextClipSlack = 2.0f;
     constexpr float       kCaretBlinkPeriod = 1.0f;
+    constexpr float       kMinQueuedSpriteExtent = 0.5f;
+    constexpr float       kMaxQueuedSpriteExtent = 65536.0f;
     constexpr int         kTabSpaces = 4;
     constexpr const char* kDefaultFontName = "__agui_default_font";
     constexpr const char* kDefaultFontFile = "Roboto-Regular.ttf";
@@ -240,6 +246,7 @@ namespace epochnamespace::gui
         static std::unordered_map<const void*, UploadState, PtrHash> g_uploadedContexts{};
         static std::mutex g_uploadMutex{};
         static std::unordered_map<const void*, DeferredDrawBatch, PtrHash> g_deferredDrawBatches{};
+        static std::unordered_map<const void*, DeferredDrawBatch, PtrHash> g_topLayerDrawBatches{};
         static std::mutex g_deferredBatchMutex{};
         static std::unordered_map<const void*, std::vector<InputEvent>, PtrHash> g_contextPendingEvents{};
         static std::mutex g_contextPendingEventsMutex{};
@@ -265,6 +272,11 @@ namespace epochnamespace::gui
             float dragGrabOffset = 0.0f;
         };
 
+        struct SelectBoxState
+        {
+            bool open = false;
+        };
+
         struct ScrollAreaFrame
         {
             std::string key{};
@@ -281,7 +293,24 @@ namespace epochnamespace::gui
 
         static thread_local std::unordered_map<std::string, ScrollTextState> g_scrollTextStates{};
         static thread_local std::unordered_map<std::string, ScrollAreaState> g_scrollAreaStates{};
+        static thread_local std::unordered_map<std::string, SelectBoxState> g_selectBoxStates{};
         static thread_local std::vector<ScrollAreaFrame> g_scrollAreaStack{};
+
+        [[nodiscard]] static bool any_select_box_open() noexcept
+        {
+            for (const auto& [key, state] : g_selectBoxStates)
+            {
+                (void)key;
+                if (state.open)
+                    return true;
+            }
+            return false;
+        }
+
+        [[nodiscard]] static bool is_select_box_list_id(std::string_view id) noexcept
+        {
+            return id.size() >= 5u && id.substr(id.size() - 5u) == "-list";
+        }
 
         struct FrameState
         {
@@ -313,7 +342,9 @@ namespace epochnamespace::gui
 
             std::vector<InputEvent> events{};
             std::vector<QueuedSpriteDraw> queuedDraws{};
+            std::vector<QueuedSpriteDraw> topLayerDraws{};
             std::vector<ThemeVariant> themeStack{};
+            int topLayerDepth = 0;
         };
 
         static thread_local FrameState g_frame{};
@@ -396,6 +427,12 @@ namespace epochnamespace::gui
         }
 
         [[nodiscard]] static std::string scroll_panel_key(std::string_view id)
+        {
+            const auto ctxValue = reinterpret_cast<std::uintptr_t>(g_frame.ctx);
+            return std::to_string(ctxValue) + "|" + std::string(id);
+        }
+
+        [[nodiscard]] static std::string widget_state_key(std::string_view id)
         {
             const auto ctxValue = reinterpret_cast<std::uintptr_t>(g_frame.ctx);
             return std::to_string(ctxValue) + "|" + std::string(id);
@@ -864,7 +901,8 @@ namespace epochnamespace::gui
                 return;
 
             if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(w) || !std::isfinite(h)
-                || w <= 0.0f || h <= 0.0f)
+                || w < kMinQueuedSpriteExtent || h < kMinQueuedSpriteExtent
+                || w > kMaxQueuedSpriteExtent || h > kMaxQueuedSpriteExtent)
             {
                 return;
             }
@@ -888,17 +926,22 @@ namespace epochnamespace::gui
                 y = top;
                 w = right - left;
                 h = bottom - top;
+                if (w < kMinQueuedSpriteExtent || h < kMinQueuedSpriteExtent)
+                    return;
             }
 
             if (ctx->windowData && g_frame.ctxShared)
             {
-                g_frame.queuedDraws.push_back(QueuedSpriteDraw{
+                QueuedSpriteDraw draw{
                     .handle = handle,
                     .x = x,
                     .y = y,
                     .w = w,
                     .h = h
-                    });
+                    };
+                g_frame.queuedDraws.push_back(draw);
+                if (g_frame.topLayerDepth > 0)
+                    g_frame.topLayerDraws.push_back(draw);
                 return;
             }
 
@@ -1011,13 +1054,187 @@ namespace epochnamespace::gui
             if (!g_resources.font.asset)
                 return nullptr;
 
-            if (ch < g_resources.font.glyphLookup.size())
+            if (ch >= 128u)
+                ch = static_cast<unsigned char>('?');
+
+            const auto glyphIndex = static_cast<std::size_t>(ch);
+            if (glyphIndex < g_resources.font.glyphLookup.size())
             {
-                if (const auto* glyph = g_resources.font.glyphLookup[ch])
+                if (const auto* glyph = g_resources.font.glyphLookup[glyphIndex])
                     return glyph;
             }
 
             return g_resources.font.fallbackGlyph;
+        }
+
+        [[nodiscard]] static unsigned char safe_draw_char(unsigned char ch) noexcept
+        {
+            if (ch == '\t' || ch == '\n')
+                return ch;
+            if (ch < 32u)
+                return static_cast<unsigned char>(' ');
+            if (ch >= 128u)
+                return static_cast<unsigned char>('?');
+            return ch;
+        }
+
+#if defined(_WIN32)
+        [[nodiscard]] static std::wstring utf8_to_wide(std::string_view text)
+        {
+            if (text.empty())
+                return {};
+
+            const int required = ::MultiByteToWideChar(
+                CP_UTF8,
+                MB_ERR_INVALID_CHARS,
+                text.data(),
+                static_cast<int>(text.size()),
+                nullptr,
+                0);
+
+            if (required <= 0)
+            {
+                std::wstring fallback{};
+                fallback.reserve(text.size());
+                for (unsigned char ch : text)
+                    fallback.push_back(ch < 128u ? static_cast<wchar_t>(ch) : L'?');
+                return fallback;
+            }
+
+            std::wstring out(static_cast<std::size_t>(required), L'\0');
+            ::MultiByteToWideChar(
+                CP_UTF8,
+                MB_ERR_INVALID_CHARS,
+                text.data(),
+                static_cast<int>(text.size()),
+                out.data(),
+                required);
+            return out;
+        }
+
+        [[nodiscard]] static std::string wide_to_utf8(std::wstring_view text)
+        {
+            if (text.empty())
+                return {};
+
+            const int required = ::WideCharToMultiByte(
+                CP_UTF8,
+                0,
+                text.data(),
+                static_cast<int>(text.size()),
+                nullptr,
+                0,
+                nullptr,
+                nullptr);
+
+            if (required <= 0)
+            {
+                std::string fallback{};
+                fallback.reserve(text.size());
+                for (wchar_t ch : text)
+                    fallback.push_back((ch >= 0 && ch < 128) ? static_cast<char>(ch) : '?');
+                return fallback;
+            }
+
+            std::string out(static_cast<std::size_t>(required), '\0');
+            ::WideCharToMultiByte(
+                CP_UTF8,
+                0,
+                text.data(),
+                static_cast<int>(text.size()),
+                out.data(),
+                required,
+                nullptr,
+                nullptr);
+            return out;
+        }
+
+        [[nodiscard]] static std::string clipboard_read_text()
+        {
+            std::string out{};
+            if (!::OpenClipboard(nullptr))
+                return out;
+
+            if (HANDLE handle = ::GetClipboardData(CF_UNICODETEXT))
+            {
+                if (const auto* wide = static_cast<const wchar_t*>(::GlobalLock(handle)))
+                {
+                    out = wide_to_utf8(std::wstring_view{ wide });
+                    ::GlobalUnlock(handle);
+                }
+            }
+
+            ::CloseClipboard();
+            return out;
+        }
+
+        static void clipboard_write_text(std::string_view text)
+        {
+            if (!::OpenClipboard(nullptr))
+                return;
+
+            const std::wstring wide = utf8_to_wide(text);
+            const SIZE_T bytes = (wide.size() + 1u) * sizeof(wchar_t);
+            HGLOBAL memory = ::GlobalAlloc(GMEM_MOVEABLE, bytes);
+            if (!memory)
+            {
+                ::CloseClipboard();
+                return;
+            }
+
+            if (void* locked = ::GlobalLock(memory))
+            {
+                std::memcpy(locked, wide.c_str(), bytes);
+                ::GlobalUnlock(memory);
+                ::EmptyClipboard();
+                if (!::SetClipboardData(CF_UNICODETEXT, memory))
+                    ::GlobalFree(memory);
+            }
+            else
+            {
+                ::GlobalFree(memory);
+            }
+
+            ::CloseClipboard();
+        }
+#else
+        [[nodiscard]] static std::string clipboard_read_text()
+        {
+            return {};
+        }
+
+        static void clipboard_write_text(std::string_view)
+        {
+        }
+#endif
+
+        static void append_text_limited(std::string& text, std::string_view incoming, std::size_t limit, bool multiline, bool& changed)
+        {
+            for (char ch : incoming)
+            {
+                if (text.size() >= limit)
+                    break;
+                if (ch == '\r')
+                    continue;
+                if (ch == '\n')
+                {
+                    if (multiline)
+                    {
+                        text.push_back('\n');
+                        changed = true;
+                    }
+                    else if (!text.empty() && text.back() != ' ')
+                    {
+                        text.push_back(' ');
+                        changed = true;
+                    }
+                    continue;
+                }
+                if (static_cast<unsigned char>(ch) < 32u)
+                    continue;
+                text.push_back(ch);
+                changed = true;
+            }
         }
 
         [[nodiscard]] static std::optional<unsigned char> next_drawable_char(std::string_view text, std::size_t index) noexcept
@@ -1027,10 +1244,10 @@ namespace epochnamespace::gui
 
             for (std::size_t i = index + 1; i < text.size(); ++i)
             {
-                const char next = text[i];
+                const unsigned char next = safe_draw_char(static_cast<unsigned char>(text[i]));
                 if (next == '\n')
                     return std::nullopt;
-                return static_cast<unsigned char>(next);
+                return next;
             }
 
             return std::nullopt;
@@ -1066,12 +1283,63 @@ namespace epochnamespace::gui
             std::optional<unsigned char> next,
             float scale) noexcept
         {
+            ch = safe_draw_char(ch);
+            if (next)
+                next = safe_draw_char(*next);
+
             float advance = glyph_advance(ch, scale);
             if (next)
                 advance += kerning_adjust(ch, *next, scale);
             if (ch != ' ' && ch != '\t')
                 advance += letter_spacing(scale);
             return advance;
+        }
+
+        [[nodiscard]] static bool glyph_rect_is_reasonable(float w, float h, float scale) noexcept
+        {
+            const float baseHeight = (std::max)(1.0f, base_line_height(scale));
+            return std::isfinite(w)
+                && std::isfinite(h)
+                && w > 0.0f
+                && h > 0.0f
+                && w <= baseHeight * 8.0f
+                && h <= baseHeight * 4.0f;
+        }
+
+        [[nodiscard]] static bool glyph_fully_inside_clip(
+            float x,
+            float y,
+            float w,
+            float h,
+            float clipLeft,
+            float clipTop,
+            float clipRight,
+            float clipBottom) noexcept
+        {
+            if (!std::isfinite(x)
+                || !std::isfinite(y)
+                || !std::isfinite(w)
+                || !std::isfinite(h)
+                || !std::isfinite(clipLeft)
+                || !std::isfinite(clipTop)
+                || !std::isfinite(clipRight)
+                || !std::isfinite(clipBottom)
+                || w <= 0.0f
+                || h <= 0.0f
+                || clipRight <= clipLeft
+                || clipBottom <= clipTop)
+            {
+                return false;
+            }
+
+            const float visibleLeft = (std::max)(x, clipLeft);
+            const float visibleTop = (std::max)(y, clipTop);
+            const float visibleRight = (std::min)(x + w, clipRight);
+            const float visibleBottom = (std::min)(y + h, clipBottom);
+            const float visibleWidth = visibleRight - visibleLeft;
+            const float visibleHeight = visibleBottom - visibleTop;
+
+            return visibleWidth >= 1.0f && visibleHeight >= 1.0f;
         }
 
         [[nodiscard]] static float measure_text_width(std::string_view text, float scale) noexcept
@@ -1081,7 +1349,7 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const char ch = text[i];
+                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
                 if (ch == '\n')
                 {
                     maxWidth = (std::max)(maxWidth, current);
@@ -1089,7 +1357,7 @@ namespace epochnamespace::gui
                     continue;
                 }
                 const auto next = next_drawable_char(text, i);
-                current += glyph_advance_with_kerning(static_cast<unsigned char>(ch), next, scale);
+                current += glyph_advance_with_kerning(ch, next, scale);
             }
             return (std::max)(maxWidth, current);
         }
@@ -1138,7 +1406,7 @@ namespace epochnamespace::gui
 
             for (std::size_t i = start; i < text.size(); ++i)
             {
-                const char ch = text[i];
+                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
                 if (ch == '\n' || is_wrap_space(ch))
                     break;
 
@@ -1161,7 +1429,7 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const char ch = text[i];
+                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
                 if (ch == '\n')
                 {
                     ++lines;
@@ -1236,7 +1504,7 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const char ch = text[i];
+                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
                 if (ch == '\n')
                 {
                     penX = x;
@@ -1321,7 +1589,7 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const char ch = text[i];
+                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
                 if (ch == '\n')
                 {
                     penX = x;
@@ -1396,16 +1664,13 @@ namespace epochnamespace::gui
                     {
                         const float drawW = glyph->size_px.x * scale;
                         const float drawH = glyph->size_px.y * scale;
-                        if (glyph->handle.is_valid() && drawW > 0.0f && drawH > 0.0f)
+                        if (glyph->handle.is_valid() && glyph_rect_is_reasonable(drawW, drawH, scale))
                         {
                             const float offsetX = glyph->offset_px.x * scale;
                             const float offsetY = glyph->offset_px.y * scale;
                             const float drawX = penX + offsetX;
                             const float drawY = baseline + offsetY;
-                            if (drawX + drawW > clipLeft
-                                && drawY + drawH > clipTop
-                                && drawX < clipRight
-                                && drawY < clipBottom)
+                            if (glyph_fully_inside_clip(drawX, drawY, drawW, drawH, clipLeft, clipTop, clipRight, clipBottom))
                             {
                                 draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
                             }
@@ -1437,7 +1702,7 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const char ch = text[i];
+                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
                 if (ch == '\n')
                 {
                     penX = anchorX;
@@ -1445,7 +1710,7 @@ namespace epochnamespace::gui
                     continue;
                 }
 
-                if (const auto* glyph = lookup_glyph(static_cast<unsigned char>(ch)))
+                if (const auto* glyph = lookup_glyph(ch))
                 {
                     if (glyph->handle.is_valid())
                     {
@@ -1455,12 +1720,16 @@ namespace epochnamespace::gui
                         const float offsetY = glyph->offset_px.y * scale;
                         const float drawX = penX + offsetX;
                         const float drawY = baseline + offsetY;
-                        const bool glyphVisible =
-                            drawX + drawW > clipLeft
-                            && drawY + drawH > clipTop
-                            && drawX < clipRight
-                            && drawY < clipBottom;
-                        if (glyphVisible)
+                        const bool glyphVisible = glyph_fully_inside_clip(
+                            drawX,
+                            drawY,
+                            drawW,
+                            drawH,
+                            clipLeft,
+                            clipTop,
+                            clipRight,
+                            clipBottom);
+                        if (glyphVisible && glyph_rect_is_reasonable(drawW, drawH, scale))
                         {
                             draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
                         }
@@ -1468,7 +1737,7 @@ namespace epochnamespace::gui
                 }
 
                 const auto next = next_drawable_char(text, i);
-                penX += glyph_advance_with_kerning(static_cast<unsigned char>(ch), next, scale);
+                penX += glyph_advance_with_kerning(ch, next, scale);
                 if (penX > clipRight)
                     return;
             }
@@ -1505,6 +1774,37 @@ namespace epochnamespace::gui
             g_uploadedContexts.erase(ctxKey);
         }
 
+        static void store_top_layer_batch(Context* ctx) noexcept
+        {
+            if (!ctx)
+            {
+                g_frame.topLayerDraws.clear();
+                return;
+            }
+
+            std::scoped_lock lock(g_deferredBatchMutex);
+            auto& batch = g_topLayerDrawBatches[ctx];
+            if (g_frame.topLayerDraws.empty())
+            {
+                if (batch.draws && !batch.draws->empty())
+                {
+                    batch.draws = std::make_shared<std::vector<QueuedSpriteDraw>>();
+                    ++batch.generation;
+                }
+                return;
+            }
+
+            auto draws = std::make_shared<std::vector<QueuedSpriteDraw>>();
+            draws->swap(g_frame.topLayerDraws);
+            const std::size_t reserveCount = (std::max)(draws->size(), std::size_t{ 256 });
+            g_frame.topLayerDraws.reserve(reserveCount);
+            if (!batch.draws || !same_queued_draws(*batch.draws, *draws))
+            {
+                batch.draws = std::move(draws);
+                ++batch.generation;
+            }
+        }
+
         static void flush_queued_draws() noexcept
         {
             auto ctxShared = g_frame.ctxShared;
@@ -1512,8 +1812,11 @@ namespace epochnamespace::gui
             if (!ctxShared || !ctx)
             {
                 g_frame.queuedDraws.clear();
+                g_frame.topLayerDraws.clear();
                 return;
             }
+
+            store_top_layer_batch(ctx);
 
             if (uses_deferred_gui_batch(ctx))
             {
@@ -1623,6 +1926,7 @@ namespace epochnamespace::gui
         }
         std::scoped_lock lock(g_deferredBatchMutex);
         g_deferredDrawBatches.erase(ctx);
+        g_topLayerDrawBatches.erase(ctx);
         g_contextMouseDownStates.erase(ctx);
         g_contextActiveWidgets.erase(ctx);
         g_contextPressedButtonKeys.erase(ctx);
@@ -1638,6 +1942,13 @@ namespace epochnamespace::gui
         {
             if (it->first.starts_with(scrollPrefix))
                 it = g_scrollAreaStates.erase(it);
+            else
+                ++it;
+        }
+        for (auto it = g_selectBoxStates.begin(); it != g_selectBoxStates.end();)
+        {
+            if (it->first.starts_with(scrollPrefix))
+                it = g_selectBoxStates.erase(it);
             else
                 ++it;
         }
@@ -1666,6 +1977,30 @@ namespace epochnamespace::gui
             std::scoped_lock lock(g_deferredBatchMutex);
             const auto it = g_deferredDrawBatches.find(ctx);
             if (it == g_deferredDrawBatches.end())
+                return false;
+            draws = it->second.draws;
+        }
+
+        if (!draws || draws->empty())
+            return false;
+
+        auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+        std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
+        for (const auto& draw : *draws)
+            ctx->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
+        return true;
+    }
+
+    bool render_top_layer_batch(core::Context* ctx) noexcept
+    {
+        if (!ctx)
+            return false;
+
+        std::shared_ptr<std::vector<QueuedSpriteDraw>> draws;
+        {
+            std::scoped_lock lock(g_deferredBatchMutex);
+            const auto it = g_topLayerDrawBatches.find(ctx);
+            if (it == g_topLayerDrawBatches.end())
                 return false;
             draws = it->second.draws;
         }
@@ -1747,6 +2082,8 @@ namespace epochnamespace::gui
         g_frame.justPressed = (!prevMouseDown && currentMouseDown);
         g_frame.justReleased = (prevMouseDown && !currentMouseDown);
         g_frame.queuedDraws.clear();
+        g_frame.topLayerDraws.clear();
+        g_frame.topLayerDepth = 0;
 
         if (rawCtx)
         {
@@ -1768,6 +2105,7 @@ namespace epochnamespace::gui
         g_frame.justPressed = false;
         g_frame.justReleased = false;
         g_frame.mouseWheelDelta = 0;
+        g_frame.topLayerDepth = 0;
     }
 
     Vec2 mouse_position() noexcept
@@ -1876,6 +2214,17 @@ namespace epochnamespace::gui
         g_frame.contentMax = {};
         g_frame.windowKey.clear();
         g_frame.widgetSerial = 0;
+    }
+
+    void begin_top_layer() noexcept
+    {
+        ++g_frame.topLayerDepth;
+    }
+
+    void end_top_layer() noexcept
+    {
+        if (g_frame.topLayerDepth > 0)
+            --g_frame.topLayerDepth;
     }
 
     void begin_modal_window(const ModalWindowOptions& options) noexcept
@@ -2038,14 +2387,13 @@ namespace epochnamespace::gui
 
         const SpriteHandle background =
             selected ? palette.buttonActive
-            : pressed ? palette.buttonActive
             : hovered ? palette.buttonHover
             : palette.buttonNormal;
 
         draw_sprite(background, pos.x, pos.y, width, height);
         if (hovered || pressed || selected)
         {
-            const SpriteHandle accent = (pressed || selected)
+            const SpriteHandle accent = selected
                 ? palette.textFieldActive
                 : palette.buttonHover;
             draw_sprite(accent, pos.x, pos.y, width, 2.0f);
@@ -2106,8 +2454,7 @@ namespace epochnamespace::gui
         const auto& palette = active_palette();
 
         const SpriteHandle background =
-            pressed ? palette.buttonActive
-            : hovered ? palette.buttonHover
+            hovered ? palette.buttonHover
             : palette.buttonNormal;
 
         draw_sprite(background, pos.x, pos.y, width, height);
@@ -2346,9 +2693,6 @@ namespace epochnamespace::gui
             }
         }
 
-        if (g_frame.justReleased && !hovered && activeWidget == id)
-            activeWidget = nullptr;
-
         if (ctxKey)
             g_contextActiveWidgets[ctxKey] = activeWidget;
 
@@ -2375,30 +2719,33 @@ namespace epochnamespace::gui
                 switch (evt.type)
                 {
                 case EventType::TextInput:
-                    for (char ch : evt.text)
-                    {
-                        if (ch == '\r') continue;
-
-                        if (ch == '\n')
-                        {
-                            if (multiline)
-                            {
-                                if (text.size() < limit) { text.push_back('\n'); result.changed = true; }
-                            }
-                            else
-                            {
-                                result.submitted = true;
-                            }
-                            continue;
-                        }
-
-                        if (static_cast<unsigned char>(ch) < 32) continue;
-                        if (text.size() < limit) { text.push_back(ch); result.changed = true; }
-                    }
+                    append_text_limited(text, evt.text, limit, multiline, result.changed);
                     break;
 
                 case EventType::KeyDown:
-                    if (evt.key == 8 || evt.key == 127) // backspace/del-ish
+                    if (evt.ctrl_down && (evt.key == 'C' || evt.key == 'c'))
+                    {
+                        clipboard_write_text(text);
+                    }
+                    else if (evt.ctrl_down && (evt.key == 'X' || evt.key == 'x'))
+                    {
+                        clipboard_write_text(text);
+                        if (!text.empty())
+                        {
+                            text.clear();
+                            result.changed = true;
+                        }
+                    }
+                    else if (evt.ctrl_down && (evt.key == 'V' || evt.key == 'v'))
+                    {
+                        append_text_limited(text, clipboard_read_text(), limit, multiline, result.changed);
+                    }
+                    else if (evt.ctrl_down && (evt.key == 'A' || evt.key == 'a'))
+                    {
+                        // Selection ranges are a follow-up; copy/cut operate on the whole focused field for now.
+                        clipboard_write_text(text);
+                    }
+                    else if (evt.key == 8 || evt.key == 127) // backspace/del-ish
                     {
                         if (!text.empty()) { text.pop_back(); result.changed = true; }
                     }
@@ -2485,7 +2832,82 @@ namespace epochnamespace::gui
         float height,
         float gap) noexcept
     {
-        return segmented_button_row(tabs, height, gap);
+        if (!g_frame.insideWindow || !g_frame.ctx || tabs.empty())
+            return std::nullopt;
+
+        const Vec2 rowStart = g_frame.cursor;
+        const auto& palette = active_palette();
+        std::optional<std::size_t> clicked{};
+        float x = rowStart.x;
+        float totalWidth = 0.0f;
+
+        for (const auto& tab : tabs)
+            totalWidth += (std::max)(1.0f, tab.width) + gap;
+        totalWidth = (std::max)(0.0f, totalWidth - gap);
+
+        const float h = (std::max)(height, base_line_height(kFontScale) + 2.0f * kBoxInnerPadding);
+        draw_sprite(palette.titleBar,
+            rowStart.x,
+            rowStart.y + h - 2.0f,
+            totalWidth,
+            2.0f);
+
+        for (std::size_t i = 0; i < tabs.size(); ++i)
+        {
+            const auto& tab = tabs[i];
+            const float width = (std::max)(1.0f, tab.width);
+            const bool hovered = point_in_rect(g_frame.mousePos, x, rowStart.y, width, h)
+                && point_in_active_clip(g_frame.mousePos);
+            const std::size_t pressKey = widget_press_key(tab.label, { x, rowStart.y }, { width, h });
+            auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+            if (hovered && g_frame.justPressed)
+                pressedKey = pressKey;
+
+            const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+            if (g_frame.justReleased && hovered && pressedKey == pressKey)
+                clicked = i;
+            if (g_frame.justReleased && pressedKey == pressKey)
+                pressedKey = 0;
+
+            const SpriteHandle background =
+                tab.active ? palette.panelBackground
+                : hovered ? palette.buttonHover
+                : palette.buttonNormal;
+            draw_sprite(background, x, rowStart.y, width, h);
+            draw_sprite(tab.active ? palette.textFieldActive : palette.titleBar, x, rowStart.y, width, tab.active ? 3.0f : 1.0f);
+            draw_sprite(palette.titleBar, x, rowStart.y, 1.0f, h);
+            draw_sprite(palette.titleBar, x + width - 1.0f, rowStart.y, 1.0f, h);
+
+            if (tab.active)
+            {
+                draw_sprite(palette.panelBackground, x, rowStart.y + h - 2.0f, width, 3.0f);
+                draw_sprite(palette.textFieldActive, x, rowStart.y + h - 3.0f, width, 2.0f);
+            }
+
+            const std::string fittedLabel = fit_text_to_width(
+                tab.label,
+                (std::max)(1.0f, width - 2.0f * kContentPadding - 2.0f),
+                kFontScale);
+            const std::string_view displayLabel = fittedLabel.empty()
+                ? tab.label
+                : std::string_view{ fittedLabel };
+            const float textWidth = measure_text_width(displayLabel, kFontScale) + 2.0f;
+            const float textHeight = base_line_height(kFontScale);
+            const float minTextX = x + kContentPadding + kButtonTextClipInset;
+            const float maxTextX = x + width - kContentPadding - textWidth;
+            const float centeredTextX = x + (std::max)(0.0f, (width - textWidth) * 0.5f);
+            const float textX = maxTextX > minTextX
+                ? (std::clamp)(centeredTextX, minTextX, maxTextX)
+                : minTextX;
+            const float textY = rowStart.y + std::floor((std::max)(0.0f, (h - textHeight) * 0.5f)) + 1.0f;
+            draw_text_line(displayLabel, textX, textY, kFontScale);
+
+            x += width + gap;
+        }
+
+        set_cursor(rowStart);
+        advance_cursor({ 0.0f, h + kContentPadding });
+        return clicked;
     }
 
     std::optional<std::size_t> inline_button_row(
@@ -2512,6 +2934,119 @@ namespace epochnamespace::gui
         set_cursor(rowStart);
         advance_cursor({ 0.0f, (std::max)(1.0f, height) + kContentPadding });
         return clicked;
+    }
+
+    SelectBoxResult select_box(const SelectBoxOptions& options) noexcept
+    {
+        SelectBoxResult result{};
+        if (!g_frame.insideWindow || !g_frame.ctx)
+            return result;
+
+        ensure_resources();
+
+        const Vec2 start = g_frame.cursor;
+        const float availableWidth = content_available_width(start.x);
+        const float width = options.size.x > 0.0f
+            ? (std::max)(96.0f, options.size.x)
+            : availableWidth;
+        const float rowHeight = (std::max)(22.0f, options.row_height);
+        const float closedHeight = options.size.y > 0.0f
+            ? (std::max)(rowHeight, options.size.y)
+            : rowHeight;
+        const std::string key = widget_state_key(
+            options.id.empty() ? std::string_view{ "__select_box" } : options.id);
+        auto& state = g_selectBoxStates[key];
+
+        std::string selectedLabel = options.selected.empty()
+            ? std::string(options.placeholder)
+            : std::string(options.selected);
+        selectedLabel += state.open ? "  ^" : "  v";
+
+        if (button(selectedLabel, { width, closedHeight }))
+        {
+            const bool nextOpen = !state.open;
+            for (auto& [otherKey, otherState] : g_selectBoxStates)
+            {
+                (void)otherKey;
+                otherState.open = false;
+            }
+            state.open = nextOpen;
+        }
+
+        result.opened = state.open;
+        if (!state.open || options.options.empty())
+            return result;
+
+        const std::size_t visibleCount = (std::max)(
+            std::size_t{ 1 },
+            (std::min)(options.options.size(), options.max_visible_options == 0
+                ? options.options.size()
+                : options.max_visible_options));
+        const float listHeight = (std::max)(rowHeight, static_cast<float>(visibleCount) * rowHeight + 2.0f);
+        const float contentHeight = static_cast<float>(options.options.size()) * (rowHeight + 2.0f);
+        const std::string listId = key + "-list";
+
+        (void)begin_scroll_area(ScrollAreaOptions{
+            .id = listId,
+            .size = { width, listHeight },
+            .content_height = contentHeight,
+            .draw_background = true,
+            .show_scrollbar = options.options.size() > visibleCount
+        });
+
+        const auto& palette = active_palette();
+        const float itemWidth = (std::max)(64.0f, width - 14.0f);
+        for (std::size_t i = 0; i < options.options.size(); ++i)
+        {
+            const Vec2 optionPos = g_frame.cursor;
+            const bool active = options.options[i] == options.selected;
+            const bool hovered = point_in_rect(g_frame.mousePos, optionPos.x, optionPos.y, itemWidth, rowHeight)
+                && point_in_active_clip(g_frame.mousePos);
+            const std::size_t pressKey = widget_press_key(options.options[i], optionPos, { itemWidth, rowHeight });
+            auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+            if (hovered && g_frame.justPressed)
+                pressedKey = pressKey;
+
+            const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+            const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
+            if (g_frame.justReleased && pressedKey == pressKey)
+                pressedKey = 0;
+
+            const SpriteHandle background =
+                active ? palette.buttonActive
+                : hovered ? palette.buttonHover
+                : palette.buttonNormal;
+            draw_sprite(background, optionPos.x, optionPos.y, itemWidth, rowHeight);
+            if (active || hovered || pressed)
+            {
+                const SpriteHandle accent = active ? palette.textFieldActive : palette.buttonHover;
+                draw_sprite(accent, optionPos.x, optionPos.y, 2.0f, rowHeight);
+                draw_sprite(accent, optionPos.x, optionPos.y, itemWidth, 2.0f);
+            }
+
+            const std::string fitted = fit_text_to_width(
+                options.options[i],
+                (std::max)(1.0f, itemWidth - 20.0f),
+                kFontScale);
+            const std::string_view displayLabel = fitted.empty()
+                ? std::string_view{ options.options[i] }
+                : std::string_view{ fitted };
+            const float textY = optionPos.y + std::floor((std::max)(0.0f, (rowHeight - base_line_height(kFontScale)) * 0.5f)) + 1.0f;
+            draw_text_line(displayLabel, optionPos.x + kContentPadding, textY, kFontScale);
+
+            g_frame.lastButtonBounds = WidgetBounds{ .position = optionPos, .size = { itemWidth, rowHeight } };
+            advance_cursor({ 0.0f, rowHeight + 2.0f });
+
+            if (clicked)
+            {
+                result.changed = true;
+                result.selected_index = i;
+                state.open = false;
+            }
+        }
+
+        end_scroll_area();
+        return result;
     }
 
     void text_box(std::string_view text, Vec2 size) noexcept
@@ -2563,6 +3098,9 @@ namespace epochnamespace::gui
         ensure_resources();
 
         const Vec2 pos = g_frame.cursor;
+        if (!std::isfinite(pos.x) || !std::isfinite(pos.y))
+            return result;
+
         const float availableWidth = content_available_width(pos.x);
         const float width = options.size.x > 0.0f
             ? (std::max)(48.0f, options.size.x)
@@ -2570,21 +3108,32 @@ namespace epochnamespace::gui
         const float height = options.size.y > 0.0f
             ? (std::max)(48.0f, options.size.y)
             : 180.0f;
+        if (!std::isfinite(width) || !std::isfinite(height) || width <= 0.0f || height <= 0.0f)
+            return result;
 
         const std::string id = options.id.empty()
             ? std::to_string(reinterpret_cast<std::uintptr_t>(g_frame.ctx)) + ":scroll-area"
             : std::string(options.id);
         auto& state = g_scrollAreaStates[scroll_panel_key(id)];
 
-        const float estimatedContentHeight = (std::max)(
+        float estimatedContentHeight = (std::max)(
             height,
             options.content_height > 0.0f ? options.content_height : state.contentHeight);
+        if (!std::isfinite(estimatedContentHeight))
+        {
+            state.contentHeight = height;
+            estimatedContentHeight = height;
+        }
         const float maxScroll = (std::max)(0.0f, estimatedContentHeight - height);
+        if (!std::isfinite(state.scrollY))
+            state.scrollY = 0.0f;
         state.scrollY = (std::clamp)(state.scrollY, 0.0f, maxScroll);
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
             && point_in_active_clip(g_frame.mousePos);
-        if (hovered && g_frame.mouseWheelDelta != 0)
+        const bool selectList = is_select_box_list_id(id);
+        const bool selectBoxCapturesWheel = any_select_box_open() && !selectList;
+        if (hovered && g_frame.mouseWheelDelta != 0 && !selectBoxCapturesWheel)
         {
             const float wheelSteps = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
             const float step = line_advance_amount(kFontScale) * 3.0f;
@@ -2674,8 +3223,12 @@ namespace epochnamespace::gui
         const float drawnContentHeight = (std::max)(
             frame.viewportHeight,
             (g_frame.cursor.y + frame.scrollY) - frame.viewportMin.y);
-        state.contentHeight = drawnContentHeight;
+        state.contentHeight = std::isfinite(drawnContentHeight)
+            ? drawnContentHeight
+            : frame.viewportHeight;
         const float maxScroll = (std::max)(0.0f, state.contentHeight - frame.viewportHeight);
+        if (!std::isfinite(state.scrollY))
+            state.scrollY = 0.0f;
         state.scrollY = (std::clamp)(state.scrollY, 0.0f, maxScroll);
 
         g_frame.contentMin = frame.previousMin;
@@ -2694,7 +3247,9 @@ namespace epochnamespace::gui
             draw_sprite(palette.textField, trackX, trackY, scrollbarWidth, frame.viewportHeight);
 
             const float visibleRatio = frame.viewportHeight / state.contentHeight;
-            const float thumbHeight = (std::max)(18.0f, frame.viewportHeight * visibleRatio);
+            const float thumbHeight = (std::min)(
+                frame.viewportHeight,
+                (std::max)(18.0f, frame.viewportHeight * visibleRatio));
             const float scrollRatio = maxScroll > 0.0f ? state.scrollY / maxScroll : 0.0f;
             const float thumbY = trackY + (frame.viewportHeight - thumbHeight) * scrollRatio;
             draw_sprite(palette.buttonActive, trackX, thumbY, scrollbarWidth, thumbHeight);

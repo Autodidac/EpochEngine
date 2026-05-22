@@ -45,6 +45,8 @@ import spritehandle;
 
 namespace epochnamespace::gui
 {
+    // Engine-internal GUI library API. Editor domains compose these primitives;
+    // generic widget, layout, theme, and clipping behavior belongs here first.
     export struct Vec2
     {
         float x{};
@@ -86,6 +88,9 @@ namespace epochnamespace::gui
         Vec2 mouse_pos{};
         int wheel_delta{};
         int key{};
+        bool ctrl_down{};
+        bool shift_down{};
+        bool alt_down{};
         std::string text{};
     };
 
@@ -181,11 +186,30 @@ namespace epochnamespace::gui
         float width{};
     };
 
+    export struct SelectBoxOptions
+    {
+        std::string_view id{};
+        std::string_view placeholder{ "Select..." };
+        std::string_view selected{};
+        std::span<const std::string_view> options{};
+        Vec2 size{};
+        float row_height{ 28.0f };
+        std::size_t max_visible_options{ 8 };
+    };
+
+    export struct SelectBoxResult
+    {
+        bool opened{};
+        bool changed{};
+        std::optional<std::size_t> selected_index{};
+    };
+
     export void push_input(const InputEvent& e) noexcept;
     export void push_input_for_context(const core::Context* ctx, const InputEvent& e) noexcept;
     export int consume_mouse_wheel_delta() noexcept;
     export void cleanup_context(const core::Context* ctx) noexcept;
     export bool render_deferred_batch(core::Context* ctx) noexcept;
+    export bool render_top_layer_batch(core::Context* ctx) noexcept;
     export std::uint64_t deferred_batch_generation(const core::Context* ctx) noexcept;
 
     export void begin_frame(const std::shared_ptr<core::Context>& ctx,
@@ -202,6 +226,8 @@ namespace epochnamespace::gui
     export void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background) noexcept;
     export void end_window() noexcept;
+    export void begin_top_layer() noexcept;
+    export void end_top_layer() noexcept;
     export void begin_modal_window(const ModalWindowOptions& options) noexcept;
     export void end_modal_window() noexcept;
     export WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept;
@@ -232,6 +258,7 @@ namespace epochnamespace::gui
         std::span<const InlineButtonSpec> items,
         float height = 24.0f,
         float gap = 6.0f) noexcept;
+    export SelectBoxResult select_box(const SelectBoxOptions& options) noexcept;
 
     export EditBoxResult edit_box(std::string& text,
         Vec2 size,
@@ -257,4 +284,3 @@ namespace epochnamespace::gui
 
     export std::optional<WidgetBounds> last_button_bounds() noexcept;
 }
-

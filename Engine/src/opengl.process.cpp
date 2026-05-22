@@ -12,6 +12,7 @@ module opengl.context;
 import core.context;
 import context.commandqueue;
 import context.multiplexer;
+import engine.gui;
 
 namespace epochnamespace::openglcontext
 {
@@ -38,11 +39,14 @@ namespace epochnamespace::openglcontext
             }
         } scoped{ previousContext };
 
-        const bool overlayPriority = ctx->gui_overlay_priority();
-        if (!overlayPriority)
-            (void)queue.drain();
+        // Stable OpenGL editor draw contract:
+        // GUI commands are drained before the scene preview and again after it.
+        // Do not special-case command menus, modals, or "overlay priority" here
+        // without a dedicated draw-model change and manual flicker/z-order proof.
+        (void)queue.drain();
         openglbridge::render_scene_preview(ctx, framebufferWidth, framebufferHeight);
         (void)queue.drain();
+        (void)gui::render_top_layer_batch(ctx.get());
         openglbridge::capture_frame_if_requested(framebufferWidth, framebufferHeight, windowId);
     }
 

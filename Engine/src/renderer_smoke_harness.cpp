@@ -31,16 +31,18 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iomanip>
-#include <iostream>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -50,9 +52,39 @@
 #    include <windows.h>
 #endif
 
+extern "C" void core_log_write(std::uint32_t lvl, const char* tag_utf8, const char* msg_utf8);
+
 namespace
 {
     using Clock = std::chrono::system_clock;
+
+    constexpr std::uint32_t kLogInfo = 1u;
+    constexpr std::uint32_t kLogError = 3u;
+    constexpr const char* kLogTag = "Epoch.RendererSmoke";
+
+    void LogInfo(std::string_view message)
+    {
+        const std::string text{ message };
+        core_log_write(kLogInfo, kLogTag, text.c_str());
+    }
+
+    void LogError(std::string_view message)
+    {
+        const std::string text{ message };
+        core_log_write(kLogError, kLogTag, text.c_str());
+    }
+
+    template <typename... Args>
+    void LogInfo(std::format_string<Args...> fmt, Args&&... args)
+    {
+        LogInfo(std::format(fmt, std::forward<Args>(args)...));
+    }
+
+    template <typename... Args>
+    void LogError(std::format_string<Args...> fmt, Args&&... args)
+    {
+        LogError(std::format(fmt, std::forward<Args>(args)...));
+    }
 
     struct HarnessOptions
     {
@@ -61,6 +93,7 @@ namespace
         std::optional<std::string> mode_filter{};
         bool capture = false;
         bool legacy_only = false;
+        bool show_help = false;
         int timeout_seconds = 45;
         std::filesystem::path output_root = "Logs/smoke";
     };
@@ -162,7 +195,7 @@ namespace
                 {
                     if (i + 1 >= argc)
                     {
-                        std::cerr << "Missing value for " << name << '\n';
+                        LogError("Missing value for {}", name);
                         return {};
                     }
                     return std::string(argv[++i]);
@@ -208,15 +241,16 @@ namespace
             }
             else if (arg == "--help" || arg == "-h")
             {
-                std::cout
-                    << "Renderer smoke harness\n"
-                    << "  --binary <path>      Engine binary path (default: ./epoch or epoch.exe)\n"
-                    << "  --backend <name>     Limit to one backend\n"
-                    << "  --mode <name>        Limit to one mode (parented|standalone)\n"
-                    << "  --capture            Forward capture hint to runtime\n"
-                    << "  --legacy-only        Skip epoch-native mirror runs\n"
-                    << "  --timeout <seconds>  Per-scenario timeout (default 45)\n"
-                    << "  --out <path>         Output root for logs/manifests\n";
+                options.show_help = true;
+                LogInfo(
+                    "Renderer smoke harness\n"
+                    "  --binary <path>      Engine binary path (default: ./epoch or epoch.exe)\n"
+                    "  --backend <name>     Limit to one backend\n"
+                    "  --mode <name>        Limit to one mode (parented|standalone)\n"
+                    "  --capture            Forward capture hint to runtime\n"
+                    "  --legacy-only        Skip epoch-native mirror runs\n"
+                    "  --timeout <seconds>  Per-scenario timeout (default 45)\n"
+                    "  --out <path>         Output root for logs/manifests");
             }
         }
 
@@ -420,17 +454,20 @@ namespace
 int main(int argc, char** argv)
 {
     const HarnessOptions options = parse_args(argc, argv);
+    if (options.show_help)
+        return 0;
+
     const auto scenarios = build_matrix(options);
 
     if (scenarios.empty())
     {
-        std::cerr << "[Harness] No scenarios selected.\n";
+        LogError("No scenarios selected.");
         return 2;
     }
 
     if (!std::filesystem::exists(options.binary_path))
     {
-        std::cerr << "[Harness] Binary not found: " << options.binary_path << '\n';
+        LogError("Binary not found: {}", options.binary_path.string());
         return 2;
     }
 
@@ -438,17 +475,18 @@ int main(int argc, char** argv)
     std::vector<ScenarioResult> results;
     results.reserve(scenarios.size());
 
-    std::cout << "[Harness] Running " << scenarios.size() << " scenarios\n";
+    LogInfo("Running {} scenarios", scenarios.size());
 
     int index = 0;
     for (const Scenario& scenario : scenarios)
     {
         ++index;
-        std::cout
-            << "[Harness] (" << index << '/' << scenarios.size() << ") "
-            << scenario.runtime << " "
-            << scenario.backend << " "
-            << scenario.mode << '\n';
+        LogInfo("({}/{}) {} {} {}",
+            index,
+            scenarios.size(),
+            scenario.runtime,
+            scenario.backend,
+            scenario.mode);
 
         results.push_back(run_scenario(options, scenario, stamp, index));
     }
@@ -459,25 +497,23 @@ int main(int argc, char** argv)
         if (!result.passed)
             ++failures;
 
-        std::cout
-            << "[Harness] "
-            << (result.passed ? "PASS" : "FAIL")
-            << " runtime=" << result.scenario.runtime
-            << " backend=" << result.scenario.backend
-            << " mode=" << result.scenario.mode
-            << " exit=" << result.exit_code
-            << (result.timed_out ? " timeout" : "")
-            << " log=" << result.log_path.generic_string()
-            << '\n';
+        LogInfo("{} runtime={} backend={} mode={} exit={}{} log={}",
+            result.passed ? "PASS" : "FAIL",
+            result.scenario.runtime,
+            result.scenario.backend,
+            result.scenario.mode,
+            result.exit_code,
+            result.timed_out ? " timeout" : "",
+            result.log_path.generic_string());
     }
 
     if (failures > 0)
     {
-        std::cout << "[Harness] Completed with " << failures << " failures.\n";
+        LogError("Completed with {} failures.", failures);
         return 1;
     }
 
-    std::cout << "[Harness] All scenarios passed.\n";
+    LogInfo("All scenarios passed.");
     return 0;
 }
 

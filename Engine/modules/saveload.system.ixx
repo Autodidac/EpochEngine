@@ -112,7 +112,7 @@ export module saveload.system;
 //        static void SaveGame(const std::string& filename, const std::vector<epochnamespace::events::Event>& events) {
 //           std::ofstream ofs(filename, std::ios::binary);  
 //           if (!ofs) {  
-//               std::cerr << "Error opening file for saving!" << std::endl;  
+//               Route save failures through core.logger before exposing them to editor evidence panels.
 //               return;  
 //           }  
 //
@@ -138,7 +138,7 @@ export module saveload.system;
 //        static void LoadGame(const std::string& filename, std::vector<epochnamespace::events::Event>& events) {
 //            std::ifstream ifs(filename, std::ios::binary);
 //            if (!ifs) {
-//                std::cerr << "Error opening file for loading!" << std::endl;
+//                Route load failures through core.logger before exposing them to editor evidence panels.
 //                return;
 //            }
 //

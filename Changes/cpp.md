@@ -29,8 +29,9 @@ After that, you are in the named module.
 ```cpp
 module;
 
-#define EPOCH_SOME_PLATFORM_SWITCH 1
-#include <windows.h>
+#if defined(_WIN32)
+#include "framework.hpp"
+#endif
 #include <string>
 
 export module epoch.example;
@@ -39,7 +40,7 @@ import engine.platform;
 
 export namespace epoch::example
 {
-    export constexpr bool some_platform_switch = EPOCH_SOME_PLATFORM_SWITCH != 0;
+    export constexpr bool some_platform_switch = true;
 }
 ```
 
@@ -180,6 +181,32 @@ Prefer:
 - classic standard headers in the global fragment for mixed/platform-heavy units
 - `import std;` only in genuinely clean module units
 
+## Output and logging policy
+
+Epoch is a C++23 engine, so new code must not fall back to iostream-style
+diagnostic output.
+
+Use:
+- `core.logger` for engine, editor, runtime, backend, AI, capture, updater, and
+  project-generation code paths
+- visible editor/evidence surfaces for operator-facing workflow status
+- `core_log_write` / `core.log` for engine-branded smoke tools or lightweight
+  validation binaries that cannot import the full logger facade
+
+Avoid:
+- `std::cout` / `std::cerr` in new C++ code
+- C `printf` / `fprintf` / `puts` style output in new C++ code
+- direct `std::print` / `std::println` in Epoch-branded runtime, editor, smoke,
+  backend, AI, capture, updater, or project-generation code
+- ad hoc console diagnostics where an engine logger category or evidence panel
+  should own the message
+
+The logger implementation itself may use C++23 print facilities or platform/file
+sinks internally. That keeps console/file output centralized while preserving
+logger ownership for the rest of the engine. Non-engine helper utilities may use
+`<print>` directly only when they are deliberately outside Epoch runtime/tooling
+ownership.
+
 ## Good Epoch pattern
 
 Use:
@@ -193,6 +220,9 @@ Avoid:
 - mixing heavy SDK includes into the named module body
 - assuming `import std;` will save a unit that already depends on textual setup
 - assuming header-only behavior survives unchanged after crossing a module boundary
+- hand-rolling new Win32 macro/include blocks in unrelated source files when
+  Epoch already has an audited platform wrapper or backend-local owner for that
+  SDK surface
 
 ## Snapshot summary
 

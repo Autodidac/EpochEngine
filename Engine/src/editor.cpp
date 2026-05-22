@@ -51,6 +51,7 @@ module;
 #include <format>
 #include <fstream>
 #include <future>
+#include <initializer_list>
 #include <iterator>
 #include <mutex>
 #include <optional>
@@ -154,6 +155,81 @@ namespace epochnamespace
             return true;
         }
 
+        [[nodiscard]] static std::string normalize_editor_text_for_gui(std::string_view text)
+        {
+            std::string out{};
+            out.reserve(text.size());
+
+            for (std::size_t i = 0; i < text.size(); ++i)
+            {
+                const auto ch = static_cast<unsigned char>(text[i]);
+                if (ch == '\r')
+                    continue;
+                if (ch == '\n' || ch == '\t')
+                {
+                    out.push_back(static_cast<char>(ch));
+                    continue;
+                }
+                if (ch >= 32u && ch < 127u)
+                {
+                    out.push_back(static_cast<char>(ch));
+                    continue;
+                }
+
+                auto has = [&](std::initializer_list<unsigned char> bytes) noexcept {
+                    if (i + bytes.size() > text.size())
+                        return false;
+                    std::size_t offset = 0;
+                    for (const unsigned char expected : bytes)
+                    {
+                        if (static_cast<unsigned char>(text[i + offset]) != expected)
+                            return false;
+                        ++offset;
+                    }
+                    return true;
+                };
+
+                if (has({ 0xC2u, 0xA0u }))
+                {
+                    out.push_back(' ');
+                    i += 1;
+                }
+                else if (has({ 0xE2u, 0x80u, 0x93u }) || has({ 0xE2u, 0x80u, 0x94u }) || has({ 0xE2u, 0x88u, 0x92u }))
+                {
+                    out.push_back('-');
+                    i += 2;
+                }
+                else if (has({ 0xE2u, 0x80u, 0x98u }) || has({ 0xE2u, 0x80u, 0x99u }))
+                {
+                    out.push_back('\'');
+                    i += 2;
+                }
+                else if (has({ 0xE2u, 0x80u, 0x9Cu }) || has({ 0xE2u, 0x80u, 0x9Du }))
+                {
+                    out.push_back('"');
+                    i += 2;
+                }
+                else if (has({ 0xE2u, 0x80u, 0xA6u }))
+                {
+                    out += "...";
+                    i += 2;
+                }
+                else if (has({ 0xE2u, 0x86u, 0x92u }))
+                {
+                    out += "->";
+                    i += 2;
+                }
+                else
+                {
+                    out.push_back(' ');
+                    while (i + 1 < text.size() && (static_cast<unsigned char>(text[i + 1]) & 0xC0u) == 0x80u)
+                        ++i;
+                }
+            }
+
+            return out;
+        }
+
         struct AiChat
         {
             static constexpr std::size_t kMaxLines = 200;
@@ -164,7 +240,7 @@ namespace epochnamespace
 
             AiChat()
             {
-                lines.emplace_back("bot> Ready. No AI model selected yet. Open AI Sandbox or Window > Open AI Control Surface, scan local models, then choose one.");
+                lines.emplace_back("bot> Ready. Select a local model in Engine AI or Window > AI Control.");
                 trim_lines();
             }
 
@@ -180,7 +256,7 @@ namespace epochnamespace
 
                 try
                 {
-                    std::string reply = pending->get();
+                    std::string reply = normalize_editor_text_for_gui(pending->get());
                     if (reply.empty()) reply = "(empty reply)";
                     lines.emplace_back("bot> " + reply);
                     if (!pendingPrompt.empty() && reply != "(empty reply)")
@@ -200,6 +276,7 @@ namespace epochnamespace
 
             void submit(std::string text)
             {
+                text = normalize_editor_text_for_gui(text);
                 if (text.empty() || is_ws_only(text)) return;
 
                 if (pending)
@@ -356,6 +433,7 @@ namespace epochnamespace
             std::string detachedPanelHostStatus{ "Docked panels active. Borderless popout routing is disabled while the editor layout is stabilized." };
             bool projectNotesVisible{ false };
             bool showAboutModal{ false };
+            bool showSettingsModal{ false };
             bool showPackageManagerModal{ false };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
@@ -367,7 +445,7 @@ namespace epochnamespace
             bool aiContinuousBuildStageOnNextFrame{ false };
             std::optional<std::future<EditorProjectBuildResult>> aiContinuousBuildPending{};
             std::string aiContinuousBuildFingerprint{};
-            std::string aiContinuousBuildStatus{ "Self-iteration watcher is off." };
+            std::string aiContinuousBuildStatus{ "Evidence watcher is off." };
             std::size_t aiContinuousBuildRunCount{ 0 };
             std::string aiToolHarnessStatus{ "AI tool harness has not run yet." };
             std::size_t aiToolHarnessRunCount{ 0 };
@@ -2094,7 +2172,7 @@ namespace epochnamespace
             std::string text = buffer.str();
             if (text.empty())
                 return "Project notes file exists but is empty.";
-            return text;
+            return normalize_editor_text_for_gui(text);
         }
 
         [[nodiscard]] std::string tail_text(std::string text, std::size_t maxChars)
@@ -2631,7 +2709,7 @@ namespace epochnamespace
                 editor,
                 "Create Project Script Stub",
                 std::string("Created ") + scriptId + ".ascript.cpp.",
-                "Select Build Selected Script, then use the centered Run button while the Scripts workspace is active. The script logs proof text and rotates scene entities through the host API.");
+                "Use Build Selected Script to validate the script asset. The centered Run button remains reserved for the active generated project shell.");
         }
 
         [[nodiscard]] std::string build_ai_project_output_review_prompt(
@@ -3011,17 +3089,28 @@ namespace epochnamespace
                 return;
             }
 
+            std::vector<std::string_view> modelViews;
+            modelViews.reserve(detectedModels.size());
             for (const auto& modelId : detectedModels)
+                modelViews.emplace_back(modelId);
+
+            const std::string selectedModel = epoch::ai::active_model_name();
+            const auto selectResult = gui::select_box(gui::SelectBoxOptions{
+                .id = "engine-ai-local-model-select",
+                .placeholder = "Choose local chat model",
+                .selected = selectedModel.empty() ? std::string_view{} : std::string_view{ selectedModel },
+                .options = modelViews,
+                .size = { contentWidth, 30.0f },
+                .row_height = 30.0f,
+                .max_visible_options = 7
+            });
+            if (selectResult.changed && selectResult.selected_index && *selectResult.selected_index < detectedModels.size())
             {
-                const bool selected = modelId == epoch::ai::active_model_name();
-                const std::string buttonLabel = (selected ? std::string("Selected Chat Model: ") : std::string("Use Chat Model: ")) + modelId;
-                if (gui::button(buttonLabel, { contentWidth, 30.0f }))
-                {
-                    if (epoch::ai::select_active_model(modelId))
-                        push_editor_log(editor, "[ai] Selected local model: " + modelId);
-                    else
-                        push_editor_log(editor, "[ai] Could not select model: " + modelId);
-                }
+                const auto& modelId = detectedModels[*selectResult.selected_index];
+                if (epoch::ai::select_active_model(modelId))
+                    push_editor_log(editor, "[ai] Selected local model: " + modelId);
+                else
+                    push_editor_log(editor, "[ai] Could not select model: " + modelId);
             }
         }
 
@@ -3161,6 +3250,7 @@ namespace epochnamespace
 
         it->second.openMenu = TopMenu::None;
         it->second.showAboutModal = false;
+        it->second.showSettingsModal = false;
         it->second.showPackageManagerModal = false;
         it->second.showUpdateConfirmModal = false;
         it->second.showSourceUpdateConfirmModal = false;
@@ -3413,14 +3503,13 @@ namespace epochnamespace
             {
                 if (selectedScriptAsset)
                     editor.activeScript = script_id_from_source_path(std::filesystem::path{ editor.selectedAssetPath });
-                emit_command(EditorCommand::RunScript, editor.activeScript);
-                push_editor_log(editor, std::string("[script] Run requested for '") + editor.activeScript + "'.");
+                editor.scriptBuildStatus = "Selected script assets build through Build Selected Script; Run builds and launches the active project.";
+                push_editor_log(editor, "[script] Center Run kept on active project. Use Build Selected Script for script asset validation.");
                 append_project_note(
                     editor,
-                    "Run Script",
-                    std::string("Run requested for ") + editor.activeScript + ".",
-                    "Watch the Output workspace for script-host results and editor-visible changes.");
-                return;
+                    "Script Run Routed To Project",
+                    std::string("Script asset selected: ") + editor.activeScript + ".",
+                    "Run remains project-owned so script assets cannot crash the project run path by accident.");
             }
 
             repair_active_project_evidence(editor);
@@ -3703,9 +3792,11 @@ namespace epochnamespace
             if (editor.openMenu != menu)
                 return;
             const auto pos = dropdown_position_for(menu);
+            gui::begin_top_layer();
             gui::begin_window(title, pos, size);
             body(gui::cursor_position());
             gui::end_window();
+            gui::end_top_layer();
         };
 
         const gui::Vec2 mouse = gui::mouse_position();
@@ -3994,24 +4085,24 @@ namespace epochnamespace
 
             if (inspectorSandboxControls)
             {
-                if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Self-Iteration Watcher" : "Enable Self-Iteration Watcher", { inspectorWidth, 30.0f }))
+                if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Evidence Watcher" : "Arm Evidence Watcher", { inspectorWidth, 30.0f }))
                 {
                     if (!editor.aiContinuousBuildEnabled)
                         repair_self_iteration_sandbox_evidence(editor);
                     editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
                     editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
-                        ? "Self-iteration watcher enabled; watching project/script evidence."
-                        : "Self-iteration watcher paused.";
+                        ? "Evidence watcher armed; queue build passes manually."
+                        : "Evidence watcher paused.";
                     if (editor.aiContinuousBuildEnabled)
                         editor.aiContinuousBuildFingerprint.clear();
                     push_editor_log(editor, editor.aiContinuousBuildEnabled
-                        ? "[ai-build] Self-iteration watcher enabled."
-                        : "[ai-build] Self-iteration watcher paused.");
+                        ? "[ai-build] Evidence watcher armed."
+                        : "[ai-build] Evidence watcher paused.");
                     append_project_note(
                         editor,
-                        editor.aiContinuousBuildEnabled ? "Self-Iteration Watcher Enabled" : "Self-Iteration Watcher Paused",
+                        editor.aiContinuousBuildEnabled ? "Evidence Watcher Armed" : "Evidence Watcher Paused",
                         editor.aiContinuousBuildStatus,
-                        "The watcher only stages evidence packets; it does not write repo changes blindly.");
+                        "The watcher observes evidence and never starts an automatic build; promotion remains human-gated.");
                 }
 
                 if (gui::button("Queue Sandbox Build Pass", { inspectorWidth, 30.0f }))
@@ -4395,7 +4486,7 @@ namespace epochnamespace
                 if (const auto* activeScript = active_script_profile(editor))
                 {
                     gui::property_row("[script asset] Build", activeScript->build_action, 120.0f);
-                    gui::property_row("[script asset] Run", "Centered Run button", 120.0f);
+                    gui::property_row("[script asset] Run", "active project only", 120.0f);
                     gui::property_row("[script asset] Hint", activeScript->diagnostic_hint, 120.0f);
                 }
                 gui::wrapped_label(editor.scriptBuildStatus, centerWidth);
@@ -4482,21 +4573,54 @@ namespace epochnamespace
                 gui::label("Latest Sandbox Notes");
                 gui::wrapped_label(tail_text(read_project_notes(editor.projectRoot), 1500), centerWidth);
                 render_ai_model_picker(editor, (std::min)(centerWidth, 460.0f));
+
+                gui::label("EpochBot Chat");
+                (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                    .id = "engine-ai-sandbox-chat",
+                    .size = { centerWidth, 150.0f },
+                    .lines = chat.lines,
+                    .max_line_chars = 220,
+                    .selectable = true,
+                    .stick_to_bottom = true
+                });
+                const auto chatInput = gui::edit_box(chat.input, { centerWidth, 30.0f }, 4096, false);
+                std::array<gui::InlineButtonSpec, 2> chatActions{ {
+                    { "Send", 96.0f },
+                    { "Evidence Plan", 150.0f }
+                } };
+                if (auto clicked = gui::inline_button_row(chatActions, 28.0f, 8.0f))
+                {
+                    if (*clicked == 0)
+                    {
+                        chat.submit(std::move(chat.input));
+                        chat.input.clear();
+                    }
+                    else
+                    {
+                        chat.submit(build_ai_self_iteration_prompt(editor));
+                    }
+                }
+                if (chatInput.submitted)
+                {
+                    chat.submit(std::move(chat.input));
+                    chat.input.clear();
+                }
+
                 if (gui::button("Save Sandbox Evidence", { 240.0f, 30.0f }))
                     repair_self_iteration_sandbox_evidence(editor);
-                if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Self-Iteration Watcher" : "Enable Self-Iteration Watcher", { 260.0f, 30.0f }))
+                if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Evidence Watcher" : "Arm Evidence Watcher", { 260.0f, 30.0f }))
                 {
                     if (!editor.aiContinuousBuildEnabled)
                         repair_self_iteration_sandbox_evidence(editor);
                     editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
                     editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
-                        ? "Self-iteration watcher enabled; watching project/script evidence."
-                        : "Self-iteration watcher paused.";
+                        ? "Evidence watcher armed; queue build passes manually."
+                        : "Evidence watcher paused.";
                     if (editor.aiContinuousBuildEnabled)
                         editor.aiContinuousBuildFingerprint.clear();
                     push_editor_log(editor, editor.aiContinuousBuildEnabled
-                        ? "[ai-build] Self-iteration watcher enabled."
-                        : "[ai-build] Self-iteration watcher paused.");
+                        ? "[ai-build] Evidence watcher armed."
+                        : "[ai-build] Evidence watcher paused.");
                 }
                 if (gui::button("Queue Sandbox Build Pass", { 240.0f, 30.0f }))
                     start_self_iteration_sandbox_build(editor, "manual self-iteration sandbox build request", true);
@@ -4982,7 +5106,7 @@ namespace epochnamespace
                 gui::property_row("[script] Hint", activeScript->diagnostic_hint);
             }
             gui::wrapped_label(
-                "Scripts compile with the engine/project and use the editor host API for callbacks. Create project-local stubs here, build them, then use the centered Run button while this Scripts workspace is active.",
+                "Scripts compile with the engine/project and use the editor host API for callbacks. Create project-local stubs here and validate them with Build Selected Script. The centered Run button builds and launches the active project shell.",
                 scriptsContentWidth);
             gui::wrapped_label(editor.scriptBuildStatus, scriptsContentWidth);
 
@@ -5233,10 +5357,7 @@ namespace epochnamespace
 
             if (editor.aiContinuousBuildEnabled && !editor.aiContinuousBuildPending)
             {
-                if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Control)
-                    start_self_iteration_sandbox_build(editor, "detected sandbox evidence change", false);
-                else
-                    startAiContinuousBuild("detected project/script evidence change", false);
+                editor.aiContinuousBuildStatus = "Evidence watcher armed; manual Queue Build Pass required.";
             }
 
             const bool showSandboxControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Control;
@@ -5269,22 +5390,22 @@ namespace epochnamespace
                 "Bottom Dock > AI is compact status only. Use the central AI Sandbox and Inspector for model selection, harness controls, self-iteration actions, and visualizer surfaces.",
                 aiContentWidth);
 
-            if (showWorkspaceActionButtons && showSandboxControls && gui::button(editor.aiContinuousBuildEnabled ? "Pause Self-Iteration Watcher" : "Enable Self-Iteration Watcher", { 260.0f, 30.0f }))
+            if (showWorkspaceActionButtons && showSandboxControls && gui::button(editor.aiContinuousBuildEnabled ? "Pause Evidence Watcher" : "Arm Evidence Watcher", { 260.0f, 30.0f }))
             {
                 editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
                 editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
-                    ? "Self-iteration watcher enabled; watching project/script evidence."
-                    : "Self-iteration watcher paused.";
+                    ? "Evidence watcher armed; queue build passes manually."
+                    : "Evidence watcher paused.";
                 if (editor.aiContinuousBuildEnabled)
                     editor.aiContinuousBuildFingerprint.clear();
                 push_editor_log(editor, editor.aiContinuousBuildEnabled
-                    ? "[ai-build] Self-iteration watcher enabled."
-                    : "[ai-build] Self-iteration watcher paused.");
+                    ? "[ai-build] Evidence watcher armed."
+                    : "[ai-build] Evidence watcher paused.");
                 append_project_note(
                     editor,
-                    editor.aiContinuousBuildEnabled ? "Self-Iteration Watcher Enabled" : "Self-Iteration Watcher Paused",
+                    editor.aiContinuousBuildEnabled ? "Evidence Watcher Armed" : "Evidence Watcher Paused",
                     editor.aiContinuousBuildStatus,
-                    "The watcher only stages evidence packets; it does not write repo changes blindly.");
+                    "The watcher observes evidence and never starts an automatic build; promotion remains human-gated.");
             }
 
             if (showWorkspaceActionButtons && showSandboxControls && gui::button("Queue Sandbox Build Pass", { 240.0f, 30.0f }))
@@ -5565,6 +5686,7 @@ namespace epochnamespace
         const bool overlayPriority =
             editor.openMenu != TopMenu::None
             || editor.showAboutModal
+            || editor.showSettingsModal
             || editor.showPackageManagerModal
             || editor.showUpdateConfirmModal
             || editor.showSourceUpdateConfirmModal;
@@ -5581,6 +5703,7 @@ namespace epochnamespace
             });
             menu_item("Settings", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
                 emit_command(EditorCommand::Settings);
+                editor.showSettingsModal = true;
                 push_editor_log(editor, "[file] Settings selected.");
             });
             menu_item("Exit", { pos.x + 12.0f, pos.y + 116.0f }, 192.0f, [&]() {
@@ -5835,6 +5958,68 @@ namespace epochnamespace
             case EditorAutomationCommand::None:
                 break;
             }
+        }
+
+        if (editor.showSettingsModal)
+        {
+            const gui::Vec2 modalSize{ 560.0f, 304.0f };
+            const gui::Vec2 modalPos{
+                (std::max)(0.0f, (w - modalSize.x) * 0.5f),
+                (std::max)(0.0f, (h - modalSize.y) * 0.5f)
+            };
+            const float contentWidth = modalSize.x - 32.0f;
+            gui::begin_modal_window(gui::ModalWindowOptions{
+                .title = "Editor Settings",
+                .position = modalPos,
+                .size = modalSize,
+                .viewport_size = { w, h },
+                .dim_background = true
+            });
+            const gui::Vec2 contentPos = gui::cursor_position();
+            const float contentY = contentPos.y;
+            gui::set_cursor({ contentPos.x + 8.0f, contentY });
+            gui::wrapped_label(
+                "Runtime-safe editor settings live here first. Layout, workspace, preview, and Engine AI controls stay visible and reviewable instead of hidden in console output.",
+                contentWidth);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 54.0f });
+            gui::property_row("[settings] Renderer", renderer_name(ctx), 148.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 78.0f });
+            gui::property_row("[settings] Project", editor.projectName, 148.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 102.0f });
+            gui::property_row("[settings] Workspace", std::string(main_surface_title(editor.mainSurface)), 148.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 126.0f });
+            gui::property_row("[settings] Preview", std::string(preview_mode_name(editor.previewMode)), 148.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 150.0f });
+            gui::property_row("[settings] AI model", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name(), 148.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 182.0f });
+            if (gui::button("Reset Layout", { 132.0f, 30.0f }))
+            {
+                reset_editor_layout(editor);
+                push_editor_log(editor, "[settings] Editor layout reset.");
+            }
+            gui::set_cursor({ contentPos.x + 150.0f, contentY + 182.0f });
+            if (gui::button("Open Engine AI", { 150.0f, 30.0f }))
+            {
+                open_editor_surface(EditorMainSurface::AISandbox, "settings");
+                editor.showSettingsModal = false;
+            }
+            gui::set_cursor({ contentPos.x + 308.0f, contentY + 182.0f });
+            if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Watcher" : "Arm Watcher", { 132.0f, 30.0f }))
+            {
+                editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
+                editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
+                    ? "Evidence watcher armed; queue build passes manually."
+                    : "Evidence watcher paused.";
+                if (editor.aiContinuousBuildEnabled)
+                    editor.aiContinuousBuildFingerprint.clear();
+                push_editor_log(editor, editor.aiContinuousBuildEnabled
+                    ? "[settings] Evidence watcher armed."
+                    : "[settings] Evidence watcher paused.");
+            }
+            gui::set_cursor({ contentPos.x + 448.0f, contentY + 182.0f });
+            if (gui::button("Close", { 88.0f, 30.0f }))
+                editor.showSettingsModal = false;
+            gui::end_modal_window();
         }
 
         if (editor.showPackageManagerModal)

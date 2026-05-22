@@ -36,10 +36,10 @@ module;
 #include "../include/_epoch.stl_types.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <memory>
-#include <print>
 #include <source_location>
 #include <utility>
 
@@ -274,6 +274,7 @@ namespace runtime
             double fps = 0.0;
 
             bool warmup_done = false;
+            int last_warmup_second_logged = -1;
             bool window_close_requested = false;
 
             while (fc.frame_index < max_frames)
@@ -304,14 +305,21 @@ namespace runtime
                     const double remaining = WARMUP_SECONDS - elapsed_since_start;
                     if (remaining > 0.0)
                     {
-                        std::print("\r[ engine ] warming up... {:.0f}s", remaining);
+                        const int whole_remaining = static_cast<int>(std::ceil(remaining));
+                        if (whole_remaining != last_warmup_second_logged)
+                        {
+                            last_warmup_second_logged = whole_remaining;
+                            runtime_info(as_std_view(epoch::core::format::str(
+                                "warming up ({}s remaining)",
+                                whole_remaining)));
+                        }
                     }
                     else
                     {
                         warmup_done = true;
                         last_t = now;
                         last_frame = fc.frame_index;
-                        std::print("\r[ engine ] warm-up complete        ");
+                        runtime_info("warm-up complete");
                     }
                 }
                 else
@@ -321,11 +329,11 @@ namespace runtime
 
                     if ((fc.frame_index % FPS_PRINT_EVERY) == 0)
                     {
-                        std::print(
-                            "\r\n[ engine ] running (frame={}, dt_ms={:.3f})",
+                        runtime_info(as_std_view(epoch::core::format::str(
+                            "running (frame={}, dt_ms={:.3f})",
                             fc.frame_index,
                             fc.dt_seconds() * 1000.0
-                        );
+                        )));
 
                         const std::uint64_t frames = fc.frame_index - last_frame;
                         const double elapsed = now - last_t;
@@ -341,10 +349,10 @@ namespace runtime
                             fps = 0.0;
                         }
 
-                        std::print(
-                            "\r\n[ engine ] FPS={:.2f} (min={:.2f}, max={:.2f})",
+                        runtime_info(as_std_view(epoch::core::format::str(
+                            "FPS={:.2f} (min={:.2f}, max={:.2f})",
                             fps, min_fps, max_fps
-                        );
+                        )));
 
                         last_t = now;
                         last_frame = fc.frame_index;

@@ -1,6 +1,28 @@
 # Epoch Changelog
 
 ## [v0.84.35]
+- Current work in progress: GUI text clipping, chat focus, project-owned Run,
+  and overlay-menu ordering are under validation; renderer frame-order changes
+  must not be used as a shortcut for command-menu z-order because they regress
+  the hard-won OpenGL flicker fixes.
+- Current work in progress: tightened GUI text clipping so edge glyphs remain
+  visible without accepting invalid glyph rectangles, latched edit-box focus so
+  chat typing does not require holding the mouse button, and reserved the
+  centered Run button for active project builds instead of script-asset
+  execution.
+- Current work in progress: corrected shared GUI Win32 include ownership to use
+  the existing platform wrapper, changed Linux/WSL default launch shape to a
+  single OpenGL editor context with no automatic WSL Vulkan fallback, and
+  documented the voxel/planetary renderer direction as a future architecture
+  track rather than current renderer proof.
+- Current work in progress: inspected the local
+  `vk_cp_cursor_nodoublefree.zip` Vulkan voxel/chunk prototype and documented
+  voxel terrain, planetary LOD, path/ray tracing, and procedural plant work as a
+  package-gated research track rather than a direct mainline source import.
+- Current work in progress: Engine AI self-iteration controls are being
+  tightened around a manual-gated evidence watcher, with copy/paste/text-smear
+  stabilization and dropdown-based local model selection moving into
+  `engine.gui`.
 - Bumped the active source line to `v0.84.35` for the DirectX multicontext proof
   lane and README screenshot refresh.
 - Added the first Windows DirectX/D3D11 backend slice: context registration,
@@ -72,13 +94,86 @@
 - Added a CLI self-test project-note handoff so `--editor-project-self-test`
   leaves visible Sandbox/ProjectLauncher evidence notes with packet, build-log,
   output, script, and human-gate paths after the materialize/build pass.
+- Hardened EpochBot chat parsing so OpenAI-compatible local models never surface
+  `reasoning_content` as visible assistant text; blank-content reasoning replies
+  are now rejected as model/API configuration failures instead of leaking draft
+  chain-of-thought into AI Chat.
+- Promoted the World Outliner `EpochBot` tab from status-only rows to a compact
+  control surface with chat transcript, prompt input, plan action, model/loop
+  evidence, and an explicit jump into the central Engine AI workspace.
+- Added a real Editor Settings modal behind File > Settings with live renderer,
+  project, preview, AI model, layout reset, and Engine AI jump actions.
+- Improved the shared dropdown/select-box primitive with left-aligned option
+  rows and wheel focus ownership while open, preventing parent scroll panes from
+  stealing model-list scrolling.
+- Matched DirectX overlay-priority replay to the scene-first/UI-last editor
+  contract so command menus can render over the D3D11 scene viewport instead of
+  being occluded by the scene pass.
 - Extended `--editor-project-self-test` into a full verifier step by running the
   generated child project's `--project-self-test`, capturing
   `Projects/<id>/logs/project-self-test.log`, adding that log to the staged
   packet, and blocking the gate if the child self-test fails.
 - Added an eval guard for rejecting low-evidence helper-model self-iteration
   drafts, keeping weak local replies out of curated training data or source
+- Fixed a DirectX GUI smear path where clipped subpixel glyph/sprite slivers
+  could be interpreted as normalized full-frame geometry during resize/scroll.
+  DirectX GUI replay now treats sprite rectangles as pixel-space only, rejects
+  non-finite/empty rectangles, and shared text drawing drops partially clipped
+  glyph quads instead of emitting barcode-like fragments.
+- Revalidated Ubuntu WSL2/WSLg with accelerated OpenGL 4.2, rebuilt the Linux
+  Clang engine target, passed `ctest --preset ninja-clang-debug`, and produced
+  a real single OpenGL editor capture with
+  `epoch --renderer opengl --standalone --editor --smoke --capture`.
+- Hardened OpenGL capture readback to flush before capture and choose front or
+  back buffer from the actual drawable double-buffer state. Plain runtime
+  smoke without `--editor` can still capture a black frame because it does not
+  open the editor proof surface.
   promotion unless they cite packet/build/output/verifier evidence.
+- Promoted that helper-review rule into executable engine behavior with
+  `--editor-ai-gate-self-test`, covering status-only replies, missing verifier
+  evidence, bypass/server attempts, and the accepted human-gated packet/build
+  evidence shape.
+- Added a source-shape audit doc for the current header/module/backend/config
+  state so future cleanup of naming, Perf Manager integration, and backend split
+  files can proceed in small build-tested batches.
+- Restyled the reusable engine GUI tab primitive so editor/workbench tabs draw as
+  connected tab chrome instead of another row of generic buttons.
+- Tightened roadmap, agent, source-shape, editor, and AI docs around the
+  production-ready rule: phased work is allowed, but checked-in code must stay
+  owned, buildable, evidence-backed, and honest about incomplete gates.
+- Added the first reusable GUI dropdown/select-box primitive in `engine.gui` and
+  moved local AI model selection onto it, setting the pattern for project,
+  package, backend, script, and asset selectors.
+- Documented `engine.gui` as an engine-internal GUI library layer with separate
+  primitive-widget, layout/docking, theme/rendering, and editor-composition
+  responsibilities.
+- Added a dedicated GUI library architecture document so future tabs,
+  dropdowns, modals, package-manager controls, scripting views, and AI control
+  surfaces have one shared `engine.gui` contract instead of drifting into
+  editor-only or Console Dock code.
+- Added aggregate helper-review gate statistics to `--editor-ai-gate-self-test`
+  so EpochBot training/eval work can track accept/reject balance, false accepts,
+  false rejects, safety blocks, evidence score, and gate accuracy.
+- Added the first repo-safe EpochBot scorecard seed for measured 4B/20B
+  training/eval progress instead of treating helper-model self-status as proof.
+- Hardened GUI glyph and scroll-area bounds against non-finite or unreasonable
+  resize/scroll rectangles to reduce the vertical smear artifacts seen in tall AI
+  and console panels.
+- Moved the C++23 policy reference into `Changes/cpp.md` and promoted the output
+  policy into `AGENTS.md` and the roadmap: engine-owned paths use
+  `core.logger`/evidence surfaces, and Epoch-branded smoke/validation tools
+  route through `core_log_write`/`core.log` instead of direct console APIs.
+- Routed active runtime warm-up diagnostics, renderer smoke output, HeadlessCI
+  output, engine diagnostics, and generated child project self-test/version
+  messages through logger-owned categories; the remaining direct-output scan
+  hits are logger internals, formatting helpers, and third-party `stb`.
+- Added an `EpochBot` tab inside the World Outliner so the bot control loop can
+  be inspected and prompted from the normal editor chrome instead of only from a
+  separate AI window.
+- Retargeted the built-in self-iteration profile to generate `EpochEngine`
+  child artifacts from the existing `sandbox` compatibility id, keeping the
+  engine-upgrade lane distinct from normal generated game/tool projects while
+  preserving existing project-root evidence paths.
 
 ## [v0.84.34]
 - Bumped the active source line to `v0.84.34` for the multicontext

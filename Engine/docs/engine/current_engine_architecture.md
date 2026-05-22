@@ -57,6 +57,10 @@ Current source version: `v0.84.35`
   imported OpenGL/Vulkan/Direct3D feature families, separates existing/partial
   engine coverage from missing renderer backlog work, and records DirectX/D3D11
   as an active first-pass Windows renderer while D3D12 remains future work.
+- **Voxel/planetary package direction**:
+  `voxel_planetary_package_track.md` records the long-horizon voxel-first world
+  spine and keeps operator prototypes as package-gated research inputs instead
+  of direct mainline source imports.
 - **Migration map**: formerly archived compatibility surfaces are now either
   preserved in active modules or called out explicitly in
   `Engine/docs/engine/legacy_feature_map.md`.

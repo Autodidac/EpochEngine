@@ -147,6 +147,9 @@ the same engine-owned path.
   and writes project notes. If the pass should bind to a local helper model, set
   `EPOCH_AI_MODEL` or a compatible explicit model variable before launch;
   discovery still remains separate from activation.
+- `--editor-ai-gate-self-test` runs the deterministic helper-review gate without
+  launching the GUI. Use it before letting helper LLM replies influence curated
+  training, eval promotion, or source-change planning.
 - generated game project shells can carry the `engine_arcade` local
   runtime-mini package. The package is a project asset/script option that
   invokes engine-owned mini-runtime scenes such as Snake/Tetris/Pacman through
@@ -157,6 +160,11 @@ the same engine-owned path.
   Downloadable source packages must compile through an updater-style human-gated
   path and must not auto-run servers, listeners, hidden model channels, or any
   service that bypasses operator approval.
+- research prototypes such as voxel terrain, planetary rendering, procedural
+  vegetation, and tool harnesses should enter Package Manager as local
+  research-package candidates first. A package candidate needs provenance,
+  source/hash, build/test commands, known limitations, and a proposed engine API
+  boundary before mainline source promotion.
 - Self-Iteration Sandbox controls always target the `sandbox` profile. They must
   not reuse the active ProjectLauncher/game/tool project when queueing engine
   self-iteration work.
@@ -245,6 +253,20 @@ the same engine-owned path.
 - the target GUI shape is MSVC/IDE-like: visible context panes, ordinary
   close/resize affordances, modal/menu layers over scene views, and no duplicate
   console-only control surfaces for editor-critical actions
+- `engine.gui` is the reusable engine GUI library layer. Primitive widgets
+  such as tabs, dropdown/select boxes, text inputs, scroll areas, image views,
+  window chrome, modal layers, and future context menus should live there before
+  editor workspaces consume them. `editor.cpp` chooses the active workspace and
+  feeds domain data; it should not own generic widget behavior.
+- The detailed GUI library contract is tracked in
+  `Engine/docs/engine/gui_library_architecture.md`; use that before adding new
+  panes, tabs, dropdowns, modal windows, package-manager UI, scripting views, or
+  AI sandbox controls.
+- The first dropdown/select-box primitive is the AI local-model selector. It
+  replaces long repeated model buttons with one reusable control so package
+  manager, project settings, backend selection, and script/asset selectors can
+  follow the same path instead of creating one-off UI. Open dropdowns own their
+  mouse-wheel focus so parent scroll panes do not steal model-list scrolling.
 - the stable Windows top-row contract is visible real child panes:
   `GLFW30`, `SDL_app`, and `SFML_Window`
 - helper `EpochChild` wrappers are implementation detail only:
@@ -317,6 +339,9 @@ the same engine-owned path.
 - when a subsystem is touched, file names, module names, and exported surfaces
   should move toward consistent professional ownership instead of growing more
   orphan naming
+- `source_shape_audit.md` is the current guard for config/header/module/backend
+  cleanup. Use it before touching compatibility headers, bridge headers, Perf
+  Manager integration, or backend file splits.
 
 ## Time-system spine
 
@@ -435,8 +460,11 @@ features over forcing every integration on every machine.
 - The same `v0.84.35` line now serializes editor Run builds, validates
   ProjectLauncher and Sandbox child `--project-self-test` paths when built
   serially, and queues Raylib redock operations through the backend owner
-  thread. Linux Clang build/headless CTest is green with DirectX disabled, but
-  WSL visual capture is not release-proof yet.
+  thread. Linux Clang build/headless CTest is green with DirectX disabled, and
+  Ubuntu WSL2/WSLg has a non-black single OpenGL editor proof when launched as
+  `epoch --renderer opengl --standalone --editor --smoke --capture`. Do not use
+  plain runtime smoke captures as editor proof; they can be black without
+  indicating an OpenGL dependency failure.
 - When `EPOCH_SINGLE_PARENT=0`, the launch config must force standalone
   top-level contexts even if CLI defaults still prefer parented mode. This mode
   is used to isolate resize/flicker from the single-parent dock host, so any
@@ -500,6 +528,9 @@ Data rules:
 - for direct helper drafting, use LM Studio `/v1/responses` or
   `/v1/chat/completions` with bounded output, and retry without any reasoning
   field when the selected model rejects explicit reasoning configuration
+- if a selected helper returns blank visible content with only hidden reasoning,
+  the editor must reject the response as a model/API configuration issue rather
+  than showing the reasoning text in AI Chat or promoting it as training data
 
 ## Procedural/time-node direction
 
@@ -549,6 +580,12 @@ These views should be backed by reusable GUI controls and custom UI powered by
 an automated texture-atlas system, not by hardcoded editor-only tab strips that
 cannot scale.
 
+All editor-shell work should be production-minded. A feature can be incomplete
+or acceptance-gated, but the code that lands must still be owned, buildable,
+usable, and honest about its limits. Do not add fake controls, duplicate command
+paths, placeholder windows, or temporary UI experiments unless they preserve a
+working path and are documented with the next promotion/removal condition.
+
 Current editor-shell gaps:
 
 - the World Outliner needs stronger grouping, clipping, and resizable columns;
@@ -557,9 +594,22 @@ Current editor-shell gaps:
 - the engine GUI now has reusable `tab_bar`, `scroll_text_panel`, and modal
   focus overlay paths; selectable text is currently row-level and must grow into
   true text-range selection/copy support
+- `tab_bar` is a real tab primitive now, not a segmented button alias. Future
+  work should keep tabs visually connected to their content pane and reserve
+  ordinary buttons for actions.
 - the current file browser and asset cards are intentionally first-pass
   controls. They still need bounded columns, filtering, real decoded thumbnails,
   rename/move/import actions, and a code/text editor surface for scripts.
+- launcher/editor settings buttons should open modal windows with concrete
+  backend, display, package, project, and AI safety controls. Modal close
+  affordances should be normal top-right X controls with overlay-priority z-order.
+- Project Hub should present a basic project/game/software launcher mockup, not
+  a miniature duplicate of the editor shell.
+- World Outliner rows should show human project/entity names, type, and useful
+  grouping instead of implementation-ish labels.
+- the AI Visualizer should eventually expose packet graphs, scene-state diffs,
+  and sampled weight/memory terrain views; it must not attempt to draw billions
+  of raw parameters directly.
 - the GUI still needs context menus, popouts, dockable editor windows,
   persisted layout profiles, resize cursors, resize handles, and column controls
 - global UI scaling should behave like normal desktop software, with explicit
@@ -592,13 +642,27 @@ Current editor-shell gaps:
   path. The all-backends sequential harness still needs extra sequencing cleanup
   after the Raylib pass before it should outrank focused SDL/SFML evidence.
 
+## Linux / WSL Runtime Shape
+
+Linux and WSL do not use the Windows parented multicontext editor shell by
+default. The current WSL-proven runtime path is a single OpenGL editor context.
+Do not automatically fall back to Vulkan in WSL; Vulkan remains explicit
+validation work on that lane until it is locally proven, and DirectX is
+Windows-only.
+
+Other renderer/tool outputs can still exist on Linux as project output choices,
+but they should launch as explicit child processes from visible editor controls
+instead of hidden parented contexts. Software rendering remains a safe-launch,
+debug/error-message, capture-diagnostic, and headless fallback path; it is not a
+normal peer renderer for the Linux editor shell.
+
 ## Generated project shell self-tests
 
 Run these from the repository root after building `ConsoleApplication1`:
 
 ```powershell
 .\x64\Debug\ConsoleApplication1.exe --editor-project-self-test sandbox
-.\Projects\Sandbox\bin\windows\Debug\x64\Sandbox.exe --project-self-test
+.\Projects\Sandbox\bin\windows\Debug\x64\EpochEngine.exe --project-self-test
 .\x64\Debug\ConsoleApplication1.exe --editor-project-self-test projectlauncher
 .\Projects\ProjectLauncher\bin\windows\Debug\x64\ProjectLauncher.exe --project-self-test
 ```

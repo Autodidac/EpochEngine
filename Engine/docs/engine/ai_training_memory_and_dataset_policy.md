@@ -55,6 +55,11 @@ Staging captures are not curated truth. Review them, promote the good parts,
 and delete outdated or bad training artifacts when the training direction
 changes.
 
+AI training, memory, and tool-loop changes are production engine work, not
+throwaway experiments. A learning pass may be experimental in scope, but it must
+still be bounded, reviewable, evidence-captured, reversible, and honest about
+what was actually verified.
+
 Iteration packets are staged truth only. They are useful because they bind one
 task, one project snapshot, one model/provider snapshot, and one set of
 evidence paths together before any later build/verify/promotion loop happens.
@@ -172,19 +177,65 @@ that does not cite a staged packet path, build log, output executable, verifier
 result, runtime/capture evidence, or eval gate must be treated as a rejected
 draft and kept out of curated training records.
 
+The runtime gate for this policy is `--editor-ai-gate-self-test`. It should pass
+before a helper model is trusted for a self-iteration review pass, and it should
+fail any reply that says the engine is "working fine" without evidence, omits
+child/self-test verifier proof, requests automatic promotion, or attempts to
+create a model-accessible server/listener/bypass channel.
+
 Any generated app, server, listener, port bind, model-accessible control
 surface, or hidden bypass channel must remain inert until an explicit human
 enable/run action. Local game/tool tests are allowed through visible editor,
 MCP, or harness controls when they are evidence-captured and do not expose a
 new model-accessible network surface.
 
-If a local multimodal helper returns its useful answer in `reasoning_content`
-while `content` is blank, treat that as a tooling/parsing issue in the helper
-path rather than assuming the model had nothing useful to say.
+If a local helper returns useful-looking text only in `reasoning_content` while
+`content` is blank, treat that as a model/API configuration failure for
+user-visible EpochBot. Hidden reasoning must not be surfaced as chat output and
+must not be promoted into curated training data as an assistant answer. Retry
+with a content-producing model/configuration, or keep the raw response only as
+private diagnostic evidence explaining why the pass was rejected.
 
-The same rule applies to local Qwen helper drafting in general: if the useful
-draft landed in `reasoning_content`, harvest it and move on instead of wasting a
-phase waiting for a cleaner helper reply.
+## Training and evaluation metrics
+
+EpochBot needs measurable training pressure before it can become the engine's
+primary coding/runtime assistant. The current practical path is a 4B/20B
+candidate supervised by stronger local or hosted helpers, verified by tools, and
+promoted through scorecards instead of trust.
+
+Use these metrics for every candidate model, adapter, prompt, tool schema, or
+dataset promotion:
+
+- gate accuracy
+- false accept rate
+- false reject rate
+- evidence coverage across packet, build log, output, verifier, and capture
+- tool trace coverage across action, arguments, output, errors, file diffs, and
+  screenshots when available
+- build pass rate
+- runtime smoke pass rate
+- self-iteration completion rate
+- curated promotion rate
+- server/bypass block rate
+- regression rate after promotion
+- time to verified patch
+
+The current deterministic seed is `--editor-ai-gate-self-test`, which now logs
+aggregate accept/reject, false-accept/false-reject, safety-block, average
+evidence-score, and accuracy statistics. Keep that gate green before treating
+Nemotron or any other local helper as a reviewer.
+
+Self-iteration is not complete just because a helper says it is. A completed
+iteration needs the same packet to show: project manifest, build log, output
+artifact, generated child self-test/verifier result, visible gate state, no
+required `[missing]` markers, and a human-review hold before source or dataset
+promotion.
+
+As of May 21, 2026, use current public practice as guidance: explicit evals for
+model/task behavior, tool-call traces as ground truth, preference or RL-style
+post-training only from curated/verifiable data, and coding benchmarks as
+external pressure tests. Epoch's local compiler, runtime, screenshot, and editor
+evidence remain the final authority.
 
 ## Commit memory
 

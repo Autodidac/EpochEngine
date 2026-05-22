@@ -284,7 +284,7 @@ export namespace epochnamespace::sdltextures
             return;
         }
 
-        //std::cerr << "[SDL_DrawSprite] Using atlas: '" << atlas->name << "', sprite: '" << atlas->entries[localIdx].name << "'\n";
+        // Use a scoped renderer logger category when atlas/sprite diagnostics are needed here.
 
         ensure_uploaded(*atlas); // Your SDL texture upload variant
 
@@ -364,11 +364,11 @@ export namespace epochnamespace::sdltextures
             static_cast<float>(region.height)
         };
 
-        //std::cout << "[DEBUG] draw_sprite: "
+        // Renderer diagnostics belong in core.logger, not direct console streams.
         //    << "x=" << x << ", y=" << y
         //    << ", width=" << width << ", height=" << height << "\n";
 
-        //std::cout << "Atlas size: " << atlas->width << "x" << atlas->height << "\n";
+        // Atlas size diagnostics should be logged through the renderer/atlas categories.
         if (!SDL_RenderTexture(sdl_renderer, texture, &srcRect, &dstRect))
         {
             sdlcontext::check_sdl_error("SDL_RenderTexture");

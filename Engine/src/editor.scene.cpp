@@ -923,7 +923,7 @@ namespace
         {
             EditorProjectKind::Game,
             "sandbox",
-            "Sandbox",
+            "EpochEngine",
             "Projects/Sandbox",
             "Projects/Sandbox/scene.epoch",
             "PersistentLevel",
@@ -931,7 +931,7 @@ namespace
             "Projects/Sandbox/project.epoch.json",
             "engine-self-iteration-sandbox",
             "engine_self_iteration_harness",
-            "AI and engine self-iteration sandbox for manipulating, building, and testing Epoch itself.",
+            "AI and engine self-iteration lane for manipulating, building, and testing Epoch itself.",
             "repo-local engine self-iteration child build for manipulation/testing only",
             "Engine/include",
             ""
@@ -1691,9 +1691,15 @@ namespace
         return root / "build_project.sh";
     }
 
+    [[nodiscard]] static std::string generated_project_artifact_stem(const fs::path& root)
+    {
+        const std::string stem = root.filename().string();
+        return stem == "Sandbox" ? "EpochEngine" : stem;
+    }
+
     [[nodiscard]] static fs::path generated_project_windows_vcxproj_path(const fs::path& root)
     {
-        return root / (root.filename().string() + ".vcxproj");
+        return root / (generated_project_artifact_stem(root) + ".vcxproj");
     }
 
     [[nodiscard]] static fs::path generated_project_build_log_path(const fs::path& root)
@@ -1703,7 +1709,7 @@ namespace
 
     [[nodiscard]] static fs::path generated_project_output_path(const fs::path& root)
     {
-        return root / "bin" / "windows" / "Debug" / "x64" / (root.filename().string() + ".exe");
+        return root / "bin" / "windows" / "Debug" / "x64" / (generated_project_artifact_stem(root) + ".exe");
     }
 
     [[nodiscard]] static std::string next_generated_project_name(EditorProjectKind kind)
@@ -1967,6 +1973,7 @@ namespace
         const fs::path engineArcadeScriptFile = scripts / "engine_arcade_scene.ascript.cpp";
         const fs::path repoRoot = resolve_epoch_repo_root(root);
         const fs::path rootAbsolute = fs::absolute(root).lexically_normal();
+        const std::string artifactStem = generated_project_artifact_stem(root);
         const fs::path manifestAbsolute = fs::absolute(manifest).lexically_normal();
         const fs::path repoEngineInclude = (repoRoot / "Engine" / "include").lexically_normal();
         const fs::path repoStaticLibProject = (repoRoot / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj").lexically_normal();
@@ -2137,7 +2144,6 @@ namespace
 
         const std::string entrySourceText =
             "#include <cstdlib>\n"
-            "#include <cstdio>\n"
             "#include <cstring>\n"
             "#if defined(_WIN32)\n"
             "#  include <stdlib.h>\n"
@@ -2145,6 +2151,7 @@ namespace
             "#  include <unistd.h>\n"
             "#endif\n"
             "#include <engine.hpp>\n\n"
+            "extern \"C\" void core_log_write(unsigned int lvl, const char* tag_utf8, const char* msg_utf8);\n\n"
             "namespace\n"
             "{\n"
             "    bool has_arg(int argc, char** argv, const char* needle) noexcept\n"
@@ -2171,27 +2178,31 @@ namespace
             "#endif\n"
             "    }\n"
             "\n"
-            "    void print_project_shell_self_test() noexcept\n"
+            "    void log_project_shell_self_test_line(const char* message) noexcept\n"
             "    {\n"
-            "        std::puts(\"" + cxx_escape(selfTestTitle) + "\");\n"
-            "        std::puts(\"project_id=" + cxx_escape(spec.project_id) + "\");\n"
-            "        std::puts(\"project_name=" + cxx_escape(spec.project_name) + "\");\n"
-            "        std::puts(\"project_root=" + cxx_escape(rootAbsoluteText) + "\");\n"
-            "        std::puts(\"manifest=" + cxx_escape(manifestAbsoluteText) + "\");\n"
-            "        std::puts(\"engine_integration=" + cxx_escape(integrationMode) + "\");\n"
+            "        core_log_write(1u, \"Epoch.ChildProject\", message ? message : \"\");\n"
+            "    }\n\n"
+            "    void log_project_shell_self_test() noexcept\n"
+            "    {\n"
+            "        log_project_shell_self_test_line(\"" + cxx_escape(selfTestTitle) + "\");\n"
+            "        log_project_shell_self_test_line(\"project_id=" + cxx_escape(spec.project_id) + "\");\n"
+            "        log_project_shell_self_test_line(\"project_name=" + cxx_escape(spec.project_name) + "\");\n"
+            "        log_project_shell_self_test_line(\"project_root=" + cxx_escape(rootAbsoluteText) + "\");\n"
+            "        log_project_shell_self_test_line(\"manifest=" + cxx_escape(manifestAbsoluteText) + "\");\n"
+            "        log_project_shell_self_test_line(\"engine_integration=" + cxx_escape(integrationMode) + "\");\n"
             "    }\n"
             "}\n\n"
             "int main(int argc, char** argv)\n"
             "{\n"
             "    if (has_arg(argc, argv, \"--version\") || has_arg(argc, argv, \"-v\"))\n"
             "    {\n"
-            "        std::puts(\"" + cxx_escape(versionTitle + spec.project_name) + "\");\n"
+            "        log_project_shell_self_test_line(\"" + cxx_escape(versionTitle + spec.project_name) + "\");\n"
             "        return 0;\n"
             "    }\n"
             "    if (has_arg(argc, argv, \"--project-self-test\"))\n"
             "    {\n"
             "        boot_project_shell();\n"
-            "        print_project_shell_self_test();\n"
+            "        log_project_shell_self_test();\n"
             "        return 0;\n"
             "    }\n"
             "    boot_project_shell();\n"
@@ -2448,7 +2459,7 @@ namespace
             "if ($buildExit -ne 0) {\n"
             "    exit $buildExit\n"
             "}\n"
-            "$exePath = Join-Path $projectRoot ('bin\\windows\\' + $Configuration + '\\' + $Platform + '\\' + '" + powershell_escape_single_quoted(root.filename().string()) + ".exe')\n"
+            "$exePath = Join-Path $projectRoot ('bin\\windows\\' + $Configuration + '\\' + $Platform + '\\' + '" + powershell_escape_single_quoted(artifactStem) + ".exe')\n"
             "'[INFO] Output: ' + $exePath | Tee-Object -FilePath $logPath -Append\n";
 
         const std::string linuxBuildScriptText =
@@ -2741,6 +2752,8 @@ namespace epochnamespace
             const auto manifestKind = extract_json_string_field(manifestText, "kind");
             const auto manifestScript = extract_json_string_field(manifestText, "default_script");
             const auto manifestTemplate = extract_json_string_field(manifestText, "template_family");
+            const auto manifestDisplayName = extract_json_string_field(manifestText, "display_name");
+            const auto manifestWindowsProject = extract_json_string_field(manifestText, "windows_project");
             const std::string expectedKind = profile->id == "sandbox"
                 ? "engine-self-iteration-sandbox"
                 : std::string(profile->kind == EditorProjectKind::Tool ? "tool" : "game");
@@ -2754,6 +2767,8 @@ namespace epochnamespace
                 && manifestKind && *manifestKind == expectedKind
                 && manifestScript && *manifestScript == profile->default_script
                 && manifestTemplate && *manifestTemplate == profile->template_family
+                && manifestDisplayName && *manifestDisplayName == profile->display_name
+                && manifestWindowsProject && *manifestWindowsProject == windowsProject.filename().generic_string()
                 && engineArcadePackageReady;
 
             if (!manifestMatchesProfile)

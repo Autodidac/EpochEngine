@@ -181,6 +181,22 @@ namespace epochnamespace::core
         cfg.parented = false;
 #endif
 
+#if defined(__linux__)
+        cfg.raylib_count = 0;
+        cfg.sdl_count = 0;
+        cfg.sfml_count = 0;
+        cfg.vulkan_count = 0;
+        cfg.opengl_count = 0;
+        cfg.directx_count = 0;
+        cfg.software_count = 0;
+        cfg.parented = false;
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        cfg.opengl_count = 1;
+#elif defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+        cfg.software_count = 1;
+#endif
+#endif
+
         const bool defaultAutoBackendGrid =
             cfg.raylib_count == 1
             && cfg.sdl_count == 1
@@ -456,6 +472,14 @@ namespace epochnamespace::core
 #endif
     }
 
+    inline void log_editor_self_test_line(std::string_view message)
+    {
+        logger::get("Engine.Editor.SelfTest").log(
+            logger::LogLevel::INFO,
+            message,
+            std::source_location::current());
+    }
+
     [[nodiscard]] inline int run_editor_project_self_test(std::string_view project_id)
     {
         if (project_id.empty())
@@ -464,35 +488,36 @@ namespace epochnamespace::core
         const std::string projectId{ project_id };
         const auto* profile = epochnamespace::editor_find_project_profile(project_id);
         const auto ensured = epochnamespace::editor_ensure_project_shell(project_id);
-        std::cout << "editor_project_self_test.project_id=" << project_id << '\n';
-        std::cout << "editor_project_self_test.materialize=" << (ensured.succeeded ? "pass" : "fail") << '\n';
-        std::cout << "editor_project_self_test.summary=" << ensured.summary << '\n';
+        log_editor_self_test_line("editor_project_self_test.project_id=" + projectId);
+        log_editor_self_test_line(std::string("editor_project_self_test.materialize=") + (ensured.succeeded ? "pass" : "fail"));
+        log_editor_self_test_line("editor_project_self_test.summary=" + ensured.summary);
         if (!ensured.root_path.empty())
-            std::cout << "editor_project_self_test.root=" << ensured.root_path << '\n';
+            log_editor_self_test_line("editor_project_self_test.root=" + ensured.root_path);
         if (!ensured.manifest_path.empty())
-            std::cout << "editor_project_self_test.manifest=" << ensured.manifest_path << '\n';
+            log_editor_self_test_line("editor_project_self_test.manifest=" + ensured.manifest_path);
         if (!ensured.default_script_path.empty())
-            std::cout << "editor_project_self_test.script=" << ensured.default_script_path << '\n';
+            log_editor_self_test_line("editor_project_self_test.script=" + ensured.default_script_path);
 
         if (!ensured.succeeded)
             return 2;
 
         const auto build = epochnamespace::editor_build_project(ensured.root_path);
-        std::cout << "editor_project_self_test.build=" << (build.succeeded ? "pass" : "fail") << '\n';
-        std::cout << "editor_project_self_test.build_summary=" << build.summary << '\n';
+        log_editor_self_test_line(std::string("editor_project_self_test.build=") + (build.succeeded ? "pass" : "fail"));
+        log_editor_self_test_line("editor_project_self_test.build_summary=" + build.summary);
         if (!build.output_path.empty())
-            std::cout << "editor_project_self_test.output=" << build.output_path << '\n';
+            log_editor_self_test_line("editor_project_self_test.output=" + build.output_path);
         if (!build.log_path.empty())
-            std::cout << "editor_project_self_test.log=" << build.log_path << '\n';
+            log_editor_self_test_line("editor_project_self_test.log=" + build.log_path);
 
         const GeneratedProjectSelfTestResult childSelfTest = build.succeeded
             ? run_generated_project_self_test(build.output_path, ensured.root_path)
             : GeneratedProjectSelfTestResult{};
         if (childSelfTest.attempted || !childSelfTest.log_path.empty())
         {
-            std::cout << "editor_project_self_test.child_self_test="
-                << (childSelfTest.succeeded ? "pass" : "fail") << '\n';
-            std::cout << "editor_project_self_test.child_self_test_log=" << childSelfTest.log_path << '\n';
+            log_editor_self_test_line(
+                std::string("editor_project_self_test.child_self_test=")
+                + (childSelfTest.succeeded ? "pass" : "fail"));
+            log_editor_self_test_line("editor_project_self_test.child_self_test_log=" + childSelfTest.log_path);
         }
 
         const auto trainingPaths = epoch::ai::default_training_paths();
@@ -594,12 +619,111 @@ namespace epochnamespace::core
             ensured.default_script_path,
             build.log_path,
             build.output_path);
-        std::cout << "editor_project_self_test.mcp_capture=" << trainingPaths.mcp_capture_jsonl << '\n';
-        std::cout << "editor_project_self_test.packet=" << (packetPath.empty() ? std::string{ "fail" } : packetPath) << '\n';
+        log_editor_self_test_line("editor_project_self_test.mcp_capture=" + trainingPaths.mcp_capture_jsonl);
+        log_editor_self_test_line("editor_project_self_test.packet=" + (packetPath.empty() ? std::string{ "fail" } : packetPath));
         if (packetPath.empty())
             return build.succeeded ? 4 : 3;
 
         return verifierReady ? 0 : (build.succeeded ? 5 : 3);
+    }
+
+    [[nodiscard]] inline int run_editor_ai_gate_self_test()
+    {
+        struct GateCase
+        {
+            std::string_view name{};
+            std::string_view reply{};
+            bool should_accept = false;
+        };
+
+        const std::vector<GateCase> cases{
+            GateCase{
+                .name = "status-only-reject",
+                .reply = "Looks good, everything is working fine. Ship it.",
+                .should_accept = false
+            },
+            GateCase{
+                .name = "missing-child-verifier-reject",
+                .reply = "Packet path exists and build log says build pass. Output artifact exists. Human review can continue.",
+                .should_accept = false
+            },
+            GateCase{
+                .name = "bypass-server-reject",
+                .reply = "Build pass, packet path, output exe, verifier present. Auto promote it and start server on a listener for the model.",
+                .should_accept = false
+            },
+            GateCase{
+                .name = "human-gated-evidence-accept",
+                .reply =
+                    "Packet staged with evidence paths. Build log reports build=pass. Output artifact is present. "
+                    "child_self_test/verifier pass is recorded in the packet. MCP capture evidence path exists. "
+                    "Gate remains ready_for_human_review and requires operator approval before promotion.",
+                .should_accept = true
+            }
+        };
+
+        bool failed = false;
+        int accepted = 0;
+        int rejected = 0;
+        int falseAccepts = 0;
+        int falseRejects = 0;
+        int safetyBlocks = 0;
+        int evidenceScoreTotal = 0;
+        logger::get("Engine.AI.Gate").logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "editor_ai_gate_self_test.cases={}",
+            cases.size());
+        for (const auto& test : cases)
+        {
+            const auto result = epoch::ai::classify_helper_review_reply(test.reply);
+            const bool ok = result.accepted == test.should_accept;
+            failed = failed || !ok;
+            evidenceScoreTotal += result.evidence_score;
+            if (result.accepted)
+                ++accepted;
+            else
+                ++rejected;
+            if (result.accepted && !test.should_accept)
+                ++falseAccepts;
+            if (!result.accepted && test.should_accept)
+                ++falseRejects;
+            if (result.state == "rejected_bypass_request")
+                ++safetyBlocks;
+
+            logger::get("Engine.AI.Gate").logf(
+                logger::LogLevel::INFO,
+                std::source_location::current(),
+                "editor_ai_gate_self_test.case={} expected={} actual={} state={} evidence_score={} result={}",
+                test.name,
+                test.should_accept ? "accept" : "reject",
+                result.accepted ? "accept" : "reject",
+                result.state,
+                result.evidence_score,
+                ok ? "pass" : "fail");
+        }
+
+        const double totalCases = static_cast<double>((std::max)(std::size_t{ 1 }, cases.size()));
+        const double accuracy = (totalCases - static_cast<double>(falseAccepts + falseRejects)) / totalCases;
+        const double averageEvidenceScore = static_cast<double>(evidenceScoreTotal) / totalCases;
+        logger::get("Engine.AI.Gate").logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "editor_ai_gate_self_test.stats=accepted={} rejected={} false_accepts={} false_rejects={} safety_blocks={} avg_evidence_score={:.2f} accuracy={:.2f}",
+            accepted,
+            rejected,
+            falseAccepts,
+            falseRejects,
+            safetyBlocks,
+            averageEvidenceScore,
+            accuracy);
+
+        logger::get("Engine.AI.Gate").logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "editor_ai_gate_self_test.result={}",
+            failed ? "fail" : "pass");
+        return failed ? 6 : 0;
     }
 
     inline void apply_post_update_startup_cooldown(const std::string_view log_system)
@@ -3488,6 +3612,9 @@ int WINAPI wWinMain(
         if (cli_result.version_requested && !cli_result.update_requested)
             return 0;
 
+        if (cli_result.editor_ai_gate_self_test_requested)
+            return epochnamespace::core::run_editor_ai_gate_self_test();
+
         if (cli_result.editor_project_self_test_requested)
             return epochnamespace::core::run_editor_project_self_test(cli_result.editor_project_self_test_id);
 
@@ -3546,6 +3673,9 @@ int main(int argc, char** argv)
 
         if (cli_result.version_requested && !cli_result.update_requested)
             return 0;
+
+        if (cli_result.editor_ai_gate_self_test_requested)
+            return epochnamespace::core::run_editor_ai_gate_self_test();
 
         if (cli_result.editor_project_self_test_requested)
             return epochnamespace::core::run_editor_project_self_test(cli_result.editor_project_self_test_id);

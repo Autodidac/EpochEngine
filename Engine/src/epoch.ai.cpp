@@ -220,6 +220,20 @@ namespace epoch::ai
             return std::string(s.substr(b, e - b));
         }
 
+        static std::string lowercase_ascii(std::string_view s)
+        {
+            std::string out;
+            out.reserve(s.size());
+            for (const unsigned char c : s)
+                out.push_back(static_cast<char>(std::tolower(c)));
+            return out;
+        }
+
+        [[nodiscard]] static bool contains_text(std::string_view haystack, std::string_view needle) noexcept
+        {
+            return haystack.find(needle) != std::string_view::npos;
+        }
+
         static std::string json_escape(std::string_view s)
         {
             std::string out;
@@ -877,9 +891,6 @@ namespace epoch::ai
             if (const std::string outputText = extract_json_string_field_after(sv, "\"text\"", choicesPos); !outputText.empty())
                 return outputText;
 
-            if (const std::string reasoning = extract_json_string_field_after(sv, "\"reasoning_content\"", choicesPos); !reasoning.empty())
-                return reasoning;
-
             return {};
         }
 
@@ -903,95 +914,6 @@ namespace epoch::ai
                 return {};
 
             std::string last;
-            std::string lastReasoning;
-
-            auto extract_last_quoted_after = [&](std::string_view text, std::string_view marker) -> std::string
-            {
-                const std::size_t markerPos = text.rfind(marker);
-                if (markerPos == std::string_view::npos)
-                    return {};
-
-                std::size_t pos = markerPos + marker.size();
-                std::string found{};
-                while (true)
-                {
-                    const std::size_t open = text.find('"', pos);
-                    if (open == std::string_view::npos)
-                        break;
-
-                    std::string raw;
-                    bool closed = false;
-                    for (std::size_t i = open + 1; i < text.size(); ++i)
-                    {
-                        const char c = text[i];
-                        if (c == '"' && text[i - 1] != '\\')
-                        {
-                            const std::string candidate = trim(json_unescape(raw));
-                            if (!candidate.empty())
-                                found = candidate;
-                            pos = i + 1;
-                            closed = true;
-                            break;
-                        }
-                        raw.push_back(c);
-                    }
-
-                    if (!closed)
-                        break;
-                }
-
-                return found;
-            };
-
-            auto reasoning_fallback = [&](std::string_view reasoning) -> std::string
-            {
-                static constexpr std::string_view markers[] = {
-                    "Final Selection:",
-                    "Final selection:",
-                    "Final Answer:",
-                    "Final answer:",
-                    "Answer:"
-                };
-
-                for (const auto marker : markers)
-                {
-                    if (const std::string extracted = extract_last_quoted_after(reasoning, marker); !extracted.empty())
-                        return extracted;
-                }
-
-                std::string bestLine{};
-                std::size_t start = 0;
-                while (start < reasoning.size())
-                {
-                    std::size_t end = reasoning.find('\n', start);
-                    if (end == std::string_view::npos)
-                        end = reasoning.size();
-
-                    std::string line = trim(reasoning.substr(start, end - start));
-                    while (!line.empty() && (line.front() == '*' || line.front() == '-' || line.front() == '"' || line.front() == '>'))
-                    {
-                        line.erase(line.begin());
-                        line = trim(line);
-                    }
-                    while (!line.empty() && (line.back() == '"' || line.back() == '.' || line.back() == ':'))
-                        line.pop_back();
-                    line = trim(line);
-
-                    if (!line.empty() && line.find("Analyze the Request") == std::string::npos
-                        && line.find("Determine the appropriate response") == std::string::npos
-                        && line.find("Drafting the response") == std::string::npos
-                        && line.find("Check constraints") == std::string::npos
-                        && line.find("Final Selection") == std::string::npos
-                        && line.find("Final Answer") == std::string::npos)
-                    {
-                        bestLine = line;
-                    }
-
-                    start = (end < reasoning.size()) ? end + 1 : reasoning.size();
-                }
-
-                return bestLine;
-            };
 
             // scan items by looking for "type":"message"
             std::size_t pos = arr_pos;
@@ -1051,12 +973,7 @@ namespace epoch::ai
                 std::string text = trim(json_unescape(raw));
                 if (itemType == "message" && !text.empty())
                     last = std::move(text);
-                else if (itemType == "reasoning" && !text.empty())
-                    lastReasoning = std::move(text);
             }
-
-            if (last.empty() && !lastReasoning.empty())
-                last = reasoning_fallback(lastReasoning);
 
             if (!last.empty())
                 return last;
@@ -1069,13 +986,6 @@ namespace epoch::ai
 
             if (const std::string directText = trim(extract_json_string_field_after(sv, "\"text\"")); !directText.empty())
                 return directText;
-
-            if (const std::string reasoning = trim(extract_json_string_field_after(sv, "\"reasoning_content\"")); !reasoning.empty())
-            {
-                if (const std::string fallback = reasoning_fallback(reasoning); !fallback.empty())
-                    return fallback;
-                return reasoning;
-            }
 
             return {};
         }
@@ -1097,7 +1007,7 @@ namespace epoch::ai
                 body += "{\"role\":\"system\",\"content\":\"" + json_escape(system_prompt) + "\"},";
                 body += "{\"role\":\"user\",\"content\":\"" + json_escape(input) + "\"}";
                 body += "],";
-                body += "\"max_tokens\":256,";
+                body += "\"max_tokens\":768,";
                 body += "\"stream\":false";
                 body += "}";
                 return body;
@@ -1159,6 +1069,8 @@ namespace epoch::ai
                     core::log::warn("ai", epoch::string_view{error.data(), error.size()});
                     return std::string("Local model API error: ") + error;
                 }
+                if (rawResponse.find("\"reasoning_content\"") != std::string::npos)
+                    return "Local model returned hidden reasoning without visible assistant content. Select a content-producing model or disable reasoning export before using EpochBot chat.";
                 return "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response.";
             }
             catch (const std::exception& ex)
@@ -1212,11 +1124,12 @@ namespace epoch::ai
 
         const std::string sys =
             "You are EpochBot.\n"
+            "Epoch is a C++23 game engine, editor, renderer, tooling, and AI self-iteration codebase; never interpret engine tasks as vehicle repair.\n"
             "Rules:\n"
             " - Reply with correct English grammar.\n"
             " - Capitalize the first letter of the response.\n"
             " - Do not mimic the user's bad grammar.\n"
-            " - Do not include hidden reasoning.\n"
+            " - Put only the final answer in assistant content; do not include or rely on hidden reasoning.\n"
             " - Stay grounded in the current Epoch editor/project context.\n"
             " - Prefer concrete editor, scene, engine, and C++ guidance that teaches the internal Epoch bot what to do next.\n"
             " - The local MCP/control layer can teach and steer EpochBot while it operates; keep responses useful for that training loop instead of acting like a generic assistant.\n"
@@ -1746,6 +1659,81 @@ namespace epoch::ai
         oss << "}\n";
 
         return write_text_file(evalFile, oss.str());
+    }
+
+    HelperReviewGateResult classify_helper_review_reply(std::string_view reply)
+    {
+        const std::string lower = lowercase_ascii(reply);
+
+        HelperReviewGateResult result{};
+        result.state = "rejected_missing_evidence";
+        result.reason = "helper reply did not cite enough staged packet/build/output/verifier evidence";
+
+        const bool bypassIntent =
+            contains_text(lower, "auto promote")
+            || contains_text(lower, "autopromote")
+            || contains_text(lower, "commit it")
+            || contains_text(lower, "push it")
+            || contains_text(lower, "no review")
+            || contains_text(lower, "skip review")
+            || contains_text(lower, "run server")
+            || contains_text(lower, "start server")
+            || contains_text(lower, "open port")
+            || contains_text(lower, "bind port")
+            || contains_text(lower, "listener")
+            || contains_text(lower, "self accessible")
+            || contains_text(lower, "model-accessible");
+        if (bypassIntent)
+        {
+            result.state = "rejected_bypass_request";
+            result.reason = "helper reply requested automatic promotion or a bypass-capable runtime action";
+            return result;
+        }
+
+        const bool saysFineWithoutEvidence =
+            (contains_text(lower, "working fine")
+                || contains_text(lower, "looks good")
+                || contains_text(lower, "all good")
+                || contains_text(lower, "ship it"))
+            && !contains_text(lower, "packet")
+            && !contains_text(lower, "build")
+            && !contains_text(lower, "verifier")
+            && !contains_text(lower, "child_self_test");
+        if (saysFineWithoutEvidence)
+        {
+            result.state = "rejected_status_only";
+            result.reason = "helper reply asserted success without visible tool/build evidence";
+            return result;
+        }
+
+        int evidenceScore = 0;
+        if (contains_text(lower, "packet")) ++evidenceScore;
+        if (contains_text(lower, "build log") || contains_text(lower, "build=pass") || contains_text(lower, "build pass")) ++evidenceScore;
+        if (contains_text(lower, "output") || contains_text(lower, ".exe") || contains_text(lower, "artifact")) ++evidenceScore;
+        if (contains_text(lower, "child_self_test") || contains_text(lower, "self-test") || contains_text(lower, "verifier")) ++evidenceScore;
+        if (contains_text(lower, "mcp") || contains_text(lower, "capture") || contains_text(lower, "evidence path")) ++evidenceScore;
+        result.evidence_score = evidenceScore;
+
+        const bool humanGated =
+            contains_text(lower, "human")
+            || contains_text(lower, "manual")
+            || contains_text(lower, "operator")
+            || contains_text(lower, "review")
+            || contains_text(lower, "approval");
+        if (!humanGated)
+        {
+            result.state = "rejected_missing_human_gate";
+            result.reason = "helper reply cited evidence but did not keep promotion behind a human review gate";
+            return result;
+        }
+
+        if (evidenceScore < 4)
+            return result;
+
+        result.accepted = true;
+        result.state = "ready_for_human_review";
+        result.reason = "helper reply cites staged packet/build/output/verifier evidence and keeps promotion human-gated";
+        return result;
     }
 
     std::string send_to_bot(const std::string& user_text)

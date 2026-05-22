@@ -5,15 +5,17 @@
 - Epoch is a C++23 engine/tooling repo. Active engine work is under
   `Engine/src/`, `Engine/modules/`, `Engine/include/`, `Engine/resource/`,
   `Engine/ai/`, and `Engine/examples/`.
-- Start with `README.md`, `Engine/docs/README.md`, and `cpp.md` before making
-  broad changes. Build and runtime details live in `Engine/docs/build/` and
-  `Engine/docs/engine/`.
+- Start with `README.md`, `Engine/docs/README.md`, and `Changes/cpp.md` before
+  making broad changes. Build and runtime details live in `Engine/docs/build/`
+  and `Engine/docs/engine/`.
 - Use the documentation map, not random README guesses:
   `Changes/roadmap.md` is the active planning contract, `Changes/changelog.txt`
   records current version work, `Engine/docs/README.md` is the docs index,
   `Engine/docs/engine/runtime_and_editor_workflows.md` owns launcher/editor
-  behavior, `Engine/docs/engine/ai_training_memory_and_dataset_policy.md` owns
-  AI capture/training policy, and `Engine/ai/README.md` plus
+  behavior, `Engine/docs/engine/gui_library_architecture.md` owns the shared
+  GUI library/control-surface contract,
+  `Engine/docs/engine/ai_training_memory_and_dataset_policy.md` owns AI
+  capture/training policy, and `Engine/ai/README.md` plus
   `Engine/ai/control/continuous_build_loop.json` own the live AI loop contract.
 - Stay inside this worktree when reading or editing docs. Do not copy README or
   `.codex` content from sibling worktrees or unrelated projects into Epoch.
@@ -42,6 +44,10 @@
 - Sync the repository before starting substantive work: inspect the current
   branch, dirty state, remotes, and fetched upstream before editing project
   files.
+- Treat Epoch as a professional production engine at every step. "First pass"
+  means narrow scope, not throwaway code: every checked-in change should have
+  clear ownership, real behavior, build/test evidence, and a documented follow-up
+  gate for anything intentionally incomplete.
 - Treat `Changes/roadmap.md` as the active planning contract. Use its Phase
   Progress, Active Mission Tracks, Current Push Order, and Acceptance Gates to
   choose the next small batch of work.
@@ -53,6 +59,10 @@
   stable.
 - Avoid speculative rewrites. If a roadmap item is too large for the current
   pass, add precise follow-up notes instead of pretending the phase is done.
+- Do not introduce placeholders, fake UI, fake AI autonomy, or dead-end
+  scaffolding as if it were production progress. Temporary compatibility code is
+  allowed only when it preserves a working path and is documented with an owner,
+  reason, and removal/promotion condition.
 - Treat operator-reported runtime issues as roadmap evidence. When the user
   reports flicker, missing panes, broken project output, confusing controls,
   AI behavior gaps, or workflow regressions, update `Changes/roadmap.md` and
@@ -74,6 +84,10 @@
   downloadable repo/source packages must compile through an updater-style,
   human-approved build/run gate and must not auto-create servers, listeners,
   hidden control surfaces, or model-bypass channels.
+- Voxel terrain, planetary renderer, procedural plant, AI, and tooling
+  prototypes are package candidates first, not direct mainline imports. Stage
+  them with provenance, source/hash, build/test commands, limitations, and a
+  clear engine API boundary before promoting any subset into active source.
 
 ## Build Commands
 
@@ -105,6 +119,9 @@
 - Linux/GCC presets are headless validation by default because GCC 14 can ICE
   while writing full-engine C++ module BMIs. Use `ninja-gcc-debug` for headless
   validation unless intentionally testing the experimental full GNU module path.
+- WSL runtime proof is single-context OpenGL. Do not default WSL to the Windows
+  parented multicontext shell or auto-fall back to Vulkan; Vulkan on WSL is an
+  explicit validation task until local proof says otherwise.
 - The module-aware CMake path requires CMake 3.28 or newer. If the available
   CMake is older, prefer the checked-in Visual Studio/MSBuild solution.
 
@@ -147,10 +164,26 @@
   panes, scrollable/selectable text views, context menus, modals, optional
   popouts, and separate editor workspaces for scene/game, assets, projects,
   systems, and AI sandbox operations.
+- Treat `engine.gui` as an engine-internal GUI library. Reusable primitives
+  such as tabs, dropdown/select boxes, scroll areas, text inputs, window chrome,
+  modal layers, splitters, and future context menus belong there first; editor
+  workspaces should compose them instead of reimplementing controls or stuffing
+  workflow UI into Console Dock output.
+- Do not toy with the working draw model. OpenGL editor stability depends on the
+  established order: drain normal GUI/backend work, render the scene once, drain
+  follow-up work, replay only the explicit GUI top-layer batch for command menus
+  and modal chrome, then capture/present. Command-menu z-order, modal focus, and
+  pane chrome fixes must be made as explicit GUI/draw-model improvements with
+  build proof and operator eye-test evidence, not by skipping drains, moving the
+  whole GUI into a deferred batch, or changing backend frame order as a shortcut.
 - EpochBot's target is a closed-loop agentic cognition system, not only a chat
   prompt. Keep the architecture documented around working memory, long-term
   memory, retrieval, goals, planner, executor, verifier, scoring, self-state,
   attention, and a real-time observe/act/verify/learn loop.
+- EpochBot chat must never surface hidden model reasoning. If a local
+  OpenAI-compatible model returns blank assistant `content` with only
+  `reasoning_content`, reject the pass as a model/API configuration issue and do
+  not promote that reasoning into curated training data.
 
 ## Linux Helper Scripts
 
@@ -176,3 +209,11 @@
   `Engine/docs/engine/runtime_and_editor_workflows.md`.
 - Prefer adding a short TODO when a workflow is uncertain instead of inventing
   a command or support claim.
+- Do not add `std::cout`, `std::cerr`, `printf`, or `fprintf` to new C++ code.
+  Engine/editor/runtime/backend/AI paths use the engine logger or visible editor
+  evidence surfaces. Epoch-branded smoke/validation tools use `core_log_write`
+  or `core.log`; direct C++23 `<print>` is reserved for non-engine helper
+  utilities that are intentionally outside Epoch runtime/tooling ownership.
+- Do not add ad hoc Win32 include blocks to shared engine/editor code. Use the
+  existing platform/config wrapper path, and keep backend-specific platform
+  includes inside backend-owned translation units.

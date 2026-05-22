@@ -3,20 +3,53 @@
 #include "epoch.runtime_bridge.hpp"
 #include "epoch.script_api.h"
 
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
-#include <iostream>
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <utility>
+
+extern "C" void core_log_write(std::uint32_t lvl, const char* tag_utf8, const char* msg_utf8);
 
 namespace
 {
+    constexpr std::uint32_t kLogInfo = 1u;
+    constexpr std::uint32_t kLogError = 3u;
+    constexpr const char* kLogTag = "Epoch.HeadlessCI";
+
     struct SmokeState
     {
         bool logged = false;
         bool queuedModel = false;
     };
+
+    void LogInfo(std::string_view message)
+    {
+        const std::string text{ message };
+        core_log_write(kLogInfo, kLogTag, text.c_str());
+    }
+
+    void LogError(std::string_view message)
+    {
+        const std::string text{ message };
+        core_log_write(kLogError, kLogTag, text.c_str());
+    }
+
+    template <typename... Args>
+    void LogInfo(std::format_string<Args...> fmt, Args&&... args)
+    {
+        LogInfo(std::format(fmt, std::forward<Args>(args)...));
+    }
+
+    template <typename... Args>
+    void LogError(std::format_string<Args...> fmt, Args&&... args)
+    {
+        LogError(std::format(fmt, std::forward<Args>(args)...));
+    }
 
     void SmokeLog(void* userData, const char* message)
     {
@@ -25,7 +58,7 @@ namespace
         {
             state->logged = true;
         }
-        std::cout << "[epoch-ci] " << (message ? message : "(null)") << '\n';
+        LogInfo(message ? message : "(null)");
     }
 
     int SmokeQueueModelLoad(void* userData, const char* debugName, const char* path)
@@ -41,8 +74,37 @@ namespace
             return 0;
         }
 
-        std::cout << "[epoch-ci] queued model '" << debugName << "' from " << path << '\n';
+        LogInfo("queued model '{}' from {}", debugName, path);
         return 1;
+    }
+
+    bool IsRepoRoot(const std::filesystem::path& candidate)
+    {
+        return std::filesystem::exists(candidate / "Engine" / "ai" / "control" / "continuous_build_loop.json")
+            && std::filesystem::exists(candidate / "Changes" / "roadmap.md");
+    }
+
+    std::filesystem::path ResolveRepoRoot(std::filesystem::path start)
+    {
+        std::error_code ec;
+        if (start.empty())
+            start = std::filesystem::current_path(ec);
+
+        if (std::filesystem::is_regular_file(start, ec))
+            start = start.parent_path();
+
+        for (auto candidate = std::filesystem::absolute(start, ec);
+            !candidate.empty();
+            candidate = candidate.parent_path())
+        {
+            if (IsRepoRoot(candidate))
+                return candidate;
+
+            if (candidate == candidate.root_path())
+                break;
+        }
+
+        return start;
     }
 
     bool OptionalPathProbe(const std::filesystem::path& repoRoot)
@@ -51,10 +113,11 @@ namespace
         const auto assetsDir = engineDir / "assets";
         const auto demoDir = assetsDir / "demo";
 
-        std::cout << "[epoch-ci] repo probe: " << repoRoot.string() << '\n';
-        std::cout << "[epoch-ci] Engine present: " << std::filesystem::exists(engineDir) << '\n';
-        std::cout << "[epoch-ci] Engine/assets present: " << std::filesystem::exists(assetsDir) << '\n';
-        std::cout << "[epoch-ci] demo assets present: " << std::filesystem::exists(demoDir) << '\n';
+        const std::string repoRootText = repoRoot.string();
+        LogInfo("repo probe: {}", repoRootText);
+        LogInfo("Engine present: {}", std::filesystem::exists(engineDir) ? 1 : 0);
+        LogInfo("Engine/assets present: {}", std::filesystem::exists(assetsDir) ? 1 : 0);
+        LogInfo("demo assets present: {}", std::filesystem::exists(demoDir) ? 1 : 0);
 
         // Hosted CI must stay asset-light, so this is an informational probe.
         return true;
@@ -66,7 +129,8 @@ namespace
         std::ifstream in(contractPath);
         if (!in)
         {
-            std::cerr << "[epoch-ci] missing AI control contract: " << contractPath.string() << '\n';
+            const std::string contractText = contractPath.string();
+            LogError("missing AI control contract: {}", contractText);
             return false;
         }
 
@@ -78,11 +142,12 @@ namespace
         const bool hasNoBlindWriteThrough =
             content.find("Never allow blind repo write-through") != std::string::npos;
 
-        std::cout << "[epoch-ci] AI control contract: " << contractPath.string() << '\n';
-        std::cout << "[epoch-ci] AI control stages present: "
-            << (hasPlanner && hasBuilder && hasVerifier && hasGate) << '\n';
-        std::cout << "[epoch-ci] AI control gate policy present: "
-            << hasNoBlindWriteThrough << '\n';
+        const std::string contractText = contractPath.string();
+        LogInfo("AI control contract: {}", contractText);
+        LogInfo("AI control stages present: {}",
+            (hasPlanner && hasBuilder && hasVerifier && hasGate) ? 1 : 0);
+        LogInfo("AI control gate policy present: {}",
+            hasNoBlindWriteThrough ? 1 : 0);
 
         return hasPlanner && hasBuilder && hasVerifier && hasGate && hasNoBlindWriteThrough;
     }
@@ -109,18 +174,18 @@ int main(int argc, char** argv)
     const int queued = host.queue_model_load(host.user_data, "MiniSponza",
         host.project_model_asset);
 
-    const auto repoRoot = (argc > 1 && argv && argv[1])
+    const auto repoRoot = ResolveRepoRoot((argc > 1 && argv && argv[1])
         ? std::filesystem::path(argv[1])
-        : std::filesystem::current_path();
+        : std::filesystem::current_path());
     OptionalPathProbe(repoRoot);
     const bool controlContractReady = RequiredControlContractProbe(repoRoot);
 
     if (!state.logged || !state.queuedModel || queued != 1 || !controlContractReady)
     {
-        std::cerr << "[epoch-ci] script host smoke failed\n";
+        LogError("script host smoke failed");
         return 1;
     }
 
-    std::cout << "[epoch-ci] headless smoke passed without graphics dependencies\n";
+    LogInfo("headless smoke passed without graphics dependencies");
     return 0;
 }

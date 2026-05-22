@@ -48,12 +48,16 @@ Build-system reality to keep in mind:
   strengths, cautions, and priorities
 - `engine/runtime_and_editor_workflows.md` - project-centric runtime, editor,
   scripting, systems, and updater behavior
+- `engine/gui_library_architecture.md` - shared engine GUI primitives, layout,
+  docking, theme/rendering, and editor-composition ownership rules
 - `engine/backend_context_status.md` - backend/context inventory and practical
   guidance
 - `engine/backend_menu_overlay_status.md` - backend GUI parity and caution
   notes
 - `engine/renderer_feature_matrix.md` - OpenGL/Vulkan/Direct3D feature-family
   map with existing coverage separated from renderer backlog work
+- `engine/voxel_planetary_package_track.md` - voxel-first planetary terrain,
+  procedural vegetation, and package-gated research import direction
 - `engine/renderer_regression_smoke_plan.md` - repeatable backend smoke
   expectations
 - `engine/smoke_capture_and_screenshot_workflow.md` - capture discipline for
@@ -63,6 +67,8 @@ Build-system reality to keep in mind:
   and scrollbar/extents artifacts
 - `engine/ai_training_memory_and_dataset_policy.md` - AI storage, iteration,
   capture, and promotion rules
+- `engine/source_shape_audit.md` - current source/header/module organization
+  checkpoint and safe cleanup gates
 - `../ai/README.md` - live AI content map and self-iteration sandbox controls
 - `engine/research_import_and_promotion.md` - staged research intake and
   promotion path
@@ -84,4 +90,5 @@ the active tree:
 
 - `../../Changes/roadmap.md`
 - `../../Changes/changelog.txt`
+- `../../Changes/cpp.md`
 - `../../Changes/engine_history_and_release_archive.md`

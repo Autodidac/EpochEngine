@@ -14,4 +14,12 @@ export namespace epoch::ai
         std::string project_id{};
         std::string scene_id{};
     };
+
+    struct HelperReviewGateResult
+    {
+        bool accepted = false;
+        int evidence_score = 0;
+        std::string state{};
+        std::string reason{};
+    };
 }

@@ -29,8 +29,11 @@ export namespace epochnamespace::openglcapture
             static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u,
             0u);
 
+        GLboolean doubleBuffered = GL_TRUE;
+        glGetBooleanv(GL_DOUBLEBUFFER, &doubleBuffered);
+        glFinish();
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        glReadBuffer(GL_BACK);
+        glReadBuffer(doubleBuffered == GL_TRUE ? GL_BACK : GL_FRONT);
         glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
         if (a_writeImage(capturePath, pixels, width, height, true))

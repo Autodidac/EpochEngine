@@ -47,6 +47,23 @@ findings. Promotion should be explicit and narrow:
 4. Leave utility-only sources out of Epoch planning truth unless they really
    inform the engine
 
+## Prototype package rule
+
+Renderer, terrain, voxel, AI, plant, or tooling prototypes should not be copied
+straight into active engine source. When a prototype is large enough to compile
+or run, prefer a package-style review path first:
+
+- record original source, local path, hash, license/provenance, and operator
+  intent
+- keep the package in a local cache, special review branch, or separate repo
+  until its engine boundary is clear
+- add package build/test commands and known limitations before promotion
+- promote only the smallest engine-owned interfaces needed by Epoch
+
+The current voxel/planetary examples are tracked in
+`engine/voxel_planetary_package_track.md`. They are design and package-candidate
+inputs, not approved mainline source imports.
+
 ## External utility note
 
 Botface now lives in its own external repo. It is not Epoch roadmap truth by

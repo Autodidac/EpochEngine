@@ -3,13 +3,7 @@ module;
 #include <include/engine.config.hpp>
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "framework.hpp"
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #endif
@@ -150,8 +144,12 @@ namespace epochnamespace::directxcontext
         state.immediate->VSSetShader(state.vertexShader, nullptr, 0);
         state.immediate->PSSetShader(state.pixelShader, nullptr, 0);
 
-        queue.drain();
-        (void)gui::render_deferred_batch(ctx.get());
+        const bool overlayPriority = ctx->gui_overlay_priority();
+        if (!overlayPriority)
+        {
+            queue.drain();
+            (void)gui::render_deferred_batch(ctx.get());
+        }
 
         const auto sceneViewport = ctx->scene_viewport();
         if (ctx->scene_preview_mode() == core::ScenePreviewMode::Editor
@@ -170,6 +168,9 @@ namespace epochnamespace::directxcontext
             detail::draw_vertices(state, solid, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             detail::draw_vertices(state, lines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
         }
+
+        queue.drain();
+        (void)gui::render_deferred_batch(ctx.get());
 
         (void)state.swapchain->Present(1, 0);
 

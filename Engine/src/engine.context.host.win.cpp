@@ -144,7 +144,10 @@ namespace
 
         epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
             .type = epochnamespace::gui::EventType::KeyDown,
-            .key = key
+            .key = key,
+            .ctrl_down = (::GetKeyState(VK_CONTROL) & 0x8000) != 0,
+            .shift_down = (::GetKeyState(VK_SHIFT) & 0x8000) != 0,
+            .alt_down = (::GetKeyState(VK_MENU) & 0x8000) != 0
         });
     }
 

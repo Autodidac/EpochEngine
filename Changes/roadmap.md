@@ -7,6 +7,10 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 - project creation, editing, play, scripting, tooling, and updates
 - renderer and systems tooling that stay honest across backends
 - engine-owned GUI/text/input instead of middleware-owned editor behavior
+- a long-horizon voxel/planetary renderer spine where multi-informational
+  voxel LOD, procedural vegetation/world generation, voxel ray/path tracing,
+  and classic terrain/model output converge instead of becoming disconnected
+  renderer experiments
 - a staged engine AI/self-iteration loop that stays reviewable and evidence-gated
 - packaging and runtime rules that hold across desktop first, then Android
 
@@ -17,36 +21,54 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 2. Commit only stable, verified changes. Do not move the branch forward with
    speculative or half-validated runtime/build states.
 3. Validation must come from asset-bearing outputs and clean up after itself.
-4. Packaged/runtime path logic must resolve from the executable path first, not
+4. Every pass must be production-minded even when the scope is small. First-pass
+   work must be real, owned, buildable, documented, and acceptance-gated; it must
+   not land as placeholder behavior, fake UI, fake AI autonomy, or throwaway
+   scaffolding.
+5. Packaged/runtime path logic must resolve from the executable path first, not
    the working directory.
-5. Multicontext UI must converge toward first-class individual context panes,
+6. Multicontext UI must converge toward first-class individual context panes,
    like an IDE/MSVC-style tool shell where each visible surface has one clear
    owner. Nested backend child windows remain backend-specific implementation
    detail, not the user-facing model.
-6. Broad hardware support stays the default. Heavy features remain tiered or
+7. Broad hardware support stays the default. Heavy features remain tiered or
    opt-in.
-7. Research imports are staged first, reviewed second, and promoted only when
+8. Research imports are staged first, reviewed second, and promoted only when
    they materially improve repo truth.
-8. Build/tooling floors must stay honest. Preserve baseline compatibility where
+9. Build/tooling floors must stay honest. Preserve baseline compatibility where
    possible, and document the real split when newer CMake/module support is
    required.
-9. External local LLM endpoints are explicitly selected tooling providers, not
-   hidden authority and not an auto-selected default.
-10. The engine AI architecture keeps three distinct internal pieces:
+10. External local LLM endpoints are explicitly selected tooling providers, not
+    hidden authority and not an auto-selected default.
+11. The engine AI architecture keeps three distinct internal pieces:
     - `EpochBot`, the primary engine-owned trainable LLM
     - local MCP/control/tool harnesses that operate the editor and collect proof
     - an offline/injectable OSS or tiny backup LLM path for fallback, generated
       software embedding, and EpochBot training support
-11. AI may generate local game, tool, app, and server project artifacts only
+12. AI may generate local game, tool, app, and server project artifacts only
     through visible, reviewable requests. It must not create or run apps/services
     that provide model bypass channels, self-accessible servers, hidden control
     surfaces, listener creation, port binding, or network-serving mode
     activation without an explicit human enable/run action.
-12. Local game/tool tests through approved editor/MCP/harness controls are
+13. Local game/tool tests through approved editor/MCP/harness controls are
     allowed when visible, evidence-captured, and not exposing a new
     model-accessible network/control surface.
-13. `addons/` is local/offline by default. Treat it as staged source material
+14. `addons/` is local/offline by default. Treat it as staged source material
     for future review, not as online repo content.
+15. C++23 output policy: engine, editor, runtime, backend, AI, capture, updater,
+    and project-generation code paths use `core.logger` or visible editor
+    evidence surfaces. New C++ code must not add `std::cout`, `std::cerr`,
+    `printf`, or `fprintf`; Epoch-branded smoke/validation tools use
+    `core_log_write` or `core.log` rather than direct console output. Direct
+    C++23 `<print>` is reserved for non-engine helper utilities that are
+    intentionally outside Epoch runtime/tooling ownership.
+16. The working GUI/scene draw model is protected. Do not alter queue-drain
+    order, backend frame order, or ad hoc overlay replay behavior to chase a GUI
+    symptom unless the mission is explicitly a draw-model improvement with build
+    proof and manual flicker/z-order eye-test evidence. OpenGL's editor baseline
+    remains: drain normal GUI/backend work, render the scene preview once, drain
+    follow-up work, replay only the explicit GUI top-layer batch for command
+    menus/modal chrome, then capture/present.
 
 ## Release And Source Policy
 
@@ -129,8 +151,10 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   can ICE while writing full-engine C++ module BMIs; full Linux editor/runtime
   builds should use Clang until GCC module support stabilizes.
 - Linux/Clang 18 is the current full-engine Linux rendering build lane, with
-  OpenGL, software renderer, and SFML validated as build-time backends. DirectX
-  remains explicitly Windows-only and must stay disabled for Linux/WSL presets.
+  single-context OpenGL as the WSL-proven editor/runtime path. Do not auto-fall
+  back to Vulkan in WSL; Vulkan remains explicit validation work on Linux/WSL
+  until it is proven locally. DirectX remains explicitly Windows-only and must
+  stay disabled for Linux/WSL presets.
 - CMake is authoritative for cross-platform builds and project-wide presets.
 - Visual Studio project/filter files must not drift from filesystem and CMake
   whenever files are moved or added.
@@ -154,8 +178,42 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   feature-complete. D3D12 stays a future explicit renderer track.
 - Vulkan remains the future explicit cross-platform graphics backend until
   runtime support is fully stabilized.
+- Linux/WSL does not use the Windows parented multicontext editor shell by
+  default. Current WSL proof is single OpenGL context with no automatic Vulkan
+  fallback; other backend/tool outputs can later launch as explicit child
+  processes from editor output settings once their Linux context ownership is
+  stable.
 - Raylib, SDL, and SFML remain context/backend compatibility and validation
   lanes, especially for docking, popout, and backend ownership checks.
+
+### Long-Horizon World And Renderer Architecture
+
+- Epoch's target renderer/world direction is a futuristic voxel-first engine
+  spine: multi-informational voxel LOD, planetary-scale hybrid terrain,
+  voxel-assisted navigation, voxel/path-traced lighting, and procedural
+  generation that can resolve into classic terrain, mesh, model, and vegetation
+  assets when that is the right runtime representation.
+- Distant objects and vegetation should converge through integrated
+  SpeedTree-like procedural generation plus voxel LOD instead of treating
+  triangle virtualization as the only path.
+- Operator voxel and procedural plant prototypes are design/reference material
+  for future reviewed imports. They must be audited and promoted through the
+  source-shape/import gate before any prototype code becomes tracked Epoch
+  engine source.
+- Prototype terrain/voxel/plant work should first become a package-manager
+  candidate, not a direct source dump. Package candidates must record source,
+  hash, provenance, build/test commands, known limitations, and the exact
+  engine-owned API boundary they propose before they are promoted.
+- The local `vk_cp_cursor_nodoublefree.zip` snapshot inspected on 2026-05-21 is
+  a Vulkan voxel/chunk reference with SDF terrain, chunk/LOD ownership,
+  platform shells, and seam tests. Keep it staged as research/package material
+  unless a later branch/repo import gate explicitly promotes a subset.
+- See `Engine/docs/engine/voxel_planetary_package_track.md` for the current
+  package-gated voxel/planetary direction.
+- This direction does not change the current renderer acceptance gate: OpenGL,
+  DirectX, Vulkan, Raylib, SDL, and SFML must keep passing their existing
+  build/runtime proof while the central resource/capability spine is built in
+  small verified batches.
 
 ### Multicontext Windowing Direction
 
@@ -368,18 +426,20 @@ engine shape and should be treated as starting truth for the next passes:
 - the scene viewport now has first-pass object interaction: visible editor
   primitives can be click-selected and left-dragged while empty scene space
   still supports camera pan/orbit/zoom
-- console-dock text rendering now avoids submitting partially clipped glyph
-  atlas quads through the current sprite path, preventing the stretched vertical
-  smear artifacts seen while scrolling tall AI/path rows
+- console-dock text rendering now accepts safely visible edge glyphs while still
+  rejecting non-finite or unreasonable glyph rectangles, preventing missing first
+  letters without reopening the stretched vertical smear artifacts seen while
+  scrolling tall AI/path rows
 - GUI buttons now capture on press and fire on release, so launcher/editor
   actions happen after the pressed visual state instead of racing it
 - project selection no longer silently creates or rewrites project shells; File
   > Save Project, Project > Save Active Project, and the centered Run button are
   the explicit operator actions that materialize/update generated project files
-- the top scene command strip now has one centered Run action. It runs the
-  selected script when a script asset is active, otherwise it saves and rebuilds
-  the active project before launching the generated output. A failed build now
-  cancels launch instead of falling through to stale child executables.
+- the top scene command strip now has one centered Run action. It saves and
+  rebuilds the active generated project before launching the generated output.
+  Script assets validate through their explicit script build controls instead of
+  stealing the project Run path. A failed build cancels launch instead of
+  falling through to stale child executables.
 - generated Sandbox and ProjectLauncher shells expose `--project-self-test` so
   child project output can be verified without launching GUI windows
 - the checked-in engine now exposes `--editor-project-self-test <id>` so Sandbox
@@ -551,16 +611,18 @@ engine shape and should be treated as starting truth for the next passes:
   owner-thread dock command routing through the Raylib render command queue.
   The patch builds cleanly; the acceptance gate is still live multicontext
   drag-out/redock confirmation with no parent crash.
-- WSL/Linux status for `v0.84.35`: repo-root `ninja-clang-debug` builds and
-  `epoch_ci_headless` passes with DirectX disabled. A Linux runtime package was
-  staged at `C:\tmp\epoch_release\epoch_linux_x64_v0.84.35.tar.gz`; the staged
-  package reports `Epoch v0.84.35` and passes `epoch_ci_headless .` after
-  including source-shaped `Engine/assets`, `Engine/resource`, and
-  `Engine/ai/control` runtime support paths. Linux visual screenshot refresh
-  remains a follow-up gate; do not replace the README Linux proof until an
-  honest Linux/WSLg or native Linux visual smoke exists. Keep any
-  workstation-specific capture failure notes in local/pass context rather than
-  public release copy.
+- WSL/Linux status for `v0.84.35`: repo-root `ninja-clang-debug` builds,
+  `epoch_ci_headless` passes with DirectX disabled, and Ubuntu WSL2/WSLg now
+  produces a real non-black single OpenGL editor capture when launched with
+  `epoch --renderer opengl --standalone --editor --smoke --capture`. A Linux
+  runtime package was staged at
+  `C:\tmp\epoch_release\epoch_linux_x64_v0.84.35.tar.gz`; the staged package
+  reports `Epoch v0.84.35` and passes `epoch_ci_headless .` after including
+  source-shaped `Engine/assets`, `Engine/resource`, and `Engine/ai/control`
+  runtime support paths. Plain runtime smoke without `--editor` can still write
+  a black capture and should not be treated as failed OpenGL dependency proof.
+  Keep workstation-specific capture failure notes in local/pass context rather
+  than public release copy.
 - A local Windows runtime package was staged at
   `C:\tmp\epoch_release\epoch_win10_x64_v0.84.35.zip` with app-local backend
   DLLs, assets, and VC143 CRT DLLs, and the staged executable reported
@@ -578,6 +640,33 @@ engine shape and should be treated as starting truth for the next passes:
 - the editor still has too many duplicate paths to equivalent controls across
   central surfaces, docks, menus, and inspectors. Keep reducing duplicate command
   surfaces while preserving one discoverable path and one quick-access path.
+- current GUI shape targets from operator review: shared tab controls should draw
+  as real connected tabs instead of generic buttons; close buttons belong as
+  top-right window X affordances; launcher/editor settings should open useful
+  modal surfaces; Project Hub should use a game/software launcher mockup instead
+  of mirroring the editor; scripting needs a real code/text editor view; World
+  Outliner rows need human names and grouping; EpochBot weight/matrix analysis
+  belongs in a separate graph/terrain-style AI visualizer that samples summaries
+  rather than trying to draw billions of parameters.
+- the GUI layer is now documented as an engine-internal library surface:
+  primitive widgets, layout/docking, theme/rendering, and editor composition are
+  separate responsibilities. New widgets such as tabs and dropdown/select boxes
+  should land in `engine.gui` first, then be consumed by editor workspaces. The
+  active contract is `Engine/docs/engine/gui_library_architecture.md`.
+- first dropdown/select-box primitive is active, but acceptance remains visual:
+  wheel focus must stay with the open list, text must stay readable, and parent
+  scroll panes must not smear or steal input during resize.
+- source-shape cleanup is now tracked in
+  `Engine/docs/engine/source_shape_audit.md`. Use that guard before renaming
+  headers, backend bridges, config surfaces, module names, or Perf Manager
+  integration points.
+- EpochBot training/eval work now needs measurable scorecards, not vibes. A
+  self-iteration pass is incomplete until it has a staged packet, build log,
+  output artifact, generated child self-test/verifier result, visible UI state,
+  and a human-review gate state with no unresolved `[missing]` evidence markers.
+  Track false accepts, false rejects, evidence coverage, tool-trace coverage,
+  build/test pass rate, and self-iteration completion rate before promoting
+  helper output into curated data.
 
 ## Phase Progress
 
@@ -655,6 +744,10 @@ engine shape and should be treated as starting truth for the next passes:
   belongs in project assets, script bridges call into engine-owned scenes, and
   downloadable packages must use explicit updater-style source build/approval
   instead of hidden auto-execution.
+- add a research-package lane for voxel terrain, procedural vegetation, and
+  renderer/tool prototypes. Prototype packages should live in a review branch,
+  separate repo, or local package cache until their API boundary, provenance,
+  tests, and promotion gate are clear.
 - keep the bottom dock centered on `Project`, `Assets`, `Systems`, `AI`, and
   `Output` as evidence/status tabs, not as the final scene/editor-window model
 - promote the new first-pass draggable splitters into reusable dock/window GUI
@@ -667,6 +760,10 @@ engine shape and should be treated as starting truth for the next passes:
   panels, modal/focus overlays, context menus, popouts, dockable/editor windows,
   draggable splitters, resize handles, and column controls must be common engine
   GUI primitives rather than per-pane hacks
+- enforce the GUI library boundary: new tabs, dropdowns, window chrome,
+  package-manager controls, scripting views, AI control surfaces, and Systems
+  panels land in `engine.gui` primitives/layout first, with editor workspaces
+  composing them afterward
 - replace file-type asset cards with decoded image/model thumbnails and make the
   project browser grow into a real bounded file/folder panel with rename/move,
   text editing, filtering, and safer script authoring controls
@@ -762,6 +859,18 @@ engine shape and should be treated as starting truth for the next passes:
   operator surface until dedicated AI editor windows land.
 - promote only staged packets that include root-resolved project/build/output
   evidence; cwd-dependent evidence is considered invalid
+- keep the self-iteration lane branded as engine upgrade work, not as a normal
+  generated game/tool project. The compatibility id may remain `sandbox`, but
+  generated child artifacts should present as `EpochEngine` and should surface
+  update/build evidence in the editor.
+- expose EpochBot control/status in normal editor chrome as well as the central
+  AI workspace. The World Outliner `EpochBot` tab now owns compact chat,
+  prompt, plan, and status controls; future tabs should add memory, tool, and
+  evaluation views without hiding them in Console Dock output.
+- reject local-model replies that contain only hidden reasoning. EpochBot must
+  show final `content` or fail visibly as a model/API configuration issue; hidden
+  `reasoning_content` is not an assistant answer and must not be promoted into
+  curated training data.
 - train from real editor tool actions by capturing before/after state from the
   selected script harness before promoting any dataset/eval records
 - reject generic EpochBot self-status answers unless they cite tool/build/scene
@@ -789,6 +898,10 @@ engine shape and should be treated as starting truth for the next passes:
 - reject helper-model self-iteration drafts that do not cite packet/build/output
   evidence, verifier results, or eval gates; weak local model output can guide a
   supervised pass but cannot promote itself into training data or source changes.
+- keep `--editor-ai-gate-self-test` green as the executable version of that
+  helper-review rule. It must reject status-only "working fine" replies,
+  missing-verifier evidence, bypass/server requests, and any review that tries
+  to promote without human approval.
 - treat `Engine/ai/control/continuous_build_loop.json` as the current contract
   for the engine self-iteration control loop until a replay runner can enforce it
 - use MCP tool schemas as the canonical tool-bus contract and replay shape
