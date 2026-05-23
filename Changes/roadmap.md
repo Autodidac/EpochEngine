@@ -1030,6 +1030,12 @@ engine shape and should be treated as starting truth for the next passes:
     into a reviewable package workflow for local and downloadable source
     packages, with explicit human approval before build/run and no auto-created
     servers or hidden model-accessible channels.
+    Network/server packages must keep the same boundary: shared network runtime
+    contracts may be inert engine capabilities, optional authoritative
+    dedicated headless server support must be a deliberate project choice, and
+    client listen/nondedicated or future client-predicted competitive paths must
+    stay separate opt-in packages so software and single-player outputs do not
+    inherit unnecessary bloat or attack surface.
 11. Continue safe include/src restructuring and MSVC/CMake synchronization
    whenever touched areas can be normalized without collateral damage.
 

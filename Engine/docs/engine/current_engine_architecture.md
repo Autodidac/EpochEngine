@@ -121,6 +121,13 @@ Current source version: `v0.84.36`
   implementations remain kernel-engine modules. The Package Manager modal is
   the first command-menu surface for these local packages; future downloadable
   source packages must stay human-gated through updater-style build paths.
+- Server-capable runtime work follows the same package boundary. Shared
+  network/runtime contracts may exist as inert engine capabilities, but
+  optional authoritative dedicated headless server support, client
+  listen/nondedicated hosting, and future competitive client-predicted paths
+  must stay explicit project/package choices. Software projects, single-player
+  games, and minimal generated clones should not inherit server/listener code,
+  port binding, or network attack surface by default.
 - World Outliner, Inspector, Console Dock, and AI Chat can now be hidden,
   reopened, reset, and resized with first-pass splitters. The bottom
   Console/AI Chat split is drag-only now; the old sizing button strip has been

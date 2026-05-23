@@ -166,6 +166,13 @@ the same engine-owned path.
   Downloadable source packages must compile through an updater-style human-gated
   path and must not auto-run servers, listeners, hidden model channels, or any
   service that bypasses operator approval.
+- network/server packages follow the same gate. Shared client/network runtime
+  contracts may ship inertly in the engine, but authoritative dedicated
+  headless server support is an optional package for projects that explicitly
+  choose that model. Client listen/nondedicated and future competitive
+  client-predicted paths remain separate opt-in packages. Software projects,
+  single-player games, and minimal generated engine clones must not receive
+  server/listener code by default.
 - research prototypes such as voxel terrain, planetary rendering, procedural
   vegetation, and tool harnesses should enter Package Manager as local
   research-package candidates first. A package candidate needs provenance,

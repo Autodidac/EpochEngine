@@ -17,6 +17,8 @@ export namespace epoch::package_registry
     {
         RuntimeMini,
         CoreOptIn,
+        NetworkRuntime,
+        HeadlessServer,
         ResearchPrototype,
         DownloadableSource
     };
@@ -25,6 +27,8 @@ export namespace epoch::package_registry
     {
         ProjectOptIn,
         MainSceneUse,
+        HeadlessServerOptIn,
+        ClientListenServerOptIn,
         ManualResearchImport,
         DownloadedOptIn
     };
@@ -40,13 +44,18 @@ export namespace epoch::package_registry
         bool includeInGeneratedProject{};
         bool requiresHumanBuildGate{true};
         bool serverOrListenerAllowed{};
+        bool headlessCapable{};
+        bool requiresExplicitNetworkApproval{};
     };
 
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
     inline constexpr std::string_view kEngineArcadeSceneId = "engine_arcade_scene";
     inline constexpr std::string_view kEngineForestFactoryPackageId = epoch::forest::kForestFactoryPackageId;
+    inline constexpr std::string_view kEngineNetworkRuntimePackageId = "engine_network_runtime";
+    inline constexpr std::string_view kEngineAuthoritativeServerPackageId = "engine_authoritative_dedicated_server";
+    inline constexpr std::string_view kEngineListenServerPackageId = "engine_client_listen_server";
 
-    inline constexpr std::array<PackageDescriptor, 7> kKnownPackages{{
+    inline constexpr std::array<PackageDescriptor, 10> kKnownPackages{{
         {
             .id = kEngineArcadePackageId,
             .displayName = "Engine Arcade",
@@ -62,6 +71,34 @@ export namespace epoch::package_registry
             .kind = PackageKind::CoreOptIn,
             .activation = ActivationMode::MainSceneUse,
             .shipsInCore = true,
+        },
+        {
+            .id = kEngineNetworkRuntimePackageId,
+            .displayName = "Engine Network Runtime",
+            .summary = "Shared client/session replication contracts; inert unless a network package is explicitly enabled.",
+            .kind = PackageKind::NetworkRuntime,
+            .activation = ActivationMode::ProjectOptIn,
+            .shipsInCore = true,
+        },
+        {
+            .id = kEngineAuthoritativeServerPackageId,
+            .displayName = "Optional Authoritative Dedicated Server",
+            .summary = "Optional headless authoritative server package for multiplayer projects that explicitly choose that model.",
+            .kind = PackageKind::HeadlessServer,
+            .activation = ActivationMode::HeadlessServerOptIn,
+            .serverOrListenerAllowed = true,
+            .headlessCapable = true,
+            .requiresExplicitNetworkApproval = true,
+        },
+        {
+            .id = kEngineListenServerPackageId,
+            .displayName = "Client Listen Server",
+            .summary = "Client-hosted nondedicated or competitive-friendly session option for multiplayer projects that explicitly opt in.",
+            .kind = PackageKind::NetworkRuntime,
+            .activation = ActivationMode::ClientListenServerOptIn,
+            .shipsInCore = true,
+            .serverOrListenerAllowed = true,
+            .requiresExplicitNetworkApproval = true,
         },
         {
             .id = "research_voxel_planetoid_vulkan",
@@ -128,5 +165,19 @@ export namespace epoch::package_registry
     {
         const auto* package = find(id);
         return package == nullptr || package->requiresHumanBuildGate;
+    }
+
+    [[nodiscard]] constexpr bool requires_explicit_network_approval(std::string_view id) noexcept
+    {
+        const auto* package = find(id);
+        return package != nullptr && package->requiresExplicitNetworkApproval;
+    }
+
+    [[nodiscard]] constexpr bool can_create_server_or_listener_after_approval(std::string_view id) noexcept
+    {
+        const auto* package = find(id);
+        return package != nullptr &&
+               package->serverOrListenerAllowed &&
+               package->requiresExplicitNetworkApproval;
     }
 }

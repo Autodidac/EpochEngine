@@ -13,6 +13,12 @@
   next passes use the Forest Factory name, keep heavy prototypes out of the
   mainline engine, and promote package candidates only through visible
   build/test evidence.
+- Added package-registry metadata and docs for optional server-capable work:
+  shared network runtime contracts stay inert by default, authoritative
+  dedicated headless server support is an explicit package choice, and
+  client listen/nondedicated hosting remains a separate opt-in path so
+  software and single-player outputs do not inherit server bloat or attack
+  surface.
 - Validation: `cmake --preset windows-msvc-debug`,
   `cmake --build --preset windows-msvc-debug --target epoch --config Debug`,
   `cmake --build --preset windows-msvc-debug --target epoch_ci_headless --config Debug`,

@@ -98,7 +98,14 @@
   downloadable repo/source packages must compile through an updater-style,
   human-approved build/run gate and must not auto-create servers, listeners,
   hidden control surfaces, or model-bypass channels.
-- Voxel terrain, planetary renderer, procedural plant, AI, and tooling
+- Server-capable work is package-gated. Authoritative dedicated headless server
+  support is optional, not the default networking model; client
+  listen/nondedicated and future client-predicted competitive paths remain
+  separate opt-in packages. Normal software projects, single-player games, and
+  minimal generated engine clones must not include server/listener code by
+  default. Any package that can bind a port, listen, host, or expose a
+  network/control surface requires an explicit human approval/run action.
+- Voxel terrain, planetary renderer, procedural vegetation/Forest Factory, AI, and tooling
   prototypes are package candidates first, not direct mainline imports. Stage
   them with provenance, source/hash, build/test commands, limitations, and a
   clear engine API boundary before promoting any subset into active source.
