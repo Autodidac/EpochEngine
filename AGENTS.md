@@ -105,6 +105,11 @@
   minimal generated engine clones must not include server/listener code by
   default. Any package that can bind a port, listen, host, or expose a
   network/control surface requires an explicit human approval/run action.
+- Bulky optional package source belongs in
+  `https://github.com/Autodidac/EpochEngineExtensions`, not in the EpochEngine
+  mainline or local `addons/` dumps. EpochEngine should keep descriptors,
+  security gates, cache/update plumbing, and stable API boundaries; package
+  payloads download or materialize under executable-local `cache/packages/`.
 - Voxel terrain, planetary renderer, procedural vegetation/Forest Factory, AI, and tooling
   prototypes are package candidates first, not direct mainline imports. Stage
   them with provenance, source/hash, build/test commands, limitations, and a

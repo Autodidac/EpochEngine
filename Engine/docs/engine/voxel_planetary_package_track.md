@@ -36,6 +36,11 @@ Epoch now treats the voxel and plant direction as two layers:
 - `cache/packages/` is the executable-local cache for downloaded or staged
   source/runtime packages. Package source is pulled into projects only through a
   visible Package Manager/updater-style gate and never by hidden automation.
+- Bulky source packages should be curated in
+  `https://github.com/Autodidac/EpochEngineExtensions` before any reviewed
+  subset is promoted into EpochEngine API contracts. The engine repo keeps
+  descriptors, package gates, cache/update plumbing, and stable interfaces
+  rather than cloning terrain/ocean/server prototype trees into mainline.
 - Forest Factory is a core feature because repeatable procedural vegetation and
   voxel occupancy are part of Epoch's runtime/generation spine. It still remains
   project opt-in: opening the Forest Factory editor scene is allowed without

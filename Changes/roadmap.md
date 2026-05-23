@@ -1036,6 +1036,11 @@ engine shape and should be treated as starting truth for the next passes:
     client listen/nondedicated or future client-predicted competitive paths must
     stay separate opt-in packages so software and single-player outputs do not
     inherit unnecessary bloat or attack surface.
+    Bulky package source belongs in
+    `https://github.com/Autodidac/EpochEngineExtensions`; EpochEngine mainline
+    keeps descriptors, security gates, updater/cache paths, and stable API
+    contracts while downloaded/generated payloads land under
+    executable-local `cache/packages/`.
 11. Continue safe include/src restructuring and MSVC/CMake synchronization
    whenever touched areas can be normalized without collateral damage.
 

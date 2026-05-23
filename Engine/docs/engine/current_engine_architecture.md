@@ -128,6 +128,10 @@ Current source version: `v0.84.36`
   must stay explicit project/package choices. Software projects, single-player
   games, and minimal generated clones should not inherit server/listener code,
   port binding, or network attack surface by default.
+- `Autodidac/EpochEngineExtensions` is the intended source home for bulky
+  optional package implementations. EpochEngine mainline should carry the
+  descriptors, package manager/updater gates, cache paths, and stable API
+  boundaries, not imported extension source trees or generated server payloads.
 - World Outliner, Inspector, Console Dock, and AI Chat can now be hidden,
   reopened, reset, and resized with first-pass splitters. The bottom
   Console/AI Chat split is drag-only now; the old sizing button strip has been

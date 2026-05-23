@@ -19,6 +19,10 @@
   client listen/nondedicated hosting remains a separate opt-in path so
   software and single-player outputs do not inherit server bloat or attack
   surface.
+- Pointed bulky optional package implementations at
+  `Autodidac/EpochEngineExtensions` so EpochEngine mainline keeps package
+  descriptors, security gates, updater/cache paths, and stable API contracts
+  instead of absorbing extension source trees.
 - Validation: `cmake --preset windows-msvc-debug`,
   `cmake --build --preset windows-msvc-debug --target epoch --config Debug`,
   `cmake --build --preset windows-msvc-debug --target epoch_ci_headless --config Debug`,

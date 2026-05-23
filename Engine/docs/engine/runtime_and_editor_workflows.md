@@ -173,6 +173,12 @@ the same engine-owned path.
   client-predicted paths remain separate opt-in packages. Software projects,
   single-player games, and minimal generated engine clones must not receive
   server/listener code by default.
+- heavy optional package source should live outside the engine repository. The
+  canonical package-source home is
+  `https://github.com/Autodidac/EpochEngineExtensions`; EpochEngine should keep
+  package descriptors, security gates, updater/cache paths, and minimal inert
+  runtime hooks only. Downloaded or generated package payloads resolve under
+  executable-local `cache/packages/`.
 - research prototypes such as voxel terrain, planetary rendering, procedural
   vegetation, and tool harnesses should enter Package Manager as local
   research-package candidates first. A package candidate needs provenance,

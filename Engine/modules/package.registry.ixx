@@ -46,8 +46,10 @@ export namespace epoch::package_registry
         bool serverOrListenerAllowed{};
         bool headlessCapable{};
         bool requiresExplicitNetworkApproval{};
+        std::string_view externalSourceRepo{};
     };
 
+    inline constexpr std::string_view kEpochEngineExtensionsRepo = "https://github.com/Autodidac/EpochEngineExtensions";
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
     inline constexpr std::string_view kEngineArcadeSceneId = "engine_arcade_scene";
     inline constexpr std::string_view kEngineForestFactoryPackageId = epoch::forest::kForestFactoryPackageId;
@@ -89,6 +91,7 @@ export namespace epoch::package_registry
             .serverOrListenerAllowed = true,
             .headlessCapable = true,
             .requiresExplicitNetworkApproval = true,
+            .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = kEngineListenServerPackageId,
@@ -99,6 +102,7 @@ export namespace epoch::package_registry
             .shipsInCore = true,
             .serverOrListenerAllowed = true,
             .requiresExplicitNetworkApproval = true,
+            .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = "research_voxel_planetoid_vulkan",
@@ -106,6 +110,7 @@ export namespace epoch::package_registry
             .summary = "Local Vulkan voxel/chunk prototype snapshot staged for reviewed package import.",
             .kind = PackageKind::ResearchPrototype,
             .activation = ActivationMode::ManualResearchImport,
+            .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = "research_almond_voxel_authoring",
@@ -113,6 +118,7 @@ export namespace epoch::package_registry
             .summary = "External voxel authoring/toolkit prototype staged for API-boundary review.",
             .kind = PackageKind::ResearchPrototype,
             .activation = ActivationMode::ManualResearchImport,
+            .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = "research_plant_lsystem_wicked_2ol",
@@ -120,6 +126,7 @@ export namespace epoch::package_registry
             .summary = "WickedEngine plant/L-system lab staged as reference material only.",
             .kind = PackageKind::ResearchPrototype,
             .activation = ActivationMode::ManualResearchImport,
+            .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = "research_planetary_terrain",
@@ -127,6 +134,7 @@ export namespace epoch::package_registry
             .summary = "NMS-like planetary and multi-terrain stacks remain package-gated.",
             .kind = PackageKind::DownloadableSource,
             .activation = ActivationMode::DownloadedOptIn,
+            .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = "research_fft_ocean",
@@ -134,6 +142,7 @@ export namespace epoch::package_registry
             .summary = "Ocean simulation package candidate; not part of the minimal engine clone.",
             .kind = PackageKind::DownloadableSource,
             .activation = ActivationMode::DownloadedOptIn,
+            .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
     }};
 
@@ -179,5 +188,11 @@ export namespace epoch::package_registry
         return package != nullptr &&
                package->serverOrListenerAllowed &&
                package->requiresExplicitNetworkApproval;
+    }
+
+    [[nodiscard]] constexpr std::string_view external_source_repo(std::string_view id) noexcept
+    {
+        const auto* package = find(id);
+        return package != nullptr ? package->externalSourceRepo : std::string_view{};
     }
 }
