@@ -4,8 +4,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.37-1F7A4C?style=for-the-badge" alt="Current development source v0.84.37" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.37-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.37" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.38-1F7A4C?style=for-the-badge" alt="Current development source v0.84.38" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
 <p align="center">
@@ -60,9 +60,9 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.37`.
-- The latest published stable runtime release is `v0.84.37`.
-- Windows and Linux `v0.84.37` runtime packages use the production package
+- Source is currently the active development line at `v0.84.38`.
+- The latest published stable runtime release is `v0.84.38`.
+- Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
   headless smoke binaries, and duplicated compatibility output folders are not
@@ -160,13 +160,11 @@ Windows promoted-window and floating-context proof, live validation:
 WSL/Linux editor proof, latest asset-bearing visual capture:
 
 <p align="center">
-  <img src="Images/readme/linux-opengl-v08386.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />
+  <img src="Images/readme/linux-opengl-v08438.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />
 </p>
 
-`v0.84.37` WSL Clang build/headless validation is green with DirectX disabled,
-and the Linux package version/headless-smokes from its staged runtime folder.
-The current README Linux image remains the last honest visual proof; refreshed
-Linux/WSLg or native Linux screenshot proof is still a follow-up gate.
+`v0.84.38` WSL Clang build/headless validation is green with DirectX disabled,
+and WSL/OpenGL visual proof is current for the single-context Linux path.
 
 ## Quick Start
 

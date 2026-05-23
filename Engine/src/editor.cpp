@@ -3787,6 +3787,34 @@ namespace epochnamespace
             };
         };
 
+        auto top_menu_button_bounds = [&](TopMenu menu) -> std::optional<gui::WidgetBounds>
+        {
+            for (const auto& item : topMenus)
+            {
+                if (item.menu == menu)
+                    return gui::WidgetBounds{
+                        .position = { item.x, toolbar_button_y },
+                        .size = { item.width, toolbar_button_h }
+                    };
+            }
+            return std::nullopt;
+        };
+
+        auto dropdown_size_for = [&](TopMenu menu) -> gui::Vec2
+        {
+            switch (menu)
+            {
+            case TopMenu::File: return dropdown_window_size(192.0f, 4);
+            case TopMenu::Edit: return dropdown_window_size(192.0f, 3);
+            case TopMenu::Asset: return dropdown_window_size(220.0f, 7);
+            case TopMenu::Window: return dropdown_window_size(248.0f, 10);
+            case TopMenu::Tools: return dropdown_window_size(228.0f, 6);
+            case TopMenu::Help: return dropdown_window_size(192.0f, 2);
+            case TopMenu::None:
+            default: return {};
+            }
+        };
+
         auto open_dropdown = [&](std::string_view title, TopMenu menu, gui::Vec2 size, auto&& body)
         {
             if (editor.openMenu != menu)
@@ -3832,6 +3860,20 @@ namespace epochnamespace
             default:
                 break;
             }
+        }
+
+        if (editor.openMenu != TopMenu::None && gui::was_mouse_pressed())
+        {
+            const auto buttonBounds = top_menu_button_bounds(editor.openMenu);
+            const gui::Vec2 dropdownPos = dropdown_position_for(editor.openMenu);
+            const gui::Vec2 dropdownSize = dropdown_size_for(editor.openMenu);
+            const bool inButton = buttonBounds
+                && editor_point_in_rect(mouse, buttonBounds->position, buttonBounds->size);
+            const bool inDropdown = dropdownSize.x > 0.0f
+                && dropdownSize.y > 0.0f
+                && editor_point_in_rect(mouse, dropdownPos, dropdownSize);
+            if (!inButton && !inDropdown)
+                editor.openMenu = TopMenu::None;
         }
 
         auto render_titlebar_close = [&](gui::Vec2 panel_pos, gui::Vec2 panel_size, auto&& close_handler)

@@ -23,6 +23,11 @@
   task is explicitly about those artifacts. Common generated/local paths include
   `build/`, `x64/`, `Engine/Bin/`, `Engine/build/`, `Engine/built/`, and
   runtime logs/captures.
+- Runtime-created cache buckets are executable-local: updater work, temporary
+  probes, extraction state, and managed helper tools belong in `cache/updates/`;
+  downloaded package archives belong in `cache/packages/`; generated/runtime
+  atlases belong in `cache/atlases/`. These are disposable local artifacts, not
+  public release payload and not tracked source.
 - Keep `addons/` local/offline. It contains extra starter projects and research
   imports that may later be reviewed into core Epoch, but it must not be added
   to the online repo by default.

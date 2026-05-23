@@ -86,10 +86,30 @@ namespace epochnamespace::updater
     export inline std::string RUNTIME_BINARY_NAME()
     {
 #if defined(_WIN32)
-        return "ConsoleApplication1.exe";
+        return "EpochEditor.exe";
 #else
         return "epoch";
 #endif
+    }
+
+    export inline std::string CACHE_ROOT_SUBDIR()
+    {
+        return "cache";
+    }
+
+    export inline std::string UPDATER_CACHE_SUBDIR()
+    {
+        return "updates";
+    }
+
+    export inline std::string PACKAGE_CACHE_SUBDIR()
+    {
+        return "packages";
+    }
+
+    export inline std::string ATLAS_CACHE_SUBDIR()
+    {
+        return "atlases";
     }
 
     export inline std::string SOURCE_SOLUTION_NAME()
@@ -272,12 +292,12 @@ namespace epochnamespace::updater
 
     export inline std::string UPDATER_TOOLS_SUBDIR()
     {
-        return "Epoch/t";
+        return "tools";
     }
 
     export inline std::string UPDATER_WORK_SUBDIR()
     {
-        return "Epoch/u";
+        return "work";
     }
 
     export inline constexpr std::string_view VCPKG_OWNER = "microsoft";

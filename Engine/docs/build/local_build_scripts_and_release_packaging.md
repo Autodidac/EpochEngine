@@ -78,6 +78,12 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 - close live windows after validation
 - avoid disposable runs from bad folders that leave stray logs or captures in
   the wrong place
+- keep updater downloads, extraction work, temporary probes, and managed helper
+  tools under the runtime's executable-local `cache/updates/` folder; downloaded
+  package archives belong in `cache/packages/`, and generated atlases belong in
+  `cache/atlases/`
+- do not include `cache/updates/`, `cache/packages/`, or `cache/atlases/` in
+  public runtime packages
 - when the README or other public-facing markdown changes, verify the rendered
   GitHub result after push instead of trusting the raw file text alone
 

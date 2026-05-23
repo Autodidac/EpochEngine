@@ -1,5 +1,29 @@
 # Epoch Changelog
 
+## [Unreleased]
+
+## [v0.84.38]
+- Bumped the active source and stable release line to `v0.84.38` for the
+  executable-local cache and command-menu stability release.
+- Fixed a remaining command/dropdown menu flicker path by keeping OpenGL
+  top-layer menu sprites out of the normal GUI draw queue. OpenGL now draws
+  those sprites only in the explicit top-layer replay pass that sits above the
+  scene viewport.
+- Top toolbar dropdowns now close when the operator clicks outside the active
+  menu button and dropdown bounds.
+- Operator eye-test confirmed the Windows Release editor is stable with the
+  command menu open after this fix.
+- Updater downloads, source-update work, temporary scripts/log probes, and
+  managed helper tools now stay under executable-local `cache/updates/`; runtime
+  release packages download under executable-local `cache/packages/` instead of
+  `%LOCALAPPDATA%`, the system temp directory, or loose executable-root update
+  artifacts.
+- The updater's Windows runtime fallback now matches the public
+  `EpochEditor.exe` product name while still accepting legacy
+  `ConsoleApplication1.exe` source-build outputs during source-update probes.
+- Documented `cache/atlases/` as the runtime-generated/generated-atlas home so
+  created atlases do not pollute source asset trees or public release payloads.
+
 ## [v0.84.37]
 - Bumped the active source and stable release line to `v0.84.37` for the
   corrected production runtime package refresh.

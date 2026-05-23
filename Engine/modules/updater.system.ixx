@@ -494,42 +494,44 @@ namespace epochnamespace::updater
             return text;
         }
 
+        [[nodiscard]] inline std::filesystem::path ensure_directory(
+            const std::filesystem::path& path)
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(path, ec);
+            return path;
+        }
+
+        [[nodiscard]] inline std::filesystem::path runtime_cache_root()
+        {
+            std::error_code ec;
+            auto root = epoch::core::path::runtime_root_dir();
+            if (root.empty())
+                root = std::filesystem::current_path(ec);
+            if (root.empty() || ec)
+                root = std::filesystem::path{ "." };
+
+            return ensure_directory(root / CACHE_ROOT_SUBDIR());
+        }
+
+        [[nodiscard]] inline std::filesystem::path updater_cache_root()
+        {
+            return ensure_directory(runtime_cache_root() / UPDATER_CACHE_SUBDIR());
+        }
+
+        [[nodiscard]] inline std::filesystem::path package_cache_root()
+        {
+            return ensure_directory(runtime_cache_root() / PACKAGE_CACHE_SUBDIR());
+        }
+
         [[nodiscard]] inline std::filesystem::path managed_tools_root()
         {
-#if defined(_WIN32)
-            const auto local_app_data = env_path("LOCALAPPDATA");
-            if (!local_app_data.empty())
-                return local_app_data / UPDATER_TOOLS_SUBDIR();
-#endif
-
-            std::error_code ec;
-            auto temp_root = std::filesystem::temp_directory_path(ec);
-            if (!ec && !temp_root.empty())
-                return temp_root / UPDATER_TOOLS_SUBDIR();
-
-            if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
-                return runtimeRoot / UPDATER_TOOLS_SUBDIR();
-
-            return std::filesystem::path{ UPDATER_TOOLS_SUBDIR() };
+            return ensure_directory(updater_cache_root() / UPDATER_TOOLS_SUBDIR());
         }
 
         [[nodiscard]] inline std::filesystem::path managed_work_root()
         {
-#if defined(_WIN32)
-            const auto local_app_data = env_path("LOCALAPPDATA");
-            if (!local_app_data.empty())
-                return local_app_data / UPDATER_WORK_SUBDIR();
-#endif
-
-            std::error_code ec;
-            auto temp_root = std::filesystem::temp_directory_path(ec);
-            if (!ec && !temp_root.empty())
-                return temp_root / UPDATER_WORK_SUBDIR();
-
-            if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
-                return runtimeRoot / UPDATER_WORK_SUBDIR();
-
-            return std::filesystem::path{ UPDATER_WORK_SUBDIR() };
+            return ensure_directory(updater_cache_root() / UPDATER_WORK_SUBDIR());
         }
 
         [[nodiscard]] inline std::string shorten_token(
@@ -1953,7 +1955,7 @@ namespace epochnamespace::updater
                 return std::filesystem::absolute(configured_binary, ec).lexically_normal();
 
 #if defined(_WIN32)
-            return std::filesystem::absolute("ConsoleApplication1.exe", ec).lexically_normal();
+            return std::filesystem::absolute("EpochEditor.exe", ec).lexically_normal();
 #else
             return std::filesystem::absolute("epoch", ec).lexically_normal();
 #endif
@@ -1969,32 +1971,24 @@ namespace epochnamespace::updater
 
         [[nodiscard]] inline std::filesystem::path replacement_package_path(const std::filesystem::path& target_binary)
         {
-#if defined(_WIN32)
-            return target_binary.parent_path() / "main.update.pkg";
-#else
-            const auto install_root =
-                managed_work_root()
-                / shorten_token(
+            const auto install_token =
+                shorten_token(
                     target_binary.parent_path().filename().string()
                     + "_" + target_binary.stem().string(),
                     24);
-            return install_root / "pkg" / "main.update.pkg";
-#endif
+            return ensure_directory(package_cache_root() / install_token) / "main.update.pkg";
         }
 
         [[nodiscard]] inline std::filesystem::path replacement_extract_dir(const std::filesystem::path& target_binary)
         {
-#if defined(_WIN32)
-            return target_binary.parent_path() / "__epoch_update";
-#else
             const auto install_root =
-                managed_work_root()
+                updater_cache_root()
                 / shorten_token(
                     target_binary.parent_path().filename().string()
                     + "_" + target_binary.stem().string(),
-                    24);
-            return install_root / "px";
-#endif
+                    24)
+                / "extract";
+            return install_root;
         }
 
         [[nodiscard]] inline std::filesystem::path source_archive_path(const std::filesystem::path& target_binary)
@@ -2061,12 +2055,7 @@ namespace epochnamespace::updater
         {
             static std::atomic<unsigned long long> s_counter{ 0 };
 
-            std::error_code ec;
-            auto temp_root = std::filesystem::temp_directory_path(ec);
-            if (ec || temp_root.empty())
-            {
-                temp_root = epoch::core::path::runtime_root_dir();
-            }
+            auto temp_root = ensure_directory(updater_cache_root() / "tmp");
 
             std::string safe_stem;
             safe_stem.reserve(stem.size());
@@ -2174,8 +2163,9 @@ namespace epochnamespace::updater
             const std::filesystem::path& target_binary)
         {
 #if defined(_WIN32)
-            const std::array<std::filesystem::path, 3> candidates{
+            const std::array<std::filesystem::path, 4> candidates{
                 runtime_dir / target_binary.filename(),
+                runtime_dir / "EpochEditor.exe",
                 runtime_dir / "ConsoleApplication1.exe",
                 runtime_dir / "epoch.exe",
             };

@@ -7,7 +7,8 @@ This folder is the tracked prebaked atlas output for the example runtime.
 - Keep source images under `../assets/`.
 - Keep tracked prebaked atlases here when they are needed so new clones do not
   have to regenerate everything before the example runtime is usable.
-- Keep disposable local dump/debug output out of git.
+- Keep disposable generated/runtime atlas output under executable-local
+  `cache/atlases/` and out of git.
 
 ## Not source of truth
 

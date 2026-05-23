@@ -67,6 +67,12 @@ Tools/epoch_install.log
 Tools/epoch_install.log
 Engine/examples/ConsoleApplication1/atlas_dump/
 Engine/examples/ConsoleApplication1/atlas_dump_backup/
+cache/updates/
+cache/packages/
+cache/atlases/
+Engine/cache/updates/
+Engine/cache/packages/
+Engine/cache/atlases/
 
 Engine/bin/
 Engine/Bin/

@@ -939,6 +939,12 @@ namespace epochnamespace::gui
                     .w = w,
                     .h = h
                     };
+                if (g_frame.topLayerDepth > 0 && ctx->type == epochnamespace::core::ContextType::OpenGL)
+                {
+                    g_frame.topLayerDraws.push_back(draw);
+                    return;
+                }
+
                 g_frame.queuedDraws.push_back(draw);
                 if (g_frame.topLayerDepth > 0)
                     g_frame.topLayerDraws.push_back(draw);

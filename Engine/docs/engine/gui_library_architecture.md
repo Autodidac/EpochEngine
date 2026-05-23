@@ -40,6 +40,12 @@ viewport should wrap their window draw in `gui::begin_top_layer()` /
 `gui::end_top_layer()` so the renderer can replay only those sprites after the
 scene pass. Do not rely on menu creation order alone for z-order.
 
+On OpenGL, top-layer sprites are replay-only. They must not also be queued in
+the normal deferred GUI batch, or command menus can slowly flip between
+scene-under and scene-over composition while a dropdown is open. Backends that
+do not yet consume the explicit top-layer replay path keep their existing
+normal-batch behavior until their presenter owns a matching replay pass.
+
 ## Intended Layers
 
 - Primitive widgets: labels, buttons, connected tabs, dropdown/select boxes,

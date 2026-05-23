@@ -34,6 +34,12 @@ the same engine-owned path.
 - source checkout installs still use the same binary-first rule; only after
   packaged parity or absence of a newer package should they rebuild from the
   GitHub source snapshot using the platform build path
+- runtime-created update/package/cache data is app-local: updater work,
+  temporary probes, extraction folders, and helper tools live under
+  `cache/updates/`; downloaded release/source packages live under
+  `cache/packages/`; generated/runtime atlases live under `cache/atlases/`.
+  These folders are disposable runtime state, not public release payload and not
+  tracked source.
 - OpenGL editor composition is scene-first: draw the scene preview, drain
   queued render work, then render the latest persistent GUI batch. The
   persistent batch is required because the OpenGL render thread can run between

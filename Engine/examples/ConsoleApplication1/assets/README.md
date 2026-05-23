@@ -21,5 +21,5 @@ This folder holds the tracked source images used by the example runtime.
 
 - Prebaked atlas outputs do not live in this folder. They belong in
   `../atlases/`.
-- Disposable atlas debug dumps do not live in this folder. They belong in the
-  ignored local dump paths beside the example runtime.
+- Disposable generated/runtime atlases do not live in this folder. They belong
+  in executable-local `cache/atlases/` and remain ignored.

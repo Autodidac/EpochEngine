@@ -86,6 +86,12 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
   duplicated `x64` compatibility folders, source-shaped `Engine/` folders,
   headless smoke binaries, and `ConsoleApplication1.exe` aliases are not public
   runtime payload.
+- Runtime-created data stays executable-local under `cache/`: updater work,
+  temporary update probes, managed tools, and extraction state live under
+  `cache/updates/`; downloaded runtime/source packages live under
+  `cache/packages/`; generated/runtime atlases live under `cache/atlases/`.
+  None of these cache buckets belong in public release payloads or tracked
+  source.
 - The updater must resolve the active install type before replacing files:
   - packaged Windows runtime: install the newest matching `.zip` runtime asset
   - packaged Linux/WSL runtime: install the newest matching `.tar.gz` runtime asset
@@ -295,7 +301,8 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - Later cleanup must classify source atlas assets, generated atlases,
   runtime/cache atlases, and test/demo atlases.
 - Source atlases belong under the canonical asset tree.
-- Generated/cache atlases must not pollute source directories.
+- Generated/cache atlases must be written under executable-local
+  `cache/atlases/` and must not pollute source directories.
 - Generated/cache atlases must be ignored.
 - Editor-generated graph/runtime surfaces must use the dedicated runtime-surface
   atlas and must not be packed into the small built-in GUI skin atlas.
@@ -334,7 +341,8 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   resolver-only cleanup pass.
 - Atlas state is mixed but classified: source/demo assets live under the
   example/canonical asset trees, tracked prebaked atlases live under
-  `Engine/examples/ConsoleApplication1/atlases`, generated dump output under
+  `Engine/examples/ConsoleApplication1/atlases`, generated/runtime atlas output
+  belongs under executable-local `cache/atlases/`, legacy dump output under
   `Engine/examples/ConsoleApplication1/atlas_dump` is ignored, and runtime
   copies under `x64/` are build output.
 - MSVC project/filter files were only touched for newly added files in this
@@ -598,6 +606,13 @@ engine shape and should be treated as starting truth for the next passes:
   `directx.gui.cpp`. Remaining DirectX work is renderer-resource parity, real
   depth/resource ownership, and any operator-observed GUI flicker in the D3D11
   pane, not basic context creation.
+- `v0.84.38` is the cache/update and command-menu stability release line:
+  OpenGL top-layer menu sprites are replay-only, toolbar dropdowns close on
+  outside click, updater work/tools/temp extraction stay under executable-local
+  `cache/updates/`, downloaded packages stay under `cache/packages/`, and
+  generated atlases are reserved for `cache/atlases/`. Windows Release and WSL
+  Clang release build/CTest lanes are required proof before publishing the new
+  runtime packages.
 - Canvas2D projection ownership has moved into `render.preview_grid` via one
   shared projection helper. Editor picking, OpenGL, DirectX, Raylib, SDL, SFML,
   Vulkan, and the software preview fallback now consume the same Canvas2D
@@ -829,8 +844,10 @@ engine shape and should be treated as starting truth for the next passes:
 - finish drag/drop and docking/popup behavior as first-class editor systems,
   not per-backend patches
 - keep GUI menu rendering in the OpenGL flicker repro matrix; menu interaction
-  currently makes the issue easier to trigger and should stay documented until
-  root cause is fixed
+  remains an acceptance test even after the OpenGL top-layer replay-only fix
+  because dropdowns, modals, and command windows must stay scene-over without
+  slow flip/flicker regressions. Windows Release operator eye-test confirmed
+  the first replay-only command-menu fix as stable.
 - improve project, script, AI, systems, and output surfaces until the shell
   reads as a professional editor rather than a debug console
 - keep the new script/file/asset workspaces usable as visible AI iteration
