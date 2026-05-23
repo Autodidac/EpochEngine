@@ -4,8 +4,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.36-1F7A4C?style=for-the-badge" alt="Current development source v0.84.36" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.36-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.36" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.37-1F7A4C?style=for-the-badge" alt="Current development source v0.84.37" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.37-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.37" />
 </p>
 
 <p align="center">
@@ -60,12 +60,13 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.36`.
-- The latest published stable runtime release is `v0.84.36`.
-- Windows and Linux `v0.84.36` runtime packages are asset-bearing packages:
-  they include the executable-root assets plus the example
-  `ConsoleApplication1` assets, atlases, and workspace paths expected by the
-  current runtime probes.
+- Source is currently the active development line at `v0.84.37`.
+- The latest published stable runtime release is `v0.84.37`.
+- Windows and Linux `v0.84.37` runtime packages use the production package
+  layout: one editor/runtime executable, a root `assets/` folder, and public
+  README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
+  headless smoke binaries, and duplicated compatibility output folders are not
+  part of the public runtime payload.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
 - Bootstrap updater-shell releases are separate from the main runtime package
@@ -162,7 +163,7 @@ WSL/Linux editor proof, latest asset-bearing visual capture:
   <img src="Images/readme/linux-opengl-v08386.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />
 </p>
 
-`v0.84.36` WSL Clang build/headless validation is green with DirectX disabled,
+`v0.84.37` WSL Clang build/headless validation is green with DirectX disabled,
 and the Linux package version/headless-smokes from its staged runtime folder.
 The current README Linux image remains the last honest visual proof; refreshed
 Linux/WSLg or native Linux screenshot proof is still a follow-up gate.
@@ -175,14 +176,14 @@ Launch from the binary directory so colocated assets resolve cleanly:
 
 ```powershell
 Set-Location x64/Debug
-.\ConsoleApplication1.exe
+.\EpochEditor.exe
 ```
 
 Release build:
 
 ```powershell
 Set-Location x64/Release
-.\ConsoleApplication1.exe
+.\EpochEditor.exe
 ```
 
 ### Build with Visual Studio / MSBuild
@@ -207,9 +208,9 @@ Example app only:
 Generated shell self-test:
 
 ```powershell
-.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test sandbox
+.\x64\Debug\EpochEditor.exe --editor-project-self-test sandbox
 .\Projects\Sandbox\bin\windows\Debug\x64\Sandbox.exe --project-self-test
-.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test projectlauncher
+.\x64\Debug\EpochEditor.exe --editor-project-self-test projectlauncher
 .\Projects\ProjectLauncher\bin\windows\Debug\x64\ProjectLauncher.exe --project-self-test
 ```
 

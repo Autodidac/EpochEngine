@@ -214,29 +214,22 @@ and the packaged asset filename itself.
 
 Before publishing a Windows packaged runtime zip:
 
-- stage from the asset-bearing runtime layout, not from a stripped source or
-  CMake executable folder alone
-- include an `x64/Release/`-style entry folder for the Windows package, with
-  the runnable executable and colocated runtime assets present there
-- include the example runtime asset tree currently used by the editor and
-  launcher probes:
-  `Engine/examples/ConsoleApplication1/assets`,
-  `Engine/examples/ConsoleApplication1/atlases`, and
-  `Engine/examples/ConsoleApplication1/workspace`
-- include the executable-root `assets/` path, `Engine/assets`, `Engine/resource`,
-  and `Engine/ai/control` until the asset resolver and packaged headless probe
-  are fully consolidated around a single package-root contract
-- if CMake output is used as the executable source, copy that executable into
-  the package's `x64/Release/` entry folder as well as the package root; do not
-  ship a CMake-only folder that lacks the example/runtime asset layout
-- stage from `x64/Release/` when the MSBuild output is the release source
-- copy the required backend DLLs beside `ConsoleApplication1.exe`
+- stage a production package root, not a stripped CMake folder and not a
+  source-shaped repo bundle
+- include one public editor/runtime executable named `EpochEditor.exe`
+- include the runtime `assets/` folder beside `EpochEditor.exe`
+- do not include generated/cache `atlases/`; the runtime owns atlas
+  regeneration
+- do not include source-shaped `Engine/` folders, duplicated `x64/Debug` or
+  `x64/Release` folders, headless smoke executables, or
+  `ConsoleApplication1.exe` aliases in the public runtime package
+- copy the required backend DLLs beside `EpochEditor.exe`
 - copy the full VC143 CRT payload from
   `C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC\<version>\x64\Microsoft.VC143.CRT\`
   into the release folder so clean Windows machines do not need a separate
   VC++ redistributable install first
 - keep `assets/` beside the executable in the packaged folder
-- run `ConsoleApplication1.exe --version` from the staged folder before zipping
+- run `EpochEditor.exe --version` from the staged folder before zipping
 - smoke the no-args packaged entry once before publishing so a release does not
   ship a dead startup path
 - name the runtime asset with the packaged version baked in, for example
@@ -266,15 +259,11 @@ Before publishing a Linux/WSL2 asset:
 - verify the packaged Linux artifact starts the main runtime path by default
   instead of accidentally shipping an updater-shell-only bootstrap
 - do not quietly reuse an older Linux artifact after source has changed
-- include the runtime executable, required shared libraries, assets, shaders,
-  scripts, `Engine/assets`, `Engine/resource`, `Engine/ai/control`, and the
-  current `Engine/examples/ConsoleApplication1` assets/atlases/workspace tree
-  in the staged package instead of assuming the repo tree exists beside the
-  executable
-- for `v0.84.36` and the current packaged headless contract, source-shaped
-  `Engine/assets`, `Engine/resource`, and `Engine/ai/control` paths are still
-  expected beside the package root; keep those paths until the packaged
-  headless probe is made executable-root aware
+- include one runtime executable, required shared libraries, root `assets/`,
+  README, and LICENSE
+- do not include generated/cache `atlases/`, source-shaped `Engine/` folders,
+  duplicated build-output folders, or headless smoke executables in the public
+  Linux runtime package
 - keep any Linux bootstrap drop separate, for example
   `epoch_updater_shell_only_linux_x64_vX.Y.Z.tar.gz`
 - keep the Linux naming and published-version story aligned with Windows so the

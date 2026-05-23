@@ -807,6 +807,7 @@ export namespace epochnamespace::menu
                 }
             }
 
+            gui::begin_top_layer();
             gui::begin_window(
                 "Editor Commands",
                 windowPosition,
@@ -849,6 +850,7 @@ export namespace epochnamespace::menu
             }
 
             gui::end_window();
+            gui::end_top_layer();
 
             if (chosen) return chosen;
             if (enterPressed && !prevEnter)

@@ -28,7 +28,7 @@ For runtime/editor/backend changes:
 
 For release-facing passes, add two more checks:
 
-8. Launch `ConsoleApplication1.exe` once with no extra args from `x64/Release/`
+8. Launch `EpochEditor.exe` once with no extra args from `x64/Release/`
    and confirm the expected packaged shell actually appears instead of hanging
 9. If a Windows zip is being published, verify the staged release folder carries
    the VC143 CRT DLLs app-local before zipping

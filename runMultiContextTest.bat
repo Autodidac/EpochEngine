@@ -3,7 +3,7 @@ setlocal
 
 set "ROOT=%~dp0"
 set "BIN=%ROOT%x64\Debug"
-set "EXE=%BIN%\ConsoleApplication1.exe"
+set "EXE=%BIN%\EpochEditor.exe"
 
 if not exist "%EXE%" (
     echo Missing debug executable:

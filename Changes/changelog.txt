@@ -1,25 +1,37 @@
 # Epoch Changelog
 
-## [v0.84.36]
-- Bumped the active source and stable release line to `v0.84.36` for the
-  corrected asset-bearing runtime package refresh.
-- Corrected the release packaging contract after the previous package refresh
-  proved too narrow: Windows and Linux runtime assets must include the
-  executable-root assets plus the example `ConsoleApplication1` assets,
-  atlases, and workspace tree that the current runtime/editor probes still
-  resolve through.
-- The release staging shape now carries both direct package executables and
-  `x64/Release`-style Windows entry folders so downloaded packages match the
-  runtime layout expected by the editor, examples, and asset-root resolver.
-- Documentation now calls out this asset layout explicitly so future release
-  refreshes do not ship stripped CMake-only packages that pass `--version` but
-  fail normal launcher/editor asset lookup.
+## [v0.84.37]
+- Bumped the active source and stable release line to `v0.84.37` for the
+  corrected production runtime package refresh.
+- Renamed the Windows editor/runtime output to `EpochEditor.exe` for both the
+  CMake and Visual Studio project paths while keeping build target names stable.
+- Corrected the public runtime package contract: release assets should contain
+  one editor/runtime executable, root `assets/`, README/LICENSE files, and
+  required app-local runtime DLLs only.
+- Removed generated atlases, duplicated `x64` compatibility folders, source
+  shaped `Engine/` trees, `ConsoleApplication1.exe` aliases, and headless smoke
+  executables from the public package contract. Atlases remain runtime-generated
+  cache output, and headless validation remains a build/CI proof artifact rather
+  than a shipped production executable.
+- Re-anchored editor command menus to the explicit GUI top-layer batch so
+  command/dropdown windows render above the scene viewport instead of competing
+  with the scene pass and flickering behind it.
+- Documentation now calls out this production package shape explicitly so
+  future release refreshes do not ship stripped CMake-only folders or
+  over-expanded source-tree bundles.
 - Validation: Windows CMake Release `epoch` and `epoch_ci_headless` built,
   `ctest --preset windows-msvc-release --output-on-failure` passed, Linux Clang
   Release rebuilt with DirectX disabled, Linux `epoch --version`,
   `epoch_ci_headless`, and CTest passed, and the corrected staged Windows/Linux
-  packages both report `Epoch v0.84.36` with packaged headless smoke passing
-  from the package root.
+  production packages report `Epoch v0.84.37` from their package roots.
+
+## [v0.84.36]
+- Bumped the active source and stable release line to `v0.84.36` for an
+  asset-bearing runtime package refresh.
+- The `v0.84.36` package refresh proved the asset-root issue but was superseded
+  by `v0.84.37` because the public package shape was too source-like: it carried
+  duplicated compatibility output folders, extra executables, and unnecessary
+  source/runtime support directories.
 
 ## [v0.84.35]
 - Fixed the hosted Linux/GCC CMake lane by making `epoch_ci_headless`

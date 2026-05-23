@@ -658,12 +658,12 @@ normal peer renderer for the Linux editor shell.
 
 ## Generated project shell self-tests
 
-Run these from the repository root after building `ConsoleApplication1`:
+Run these from the repository root after building the editor runtime:
 
 ```powershell
-.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test sandbox
+.\x64\Debug\EpochEditor.exe --editor-project-self-test sandbox
 .\Projects\Sandbox\bin\windows\Debug\x64\EpochEngine.exe --project-self-test
-.\x64\Debug\ConsoleApplication1.exe --editor-project-self-test projectlauncher
+.\x64\Debug\EpochEditor.exe --editor-project-self-test projectlauncher
 .\Projects\ProjectLauncher\bin\windows\Debug\x64\ProjectLauncher.exe --project-self-test
 ```
 

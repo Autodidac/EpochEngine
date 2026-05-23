@@ -297,7 +297,11 @@ elseif(UNIX AND NOT APPLE)
 endif()
 
 add_executable(epoch ${EPOCH_SOURCES})
-set_target_properties(epoch PROPERTIES OUTPUT_NAME epoch)
+if(WIN32)
+    set_target_properties(epoch PROPERTIES OUTPUT_NAME EpochEditor)
+else()
+    set_target_properties(epoch PROPERTIES OUTPUT_NAME epoch)
+endif()
 
 if(MSVC)
     set_source_files_properties(
@@ -1036,4 +1040,3 @@ if(DOXYGEN_FOUND)
 else()
     message(STATUS "Doxygen not found; the 'docs' target will be skipped.")
 endif()
-

@@ -35,6 +35,11 @@ change backend frame order as a shortcut unless the task is specifically a
 draw-model change with build evidence and operator eye-test proof across the
 affected contexts.
 
+Command menus, dropdowns, and modal chrome that must sit above the scene
+viewport should wrap their window draw in `gui::begin_top_layer()` /
+`gui::end_top_layer()` so the renderer can replay only those sprites after the
+scene pass. Do not rely on menu creation order alone for z-order.
+
 ## Intended Layers
 
 - Primitive widgets: labels, buttons, connected tabs, dropdown/select boxes,
