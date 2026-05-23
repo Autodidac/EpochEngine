@@ -213,6 +213,18 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - Distant objects and vegetation should converge through integrated
   SpeedTree-like procedural generation plus voxel LOD instead of treating
   triangle virtualization as the only path.
+- First-pass core contracts now have a narrow source shape: `voxel.field` owns
+  multi-informational cell/chunk/LOD metadata, `voxel.trace` owns shared
+  rendering/lighting/navigation/visibility/smoke/AI query intent, and
+  `forest.factory` owns deterministic Forest Factory descriptors.
+- Forest Factory is a core editor/runtime feature and needs its own 3D editor
+  workspace/window. Generated projects must include it only after a human-visible
+  scene-use/package activation path adds the `engine_forest_factory` package
+  manifest and assets.
+- NMS-like planetary terrain, multi-terrain authoring, FFT ocean, external
+  voxel demos, and heavyweight renderer/game extensions stay package-managed
+  under `cache/packages/` or review branches until their API boundary and
+  build/test/provenance gates are clear.
 - Operator voxel and procedural plant prototypes are design/reference material
   for future reviewed imports. They must be audited and promoted through the
   source-shape/import gate before any prototype code becomes tracked Epoch
@@ -774,6 +786,15 @@ engine shape and should be treated as starting truth for the next passes:
   renderer/tool prototypes. Prototype packages should live in a review branch,
   separate repo, or local package cache until their API boundary, provenance,
   tests, and promotion gate are clear.
+- add the next source-shape package registry slice: one descriptor module for
+  local runtime-mini packages such as `engine_arcade` and core opt-in packages
+  such as `engine_forest_factory`, then replace duplicated package strings in
+  editor/project/runtime code only after the descriptor module builds in MSVC and
+  CMake.
+- add the next AI safety slice: reject hidden-reasoning-only responses before
+  raw response snippet logging, block non-promotable assistant replies from raw
+  or curated training capture, and add copy/paste/selection smoke proof for AI
+  Chat and scrollable evidence panels.
 - keep the bottom dock centered on `Project`, `Assets`, `Systems`, `AI`, and
   `Output` as evidence/status tabs, not as the final scene/editor-window model
 - promote the new first-pass draggable splitters into reusable dock/window GUI

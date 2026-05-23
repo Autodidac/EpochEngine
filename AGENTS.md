@@ -43,6 +43,15 @@
   applications. Expose them to projects as package/script assets such as
   `engine_arcade`, not by moving their implementations into loose generated
   project scripts.
+- Voxel field/pathing/tracing contracts and deterministic Forest Factory
+  descriptors are core engine primitives. Heavy planetary terrain,
+  multi-terrain authoring, FFT ocean, imported prototype demos, and
+  game-specific world stacks are package candidates first and should flow
+  through `cache/packages/`, review branches, or separate repos before any
+  source promotion.
+- Forest Factory gets its own editor 3D scene/window as a core feature, but
+  generated projects include Forest Factory assets/scripts only after a visible
+  package activation or main-scene use gate.
 
 ## Roadmap Discipline
 

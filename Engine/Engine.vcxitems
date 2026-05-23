@@ -264,6 +264,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.window.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.bindings.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device.ixx" />

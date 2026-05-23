@@ -53,6 +53,11 @@ rewrite disguised as progress.
 - Source organization should support the editor domains directly: scene/game,
   assets, project/build, systems/perf, AI sandbox, package manager, scripting,
   and backend/runtime.
+- Voxel/pathing/tracing contracts and deterministic Forest Factory descriptors
+  are core engine primitives. Heavy planetary terrain, multi-terrain authoring,
+  FFT ocean, external prototype demos, and game-specific world stacks stay
+  package-managed until their API boundary, provenance, build/test path, and
+  project opt-in behavior are proven.
 - Generated project output under repo-root `Projects/` remains evidence unless
   a template or fixture is explicitly promoted into tracked source.
 

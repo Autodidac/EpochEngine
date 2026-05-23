@@ -10,6 +10,11 @@ Public headers
 Primary module families
 - `core.*`, `context.*`, `platform.*`, `render.*`, `perf.*`, `updater.*` spine/runtime ownership
 - `ai.*` tiny-model runtime, dataset, training, eval, and MCP-adapter planning surfaces
+- `voxel.*` core multi-informational voxel field and trace/query contracts
+- `forest.factory` deterministic built-in Forest Factory contracts; project assets
+  remain opt-in through package activation
+- `package.registry` source-owned package descriptors for runtime-minis,
+  core opt-in packages, and research/downloadable package candidates
 - `opengl.*`, `sdl.*`, `raylib.*`, `sfml.*`, `software.*`, `vulkan.*`, `noop.context` backend/context integrations
 - `ecs.*` and `aentity.*` ECS surfaces
 - `atlas.*`, sprite, image, texture, and GUI support

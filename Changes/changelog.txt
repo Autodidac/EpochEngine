@@ -1,6 +1,22 @@
 # Epoch Changelog
 
 ## [Unreleased]
+- Added the first source-shaped package/core spine for voxel-era engine work:
+  `voxel.field`, `voxel.trace`, `forest.factory`, and `package.registry` now
+  compile in the CMake/MSVC module path.
+- Documented the boundary between core voxel/pathing/tracing and
+  package-managed terrain/rendering extensions: Forest Factory is core
+  project-opt-in functionality, while planetary terrain stacks, multi-terrain
+  authoring, FFT ocean work, and external voxel/renderer prototypes remain
+  package candidates under `cache/packages/` provenance.
+- Updated the source-shape, module inventory, roadmap, and agent notes so the
+  next passes use the Forest Factory name, keep heavy prototypes out of the
+  mainline engine, and promote package candidates only through visible
+  build/test evidence.
+- Validation: `cmake --preset windows-msvc-debug`,
+  `cmake --build --preset windows-msvc-debug --target epoch --config Debug`,
+  `cmake --build --preset windows-msvc-debug --target epoch_ci_headless --config Debug`,
+  and `ctest --preset windows-msvc-debug --output-on-failure` passed.
 
 ## [v0.84.38]
 - Bumped the active source and stable release line to `v0.84.38` for the

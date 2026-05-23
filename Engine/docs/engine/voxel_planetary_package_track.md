@@ -21,6 +21,27 @@ those are the fastest runtime form.
 - Distant objects should use voxel-informed LOD and generated representations
   before the engine reaches for triangle-virtualization-style solutions.
 
+## Core And Package Boundary
+
+Epoch now treats the voxel and plant direction as two layers:
+
+- Engine core owns the lightweight contracts: voxel cell/chunk/LOD metadata,
+  trace/query purposes for rendering, lighting, navigation, visibility, smoke,
+  and AI, plus deterministic Forest Factory descriptors that can preview inside
+  the editor without forcing generated projects to carry forest assets.
+- Project/package activation owns heavy payloads: NMS-like planetary terrain,
+  multi-terrain authoring, FFT ocean, large renderer experiments, prototype
+  demos, source downloads, and generated content that should not inflate every
+  software or small-game clone.
+- `cache/packages/` is the executable-local cache for downloaded or staged
+  source/runtime packages. Package source is pulled into projects only through a
+  visible Package Manager/updater-style gate and never by hidden automation.
+- Forest Factory is a core feature because repeatable procedural vegetation and
+  voxel occupancy are part of Epoch's runtime/generation spine. It still remains
+  project opt-in: opening the Forest Factory editor scene is allowed without
+  adding package assets, but using a plant in the main scene must activate the
+  `engine_forest_factory` package manifest and generated assets for that project.
+
 ## Prototype Inputs
 
 Operator-provided prototypes are design references until they pass the research
@@ -80,10 +101,13 @@ Before any voxel package becomes tracked engine code:
 
 ## Deferred Engine Work
 
-- Define the core voxel cell, chunk, and LOD metadata contracts.
+- Keep the first-pass `voxel.field`, `voxel.trace`, `forest.factory`, and
+  `package.registry` contracts small, build-tested, and renderer-agnostic before
+  wiring them into editor workspaces or runtime packages.
 - Add package-manager support for local research packages with provenance and
   build/test evidence.
-- Add a voxel terrain preview workspace once the GUI library has stable tabs,
-  dropdowns, scrollable text, modals, and copy/paste.
+- Add a Forest Factory 3D editor workspace and a voxel terrain preview workspace
+  once the GUI library has stable tabs, dropdowns, scrollable text, modals, and
+  copy/paste.
 - Connect EpochBot planning to package evidence only after the gate can reject
   low-evidence or hidden-reasoning model output.

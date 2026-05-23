@@ -818,6 +818,18 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.window.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx">
+      <Filter>Module Files\ixx\epoch</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx">
+      <Filter>Module Files\ixx\epoch</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx">
+      <Filter>Module Files\ixx\epoch</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx">
+      <Filter>Module Files\ixx\epoch</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
