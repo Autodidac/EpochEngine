@@ -171,6 +171,7 @@ namespace epochnamespace::directxcontext
 
         queue.drain();
         (void)gui::render_deferred_batch(ctx.get());
+        (void)gui::render_top_layer_batch(ctx.get());
 
         (void)state.swapchain->Present(1, 0);
 

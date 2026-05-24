@@ -291,6 +291,26 @@ namespace epochnamespace::core
         return (std::min)(static_cast<int>(parsed), kMaxDelayMs);
     }
 
+    [[nodiscard]] inline std::string read_environment_string(const char* name)
+    {
+        if (!name || *name == '\0')
+            return {};
+
+#if defined(_WIN32)
+        char* raw = nullptr;
+        std::size_t raw_size = 0;
+        if (_dupenv_s(&raw, &raw_size, name) != 0 || raw == nullptr)
+            return {};
+
+        std::string value{ raw };
+        std::free(raw);
+        return value;
+#else
+        const char* const raw = std::getenv(name);
+        return raw ? std::string{ raw } : std::string{};
+#endif
+    }
+
     inline void append_editor_project_self_test_note(
         std::string_view project_root,
         std::string_view title,
@@ -1253,6 +1273,7 @@ namespace epochnamespace::core
         constexpr std::string_view kEditorLog = "Engine.Editor";
 
         [[nodiscard]] std::unique_ptr<epochnamespace::scene::Scene> make_scene_from_id(std::string_view scene_id);
+        [[nodiscard]] bool launch_project_child_process(std::string_view launch_argument);
 
         template <typename PumpFunc>
         int RunEditorInterfaceLoop(MultiContextManager& mgr, PumpFunc&& pump_events)
@@ -1280,13 +1301,13 @@ namespace epochnamespace::core
                         std::shared_lock lock(epochnamespace::core::g_backendsMutex);
                         snapshot.reserve(epochnamespace::core::g_backends.size());
 
-                        for (auto& [type, state] : epochnamespace::core::g_backends)
+                        for (auto& [type, backendSlot] : epochnamespace::core::g_backends)
                         {
                             std::vector<std::shared_ptr<epochnamespace::core::Context>> contexts;
-                            contexts.reserve(1 + state.duplicates.size());
+                            contexts.reserve(1 + backendSlot.duplicates.size());
 
-                            if (state.master) contexts.push_back(state.master);
-                            for (auto& dup : state.duplicates) contexts.push_back(dup);
+                            if (backendSlot.master) contexts.push_back(backendSlot.master);
+                            for (auto& dup : backendSlot.duplicates) contexts.push_back(dup);
 
                             snapshot.emplace_back(type, std::move(contexts));
                         }
@@ -1387,7 +1408,13 @@ namespace epochnamespace::core
                                 };
 
                             auto launch_requested_game = [&](std::string_view scene_id)
-                                 {
+                                  {
+                                    if (scene_id.starts_with("project-exe:"))
+                                    {
+                                        (void)launch_project_child_process(scene_id);
+                                        return;
+                                    }
+
                                     if (auto scene = make_scene_from_id(scene_id))
                                     {
                                         auto label = std::string(scene_id);
@@ -1639,13 +1666,13 @@ namespace epochnamespace::core
                         std::shared_lock lock(epochnamespace::core::g_backendsMutex);
                         snapshot.reserve(epochnamespace::core::g_backends.size());
 
-                        for (auto& [type, state] : epochnamespace::core::g_backends)
+                        for (auto& [type, backendSlot] : epochnamespace::core::g_backends)
                         {
                             std::vector<std::shared_ptr<epochnamespace::core::Context>> contexts;
-                            contexts.reserve(1 + state.duplicates.size());
+                            contexts.reserve(1 + backendSlot.duplicates.size());
 
-                            if (state.master) contexts.push_back(state.master);
-                            for (auto& dup : state.duplicates) contexts.push_back(dup);
+                            if (backendSlot.master) contexts.push_back(backendSlot.master);
+                            for (auto& dup : backendSlot.duplicates) contexts.push_back(dup);
 
                             snapshot.emplace_back(type, std::move(contexts));
                         }
@@ -2011,8 +2038,39 @@ namespace epochnamespace::core
             if (!launch_argument.starts_with("project-exe:"))
                 return false;
 
+            std::string payload{ launch_argument.substr(std::string_view{ "project-exe:" }.size()) };
+            std::string executable_payload = payload;
+            std::string scene_argument{};
+            std::string backend_argument{};
+            if (const std::size_t optionMarker = payload.find('|'); optionMarker != std::string::npos)
+            {
+                executable_payload = payload.substr(0, optionMarker);
+                std::string options = payload.substr(optionMarker + 1);
+                while (!options.empty())
+                {
+                    const std::size_t nextOption = options.find('|');
+                    const std::string option = nextOption == std::string::npos
+                        ? options
+                        : options.substr(0, nextOption);
+
+                    constexpr std::string_view kScenePrefix = "scene=";
+                    constexpr std::string_view kBackendPrefix = "backend=";
+                    if (option.starts_with(kScenePrefix))
+                        scene_argument = option.substr(kScenePrefix.size());
+                    else if (option.starts_with(kBackendPrefix))
+                        backend_argument = option.substr(kBackendPrefix.size());
+
+                    if (nextOption == std::string::npos)
+                        break;
+                    options.erase(0, nextOption + 1);
+                }
+            }
+
+            if (backend_argument.empty())
+                backend_argument = "opengl";
+
             const std::filesystem::path executable = std::filesystem::path{
-                std::string(launch_argument.substr(std::string_view{ "project-exe:" }.size()))
+                executable_payload
             }.lexically_normal();
             std::error_code ec;
             if (!std::filesystem::exists(executable, ec) || ec)
@@ -2033,6 +2091,17 @@ namespace epochnamespace::core
 
             PROCESS_INFORMATION process{};
             std::wstring command_line = L"\"" + executable.wstring() + L"\"";
+            command_line += L" --standalone";
+            if (!scene_argument.empty())
+            {
+                const std::wstring scene_wide{ scene_argument.begin(), scene_argument.end() };
+                command_line += L" --scene \"" + scene_wide + L"\"";
+            }
+            if (!backend_argument.empty())
+            {
+                const std::wstring backend_wide{ backend_argument.begin(), backend_argument.end() };
+                command_line += L" --backend \"" + backend_wide + L"\"";
+            }
             std::wstring working_directory = executable.parent_path().wstring();
             const BOOL created = CreateProcessW(
                 executable.wstring().c_str(),
@@ -2057,11 +2126,23 @@ namespace epochnamespace::core
                 return false;
             }
 
+            logger::get(kEditorLog).logf(
+                logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Launched built project executable in standalone {} mode: {}",
+                backend_argument,
+                executable.generic_string());
+
             CloseHandle(process.hThread);
             CloseHandle(process.hProcess);
             return true;
 #else
-            const std::string command = "\"" + executable.string() + "\" &";
+            std::string command = "\"" + executable.string() + "\" --standalone";
+            if (!scene_argument.empty())
+                command += " --scene \"" + scene_argument + "\"";
+            if (!backend_argument.empty())
+                command += " --backend \"" + backend_argument + "\"";
+            command += " &";
             if (std::system(command.c_str()) != 0)
             {
                 logger::get(kEditorLog).logf(
@@ -2071,6 +2152,12 @@ namespace epochnamespace::core
                     executable.generic_string());
                 return false;
             }
+            logger::get(kEditorLog).logf(
+                logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Launched built project executable in standalone {} mode: {}",
+                backend_argument,
+                executable.generic_string());
             return true;
 #endif
         }
@@ -2246,6 +2333,9 @@ namespace epochnamespace::core
                     (ctx->is_key_held_safe(epochnamespace::input::Key::Up) ? 1.0f : 0.0f)
                     - (ctx->is_key_held_safe(epochnamespace::input::Key::Down) ? 1.0f : 0.0f);
 
+                if (ctx->is_key_down_safe(epochnamespace::input::Key::Home))
+                    epochnamespace::previewgrid::reset_camera(ctx.get());
+
                 if (mouse_right_down && m_looking)
                 {
                     const float mouseDeltaX = mouse_pos.x - m_lastMouse.x;
@@ -2302,7 +2392,7 @@ namespace epochnamespace::core
                     + (m_modelSummary.summary.empty() ? std::string("(unavailable)") : m_modelSummary.summary),
                     390.0f);
                 gui::wrapped_label(m_description, 390.0f);
-                gui::wrapped_label("Esc returns to the editor. Use LMB pan, RMB orbit, wheel zoom, and WASD/QE for play-preview navigation.", 390.0f);
+                gui::wrapped_label("Esc returns to the editor. Use LMB pan, RMB orbit, wheel zoom, Home reset, and WASD/QE for play-preview navigation.", 390.0f);
                 gui::end_window();
 
                 gui::end_frame();
@@ -2334,13 +2424,13 @@ namespace epochnamespace::core
                 std::shared_lock lock(epochnamespace::core::g_backendsMutex);
                 snapshot.reserve(epochnamespace::core::g_backends.size());
 
-                for (auto& [type, state] : epochnamespace::core::g_backends)
+                for (auto& [type, backendSlot] : epochnamespace::core::g_backends)
                 {
                     std::vector<std::shared_ptr<epochnamespace::core::Context>> contexts;
-                    contexts.reserve(1 + state.duplicates.size());
+                    contexts.reserve(1 + backendSlot.duplicates.size());
 
-                    if (state.master) contexts.push_back(state.master);
-                    for (auto& dup : state.duplicates) contexts.push_back(dup);
+                    if (backendSlot.master) contexts.push_back(backendSlot.master);
+                    for (auto& dup : backendSlot.duplicates) contexts.push_back(dup);
 
                     snapshot.emplace_back(type, std::move(contexts));
                 }
@@ -2622,9 +2712,18 @@ namespace epochnamespace::core
                             if (startup_mode == SessionMode::Menu)
                                 ensure_menu_initialized(session, ctx);
 
-                            if (!epochnamespace::core::cli::scene_name.empty())
+                            std::string startup_scene_name = epochnamespace::core::cli::scene_name;
+                            if (startup_scene_name.empty())
+                                startup_scene_name = read_environment_string("EPOCH_PROJECT_RUNTIME_SCENE");
+                            if (startup_scene_name.empty())
                             {
-                                if (auto direct_scene = make_scene_from_id(epochnamespace::core::cli::scene_name))
+                                const std::string project_id = read_environment_string("EPOCH_EDITOR_PROJECT_ID");
+                                if (!project_id.empty())
+                                    startup_scene_name = "project:" + project_id;
+                            }
+                            if (!startup_scene_name.empty())
+                            {
+                                if (auto direct_scene = make_scene_from_id(startup_scene_name))
                                 {
                                     session.active_scene = std::move(direct_scene);
                                     session.active_scene->load();
@@ -2772,6 +2871,9 @@ namespace epochnamespace::core
                                     const float pitchInput =
                                         (ctx->is_key_held_safe(epochnamespace::input::Key::Up) ? 1.0f : 0.0f)
                                         - (ctx->is_key_held_safe(epochnamespace::input::Key::Down) ? 1.0f : 0.0f);
+
+                                    if (ctx->is_key_down_safe(epochnamespace::input::Key::Home))
+                                        epochnamespace::previewgrid::reset_camera(ctx.get());
 
                                     if (mouse_right_down && look_state.looking)
                                     {

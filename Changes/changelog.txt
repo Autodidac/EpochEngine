@@ -13,6 +13,16 @@
   next passes use the Forest Factory name, keep heavy prototypes out of the
   mainline engine, and promote package candidates only through visible
   build/test evidence.
+- Tightened the current GUI draw contract by routing modal/dropdown top-layer
+  sprites through a backend-independent top-layer batch, then replaying that
+  batch after scene preview on SDL, SFML, Raylib, Vulkan, DirectX, software, and
+  OpenGL paths so modal windows do not compete with the scene background.
+- Renamed ambiguous backend-map locals away from generic `state` in the context
+  host paths and package registry research labels away from stale
+  prototype-specific names; Epoch-facing metadata now uses renderer-neutral
+  voxel research and Forest Factory temporal graph wording.
+- Documented that Vulkan source files should migrate into a backend-owned folder
+  only through a coordinated filesystem/CMake/MSVC-filter/module pass.
 - Added package-registry metadata and docs for optional server-capable work:
   shared network runtime contracts stay inert by default, authoritative
   dedicated headless server support is an explicit package choice, and
@@ -27,6 +37,18 @@
   `cmake --build --preset windows-msvc-debug --target epoch --config Debug`,
   `cmake --build --preset windows-msvc-debug --target epoch_ci_headless --config Debug`,
   and `ctest --preset windows-msvc-debug --output-on-failure` passed.
+- Project Run now refuses the unsafe parent multicontext fallback when the built
+  child executable is missing after a build. Successful launches use the Project
+  workspace backend selector and pass standalone backend flags to the child
+  process; child launches default to standalone OpenGL if no backend is
+  specified.
+- Added a first-pass `Home` reset hotkey for editor and project-preview camera
+  movement, and documented the follow-up input-profile/package system so
+  generated projects can opt into the same configurable controls without
+  inheriting unrelated editor bloat.
+- Aligned Vulkan texture lookup with the existing shared asset-root resolver so
+  multicontext Vulkan can find `Engine/assets/vulkan/texture.ppm` from normal
+  repo-local `x64/Debug` runs without requiring duplicate loose texture files.
 
 ## [v0.84.38]
 - Bumped the active source and stable release line to `v0.84.38` for the
@@ -112,6 +134,14 @@
   tightened around a manual-gated evidence watcher, with copy/paste/text-smear
   stabilization and dropdown-based local model selection moving into
   `engine.gui`.
+- Current work in progress: promoted progress bars into the shared `engine.gui`
+  primitive set, wired Package Manager selection/install feedback through the
+  modal instead of Console Dock controls, and reflowed the modal so dropdowns
+  do not overlap package rows or bleed progress art outside the window.
+- Current work in progress: Project Run now exposes a Project workspace backend
+  selector and launches built child executables as standalone single-context
+  processes using `--standalone --backend <choice>` instead of cloning the
+  editor multicontext shell by default.
 - Bumped the active source line to `v0.84.35` for the DirectX multicontext proof
   lane and README screenshot refresh.
 - Added the first Windows DirectX/D3D11 backend slice: context registration,

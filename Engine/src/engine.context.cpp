@@ -270,9 +270,9 @@ namespace epochnamespace::core
         {
             std::shared_lock lock(g_backendsMutex);
             contexts.reserve(g_backends.size());
-            for (auto& [_, state] : g_backends) {
-                if (state.master) contexts.push_back(state.master);
-                for (auto& dup : state.duplicates) contexts.push_back(dup);
+            for (auto& [_, backendSlot] : g_backends) {
+                if (backendSlot.master) contexts.push_back(backendSlot.master);
+                for (auto& dup : backendSlot.duplicates) contexts.push_back(dup);
             }
         }
 
@@ -304,4 +304,3 @@ namespace epochnamespace::core
         return anyRunning;
     }
 } // namespace epochnamespace::core
-

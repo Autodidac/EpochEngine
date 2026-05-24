@@ -640,21 +640,21 @@ namespace
                         return;
                     }
 
-                    BackendState& state = it->second;
+                    BackendState& backendSlot = it->second;
                     contexts.reserve(static_cast<size_t>(count));
-                    contexts.push_back(state.master);
+                    contexts.push_back(backendSlot.master);
 
                     auto ensure_duplicate = [&](size_t index) -> std::shared_ptr<Context>
                         {
-                            if (index < state.duplicates.size())
+                            if (index < backendSlot.duplicates.size())
                             {
-                                auto& candidate = state.duplicates[index];
+                                auto& candidate = backendSlot.duplicates[index];
                                 if (candidate && candidate->initialize) return candidate;
-                                candidate = CloneContext(*state.master);
+                                candidate = CloneContext(*backendSlot.master);
                                 return candidate;
                             }
-                            auto dup = CloneContext(*state.master);
-                            state.duplicates.push_back(dup);
+                            auto dup = CloneContext(*backendSlot.master);
+                            backendSlot.duplicates.push_back(dup);
                             return dup;
                         };
 
@@ -1049,31 +1049,31 @@ namespace
         std::shared_ptr<Context> ctx;
         {
             std::unique_lock lock(g_backendsMutex);
-            auto& state = g_backends[type];
+            auto& backendSlot = g_backends[type];
 
-            if (!state.master)
+            if (!backendSlot.master)
             {
                 ctx = std::make_shared<Context>();
                 ctx->type = type;
-                state.master = ctx;
+                backendSlot.master = ctx;
             }
-            else if (!state.master->windowData)
+            else if (!backendSlot.master->windowData)
             {
-                ctx = state.master;
+                ctx = backendSlot.master;
             }
             else
             {
                 auto it = std::find_if(
-                    state.duplicates.begin(),
-                    state.duplicates.end(),
+                    backendSlot.duplicates.begin(),
+                    backendSlot.duplicates.end(),
                     [](const std::shared_ptr<Context>& dup) { return dup && !dup->windowData; });
 
-                if (it != state.duplicates.end())
+                if (it != backendSlot.duplicates.end())
                     ctx = *it;
                 else
                 {
-                    auto dup = CloneContext(*state.master);
-                    state.duplicates.push_back(dup);
+                    auto dup = CloneContext(*backendSlot.master);
+                    backendSlot.duplicates.push_back(dup);
                     ctx = dup;
                 }
             }
@@ -1909,4 +1909,3 @@ namespace epochnamespace::platform
 } // namespace epochnamespace::platform
 
 #endif // __linux__
-

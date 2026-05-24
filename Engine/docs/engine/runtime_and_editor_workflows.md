@@ -166,6 +166,22 @@ the same engine-owned path.
   Downloadable source packages must compile through an updater-style human-gated
   path and must not auto-run servers, listeners, hidden model channels, or any
   service that bypasses operator approval.
+- Package Manager install attempts must show visible per-package state in the
+  modal using the shared GUI progress bar. Selecting a package should update the
+  selected package/status text immediately; pressing Install should either
+  materialize a local package, stage a human-approved download/build gate, or
+  display the reason the package is blocked.
+- Project Run is project-owned, not editor-clone-owned. The Project workspace
+  must expose the target backend/context and child project launches should use
+  standalone single-context flags such as `--standalone --backend opengl`.
+  If the expected child executable is missing after the build, the editor must
+  block the run with visible evidence instead of falling back to a parent
+  multicontext `Project Runtime` scene across every dock.
+- workspace changes from the launcher/editor toolbar may use short loading
+  feedback through the shared GUI progress primitive only after that feedback is
+  proven not to change scene viewport geometry or revive menu/modal flicker.
+  Console Dock is status-only and must not drive these workspace switches or
+  package actions.
 - network/server packages follow the same gate. Shared client/network runtime
   contracts may ship inertly in the engine, but authoritative dedicated
   headless server support is an optional package for projects that explicitly
@@ -203,6 +219,10 @@ the same engine-owned path.
   manifest, entry source, build script, `project.paths.txt`, expected output,
   build log, and active script source so the user can tell whether the shell is
   real without leaving the editor
+- viewport movement starts with the shared preview controls: LMB pan, RMB orbit,
+  wheel zoom, WASD/QE movement, and `Home` reset. The next promoted version
+  needs a configurable input profile that projects can opt into through the
+  package/engine feature system instead of inheriting every editor-only binding.
 - hot reload remains a development feature and needs smoke coverage instead of
   trust
 

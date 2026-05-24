@@ -216,7 +216,7 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - First-pass core contracts now have a narrow source shape: `voxel.field` owns
   multi-informational cell/chunk/LOD metadata, `voxel.trace` owns shared
   rendering/lighting/navigation/visibility/smoke/AI query intent, and
-  `forest.factory` owns deterministic Forest Factory descriptors.
+  `forest.factory` owns deterministic Forest Factory temporal-graph descriptors.
 - Forest Factory is a core editor/runtime feature and needs its own 3D editor
   workspace/window. Generated projects must include it only after a human-visible
   scene-use/package activation path adds the `engine_forest_factory` package
@@ -225,11 +225,11 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   voxel demos, and heavyweight renderer/game extensions stay package-managed
   under `cache/packages/` or review branches until their API boundary and
   build/test/provenance gates are clear.
-- Operator voxel and procedural plant prototypes are design/reference material
-  for future reviewed imports. They must be audited and promoted through the
-  source-shape/import gate before any prototype code becomes tracked Epoch
-  engine source.
-- Prototype terrain/voxel/plant work should first become a package-manager
+- Operator voxel and procedural forest/temporal-graph prototypes are
+  design/reference material for future reviewed imports. They must be audited
+  and promoted through the source-shape/import gate before any prototype code
+  becomes tracked Epoch engine source.
+- Prototype terrain/voxel/forest work should first become a package-manager
   candidate, not a direct source dump. Package candidates must record source,
   hash, provenance, build/test commands, known limitations, and the exact
   engine-owned API boundary they propose before they are promoted.
@@ -327,6 +327,12 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   override support, and hard-fail diagnostics.
 - Normalize the atlas pipeline and generated/cache ignore policy.
 - Continue `src/` and `include/` cleanup without broad blind moves.
+- Move the growing Vulkan backend files into a backend-owned source folder only
+  as a coordinated filesystem/CMake/MSVC-filter/module migration, not as an
+  opportunistic partial rename during renderer flicker work.
+- Vulkan asset lookup must keep using the shared runtime/engine asset resolver.
+  Do not reintroduce backend-local texture probes that only check `x64/Debug`
+  or copied working-directory assets.
 - Clarify module ownership and avoid globbing experimental modules into active
   builds by accident.
 - Keep MSVC project/filter entries synchronized with filesystem and CMake when
@@ -572,6 +578,27 @@ engine shape and should be treated as starting truth for the next passes:
   game modules. The command-menu Package Manager modal is the intended GUI
   surface for local packages first; future downloadable source packages must
   route through an updater-style build/approval gate.
+- Package Manager now needs visible per-package state instead of silent buttons:
+  selection uses the shared dropdown primitive, Install updates a shared
+  `engine.gui` progress bar/status line, downloadable packages remain staged
+  behind human approval, and Console Dock mirrors compact status only instead of
+  controlling package/editor workflows.
+- project Run must be operator-selectable by runtime backend/context. The
+  current acceptance gate is that the Project workspace selector launches built
+  child projects as standalone single-context processes with explicit backend
+  flags instead of opening another multicontext editor clone. If the expected
+  child executable is missing after a build, Run must block with visible
+  evidence and must not fall back to the parent multicontext shell.
+- viewport movement needs a shared input profile instead of hardcoded editor
+  assumptions. First-pass behavior adds `Home` to reset the preview camera; the
+  next gate is a reusable input-configuration system that can be enabled by
+  projects as an opt-in package/engine feature without bloating software or
+  single-player outputs that do not need it.
+- workspace launches and toolbar surface switches should eventually use the
+  shared progress primitive for short transition feedback. The acceptance gate is
+  that loading feedback appears without moving the scene viewport or reviving
+  command-menu/scene z-order flicker; inline toolbar loading bars are deferred
+  until they meet that gate.
 - built-in mini-runtimes remain part of the core engine that ships with
   applications. They should be script-invokable and usable as future
   render-to-texture/game-arcade assets, not migrated into loose project script

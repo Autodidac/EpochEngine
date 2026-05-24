@@ -204,6 +204,15 @@ namespace epochnamespace::gui
         std::optional<std::size_t> selected_index{};
     };
 
+    export struct ProgressBarOptions
+    {
+        std::string_view label{};
+        std::string_view status{};
+        float value{};
+        Vec2 size{};
+        bool show_percent{ true };
+    };
+
     export void push_input(const InputEvent& e) noexcept;
     export void push_input_for_context(const core::Context* ctx, const InputEvent& e) noexcept;
     export int consume_mouse_wheel_delta() noexcept;
@@ -259,6 +268,7 @@ namespace epochnamespace::gui
         float height = 24.0f,
         float gap = 6.0f) noexcept;
     export SelectBoxResult select_box(const SelectBoxOptions& options) noexcept;
+    export void progress_bar(const ProgressBarOptions& options) noexcept;
 
     export EditBoxResult edit_box(std::string& text,
         Vec2 size,

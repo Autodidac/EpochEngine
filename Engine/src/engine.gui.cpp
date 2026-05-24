@@ -939,15 +939,13 @@ namespace epochnamespace::gui
                     .w = w,
                     .h = h
                     };
-                if (g_frame.topLayerDepth > 0 && ctx->type == epochnamespace::core::ContextType::OpenGL)
+                if (g_frame.topLayerDepth > 0)
                 {
                     g_frame.topLayerDraws.push_back(draw);
                     return;
                 }
 
                 g_frame.queuedDraws.push_back(draw);
-                if (g_frame.topLayerDepth > 0)
-                    g_frame.topLayerDraws.push_back(draw);
                 return;
             }
 
@@ -2240,6 +2238,8 @@ namespace epochnamespace::gui
         try { ensure_resources(); }
         catch (...) { return; }
 
+        begin_top_layer();
+
         if (options.dim_background && options.viewport_size.x > 0.0f && options.viewport_size.y > 0.0f)
         {
             const auto& palette = active_palette();
@@ -2252,6 +2252,7 @@ namespace epochnamespace::gui
     void end_modal_window() noexcept
     {
         end_window();
+        end_top_layer();
     }
 
     WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept
@@ -3053,6 +3054,69 @@ namespace epochnamespace::gui
 
         end_scroll_area();
         return result;
+    }
+
+    void progress_bar(const ProgressBarOptions& options) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx)
+            return;
+
+        ensure_resources();
+
+        const Vec2 pos = g_frame.cursor;
+        const float availableWidth = content_available_width(pos.x);
+        const float requestedWidth = options.size.x > 0.0f ? options.size.x : availableWidth;
+        const float width = std::clamp(
+            requestedWidth,
+            1.0f,
+            (std::max)(1.0f, availableWidth));
+        const float height = (std::max)(14.0f, options.size.y > 0.0f ? options.size.y : 18.0f);
+        const float value = std::clamp(options.value, 0.0f, 1.0f);
+        const auto& palette = active_palette();
+
+        draw_sprite(palette.panelBackground, pos.x, pos.y, width, height);
+        draw_sprite(palette.consoleBackground, pos.x + 2.0f, pos.y + 2.0f, (std::max)(1.0f, width - 4.0f), (std::max)(1.0f, height - 4.0f));
+
+        const float fillWidth = std::floor((std::max)(0.0f, width - 4.0f) * value);
+        if (fillWidth > 0.0f)
+            draw_sprite(palette.textFieldActive, pos.x + 2.0f, pos.y + 2.0f, fillWidth, (std::max)(1.0f, height - 4.0f));
+
+        draw_sprite(palette.buttonHover, pos.x, pos.y, width, 1.0f);
+        draw_sprite(palette.buttonHover, pos.x, pos.y + height - 1.0f, width, 1.0f);
+        draw_sprite(palette.buttonHover, pos.x, pos.y, 1.0f, height);
+        draw_sprite(palette.buttonHover, pos.x + width - 1.0f, pos.y, 1.0f, height);
+
+        std::string labelText;
+        if (!options.label.empty())
+            labelText = std::string(options.label);
+        if (!options.status.empty())
+        {
+            if (!labelText.empty())
+                labelText += " - ";
+            labelText += options.status;
+        }
+        if (options.show_percent)
+        {
+            if (!labelText.empty())
+                labelText += " ";
+            labelText += std::to_string(static_cast<int>(std::round(value * 100.0f)));
+            labelText += "%";
+        }
+
+        if (!labelText.empty())
+        {
+            const std::string fitted = fit_text_to_width(
+                labelText,
+                (std::max)(1.0f, width - 2.0f * kContentPadding),
+                kFontScale);
+            const std::string_view displayLabel = fitted.empty()
+                ? std::string_view{ labelText }
+                : std::string_view{ fitted };
+            const float textY = pos.y + std::floor((std::max)(0.0f, (height - base_line_height(kFontScale)) * 0.5f)) + 1.0f;
+            draw_text_line(displayLabel, pos.x + kContentPadding, textY, kFontScale);
+        }
+
+        advance_cursor({ 0.0f, height + kContentPadding });
     }
 
     void text_box(std::string_view text, Vec2 size) noexcept

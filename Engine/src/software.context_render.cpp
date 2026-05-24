@@ -164,6 +164,11 @@ namespace epochnamespace::anativecontext
             }
 
             detail::render_scene_preview(ctx);
+            if (ctx.windowData && ctx.windowData->context)
+            {
+                if (auto liveContext = std::reinterpret_pointer_cast<epochnamespace::core::Context>(ctx.windowData->context))
+                    ::epochnamespace::gui::render_top_layer_batch(liveContext.get());
+            }
 
             sr.lastGuiGeneration = guiGeneration;
             sr.lastCameraRevision = cameraRevision;

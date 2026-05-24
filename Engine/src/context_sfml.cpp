@@ -674,6 +674,8 @@ namespace
         render_scene_preview(ctx);
         s_window->resetGLStates();
         (void)epochnamespace::gui::render_deferred_batch(ctx.get());
+        s_window->resetGLStates();
+        (void)epochnamespace::gui::render_top_layer_batch(ctx.get());
         s_window->display();
         (void)s_window->setActive(false);
         return s_window->isOpen();

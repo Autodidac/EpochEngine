@@ -56,6 +56,7 @@ export module vulkan.context:texture;
 
 import :shared_vk;
 import core.logger;
+import core.path;
 import engine.cli;
 import utility.string_converter;
 import image.loader;
@@ -99,11 +100,19 @@ namespace epochnamespace::vulkancontext
             const fs::path exeDir = epochnamespace::core::cli::exe_path.empty()
                 ? fs::path{}
                 : fs::absolute(epochnamespace::core::cli::exe_path).parent_path();
-            const std::array<fs::path, 8> candidates = {
+            const fs::path runtimeRoot = epoch::core::path::runtime_root_dir();
+            const fs::path engineAssets = epoch::core::path::engine_asset_dir();
+            const fs::path exampleAssets = epoch::core::path::example_asset_dir();
+            const std::array<fs::path, 13> candidates = {
                 exeDir / target,
                 exeDir / "assets" / "vulkan" / target,
                 target,
                 fs::path("assets") / "vulkan" / target,
+                runtimeRoot / "assets" / "vulkan" / target,
+                engineAssets / "vulkan" / target,
+                engineAssets / target,
+                exampleAssets / "vulkan" / target,
+                exampleAssets / target,
                 fs::path("epochengine") / "assets" / "vulkan" / target,
                 fs::path("..") / "epochengine" / "assets" / "vulkan" / target,
                 fs::path("..") / ".." / ".." / "x64" / "Debug" / target,

@@ -2401,10 +2401,10 @@ namespace epochnamespace::core
                         return;
                     }
 
-                    core::BackendState& state = it->second;
-                    master = state.master;
+                    core::BackendState& backendSlot = it->second;
+                    master = backendSlot.master;
 
-                    for (auto& dup : state.duplicates)
+                    for (auto& dup : backendSlot.duplicates)
                     {
                         if (dup && dup->windowData == nullptr)
                             free_dups.push_back(dup);
@@ -2646,28 +2646,28 @@ namespace epochnamespace::core
         std::shared_ptr<Context> ctx;
         {
             std::unique_lock lock(g_backendsMutex);
-            auto& state = g_backends[type];
+            auto& backendSlot = g_backends[type];
 
-            if (!state.master)
+            if (!backendSlot.master)
             {
                 ctx = std::make_shared<Context>();
                 ctx->type = type;
-                state.master = ctx;
+                backendSlot.master = ctx;
             }
-            else if (!state.master->windowData)
+            else if (!backendSlot.master->windowData)
             {
-                ctx = state.master;
+                ctx = backendSlot.master;
             }
             else
             {
-                auto it = std::find_if(state.duplicates.begin(), state.duplicates.end(),
+                auto it = std::find_if(backendSlot.duplicates.begin(), backendSlot.duplicates.end(),
                     [](const std::shared_ptr<Context>& dup) { return dup && !dup->windowData; });
 
-                if (it != state.duplicates.end()) ctx = *it;
+                if (it != backendSlot.duplicates.end()) ctx = *it;
                 else
                 {
-                    auto dup = CloneContext(*state.master);
-                    state.duplicates.push_back(dup);
+                    auto dup = CloneContext(*backendSlot.master);
+                    backendSlot.duplicates.push_back(dup);
                     ctx = dup;
                 }
             }

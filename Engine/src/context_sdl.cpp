@@ -642,6 +642,7 @@ namespace
         (void)queue.drain();
         (void)epochnamespace::gui::render_deferred_batch(ctx.get());
         render_scene_preview(ctx);
+        (void)epochnamespace::gui::render_top_layer_batch(ctx.get());
         epochnamespace::sdlcontext::end_frame();
         if (state.renderFaulted)
         {

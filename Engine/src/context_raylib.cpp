@@ -108,6 +108,7 @@ namespace epochnamespace::core::detail
             (void)queue.drain();
             epochnamespace::raylibcontext::raylib_render_scene_preview(current);
             (void)epochnamespace::gui::render_deferred_batch(current.get());
+            (void)epochnamespace::gui::render_top_layer_batch(current.get());
             epochnamespace::raylib_api::end_drawing();
 
             st.frameActive = false;

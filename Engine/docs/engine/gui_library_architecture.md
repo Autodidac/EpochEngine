@@ -49,8 +49,8 @@ normal-batch behavior until their presenter owns a matching replay pass.
 ## Intended Layers
 
 - Primitive widgets: labels, buttons, connected tabs, dropdown/select boxes,
-  text inputs, scrollable text panels, image/runtime-surface views, and future
-  checkboxes, sliders, tree views, and list views.
+  progress bars, text inputs, scrollable text panels, image/runtime-surface
+  views, and future checkboxes, sliders, tree views, and list views.
 - Layout and docking: windows, splitters, resize handles, scroll extents,
   focus routing, z-order, modal scrims, context menus, and future popout hosts.
 - Theme and rendering: palette ownership, font/glyph metrics, clipping,
@@ -73,6 +73,14 @@ Before a control is considered ready, it needs:
 - stable clipping and hit testing inside scrollable/resizable panes
 - dropdown/select boxes must keep their own mouse-wheel focus while open instead
   of letting a parent scroll pane consume the wheel first
+- progress bars are shared GUI primitives for package installs, workspace
+  loading, updater/cache operations, generated-project builds, and any future
+  visible long-running editor action; do not draw one-off progress rows in
+  Console Dock or domain code when `engine.gui` can own the behavior
+- input profiles are shared engine/editor contracts, not per-surface hacks.
+  Camera reset begins with the `Home` preview hotkey, but rebinding, project
+  export, and package opt-in must flow through a reusable input-configuration
+  surface before being promoted to generated projects
 - text inputs must support basic desktop editing affordances before promotion:
   first-pass whole-field copy, cut, paste, and select-all are acceptable, but
   true ranged text selection/caret movement remains the next gate

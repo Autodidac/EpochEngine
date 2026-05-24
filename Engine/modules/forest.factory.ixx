@@ -13,6 +13,7 @@ export namespace epoch::forest
 {
     inline constexpr std::string_view kForestFactoryPackageId = "engine_forest_factory";
     inline constexpr std::string_view kForestFactoryWorkspace = "Forest Factory";
+    inline constexpr std::string_view kForestFactoryTechnique = "Temporal graph / parametric L-system";
 
     enum class ForestOutputKind : std::uint8_t
     {

@@ -79,6 +79,7 @@ import engine.input;
 import scripting.system;
 import epoch.ai;
 import epoch.systems;
+import package.registry;
 import render.preview_grid;
 
 namespace epochnamespace
@@ -401,6 +402,16 @@ namespace epochnamespace
             std::string projectBuildStatus{};
             std::string scriptBuildStatus{};
             std::string newScriptName{ "sandbox_iteration" };
+            std::string scriptEditorPath{};
+            std::string scriptEditorText{};
+            std::string scriptEditorStatus{ "No script source loaded." };
+            bool scriptEditorDirty{ false };
+            std::optional<std::future<EditorProjectBuildResult>> projectBuildPending{};
+            bool projectBuildRunAfterBuild{ false };
+            std::string projectBuildRunScene{};
+            std::string projectBuildOutputPath{};
+            std::string projectBuildRunBackend{};
+            std::string projectRunBackend{ "opengl" };
             std::string selectedProjectFile{};
             std::string selectedAssetPath{};
             std::vector<EditorEntity> entities{};
@@ -418,6 +429,7 @@ namespace epochnamespace
             EditorTimeControl timeControl{};
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
+            EditorWorkspaceTab dockStatusTab{ EditorWorkspaceTab::Output };
             EditorMainSurface mainSurface{ initial_editor_main_surface(workspaceTab) };
             float workspaceSplit{ 0.68f };
             float outlinerSplit{ 0.20f };
@@ -435,6 +447,9 @@ namespace epochnamespace
             bool showAboutModal{ false };
             bool showSettingsModal{ false };
             bool showPackageManagerModal{ false };
+            std::string selectedPackageId{ "engine_arcade" };
+            std::string packageInstallStatus{ "Select a package and press Install." };
+            float packageInstallProgress{ 0.0f };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
@@ -2034,6 +2049,45 @@ namespace epochnamespace
             }
         }
 
+        struct ProjectRunBackendChoice
+        {
+            std::string_view label{};
+            std::string_view argument{};
+        };
+
+        [[nodiscard]] std::span<const ProjectRunBackendChoice> project_run_backend_choices() noexcept
+        {
+#if defined(_WIN32)
+            static constexpr std::array<ProjectRunBackendChoice, 6> kChoices{ {
+                { "OpenGL single context", "opengl" },
+                { "DirectX single context", "directx" },
+                { "Vulkan single context", "vulkan" },
+                { "Raylib single context", "raylib" },
+                { "SDL single context", "sdl" },
+                { "SFML single context", "sfml" }
+            } };
+#else
+            static constexpr std::array<ProjectRunBackendChoice, 5> kChoices{ {
+                { "OpenGL single context", "opengl" },
+                { "Vulkan single context", "vulkan" },
+                { "Raylib single context", "raylib" },
+                { "SDL single context", "sdl" },
+                { "SFML single context", "sfml" }
+            } };
+#endif
+            return { kChoices.data(), kChoices.size() };
+        }
+
+        [[nodiscard]] std::string_view project_run_backend_label(std::string_view argument) noexcept
+        {
+            for (const auto& choice : project_run_backend_choices())
+            {
+                if (choice.argument == argument)
+                    return choice.label;
+            }
+            return "OpenGL single context";
+        }
+
         [[nodiscard]] std::string vec3_text(const std::array<float, 3>& value)
         {
             return std::format("({:.1f}, {:.1f}, {:.1f})", value[0], value[1], value[2]);
@@ -2302,6 +2356,151 @@ namespace epochnamespace
             const auto resolvedPath = resolve_editor_path(path);
             std::error_code ec;
             return std::filesystem::absolute(resolvedPath, ec).lexically_normal().generic_string();
+        }
+
+        bool load_script_source_editor(EditorState& editor, const std::filesystem::path& path, bool force = false)
+        {
+            if (path.empty())
+            {
+                editor.scriptEditorStatus = "No script source selected.";
+                return false;
+            }
+
+            const auto resolvedPath = resolve_editor_path(path);
+            const std::string normalizedPath = display_project_path(resolvedPath);
+            if (!force && editor.scriptEditorDirty && editor.scriptEditorPath != normalizedPath)
+            {
+                editor.scriptEditorStatus = "Unsaved script edits; save or reload before switching source files.";
+                return false;
+            }
+
+            std::error_code ec;
+            if (!std::filesystem::exists(resolvedPath, ec) || ec)
+            {
+                editor.scriptEditorPath = normalizedPath;
+                editor.scriptEditorText.clear();
+                editor.scriptEditorDirty = false;
+                editor.scriptEditorStatus = "Script source is missing.";
+                return false;
+            }
+
+            ec.clear();
+            const auto size = std::filesystem::file_size(resolvedPath, ec);
+            if (ec)
+            {
+                editor.scriptEditorStatus = "Could not read script source size.";
+                return false;
+            }
+
+            constexpr std::uintmax_t kMaxEditableScriptBytes = 256u * 1024u;
+            if (size > kMaxEditableScriptBytes)
+            {
+                editor.scriptEditorStatus = "Script source is too large for the current editor surface.";
+                return false;
+            }
+
+            std::ifstream in(resolvedPath, std::ios::binary);
+            if (!in)
+            {
+                editor.scriptEditorStatus = "Could not open script source for reading.";
+                return false;
+            }
+
+            std::ostringstream text;
+            text << in.rdbuf();
+            editor.scriptEditorPath = normalizedPath;
+            editor.scriptEditorText = text.str();
+            editor.scriptEditorDirty = false;
+            editor.scriptEditorStatus = "Loaded script source.";
+            return true;
+        }
+
+        bool save_script_source_editor(EditorState& editor)
+        {
+            if (editor.scriptEditorPath.empty())
+            {
+                editor.scriptEditorStatus = "No script source loaded.";
+                return false;
+            }
+
+            const auto resolvedPath = resolve_editor_path(std::filesystem::path{ editor.scriptEditorPath });
+            std::error_code ec;
+            std::filesystem::create_directories(resolvedPath.parent_path(), ec);
+            if (ec)
+            {
+                editor.scriptEditorStatus = "Could not create script source directory.";
+                return false;
+            }
+
+            std::ofstream out(resolvedPath, std::ios::binary | std::ios::trunc);
+            if (!out)
+            {
+                editor.scriptEditorStatus = "Could not open script source for writing.";
+                return false;
+            }
+
+            out << editor.scriptEditorText;
+            editor.scriptEditorDirty = false;
+            editor.scriptEditorStatus = "Saved script source.";
+            return true;
+        }
+
+        void sync_script_source_editor(EditorState& editor, const std::filesystem::path& path)
+        {
+            if (path.empty())
+                return;
+
+            const std::string normalizedPath = display_project_path(path);
+            if (editor.scriptEditorPath.empty() || (!editor.scriptEditorDirty && editor.scriptEditorPath != normalizedPath))
+                (void)load_script_source_editor(editor, path, false);
+        }
+
+        void draw_script_source_editor(EditorState& editor, const std::filesystem::path& sourcePath, float width, float height)
+        {
+            sync_script_source_editor(editor, sourcePath);
+
+            gui::label("Script Source Editor");
+            gui::property_row("[script editor] Path", editor.scriptEditorPath.empty() ? display_project_path(sourcePath) : editor.scriptEditorPath, 130.0f);
+            gui::property_row(
+                "[script editor] State",
+                editor.scriptEditorDirty ? std::string("Modified; save before build/run.") : editor.scriptEditorStatus,
+                130.0f);
+
+            const auto edit = gui::edit_box(
+                editor.scriptEditorText,
+                { (std::max)(180.0f, width), (std::max)(120.0f, height) },
+                256u * 1024u,
+                true);
+            if (edit.changed)
+            {
+                editor.scriptEditorDirty = true;
+                editor.scriptEditorStatus = "Modified.";
+            }
+
+            if (gui::button("Save Script Source", { (std::min)(210.0f, width), 30.0f }))
+            {
+                if (save_script_source_editor(editor))
+                {
+                    push_editor_log(editor, "[script] Saved source: " + editor.scriptEditorPath);
+                    append_project_note(
+                        editor,
+                        "Save Script Source",
+                        "Saved script source from the editor surface.",
+                        editor.scriptEditorPath);
+                }
+                else
+                {
+                    push_editor_log(editor, "[script] Save failed: " + editor.scriptEditorStatus);
+                }
+            }
+
+            if (gui::button("Reload Script Source", { (std::min)(220.0f, width), 30.0f }))
+            {
+                if (load_script_source_editor(editor, sourcePath, true))
+                    push_editor_log(editor, "[script] Reloaded source: " + editor.scriptEditorPath);
+                else
+                    push_editor_log(editor, "[script] Reload failed: " + editor.scriptEditorStatus);
+            }
         }
 
         [[nodiscard]] std::string read_text_tail(const std::filesystem::path& path, std::size_t maxChars = 2400)
@@ -2703,6 +2902,8 @@ namespace epochnamespace
             editor.activeScript = scriptId;
             editor.newScriptName = scriptId;
             editor.selectedProjectFile = display_project_path(scriptPath);
+            editor.selectedAssetPath = editor.selectedProjectFile;
+            (void)load_script_source_editor(editor, scriptPath, true);
             editor.scriptBuildStatus = "Created project script stub: " + editor.selectedProjectFile;
             push_editor_log(editor, "[script] Created project script stub '" + scriptId + "'.");
             append_project_note(
@@ -2898,6 +3099,52 @@ namespace epochnamespace
         void repair_active_project_evidence(EditorState& editor)
         {
             repair_project_evidence(editor, editor.projectId);
+        }
+
+        [[nodiscard]] std::string project_runtime_scene_id(const EditorState& editor)
+        {
+            if (!editor.projectId.empty())
+                return std::string("project:") + editor.projectId;
+            return editor.activeRuntimeScene.empty() ? std::string("project:projectlauncher") : editor.activeRuntimeScene;
+        }
+
+        void start_project_build(EditorState& editor, bool runAfterBuild, std::string_view reason)
+        {
+            if (editor.projectBuildPending)
+            {
+                editor.projectBuildStatus = "Project build already running; wait for the current build before pressing Run again.";
+                push_editor_log(editor, "[project] Build/run request ignored because a project build is already running.");
+                return;
+            }
+
+            if (editor.aiContinuousBuildPending)
+            {
+                editor.projectBuildStatus = "Self-iteration build is already running; wait before starting a project build.";
+                push_editor_log(editor, "[project] Build/run request blocked while AI self-iteration build is running.");
+                return;
+            }
+
+            if (editor.projectRoot.empty())
+            {
+                editor.projectBuildStatus = "No active project root selected.";
+                push_editor_log(editor, "[project] Build/run request failed: no active project root.");
+                return;
+            }
+
+            repair_active_project_evidence(editor);
+
+            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+            editor.projectBuildRunAfterBuild = runAfterBuild;
+            editor.projectBuildRunScene = project_runtime_scene_id(editor);
+            editor.projectBuildOutputPath = display_project_path(outputExe);
+            editor.projectBuildRunBackend = editor.projectRunBackend.empty() ? std::string("opengl") : editor.projectRunBackend;
+            editor.projectBuildStatus =
+                std::string(runAfterBuild ? "Build/run queued: " : "Build queued: ") + std::string(reason);
+            push_editor_log(editor, "[project] " + editor.projectBuildStatus);
+
+            editor.projectBuildPending.emplace(std::async(std::launch::async, [root = editor.projectRoot]() {
+                return editor_build_project(root);
+            }));
         }
 
         void activate_self_iteration_sandbox(
@@ -3512,48 +3759,96 @@ namespace epochnamespace
                     "Run remains project-owned so script assets cannot crash the project run path by accident.");
             }
 
-            repair_active_project_evidence(editor);
-
-            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
-            const auto build = editor_build_project(editor.projectRoot);
-            editor.projectBuildStatus = build.summary;
-            push_editor_log(
-                editor,
-                std::string("[project] ")
-                + (build.succeeded ? "Build passed. " : "Build failed. ")
-                + build.summary);
-            if (!build.output_path.empty())
-                push_editor_log(editor, std::string("[project] Output: ") + build.output_path);
-            if (!build.log_path.empty())
-                push_editor_log(editor, std::string("[project] Log: ") + build.log_path);
-            append_project_note(
-                editor,
-                "Run Build Step",
-                build.summary,
-                build.succeeded ? "Run saved the project shell and built the child executable." : "Run saved the project shell, but build failed; inspect the build log before retrying.");
-            if (!build.succeeded)
-            {
-                push_editor_log(editor, "[project] Run canceled because the project build failed.");
-                return;
-            }
-
-            const bool hasBuiltOutput = path_exists(outputExe);
-            const std::string playTarget = hasBuiltOutput
-                ? std::string("project-exe:") + display_project_path(outputExe)
-                : editor.activeRuntimeScene;
-            emit_command(EditorCommand::RunGame, playTarget);
-            push_editor_log(editor, std::string("[project] Run requested for ") + editor.projectName + ".");
-            push_editor_log(
-                editor,
-                hasBuiltOutput
-                    ? std::string("[project] Launching built child executable: ") + display_project_path(outputExe)
-                    : std::string("[project] No child executable yet; falling back to in-editor runtime target '") + editor.activeRuntimeScene + "'.");
-            append_project_note(
-                editor,
-                "Run Active Project",
-                hasBuiltOutput ? std::string("Launching built child executable.") : std::string("Falling back to in-editor runtime target."),
-                playTarget);
+            start_project_build(editor, true, "center Run button");
         };
+
+        auto poll_project_build = [&]()
+        {
+            if (!editor.projectBuildPending
+                || editor.projectBuildPending->wait_for(0ms) != std::future_status::ready)
+                return;
+
+            try
+            {
+                const auto build = editor.projectBuildPending->get();
+                editor.projectBuildPending.reset();
+                editor.projectBuildStatus = build.summary;
+                push_editor_log(
+                    editor,
+                    std::string("[project] ")
+                    + (build.succeeded ? "Build passed. " : "Build failed. ")
+                    + build.summary);
+                if (!build.output_path.empty())
+                    push_editor_log(editor, std::string("[project] Output: ") + build.output_path);
+                if (!build.log_path.empty())
+                    push_editor_log(editor, std::string("[project] Log: ") + build.log_path);
+
+                append_project_note(
+                    editor,
+                    "Project Build Completed",
+                    build.summary,
+                    build.succeeded ? "Project build evidence is available." : "Project build failed; inspect the build log before retrying.");
+
+                const bool shouldRun = editor.projectBuildRunAfterBuild;
+                const std::string outputPath = build.output_path.empty() ? editor.projectBuildOutputPath : build.output_path;
+                const std::string sceneId = editor.projectBuildRunScene.empty() ? project_runtime_scene_id(editor) : editor.projectBuildRunScene;
+                const std::string runBackend = editor.projectBuildRunBackend.empty() ? std::string("opengl") : editor.projectBuildRunBackend;
+
+                editor.projectBuildRunAfterBuild = false;
+                editor.projectBuildRunScene.clear();
+                editor.projectBuildOutputPath.clear();
+                editor.projectBuildRunBackend.clear();
+
+                if (!shouldRun)
+                    return;
+
+                if (!build.succeeded)
+                {
+                    push_editor_log(editor, "[project] Run canceled because the project build failed.");
+                    return;
+                }
+
+                const bool hasBuiltOutput = path_exists(outputPath);
+                if (!hasBuiltOutput)
+                {
+                    editor.projectBuildStatus = "Run blocked: built child executable is missing after build.";
+                    push_editor_log(
+                        editor,
+                        "[project] Run blocked: built child executable is missing; refusing parent multicontext fallback.");
+                    append_project_note(
+                        editor,
+                        "Run Active Project Blocked",
+                        "The built child executable was missing after build; parent multicontext fallback was refused.",
+                        outputPath.empty() ? std::string("(missing output path)") : outputPath);
+                    return;
+                }
+
+                const std::string playTarget =
+                    std::string("project-exe:") + display_project_path(outputPath) + "|scene=" + sceneId + "|backend=" + runBackend;
+                emit_command(EditorCommand::RunGame, playTarget);
+                push_editor_log(editor, std::string("[project] Run requested for ") + editor.projectName + ".");
+                push_editor_log(
+                    editor,
+                    std::string("[project] Launching built child executable in standalone ") + std::string(project_run_backend_label(runBackend)) + ": " + sceneId);
+                append_project_note(
+                    editor,
+                    "Run Active Project",
+                    std::string("Launching built child executable in standalone ") + std::string(project_run_backend_label(runBackend)) + ".",
+                    playTarget);
+            }
+            catch (const std::exception& e)
+            {
+                editor.projectBuildPending.reset();
+                editor.projectBuildRunAfterBuild = false;
+                editor.projectBuildRunScene.clear();
+                editor.projectBuildOutputPath.clear();
+                editor.projectBuildRunBackend.clear();
+                editor.projectBuildStatus = std::string("Project build threw: ") + e.what();
+                push_editor_log(editor, "[project] Build threw: " + std::string(e.what()));
+            }
+        };
+
+        poll_project_build();
 
         auto apply_editor_surface = [&](EditorMainSurface surface, std::string_view source)
         {
@@ -4366,7 +4661,7 @@ namespace epochnamespace
             gui::label(std::string("Preview Objects: ") + std::to_string(visible_entity_count(editor)));
             gui::label(std::string("Editor Script: ") + editor.activeScript);
             gui::label(std::string("Runtime Target: ") + editor.activeRuntimeScene);
-            gui::label("Viewport Input: click/drag objects  |  empty LMB pan  |  RMB orbit  |  Wheel zoom");
+            gui::label("Viewport Input: click/drag objects  |  empty LMB pan  |  RMB orbit  |  Wheel zoom  |  Home reset");
         }
         gui::end_scroll_area();
         gui::end_window();
@@ -4443,28 +4738,33 @@ namespace epochnamespace
                 gui::wrapped_label(
                     "This surface is the project launcher/control workspace. Save, build, and run happen here or from the centered Run button; logs remain mirrored below.",
                     centerWidth);
+                const auto runChoices = project_run_backend_choices();
+                std::vector<std::string_view> runChoiceLabels;
+                runChoiceLabels.reserve(runChoices.size());
+                for (const auto& choice : runChoices)
+                    runChoiceLabels.emplace_back(choice.label);
+                const auto runBackendSelect = gui::select_box(gui::SelectBoxOptions{
+                    .id = "project-run-backend-select",
+                    .placeholder = "Choose project runtime backend",
+                    .selected = project_run_backend_label(editor.projectRunBackend),
+                    .options = std::span<const std::string_view>{ runChoiceLabels.data(), runChoiceLabels.size() },
+                    .size = { (std::min)(centerWidth, 360.0f), 30.0f },
+                    .row_height = 28.0f,
+                    .max_visible_options = 6
+                });
+                if (runBackendSelect.changed && runBackendSelect.selected_index && *runBackendSelect.selected_index < runChoices.size())
+                {
+                    editor.projectRunBackend = std::string(runChoices[*runBackendSelect.selected_index].argument);
+                    push_editor_log(editor, std::string("[project] Project Run backend set to ") + std::string(runChoices[*runBackendSelect.selected_index].label) + ".");
+                }
+                gui::property_row("[project] Run mode", std::string(project_run_backend_label(editor.projectRunBackend)), 108.0f);
+                gui::wrapped_label(
+                    "Project Run launches the built child executable as a standalone single-context process using the selected backend, instead of cloning the editor multicontext shell.",
+                    centerWidth);
                 if (gui::button("Save Active Project", { 220.0f, 30.0f }))
                     repair_active_project_evidence(editor);
                 if (gui::button("Build Active Project", { 220.0f, 30.0f }))
-                {
-                    repair_active_project_evidence(editor);
-                    const auto build = editor_build_project(editor.projectRoot);
-                    editor.projectBuildStatus = build.summary;
-                    push_editor_log(
-                        editor,
-                        std::string("[project] ")
-                        + (build.succeeded ? "Build passed. " : "Build failed. ")
-                        + build.summary);
-                    if (!build.output_path.empty())
-                        push_editor_log(editor, std::string("[project] Output: ") + build.output_path);
-                    if (!build.log_path.empty())
-                        push_editor_log(editor, std::string("[project] Log: ") + build.log_path);
-                    append_project_note(
-                        editor,
-                        "Build Active Project",
-                        build.summary,
-                        build.succeeded ? "Build passed from the Project surface." : "Build failed from the Project surface; inspect the build log before retrying.");
-                }
+                    start_project_build(editor, false, "Project surface");
                 if (gui::button("Run Active Project", { 220.0f, 30.0f }))
                     run_active_context();
                 gui::wrapped_label(editor.projectStatus, centerWidth);
@@ -4501,6 +4801,7 @@ namespace epochnamespace
                         {
                             editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
                             editor.scriptBuildStatus = "Selected script asset: " + entry.path;
+                            (void)load_script_source_editor(editor, entry.path, false);
                         }
                         push_editor_log(editor, "[assets] Selected " + entry.path);
                     }
@@ -4538,6 +4839,8 @@ namespace epochnamespace
                     create_project_script_stub(editor);
                 if (gui::button("Build Selected Script Asset", { (std::min)(240.0f, centerWidth), 30.0f }))
                 {
+                    if (editor.scriptEditorDirty)
+                        (void)save_script_source_editor(editor);
                     const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
                     editor.scriptBuildStatus = build.summary;
                     push_editor_log(
@@ -4551,6 +4854,7 @@ namespace epochnamespace
                         build.summary,
                         build.succeeded ? "Script asset validation passed against the active project shell." : "Script asset validation failed; inspect script diagnostics before running.");
                 }
+                draw_script_source_editor(editor, activeScriptSource, centerWidth, 220.0f);
                 break;
             }
             case EditorMainSurface::AISandbox:
@@ -4912,11 +5216,11 @@ namespace epochnamespace
         {
         gui::begin_window("Console Dock", log_pos, log_size);
         const std::array<gui::SegmentedButtonSpec, 5> workspaceTabs{{
-            { "Output", 78.0f, editor.workspaceTab == EditorWorkspaceTab::Output },
-            { "Project", 78.0f, editor.workspaceTab == EditorWorkspaceTab::Project },
-            { "Assets", 90.0f, editor.workspaceTab == EditorWorkspaceTab::Assets || editor.workspaceTab == EditorWorkspaceTab::Scripts },
-            { "AI", 58.0f, editor.workspaceTab == EditorWorkspaceTab::AI },
-            { "Systems", 84.0f, editor.workspaceTab == EditorWorkspaceTab::Systems }
+            { "Output", 78.0f, editor.dockStatusTab == EditorWorkspaceTab::Output },
+            { "Project", 78.0f, editor.dockStatusTab == EditorWorkspaceTab::Project },
+            { "Assets", 90.0f, editor.dockStatusTab == EditorWorkspaceTab::Assets || editor.dockStatusTab == EditorWorkspaceTab::Scripts },
+            { "AI", 58.0f, editor.dockStatusTab == EditorWorkspaceTab::AI },
+            { "Systems", 84.0f, editor.dockStatusTab == EditorWorkspaceTab::Systems }
         }};
         const std::array<EditorWorkspaceTab, 5> workspaceTabIds{{
             EditorWorkspaceTab::Output,
@@ -4927,30 +5231,10 @@ namespace epochnamespace
         }};
         if (const auto selected = gui::tab_bar(workspaceTabs))
         {
-            editor.workspaceTab = workspaceTabIds[*selected];
-            switch (editor.workspaceTab)
-            {
-            case EditorWorkspaceTab::Project:
-                open_editor_surface(EditorMainSurface::Project, "bottom dock");
-                break;
-            case EditorWorkspaceTab::Assets:
-            case EditorWorkspaceTab::Scripts:
-                open_editor_surface(EditorMainSurface::Assets, "bottom dock");
-                break;
-            case EditorWorkspaceTab::AI:
-                open_editor_surface(EditorMainSurface::AISandbox, "bottom dock");
-                break;
-            case EditorWorkspaceTab::Systems:
-                open_editor_surface(EditorMainSurface::Systems, "bottom dock");
-                break;
-            case EditorWorkspaceTab::Output:
-            default:
-                open_editor_surface(EditorMainSurface::Scene, "bottom dock");
-                break;
-            }
+            editor.dockStatusTab = workspaceTabIds[*selected];
         }
 
-        const bool dockUsesOuterScroll = editor.workspaceTab != EditorWorkspaceTab::Output;
+        const bool dockUsesOuterScroll = editor.dockStatusTab != EditorWorkspaceTab::Output;
         if (dockUsesOuterScroll)
         {
             const gui::Vec2 dockScrollStart = gui::cursor_position();
@@ -4958,14 +5242,15 @@ namespace epochnamespace
                 60.0f,
                 bottom_pos.y + bottom_h - dockScrollStart.y - 4.0f);
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
-                .id = std::string("console-dock-body-") + std::to_string(static_cast<int>(editor.workspaceTab)),
+                .id = std::string("console-dock-body-") + std::to_string(static_cast<int>(editor.dockStatusTab)),
                 .size = { (std::max)(120.0f, log_size.x - 12.0f), dockScrollHeight },
                 .draw_background = false,
                 .show_scrollbar = true
             });
         }
 
-        switch (editor.workspaceTab)
+        constexpr bool showDockEditorControls = false;
+        switch (editor.dockStatusTab)
         {
         case EditorWorkspaceTab::Project:
         {
@@ -5039,44 +5324,29 @@ namespace epochnamespace
                 (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(editor.projectStatus, (std::max)(180.0f, log_size.x - 24.0f));
             gui::wrapped_label(editor.projectBuildStatus, (std::max)(180.0f, log_size.x - 24.0f));
-            if (gui::button(editor.projectNotesVisible ? "Hide Project Notes" : "Show Project Notes", { 220.0f, 30.0f }))
+            if (showDockEditorControls && gui::button(editor.projectNotesVisible ? "Hide Project Notes" : "Show Project Notes", { 220.0f, 30.0f }))
                 editor.projectNotesVisible = !editor.projectNotesVisible;
             if (editor.projectNotesVisible)
                 gui::wrapped_label(read_project_notes(editor.projectRoot), (std::max)(180.0f, log_size.x - 24.0f));
 
-            for (const auto& profile : editor_project_profiles())
+            if (showDockEditorControls)
             {
-                const std::string buttonLabel = std::string(profile.display_name);
-                if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
+                for (const auto& profile : editor_project_profiles())
                 {
-                    set_project(editor, profile.id, true);
-                    epochnamespace::previewgrid::reset_camera(ctx.get());
+                    const std::string buttonLabel = std::string(profile.display_name);
+                    if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
+                    {
+                        set_project(editor, profile.id, true);
+                        epochnamespace::previewgrid::reset_camera(ctx.get());
+                    }
                 }
             }
 
-            if (gui::button("Save Active Project", { 220.0f, 30.0f }))
+            if (showDockEditorControls && gui::button("Save Active Project", { 220.0f, 30.0f }))
                 repair_active_project_evidence(editor);
-            if (gui::button("Build Active Project", { 220.0f, 30.0f }))
-            {
-                repair_active_project_evidence(editor);
-                const auto build = editor_build_project(editor.projectRoot);
-                editor.projectBuildStatus = build.summary;
-                push_editor_log(
-                    editor,
-                    std::string("[project] ")
-                    + (build.succeeded ? "Build passed. " : "Build failed. ")
-                    + build.summary);
-                if (!build.output_path.empty())
-                    push_editor_log(editor, std::string("[project] Output: ") + build.output_path);
-                if (!build.log_path.empty())
-                    push_editor_log(editor, std::string("[project] Log: ") + build.log_path);
-                append_project_note(
-                    editor,
-                    "Build Active Project",
-                    build.summary,
-                    build.succeeded ? "Build passed; the centered Run button can use the child executable when output exists." : "Build failed; inspect the build log before retrying or promoting AI evidence.");
-            }
-            if (gui::button("Create Game Project Shell", { 220.0f, 30.0f }))
+            if (showDockEditorControls && gui::button("Build Active Project", { 220.0f, 30.0f }))
+                start_project_build(editor, false, "Project bottom dock");
+            if (showDockEditorControls && gui::button("Create Game Project Shell", { 220.0f, 30.0f }))
             {
                 const auto created = editor_create_project_shell(EditorProjectKind::Game);
                 editor.projectStatus = created.summary;
@@ -5103,7 +5373,7 @@ namespace epochnamespace
                         "Use Build Active Project, then the centered Run button. This is a ProjectLauncher game/software shell, not the self-iteration sandbox.");
                 }
             }
-            if (gui::button("Create Tool Project Shell", { 220.0f, 30.0f }))
+            if (showDockEditorControls && gui::button("Create Tool Project Shell", { 220.0f, 30.0f }))
             {
                 const auto created = editor_create_project_shell(EditorProjectKind::Tool);
                 editor.projectStatus = created.summary;
@@ -5154,38 +5424,47 @@ namespace epochnamespace
 
             gui::property_row("[script] New script", "type a safe id, then create a project-local .ascript.cpp");
             (void)gui::edit_box(editor.newScriptName, { scriptsContentWidth, 28.0f }, 64, false);
-            if (gui::button("Create Project Script Stub", { (std::min)(260.0f, scriptsContentWidth), 30.0f }))
+            if (showDockEditorControls && gui::button("Create Project Script Stub", { (std::min)(260.0f, scriptsContentWidth), 30.0f }))
                 create_project_script_stub(editor);
 
-            for (const auto& script : editor_script_profiles())
+            if (showDockEditorControls)
             {
-                const std::string buttonLabel = std::string(script.display_name);
-                const std::string resolvedSource = editor_resolve_script_source_path(script.id, editor.projectRoot);
-                if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
+                for (const auto& script : editor_script_profiles())
                 {
-                    editor.activeScript = std::string(script.id);
-                    editor.scriptBuildStatus = std::string("Selected script source: ") + resolvedSource;
-                    push_editor_log(editor, std::string("[script] Selected ") + editor.activeScript + ".");
+                    const std::string buttonLabel = std::string(script.display_name);
+                    const std::string resolvedSource = editor_resolve_script_source_path(script.id, editor.projectRoot);
+                    if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
+                    {
+                        editor.activeScript = std::string(script.id);
+                        editor.scriptBuildStatus = std::string("Selected script source: ") + resolvedSource;
+                        (void)load_script_source_editor(editor, resolvedSource, false);
+                        push_editor_log(editor, std::string("[script] Selected ") + editor.activeScript + ".");
+                    }
+                    gui::property_row("  source", resolvedSource);
+                    gui::wrapped_label(script.description, (std::max)(160.0f, log_size.x - 36.0f));
                 }
-                gui::property_row("  source", resolvedSource);
-                gui::wrapped_label(script.description, (std::max)(160.0f, log_size.x - 36.0f));
             }
 
             const auto scriptEntries = collect_script_browser_entries(editor.projectRoot);
             gui::property_row("[script] Project/engine script files", std::to_string(scriptEntries.size()));
-            for (const auto& entry : scriptEntries)
+            if (showDockEditorControls)
             {
-                if (gui::button(entry.label, { scriptsContentWidth, 28.0f }))
+                for (const auto& entry : scriptEntries)
                 {
-                    editor.activeScript = entry.kind;
-                    editor.selectedProjectFile = entry.path;
-                    editor.scriptBuildStatus = "Selected script source: " + entry.path;
-                    push_editor_log(editor, "[script] Selected source " + entry.path);
+                    if (gui::button(entry.label, { scriptsContentWidth, 28.0f }))
+                    {
+                        editor.activeScript = entry.kind;
+                        editor.selectedProjectFile = entry.path;
+                        editor.scriptBuildStatus = "Selected script source: " + entry.path;
+                        push_editor_log(editor, "[script] Selected source " + entry.path);
+                    }
                 }
             }
 
-            if (gui::button("Build Selected Script", { 180.0f, 30.0f }))
+            if (showDockEditorControls && gui::button("Build Selected Script", { 180.0f, 30.0f }))
             {
+                if (editor.scriptEditorDirty)
+                    (void)save_script_source_editor(editor);
                 const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
                 editor.scriptBuildStatus = build.summary;
                 push_editor_log(
@@ -5202,19 +5481,24 @@ namespace epochnamespace
 
             const auto projectEntries = collect_project_browser_entries(editor.projectRoot);
             gui::property_row("[files] Active project browser", std::to_string(projectEntries.size()) + " visible entries");
-            gui::wrapped_label("This is the first shallow project file/folder viewer. It skips build/bin/.vs output, selects scripts for build/run, and gives the AI sandbox visible path evidence instead of hidden filesystem magic.", scriptsContentWidth);
-            for (const auto& entry : projectEntries)
+            gui::wrapped_label("Console Dock is status-only. Use the central Asset Browser / Scripts surface for file browsing, script editing, and build actions.", scriptsContentWidth);
+            if (showDockEditorControls)
             {
-                if (gui::button(entry.label, { scriptsContentWidth, 26.0f }))
+                for (const auto& entry : projectEntries)
                 {
-                    editor.selectedProjectFile = entry.path;
-                    if (entry.kind == "SCRIPT")
+                    if (gui::button(entry.label, { scriptsContentWidth, 26.0f }))
                     {
-                        editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
-                        editor.scriptBuildStatus = "Selected project script: " + entry.path;
+                        editor.selectedProjectFile = entry.path;
+                        if (entry.kind == "SCRIPT")
+                        {
+                            editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
+                            editor.scriptBuildStatus = "Selected project script: " + entry.path;
+                            (void)load_script_source_editor(editor, entry.path, false);
+                        }
+                        push_editor_log(editor, "[files] Selected " + entry.path);
                     }
-                    push_editor_log(editor, "[files] Selected " + entry.path);
                 }
+                draw_script_source_editor(editor, activeScriptSource, scriptsContentWidth, 180.0f);
             }
             gui::property_row("[files] Selected", editor.selectedProjectFile.empty() ? std::string("(none)") : editor.selectedProjectFile);
             break;
@@ -6066,7 +6350,7 @@ namespace epochnamespace
 
         if (editor.showPackageManagerModal)
         {
-            const gui::Vec2 modalSize{ 640.0f, 330.0f };
+            const gui::Vec2 modalSize{ 660.0f, 360.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
@@ -6080,6 +6364,28 @@ namespace epochnamespace
             const auto projectRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
             const auto engineArcadePackage = projectRoot / "assets" / "packages" / "engine_arcade.package.json";
             const auto engineArcadeScript = projectRoot / "scripts" / "engine_arcade_scene.ascript.cpp";
+            const auto knownPackages = epoch::package_registry::known_packages();
+            std::vector<std::string_view> packageOptions;
+            packageOptions.reserve(knownPackages.size());
+            const epoch::package_registry::PackageDescriptor* selectedPackage = nullptr;
+            for (std::size_t i = 0; i < knownPackages.size(); ++i)
+            {
+                const auto& package = knownPackages[i];
+                packageOptions.push_back(package.displayName);
+                if (editor.selectedPackageId.empty() || package.id == editor.selectedPackageId)
+                {
+                    selectedPackage = &package;
+                }
+            }
+            if (!selectedPackage && !knownPackages.empty())
+            {
+                selectedPackage = &knownPackages.front();
+                editor.selectedPackageId = std::string(selectedPackage->id);
+            }
+            const std::string selectedPackageLabel = selectedPackage
+                ? std::string(selectedPackage->displayName)
+                : std::string("(none)");
+            const bool engineArcadeInstalled = path_exists(engineArcadePackage) && path_exists(engineArcadeScript);
 
             gui::begin_modal_window(gui::ModalWindowOptions{
                 .title = "Package Manager",
@@ -6088,39 +6394,133 @@ namespace epochnamespace
                 .viewport_size = { w, h },
                 .dim_background = true
             });
-            const gui::Vec2 contentPos = gui::cursor_position();
-            const float contentY = contentPos.y;
-            gui::set_cursor({ contentPos.x + 8.0f, contentY });
             gui::wrapped_label(
-                "Local packages are reviewable engine/project assets. Downloadable source packages will later use the updater-style source build gate and must never auto-run services or bypass human approval.",
+                "Local packages are reviewable engine/project assets. Downloadable source packages use a human-approved source/build gate and must never auto-run services.",
                 contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 58.0f });
-            gui::property_row("[package] Active project", editor.projectName, 150.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 84.0f });
-            gui::property_row("[package] Engine arcade", engineArcadeEligible ? "available" : "not applicable to this project", 150.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 110.0f });
-            gui::property_row("[package] Manifest", path_exists(engineArcadePackage) ? "installed" : "missing", 150.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 136.0f });
-            gui::property_row("[package] Script asset", path_exists(engineArcadeScript) ? "installed" : "missing", 150.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 168.0f });
-            gui::wrapped_label(
-                "engine_arcade exposes the kernel-owned mini-runtimes as local runtime-mini assets for future render-to-texture cabinets, without copying the game implementations out of the engine.",
-                contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 238.0f });
-            if (gui::button("Install Local Runtime-Minis", { 220.0f, 30.0f }))
+            const auto packageSelect = gui::select_box(gui::SelectBoxOptions{
+                .id = "package-manager-package-select",
+                .placeholder = "Choose package",
+                .selected = selectedPackageLabel,
+                .options = std::span<const std::string_view>{ packageOptions.data(), packageOptions.size() },
+                .size = { contentWidth, 30.0f },
+                .row_height = 28.0f,
+                .max_visible_options = 6
+            });
+            if (packageSelect.changed && packageSelect.selected_index && *packageSelect.selected_index < knownPackages.size())
             {
-                if (engineArcadeEligible)
-                {
-                    repair_active_project_evidence(editor);
-                    editor.workspaceTab = EditorWorkspaceTab::Assets;
-                    push_editor_log(editor, "[package] Requested engine_arcade local runtime-mini package materialization.");
-                }
-                else
-                {
-                    push_editor_log(editor, "[package] engine_arcade applies to game project shells, not the self-iteration sandbox or tool hubs.");
-                }
+                selectedPackage = &knownPackages[*packageSelect.selected_index];
+                editor.selectedPackageId = std::string(selectedPackage->id);
+                editor.packageInstallStatus = std::string("Selected ") + std::string(selectedPackage->displayName) + ".";
+                editor.packageInstallProgress = 0.0f;
             }
-            gui::set_cursor({ contentPos.x + 244.0f, contentPos.y + 238.0f });
+            const std::string activePackageLabel = selectedPackage
+                ? std::string(selectedPackage->displayName)
+                : std::string("(none)");
+
+            const auto packageKindText = [](epoch::package_registry::PackageKind kind) noexcept -> std::string_view
+            {
+                switch (kind)
+                {
+                case epoch::package_registry::PackageKind::RuntimeMini: return "Runtime mini";
+                case epoch::package_registry::PackageKind::CoreOptIn: return "Core opt-in";
+                case epoch::package_registry::PackageKind::NetworkRuntime: return "Network runtime";
+                case epoch::package_registry::PackageKind::HeadlessServer: return "Headless server";
+                case epoch::package_registry::PackageKind::ResearchPrototype: return "Research prototype";
+                case epoch::package_registry::PackageKind::DownloadableSource: return "Downloadable source";
+                default: return "Unknown";
+                }
+            };
+
+            if (packageSelect.opened)
+            {
+                gui::wrapped_label(
+                    "Choose one package. Details and install status return after the dropdown closes.",
+                    contentWidth);
+            }
+            else
+            {
+                gui::property_row("Project", editor.projectName, 96.0f);
+                gui::property_row("Package", activePackageLabel, 96.0f);
+                gui::property_row("Type", selectedPackage ? std::string(packageKindText(selectedPackage->kind)) : std::string("(none)"), 96.0f);
+                gui::property_row("Source", selectedPackage && !selectedPackage->externalSourceRepo.empty()
+                    ? std::string(selectedPackage->externalSourceRepo)
+                    : std::string("engine builtin"), 96.0f);
+
+                if (selectedPackage && !selectedPackage->summary.empty())
+                    gui::wrapped_label(std::string(selectedPackage->summary), contentWidth);
+
+                if (selectedPackage && selectedPackage->id == epoch::package_registry::kEngineArcadePackageId)
+                {
+                    gui::property_row("Availability", engineArcadeEligible ? "available for this project" : "not applicable to this project", 96.0f);
+                    gui::property_row("Manifest", path_exists(engineArcadePackage) ? "installed" : "missing", 96.0f);
+                    gui::property_row("Script asset", path_exists(engineArcadeScript) ? "installed" : "missing", 96.0f);
+                }
+                else if (selectedPackage && selectedPackage->requiresExplicitNetworkApproval)
+                {
+                    gui::wrapped_label(
+                        "This package can create a server, listener, or network control surface. It remains blocked until a human explicitly approves the run/build gate.",
+                        contentWidth);
+                }
+
+                gui::progress_bar(gui::ProgressBarOptions{
+                    .label = "Install",
+                    .status = editor.packageInstallStatus,
+                    .value = (std::max)(editor.packageInstallProgress, engineArcadeInstalled && editor.selectedPackageId == "engine_arcade" ? 1.0f : 0.0f),
+                    .size = { (std::min)(contentWidth, 500.0f), 20.0f },
+                    .show_percent = true
+                });
+            }
+
+            const gui::Vec2 buttonRow = gui::cursor_position();
+            if (!packageSelect.opened)
+            {
+                if (gui::button("Install Selected Package", { 220.0f, 30.0f }))
+                {
+                    if (!selectedPackage)
+                    {
+                        editor.packageInstallStatus = "No package selected.";
+                        editor.packageInstallProgress = 0.0f;
+                    }
+                    else if (selectedPackage->id == epoch::package_registry::kEngineArcadePackageId)
+                    {
+                        if (engineArcadeEligible)
+                        {
+                            repair_active_project_evidence(editor);
+                            editor.packageInstallStatus = engineArcadeInstalled
+                                ? "Engine Arcade already installed."
+                                : "Engine Arcade staged into the active project.";
+                            editor.packageInstallProgress = 1.0f;
+                            push_editor_log(editor, "[package] Requested engine_arcade local runtime-mini package materialization.");
+                        }
+                        else
+                        {
+                            editor.packageInstallStatus = "Engine Arcade applies to game project shells, not sandbox/tool hubs.";
+                            editor.packageInstallProgress = 0.0f;
+                            push_editor_log(editor, "[package] engine_arcade applies to game project shells, not the self-iteration sandbox or tool hubs.");
+                        }
+                    }
+                    else if (selectedPackage->requiresExplicitNetworkApproval)
+                    {
+                        editor.packageInstallStatus = "Blocked: network/server packages require explicit human approval.";
+                        editor.packageInstallProgress = 0.0f;
+                        push_editor_log(editor, std::string("[package] Blocked ") + std::string(selectedPackage->id) + ": explicit network approval required.");
+                    }
+                    else if (selectedPackage->kind == epoch::package_registry::PackageKind::DownloadableSource
+                        || selectedPackage->kind == epoch::package_registry::PackageKind::ResearchPrototype)
+                    {
+                        editor.packageInstallStatus = "Download/build gate staged; cache/packages fetch is not automatic.";
+                        editor.packageInstallProgress = 0.15f;
+                        push_editor_log(editor, std::string("[package] Staged download/build gate for ") + std::string(selectedPackage->id) + ".");
+                    }
+                    else
+                    {
+                        editor.packageInstallStatus = "Core opt-in package selected; activate it from the matching editor surface.";
+                        editor.packageInstallProgress = 0.35f;
+                        push_editor_log(editor, std::string("[package] Selected core opt-in package ") + std::string(selectedPackage->id) + ".");
+                    }
+                }
+                gui::set_cursor({ buttonRow.x + 236.0f, buttonRow.y });
+            }
             if (gui::button("Close", { 120.0f, 30.0f }))
                 editor.showPackageManagerModal = false;
             gui::end_modal_window();
