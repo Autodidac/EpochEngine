@@ -148,7 +148,6 @@ export namespace epochnamespace::sdlcontext
         std::function<void(int, int)> onResize;
 
         bool useFrameLimiter = false;
-        std::chrono::steady_clock::time_point lastFrameTime{};
     };
 
     inline SDLState sdlcontext{};
@@ -529,26 +528,18 @@ export namespace epochnamespace::sdlcontext
             return false;
         }
 
-        const int vsyncResult = SDL_SetRenderVSync(sdlcontext.renderer, 1);
+        const int vsyncResult = SDL_SetRenderVSync(sdlcontext.renderer, 0);
         if (vsyncResult != 0)
         {
             const char* const sdlError = SDL_GetError();
             const bool hasDetail = sdlError && sdlError[0] != '\0';
-            std::string message = "Render VSync unavailable";
+            std::string message = "Render VSync disable unavailable";
             if (hasDetail)
                 message += std::string(": ") + sdlError;
-            if (sdlcontext.parent)
-            {
-                sdlcontext.useFrameLimiter = true;
-                sdlcontext.lastFrameTime = std::chrono::steady_clock::now();
-                message += "; using internal frame limiter";
-            }
+            message += "; relying on engine core frame limiter";
             logger::warn("SDL", message);
         }
-        else
-        {
-            sdlcontext.useFrameLimiter = false;
-        }
+        sdlcontext.useFrameLimiter = false;
 
         init_renderer(sdlcontext.renderer);
         sdltextures::sdl_renderer = sdlcontext.renderer;
@@ -745,21 +736,6 @@ export namespace epochnamespace::sdlcontext
             queue.clear();
             frameTimer.finish();
             return false;
-        }
-
-        if (sdlcontext.parent && sdlcontext.useFrameLimiter)
-        {
-            using clock = std::chrono::steady_clock;
-            constexpr auto frameDuration = std::chrono::milliseconds(16);
-            const auto now = clock::now();
-            const auto elapsed = now - sdlcontext.lastFrameTime;
-            if (elapsed < frameDuration)
-            {
-                const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(frameDuration - elapsed);
-                if (remaining.count() > 0)
-                    SDL_Delay(static_cast<Uint32>(remaining.count()));
-            }
-            sdlcontext.lastFrameTime = clock::now();
         }
 
         frameTimer.finish();

@@ -446,8 +446,8 @@ export namespace epochnamespace::sfmlcontext
             return false;
         }
 
-        sfmlcontext.window->setVerticalSyncEnabled(true);
-        sfmlcontext.window->setFramerateLimit(60);
+        sfmlcontext.window->setVerticalSyncEnabled(false);
+        sfmlcontext.window->setFramerateLimit(0);
 
         auto* windowPtr = sfmlcontext.window.get();
 

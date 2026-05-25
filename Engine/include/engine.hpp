@@ -71,6 +71,12 @@ inline constexpr int DEFAULT_WINDOW_HEIGHT = 2160;
 //inline constexpr int DEFAULT_WINDOW_WIDTH = 4096;
 //inline constexpr int DEFAULT_WINDOW_HEIGHT = 2160;
 
+namespace epochnamespace::core
+{
+    void ParseCommandLine(int argc, char** argv);
+    void RunEngine();
+}
+
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
 
 // Max string length for title and class name
@@ -82,11 +88,9 @@ namespace epochnamespace::core
     ATOM RegisterWindowClass(HINSTANCE hInstance, LPCWSTR window_name, LPCWSTR child_name);
     void PrintLastWin32Error(const wchar_t* lpszFunction);
     void ShowConsole();
-    extern void RunEngine();
 }
 
 #endif
 #if defined(_WIN32)
 HWND InitWindowInstance(HINSTANCE hInstance, int nCmdShow, LPCWSTR szWindowClass, LPCWSTR szTitle, int32_t windowWidth, int32_t windowHeight);
 #endif
-

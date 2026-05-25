@@ -2042,6 +2042,7 @@ namespace epochnamespace::core
             std::string executable_payload = payload;
             std::string scene_argument{};
             std::string backend_argument{};
+            std::string frame_limit_argument{};
             if (const std::size_t optionMarker = payload.find('|'); optionMarker != std::string::npos)
             {
                 executable_payload = payload.substr(0, optionMarker);
@@ -2055,10 +2056,16 @@ namespace epochnamespace::core
 
                     constexpr std::string_view kScenePrefix = "scene=";
                     constexpr std::string_view kBackendPrefix = "backend=";
+                    constexpr std::string_view kFrameLimitPrefix = "fps=";
+                    constexpr std::string_view kFrameLimitLongPrefix = "frame-limit=";
                     if (option.starts_with(kScenePrefix))
                         scene_argument = option.substr(kScenePrefix.size());
                     else if (option.starts_with(kBackendPrefix))
                         backend_argument = option.substr(kBackendPrefix.size());
+                    else if (option.starts_with(kFrameLimitPrefix))
+                        frame_limit_argument = option.substr(kFrameLimitPrefix.size());
+                    else if (option.starts_with(kFrameLimitLongPrefix))
+                        frame_limit_argument = option.substr(kFrameLimitLongPrefix.size());
 
                     if (nextOption == std::string::npos)
                         break;
@@ -2102,6 +2109,11 @@ namespace epochnamespace::core
                 const std::wstring backend_wide{ backend_argument.begin(), backend_argument.end() };
                 command_line += L" --backend \"" + backend_wide + L"\"";
             }
+            if (!frame_limit_argument.empty())
+            {
+                const std::wstring frame_limit_wide{ frame_limit_argument.begin(), frame_limit_argument.end() };
+                command_line += L" --frame-limit \"" + frame_limit_wide + L"\"";
+            }
             std::wstring working_directory = executable.parent_path().wstring();
             const BOOL created = CreateProcessW(
                 executable.wstring().c_str(),
@@ -2142,6 +2154,8 @@ namespace epochnamespace::core
                 command += " --scene \"" + scene_argument + "\"";
             if (!backend_argument.empty())
                 command += " --backend \"" + backend_argument + "\"";
+            if (!frame_limit_argument.empty())
+                command += " --frame-limit \"" + frame_limit_argument + "\"";
             command += " &";
             if (std::system(command.c_str()) != 0)
             {
@@ -3437,6 +3451,11 @@ namespace epochnamespace::core
         }
 #endif
     } // anonymous namespace
+
+    void ParseCommandLine(int argc, char** argv)
+    {
+        (void)cli::parse(argc, argv);
+    }
 
     void RunEngine()
     {

@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.38-1F7A4C?style=for-the-badge" alt="Current development source v0.84.38" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.40-1F7A4C?style=for-the-badge" alt="Current development source v0.84.40" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
@@ -60,7 +60,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.38`.
+- Source is currently the active development line at `v0.84.40`.
 - The latest published stable runtime release is `v0.84.38`.
 - Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -69,6 +69,9 @@ For engine/tooling developers:
   part of the public runtime payload.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
+- MSVC static-vcpkg Debug/Release builds keep one private STB implementation
+  owner, avoid SFML static/dynamic library mixing, link raylib consistently as
+  static, and carry the SDL3 Windows system library set in the final app target.
 - Bootstrap updater-shell releases are separate from the main runtime package
   and are meant to update into the current runtime release, then fall through
   to source only when packaged parity is already reached.

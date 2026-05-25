@@ -243,3 +243,13 @@
 - Do not add ad hoc Win32 include blocks to shared engine/editor code. Use the
   existing platform/config wrapper path, and keep backend-specific platform
   includes inside backend-owned translation units.
+- GLAD ownership is single-provider. CMake uses
+  `EPOCH_GLAD_PROVIDER=auto|vcpkg|bundled`; `auto` prefers vcpkg `glad::glad`
+  and falls back to Epoch's checked-in loader. Do not link both loaders, add
+  random system GLAD fallbacks, or use `/FORCE:MULTIPLE` to hide duplicate
+  symbols.
+- Keep MSVC static-vcpkg linkage ownership explicit: STB implementation belongs
+  in one private source file, final app targets own third-party import/static
+  library choices, SFML static and dynamic variants must never be linked
+  together, and SDL3 static Windows system libraries belong on the executable
+  target rather than hidden in backend source.

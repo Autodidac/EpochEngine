@@ -45,12 +45,23 @@ export namespace epoch::perf
         uncapped,
         mobile_30,
         deck_40,
-        desktop_60
+        desktop_60,
+        editor_120
+    };
+
+    enum class frame_limit_preset : std::uint8_t
+    {
+        fps_60,
+        fps_120,
+        unlimited
     };
 
     [[nodiscard]] tier tier_from_env() noexcept;
     [[nodiscard]] double target_fps_for(tier t) noexcept;
+    [[nodiscard]] double target_fps_for(frame_limit_preset preset) noexcept;
     [[nodiscard]] const char* to_string(tier t) noexcept;
+    [[nodiscard]] const char* to_string(frame_limit_preset preset) noexcept;
+    [[nodiscard]] const char* label_for_frame_limit(double fps) noexcept;
 
     struct frame_limiter
     {
@@ -95,9 +106,10 @@ namespace epoch::perf
             if (sv_eq(s, "mobile") || sv_eq(s, "30")) return tier::mobile_30;
             if (sv_eq(s, "deck") || sv_eq(s, "40")) return tier::deck_40;
             if (sv_eq(s, "desktop") || sv_eq(s, "60")) return tier::desktop_60;
+            if (sv_eq(s, "editor") || sv_eq(s, "120")) return tier::editor_120;
             if (sv_eq(s, "uncapped") || sv_eq(s, "0"))  return tier::uncapped;
         }
-        return tier::desktop_60;
+        return tier::editor_120;
     }
 
     double target_fps_for(tier t) noexcept
@@ -107,9 +119,21 @@ namespace epoch::perf
         case tier::mobile_30:  return 30.0;
         case tier::deck_40:    return 40.0;
         case tier::desktop_60: return 60.0;
+        case tier::editor_120: return 120.0;
         case tier::uncapped:   return 0.0;
         }
-        return 60.0;
+        return 120.0;
+    }
+
+    double target_fps_for(frame_limit_preset preset) noexcept
+    {
+        switch (preset)
+        {
+        case frame_limit_preset::fps_60:    return 60.0;
+        case frame_limit_preset::fps_120:   return 120.0;
+        case frame_limit_preset::unlimited: return 0.0;
+        }
+        return 120.0;
     }
 
     const char* to_string(tier t) noexcept
@@ -119,9 +143,32 @@ namespace epoch::perf
         case tier::mobile_30:  return "mobile_30";
         case tier::deck_40:    return "deck_40";
         case tier::desktop_60: return "desktop_60";
+        case tier::editor_120: return "editor_120";
         case tier::uncapped:   return "uncapped";
         }
-        return "desktop_60";
+        return "editor_120";
+    }
+
+    const char* to_string(frame_limit_preset preset) noexcept
+    {
+        switch (preset)
+        {
+        case frame_limit_preset::fps_60:    return "60";
+        case frame_limit_preset::fps_120:   return "120";
+        case frame_limit_preset::unlimited: return "unlimited";
+        }
+        return "120";
+    }
+
+    const char* label_for_frame_limit(double fps) noexcept
+    {
+        if (fps <= 0.0)
+            return "Unlimited";
+        if (fps >= 119.5 && fps <= 120.5)
+            return "120 FPS";
+        if (fps >= 59.5 && fps <= 60.5)
+            return "60 FPS";
+        return "Custom";
     }
 
     void frame_limiter::wait_for_next_frame() noexcept

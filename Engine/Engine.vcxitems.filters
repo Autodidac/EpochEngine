@@ -1025,6 +1025,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderer_smoke_harness.cpp">
       <Filter>Source Files\external scripts</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\image.stb.cpp">
+      <Filter>Source Files\core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Image Include="$(MSBuildThisFileDirectory)resource\icon.ico">

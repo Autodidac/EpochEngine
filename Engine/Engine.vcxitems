@@ -17,7 +17,7 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies Condition="'$(EpochUseRaylib)'=='true'">%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(EpochUseSfml)'=='true'">%(AdditionalDependencies);sfml-graphics.lib;sfml-window.lib;sfml-system.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(EpochUseSfml)'=='true' And '$(VcpkgUseStatic)'!='true'">%(AdditionalDependencies);sfml-graphics.lib;sfml-window.lib;sfml-system.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(EpochUseDirectX)'=='true'">%(AdditionalDependencies);d3d11.lib;dxgi.lib;d3dcompiler.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -278,6 +278,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.systems.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.dispatch_storage.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\image.stb.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.context-texture.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>

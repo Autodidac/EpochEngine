@@ -2206,6 +2206,7 @@ namespace
             "        return 0;\n"
             "    }\n"
             "    boot_project_shell();\n"
+            "    epochnamespace::core::ParseCommandLine(argc, argv);\n"
             "    epochnamespace::core::RunEngine();\n"
             "    return 0;\n"
             "}\n";

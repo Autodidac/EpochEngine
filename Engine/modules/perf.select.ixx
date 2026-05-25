@@ -48,7 +48,7 @@ export namespace epoch::perf
     // If EPOCH_TIER is set, it wins. Otherwise choose by capabilities.
     [[nodiscard]] inline tier select_tier(const epoch::Capabilities& caps) noexcept
     {
-        // Env override wins (mobile/deck/desktop/uncapped or 30/40/60/0)
+        // Env override wins (mobile/deck/desktop/editor/uncapped or 30/40/60/120/0)
         if (auto v = epoch::core::env::get(epoch::to_view(std::string_view{ "EPOCH_TIER" })))
 
             return tier_from_env();
@@ -67,11 +67,11 @@ export namespace epoch::perf
             return tier::deck_40;
 
         case epoch::GpuTier::tier_a_desktop:
-            // High-end desktop: default 60 unless you want uncapped.
-            return tier::desktop_60;
+            // Editor-capable desktop: the shared core frame limiter defaults to 120.
+            return tier::editor_120;
         }
 
-        return tier::desktop_60;
+        return tier::editor_120;
     }
 
     [[nodiscard]] inline double target_fps_for_caps(const epoch::Capabilities& caps) noexcept

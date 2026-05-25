@@ -84,6 +84,7 @@ import core.commandline;
 import engine.input;
 import engine.cli;
 import engine.telemetry;
+import perf.tier;
 
 // ---- helpers ----
 import utility.string_converter;     // epochnamespace::text::narrow_utf8
@@ -1722,6 +1723,23 @@ namespace
             ctx->process = nullptr;
         }
 
+        epoch::perf::frame_limiter coreFrameLimiter{};
+        double activeCoreFrameLimit = -1.0;
+        const auto resolveCoreFrameLimit = []() noexcept -> double
+        {
+            if (cli::frame_limit_explicit)
+                return cli::frame_limit_fps;
+
+            const bool standaloneProject =
+                !cli::parented_mode
+                && !cli::editor_requested
+                && !cli::run_menu_loop;
+
+            return epoch::perf::target_fps_for(standaloneProject
+                ? epoch::perf::frame_limit_preset::fps_60
+                : epoch::perf::frame_limit_preset::fps_120);
+        };
+
         while (running.load(std::memory_order_acquire) && win.running)
         {
             bool keepRunning = true;
@@ -1753,7 +1771,13 @@ namespace
 
             record_native_title_frame(localDisplay, xwin, win);
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            const double requestedFrameLimit = resolveCoreFrameLimit();
+            if (requestedFrameLimit != activeCoreFrameLimit)
+            {
+                coreFrameLimiter.set_target_fps(requestedFrameLimit);
+                activeCoreFrameLimit = requestedFrameLimit;
+            }
+            coreFrameLimiter.wait_for_next_frame();
         }
 
         win.commandQueue.drain();

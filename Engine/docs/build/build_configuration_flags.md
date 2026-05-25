@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.36`
+Current source version: `v0.84.40`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -18,6 +18,7 @@ building during the migration.
 | `EPOCH_ENABLE_SOFTWARE_RENDERER` | On | Enable the software fallback renderer. |
 | `EPOCH_ENABLE_VULKAN` | On | Enable the experimental Vulkan build path. |
 | `EPOCH_ENABLE_DIRECTX` | On on Windows, off elsewhere | Enable the first-pass Windows DirectX/D3D11 renderer path. Keep this off on Linux/WSL. |
+| `EPOCH_GLAD_PROVIDER` | `auto` | Select the OpenGL loader owner: `auto`, `vcpkg`, or `bundled`. |
 | `EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES` | Off | Turn missing optional backend deps into configure errors. |
 
 ## Entry points
@@ -93,12 +94,22 @@ override them locally in `engine.config.hpp`.
 - SDL builds require SDL3, and SDL image support where texture ingestion needs it.
 - Raylib-only configurations still rely on the expected GL loader plumbing on
   desktop platforms.
+- GLAD is single-owner per target. `EPOCH_GLAD_PROVIDER=auto` prefers vcpkg
+  `glad::glad` and falls back to Epoch's checked-in loader. Use `vcpkg` to
+  require the package target or `bundled` to force the checked-in loader. Do
+  not link both loaders, add random system fallbacks, or hide duplicate symbols
+  with `/FORCE:MULTIPLE`.
 - Module-aware builds should keep `CMAKE_CXX_SCAN_FOR_MODULES=ON` enabled.
+- MSVC static-vcpkg app builds must keep dependency ownership consistent:
+  `image.stb.cpp` is the only private STB implementation owner, SFML static and
+  dynamic libraries must not be linked together, raylib static builds use
+  `RAYLIB_STATIC` instead of DLL-import macros, and the final app target carries
+  SDL3's required Windows system libraries.
 
 ## Current release note
 
-- `v0.84.36` is the current source line for the corrected asset-bearing release
-  packaging pass.
+- `v0.84.40` is the current source line for the MSVC static-vcpkg linker repair
+  and the active multicontext/package source-shape batch.
 - Normal desktop/runtime builds should stay on the main runtime path by default.
 - `EPOCH_UPDATER_SHELL_BUILD` is now an explicit bootstrap-mode switch, not the
   default identity for packaged Linux or Windows releases.

@@ -1,6 +1,25 @@
 # Epoch Changelog
 
-## [Unreleased]
+## [v0.84.40]
+- Bumped the active source line to `v0.84.40` for the MSVC static-vcpkg
+  linker repair and current multicontext/package/GUI source-shape batch.
+- Fixed the Debug/Release x64 Visual Studio app linkage for static vcpkg:
+  STB image implementation now lives in one private `image.stb.cpp`
+  translation unit, SFML shared-item dependencies are skipped when the app is
+  using static vcpkg, raylib compiles with `RAYLIB_STATIC`, and the final app
+  target carries the SDL3 Windows system dependency set.
+- Added `EPOCH_GLAD_PROVIDER=auto|vcpkg|bundled` so CMake owns exactly one
+  OpenGL loader per target. `auto` prefers vcpkg `glad::glad` and falls back to
+  the checked-in loader; `/FORCE:MULTIPLE` is no longer an accepted GLAD
+  collision escape hatch.
+- Simplified the editor status strip to show source/build identity, thread
+  capacity, active renderer, and zoom inside the editor instead of repeating
+  launcher/editor labels.
+- Validation: MSBuild Debug x64 `ConsoleApplication1` passed,
+  `HeadlessCI` built, `x64/Debug/HeadlessCI.exe` passed from the asset-bearing
+  output folder, Windows CMake Debug configured/built/CTested the headless
+  target, and WSL Ubuntu Clang Debug configured/built/CTested the headless
+  target with DirectX disabled.
 - Added the first source-shaped package/core spine for voxel-era engine work:
   `voxel.field`, `voxel.trace`, `forest.factory`, and `package.registry` now
   compile in the CMake/MSVC module path.

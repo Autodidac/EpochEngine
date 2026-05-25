@@ -411,8 +411,8 @@ namespace
             return;
         }
 
-        s_window->setVerticalSyncEnabled(true);
-        s_window->setFramerateLimit(60);
+        s_window->setVerticalSyncEnabled(false);
+        s_window->setFramerateLimit(0);
         s_window->setKeyRepeatEnabled(false);
         (void)s_window->setActive(true);
         (void)s_window->setActive(false);

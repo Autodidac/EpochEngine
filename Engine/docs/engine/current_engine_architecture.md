@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.36`
+Current source version: `v0.84.40`
 
 ## Architecture highlights
 
@@ -57,6 +57,13 @@ Current source version: `v0.84.36`
   imported OpenGL/Vulkan/Direct3D feature families, separates existing/partial
   engine coverage from missing renderer backlog work, and records DirectX/D3D11
   as an active first-pass Windows renderer while D3D12 remains future work.
+- **OpenGL loader ownership**: CMake now uses `EPOCH_GLAD_PROVIDER` to select a
+  single GLAD owner per target. `auto` prefers vcpkg `glad::glad`, then falls
+  back to the checked-in loader; duplicate-loader masking with linker force
+  flags is not part of the supported build shape.
+- **Editor status strip**: the in-editor status line now reports source/build
+  identity, thread capacity, active renderer, and zoom without repeating
+  launcher/editor mode labels.
 - **Voxel/planetary package direction**:
   `voxel_planetary_package_track.md` records the long-horizon voxel-first world
   spine and keeps operator prototypes as package-gated research inputs instead

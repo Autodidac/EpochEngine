@@ -119,6 +119,20 @@ stability rule, not the final typography goal: mojibake in AI notes or local
 model replies must be normalized before display/training capture, and hidden
 reasoning text must never be promoted to chat output.
 
+## Script Editor And Clipboard Gate
+
+The current script surface is not a finished editor. It can locate and preview
+script source, but a production scripting workspace still needs editable code
+text, a visible caret and selection, copy/cut/paste/select-all, save/reload
+evidence, build/run feedback, and predictable keyboard focus without holding a
+mouse button down. Broken high-byte banners or mojibake in source previews must
+be sanitized for display without corrupting the saved source.
+
+Script editing should use shared GUI text primitives, not a one-off asset panel
+hack. The acceptance gate is a script file that can be opened from Assets or the
+Script Editor workspace, edited, saved, reloaded, copied/pasted, built, and run
+with visible evidence and no Console Dock-only control path.
+
 ## Safe Split Plan
 
 Do not split files only for aesthetics. The safe code split is:
@@ -134,3 +148,10 @@ Do not split files only for aesthetics. The safe code split is:
 Until that split is fully verified, `Engine/src/engine.gui.cpp` remains the
 canonical implementation file and this document is the contract for keeping new
 GUI work library-shaped.
+
+The next ownership step is a real linkable GUI target, not just more code inside
+the editor. Keep `engine.gui` as the public module/API, then split reusable
+primitives, layout/docking, text/clipboard, progress bars, modal chrome, and
+backend replay support into a separately linked static/shared object target only
+when CMake, MSVC project files, filters, and all active backend consumers are
+updated and validated together.

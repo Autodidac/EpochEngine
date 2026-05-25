@@ -76,10 +76,12 @@ import core.path;
 import context.commandqueue;
 import context.type;
 import engine.input;
+import engine.cli;
 import scripting.system;
 import epoch.ai;
 import epoch.systems;
 import package.registry;
+import perf.tier;
 import render.preview_grid;
 
 namespace epochnamespace
@@ -411,7 +413,10 @@ namespace epochnamespace
             std::string projectBuildRunScene{};
             std::string projectBuildOutputPath{};
             std::string projectBuildRunBackend{};
+            double projectBuildRunFrameLimitFps{ 60.0 };
             std::string projectRunBackend{ "opengl" };
+            double projectRunFrameLimitFps{ 60.0 };
+            double editorFrameLimitFps{ 120.0 };
             std::string selectedProjectFile{};
             std::string selectedAssetPath{};
             std::vector<EditorEntity> entities{};
@@ -2088,6 +2093,38 @@ namespace epochnamespace
             return "OpenGL single context";
         }
 
+        struct FrameLimitChoice
+        {
+            std::string_view label{};
+            std::string_view argument{};
+            double fps{};
+        };
+
+        [[nodiscard]] std::span<const FrameLimitChoice> frame_limit_choices() noexcept
+        {
+            static constexpr std::array<FrameLimitChoice, 3> kChoices{ {
+                { "60 FPS", "60", 60.0 },
+                { "120 FPS", "120", 120.0 },
+                { "Unlimited", "unlimited", 0.0 }
+            } };
+            return { kChoices.data(), kChoices.size() };
+        }
+
+        [[nodiscard]] std::string_view frame_limit_label(double fps) noexcept
+        {
+            return epoch::perf::label_for_frame_limit(fps);
+        }
+
+        [[nodiscard]] std::string_view frame_limit_argument(double fps) noexcept
+        {
+            for (const auto& choice : frame_limit_choices())
+            {
+                if (choice.fps == fps)
+                    return choice.argument;
+            }
+            return "120";
+        }
+
         [[nodiscard]] std::string vec3_text(const std::array<float, 3>& value)
         {
             return std::format("({:.1f}, {:.1f}, {:.1f})", value[0], value[1], value[2]);
@@ -3138,6 +3175,7 @@ namespace epochnamespace
             editor.projectBuildRunScene = project_runtime_scene_id(editor);
             editor.projectBuildOutputPath = display_project_path(outputExe);
             editor.projectBuildRunBackend = editor.projectRunBackend.empty() ? std::string("opengl") : editor.projectRunBackend;
+            editor.projectBuildRunFrameLimitFps = editor.projectRunFrameLimitFps;
             editor.projectBuildStatus =
                 std::string(runAfterBuild ? "Build/run queued: " : "Build queued: ") + std::string(reason);
             push_editor_log(editor, "[project] " + editor.projectBuildStatus);
@@ -3793,11 +3831,13 @@ namespace epochnamespace
                 const std::string outputPath = build.output_path.empty() ? editor.projectBuildOutputPath : build.output_path;
                 const std::string sceneId = editor.projectBuildRunScene.empty() ? project_runtime_scene_id(editor) : editor.projectBuildRunScene;
                 const std::string runBackend = editor.projectBuildRunBackend.empty() ? std::string("opengl") : editor.projectBuildRunBackend;
+                const double runFrameLimit = editor.projectBuildRunFrameLimitFps;
 
                 editor.projectBuildRunAfterBuild = false;
                 editor.projectBuildRunScene.clear();
                 editor.projectBuildOutputPath.clear();
                 editor.projectBuildRunBackend.clear();
+                editor.projectBuildRunFrameLimitFps = editor.projectRunFrameLimitFps;
 
                 if (!shouldRun)
                     return;
@@ -3824,16 +3864,24 @@ namespace epochnamespace
                 }
 
                 const std::string playTarget =
-                    std::string("project-exe:") + display_project_path(outputPath) + "|scene=" + sceneId + "|backend=" + runBackend;
+                    std::string("project-exe:") + display_project_path(outputPath)
+                    + "|scene=" + sceneId
+                    + "|backend=" + runBackend
+                    + "|fps=" + std::string(frame_limit_argument(runFrameLimit));
                 emit_command(EditorCommand::RunGame, playTarget);
                 push_editor_log(editor, std::string("[project] Run requested for ") + editor.projectName + ".");
                 push_editor_log(
                     editor,
-                    std::string("[project] Launching built child executable in standalone ") + std::string(project_run_backend_label(runBackend)) + ": " + sceneId);
+                    std::string("[project] Launching built child executable in standalone ")
+                    + std::string(project_run_backend_label(runBackend))
+                    + " at " + std::string(frame_limit_label(runFrameLimit))
+                    + ": " + sceneId);
                 append_project_note(
                     editor,
                     "Run Active Project",
-                    std::string("Launching built child executable in standalone ") + std::string(project_run_backend_label(runBackend)) + ".",
+                    std::string("Launching built child executable in standalone ")
+                    + std::string(project_run_backend_label(runBackend))
+                    + " at " + std::string(frame_limit_label(runFrameLimit)) + ".",
                     playTarget);
             }
             catch (const std::exception& e)
@@ -3987,14 +4035,17 @@ namespace epochnamespace
         if (gui::button("Run", { run_button_w, toolbar_button_h }))
             run_active_context();
 
+        const std::size_t toolbarThreadCount = (std::max)(std::size_t{ 1 },
+            std::thread::hardware_concurrency() > 0
+            ? static_cast<std::size_t>(std::thread::hardware_concurrency())
+            : std::size_t{ 1 });
         const float status_x = (std::max)(toolbar_x + 12.0f, run_button_x + run_button_w + 14.0f);
         gui::set_cursor({ status_x, toolbar_button_y + 4.0f });
         gui::wrapped_label(
             std::string("v") + epochnamespace::GetEngineVersionString()
             + "  |  " + epochnamespace::GetEngineBuildTagString()
+            + "  |  Threads " + std::to_string(toolbarThreadCount)
             + "  |  " + renderer_name(ctx)
-            + "  |  " + std::string(preview_mode_name(editor.previewMode))
-            + "  |  " + preview_camera_name(ctx)
             + "  |  Zoom " + preview_zoom_text(ctx),
             (std::max)(180.0f, w - status_x - 12.0f));
 
@@ -4758,6 +4809,26 @@ namespace epochnamespace
                     push_editor_log(editor, std::string("[project] Project Run backend set to ") + std::string(runChoices[*runBackendSelect.selected_index].label) + ".");
                 }
                 gui::property_row("[project] Run mode", std::string(project_run_backend_label(editor.projectRunBackend)), 108.0f);
+                const auto limitChoices = frame_limit_choices();
+                std::vector<std::string_view> limitChoiceLabels;
+                limitChoiceLabels.reserve(limitChoices.size());
+                for (const auto& choice : limitChoices)
+                    limitChoiceLabels.emplace_back(choice.label);
+                const auto runLimitSelect = gui::select_box(gui::SelectBoxOptions{
+                    .id = "project-run-frame-limit-select",
+                    .placeholder = "Choose project frame limit",
+                    .selected = frame_limit_label(editor.projectRunFrameLimitFps),
+                    .options = std::span<const std::string_view>{ limitChoiceLabels.data(), limitChoiceLabels.size() },
+                    .size = { (std::min)(centerWidth, 260.0f), 30.0f },
+                    .row_height = 28.0f,
+                    .max_visible_options = 3
+                });
+                if (runLimitSelect.changed && runLimitSelect.selected_index && *runLimitSelect.selected_index < limitChoices.size())
+                {
+                    editor.projectRunFrameLimitFps = limitChoices[*runLimitSelect.selected_index].fps;
+                    push_editor_log(editor, std::string("[project] Project Run frame limit set to ") + std::string(limitChoices[*runLimitSelect.selected_index].label) + ".");
+                }
+                gui::property_row("[project] Frame limit", std::string(frame_limit_label(editor.projectRunFrameLimitFps)), 108.0f);
                 gui::wrapped_label(
                     "Project Run launches the built child executable as a standalone single-context process using the selected backend, instead of cloning the editor multicontext shell.",
                     centerWidth);
@@ -5244,7 +5315,7 @@ namespace epochnamespace
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = std::string("console-dock-body-") + std::to_string(static_cast<int>(editor.dockStatusTab)),
                 .size = { (std::max)(120.0f, log_size.x - 12.0f), dockScrollHeight },
-                .draw_background = false,
+                .draw_background = true,
                 .show_scrollbar = true
             });
         }
@@ -6288,7 +6359,7 @@ namespace epochnamespace
 
         if (editor.showSettingsModal)
         {
-            const gui::Vec2 modalSize{ 560.0f, 304.0f };
+            const gui::Vec2 modalSize{ 560.0f, 352.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
@@ -6317,19 +6388,43 @@ namespace epochnamespace
             gui::property_row("[settings] Preview", std::string(preview_mode_name(editor.previewMode)), 148.0f);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 150.0f });
             gui::property_row("[settings] AI model", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name(), 148.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 182.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 176.0f });
+            const auto settingsLimitChoices = frame_limit_choices();
+            std::vector<std::string_view> settingsLimitLabels;
+            settingsLimitLabels.reserve(settingsLimitChoices.size());
+            for (const auto& choice : settingsLimitChoices)
+                settingsLimitLabels.emplace_back(choice.label);
+            const auto settingsLimitSelect = gui::select_box(gui::SelectBoxOptions{
+                .id = "editor-core-frame-limit-select",
+                .placeholder = "Choose editor frame limit",
+                .selected = frame_limit_label(editor.editorFrameLimitFps),
+                .options = std::span<const std::string_view>{ settingsLimitLabels.data(), settingsLimitLabels.size() },
+                .size = { 240.0f, 30.0f },
+                .row_height = 28.0f,
+                .max_visible_options = 3
+            });
+            if (settingsLimitSelect.changed && settingsLimitSelect.selected_index && *settingsLimitSelect.selected_index < settingsLimitChoices.size())
+            {
+                editor.editorFrameLimitFps = settingsLimitChoices[*settingsLimitSelect.selected_index].fps;
+                core::cli::frame_limit_explicit = true;
+                core::cli::frame_limit_fps = editor.editorFrameLimitFps;
+                push_editor_log(editor, std::string("[settings] Editor frame limit set to ") + std::string(settingsLimitChoices[*settingsLimitSelect.selected_index].label) + ".");
+            }
+            gui::set_cursor({ contentPos.x + 258.0f, contentY + 180.0f });
+            gui::property_row("[settings] Frame limit", std::string(frame_limit_label(editor.editorFrameLimitFps)), 148.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 222.0f });
             if (gui::button("Reset Layout", { 132.0f, 30.0f }))
             {
                 reset_editor_layout(editor);
                 push_editor_log(editor, "[settings] Editor layout reset.");
             }
-            gui::set_cursor({ contentPos.x + 150.0f, contentY + 182.0f });
+            gui::set_cursor({ contentPos.x + 150.0f, contentY + 222.0f });
             if (gui::button("Open Engine AI", { 150.0f, 30.0f }))
             {
                 open_editor_surface(EditorMainSurface::AISandbox, "settings");
                 editor.showSettingsModal = false;
             }
-            gui::set_cursor({ contentPos.x + 308.0f, contentY + 182.0f });
+            gui::set_cursor({ contentPos.x + 308.0f, contentY + 222.0f });
             if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Watcher" : "Arm Watcher", { 132.0f, 30.0f }))
             {
                 editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
@@ -6342,7 +6437,7 @@ namespace epochnamespace
                     ? "[settings] Evidence watcher armed."
                     : "[settings] Evidence watcher paused.");
             }
-            gui::set_cursor({ contentPos.x + 448.0f, contentY + 182.0f });
+            gui::set_cursor({ contentPos.x + 448.0f, contentY + 222.0f });
             if (gui::button("Close", { 88.0f, 30.0f }))
                 editor.showSettingsModal = false;
             gui::end_modal_window();

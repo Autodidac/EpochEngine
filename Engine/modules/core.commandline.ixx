@@ -220,6 +220,25 @@ namespace epochnamespace::core::cli
             return WindowMode::Auto;
         }
 
+        [[nodiscard]] inline bool parse_frame_limit(const std::string_view value, double& out_fps)
+        {
+            const std::string lowered = to_lower(value);
+            if (lowered == "unlimited" || lowered == "uncapped" || lowered == "off" || lowered == "0")
+            {
+                out_fps = 0.0;
+                return true;
+            }
+
+            std::string text(value);
+            char* end = nullptr;
+            const double parsed = std::strtod(text.c_str(), &end);
+            if (end == text.c_str() || parsed < 0.0)
+                return false;
+
+            out_fps = parsed;
+            return true;
+        }
+
         [[nodiscard]] constexpr bool default_parented_mode() noexcept
         {
             return epoch::platform::policy::default_parented_multiwindow();
@@ -239,6 +258,8 @@ namespace epochnamespace::core::cli
     export inline bool editor_requested = false;
     export inline bool updater_shell_requested = false;
     export inline bool backend_selection_explicit = false;
+    export inline bool frame_limit_explicit = false;
+    export inline double frame_limit_fps = 0.0;
     export inline std::uint32_t capture_warmup_frames = 12;
     export inline std::string scene_name{};
     export inline std::filesystem::path exe_path;
@@ -399,6 +420,8 @@ namespace epochnamespace::core::cli
         parented_mode = detail::default_parented_mode();
         runtime_path = RuntimePath::Epoch;
         backend_selection_explicit = false;
+        frame_limit_explicit = false;
+        frame_limit_fps = 0.0;
 
         (void)apply_backend_selection("auto");
 
@@ -493,6 +516,8 @@ namespace epochnamespace::core::cli
                     "  --renderer <backend|auto>  Select one backend; auto requests the backend grid\n"
                     "                             Backends: auto, opengl, directx/d3d11, vulkan, raylib, sdl, sfml, software\n"
                     "  --backend <backend|auto>   Alias for --renderer\n"
+                    "  --frame-limit <fps|unlimited>\n"
+                    "                             Use the engine core frame limiter; common values: 60, 120, unlimited\n"
                     "  --scene <name>             Optional scene hint for smoke tooling\n"
                     "  --capture                  Optional capture hint for smoke tooling\n"
                     "  --smoke                    Run bounded smoke flow where supported\n"
@@ -643,6 +668,23 @@ namespace epochnamespace::core::cli
                     else
                     {
                         backend_selection_explicit = true;
+                    }
+                }
+            }
+            else if (key == "--frame-limit"sv || key == "--fps-limit"sv)
+            {
+                const auto parsed = read_value(key);
+                if (!parsed.empty())
+                {
+                    double requested = 0.0;
+                    if (detail::parse_frame_limit(parsed, requested))
+                    {
+                        frame_limit_explicit = true;
+                        frame_limit_fps = requested;
+                    }
+                    else
+                    {
+                        detail::log_error("Invalid frame limit: " + std::string(parsed));
                     }
                 }
             }

@@ -85,6 +85,7 @@ import context.multiplexer;
 import context.type;
 import context.window;
 import engine.telemetry;
+import perf.tier;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import opengl.context;
@@ -3346,6 +3347,23 @@ namespace epochnamespace::core
             ctx->process = nullptr;
         }
 
+        epoch::perf::frame_limiter coreFrameLimiter{};
+        double activeCoreFrameLimit = -1.0;
+        const auto resolveCoreFrameLimit = []() noexcept -> double
+        {
+            if (epochnamespace::core::cli::frame_limit_explicit)
+                return epochnamespace::core::cli::frame_limit_fps;
+
+            const bool standaloneProject =
+                !epochnamespace::core::cli::parented_mode
+                && !epochnamespace::core::cli::editor_requested
+                && !epochnamespace::core::cli::run_menu_loop;
+
+            return epoch::perf::target_fps_for(standaloneProject
+                ? epoch::perf::frame_limit_preset::fps_60
+                : epoch::perf::frame_limit_preset::fps_120);
+        };
+
         while (running.load(std::memory_order_acquire) && win.running && !win.get_should_close())
         {
             bool keepRunning = true;
@@ -3372,17 +3390,13 @@ namespace epochnamespace::core
 
             record_native_title_frame(this, win);
 
-            const bool backendOwnsFramePacing =
-                ctx->type == ContextType::OpenGL
-                || ctx->type == ContextType::Vulkan
-                || ctx->type == ContextType::SDL
-                || ctx->type == ContextType::SFML
-                || ctx->type == ContextType::RayLib;
-
-            if (backendOwnsFramePacing)
-                std::this_thread::yield();
-            else
-                std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            const double requestedFrameLimit = resolveCoreFrameLimit();
+            if (requestedFrameLimit != activeCoreFrameLimit)
+            {
+                coreFrameLimiter.set_target_fps(requestedFrameLimit);
+                activeCoreFrameLimit = requestedFrameLimit;
+            }
+            coreFrameLimiter.wait_for_next_frame();
         }
 
         if (win.running && !win.get_should_close())

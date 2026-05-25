@@ -33,9 +33,9 @@
 // This file MUST be a module implementation unit for `vulkan.context`
 // because it defines `epochnamespace::vulkancontext::Application` methods.
 //
-// It also MUST be the single TU that provides:
-//  - STB_IMAGE_IMPLEMENTATION
-//  - Vulkan-Hpp dynamic dispatch storage (see acontext.vulkan.dispatch_storage.cpp)
+// It also MUST use the Vulkan-Hpp dynamic dispatch storage provided by
+// acontext.vulkan.dispatch_storage.cpp. STB image implementation ownership lives
+// in image.stb.cpp so backend objects do not export duplicate stbi_* symbols.
 //
 // If you keep vulkan.hpp in the module interface BMI, the safest way to guarantee
 // the dispatch storage exists is to include vulkan.hpp textually here (with the
@@ -47,11 +47,6 @@
 //
 
 module;
-
-// ---- One-TU-only implementations / storage ---------------------------------
-#ifndef STB_IMAGE_IMPLEMENTATION
-#   define STB_IMAGE_IMPLEMENTATION
-#endif
 
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
@@ -84,9 +79,6 @@ module;
 #endif
 
 #include <vulkan/vulkan.hpp>
-
-// STB must be included after its implementation define:
-#include "src/stb/stb_image.h"
 
 #include <algorithm>
 #include <cassert>

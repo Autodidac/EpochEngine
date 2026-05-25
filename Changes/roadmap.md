@@ -652,6 +652,14 @@ engine shape and should be treated as starting truth for the next passes:
   generated atlases are reserved for `cache/atlases/`. Windows Release and WSL
   Clang release build/CTest lanes are required proof before publishing the new
   runtime packages.
+- `v0.84.40` is the static-vcpkg/MSVC linker repair line for the current
+  source tree: STB image symbols are owned by one private source file instead
+  of a backend context object, SFML is no longer linked as both static and
+  dynamic in the app target, raylib static/dynamic import macros match the
+  static vcpkg build, SDL3 static Windows system libs are explicit on the final
+  editor executable, CMake selects exactly one GLAD provider through
+  `EPOCH_GLAD_PROVIDER`, and the editor status strip reports thread capacity
+  without repeating launcher/editor labels.
 - Canvas2D projection ownership has moved into `render.preview_grid` via one
   shared projection helper. Editor picking, OpenGL, DirectX, Raylib, SDL, SFML,
   Vulkan, and the software preview fallback now consume the same Canvas2D
@@ -718,11 +726,31 @@ engine shape and should be treated as starting truth for the next passes:
   Outliner rows need human names and grouping; EpochBot weight/matrix analysis
   belongs in a separate graph/terrain-style AI visualizer that samples summaries
   rather than trying to draw billions of parameters.
+- latest editor workflow gates from operator review: Systems should replace the
+  generic Inspector side panel with live `[time]`/pacing stats when Systems is
+  active; AI model selection should live in the renamed Engine AI inspector
+  rather than duplicating selection controls in the central AI surface; Run
+  Scene In Editor and Run External Project must become distinct actions;
+  Project Run needs an explicit single-context/backend selector; 2D Editor,
+  GUI Factory, Forest Factory, and Script Editor each need their own clear
+  workspace entry and should not be hidden in Console Dock output.
+- current script-editing evidence is not good enough: the asset/script panel is
+  still mostly a preview, broken high-byte banner text renders as question-mark
+  blocks, and copy/paste/select-all are not proven across AI Chat, script
+  source, and evidence panels. Do not call scripting UI complete until the
+  engine GUI text primitive supports editable code text, clipboard operations,
+  stable focus, visible caret/selection, save/reload evidence, and build/run
+  feedback without holding mouse focus.
 - the GUI layer is now documented as an engine-internal library surface:
   primitive widgets, layout/docking, theme/rendering, and editor composition are
   separate responsibilities. New widgets such as tabs and dropdown/select boxes
   should land in `engine.gui` first, then be consumed by editor workspaces. The
   active contract is `Engine/docs/engine/gui_library_architecture.md`.
+- the next GUI ownership gate is a real library target split: keep the public
+  module as `engine.gui`, but move reusable primitives/layout/text/progress/
+  modal/chrome implementation into a separately linked static/shared GUI object
+  target only when CMake, MSVC projects, filters, and backend replay users are
+  updated together and MSVC/CMake validation passes.
 - first dropdown/select-box primitive is active, but acceptance remains visual:
   wheel focus must stay with the open list, text must stay readable, and parent
   scroll panes must not smear or steal input during resize.
