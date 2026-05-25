@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.40`
+Current source version: `v0.84.41`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -108,8 +108,8 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.84.40` is the current source line for the MSVC static-vcpkg linker repair
-  and the active multicontext/package source-shape batch.
+- `v0.84.41` is the current source line for the visible script editing,
+  clipboard, and active multicontext/package source-shape batch.
 - Normal desktop/runtime builds should stay on the main runtime path by default.
 - `EPOCH_UPDATER_SHELL_BUILD` is now an explicit bootstrap-mode switch, not the
   default identity for packaged Linux or Windows releases.

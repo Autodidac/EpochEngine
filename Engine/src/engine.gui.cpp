@@ -1172,10 +1172,10 @@ namespace epochnamespace::gui
             return out;
         }
 
-        static void clipboard_write_text(std::string_view text)
+        [[nodiscard]] static bool clipboard_write_text(std::string_view text)
         {
             if (!::OpenClipboard(nullptr))
-                return;
+                return false;
 
             const std::wstring wide = utf8_to_wide(text);
             const SIZE_T bytes = (wide.size() + 1u) * sizeof(wchar_t);
@@ -1183,9 +1183,10 @@ namespace epochnamespace::gui
             if (!memory)
             {
                 ::CloseClipboard();
-                return;
+                return false;
             }
 
+            bool wrote = false;
             if (void* locked = ::GlobalLock(memory))
             {
                 std::memcpy(locked, wide.c_str(), bytes);
@@ -1193,6 +1194,8 @@ namespace epochnamespace::gui
                 ::EmptyClipboard();
                 if (!::SetClipboardData(CF_UNICODETEXT, memory))
                     ::GlobalFree(memory);
+                else
+                    wrote = true;
             }
             else
             {
@@ -1200,6 +1203,7 @@ namespace epochnamespace::gui
             }
 
             ::CloseClipboard();
+            return wrote;
         }
 #else
         [[nodiscard]] static std::string clipboard_read_text()
@@ -1207,8 +1211,9 @@ namespace epochnamespace::gui
             return {};
         }
 
-        static void clipboard_write_text(std::string_view)
+        [[nodiscard]] static bool clipboard_write_text(std::string_view)
         {
+            return false;
         }
 #endif
 
@@ -1241,6 +1246,11 @@ namespace epochnamespace::gui
             }
         }
 
+        [[nodiscard]] static bool is_utf8_continuation_byte(unsigned char ch) noexcept
+        {
+            return (ch & 0xC0u) == 0x80u;
+        }
+
         [[nodiscard]] static std::optional<unsigned char> next_drawable_char(std::string_view text, std::size_t index) noexcept
         {
             if (index >= text.size())
@@ -1248,7 +1258,10 @@ namespace epochnamespace::gui
 
             for (std::size_t i = index + 1; i < text.size(); ++i)
             {
-                const unsigned char next = safe_draw_char(static_cast<unsigned char>(text[i]));
+                const unsigned char raw = static_cast<unsigned char>(text[i]);
+                if (is_utf8_continuation_byte(raw))
+                    continue;
+                const unsigned char next = safe_draw_char(raw);
                 if (next == '\n')
                     return std::nullopt;
                 return next;
@@ -1353,7 +1366,10 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
+                const unsigned char raw = static_cast<unsigned char>(text[i]);
+                if (is_utf8_continuation_byte(raw))
+                    continue;
+                const unsigned char ch = safe_draw_char(raw);
                 if (ch == '\n')
                 {
                     maxWidth = (std::max)(maxWidth, current);
@@ -1410,7 +1426,10 @@ namespace epochnamespace::gui
 
             for (std::size_t i = start; i < text.size(); ++i)
             {
-                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
+                const unsigned char raw = static_cast<unsigned char>(text[i]);
+                if (is_utf8_continuation_byte(raw))
+                    continue;
+                const unsigned char ch = safe_draw_char(raw);
                 if (ch == '\n' || is_wrap_space(ch))
                     break;
 
@@ -1433,7 +1452,10 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
+                const unsigned char raw = static_cast<unsigned char>(text[i]);
+                if (is_utf8_continuation_byte(raw))
+                    continue;
+                const unsigned char ch = safe_draw_char(raw);
                 if (ch == '\n')
                 {
                     ++lines;
@@ -1508,7 +1530,10 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
+                const unsigned char raw = static_cast<unsigned char>(text[i]);
+                if (is_utf8_continuation_byte(raw))
+                    continue;
+                const unsigned char ch = safe_draw_char(raw);
                 if (ch == '\n')
                 {
                     penX = x;
@@ -1593,7 +1618,10 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
+                const unsigned char raw = static_cast<unsigned char>(text[i]);
+                if (is_utf8_continuation_byte(raw))
+                    continue;
+                const unsigned char ch = safe_draw_char(raw);
                 if (ch == '\n')
                 {
                     penX = x;
@@ -1706,7 +1734,10 @@ namespace epochnamespace::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char ch = safe_draw_char(static_cast<unsigned char>(text[i]));
+                const unsigned char raw = static_cast<unsigned char>(text[i]);
+                if (is_utf8_continuation_byte(raw))
+                    continue;
+                const unsigned char ch = safe_draw_char(raw);
                 if (ch == '\n')
                 {
                     penX = anchorX;
@@ -2732,11 +2763,11 @@ namespace epochnamespace::gui
                 case EventType::KeyDown:
                     if (evt.ctrl_down && (evt.key == 'C' || evt.key == 'c'))
                     {
-                        clipboard_write_text(text);
+                        (void)clipboard_write_text(text);
                     }
                     else if (evt.ctrl_down && (evt.key == 'X' || evt.key == 'x'))
                     {
-                        clipboard_write_text(text);
+                        (void)clipboard_write_text(text);
                         if (!text.empty())
                         {
                             text.clear();
@@ -2750,7 +2781,7 @@ namespace epochnamespace::gui
                     else if (evt.ctrl_down && (evt.key == 'A' || evt.key == 'a'))
                     {
                         // Selection ranges are a follow-up; copy/cut operate on the whole focused field for now.
-                        clipboard_write_text(text);
+                        (void)clipboard_write_text(text);
                     }
                     else if (evt.key == 8 || evt.key == 127) // backspace/del-ish
                     {
@@ -2806,6 +2837,16 @@ namespace epochnamespace::gui
 
         advance_cursor({ 0.0f, height + kContentPadding });
         return result;
+    }
+
+    std::string clipboard_text() noexcept
+    {
+        return clipboard_read_text();
+    }
+
+    bool set_clipboard_text(std::string_view text) noexcept
+    {
+        return clipboard_write_text(text);
     }
 
     std::optional<std::size_t> segmented_button_row(

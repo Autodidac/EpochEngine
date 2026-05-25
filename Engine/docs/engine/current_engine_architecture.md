@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.40`
+Current source version: `v0.84.41`
 
 ## Architecture highlights
 
@@ -28,7 +28,8 @@ Current source version: `v0.84.40`
   filewatch-first loop.
 - **Project browser + asset cards**: the editor now exposes project-local script
   stub creation, project/engine script selection, a shallow file/folder browser,
-  and an `Assets` workspace with first-pass file-type thumbnail cards.
+  an `Assets` workspace with first-pass file-type thumbnail cards, and visible
+  script-source copy/paste/save/reload controls.
 - **Mode-specific editor surfaces**: Scene/Game modes keep the 3D viewport,
   while Project, Assets, Self-Iteration Sandbox, and Systems now own central GUI
   surfaces so build, asset, AI, and systems controls are no longer packed only

@@ -660,6 +660,13 @@ engine shape and should be treated as starting truth for the next passes:
   editor executable, CMake selects exactly one GLAD provider through
   `EPOCH_GLAD_PROVIDER`, and the editor status strip reports thread capacity
   without repeating launcher/editor labels.
+- `v0.84.41` adds the first visible script-source editing controls in the
+  Assets workspace: shared GUI clipboard helpers, Copy Source, Paste Clipboard,
+  Save, Reload, and UTF-8 continuation-byte collapse so unsupported source
+  banners do not smear into repeated question marks. The next acceptance gate is
+  a real code editor viewport with internal scrolling, ranged selection, caret
+  navigation, syntax-aware display, and clean copy/paste behavior across
+  Console Dock, AI Chat, and source editing surfaces.
 - Canvas2D projection ownership has moved into `render.preview_grid` via one
   shared projection helper. Editor picking, OpenGL, DirectX, Raylib, SDL, SFML,
   Vulkan, and the software preview fallback now consume the same Canvas2D

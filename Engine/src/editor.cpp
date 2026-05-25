@@ -2514,29 +2514,78 @@ namespace epochnamespace
                 editor.scriptEditorStatus = "Modified.";
             }
 
-            if (gui::button("Save Script Source", { (std::min)(210.0f, width), 30.0f }))
+            std::array<gui::InlineButtonSpec, 4> scriptEditActions{ {
+                { "Copy Source", 118.0f },
+                { "Paste Clipboard", 146.0f },
+                { "Save", 72.0f },
+                { "Reload", 86.0f }
+            } };
+            if (auto clicked = gui::inline_button_row(scriptEditActions, 28.0f, 8.0f))
             {
-                if (save_script_source_editor(editor))
+                if (*clicked == 0)
                 {
-                    push_editor_log(editor, "[script] Saved source: " + editor.scriptEditorPath);
-                    append_project_note(
-                        editor,
-                        "Save Script Source",
-                        "Saved script source from the editor surface.",
-                        editor.scriptEditorPath);
+                    if (gui::set_clipboard_text(editor.scriptEditorText))
+                    {
+                        editor.scriptEditorStatus = "Copied script source to clipboard.";
+                        push_editor_log(editor, "[script] Copied source to clipboard.");
+                    }
+                    else
+                    {
+                        editor.scriptEditorStatus = "Clipboard copy failed.";
+                        push_editor_log(editor, "[script] Clipboard copy failed.");
+                    }
                 }
-                else
+                else if (*clicked == 1)
                 {
-                    push_editor_log(editor, "[script] Save failed: " + editor.scriptEditorStatus);
+                    constexpr std::size_t kMaxEditableScriptBytes = 256u * 1024u;
+                    const std::string clipboard = gui::clipboard_text();
+                    if (clipboard.empty())
+                    {
+                        editor.scriptEditorStatus = "Clipboard is empty.";
+                    }
+                    else
+                    {
+                        const std::size_t remaining = editor.scriptEditorText.size() < kMaxEditableScriptBytes
+                            ? kMaxEditableScriptBytes - editor.scriptEditorText.size()
+                            : 0u;
+                        if (remaining == 0u)
+                        {
+                            editor.scriptEditorStatus = "Script source is at the editor size limit.";
+                        }
+                        else
+                        {
+                            editor.scriptEditorText.append(clipboard.substr(0u, remaining));
+                            editor.scriptEditorDirty = true;
+                            editor.scriptEditorStatus = clipboard.size() > remaining
+                                ? "Pasted truncated clipboard text at end of script."
+                                : "Pasted clipboard text at end of script.";
+                            push_editor_log(editor, "[script] Pasted clipboard text into source editor.");
+                        }
+                    }
                 }
-            }
-
-            if (gui::button("Reload Script Source", { (std::min)(220.0f, width), 30.0f }))
-            {
-                if (load_script_source_editor(editor, sourcePath, true))
-                    push_editor_log(editor, "[script] Reloaded source: " + editor.scriptEditorPath);
-                else
-                    push_editor_log(editor, "[script] Reload failed: " + editor.scriptEditorStatus);
+                else if (*clicked == 2)
+                {
+                    if (save_script_source_editor(editor))
+                    {
+                        push_editor_log(editor, "[script] Saved source: " + editor.scriptEditorPath);
+                        append_project_note(
+                            editor,
+                            "Save Script Source",
+                            "Saved script source from the editor surface.",
+                            editor.scriptEditorPath);
+                    }
+                    else
+                    {
+                        push_editor_log(editor, "[script] Save failed: " + editor.scriptEditorStatus);
+                    }
+                }
+                else if (*clicked == 3)
+                {
+                    if (load_script_source_editor(editor, sourcePath, true))
+                        push_editor_log(editor, "[script] Reloaded source: " + editor.scriptEditorPath);
+                    else
+                        push_editor_log(editor, "[script] Reload failed: " + editor.scriptEditorStatus);
+                }
             }
         }
 

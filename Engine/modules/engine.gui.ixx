@@ -274,6 +274,8 @@ namespace epochnamespace::gui
         Vec2 size,
         std::size_t max_chars = 0,
         bool multiline = false) noexcept;
+    export [[nodiscard]] std::string clipboard_text() noexcept;
+    export bool set_clipboard_text(std::string_view text) noexcept;
 
     export void text_box(std::string_view text, Vec2 size) noexcept;
     export ScrollAreaResult begin_scroll_area(const ScrollAreaOptions& options) noexcept;

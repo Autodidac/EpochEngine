@@ -82,8 +82,9 @@ Before a control is considered ready, it needs:
   export, and package opt-in must flow through a reusable input-configuration
   surface before being promoted to generated projects
 - text inputs must support basic desktop editing affordances before promotion:
-  first-pass whole-field copy, cut, paste, and select-all are acceptable, but
-  true ranged text selection/caret movement remains the next gate
+  first-pass whole-field copy, cut, paste, select-all, and visible domain
+  clipboard actions are acceptable, but true ranged text selection/caret
+  movement remains the next gate
 - keyboard/mouse focus behavior that does not leak across panes or contexts
 - backend-safe rendering through the shared GUI replay path
 - a documented owner and expected consumers
@@ -114,10 +115,23 @@ This prevents scroll/dropdown/resize slivers from turning into vertical
 barcode-like smear artifacts during DirectX or multicontext resize tests.
 
 Current text rendering intentionally sanitizes non-ASCII/high-byte input to a
-safe visible fallback until the font pipeline owns full UTF-8 shaping. That is a
-stability rule, not the final typography goal: mojibake in AI notes or local
-model replies must be normalized before display/training capture, and hidden
-reasoning text must never be promoted to chat output.
+safe visible fallback until the font pipeline owns full UTF-8 shaping. UTF-8
+continuation bytes are skipped so unsupported glyphs collapse instead of
+turning one source banner into a wall of question marks. That is a stability
+rule, not the final typography goal: mojibake in AI notes or local model replies
+must be normalized before display/training capture, and hidden reasoning text
+must never be promoted to chat output.
+
+## Script Editing Gate
+
+The Assets workspace owns the first visible Script Source Editor surface. It
+loads the active `.ascript.cpp`, allows multiline edits through the shared
+`engine.gui` text input, exposes explicit Copy Source and Paste Clipboard
+actions, and saves/reloads through the same evidence log used by project
+actions. This is only the first production-safe step. Promotion to a real code
+editor still requires internal scroll/caret positioning, ranged selection,
+keyboard navigation, syntax-aware display, and a cleaner split between preview,
+editor, and build actions.
 
 ## Script Editor And Clipboard Gate
 

@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.84.41]
+- Bumped the active source line to `v0.84.41` for the first visible script
+  editing and clipboard stabilization pass.
+- Promoted clipboard access into the shared `engine.gui` API so editor
+  workspaces can expose explicit copy/paste actions instead of hiding all
+  editing behind focused-field hotkeys.
+- Updated the Assets workspace Script Source Editor with visible Copy Source,
+  Paste Clipboard, Save, and Reload actions tied to the existing editor evidence
+  log.
+- Collapsed unsupported UTF-8 continuation bytes in GUI text rendering so
+  box-art/source banners and mojibake no longer smear into repeated question
+  marks across script/editor text surfaces. Full UTF-8 shaping remains a
+  follow-up font pipeline gate.
+
 ## [v0.84.40]
 - Bumped the active source line to `v0.84.40` for the MSVC static-vcpkg
   linker repair and current multicontext/package/GUI source-shape batch.
