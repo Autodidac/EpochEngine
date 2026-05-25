@@ -606,6 +606,50 @@ namespace
             | SWP_SHOWWINDOW);
     }
 
+    [[nodiscard]] inline bool child_window_matches_parent_slot(
+        HWND hwnd,
+        HWND parent,
+        int x,
+        int y,
+        int width,
+        int height) noexcept
+    {
+        if (!hwnd
+            || !parent
+            || ::IsWindow(hwnd) == FALSE
+            || ::IsWindow(parent) == FALSE
+            || ::GetParent(hwnd) != parent)
+        {
+            return false;
+        }
+
+        RECT rect{};
+        if (::GetWindowRect(hwnd, &rect) == FALSE)
+            return false;
+
+        POINT points[2]{
+            { rect.left, rect.top },
+            { rect.right, rect.bottom }
+        };
+        ::SetLastError(ERROR_SUCCESS);
+        if (::MapWindowPoints(HWND_DESKTOP, parent, points, 2) == 0
+            && (::GetLastError() != ERROR_SUCCESS))
+        {
+            return false;
+        }
+
+        constexpr int kDockSlotTolerance = 2;
+        const int actualX = points[0].x;
+        const int actualY = points[0].y;
+        const int actualW = points[1].x - points[0].x;
+        const int actualH = points[1].y - points[0].y;
+
+        return std::abs(actualX - x) <= kDockSlotTolerance
+            && std::abs(actualY - y) <= kDockSlotTolerance
+            && std::abs(actualW - width) <= kDockSlotTolerance
+            && std::abs(actualH - height) <= kDockSlotTolerance;
+    }
+
     // Dock/undock requests must be processed on the window's owning thread.
     // GLFW/raylib windows are owned by the thread that created them (typically the render thread).
     // Cross-thread SetParent/SetWindowLongPtr/SetWindowPos can deadlock.
@@ -1121,6 +1165,7 @@ namespace
             clientW,
             clientH);
         apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+        window->set_size(clientW, clientH);
         if (proxy_drag_owns_host(window))
             ::SetFocus(window->host_hwnd);
         else
@@ -1163,6 +1208,7 @@ namespace
             apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
             ::ShowWindow(window->host_hwnd, SW_SHOWNA);
             ::ShowWindow(window->hwndChild, SW_SHOWNA);
+            window->set_size(clientW, clientH);
             if (proxy_drag_owns_host(window))
                 ::SetFocus(window->hwndChild ? window->hwndChild : window->host_hwnd);
         }
@@ -1189,6 +1235,7 @@ namespace
                     clientH);
                 ::ShowWindow(window->host_hwnd, SW_HIDE);
             }
+            window->set_size(clientW, clientH);
             if (proxy_drag_owns_host(window))
                 ::SetFocus(window->hwndChild);
         }
@@ -3062,11 +3109,34 @@ namespace epochnamespace::core
 
             WindowData& win = *dockedWindows[i];
             if ((win.type == ContextType::SDL || win.type == ContextType::SFML)
-                && has_proxy_shell_pair(&win)
-                && ::GetParent(win.host_hwnd) == parent
-                && ::GetParent(win.hwndChild) == win.host_hwnd)
+                && has_proxy_shell_pair(&win))
             {
-                redock_sfml_proxy_window(&win, parent, slotScreen.x, slotScreen.y, cw, ch);
+                const HWND proxySlot = dock_slot_handle(&win, parent);
+                bool childFitsHost = true;
+                if (::GetParent(win.hwndChild) == win.host_hwnd)
+                {
+                    RECT hostClient{};
+                    if (::GetClientRect(win.host_hwnd, &hostClient) != FALSE)
+                    {
+                        childFitsHost = child_window_matches_parent_slot(
+                            win.hwndChild,
+                            win.host_hwnd,
+                            0,
+                            0,
+                            clamp_positive(static_cast<int>(hostClient.right - hostClient.left)),
+                            clamp_positive(static_cast<int>(hostClient.bottom - hostClient.top)));
+                    }
+                }
+
+                if (!child_window_matches_parent_slot(proxySlot, parent, slotX, slotY, cw, ch)
+                    || !childFitsHost
+                    || win.width != cw
+                    || win.height != ch)
+                {
+                    post_proxy_host_command(&win, ProxyDockCmd::Redock, parent, slotScreen.x, slotScreen.y, cw, ch);
+                    win.set_size(cw, ch);
+                }
+                continue;
             }
 
             const HWND liveHwnd = dock_slot_handle(&win, parent);
@@ -3720,14 +3790,14 @@ namespace epochnamespace::core
                         drag.proxyRedockPending = false;
                         if (::GetParent(hwnd) != drag.originalParent || window->isFloating)
                         {
-                            post_owner_thread_dock_command(
+                            static_cast<void>(post_owner_thread_dock_command(
                                 window,
                                 ProxyDockCmd::Redock,
                                 drag.originalParent,
                                 newX,
                                 newY,
                                 wndW,
-                                wndH);
+                                wndH));
                             if (auto* mgr = s_activeInstance)
                                 mgr->HandleResize(hwnd, wndW, wndH);
                         }
@@ -3850,14 +3920,14 @@ namespace epochnamespace::core
                             clientH);
                         if (!drag.proxyUndockPending)
                         {
-                            post_owner_thread_dock_command(
+                            static_cast<void>(post_owner_thread_dock_command(
                                 window,
                                 ProxyDockCmd::Undock,
                                 drag.originalParent,
                                 escaped.x,
                                 escaped.y,
                                 clientW,
-                                clientH);
+                                clientH));
                             drag.proxyUndockPending = true;
                         }
                     }
@@ -3897,14 +3967,14 @@ namespace epochnamespace::core
                     }
                     else if (window && backend_requires_owner_thread_dock_commands(window))
                     {
-                        post_owner_thread_dock_command(
+                        static_cast<void>(post_owner_thread_dock_command(
                             window,
                             ProxyDockCmd::MoveDetached,
                             drag.originalParent,
                             newX,
                             newY,
                             clientW,
-                            clientH);
+                            clientH));
                     }
                     else
                     {
@@ -3917,14 +3987,14 @@ namespace epochnamespace::core
             {
                 if (window && backend_requires_owner_thread_dock_commands(window))
                 {
-                    post_owner_thread_dock_command(
+                    static_cast<void>(post_owner_thread_dock_command(
                         window,
                         ProxyDockCmd::MoveDetached,
                         nullptr,
                         newX,
                         newY,
                         clientW,
-                        clientH);
+                        clientH));
                 }
                 else
                 {
@@ -4018,6 +4088,7 @@ namespace epochnamespace::core
                     request->y,
                     request->width,
                     request->height);
+                window->set_size(request->width, request->height);
 #if defined(_DEBUG)
                 if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
                 {
@@ -4047,8 +4118,8 @@ namespace epochnamespace::core
                     request->y,
                     request->width,
                     request->height);
-                if (request->parentHwnd && ::IsWindow(request->parentHwnd) != FALSE)
-                    request_parent_layout(request->parentHwnd);
+                // Parent layout either requested this redock or follows the drag release.
+                // Re-requesting it here can loop SDL/SFML proxy placement.
                 return 0;
             }
 
@@ -4167,14 +4238,14 @@ namespace epochnamespace::core
                         }
                         else if (window && backend_requires_owner_thread_dock_commands(window))
                         {
-                            post_owner_thread_dock_command(
+                            static_cast<void>(post_owner_thread_dock_command(
                                 window,
                                 ProxyDockCmd::Redock,
                                 originalParent,
                                 wndRect.left,
                                 wndRect.top,
                                 clientW,
-                                clientH);
+                                clientH));
                         }
                         else
                         {

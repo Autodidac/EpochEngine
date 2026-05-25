@@ -677,6 +677,14 @@ Current editor-shell gaps:
 - The visible proxy shell is the thing that should undock: once dragged outside
   the parent, it must become a real top-level window, keep mouse/input control,
   and continue following the drag instead of freezing in place under the parent.
+- SDL/SFML proxy shells must be moved back into dock slots by their posted
+  proxy-host redock command. The parent grid may decide the slot, but it must
+  not directly reparent or resize the nested SDL/SFML host/child pair while the
+  backend-owned shell is redocking.
+- A proxy redock command must not request another parent layout from inside the
+  redock handler. Drag release or the parent layout pass owns the next layout
+  request; re-requesting from the proxy handler can loop placement and recreate
+  redock flicker/crash behavior.
 - Focused six-pane parent validation is the current honest runtime gate for this
   path. The all-backends sequential harness still needs extra sequencing cleanup
   after the Raylib pass before it should outrank focused SDL/SFML evidence.

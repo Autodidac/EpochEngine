@@ -49,6 +49,10 @@
 - Aligned Vulkan texture lookup with the existing shared asset-root resolver so
   multicontext Vulkan can find `Engine/assets/vulkan/texture.ppm` from normal
   repo-local `x64/Debug` runs without requiring duplicate loose texture files.
+- Routed SDL/SFML parent-grid redock placement through the proxy host command
+  path and stopped the proxy redock command from requesting another layout
+  cycle, so top-row redocks no longer receive cross-thread parent-grid
+  repositioning while their backend-owned host shells are moving.
 
 ## [v0.84.38]
 - Bumped the active source and stable release line to `v0.84.38` for the

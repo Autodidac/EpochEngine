@@ -676,6 +676,11 @@ engine shape and should be treated as starting truth for the next passes:
   owner-thread dock command routing through the Raylib render command queue.
   The patch builds cleanly; the acceptance gate is still live multicontext
   drag-out/redock confirmation with no parent crash.
+- SDL/SFML top-row redock crash evidence points at parent-grid repositioning of
+  proxy host/child windows. The current fix routes grid placement through the
+  proxy host redock command and avoids redock-triggered layout recursion; the
+  acceptance gate is a live six-context redock eye-test focused on SDL and SFML
+  returning to top-row slots without crashing, hiding, or desynchronizing input.
 - WSL/Linux status for `v0.84.35`: repo-root `ninja-clang-debug` builds,
   `epoch_ci_headless` passes with DirectX disabled, and Ubuntu WSL2/WSLg now
   produces a real non-black single OpenGL editor capture when launched with
