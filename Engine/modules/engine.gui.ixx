@@ -248,6 +248,7 @@ namespace epochnamespace::gui
     export void advance_cursor(Vec2 delta) noexcept;
 
     export bool button(std::string_view label, Vec2 size) noexcept;
+    export bool button_selected(std::string_view label, Vec2 size, bool selected) noexcept;
     export bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept;
     export void image(const SpriteHandle& sprite, Vec2 size) noexcept;
     export [[nodiscard]] SpriteHandle register_runtime_surface(

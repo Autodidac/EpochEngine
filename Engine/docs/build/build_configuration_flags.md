@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.48`
+Current source version: `v0.84.50`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -116,7 +116,11 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.84.48` is the current source line for the Console Dock status cleanup.
+- `v0.84.50` is the current source line for the toolbar/menu selected-state
+  cleanup. Top menu buttons and main editor workspace buttons now use the shared
+  `engine.gui` selected-button primitive so active/open state stays visually
+  deliberate instead of flickering through transient hover/press states.
+- `v0.84.48` kept the Console Dock status cleanup aligned.
   Bottom Dock > Project, Assets, AI, and Systems now use compact selectable text
   panels matching Output while controls stay in central workspaces or the
   Inspector.

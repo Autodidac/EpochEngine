@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.46`
+Current source version: `v0.84.50`
 
 ## Architecture highlights
 
@@ -18,8 +18,8 @@ Current source version: `v0.84.46`
 - **Custom UI on automated texture/atlas plumbing**: GUI layout, atlas upload,
   sprite submission, clipped panels, tab bars, scroll text, arbitrary scroll
   areas, dock visibility, first-pass splitter resize state, generated runtime
-  surface atlases, and font/text rendering are engine-owned systems shared
-  across the active render paths.
+  surface atlases, selected/open button states, and font/text rendering are
+  engine-owned systems shared across the active render paths.
 - **Launcher/editor split**: project and game entry now live in the launcher,
   while the editor uses a more traditional desktop-style menu flow.
 - **Task graph + scripting**: reload and background work are funneled through

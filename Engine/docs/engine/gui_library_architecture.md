@@ -51,6 +51,9 @@ normal-batch behavior until their presenter owns a matching replay pass.
 - Primitive widgets: labels, buttons, connected tabs, dropdown/select boxes,
   progress bars, text inputs, scrollable text panels, image/runtime-surface
   views, and future checkboxes, sliders, tree views, and list views.
+- Button state: use `gui::button_selected` for active/open toolbar, menu, tab,
+  and window-chrome buttons so selection is explicit and does not flicker
+  through transient hover/press state while top-layer GUI is replayed.
 - Layout and docking: windows, splitters, resize handles, scroll extents,
   focus routing, z-order, modal scrims, context menus, and future popout hosts.
 - Theme and rendering: palette ownership, font/glyph metrics, clipping,

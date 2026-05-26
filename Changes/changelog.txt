@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.84.50]
+- Bumped the active source line to `v0.84.50` for the toolbar/menu selected-state
+  cleanup.
+- Added reusable `engine.gui` selected-button rendering through
+  `gui::button_selected`, so active/open buttons can be drawn deliberately
+  instead of depending on transient hover/press state.
+- Routed the top menu row and main editor workspace row through the selected
+  button primitive. This targets the minor OpenGL/GUI half-selected flip-flop
+  reported around menu and workspace button transitions without changing the
+  protected scene-first / GUI-over draw model.
+- Verified `ConsoleApplication1` Debug x64 with MSBuild after the GUI
+  selected-state patch. Also verified `--editor-ai-gate-self-test`,
+  `--editor-project-self-test projectlauncher`, and
+  `--editor-project-self-test sandbox` from `x64/Debug`; all returned 0.
+
 ## [v0.84.49]
 - Bumped the active source line to `v0.84.49` for the Console Dock source
   cleanup and OS AI policy rename.

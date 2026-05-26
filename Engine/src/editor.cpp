@@ -4259,7 +4259,7 @@ namespace epochnamespace
         {
             item.x = toolbar_x;
             gui::set_cursor({ toolbar_x, toolbar_button_y });
-            if (gui::button(item.label, { item.width, toolbar_button_h }))
+            if (gui::button_selected(item.label, { item.width, toolbar_button_h }, editor.openMenu == item.menu))
                 editor.openMenu = editor.openMenu == item.menu ? TopMenu::None : item.menu;
             toolbar_x += item.width + 6.0f;
         }
@@ -4302,32 +4302,32 @@ namespace epochnamespace
         const std::string systems_tab = "Systems";
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(editor_tab, { 180.0f, tab_h }))
+        if (gui::button_selected(editor_tab, { 180.0f, tab_h }, editor.mainSurface == EditorMainSurface::Scene))
             open_editor_surface(EditorMainSurface::Scene, "toolbar");
         tab_x += 180.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(runtime_tab, { 156.0f, tab_h }))
+        if (gui::button_selected(runtime_tab, { 156.0f, tab_h }, editor.mainSurface == EditorMainSurface::Game2D))
             open_editor_surface(EditorMainSurface::Game2D, "toolbar");
         tab_x += 156.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(assets_tab, { 124.0f, tab_h }))
+        if (gui::button_selected(assets_tab, { 124.0f, tab_h }, editor.mainSurface == EditorMainSurface::Assets))
             open_editor_surface(EditorMainSurface::Assets, "toolbar");
         tab_x += 124.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(project_tab, { 164.0f, tab_h }))
+        if (gui::button_selected(project_tab, { 164.0f, tab_h }, editor.mainSurface == EditorMainSurface::Project))
             open_editor_surface(EditorMainSurface::Project, "toolbar");
         tab_x += 164.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(ai_control_tab, { 180.0f, tab_h }))
+        if (gui::button_selected(ai_control_tab, { 180.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox))
             open_editor_surface(EditorMainSurface::AISandbox, "toolbar");
         tab_x += 180.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button(systems_tab, { 124.0f, tab_h }))
+        if (gui::button_selected(systems_tab, { 124.0f, tab_h }, editor.mainSurface == EditorMainSurface::Systems))
             open_editor_surface(EditorMainSurface::Systems, "toolbar");
 
         gui::end_window();

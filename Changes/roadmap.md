@@ -698,6 +698,12 @@ engine shape and should be treated as starting truth for the next passes:
   blocked while a valid evidence-backed final answer remains allowed. The next
   acceptance gate is AI Chat/evidence-panel copy/paste/selection smoke proof and
   the first watchable executor action in the closed-loop sandbox.
+- `v0.84.50` targets the newest minor OpenGL/GUI button-state flicker report
+  without touching the protected draw model: `engine.gui` now exposes an
+  explicit selected-button primitive, and the top menu/workspace toolbar rows
+  use it for active/open state instead of relying only on transient hover or
+  press state. Acceptance remains operator eye-test proof that half-selected
+  menu/workspace buttons no longer flip-flop during normal OpenGL use.
 - Canvas2D projection ownership has moved into `render.preview_grid` via one
   shared projection helper. Editor picking, OpenGL, DirectX, Raylib, SDL, SFML,
   Vulkan, and the software preview fallback now consume the same Canvas2D

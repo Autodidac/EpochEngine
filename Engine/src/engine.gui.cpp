@@ -2469,6 +2469,11 @@ namespace epochnamespace::gui
         return button_with_state(label, size, false);
     }
 
+    bool button_selected(std::string_view label, Vec2 size, bool selected) noexcept
+    {
+        return button_with_state(label, size, selected);
+    }
+
     bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return false;
