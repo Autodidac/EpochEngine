@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.41`
+Current source version: `v0.84.48`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -100,16 +100,31 @@ override them locally in `engine.config.hpp`.
   not link both loaders, add random system fallbacks, or hide duplicate symbols
   with `/FORCE:MULTIPLE`.
 - Module-aware builds should keep `CMAKE_CXX_SCAN_FOR_MODULES=ON` enabled.
-- MSVC static-vcpkg app builds must keep dependency ownership consistent:
+- The normal MSVC x64 multicontext editor target uses the dynamic vcpkg lane
+  (`x64-windows`, `/MD`, `RAYLIB_DLL`) so Raylib, SFML, SDL3, GLAD, and DirectX
+  can coexist without third-party static duplicate-symbol conflicts. DLLs beside
+  `EpochEditor.exe` in `x64/Debug` or `x64/Release` are expected for this lane;
+  use `dumpbin /DEPENDENTS` to distinguish true runtime dependencies from stale
+  files left by older copy passes.
+- MSVC static-vcpkg experiments must keep dependency ownership consistent:
   `image.stb.cpp` is the only private STB implementation owner, SFML static and
   dynamic libraries must not be linked together, raylib static builds use
   `RAYLIB_STATIC` instead of DLL-import macros, and the final app target carries
-  SDL3's required Windows system libraries.
+  SDL3's required Windows system libraries. Do not use `/FORCE:MULTIPLE`; static
+  all-backend support needs owned or isolated GLAD/STB/math providers before it
+  can be promoted as the default app lane.
 
 ## Current release note
 
-- `v0.84.41` is the current source line for the visible script editing,
-  clipboard, and active multicontext/package source-shape batch.
+- `v0.84.48` is the current source line for the Console Dock status cleanup.
+  Bottom Dock > Project, Assets, AI, and Systems now use compact selectable text
+  panels matching Output while controls stay in central workspaces or the
+  Inspector.
+- `v0.84.47` is the source line for the project runtime/profile cleanup,
+  selectable project camera styles, MSVC vcpkg linkage clarification, and the
+  centered Run route that launches normal generated projects through the
+  selected single-context child backend while keeping engine self-iteration
+  in-editor.
 - Normal desktop/runtime builds should stay on the main runtime path by default.
 - `EPOCH_UPDATER_SHELL_BUILD` is now an explicit bootstrap-mode switch, not the
   default identity for packaged Linux or Windows releases.

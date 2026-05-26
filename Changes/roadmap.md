@@ -11,7 +11,7 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
   voxel LOD, procedural vegetation/world generation, voxel ray/path tracing,
   and classic terrain/model output converge instead of becoming disconnected
   renderer experiments
-- a staged engine AI/self-iteration loop that stays reviewable and evidence-gated
+- a staged OS-model/self-iteration loop that stays reviewable and evidence-gated
 - packaging and runtime rules that hold across desktop first, then Android
 
 ## Non-Negotiable Rules
@@ -40,11 +40,19 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
    required.
 10. External local LLM endpoints are explicitly selected tooling providers, not
     hidden authority and not an auto-selected default.
-11. The engine AI architecture keeps three distinct internal pieces:
-    - `EpochBot`, the primary engine-owned trainable LLM
+11. The OS AI architecture keeps three distinct pieces:
+    - an engine-owned OS-model harness for memory, retrieval, tool use,
+      planning, verification, evidence metrics, and dataset/eval gates
     - local MCP/control/tool harnesses that operate the editor and collect proof
-    - an offline/injectable OSS or tiny backup LLM path for fallback, generated
-      software embedding, and EpochBot training support
+    - operator-selected OS model lanes: `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` and
+      `Qwen/Qwen3.6-27B` for coding/review, plus
+      `Wan-AI/Wan2.1-VACE-1.3B`, `microsoft/TRELLIS.2-4B`, and
+      `black-forest-labs/FLUX.2-klein-4B` as future package-managed creative
+      lanes
+    - on-demand model asset gates: Qwen/Nemotron weights live under
+      executable-local `cache/models/` only after operator action, are not
+      cloned for engine self-iteration, and enter generated projects only after
+      explicit package opt-in plus license/notice review
 12. AI may generate local game, tool, app, and server project artifacts only
     through visible, reviewable requests. It must not create or run apps/services
     that provide model bypass channels, self-accessible servers, hidden control
@@ -69,6 +77,11 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     remains: drain normal GUI/backend work, render the scene preview once, drain
     follow-up work, replay only the explicit GUI top-layer batch for command
     menus/modal chrome, then capture/present.
+17. MSVC x64 multicontext editor builds currently use the dynamic-vcpkg app lane
+    (`x64-windows`, `/MD`, `RAYLIB_DLL`). DLLs in the output folder are expected
+    runtime dependencies for that lane; static-vcpkg all-backend work remains a
+    separate acceptance-gated track because Raylib/SFML/SDL/GLAD static libs can
+    export overlapping STB, GLAD, and math symbols.
 
 ## Release And Source Policy
 
@@ -89,7 +102,8 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 - Runtime-created data stays executable-local under `cache/`: updater work,
   temporary update probes, managed tools, and extraction state live under
   `cache/updates/`; downloaded runtime/source packages live under
-  `cache/packages/`; generated/runtime atlases live under `cache/atlases/`.
+  `cache/packages/`; on-demand OS model weights live under `cache/models/`;
+  generated/runtime atlases live under `cache/atlases/`.
   None of these cache buckets belong in public release payloads or tracked
   source.
 - The updater must resolve the active install type before replacing files:
@@ -457,7 +471,7 @@ engine shape and should be treated as starting truth for the next passes:
 - project actions now append `PROJECT_NOTES.md` operator notes so generated
   ProjectLauncher shells can show what changed, how to run it, and which
   self-iteration packets/builds affected the project
-- sandbox scene-training packets can now be staged from the editor so EpochBot
+- sandbox scene-training packets can now be staged from the editor so OS AI
   has an explicit, watchable 3D edit/test learning lane instead of answering
   that it is "working fine" without evidence
 - the scene viewport now has first-pass object interaction: visible editor
@@ -473,10 +487,13 @@ engine shape and should be treated as starting truth for the next passes:
   > Save Project, Project > Save Active Project, and the centered Run button are
   the explicit operator actions that materialize/update generated project files
 - the top scene command strip now has one centered Run action. It saves and
-  rebuilds the active generated project before launching the generated output.
-  Script assets validate through their explicit script build controls instead of
-  stealing the project Run path. A failed build cancels launch instead of
-  falling through to stale child executables.
+  rebuilds normal generated projects before launching the selected
+  single-context child backend. Script assets validate through their explicit
+  script build controls instead of stealing the project Run path. The engine
+  self-iteration sandbox remains editor-shaped because it manipulates and tests
+  the checked-out engine rather than acting like a generated game/tool child. A
+  failed build cancels launch instead of falling through to stale child
+  executables.
 - generated Sandbox and ProjectLauncher shells expose `--project-self-test` so
   child project output can be verified without launching GUI windows
 - the checked-in engine now exposes `--editor-project-self-test <id>` so Sandbox
@@ -484,7 +501,7 @@ engine shape and should be treated as starting truth for the next passes:
   before their generated child `--project-self-test` paths are run
 - `v0.84.30` extends that self-test route into the AI evidence loop: the engine
   now appends MCP-style tool captures and stages review-gated iteration packets
-  for Sandbox and ProjectLauncher, giving EpochBot a real materialize -> build
+  for Sandbox and ProjectLauncher, giving OS AI a real materialize -> build
   -> capture -> packet path to inspect before proposing the next pass
 - Self-Iteration Sandbox controls now force the `sandbox` profile and rewrite
   stale generated shell identity when manifest id/script/template evidence does
@@ -589,6 +606,12 @@ engine shape and should be treated as starting truth for the next passes:
   flags instead of opening another multicontext editor clone. If the expected
   child executable is missing after a build, Run must block with visible
   evidence and must not fall back to the parent multicontext shell.
+- `v0.84.48` keeps the centered Run contract aligned with that gate: normal
+  generated projects build and launch through the selected single-context child
+  backend, while the engine self-iteration lane remains editor-shaped. The
+  bottom Console Dock is status-only again; Project, Assets, AI, and Systems use
+  Output-style selectable text panels and must not regain workflow buttons,
+  package controls, graph controls, or model-selection controls.
 - viewport movement needs a shared input profile instead of hardcoded editor
   assumptions. First-pass behavior adds `Home` to reset the preview camera; the
   next gate is a reusable input-configuration system that can be enabled by
@@ -667,6 +690,14 @@ engine shape and should be treated as starting truth for the next passes:
   a real code editor viewport with internal scrolling, ranged selection, caret
   navigation, syntax-aware display, and clean copy/paste behavior across
   Console Dock, AI Chat, and source editing surfaces.
+- `v0.84.42` adds the first hard Phase 5 OS AI promotion-safety guard:
+  hidden-reasoning-only local model replies, no-model/no-decode failures, API
+  errors, and obvious leaked reasoning drafts stay visible as operator feedback
+  but are blocked before local training capture and MCP chat evidence.
+  `--editor-ai-gate-self-test` now proves those non-promotable replies are
+  blocked while a valid evidence-backed final answer remains allowed. The next
+  acceptance gate is AI Chat/evidence-panel copy/paste/selection smoke proof and
+  the first watchable executor action in the closed-loop sandbox.
 - Canvas2D projection ownership has moved into `render.preview_grid` via one
   shared projection helper. Editor picking, OpenGL, DirectX, Raylib, SDL, SFML,
   Vulkan, and the software preview fallback now consume the same Canvas2D
@@ -676,9 +707,10 @@ engine shape and should be treated as starting truth for the next passes:
   tilted editor perspective; this pass is build-validated and still needs the
   operator multicontext eye-test.
 - The Run button now serializes generated project builds inside the editor
-  process. A duplicate Run/build request returns a visible failure instead of
-  launching a second ProjectLauncher/Sandbox build that can collide over shared
-  `StaticLib1` clean logs, module IFC/BMI state, or PDB outputs.
+  process and routes normal project launches through the selected single-context
+  child backend. A duplicate Run/build request returns a visible failure instead
+  of launching a second ProjectLauncher/Sandbox build that can collide over
+  shared `StaticLib1` clean logs, module IFC/BMI state, or PDB outputs.
 - Generated Windows child build scripts now carry a repo-level lock as well, so
   manual ProjectLauncher/Sandbox builds launched outside the editor wait for the
   shared MSVC engine build lane instead of corrupting shared logs/libs/PDBs.
@@ -730,12 +762,12 @@ engine shape and should be treated as starting truth for the next passes:
   top-right window X affordances; launcher/editor settings should open useful
   modal surfaces; Project Hub should use a game/software launcher mockup instead
   of mirroring the editor; scripting needs a real code/text editor view; World
-  Outliner rows need human names and grouping; EpochBot weight/matrix analysis
+  Outliner rows need human names and grouping; OS AI model-analysis
   belongs in a separate graph/terrain-style AI visualizer that samples summaries
   rather than trying to draw billions of parameters.
 - latest editor workflow gates from operator review: Systems should replace the
   generic Inspector side panel with live `[time]`/pacing stats when Systems is
-  active; AI model selection should live in the renamed Engine AI inspector
+  active; AI model selection should live in the renamed OS AI inspector
   rather than duplicating selection controls in the central AI surface; Run
   Scene In Editor and Run External Project must become distinct actions;
   Project Run needs an explicit single-context/backend selector; 2D Editor,
@@ -765,13 +797,18 @@ engine shape and should be treated as starting truth for the next passes:
   `Engine/docs/engine/source_shape_audit.md`. Use that guard before renaming
   headers, backend bridges, config surfaces, module names, or Perf Manager
   integration points.
-- EpochBot training/eval work now needs measurable scorecards, not vibes. A
+- OS AI training/eval work now needs measurable evidence gates, not vibes. A
   self-iteration pass is incomplete until it has a staged packet, build log,
   output artifact, generated child self-test/verifier result, visible UI state,
   and a human-review gate state with no unresolved `[missing]` evidence markers.
   Track false accepts, false rejects, evidence coverage, tool-trace coverage,
   build/test pass rate, and self-iteration completion rate before promoting
   helper output into curated data.
+- Internal bundled-model work is retired. OS AI work now focuses on a
+  production harness around selected Nemotron 3 Nano/Qwen models and the approved
+  FLUX/Wan/TRELLIS creative package lanes, with curated traces, prompts,
+  adapters, evidence gates, and package/runtime integration as the mutable
+  artifacts.
 
 ## Phase Progress
 
@@ -845,6 +882,14 @@ engine shape and should be treated as starting truth for the next passes:
 - keep checked-in MSVC solution projects self-contained enough to build from a
   normal VS 2022/MSBuild invocation, including explicit vcpkg triplet defaults
   when machine-global vcpkg integration leaves `$(VcpkgTriplet)` empty.
+- keep the checked-in MSVC x64 editor target on one dependency model at a time.
+  The current multicontext app lane is dynamic-vcpkg; static-vcpkg all-backend
+  experiments remain blocked until third-party static STB/GLAD/math ownership is
+  isolated without `/FORCE:MULTIPLE`.
+- keep the Self-Iteration Sandbox classified separately from game/tool projects.
+  It mirrors the engine/editor manipulation lane, while normal generated
+  projects expose their own selectable camera style for editor orbit,
+  first-person runtime, or locked 2D canvas previews.
 - keep engine-owned runtime-mini packages first-class: local package metadata
   belongs in project assets, script bridges call into engine-owned scenes, and
   downloadable packages must use explicit updater-style source build/approval
@@ -858,10 +903,10 @@ engine shape and should be treated as starting truth for the next passes:
   such as `engine_forest_factory`, then replace duplicated package strings in
   editor/project/runtime code only after the descriptor module builds in MSVC and
   CMake.
-- add the next AI safety slice: reject hidden-reasoning-only responses before
-  raw response snippet logging, block non-promotable assistant replies from raw
-  or curated training capture, and add copy/paste/selection smoke proof for AI
-  Chat and scrollable evidence panels.
+- continue the AI safety slice: hidden-reasoning-only responses are now rejected
+  before raw response snippet logging, blocked from local training/MCP capture,
+  and covered by `--editor-ai-gate-self-test`; the remaining gate is
+  copy/paste/selection smoke proof for AI Chat and scrollable evidence panels.
 - keep the bottom dock centered on `Project`, `Assets`, `Systems`, `AI`, and
   `Output` as evidence/status tabs, not as the final scene/editor-window model
 - promote the new first-pass draggable splitters into reusable dock/window GUI
@@ -956,10 +1001,10 @@ engine shape and should be treated as starting truth for the next passes:
 
 ### 6. Self-Iteration, Training, And Review Loop
 
-- standardize the full engine AI architecture:
-  `EpochBot`, local MCP/control/tool harnesses, and the offline/injectable
-  backup LLM path, with the self-iteration sandbox separated from normal
-  ProjectLauncher/editor scene authoring
+- standardize the full OS AI architecture:
+  an engine-owned OS-model harness, local MCP/control/tool harnesses, and
+  selected Nemotron 3 Nano/Qwen model lanes, with the self-iteration
+  sandbox separated from normal ProjectLauncher/editor scene authoring
 - build on the current iteration-packet/capture roots already present in the
   editor instead of inventing a second AI staging path
 - make staged packets the first durable handoff between planner/executor work
@@ -979,20 +1024,20 @@ engine shape and should be treated as starting truth for the next passes:
   generated game/tool project. The compatibility id may remain `sandbox`, but
   generated child artifacts should present as `EpochEngine` and should surface
   update/build evidence in the editor.
-- expose EpochBot control/status in normal editor chrome as well as the central
-  AI workspace. The World Outliner `EpochBot` tab now owns compact chat,
+- expose OS AI control/status in normal editor chrome as well as the central
+  AI workspace. The World Outliner `OS AI` tab owns compact chat,
   prompt, plan, and status controls; future tabs should add memory, tool, and
   evaluation views without hiding them in Console Dock output.
-- reject local-model replies that contain only hidden reasoning. EpochBot must
+- reject local-model replies that contain only hidden reasoning. The OS AI path must
   show final `content` or fail visibly as a model/API configuration issue; hidden
   `reasoning_content` is not an assistant answer and must not be promoted into
-  curated training data.
+  MCP capture, raw local training capture, or curated training data.
 - train from real editor tool actions by capturing before/after state from the
   selected script harness before promoting any dataset/eval records
-- reject generic EpochBot self-status answers unless they cite tool/build/scene
+- reject generic OS AI self-status answers unless they cite tool/build/scene
   evidence paths or visible state changes
 - grow the sandbox scene-training lane into a watchable 3D edit/test runner
-  where EpochBot can learn from object edits, scene-state diffs, and verifier
+  where OS AI can learn from object edits, scene-state diffs, and verifier
   output without mutating normal game/editor projects by accident
 - keep local model activation operator-gated; no first-detected model fallback,
   no hidden helper identity, and no chat/tool execution before selection
@@ -1003,7 +1048,7 @@ engine shape and should be treated as starting truth for the next passes:
   can run through visible editor/MCP/harness controls, but apps or servers that
   expose model-accessible control surfaces, listeners, ports, or serving modes
   must require an explicit human enable/run action
-- implement EpochBot as a closed-loop agentic cognition system, not a stateless
+- implement OS AI as a closed-loop agentic cognition system, not a stateless
   chatbot. Minimum architecture: base model, working memory, persistent
   semantic/episodic/procedural memory, retrieval/ranking, goal stack, planner,
   tool executor, verifier, scoring/reward, self-state tracker, attention
@@ -1074,7 +1119,7 @@ engine shape and should be treated as starting truth for the next passes:
    explicitly deferred with proof.
 2. Keep GitHub/workflow reliability and local/hosted build truth aligned after
    the headless plus Linux Clang engine split.
-3. Move Phase 5 to the front: implement the smallest real EpochBot closed-loop
+3. Move Phase 5 to the front: implement the smallest real OS AI closed-loop
    control slice using the current sandbox/evidence paths. Required parts are
    working memory, staged goal packet, visible executor action, verifier
    evidence, score/gate result, notes update, and no hidden autonomy.

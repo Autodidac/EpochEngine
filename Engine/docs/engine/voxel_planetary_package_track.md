@@ -114,5 +114,5 @@ Before any voxel package becomes tracked engine code:
 - Add a Forest Factory 3D editor workspace and a voxel terrain preview workspace
   once the GUI library has stable tabs, dropdowns, scrollable text, modals, and
   copy/paste.
-- Connect EpochBot planning to package evidence only after the gate can reject
+- Connect OS AI planning to package evidence only after the gate can reject
   low-evidence or hidden-reasoning model output.

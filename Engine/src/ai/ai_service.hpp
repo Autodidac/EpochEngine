@@ -34,8 +34,8 @@
 
 namespace epoch::ai {
 
-	void init_bot();
-	void shutdown_bot();
-	std::string send_to_bot(const std::string& user_text);
+	void init_engine_ai();
+	void shutdown_engine_ai();
+	std::string send_to_engine_ai(const std::string& user_text);
 
 }

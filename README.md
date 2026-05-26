@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.41-1F7A4C?style=for-the-badge" alt="Current development source v0.84.41" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.49-1F7A4C?style=for-the-badge" alt="Current development source v0.84.49" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
@@ -60,7 +60,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.41`.
+- Source is currently the active development line at `v0.84.49`.
 - The latest published stable runtime release is `v0.84.38`.
 - Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -69,9 +69,10 @@ For engine/tooling developers:
   part of the public runtime payload.
 - Windows and Linux packaged runtime assets now use versioned names such as
   `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
-- MSVC static-vcpkg Debug/Release builds keep one private STB implementation
-  owner, avoid SFML static/dynamic library mixing, link raylib consistently as
-  static, and carry the SDL3 Windows system library set in the final app target.
+- MSVC Debug/Release multicontext editor builds use the dynamic-vcpkg
+  `x64-windows` lane so Raylib, SFML, SDL3, GLAD, OpenGL, Vulkan, and DirectX can
+  coexist without static duplicate-symbol collisions. DLLs beside the debug
+  executable are expected runtime dependencies for that editor lane.
 - Bootstrap updater-shell releases are separate from the main runtime package
   and are meant to update into the current runtime release, then fall through
   to source only when packaged parity is already reached.
@@ -83,7 +84,8 @@ For engine/tooling developers:
   concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.
 
-AI sandbox and training instructions live with the AI assets in `Engine/ai/README.md`.
+OS AI model, tooling, and evidence rules live with the AI assets in
+`Engine/ai/README.md` and the engine policy docs.
 
 ## What Epoch Provides Right Now
 
@@ -92,8 +94,12 @@ AI sandbox and training instructions live with the AI assets in `Engine/ai/READM
 - Top-level editor modes now route the center area into separate Scene/Game,
   Project, Assets, AI Sandbox, and Systems surfaces instead of forcing every
   workflow through the Perspective 3D view or the bottom console dock.
-- The centered Run action now always saves/builds the active project before
-  launch and cancels on failed builds instead of launching stale child outputs.
+- The centered Run action now saves/builds normal generated projects before
+  launching the selected single-context child output, while the engine
+  self-iteration lane stays editor-shaped for visible manipulation/testing.
+- The bottom Console Dock is status-only again: Project, Assets, AI, and
+  Systems use the same compact selectable text-panel style as Output, while
+  controls stay in central workspaces or the Inspector.
 - Generated game and software/tool project shells with explicit build, script,
   output, and manifest proof surfaced in the editor.
 - Non-GUI project-shell self-tests for Sandbox and ProjectLauncher, including
@@ -109,16 +115,21 @@ AI sandbox and training instructions live with the AI assets in `Engine/ai/READM
 - Editor-visible script/file/asset surfaces so Sandbox and Project Hub work
   can leave selectable paths, build/run notes, and first-pass asset cards.
 - A first Package Manager modal for local runtime-mini packages, with future
-  downloadable source packages constrained to explicit updater-style build gates.
+  downloadable source/model packages constrained to explicit updater-style
+  build/download gates.
 - Multicontext renderer orchestration across Raylib, SDL3, SFML, Vulkan,
   OpenGL, software, and headless/noop paths.
 - A Systems workspace with readable render/frame, task/thread, support-tier, and
   AI-loop graph surfaces for renderer/runtime ownership diagnostics.
 - A time-system spine with fixed-step ownership, pause/resume, scaling,
   single-step, and early editor-facing diagnostics.
-- A staged AI workspace centered on `EpochBot`, local MCP/control harnesses, an
-  offline/injectable backup LLM path, and a separate self-iteration sandbox that
-  stages visible evidence before any promotion.
+- A staged AI workspace centered on an engine-owned OS-model harness around
+  operator-selected `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` and `Qwen/Qwen3.6-27B`
+  coding/review lanes plus future `FLUX.2-klein-4B`, `Wan2.1-VACE-1.3B`, and
+  `TRELLIS.2-4B` creative package lanes. The self-iteration sandbox stages
+  visible evidence before any promotion, downloads Qwen/Nemotron weights only
+  on demand into `cache/models/`, and includes model weights in generated
+  projects only after explicit package opt-in and license/notice review.
 - Executable-root asset, shader, script, font, log, and capture resolution so
   local runs stop depending on whatever folder the process happened to launch
   from.
@@ -274,7 +285,7 @@ If you're digging into engine behavior:
 - [Engine/docs/engine/current_engine_architecture.md](Engine/docs/engine/current_engine_architecture.md)
 - [Engine/docs/engine/backend_context_status.md](Engine/docs/engine/backend_context_status.md)
 - [Engine/docs/engine/backend_menu_overlay_status.md](Engine/docs/engine/backend_menu_overlay_status.md)
-- [Engine/docs/engine/ai_training_memory_and_dataset_policy.md](Engine/docs/engine/ai_training_memory_and_dataset_policy.md)
+- [Engine/docs/engine/os_ai_tooling_and_evidence_policy.md](Engine/docs/engine/os_ai_tooling_and_evidence_policy.md)
 - [Engine/docs/engine/smoke_capture_and_screenshot_workflow.md](Engine/docs/engine/smoke_capture_and_screenshot_workflow.md)
 
 Project planning and release history:
@@ -290,8 +301,8 @@ The current roadmap is focused on:
 1. Growing the Systems workspace into a stronger renderer/runtime ownership and
    pacing surface.
 2. Carrying the time-system spine deeper into runtime and scene ownership.
-3. Tightening the AI capture, review, and promotion loop with a
-   separate self-iteration sandbox and watchable scene-training tasks.
+3. Tightening the OS-model capture, review, and promotion loop with a
+   separate self-iteration sandbox and watchable scene/tool evidence tasks.
 4. Improving UI/editor maturity without regressing the honest project-centric
    runtime flow.
 

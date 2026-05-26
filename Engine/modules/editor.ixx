@@ -58,7 +58,8 @@ namespace epochnamespace
     export enum class EditorProjectKind : unsigned char
     {
         Game = 0,
-        Tool
+        Tool,
+        EngineSelfIteration
     };
 
     export enum class EditorCommand : unsigned char
@@ -216,4 +217,3 @@ namespace epochnamespace
     export void cleanup_chat_context(const core::Context* ctx);
     export void shutdown_chat_system();
 }
-

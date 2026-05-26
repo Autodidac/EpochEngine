@@ -1,9 +1,9 @@
 {
   "id": "local-mcp-control",
-  "display_name": "Local MCP Control And Training Layer",
+  "display_name": "Local MCP Control Layer",
   "provider": "local-mcp-control",
   "endpoint": "workspace/mcp_capture.jsonl",
-  "model_selection": "engine-owned",
+  "model_selection": "operator-selected-model",
   "repo_safe_manifest": true,
   "local_weights_only": true,
   "status": "active"

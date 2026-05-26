@@ -1,5 +1,122 @@
 # Epoch Changelog
 
+## [v0.84.49]
+- Bumped the active source line to `v0.84.49` for the Console Dock source
+  cleanup and OS AI policy rename.
+- Removed the unreachable Project, Assets, AI, and Systems control bodies that
+  still lived behind the compact Bottom Dock status panels. Those tabs now have
+  one source path: selectable status/evidence text only, with controls staying
+  in the central workspaces or Inspector.
+- Renamed the old AI training/memory policy doc to
+  `Engine/docs/engine/os_ai_tooling_and_evidence_policy.md` and updated README,
+  docs-index, and AGENTS references so the project no longer advertises the old
+  internal-bot/training framing.
+- Verified `ConsoleApplication1` Debug x64 with MSBuild after the source
+  cleanup. Also verified `--editor-ai-gate-self-test`,
+  `--editor-project-self-test projectlauncher`, and
+  `--editor-project-self-test sandbox` from `x64/Debug`; all returned 0.
+
+## [v0.84.48]
+- Bumped the active source line to `v0.84.48` for the Console Dock status
+  cleanup.
+- Changed Bottom Dock > Project, Assets, AI, and Systems to render compact
+  selectable status text panels matching the Output tab instead of nested
+  property-row bodies that caused visual slabs, bleed, and resize artifacts.
+- Preserved the AI self-iteration build/status update path while keeping model
+  selection, package actions, script editing, and graph controls in the central
+  workspaces or Inspector.
+- Verified `ConsoleApplication1` Debug x64 with MSBuild after the dock cleanup.
+  Also verified `--editor-ai-gate-self-test`,
+  `--editor-project-self-test projectlauncher`, and
+  `--editor-project-self-test sandbox` from `x64/Debug`; all returned 0.
+
+## [v0.84.47]
+- Bumped the active source line to `v0.84.47` for the centered Run route and
+  project launch contract cleanup.
+- Changed the centered toolbar Run action so normal generated projects save,
+  build, and launch through the selected single-context child backend instead of
+  playing the active editor scene across the multicontext parent.
+- Kept the engine self-iteration sandbox on the editor-shaped in-process path so
+  it can keep manipulating, building, and verifying the checked-out engine rather
+  than pretending to be a normal generated game/tool project.
+- Updated the runtime workflow and roadmap notes so Project workspace
+  `Play In Editor`, explicit single-context launch, and self-iteration behavior
+  remain separated.
+
+## [v0.84.46]
+- Bumped the active source line to `v0.84.46` for the project runtime/profile
+  cleanup and MSVC vcpkg linkage clarification.
+- Reclassified the `sandbox` profile as an engine self-iteration lane instead
+  of a normal game/tool project, so its editor surfaces mirror Epoch engine
+  manipulation/testing rather than generated-project behavior.
+- Added a Project workspace camera-style selector for normal generated projects
+  so project play can choose editor orbit, first-person runtime, or locked 2D
+  canvas camera behavior without turning the self-iteration sandbox into a game.
+- Aligned the MSVC Debug/Release x64 editor projects to the dynamic-vcpkg
+  multicontext app lane. DLLs in `x64/Debug` are now documented as expected
+  runtime dependencies for that lane; pure static-vcpkg all-backend builds remain
+  constrained by third-party static symbol ownership and must not be forced with
+  duplicate-symbol linker hacks.
+
+## [v0.84.45]
+- Bumped the active source line to `v0.84.45` for the OS model package/cache
+  contract and project runtime split cleanup.
+- Added Qwen 3.6 27B and NVIDIA Nemotron 3 Nano 4B BF16 as Package Manager model-asset lanes:
+  weights are staged for on-demand download into executable-local
+  `cache/models/` and are not cloned or bundled for routine engine
+  self-iteration.
+- Package Manager model install now writes a project-local
+  `*.model.package.json` opt-in manifest plus an executable-local
+  `cache/models/.../download.plan.json` so model inclusion has visible evidence
+  before the future downloader transfers any weights.
+- Documented that generated projects include OS model weights only through an
+  explicit package opt-in with license/notice review; otherwise projects carry
+  metadata or download recipes only.
+- Changed AI model/cache paths so local model artifacts resolve through
+  executable-local cache buckets instead of tracked source or workspace model
+  folders.
+- Continued the Project workspace split between Play In Editor and Launch
+  Single Context, with project runtime camera controls disabled in the external
+  project preview path.
+- Added first solid-preview parity for SDL/SFML/Raylib fallback scene rendering
+  so non-OpenGL backends move closer to the OpenGL visual baseline.
+
+## [v0.84.44]
+- Bumped the active source line to `v0.84.44` for the OS AI direction cleanup.
+- Removed bundled AI model scaffolding from the active provider path:
+  the old local model manifest, tokenizer manifest, and metric seed are gone.
+- Reframed AI manifests, prompts, control-loop docs, and policy docs around
+  operator-selected OS model lanes instead of bundled model weights.
+- Documented the canonical Hugging Face source pages for
+  `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16`, `Qwen/Qwen3.6-27B`,
+  `Wan-AI/Wan2.1-VACE-1.3B`, `microsoft/TRELLIS.2-4B`, and
+  `black-forest-labs/FLUX.2-klein-4B`.
+
+## [v0.84.43]
+- Bumped the active source line to `v0.84.43` for the Engine AI naming and model
+  lane correction.
+- Removed the active legacy AI identity from source prompts, AI docs, roadmap,
+  eval seeds, and control-loop contracts. The AI direction is now
+  operator-selected OS model lanes: Qwen/Nemotron for coding/review and the
+  approved FLUX/Wan/TRELLIS creative model lanes for future package-managed
+  generation workflows.
+- Kept deterministic AI gate metrics focused on evidence quality instead of
+  model self-status claims.
+
+## [v0.84.42]
+- Bumped the active source line to `v0.84.42` for the first hard Engine AI
+  promotion-safety guard in the Phase 5 roadmap.
+- Added a central assistant-text promotion predicate so model configuration
+  errors, no-model/no-decode replies, and hidden-reasoning-only responses remain
+  visible to the operator but cannot enter local training capture or MCP chat
+  evidence.
+- Moved reasoning-only response handling ahead of raw response snippet logging so
+  hidden `reasoning_content` is rejected with byte-count diagnostics instead of
+  being copied into logs, curated datasets, or training evidence.
+- Extended `--editor-ai-gate-self-test` with capture-promotion cases so
+  hidden-reasoning-only replies, no-model failures, and leaked reasoning drafts
+  are tested as blocked while an evidence-backed final answer remains allowed.
+
 ## [v0.84.41]
 - Bumped the active source line to `v0.84.41` for the first visible script
   editing and clipboard stabilization pass.
@@ -208,7 +325,7 @@
 - Documented that DirectX is Windows-only and intentionally disabled for Linux
   and WSL builds; the current DirectX source shape is a first-pass backend slice
   and now has real implementation files instead of fake placeholder modules.
-- Added the next-pass EpochBot control-loop prompt and acceptance shape so Phase
+- Added the next-pass Engine AI control-loop prompt and acceptance shape so Phase
   5 can proceed from working memory, staged packets, visible execution,
   verification, scoring, and human gates instead of another prompt-only chat
   surface.
@@ -250,11 +367,11 @@
 - Added a CLI self-test project-note handoff so `--editor-project-self-test`
   leaves visible Sandbox/ProjectLauncher evidence notes with packet, build-log,
   output, script, and human-gate paths after the materialize/build pass.
-- Hardened EpochBot chat parsing so OpenAI-compatible local models never surface
+- Hardened Engine AI chat parsing so OpenAI-compatible local models never surface
   `reasoning_content` as visible assistant text; blank-content reasoning replies
   are now rejected as model/API configuration failures instead of leaking draft
   chain-of-thought into AI Chat.
-- Promoted the World Outliner `EpochBot` tab from status-only rows to a compact
+- Promoted the World Outliner `Engine AI` tab from status-only rows to a compact
   control surface with chat transcript, prompt input, plan action, model/loop
   evidence, and an explicit jump into the central Engine AI workspace.
 - Added a real Editor Settings modal behind File > Settings with live renderer,
@@ -308,9 +425,9 @@
   surfaces have one shared `engine.gui` contract instead of drifting into
   editor-only or Console Dock code.
 - Added aggregate helper-review gate statistics to `--editor-ai-gate-self-test`
-  so EpochBot training/eval work can track accept/reject balance, false accepts,
+  so OS AI training/eval work can track accept/reject balance, false accepts,
   false rejects, safety blocks, evidence score, and gate accuracy.
-- Added the first repo-safe EpochBot scorecard seed for measured 4B/20B
+- Added the first repo-safe AI evidence-metric seed for measured model-lane
   training/eval progress instead of treating helper-model self-status as proof.
 - Hardened GUI glyph and scroll-area bounds against non-finite or unreasonable
   resize/scroll rectangles to reduce the vertical smear artifacts seen in tall AI
@@ -323,7 +440,7 @@
   output, engine diagnostics, and generated child project self-test/version
   messages through logger-owned categories; the remaining direct-output scan
   hits are logger internals, formatting helpers, and third-party `stb`.
-- Added an `EpochBot` tab inside the World Outliner so the bot control loop can
+- Added an `Engine AI` tab inside the World Outliner so the control loop can
   be inspected and prompted from the normal editor chrome instead of only from a
   separate AI window.
 - Retargeted the built-in self-iteration profile to generate `EpochEngine`
@@ -549,7 +666,7 @@
 
 ## [v0.84.20]
 - Bumped the active source line to `v0.84.20` for the GUI interaction and
-  EpochBot cognition-loop documentation pass.
+  Engine AI cognition-loop documentation pass.
 - Removed stale Outliner/Inspector `Narrow` and `Wide` buttons now that panel
   sizing is owned by draggable splitters.
 - Added click/drag behavior to generic scroll areas and scroll-text panel
@@ -558,7 +675,7 @@
   visibility drift, launcher and OpenGL perspective flicker, scene/GUI
   composition artifacts, graph polish/performance, and redundant surface
   controls.
-- Captured the target EpochBot architecture as a closed-loop agentic cognition
+- Captured the target Engine AI architecture as a closed-loop agentic cognition
   system: working memory, long-term memory, retrieval, goals, planner,
   executor, verifier, scoring, self-state, attention, and a real-time loop.
 
@@ -572,8 +689,8 @@
 - Routed the AI Sandbox toolbar, bottom AI dock tab, and new Window menu entry
   through one control-surface path that reopens Inspector, AI Chat, and the
   Console Dock together before activating the self-iteration sandbox.
-- Removed the duplicate no-model bot initialization log caused by chat
-  construction and the shared bot init path both probing the same empty model
+- Removed the duplicate no-model Engine AI initialization log caused by chat
+  construction and the shared Engine AI init path both probing the same empty model
   state.
 - Clarified that the remaining `aengine.*` naming migration is a filename/source
   layout migration, not a runtime namespace or log-category rename.
@@ -792,8 +909,8 @@
 - Fixed generated child-project repair/build behavior so stale `v145` Visual
   Studio toolset metadata is retargeted to `v143`, normal generated projects
   stay on C++23, and build scripts force the current VS 2022 toolset.
-- Corrected the active AI architecture docs to track EpochBot, local
-  MCP/control/tool harnesses, and the offline/injectable backup LLM path, while
+- Corrected the active AI architecture docs to track Engine AI, local
+  MCP/control/tool harnesses, and selected local model lanes, while
   keeping external local OpenAI-compatible models as selected teacher/reviewer
   providers rather than hidden authority.
 - Tightened the AI control docs, prompt seed, and eval seed around current
@@ -872,9 +989,9 @@
   build, creation, script, tool-harness, and self-iteration packet actions now
   append visible operator notes that can be shown from the Project workspace.
 - Added a `Stage Sandbox Scene Training Task` action that stages an explicit
-  watchable 3D scene-training packet for EpochBot instead of letting local
+  watchable 3D scene-training packet for Engine AI instead of letting local
   models answer "working fine" without tool/build/scene evidence.
-- Strengthened EpochBot prompt/eval/control-loop context so self-iteration and
+- Strengthened Engine AI prompt/eval/control-loop context so self-iteration and
   training claims must cite visible evidence paths or state changes.
 - Changed editor object dragging from distance-amplified pixel deltas to a
   mouse-ray/object-plane drag path with a clamped fallback, reducing the
@@ -1197,7 +1314,7 @@
 - Refreshed the README proof set for `v0.83.85`: the Windows six-pane source image now comes from a current asset-bearing release run, the README also includes a dedicated promoted-window undock proof, and the Linux proof now comes from the WSL2 OpenGL capture path under the asset-bearing `Engine/Bin/Clang-Release/` output.
 - Aligned the packaged-runtime story across Windows and Linux: the main packaged runtime is the default release path, updater-shell mode is explicit/bootstrap-only, and Linux packaged assets are expected to stay source/version aligned instead of shipping as updater-only artifacts.
 - Fixed the Linux main-runtime build path under WSL2 by moving the legacy runtime bridge declaration out of module-owned linkage and into a shared header, then keeping the CMake policy floor high enough that the system `glm` package no longer blocks configuration outright.
-- Kept the project-shell and AI roadmap surfaces honest: generated projects still expose explicit build/output/script proof, and the EpochBot plus MCP/control model stays staged/reviewable instead of drifting into blind autonomy language.
+- Kept the project-shell and AI roadmap surfaces honest: generated projects still expose explicit build/output/script proof, and the Engine AI plus MCP/control model stays staged/reviewable instead of drifting into blind autonomy language.
 
 ## [v0.83.84]
 - Fixed the six-context Win32 proxy-shell drag path so SDL and SFML can undock from the same visible `EpochChild` shell the user actually grabs in the parented editor, instead of depending on the nested backend child to start the escape. The proxy host is now promoted as a real standalone top-level shell on undock and normalized back into child mode on redock.
@@ -1339,21 +1456,21 @@
 
 ## [v0.83.63]
 - Rewrote the roadmap around the real current direction: project-driven runtime, modular editor workspaces, frame/task graph tooling in the Systems surface, broad automatic hardware support, and explicit support tiers for heavier optional backend/libs.
-- Documented the then-current AI split around internal EpochBot plus the local MCP/control layer, while local LM Studio models remained development helpers outside automatic runtime activation.
+- Documented the then-current AI split around Engine AI plus the local MCP/control layer, while local LM Studio models remained development helpers outside automatic runtime activation.
 - Added the explicit local MCP manifest and tightened the AI content/docs around raw capture promotion, staged JSONL policy, and deleting outdated training artifacts when the training direction changes.
 - Continued the live Systems workspace implementation with engine-generated render/task graph surfaces and reusable GUI integration, then re-verified the Windows Debug and Release example builds.
 - Refreshed the README multicontext proof at `v0.83.63` from the real 4K asset-bearing `x64/Debug` editor run after the Vulkan color/layout corrections.
 
 ## [v0.83.62]
 - Moved the editor workspace strip onto reusable GUI controls so the project/runtime shell is less hardcoded in `aeditor.cpp` and more aligned with the modular GUI direction.
-- Refocused the local AI system prompt so the LM Studio oracle teaches EpochBot inside the active project/editor context instead of behaving like a detached generic chat reply.
+- Refocused the local AI system prompt so the LM Studio oracle teaches Engine AI inside the active project/editor context instead of behaving like a detached generic chat reply.
 - Corrected the AI data policy: JSON/JSONL training data stays Git-safe, `workspace/auto_train.jsonl` is now documented as a staging capture path, and only compiled checkpoints/models/caches remain local-only.
 - Refreshed README, runtime, smoke, and build docs around the modular workspace shell and the validated local oracle baseline `qwen/qwen3.5-9b`.
 
 ## [v0.83.61]
 - Finished the first honest project-runtime seam by moving project profiles, script profiles, runtime scene ids, and seed entities under `aeditor.scene.cpp`, while the live editor shell in `aeditor.cpp` now drives `Project`, `Scripts`, `AI`, `Systems`, and `Output` workspaces on top of that data.
 - Added the first repo-safe `Engine/ai/` content layout for curated datasets, schemas, evals, manifests, tokenizer metadata, and prompt templates, while tightening the local-only policy for compiled checkpoint/model paths under `workspace/ai/`.
-- Expanded `epoch.ai` into the first explicit three-role AI surface: embedded tiny-model planning types, MCP operation capture types, and the active LM Studio teacher/oracle bridge with visible provider/model metadata.
+- Expanded `epoch.ai` into the first explicit AI surface: local model provider metadata, MCP operation capture types, and visible provider/model status for selected local OpenAI-compatible helpers.
 - Documented the working AI/build/smoke method in `Engine/docs/ai_build_memory.md`, refreshed README/runtime/build/smoke docs for the new policy, and collapsed the old loose `release_notes_v*.md` files behind the existing collated history surfaces.
 
 ## [v0.83.60]
@@ -1683,4 +1800,4 @@
 - Added more in-editor project proof rows for generated project shells and script sources so the Project and Scripts workspaces expose concrete file/output/log locations rather than only status text.
 - Fixed the Win32 SFML redock decision to use the actual mouse-release screen point instead of stale drag history, which was leaving some full-grid runs detached even when the release returned inside the parent window.
 - Switched Win32 proxy drag tracking to the real screen cursor for detached SDL/SFML-style child drags so grabbed panes stop drifting or “running away” as their host/child relationship changes during undock.
-- Clarified the AI workspace with explicit eval-suite visibility plus staged capture and promotion paths in the editor log so the EpochBot/MCP flow stays reviewable instead of reading like blind autonomy.
+- Clarified the AI workspace with explicit eval-suite visibility plus staged capture and promotion paths in the editor log so the Engine AI/MCP flow stays reviewable instead of reading like blind autonomy.

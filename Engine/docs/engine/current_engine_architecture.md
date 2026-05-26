@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.41`
+Current source version: `v0.84.46`
 
 ## Architecture highlights
 
@@ -45,10 +45,14 @@ Current source version: `v0.84.41`
 - **Executable-root runtime resolution**: fonts, scripts, shaders, captures,
   workspace paths, and updater scratch roots are being normalized around one
   executable-root/runtime-root resolver instead of cwd guesses.
-- **Three-piece engine AI path**: the intended internal pieces are EpochBot,
-  the local MCP/control/tool harness layer, and an offline/injectable backup
-  LLM path. External local OpenAI-compatible LLMs remain selected
-  teacher/reviewer helpers for testing, curation, and acceleration.
+- **Three-piece OS AI path**: Epoch owns the OS-model harness for memory,
+  retrieval, planning, tool use, verification, evidence metrics, and
+  dataset/eval gates; local MCP/control/tool harnesses operate the editor and
+  collect proof; operator-selected Qwen/Nemotron model lanes provide coding and
+  review, with FLUX/Wan/TRELLIS tracked as creative model package lanes.
+  Assistant replies now
+  pass a non-promotable-response guard before local raw training capture or MCP
+  chat evidence can record them.
 - **Systems workspace direction**: central Systems and AI Sandbox surfaces now
   render engine-generated graph textures through the dedicated runtime-surface
   atlas instead of relying on text-only diagnostics or the bottom dock. Systems

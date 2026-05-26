@@ -110,10 +110,10 @@
     <VcpkgManifestInstall>true</VcpkgManifestInstall>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseStatic>false</VcpkgUseStatic>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseStatic>false</VcpkgUseStatic>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <VcpkgUseStatic>false</VcpkgUseStatic>
@@ -166,7 +166,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_STATIC;_DEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;_DEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -176,7 +176,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <CallingConvention>Cdecl</CallingConvention>
-      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -188,7 +188,7 @@
     </Link>
     <PostBuildEvent>
       <Message>Copy vcpkg debug runtime DLLs</Message>
-      <Command>if exist "$(EpochVcpkgInstallRoot)debug\bin\*.dll" xcopy /Y /D "$(EpochVcpkgInstallRoot)debug\bin\*.dll" "$(OutDir)" &gt;nul</Command>
+      <Command>if "$(VcpkgUseStatic)" NEQ "true" if exist "$(EpochVcpkgInstallRoot)debug\bin\*.dll" xcopy /Y /D "$(EpochVcpkgInstallRoot)debug\bin\*.dll" "$(OutDir)" &gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -197,7 +197,7 @@
       <FunctionLevelLinking>false</FunctionLevelLinking>
       <IntrinsicFunctions>false</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_STATIC;NDEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;NDEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -208,7 +208,7 @@
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <CallingConvention>StdCall</CallingConvention>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -222,17 +222,17 @@
     </Link>
     <PostBuildEvent>
       <Message>Copy vcpkg release runtime DLLs</Message>
-      <Command>if exist "$(EpochVcpkgInstallRoot)bin\*.dll" xcopy /Y /D "$(EpochVcpkgInstallRoot)bin\*.dll" "$(OutDir)" &gt;nul</Command>
+      <Command>if "$(VcpkgUseStatic)" NEQ "true" if exist "$(EpochVcpkgInstallRoot)bin\*.dll" xcopy /Y /D "$(EpochVcpkgInstallRoot)bin\*.dll" "$(OutDir)" &gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Target Name="EpochCopyDebugVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+  <Target Name="EpochCopyDebugVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Debug|x64' And '$(VcpkgUseStatic)'!='true'">
     <ItemGroup>
       <EpochDebugVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)debug\bin\*.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(EpochDebugVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochDebugVcpkgRuntimeDlls)'!=''" />
   </Target>
-  <Target Name="EpochCopyReleaseVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <Target Name="EpochCopyReleaseVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Release|x64' And '$(VcpkgUseStatic)'!='true'">
     <ItemGroup>
       <EpochReleaseVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)bin\*.dll" />
     </ItemGroup>

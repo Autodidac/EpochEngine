@@ -71,8 +71,8 @@ namespace epoch::ai
 {
     namespace
     {
-        Bot* g_bot = nullptr;
-        ProviderMode g_providerMode = ProviderMode::LmStudioOracle;
+        EngineAiModel* g_engineAi = nullptr;
+        ProviderMode g_providerMode = ProviderMode::OpenSourceLocal;
         static std::string read_env_var(const char* name)
         {
 #if defined(_WIN32)
@@ -144,6 +144,15 @@ namespace epoch::ai
         std::string g_modelDetectionStatus = g_selectedModel.empty()
             ? std::string{ "Not scanned." }
             : std::string{ "Configured model: " } + g_selectedModel;
+
+        static std::string executable_cache_bucket(std::string_view bucket)
+        {
+            const auto runtimeRoot = epoch::core::path::runtime_root_dir();
+            if (!runtimeRoot.empty())
+                return (runtimeRoot / "cache" / std::string{ bucket }).generic_string();
+
+            return std::string{ "cache/" } + std::string{ bucket };
+        }
 
         static bool ends_with(std::string_view s, std::string_view suf)
         {
@@ -232,6 +241,11 @@ namespace epoch::ai
         [[nodiscard]] static bool contains_text(std::string_view haystack, std::string_view needle) noexcept
         {
             return haystack.find(needle) != std::string_view::npos;
+        }
+
+        [[nodiscard]] static bool starts_with_text(std::string_view haystack, std::string_view needle) noexcept
+        {
+            return haystack.size() >= needle.size() && haystack.substr(0, needle.size()) == needle;
         }
 
         static std::string json_escape(std::string_view s)
@@ -894,6 +908,57 @@ namespace epoch::ai
             return {};
         }
 
+        [[nodiscard]] static bool has_hidden_reasoning_without_visible_content(const std::string& response)
+        {
+            if (response.find("\"reasoning_content\"") == std::string::npos)
+                return false;
+
+            if (!trim(extract_openai_choice_message_content(response)).empty())
+                return false;
+
+            std::string_view sv{ response };
+            if (!trim(extract_json_string_field_after(sv, "\"content\"")).empty())
+                return false;
+
+            if (!trim(extract_json_string_field_after(sv, "\"text\"")).empty())
+                return false;
+
+            return true;
+        }
+
+        [[nodiscard]] static bool is_promotable_assistant_text(std::string_view text)
+        {
+            const std::string candidate = trim(text);
+            if (candidate.empty() || candidate == "(empty reply)")
+                return false;
+
+            const std::string lower = lowercase_ascii(candidate);
+            if (starts_with_text(lower, "no ai model selected")
+                || starts_with_text(lower, "os ai model could not initialize")
+                || starts_with_text(lower, "engine ai model could not initialize")
+                || starts_with_text(lower, "local model api error")
+                || starts_with_text(lower, "local openai-compatible request failed")
+                || starts_with_text(lower, "local model returned hidden reasoning")
+                || starts_with_text(lower, "local model returned no decodable assistant text")
+                || starts_with_text(lower, "no decodable reply from selected local model"))
+            {
+                return false;
+            }
+
+            if (contains_text(lower, "\"reasoning_content\"")
+                || contains_text(lower, "reasoning_content")
+                || contains_text(lower, "we need to produce a response that follows the rules")
+                || contains_text(lower, "the user asks:")
+                || contains_text(lower, "must reply with correct english grammar")
+                || contains_text(lower, "not mimic bad grammar")
+                || contains_text(lower, "hidden reasoning"))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         static std::string extract_lmstudio_message_content(const std::string& response)
         {
             // LM Studio v1: { "output": [ { "type":"message", "content":"..." }, ... ] , ... }
@@ -1043,6 +1108,14 @@ namespace epoch::ai
 
                 if (!resp.empty())
                 {
+                    if (has_hidden_reasoning_without_visible_content(resp))
+                    {
+                        std::string warn = "Local OpenAI-compatible reply contained hidden reasoning without visible assistant content. bytes=";
+                        warn += std::to_string(resp.size());
+                        core::log::warn("ai", epoch::string_view{warn.data(), warn.size()});
+                        return {};
+                    }
+
                     std::string snippet = trim(resp.substr(0, (std::min)(resp.size(), static_cast<std::size_t>(240))));
                     if (snippet.empty())
                         snippet = "(non-empty body with no decodable content)";
@@ -1069,8 +1142,8 @@ namespace epoch::ai
                     core::log::warn("ai", epoch::string_view{error.data(), error.size()});
                     return std::string("Local model API error: ") + error;
                 }
-                if (rawResponse.find("\"reasoning_content\"") != std::string::npos)
-                    return "Local model returned hidden reasoning without visible assistant content. Select a content-producing model or disable reasoning export before using EpochBot chat.";
+                if (has_hidden_reasoning_without_visible_content(rawResponse))
+                    return "Local model returned hidden reasoning without visible assistant content. Select a content-producing model or disable reasoning export before using OS AI chat.";
                 return "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response.";
             }
             catch (const std::exception& ex)
@@ -1094,7 +1167,7 @@ namespace epoch::ai
         }
     } // namespace
 
-    Bot::Bot(Config cfg)
+    EngineAiModel::EngineAiModel(Config cfg)
         : m_cfg(std::move(cfg))
     {
         if (m_cfg.backend.empty())
@@ -1103,27 +1176,27 @@ namespace epoch::ai
             m_cfg.best_of = 1;
 
         if (m_cfg.backend != "openai_chat")
-            core::log::info("ai", "Bot backend is not openai_chat; only OpenAI-compatible chat is implemented here.");
+            core::log::info("ai", "OS AI backend is not openai_chat; only OpenAI-compatible chat is implemented here.");
 
         m_endpoint_full = normalize_openai_chat_endpoint(m_cfg.endpoint);
         m_cfg.model = resolve_model_name(m_cfg.endpoint, m_cfg.model);
-        g_providerMode = ProviderMode::LmStudioOracle;
+        g_providerMode = ProviderMode::OpenSourceLocal;
         g_selectedEndpoint = m_cfg.endpoint;
         g_selectedModel = m_cfg.model;
         if (!m_cfg.model.empty())
         {
-            std::string msg = "Bot model: ";
+            std::string msg = "OS AI model: ";
             msg += m_cfg.model;
             core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
         }
     }
 
-    BotReply Bot::submit(std::string_view user_input)
+    EngineAiReply EngineAiModel::submit(std::string_view user_input)
     {
-        BotReply out{};
+        EngineAiReply out{};
 
         const std::string sys =
-            "You are EpochBot.\n"
+            "You are the selected open-source OS AI model.\n"
             "Epoch is a C++23 game engine, editor, renderer, tooling, and AI self-iteration codebase; never interpret engine tasks as vehicle repair.\n"
             "Rules:\n"
             " - Reply with correct English grammar.\n"
@@ -1131,9 +1204,9 @@ namespace epoch::ai
             " - Do not mimic the user's bad grammar.\n"
             " - Put only the final answer in assistant content; do not include or rely on hidden reasoning.\n"
             " - Stay grounded in the current Epoch editor/project context.\n"
-            " - Prefer concrete editor, scene, engine, and C++ guidance that teaches the internal Epoch bot what to do next.\n"
-            " - The local MCP/control layer can teach and steer EpochBot while it operates; keep responses useful for that training loop instead of acting like a generic assistant.\n"
-            " - If asked whether Epoch, EpochBot, training, or self-iteration is working, do not claim success from confidence alone; cite the visible tool, build, scene, packet, log, or capture evidence that proves it.\n"
+            " - Prefer concrete editor, scene, engine, and C++ guidance that teaches the OS AI harness what to do next.\n"
+            " - The local MCP/control layer can teach and steer the selected model while it operates; keep responses useful for that training loop instead of acting like a generic assistant.\n"
+            " - If asked whether Epoch, OS AI, training, or self-iteration is working, do not claim success from confidence alone; cite the visible tool, build, scene, packet, log, or capture evidence that proves it.\n"
             " - Treat sandboxed 3D scene-training as a learning exercise: name the intended scene edit, the tool/action to run, the evidence to watch, and the pass/fail condition.\n"
             " - Keep self-iteration separate from normal ProjectLauncher game/software editing unless the operator explicitly asks to change the project/editor scene.\n"
             " - When suggesting project or file work, keep it relevant to the active engine/runtime context instead of drifting into generic setup advice.\n";
@@ -1175,27 +1248,27 @@ namespace epoch::ai
         return out;
     }
 
-    void init_bot()
+    void init_engine_ai()
     {
-        if (g_bot) return;
+        if (g_engineAi) return;
 
         if (g_detectedModels.empty() && g_modelDetectionStatus == "Not scanned.")
             (void)refresh_detected_models();
 
         if (g_selectedModel.empty())
         {
-            core::log::info("ai", "Bot not initialized: no AI model selected.");
+            core::log::info("ai", "OS AI model not initialized: no local model selected.");
             return;
         }
 
-        g_bot = new Bot({
+        g_engineAi = new EngineAiModel({
             .backend = "openai_chat",
             .endpoint = g_selectedEndpoint,
             .model = g_selectedModel,
             .best_of = 1
         });
 
-        core::log::info("ai", "Bot initialized");
+        core::log::info("ai", "OS AI model initialized");
         {
             std::string msg = "AI provider: ";
             msg += active_provider_summary();
@@ -1218,11 +1291,11 @@ namespace epoch::ai
         }
     }
 
-    void shutdown_bot()
+    void shutdown_engine_ai()
     {
-        delete g_bot;
-        g_bot = nullptr;
-        core::log::info("ai", "Bot shutdown");
+        delete g_engineAi;
+        g_engineAi = nullptr;
+        core::log::info("ai", "OS AI model shutdown");
     }
 
 
@@ -1255,11 +1328,6 @@ namespace epoch::ai
         return "Engine/ai/evals";
     }
 
-    std::string tokenizer_root()
-    {
-        return "Engine/ai/tokenizer";
-    }
-
     std::string prompts_root()
     {
         return "Engine/ai/prompts";
@@ -1287,12 +1355,12 @@ namespace epoch::ai
 
     std::string local_model_root()
     {
-        return default_workspace_root() + "/ai/models";
+        return executable_cache_bucket("models");
     }
 
     std::string local_cache_root()
     {
-        return default_workspace_root() + "/ai/cache";
+        return executable_cache_bucket("ai");
     }
 
     ProviderMode current_provider_mode() noexcept
@@ -1366,8 +1434,8 @@ namespace epoch::ai
             return false;
         }
 
-        delete g_bot;
-        g_bot = nullptr;
+        delete g_engineAi;
+        g_engineAi = nullptr;
         g_selectedModel = selected;
         g_modelDetectionStatus = "Selected model: " + selected;
 
@@ -1383,25 +1451,20 @@ namespace epoch::ai
         manifest.id = g_selectedModel;
         manifest.provider = g_providerMode;
         manifest.endpoint = g_selectedEndpoint;
-        manifest.tokenizer_path = tokenizer_root() + "/epoch_tokenizer_manifest.json";
         manifest.repo_safe_manifest = true;
-        manifest.local_weights_only = true;
+        manifest.local_weights_only = false;
         manifest.available = !g_selectedModel.empty();
 
         switch (g_providerMode)
         {
-        case ProviderMode::EmbeddedTiny:
-            manifest.display_name = g_selectedModel;
-            manifest.manifest_path = manifests_root() + "/embedded_tiny_epoch.json";
-            break;
         case ProviderMode::McpOperations:
             manifest.display_name = g_selectedModel;
             manifest.manifest_path = manifests_root() + "/local_mcp_control.json";
             break;
-        case ProviderMode::LmStudioOracle:
+        case ProviderMode::OpenSourceLocal:
         default:
             manifest.display_name = g_selectedModel;
-            manifest.manifest_path = manifests_root() + "/teacher_oracle_lmstudio.json";
+            manifest.manifest_path = manifests_root() + "/open_source_model_provider.json";
             break;
         }
 
@@ -1424,6 +1487,12 @@ namespace epoch::ai
 
     void append_training_sample(std::string_view prompt, std::string_view answer, std::string_view source)
     {
+        if (!is_promotable_assistant_text(answer))
+        {
+            core::log::warn("ai", "Skipped non-promotable local training capture.");
+            return;
+        }
+
         const TrainingPaths paths = default_training_paths();
         const std::filesystem::path workspaceDir = paths.workspace_root;
         const std::filesystem::path checkpointDir = paths.checkpoint_root;
@@ -1661,6 +1730,11 @@ namespace epoch::ai
         return write_text_file(evalFile, oss.str());
     }
 
+    bool is_promotable_assistant_reply(std::string_view reply)
+    {
+        return is_promotable_assistant_text(reply);
+    }
+
     HelperReviewGateResult classify_helper_review_reply(std::string_view reply)
     {
         const std::string lower = lowercase_ascii(reply);
@@ -1736,17 +1810,17 @@ namespace epoch::ai
         return result;
     }
 
-    std::string send_to_bot(const std::string& user_text)
+    std::string send_to_engine_ai(const std::string& user_text)
     {
         if (g_selectedModel.empty())
             return "No AI model selected. Open Workspace > AI, scan local models, and choose a model before running chat/tooling.";
 
-        if (!g_bot) init_bot();
-        if (!g_bot)
-            return "AI bot could not initialize. Confirm a local model is selected and the endpoint is reachable.";
+        if (!g_engineAi) init_engine_ai();
+        if (!g_engineAi)
+            return "OS AI model could not initialize. Confirm a local model is selected and the endpoint is reachable.";
 
-        const auto reply = g_bot->submit(user_text);
-        if (!reply.text.empty())
+        const auto reply = g_engineAi->submit(user_text);
+        if (is_promotable_assistant_text(reply.text))
         {
             append_mcp_capture(McpCaptureRecord{
                 .server = "local-openai-compatible",
@@ -1755,6 +1829,10 @@ namespace epoch::ai
                 .normalized_output = reply.text,
                 .source_path = active_model_manifest().manifest_path
             });
+        }
+        else if (!reply.text.empty())
+        {
+            core::log::warn("ai", "Skipped non-promotable MCP chat capture.");
         }
         if (reply.text.empty())
             return std::string("No decodable reply from selected local model '") + g_selectedModel

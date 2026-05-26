@@ -332,18 +332,18 @@ already regressed:
   `render.preview_grid` camera/projection math instead of letting one backend
   drift onto its own preview-camera implementation
 
-## AI asset policy
+## OS AI asset policy
 
-Epoch currently documents three internal AI/control pieces:
+Epoch documents OS/open-source model integration, not bundled model weights:
 
-- EpochBot inside the engine/editor/runtime
+- an engine-owned OS-model harness for prompts, memory, tools, verification,
+  evidence metrics, and dataset/eval gates
 - local MCP/control/tool harnesses that operate the engine and collect proof
-- the offline/injectable OSS or tiny backup LLM path for fallback, generated
-  software embedding, and EpochBot training support
+- operator-selected model lanes for Qwen, Nemotron, FLUX, Wan, and TRELLIS
 
 External local LLMs such as LM Studio are development helpers. They are useful
 for testing, curation, evaluation, and speeding up documentation/build work,
-but they are selected teacher/reviewer providers rather than hidden authority.
+but they are selected reviewer providers rather than hidden authority.
 
 Future automated passes should use available local helpers aggressively for
 draft reasoning, documentation, screenshot review, and bounded code sketches
@@ -372,14 +372,13 @@ Git-safe AI assets live under:
 - `Engine/ai/datasets/schema/`
 - `Engine/ai/evals/`
 - `Engine/ai/manifests/`
-- `Engine/ai/tokenizer/`
 - `Engine/ai/prompts/`
 
-Local-only compiled AI artifacts stay out of Git:
+Downloaded model/package artifacts stay out of Git:
 
-- `Engine/examples/ConsoleApplication1/workspace/ai/checkpoints/`
-- `Engine/examples/ConsoleApplication1/workspace/ai/models/`
-- `Engine/examples/ConsoleApplication1/workspace/ai/cache/`
+- executable-local `cache/packages/`
+- executable-local `cache/updates/`
+- future package-manager model cache folders
 
 Git-safe staging capture paths include:
 
@@ -432,7 +431,7 @@ Use the helper model for:
 - dataset cleanup suggestions
 - roadmap/doc phrasing assistance
 - drafted reasoning and code-outline assistance for bounded engine tasks
-- validating that EpochBot receives visible answers through the engine path
+- validating that selected OS models produce visible answers through the engine path
 
 If multiple helper models are loaded:
 
@@ -446,14 +445,15 @@ When the helper returns mostly reasoning text or stalls:
 
 - use the helper for bounded drafting, not as a blocker for compile-critical work
 - prefer refining small helper drafts locally over waiting on long monolithic answers
-- if `content` is blank but `reasoning_content` contains the useful answer,
-  harvest it as helper output instead of discarding the pass
+- if `content` is blank but `reasoning_content` contains useful-looking text,
+  reject it as engine assistant output. Do not harvest hidden reasoning into
+  AI chat, MCP capture, local raw training capture, or curated datasets.
 
 ## Related docs
 
 - `cmake_presets_and_builds.md`
 - `../engine/runtime_and_editor_workflows.md`
 - `../engine/smoke_capture_and_screenshot_workflow.md`
-- `../engine/ai_training_memory_and_dataset_policy.md`
+- `../engine/os_ai_tooling_and_evidence_policy.md`
 - `../../Changes/roadmap.md`
 - `developer_tools_and_dependencies.md`

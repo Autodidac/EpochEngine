@@ -29,25 +29,20 @@
  *                                              *
  ***********************************************/
 #pragma once
-#include "ai_types.hpp"
-#include <string_view>
+#include <string>
+#include <vector>
 
 namespace epoch::ai {
 
-class Bot {
-public:
-    struct Config {
-        std::string backend;
-        std::string endpoint;
-        std::string model;
-        std::size_t best_of = 1;
-    };
+struct Candidate {
+    std::string text;
+    double score = 0.0;
+};
 
-    explicit Bot(Config cfg);
-    BotReply submit(std::string_view user_input);
-
-private:
-    Config m_cfg;
+struct EngineAiReply {
+    std::string text;
+    double score = 0.0;
+    std::vector<Candidate> alternatives;
 };
 
 } // namespace epoch::ai

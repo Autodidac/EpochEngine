@@ -474,6 +474,24 @@ namespace epochnamespace::raylibcontext
                     to_raylib_color(vertices[firstIndex].color));
             }
 
+            const auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(ctx.get());
+            for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
+            {
+                epochnamespace::raylib_api::Vector2 a{};
+                epochnamespace::raylib_api::Vector2 b{};
+                epochnamespace::raylib_api::Vector2 c{};
+                if (!project_preview_vertex(mvp, solidVertices[i].position, viewport, a)
+                    || !project_preview_vertex(mvp, solidVertices[i + 1].position, viewport, b)
+                    || !project_preview_vertex(mvp, solidVertices[i + 2].position, viewport, c))
+                {
+                    continue;
+                }
+
+                const auto color = to_raylib_color(solidVertices[i].color);
+                epochnamespace::raylib_api::draw_triangle(a, b, c, color);
+                epochnamespace::raylib_api::draw_triangle(c, b, a, color);
+            }
+
             const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
             const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get());
             for (std::size_t i = 0; i + 1 < markerCount; i += 2)

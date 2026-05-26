@@ -14,8 +14,8 @@
   `Engine/docs/engine/runtime_and_editor_workflows.md` owns launcher/editor
   behavior, `Engine/docs/engine/gui_library_architecture.md` owns the shared
   GUI library/control-surface contract,
-  `Engine/docs/engine/ai_training_memory_and_dataset_policy.md` owns AI
-  capture/training policy, and `Engine/ai/README.md` plus
+  `Engine/docs/engine/os_ai_tooling_and_evidence_policy.md` owns OS AI
+  model/tooling evidence and promotion policy, and `Engine/ai/README.md` plus
   `Engine/ai/control/continuous_build_loop.json` own the live AI loop contract.
 - Stay inside this worktree when reading or editing docs. Do not copy README or
   `.codex` content from sibling worktrees or unrelated projects into Epoch.
@@ -25,9 +25,10 @@
   runtime logs/captures.
 - Runtime-created cache buckets are executable-local: updater work, temporary
   probes, extraction state, and managed helper tools belong in `cache/updates/`;
-  downloaded package archives belong in `cache/packages/`; generated/runtime
-  atlases belong in `cache/atlases/`. These are disposable local artifacts, not
-  public release payload and not tracked source.
+  downloaded package archives belong in `cache/packages/`; on-demand OS model
+  weights belong in `cache/models/`; generated/runtime atlases belong in
+  `cache/atlases/`. These are disposable local artifacts, not public release
+  payload and not tracked source.
 - Keep `addons/` local/offline. It contains extra starter projects and research
   imports that may later be reviewed into core Epoch, but it must not be added
   to the online repo by default.
@@ -86,7 +87,7 @@
   smallest acceptance-gated batch, document every confirmed user observation,
   keep source/version/changelog/docs aligned, build/test what changed, and do
   not claim completion for unverified GUI, AI, project, or renderer behavior.
-- EpochBot and helper models may generate local games, tools, apps, or server
+- OS AI and helper models may generate local games, tools, apps, or server
   project code only as reviewable artifacts. They must not create or run any
   app/service that gives the model a bypass channel, self-accessible server,
   hidden control surface, listener, or port bind without an explicit human
@@ -94,10 +95,14 @@
 - Local game and tool execution through approved editor/MCP/harness controls is
   allowed when it is visible, evidence-captured, and does not expose a new
   model-accessible network/control surface.
-- The Package Manager direction starts with local runtime-mini packages. Future
-  downloadable repo/source packages must compile through an updater-style,
-  human-approved build/run gate and must not auto-create servers, listeners,
-  hidden control surfaces, or model-bypass channels.
+- The Package Manager direction starts with local runtime-mini packages and
+  operator-demand OS model assets. Qwen/Nemotron weights download only into
+  executable-local `cache/models/`, are not cloned for engine self-iteration,
+  and enter generated projects only through explicit package opt-in plus
+  license/notice review. Future downloadable repo/source packages must compile
+  through an updater-style, human-approved build/run gate and must not
+  auto-create servers, listeners, hidden control surfaces, or model-bypass
+  channels.
 - Server-capable work is package-gated. Authoritative dedicated headless server
   support is optional, not the default networking model; client
   listen/nondedicated and future client-predicted competitive paths remain
@@ -202,11 +207,11 @@
   pane chrome fixes must be made as explicit GUI/draw-model improvements with
   build proof and operator eye-test evidence, not by skipping drains, moving the
   whole GUI into a deferred batch, or changing backend frame order as a shortcut.
-- EpochBot's target is a closed-loop agentic cognition system, not only a chat
+- OS AI's target is a closed-loop agentic cognition system, not only a chat
   prompt. Keep the architecture documented around working memory, long-term
   memory, retrieval, goals, planner, executor, verifier, scoring, self-state,
   attention, and a real-time observe/act/verify/learn loop.
-- EpochBot chat must never surface hidden model reasoning. If a local
+- OS AI chat must never surface hidden model reasoning. If a local
   OpenAI-compatible model returns blank assistant `content` with only
   `reasoning_content`, reject the pass as a model/API configuration issue and do
   not promote that reasoning into curated training data.

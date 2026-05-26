@@ -10,22 +10,19 @@ export namespace epoch::ai
 {
     enum class ProviderMode : std::uint8_t
     {
-        EmbeddedTiny = 0,
-        McpOperations,
-        LmStudioOracle
+        OpenSourceLocal = 0,
+        McpOperations
     };
 
     struct ModelManifest
     {
         std::string id{};
         std::string display_name{};
-        ProviderMode provider{ ProviderMode::EmbeddedTiny };
+        ProviderMode provider{ ProviderMode::OpenSourceLocal };
         std::string endpoint{};
         std::string manifest_path{};
-        std::string tokenizer_path{};
-        std::string checkpoint_path{};
         bool repo_safe_manifest{ true };
-        bool local_weights_only{ true };
+        bool local_weights_only{ false };
         bool available{ false };
     };
 
@@ -33,12 +30,10 @@ export namespace epoch::ai
     {
         switch (mode)
         {
-        case ProviderMode::EmbeddedTiny:
-            return "embedded-local";
+        case ProviderMode::OpenSourceLocal:
+            return "open-source-local-model";
         case ProviderMode::McpOperations:
             return "local-mcp-control";
-        case ProviderMode::LmStudioOracle:
-            return "local-openai-compatible";
         default:
             return "unknown";
         }

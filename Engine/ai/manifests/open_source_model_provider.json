@@ -1,0 +1,54 @@
+{
+  "id": "open-source-local-model-provider",
+  "display_name": "Open-Source Local Model Provider",
+  "provider": "local-openai-compatible",
+  "endpoint": "http://localhost:1234",
+  "selected_model": "",
+  "model_selection": "explicit-operator-selection",
+  "download_policy": "on-demand-cache-only",
+  "model_cache_root": "cache/models",
+  "project_inclusion": "explicit-package-opt-in",
+  "engine_iteration_weight_policy": "do-not-clone-or-bundle-weights",
+  "repo_safe_manifest": true,
+  "local_weights_only": false,
+  "status": "awaiting-model-selection",
+  "coding_model_lanes": [
+    {
+      "id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+      "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+      "license": "nvidia-open-model-license",
+      "role": "fast local coding/review helper",
+      "download_target": "cache/models/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+      "project_bundle_default": false
+    },
+    {
+      "id": "Qwen/Qwen3.6-27B",
+      "url": "https://huggingface.co/Qwen/Qwen3.6-27B",
+      "license": "apache-2.0",
+      "role": "heavy local coding/planning helper",
+      "download_target": "cache/models/Qwen/Qwen3.6-27B",
+      "project_bundle_default": false
+    }
+  ],
+  "creative_model_lanes": [
+    {
+      "id": "Wan-AI/Wan2.1-VACE-1.3B",
+      "url": "https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B",
+      "license": "apache-2.0",
+      "role": "video/editing package lane"
+    },
+    {
+      "id": "microsoft/TRELLIS.2-4B",
+      "url": "https://huggingface.co/microsoft/TRELLIS.2-4B",
+      "license": "mit",
+      "role": "3D asset package lane"
+    },
+    {
+      "id": "black-forest-labs/FLUX.2-klein-4B",
+      "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
+      "license": "apache-2.0",
+      "role": "image generation/editing package lane"
+    }
+  ],
+  "notes": "Epoch does not ship bundled model weights. Qwen and Nemotron weights are downloaded on demand into executable-local cache/models when the operator requests them. Engine self-iteration uses selected OS model lanes through evidence gates; generated projects include model weights only after an explicit package opt-in with license/notice review."
+}

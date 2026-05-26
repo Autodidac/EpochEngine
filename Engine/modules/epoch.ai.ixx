@@ -68,14 +68,14 @@ export namespace epoch::ai
         double score = 0.0;
     };
 
-    struct BotReply
+    struct EngineAiReply
     {
         std::string text;
         double score = 0.0;
         std::vector<Candidate> alternatives;
     };
 
-    class Bot
+    class EngineAiModel
     {
     public:
         struct Config
@@ -86,8 +86,8 @@ export namespace epoch::ai
             std::size_t best_of = 1;
         };
 
-        explicit Bot(Config cfg);
-        [[nodiscard]] BotReply submit(std::string_view user_input);
+        explicit EngineAiModel(Config cfg);
+        [[nodiscard]] EngineAiReply submit(std::string_view user_input);
 
     private:
         Config m_cfg{};
@@ -95,16 +95,15 @@ export namespace epoch::ai
     };
 
     // Engine-global service wrapper (simple singleton)
-    void init_bot();
-    void shutdown_bot();
+    void init_engine_ai();
+    void shutdown_engine_ai();
     void append_training_sample(std::string_view prompt, std::string_view answer, std::string_view source = "win32_chat_panel");
-    [[nodiscard]] std::string send_to_bot(const std::string& user_text);
+    [[nodiscard]] std::string send_to_engine_ai(const std::string& user_text);
     [[nodiscard]] std::string default_workspace_root();
     [[nodiscard]] std::string research_staging_root();
     [[nodiscard]] std::string iteration_packet_root();
     [[nodiscard]] std::string curated_datasets_root();
     [[nodiscard]] std::string evals_root();
-    [[nodiscard]] std::string tokenizer_root();
     [[nodiscard]] std::string prompts_root();
     [[nodiscard]] std::string manifests_root();
     [[nodiscard]] std::string local_capture_jsonl_path();
@@ -126,5 +125,6 @@ export namespace epoch::ai
     [[nodiscard]] bool promote_mcp_capture_record(const McpCaptureRecord& record, std::string_view dataset_name = "epoch_mcp_curated");
     [[nodiscard]] bool promote_dataset_record(const DatasetRecord& record, std::string_view dataset_name = "epoch_editor_curated");
     [[nodiscard]] bool promote_eval_case(const EvalCase& record, std::string_view suite_name = "editor_ai_smoke");
+    [[nodiscard]] bool is_promotable_assistant_reply(std::string_view reply);
     [[nodiscard]] HelperReviewGateResult classify_helper_review_reply(std::string_view reply);
 }

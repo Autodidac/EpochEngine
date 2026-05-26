@@ -921,7 +921,7 @@ namespace
 
     constexpr std::array<EditorProjectProfile, 5> kProjectProfiles{{
         {
-            EditorProjectKind::Game,
+            EditorProjectKind::EngineSelfIteration,
             "sandbox",
             "EpochEngine",
             "Projects/Sandbox",
@@ -1477,7 +1477,12 @@ namespace
             return std::nullopt;
 
         OwnedProjectProfile profile{};
-        profile.kind = *kindText == "tool" ? EditorProjectKind::Tool : EditorProjectKind::Game;
+        if (*kindText == "tool")
+            profile.kind = EditorProjectKind::Tool;
+        else if (*kindText == "engine-self-iteration-sandbox")
+            profile.kind = EditorProjectKind::EngineSelfIteration;
+        else
+            profile.kind = EditorProjectKind::Game;
         profile.id = *id;
         profile.display_name = *displayName;
         profile.root_path = manifest_path.parent_path().lexically_normal().generic_string();
@@ -1495,9 +1500,13 @@ namespace
         profile.runtime_scene_id = "project:" + profile.id;
         profile.manifest_path = manifest_path.lexically_normal().generic_string();
         profile.template_family = extract_json_string_field(manifestText, "template_family")
-            .value_or(profile.kind == EditorProjectKind::Tool ? "tool-project" : "game-project");
+            .value_or(profile.kind == EditorProjectKind::EngineSelfIteration
+                ? "engine-self-iteration-sandbox"
+                : (profile.kind == EditorProjectKind::Tool ? "tool-project" : "game-project"));
         profile.default_script = extract_json_string_field(manifestText, "default_script")
-            .value_or(profile.kind == EditorProjectKind::Tool ? "tool_bootstrap" : "project_demo_bootstrap");
+            .value_or(profile.kind == EditorProjectKind::EngineSelfIteration
+                ? "engine_self_iteration_harness"
+                : (profile.kind == EditorProjectKind::Tool ? "tool_bootstrap" : "project_demo_bootstrap"));
         profile.engine_integration_mode = extract_json_string_field(manifestText, "engine_integration")
             .value_or("embedded-static-include or duplicated-source");
         profile.public_include_root = extract_json_string_field(manifestText, "public_include_root")
@@ -1506,7 +1515,9 @@ namespace
             .value_or("");
         profile.description =
             "Generated "
-            + std::string(profile.kind == EditorProjectKind::Tool ? "software/tool" : "game")
+            + std::string(profile.kind == EditorProjectKind::EngineSelfIteration
+                ? "engine self-iteration"
+                : (profile.kind == EditorProjectKind::Tool ? "software/tool" : "game"))
             + " project shell rooted at "
             + profile.root_path
             + " with runtime scene "
@@ -1515,7 +1526,6 @@ namespace
 
         return profile;
     }
-
     static void rebuild_project_profile_cache()
     {
         if (!project_profiles_cache_dirty())
@@ -2603,6 +2613,8 @@ namespace epochnamespace
     {
         switch (kind)
         {
+        case EditorProjectKind::EngineSelfIteration:
+            return "Engine Self-Iteration";
         case EditorProjectKind::Tool:
             return "Software / Tool";
         case EditorProjectKind::Game:
@@ -2610,7 +2622,6 @@ namespace epochnamespace
             return "Game";
         }
     }
-
     std::string editor_project_demo_model_path(std::string_view project_id)
     {
         const auto* profile = editor_find_project_profile(project_id);

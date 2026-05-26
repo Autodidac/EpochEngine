@@ -19,6 +19,7 @@ export namespace epoch::package_registry
         CoreOptIn,
         NetworkRuntime,
         HeadlessServer,
+        ModelAsset,
         ResearchPrototype,
         DownloadableSource
     };
@@ -29,6 +30,7 @@ export namespace epoch::package_registry
         MainSceneUse,
         HeadlessServerOptIn,
         ClientListenServerOptIn,
+        ModelDownloadOptIn,
         ManualResearchImport,
         DownloadedOptIn
     };
@@ -56,8 +58,10 @@ export namespace epoch::package_registry
     inline constexpr std::string_view kEngineNetworkRuntimePackageId = "engine_network_runtime";
     inline constexpr std::string_view kEngineAuthoritativeServerPackageId = "engine_authoritative_dedicated_server";
     inline constexpr std::string_view kEngineListenServerPackageId = "engine_client_listen_server";
+    inline constexpr std::string_view kNemotronNanoPackageId = "os_model_nemotron_3_nano_4b_bf16";
+    inline constexpr std::string_view kQwenCoderPackageId = "os_model_qwen_27b";
 
-    inline constexpr std::array<PackageDescriptor, 10> kKnownPackages{{
+    inline constexpr std::array<PackageDescriptor, 12> kKnownPackages{{
         {
             .id = kEngineArcadePackageId,
             .displayName = "Engine Arcade",
@@ -103,6 +107,24 @@ export namespace epoch::package_registry
             .serverOrListenerAllowed = true,
             .requiresExplicitNetworkApproval = true,
             .externalSourceRepo = kEpochEngineExtensionsRepo,
+        },
+        {
+            .id = kNemotronNanoPackageId,
+            .displayName = "NVIDIA Nemotron 3 Nano 4B BF16",
+            .summary = "Fast OS coding/review model lane. Weights download on demand into cache/models and may be included in projects only by explicit package opt-in.",
+            .kind = PackageKind::ModelAsset,
+            .activation = ActivationMode::ModelDownloadOptIn,
+            .requiresHumanBuildGate = true,
+            .externalSourceRepo = "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+        },
+        {
+            .id = kQwenCoderPackageId,
+            .displayName = "Qwen 3.6 27B",
+            .summary = "Heavy OS coding/planning model lane. Weights download on demand into cache/models and may be included in projects only by explicit package opt-in.",
+            .kind = PackageKind::ModelAsset,
+            .activation = ActivationMode::ModelDownloadOptIn,
+            .requiresHumanBuildGate = true,
+            .externalSourceRepo = "https://huggingface.co/Qwen/Qwen3.6-27B",
         },
         {
             .id = "research_voxel_planetoid",

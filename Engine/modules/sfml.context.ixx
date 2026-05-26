@@ -328,6 +328,36 @@ export namespace epochnamespace::sfmlcontext
             if (lines.getVertexCount() > 0)
                 sfmlcontext.window->draw(lines, renderStates);
 
+            sf::VertexArray solids(sf::PrimitiveType::Triangles);
+            const auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(ctx.get());
+            for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
+            {
+                sf::Vector2f a{};
+                sf::Vector2f b{};
+                sf::Vector2f c{};
+                if (!project_preview_vertex(mvp, solidVertices[i].position, viewport, a)
+                    || !project_preview_vertex(mvp, solidVertices[i + 1].position, viewport, b)
+                    || !project_preview_vertex(mvp, solidVertices[i + 2].position, viewport, c))
+                {
+                    continue;
+                }
+
+                a.x -= static_cast<float>(viewport.x);
+                a.y -= static_cast<float>(viewport.y);
+                b.x -= static_cast<float>(viewport.x);
+                b.y -= static_cast<float>(viewport.y);
+                c.x -= static_cast<float>(viewport.x);
+                c.y -= static_cast<float>(viewport.y);
+
+                const auto color = to_sfml_color(solidVertices[i].color);
+                solids.append(sf::Vertex(a, color));
+                solids.append(sf::Vertex(b, color));
+                solids.append(sf::Vertex(c, color));
+            }
+
+            if (solids.getVertexCount() > 0)
+                sfmlcontext.window->draw(solids, renderStates);
+
             const auto appendPreviewLines = [&](const auto& lineVertices, std::size_t vertexCount)
             {
                 for (std::size_t i = 0; i + 1 < vertexCount; i += 2)

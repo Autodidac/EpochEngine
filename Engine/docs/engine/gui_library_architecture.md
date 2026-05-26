@@ -100,10 +100,16 @@ belong in proper GUI windows:
 - Systems graphs and time controls belong in the Systems workspace.
 - AI sandbox controls belong in the AI workspace and Inspector, with compact
   status mirrored in the dock only when useful. The World Outliner may expose an
-  `EpochBot` tab with compact model/loop state, chat transcript, prompt entry,
-  and plan controls because that keeps the bot attached to normal editor chrome
+  `OS AI` tab with compact model/loop state, chat transcript, prompt entry,
+  and plan controls because that keeps the selected AI model attached to normal editor chrome
   instead of hiding control in a separate floating window.
 - Scripting needs a real code/text editor surface, not a Console Dock submenu.
+
+Current bottom-dock non-output tabs should use the same selectable
+`scroll_text_panel` presentation as `Output`. Do not reintroduce property-row
+blocks, buttons, dropdowns, or progress widgets into Project, Assets, AI, or
+Systems dock pages; those controls belong in central workspaces, modal windows,
+or Inspector-owned panels.
 
 ## Artifact And Smear Guard
 

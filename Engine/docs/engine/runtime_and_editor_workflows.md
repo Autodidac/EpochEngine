@@ -171,12 +171,23 @@ the same engine-owned path.
   selected package/status text immediately; pressing Install should either
   materialize a local package, stage a human-approved download/build gate, or
   display the reason the package is blocked.
+- OS model package lanes are on-demand model assets. Qwen/Nemotron weights are
+  staged to executable-local `cache/models/` only after operator action, are
+  not cloned for engine self-iteration, and are included in generated projects
+  only by explicit package opt-in with license/notice review. The current gate
+  writes a project-local `*.model.package.json` opt-in manifest and a
+  cache-local `download.plan.json` before any future downloader is allowed to
+  transfer weights.
 - Project Run is project-owned, not editor-clone-owned. The Project workspace
   must expose the target backend/context and child project launches should use
   standalone single-context flags such as `--standalone --backend opengl`.
   If the expected child executable is missing after the build, the editor must
   block the run with visible evidence instead of falling back to a parent
   multicontext `Project Runtime` scene across every dock.
+- The centered Run button follows the same split: normal generated projects
+  save, build, and launch through the selected single-context child backend; the
+  engine self-iteration lane stays editor-shaped because it manipulates the
+  checked-out engine and needs visible build/review evidence.
 - workspace changes from the launcher/editor toolbar may use short loading
   feedback through the shared GUI progress primitive only after that feedback is
   proven not to change scene viewport geometry or revive menu/modal flicker.
@@ -200,16 +211,20 @@ the same engine-owned path.
   research-package candidates first. A package candidate needs provenance,
   source/hash, build/test commands, known limitations, and a proposed engine API
   boundary before mainline source promotion.
-- Self-Iteration Sandbox controls always target the `sandbox` profile. They must
-  not reuse the active ProjectLauncher/game/tool project when queueing engine
-  self-iteration work.
+- Self-Iteration Sandbox controls always target the `sandbox` profile. The
+  profile is classified as an engine self-iteration lane, not a normal
+  game/tool project, so it mirrors the checked-out engine/editor shape for
+  manipulation, build, and testing instead of inheriting generated-project
+  presentation behavior.
 - project shells should only be materialized by explicit operator action:
   File > Save Project, Project > Save Active Project, or the centered Run
   button. Merely selecting a project profile must not create files silently.
-- the centered Run button now always saves and rebuilds the active generated
-  project before launch. If the build fails, launch is canceled so stale
-  `Projects/**/bin/...` outputs are not mistaken for the result of the current
-  run.
+- the centered Run button now saves and rebuilds normal generated projects, then
+  launches the selected single-context child backend. If the build fails, launch
+  is canceled so stale `Projects/**/bin/...` outputs are not mistaken for the
+  result of the current run. The engine self-iteration sandbox is intentionally
+  excluded from that generated-project launch path and remains editor-shaped for
+  visible engine manipulation, build evidence, and review gates.
 - generated project builds are serialized inside the editor process, and emitted
   Windows `build_project.ps1` scripts also take a repo-level build lock. Until
   ProjectLauncher/Sandbox child builds have isolated engine-object/module/PDB
@@ -219,6 +234,11 @@ the same engine-owned path.
   manifest, entry source, build script, `project.paths.txt`, expected output,
   build log, and active script source so the user can tell whether the shell is
   real without leaving the editor
+- normal generated projects expose a selectable camera style from the Project
+  workspace. The first production choices are editor orbit, first-person runtime,
+  and locked 2D canvas. That setting applies to Play In Editor and the project
+  preview path; the engine self-iteration sandbox keeps following editor tools
+  because it is an engine/editor manipulation lane.
 - viewport movement starts with the shared preview controls: LMB pan, RMB orbit,
   wheel zoom, WASD/QE movement, and `Home` reset. The next promoted version
   needs a configurable input profile that projects can opt into through the
@@ -279,6 +299,11 @@ the same engine-owned path.
   the vertical splitter between them or the horizontal splitter above them.
   Button rows such as `Console +`, `Chat +`, `Dock +`, `Dock -`, and `Reset
   Columns` are intentionally removed from the active workflow.
+- Bottom Dock `Project`, `Assets`, `AI`, and `Systems` pages are compact
+  selectable text status panels using the same visual path as `Output`. Their
+  job is evidence/status only; controls for packages, script editing, model
+  selection, time controls, and graph surfaces belong in central workspaces or
+  the Inspector.
 - Phase 5 self-iteration should have visible graph/flow feedback, not only text
   rows. The first-pass AI loop visualizer shows planner, builder, verifier,
   gate, and human-review readiness as an engine-generated surface in the central
@@ -529,17 +554,19 @@ features over forcing every integration on every machine.
 
 ## AI runtime direction
 
-Epoch documents three internal AI/control pieces:
+Epoch documents three AI/control pieces:
 
-- EpochBot, the primary engine-owned trainable LLM/runtime path
+- OS AI, the engine-owned open-source model harness for memory, retrieval,
+  planning, tool use, verification, evidence metrics, and dataset/eval gates
 - local tool/MCP control harnesses that operate the editor and collect proof
-- an offline/injectable OSS or tiny backup LLM path for fallback, generated
-  software embedding, and EpochBot training support
+- operator-selected Qwen/Nemotron local model lanes for coding, review,
+  fallback, and future generated-software embedding where licensing allows, with
+  FLUX/Wan/TRELLIS tracked as package-managed creative model lanes
 
-External local OpenAI-compatible LLMs such as LM Studio or Ollama are
-development helpers. They can help with testing, evals, dataset cleanup, and
-faster iteration, but they are selected teacher/reviewer providers rather than
-hidden authority.
+External local OpenAI-compatible LLMs such as LM Studio or Ollama are selected
+runtime/helper providers. They can help with testing, evals, dataset cleanup,
+and faster iteration, but they are not hidden authority and are not a substitute
+for visible build/test evidence.
 The editor scans `/v1/models` and sends selected-model chat to
 `/v1/chat/completions`; tool evidence capture files, including the legacy
 `mcp_capture.jsonl` path, are evidence logs for the harness, not a hidden second
@@ -723,7 +750,7 @@ tool identity.
 As of `v0.84.30`, the engine-side command also appends an MCP-style tool
 capture and stages an AI iteration packet under
 `Engine/examples/ConsoleApplication1/workspace/ai/iterations/`. That packet is
-the reviewable bridge for EpochBot: it records project paths, build logs,
+the reviewable bridge for OS AI: it records project paths, build logs,
 outputs, capture logs, selected model metadata, and a human-gated verifier
 state before any follow-up coding pass is allowed to promote changes.
 

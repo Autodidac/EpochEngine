@@ -2,13 +2,21 @@
   "$schema": "https://epoch.local/schemas/ai_control_loop.schema.json",
   "name": "epoch_engine_ai_control_loop",
   "status": "phase3_4_control_foundation",
-  "summary": "Evidence-gated loop for turning editor/project/sandbox work into build-verified AI training and eval material for EpochBot, the engine-owned LLM path with a backup tiny internal LLM, without confusing the normal game/software editor with the self-iteration sandbox.",
+  "summary": "Evidence-gated loop for turning editor/project/sandbox work into build-verified AI training and eval material around explicit open-source OS model lanes, without shipping bundled model weights or confusing the normal game/software editor with the self-iteration sandbox.",
   "roles": {
-    "runtime_bot": "EpochBot engine-owned LLM",
+    "runtime_agent": "Epoch OS-model memory/tool/verifier/eval harness",
     "control_bot": "local MCP/control",
-    "offline_backup_bot": "offline/injectable OSS or tiny internal LLM for fallback, generated software embedding, and EpochBot training support",
-    "teacher": "optional selected local helper LLM used only for development-time review, curation, and bootstrapping EpochBot"
+    "primary_coder_model": "operator-selected Qwen/Qwen3.6-27B lane for coding, planning, and larger review tasks",
+    "fast_reviewer_model": "operator-selected nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16 lane for fast local review, status, and bounded helper tasks",
+    "creative_model_lanes": "operator-selected FLUX.2 klein, Wan2.1 VACE, and TRELLIS.2 package lanes for future image/video/3D asset workflows"
   },
+  "model_source_pages": [
+    "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+    "https://huggingface.co/Qwen/Qwen3.6-27B",
+    "https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B",
+    "https://huggingface.co/microsoft/TRELLIS.2-4B",
+    "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B"
+  ],
   "technique_policy": [
     "Keep the loop simple and inspectable: planner, executor, builder, verifier, and gate are workflow stages, not unsupervised autonomous agents.",
     "Local OpenAI-compatible models may propose plans, review project output, and help label captures only after an operator explicitly selects a model.",
@@ -22,6 +30,8 @@
   "selected_model_policy": {
     "gui_activation": "model discovery is separate from activation; the operator must choose a model before chat/tooling is active",
     "cli_activation": "non-GUI self-iteration may use EPOCH_AI_MODEL, EPOCH_OPENAI_MODEL, LM_STUDIO_MODEL, or OPENAI_MODEL as an explicit operator-selected reviewer model",
+    "download_activation": "Qwen and Nemotron weights download only on explicit operator demand into executable-local cache/models",
+    "project_inclusion": "generated projects may include model weights only after explicit package opt-in with license and notice review",
     "forbidden_fallback": "do not activate the first discovered model automatically"
   },
   "loop": [
@@ -68,12 +78,12 @@
     "Never promote raw captures directly into committed datasets.",
     "Never treat failed builds as positive training examples unless explicitly labeled as failure-analysis data.",
     "Never allow blind repo write-through from planner or executor output.",
-    "Never accept EpochBot saying it is working fine unless the answer cites visible tool, build, scene, packet, log, or capture evidence.",
+    "Never accept OS AI saying it is working fine unless the answer cites visible tool, build, scene, packet, log, or capture evidence.",
     "Reject helper-model plans that cite no staged packet, build log, output executable, verifier result, runtime capture, or eval gate.",
     "Keep self-iteration sandbox tasks separate from normal ProjectLauncher game/software editing unless the operator explicitly approves a project/editor change.",
     "Apps and server projects may be generated or edited as artifacts, but any app/service that exposes a model-accessible control surface, server process, listener, port, or network-serving mode requires an explicit human run/enable action.",
     "Every promoted record must be traceable to a staged packet, build log, runtime capture, MCP capture, or eval case.",
-    "Local checkpoints, local models, and caches stay under the workspace AI folders unless packaged intentionally."
+    "Local checkpoints stay in workspace AI folders; downloaded OS model weights stay under executable-local cache/models unless packaged intentionally after human approval."
   ],
   "runtime_permission_gates": {
     "game_project_generation": "allowed_after_operator_request",

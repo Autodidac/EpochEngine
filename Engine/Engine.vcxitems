@@ -39,9 +39,9 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\_epoch.stl_types.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_bot.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_model.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_service.hpp" />
-      <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_types.hpp" />
+      <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_response.hpp" />
       <ClInclude Include="$(MSBuildThisFileDirectory)src\core_context_backends.hpp" />
       <ClInclude Include="$(MSBuildThisFileDirectory)src\directx_context_detail.hpp" />
       <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp" />

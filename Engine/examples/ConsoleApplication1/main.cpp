@@ -42,8 +42,6 @@
 import epoch.engine; // import the module
 import core.logger;
 
-#define RAYLIB_STATIC
-
 //void test_linkage() {
 //    epochengine::opengl::s_state.shader = 42;  // Or just read a member
 //}

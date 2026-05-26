@@ -318,6 +318,47 @@ export namespace epochnamespace::sdlcontext
                 }
             }
 
+            const auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(ctx.get());
+            for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
+            {
+                float ax = 0.0f;
+                float ay = 0.0f;
+                float bx = 0.0f;
+                float by = 0.0f;
+                float cx = 0.0f;
+                float cy = 0.0f;
+                if (!project_preview_vertex(mvp, solidVertices[i].position, viewport, ax, ay)
+                    || !project_preview_vertex(mvp, solidVertices[i + 1].position, viewport, bx, by)
+                    || !project_preview_vertex(mvp, solidVertices[i + 2].position, viewport, cx, cy))
+                {
+                    continue;
+                }
+
+                const auto color = solidVertices[i].color;
+                const SDL_FColor faceColor{
+                    (std::clamp)(color.x, 0.0f, 1.0f),
+                    (std::clamp)(color.y, 0.0f, 1.0f),
+                    (std::clamp)(color.z, 0.0f, 1.0f),
+                    1.0f
+                };
+                SDL_Vertex triangle[3]{};
+                triangle[0].position = SDL_FPoint{ ax, ay };
+                triangle[0].color = faceColor;
+                triangle[0].tex_coord = SDL_FPoint{ 0.0f, 0.0f };
+                triangle[1].position = SDL_FPoint{ bx, by };
+                triangle[1].color = faceColor;
+                triangle[1].tex_coord = SDL_FPoint{ 0.0f, 0.0f };
+                triangle[2].position = SDL_FPoint{ cx, cy };
+                triangle[2].color = faceColor;
+                triangle[2].tex_coord = SDL_FPoint{ 0.0f, 0.0f };
+                if (!SDL_RenderGeometry(sdl_renderer.renderer, nullptr, triangle, 3, nullptr, 0))
+                {
+                    check_sdl_error("SDL_RenderGeometry");
+                    state::get_sdl_state().renderFaulted = true;
+                    break;
+                }
+            }
+
             const auto drawPreviewLines = [&](const auto& lineVertices, std::size_t vertexCount) noexcept
             {
                 for (std::size_t i = 0; i + 1 < vertexCount; i += 2)

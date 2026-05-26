@@ -229,6 +229,7 @@ namespace epochnamespace::raylib_api
     void end_scissor_mode() { ::EndScissorMode(); }
     void draw_rectangle_rec(const Rectangle& rec, Color color) { ::DrawRectangleRec(to_rl(rec), to_rl(color)); }
     void draw_line_v(Vector2 start, Vector2 end, Color color) { ::DrawLineV(to_rl(start), to_rl(end), to_rl(color)); }
+    void draw_triangle(Vector2 a, Vector2 b, Vector2 c, Color color) { ::DrawTriangle(to_rl(a), to_rl(b), to_rl(c), to_rl(color)); }
     void set_viewport(int x, int y, int width, int height) { ::rlViewport(x, y, width, height); }
     void begin_mode_3d(const Camera3D& camera) { ::BeginMode3D(to_rl(camera)); }
     void end_mode_3d() { ::EndMode3D(); }

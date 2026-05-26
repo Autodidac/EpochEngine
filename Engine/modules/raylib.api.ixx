@@ -195,6 +195,7 @@ export namespace epochnamespace::raylib_api
     void end_scissor_mode();
     void draw_rectangle_rec(const Rectangle& rec, Color color);
     void draw_line_v(Vector2 start, Vector2 end, Color color);
+    void draw_triangle(Vector2 a, Vector2 b, Vector2 c, Color color);
     void set_viewport(int x, int y, int width, int height);
     void begin_mode_3d(const Camera3D& camera);
     void end_mode_3d();

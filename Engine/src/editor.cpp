@@ -243,7 +243,7 @@ namespace epochnamespace
 
             AiChat()
             {
-                lines.emplace_back("bot> Ready. Select a local model in Engine AI or Window > AI Control.");
+                lines.emplace_back("ai> Ready. Select a local model in OS AI or Window > AI Control.");
                 trim_lines();
             }
 
@@ -261,7 +261,7 @@ namespace epochnamespace
                 {
                     std::string reply = normalize_editor_text_for_gui(pending->get());
                     if (reply.empty()) reply = "(empty reply)";
-                    lines.emplace_back("bot> " + reply);
+                    lines.emplace_back("ai> " + reply);
                     if (!pendingPrompt.empty() && reply != "(empty reply)")
                         epoch::ai::append_training_sample(pendingPrompt, reply, "editor_ai_chat");
                     pendingPrompt.clear();
@@ -269,7 +269,7 @@ namespace epochnamespace
                 }
                 catch (const std::exception& e)
                 {
-                    lines.emplace_back(std::string("bot> (error) ") + e.what());
+                    lines.emplace_back(std::string("ai> (error) ") + e.what());
                     pendingPrompt.clear();
                     trim_lines();
                 }
@@ -284,7 +284,7 @@ namespace epochnamespace
 
                 if (pending)
                 {
-                    lines.emplace_back("bot> (busy)");
+                    lines.emplace_back("ai> (busy)");
                     trim_lines();
                     return;
                 }
@@ -294,7 +294,7 @@ namespace epochnamespace
                 pendingPrompt = text;
 
                 pending.emplace(std::async(std::launch::async, [t = std::move(text)]() mutable {
-                    return epoch::ai::send_to_bot(t);
+                    return epoch::ai::send_to_engine_ai(t);
                 }));
             }
 
@@ -416,6 +416,7 @@ namespace epochnamespace
             double projectBuildRunFrameLimitFps{ 60.0 };
             std::string projectRunBackend{ "opengl" };
             double projectRunFrameLimitFps{ 60.0 };
+            previewgrid::CameraMode projectCameraMode{ previewgrid::CameraMode::Editor };
             double editorFrameLimitFps{ 120.0 };
             std::string selectedProjectFile{};
             std::string selectedAssetPath{};
@@ -1241,6 +1242,9 @@ namespace epochnamespace
             state.activeWorld = std::string(profile->world_name);
             state.activeScript = std::string(profile->default_script);
             state.activeRuntimeScene = std::string(profile->runtime_scene_id);
+            state.projectCameraMode = profile->id == std::string_view{ "twodstudio" }
+                ? previewgrid::CameraMode::Canvas2D
+                : previewgrid::CameraMode::Editor;
             state.projectStatus = "Selected project profile. Use File > Save Project or the centered Run button to materialize/update generated project files.";
             state.projectBuildStatus = "Build Project creates or refreshes a repo-local child executable for the active shell after an explicit save/run.";
             state.scriptBuildStatus = "Select a script to validate or run against the active project shell.";
@@ -1821,7 +1825,7 @@ namespace epochnamespace
                 ? std::string("(none)")
                 : (state.entities[selectedIndex].name + " [" + state.entities[selectedIndex].type + "]");
             return std::format(
-                "Create one sandboxed 3D scene-training exercise for EpochBot. The bot must edit or inspect visible primitives in a sandbox scene, produce build/tool/runtime evidence, and report what changed. It must not answer that it is working fine unless it cites concrete evidence paths. Active project: '{}' ({}), selected object: {}, object count: {}, active script: '{}'.",
+                "Create one sandboxed 3D scene-training exercise for OS AI. The selected model must edit or inspect visible primitives in a sandbox scene, produce build/tool/runtime evidence, and report what changed. It must not answer that it is working fine unless it cites concrete evidence paths. Active project: '{}' ({}), selected object: {}, object count: {}, active script: '{}'.",
                 state.projectName,
                 state.projectId,
                 selected,
@@ -2100,6 +2104,12 @@ namespace epochnamespace
             double fps{};
         };
 
+        struct ProjectCameraChoice
+        {
+            std::string_view label{};
+            previewgrid::CameraMode mode{ previewgrid::CameraMode::Editor };
+        };
+
         [[nodiscard]] std::span<const FrameLimitChoice> frame_limit_choices() noexcept
         {
             static constexpr std::array<FrameLimitChoice, 3> kChoices{ {
@@ -2123,6 +2133,26 @@ namespace epochnamespace
                     return choice.argument;
             }
             return "120";
+        }
+
+        [[nodiscard]] std::span<const ProjectCameraChoice> project_camera_choices() noexcept
+        {
+            static constexpr std::array<ProjectCameraChoice, 3> kChoices{ {
+                { "Editor orbit camera", previewgrid::CameraMode::Editor },
+                { "First-person runtime camera", previewgrid::CameraMode::FPS },
+                { "Locked 2D canvas camera", previewgrid::CameraMode::Canvas2D }
+            } };
+            return { kChoices.data(), kChoices.size() };
+        }
+
+        [[nodiscard]] std::string_view project_camera_label(previewgrid::CameraMode mode) noexcept
+        {
+            for (const auto& choice : project_camera_choices())
+            {
+                if (choice.mode == mode)
+                    return choice.label;
+            }
+            return "Editor orbit camera";
         }
 
         [[nodiscard]] std::string vec3_text(const std::array<float, 3>& value)
@@ -3006,7 +3036,7 @@ namespace epochnamespace
             const std::filesystem::path& outputExe)
         {
             return std::format(
-                "You are the selected local coding model helping build EpochBot: a from-scratch engine-owned LLM plus backup tiny internal LLM, trained through editor tools, sandbox scenes, build evidence, and eval gates.\n"
+                "You are the selected OS AI model helping Epoch through an engine-owned harness around selected Qwen/Nemotron model lanes and approved creative model package lanes, trained through editor tools, sandbox scenes, build evidence, and eval gates.\n"
                 "Review the latest project output evidence and produce exactly one safe self-iteration pass.\n"
                 "Do not claim anything is working unless you cite the evidence paths below.\n"
                 "Return concise sections: Diagnosis, Proposed Files, Editor/Tool Actions, Build/Test Commands, Verifier Gate, Training/Eval Record.\n"
@@ -3185,6 +3215,145 @@ namespace epochnamespace
         void repair_active_project_evidence(EditorState& editor)
         {
             repair_project_evidence(editor, editor.projectId);
+        }
+
+        [[nodiscard]] std::string editor_json_escape(std::string_view text)
+        {
+            std::string escaped;
+            escaped.reserve(text.size() + 8u);
+            for (const char ch : text)
+            {
+                switch (ch)
+                {
+                case '\\': escaped += "\\\\"; break;
+                case '"': escaped += "\\\""; break;
+                case '\n': escaped += "\\n"; break;
+                case '\r': escaped += "\\r"; break;
+                case '\t': escaped += "\\t"; break;
+                default:
+                    if (static_cast<unsigned char>(ch) < 0x20u)
+                        escaped += ' ';
+                    else
+                        escaped += ch;
+                    break;
+                }
+            }
+            return escaped;
+        }
+
+        [[nodiscard]] std::string safe_package_artifact_id(std::string_view id)
+        {
+            std::string safe;
+            safe.reserve(id.size());
+            for (const char ch : id)
+            {
+                const unsigned char uch = static_cast<unsigned char>(ch);
+                if (std::isalnum(uch) || ch == '_' || ch == '-' || ch == '.')
+                    safe += ch;
+                else
+                    safe += '_';
+            }
+            return safe.empty() ? std::string{ "package" } : safe;
+        }
+
+        [[nodiscard]] bool stage_model_package_opt_in(
+            EditorState& editor,
+            const epoch::package_registry::PackageDescriptor& package)
+        {
+            if (editor.projectRoot.empty())
+            {
+                editor.packageInstallStatus = "No active project root for model package opt-in.";
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
+
+            const std::string safeId = safe_package_artifact_id(package.id);
+            const std::filesystem::path projectRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
+            const std::filesystem::path packageDir = projectRoot / "assets" / "packages";
+            const std::filesystem::path manifestPath = packageDir / (safeId + ".model.package.json");
+            const std::filesystem::path modelCacheDir =
+                resolve_editor_path(std::filesystem::path{ epoch::ai::local_model_root() }) / safeId;
+            const std::filesystem::path downloadPlanPath = modelCacheDir / "download.plan.json";
+
+            std::error_code ec;
+            std::filesystem::create_directories(packageDir, ec);
+            if (ec)
+            {
+                editor.packageInstallStatus = "Could not create project package directory.";
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
+
+            ec.clear();
+            std::filesystem::create_directories(modelCacheDir, ec);
+            if (ec)
+            {
+                editor.packageInstallStatus = "Could not create executable-local model cache directory.";
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
+
+            const std::string packageId = editor_json_escape(package.id);
+            const std::string displayName = editor_json_escape(package.displayName);
+            const std::string repo = editor_json_escape(package.externalSourceRepo);
+            const std::string cacheRoot = editor_json_escape(epoch::ai::local_model_root());
+            const std::string cacheDir = editor_json_escape(modelCacheDir.generic_string());
+
+            {
+                std::ofstream out(manifestPath, std::ios::binary | std::ios::trunc);
+                if (!out)
+                {
+                    editor.packageInstallStatus = "Could not write project model package manifest.";
+                    editor.packageInstallProgress = 0.0f;
+                    return false;
+                }
+
+                out
+                    << "{\n"
+                    << "  \"schema\": \"epoch.model.package.v1\",\n"
+                    << "  \"package_id\": \"" << packageId << "\",\n"
+                    << "  \"display_name\": \"" << displayName << "\",\n"
+                    << "  \"type\": \"os_model_asset\",\n"
+                    << "  \"source_repo\": \"" << repo << "\",\n"
+                    << "  \"cache_root\": \"" << cacheRoot << "\",\n"
+                    << "  \"download_policy\": \"operator_demand_only\",\n"
+                    << "  \"include_in_project\": true,\n"
+                    << "  \"weights_bundled\": false,\n"
+                    << "  \"requires_license_notice_review\": true\n"
+                    << "}\n";
+            }
+
+            {
+                std::ofstream out(downloadPlanPath, std::ios::binary | std::ios::trunc);
+                if (!out)
+                {
+                    editor.packageInstallStatus = "Could not write model download plan.";
+                    editor.packageInstallProgress = 0.0f;
+                    return false;
+                }
+
+                out
+                    << "{\n"
+                    << "  \"schema\": \"epoch.model.download.plan.v1\",\n"
+                    << "  \"package_id\": \"" << packageId << "\",\n"
+                    << "  \"source_repo\": \"" << repo << "\",\n"
+                    << "  \"target_dir\": \"" << cacheDir << "\",\n"
+                    << "  \"transfer\": \"not_started\",\n"
+                    << "  \"human_approval_required\": true,\n"
+                    << "  \"engine_iteration_clone\": false,\n"
+                    << "  \"notes\": \"Weights are fetched on demand only; generated projects carry this manifest until an operator includes or downloads the model.\"\n"
+                    << "}\n";
+            }
+
+            editor.packageInstallStatus = "Model package opt-in staged; download plan is waiting in cache/models.";
+            editor.packageInstallProgress = 0.35f;
+            append_project_note(
+                editor,
+                "Stage OS Model Package",
+                std::string("Staged ") + std::string(package.displayName) + " as an explicit project model package opt-in.",
+                "Weights remain outside source and are downloaded only after an operator-approved package download step.");
+            push_editor_log(editor, "[package] Wrote model package manifest: " + display_project_path(manifestPath));
+            return true;
         }
 
         [[nodiscard]] std::string project_runtime_scene_id(const EditorState& editor)
@@ -3489,7 +3658,7 @@ namespace epochnamespace
 
             if (!storage.bot_initialized)
             {
-                epoch::ai::init_bot();
+                epoch::ai::init_engine_ai();
                 storage.bot_initialized = true;
             }
 
@@ -3555,7 +3724,7 @@ namespace epochnamespace
 
         if (chatStorage.bot_initialized)
         {
-            epoch::ai::shutdown_bot();
+            epoch::ai::shutdown_engine_ai();
             chatStorage.bot_initialized = false;
         }
     }
@@ -3828,7 +3997,22 @@ namespace epochnamespace
             push_editor_log(editor, std::string(logLine));
         };
 
-        auto run_active_context = [&]()
+        auto play_active_context = [&]()
+        {
+            const std::string sceneId = project_runtime_scene_id(editor);
+            if (ctx)
+                previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
+            editor.projectStatus = std::string("Play In Editor requested: ") + sceneId;
+            push_editor_log(editor, std::string("[project] Play In Editor requested for ") + editor.projectName + ": " + sceneId);
+            append_project_note(
+                editor,
+                "Play In Editor",
+                "Running the active project scene inside the editor without launching a child process.",
+                sceneId);
+            emit_command(EditorCommand::RunGame, sceneId);
+        };
+
+        auto launch_active_project_context = [&]()
         {
             const bool selectedScriptAsset = !editor.selectedAssetPath.empty()
                 && std::filesystem::path{ editor.selectedAssetPath }.filename().string().ends_with(".ascript.cpp");
@@ -3843,10 +4027,10 @@ namespace epochnamespace
                     editor,
                     "Script Run Routed To Project",
                     std::string("Script asset selected: ") + editor.activeScript + ".",
-                    "Run remains project-owned so script assets cannot crash the project run path by accident.");
+                    "Project launch remains project-owned so script assets cannot crash the project run path by accident.");
             }
 
-            start_project_build(editor, true, "center Run button");
+            start_project_build(editor, true, "Launch Single Context");
         };
 
         auto poll_project_build = [&]()
@@ -3900,13 +4084,13 @@ namespace epochnamespace
                 const bool hasBuiltOutput = path_exists(outputPath);
                 if (!hasBuiltOutput)
                 {
-                    editor.projectBuildStatus = "Run blocked: built child executable is missing after build.";
+                    editor.projectBuildStatus = "Launch blocked: built child executable is missing after build.";
                     push_editor_log(
                         editor,
-                        "[project] Run blocked: built child executable is missing; refusing parent multicontext fallback.");
+                        "[project] Launch blocked: built child executable is missing; refusing parent multicontext fallback.");
                     append_project_note(
                         editor,
-                        "Run Active Project Blocked",
+                        "Launch Single Context Blocked",
                         "The built child executable was missing after build; parent multicontext fallback was refused.",
                         outputPath.empty() ? std::string("(missing output path)") : outputPath);
                     return;
@@ -3918,7 +4102,7 @@ namespace epochnamespace
                     + "|backend=" + runBackend
                     + "|fps=" + std::string(frame_limit_argument(runFrameLimit));
                 emit_command(EditorCommand::RunGame, playTarget);
-                push_editor_log(editor, std::string("[project] Run requested for ") + editor.projectName + ".");
+                push_editor_log(editor, std::string("[project] Single-context launch requested for ") + editor.projectName + ".");
                 push_editor_log(
                     editor,
                     std::string("[project] Launching built child executable in standalone ")
@@ -3927,7 +4111,7 @@ namespace epochnamespace
                     + ": " + sceneId);
                 append_project_note(
                     editor,
-                    "Run Active Project",
+                    "Launch Single Context",
                     std::string("Launching built child executable in standalone ")
                     + std::string(project_run_backend_label(runBackend))
                     + " at " + std::string(frame_limit_label(runFrameLimit)) + ".",
@@ -3962,6 +4146,7 @@ namespace epochnamespace
                 editor.showConsoleDock = true;
                 editor.showAiChat = true;
                 editor.previewMode = core::ScenePreviewMode::Editor;
+                editor.projectCameraMode = previewgrid::CameraMode::Editor;
                 if (ctx && epochnamespace::previewgrid::camera_mode_for(ctx.get()) == epochnamespace::previewgrid::CameraMode::Canvas2D)
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
                 push_editor_log(editor, std::string("[editor] Scene workbench opened from ") + std::string(source) + ".");
@@ -3973,6 +4158,7 @@ namespace epochnamespace
                 editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Project;
                 editor.previewMode = core::ScenePreviewMode::Editor;
+                editor.projectCameraMode = previewgrid::CameraMode::Canvas2D;
                 ensure_2d_canvas_entity(editor);
                 if (ctx)
                 {
@@ -4082,7 +4268,12 @@ namespace epochnamespace
         const float run_button_x = (std::max)(toolbar_x + 12.0f, viewport_pos.x + (viewport_size.x - run_button_w) * 0.5f);
         gui::set_cursor({ run_button_x, toolbar_button_y });
         if (gui::button("Run", { run_button_w, toolbar_button_h }))
-            run_active_context();
+        {
+            if (editor.projectKind == "Engine Self-Iteration")
+                play_active_context();
+            else
+                launch_active_project_context();
+        }
 
         const std::size_t toolbarThreadCount = (std::max)(std::size_t{ 1 },
             std::thread::hardware_concurrency() > 0
@@ -4386,7 +4577,7 @@ namespace epochnamespace
             const std::filesystem::path inspectorPathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
             const std::string inspectorActiveScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
             const std::string inspectorLatestPrompt = last_chat_line_with_prefix(chat, "you> ");
-            const std::string inspectorLatestReply = last_chat_line_with_prefix(chat, "bot> ");
+            const std::string inspectorLatestReply = last_chat_line_with_prefix(chat, "ai> ");
             const auto inspectorManifest = epoch::ai::active_model_manifest();
             const auto inspectorGate = summarize_ai_review_gate(
                 editor,
@@ -4560,7 +4751,7 @@ namespace epochnamespace
                         : editor.projectId + "-sandbox-scene-training";
                     packet.task_prompt = build_ai_sandbox_scene_training_prompt(editor);
                     packet.operator_notes =
-                        "EpochBot must use visible sandbox scene/tool/build evidence. Generic self-reporting like 'working fine' is invalid without paths, changed object state, and verifier output.";
+                        "OS AI must use visible sandbox scene/tool/build evidence. Generic self-reporting like 'working fine' is invalid without paths, changed object state, and verifier output.";
                     packet.control_loop_stage = "Planner queued: sandbox scene-training task requires tool/build/runtime evidence";
                     const std::string packetDir = epoch::ai::stage_iteration_packet(packet);
                     if (packetDir.empty())
@@ -4575,7 +4766,7 @@ namespace epochnamespace
                             editor,
                             "Sandbox Scene Training Task Staged",
                             std::string("Packet staged at ") + packetDir,
-                            "Use this for watchable EpochBot scene-edit/test learning; reject answers without evidence paths or visible state changes.");
+                            "Use this for watchable OS AI scene-edit/test learning; reject answers without evidence paths or visible state changes.");
                     }
                 }
             }
@@ -4878,15 +5069,51 @@ namespace epochnamespace
                     push_editor_log(editor, std::string("[project] Project Run frame limit set to ") + std::string(limitChoices[*runLimitSelect.selected_index].label) + ".");
                 }
                 gui::property_row("[project] Frame limit", std::string(frame_limit_label(editor.projectRunFrameLimitFps)), 108.0f);
+                const bool activeProjectIsEngineSandbox = editor.projectId == "sandbox";
+                if (!activeProjectIsEngineSandbox)
+                {
+                    const auto cameraChoices = project_camera_choices();
+                    std::vector<std::string_view> cameraChoiceLabels;
+                    cameraChoiceLabels.reserve(cameraChoices.size());
+                    for (const auto& choice : cameraChoices)
+                        cameraChoiceLabels.emplace_back(choice.label);
+                    const auto cameraSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "project-camera-style-select",
+                        .placeholder = "Choose project camera style",
+                        .selected = project_camera_label(editor.projectCameraMode),
+                        .options = std::span<const std::string_view>{ cameraChoiceLabels.data(), cameraChoiceLabels.size() },
+                        .size = { (std::min)(centerWidth, 320.0f), 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 3
+                    });
+                    if (cameraSelect.changed && cameraSelect.selected_index && *cameraSelect.selected_index < cameraChoices.size())
+                    {
+                        editor.projectCameraMode = cameraChoices[*cameraSelect.selected_index].mode;
+                        previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
+                        if (editor.projectCameraMode == previewgrid::CameraMode::Canvas2D)
+                        {
+                            ensure_2d_canvas_entity(editor);
+                            previewgrid::reset_camera(ctx.get());
+                        }
+                        push_editor_log(editor, std::string("[project] Project camera style set to ") + std::string(cameraChoices[*cameraSelect.selected_index].label) + ".");
+                    }
+                    gui::property_row("[project] Camera style", std::string(project_camera_label(editor.projectCameraMode)), 108.0f);
+                }
+                else
+                {
+                    gui::property_row("[project] Camera style", "Engine self-iteration mirrors the editor workbench.", 108.0f);
+                }
                 gui::wrapped_label(
-                    "Project Run launches the built child executable as a standalone single-context process using the selected backend, instead of cloning the editor multicontext shell.",
+                    "Play In Editor runs the active project scene inside this editor. Launch Single Context builds the child executable and starts one selected backend as a standalone process.",
                     centerWidth);
                 if (gui::button("Save Active Project", { 220.0f, 30.0f }))
                     repair_active_project_evidence(editor);
+                if (gui::button("Play In Editor", { 220.0f, 30.0f }))
+                    play_active_context();
                 if (gui::button("Build Active Project", { 220.0f, 30.0f }))
                     start_project_build(editor, false, "Project surface");
-                if (gui::button("Run Active Project", { 220.0f, 30.0f }))
-                    run_active_context();
+                if (gui::button("Launch Single Context", { 220.0f, 30.0f }))
+                    launch_active_project_context();
                 gui::wrapped_label(editor.projectStatus, centerWidth);
                 gui::wrapped_label(editor.projectBuildStatus, centerWidth);
                 break;
@@ -4984,7 +5211,7 @@ namespace epochnamespace
                 const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
                 const std::filesystem::path pathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
                 const std::string latestPrompt = last_chat_line_with_prefix(chat, "you> ");
-                const std::string latestReply = last_chat_line_with_prefix(chat, "bot> ");
+                const std::string latestReply = last_chat_line_with_prefix(chat, "ai> ");
                 const auto gateStatus = summarize_ai_review_gate(
                     editor,
                     buildLog,
@@ -5028,7 +5255,7 @@ namespace epochnamespace
                 else
                     gui::wrapped_label("AI loop graph surface unavailable; check runtime-surface atlas diagnostics.", centerWidth);
                 gui::wrapped_label(
-                    "This is the visible control surface for engine self-iteration. EpochBot stages evidence and build packets here; promotion remains a human-approved step.",
+                    "This is the visible control surface for engine self-iteration. OS AI stages evidence and build packets here; promotion remains a human-approved step.",
                     centerWidth);
                 const auto sandboxNotesPath = project_notes_path(editor.projectRoot);
                 const auto sandboxBuildLog = project_build_log_path(editor.projectRoot);
@@ -5040,7 +5267,7 @@ namespace epochnamespace
                 gui::wrapped_label(tail_text(read_project_notes(editor.projectRoot), 1500), centerWidth);
                 render_ai_model_picker(editor, (std::min)(centerWidth, 460.0f));
 
-                gui::label("EpochBot Chat");
+                gui::label("OS AI Chat");
                 (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
                     .id = "engine-ai-sandbox-chat",
                     .size = { centerWidth, 150.0f },
@@ -5354,7 +5581,23 @@ namespace epochnamespace
             editor.dockStatusTab = workspaceTabIds[*selected];
         }
 
-        const bool dockUsesOuterScroll = editor.dockStatusTab != EditorWorkspaceTab::Output;
+        auto dockLine = [](std::string_view label, std::string_view value) {
+            return std::format("{:<28} {}", label, value);
+        };
+        auto renderDockStatusPanel = [&](std::string_view id, const std::vector<std::string>& lines) {
+            const gui::Vec2 panelCursor = gui::cursor_position();
+            const float panelHeight = (std::max)(72.0f, bottom_pos.y + bottom_h - panelCursor.y - 12.0f);
+            (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                .id = std::string("editor-dock-status-") + std::string(id),
+                .size = { (std::max)(180.0f, log_size.x - 24.0f), panelHeight },
+                .lines = lines,
+                .max_line_chars = 1024,
+                .selectable = true,
+                .stick_to_bottom = false
+            });
+        };
+
+        const bool dockUsesOuterScroll = false;
         if (dockUsesOuterScroll)
         {
             const gui::Vec2 dockScrollStart = gui::cursor_position();
@@ -5377,149 +5620,24 @@ namespace epochnamespace
             const auto* activeProfile = editor_find_project_profile(editor.projectId);
             if (!activeProfile)
                 activeProfile = &editor_default_project_profile();
-            const auto seedEntities = editor_seed_entities_for_project(editor.projectId);
-            const auto seedSummary = summarize_seed_objects(seedEntities);
 
-            const std::filesystem::path entrySource = project_entry_source_path(editor.projectRoot);
-            const std::filesystem::path buildScript = project_windows_build_script_path(editor.projectRoot);
-            const std::filesystem::path projectFile = project_windows_vcxproj_path(editor.projectRoot);
             const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
             const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
-            const std::filesystem::path notesPath = project_notes_path(editor.projectRoot);
-            const std::filesystem::path pathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
-            const auto modelSummary = editor_project_model_summary(editor.projectId);
 
-            gui::property_row("[project] Active", activeProfile->display_name);
-            gui::property_row("[project] Kind", editor.projectKind);
-            gui::property_row("[project] Root", editor.projectRoot);
-            gui::property_row("[project] Scene", editor.projectScenePath);
-            gui::property_row("[project] World", activeProfile->world_name);
-            gui::property_row("[project] Runtime", activeProfile->runtime_scene_id);
-            gui::property_row("[project] Manifest", editor.projectManifest);
-            gui::property_row("[project] Template", editor.projectTemplate);
-            gui::property_row("[project] Default script", activeProfile->default_script);
-            gui::property_row("[project] Script source", editor_resolve_script_source_path(activeProfile->default_script, editor.projectRoot));
-            gui::property_row(
-                "[project] Runtime package",
-                activeProfile->kind == EditorProjectKind::Game && activeProfile->id != "sandbox"
-                    ? "engine_arcade local runtime-minis"
-                    : "none");
-            gui::property_row("[project] Demo model", modelSummary.asset_path.empty() ? std::string("(none)") : modelSummary.asset_path);
-            gui::property_row("[project] Demo model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path);
-            gui::property_row("[project] Demo model exists", modelSummary.exists ? "true" : "false");
-            gui::property_row("[project] Demo model parsed", modelSummary.parsed ? "true" : "false");
-            gui::property_row("[project] Demo model summary", modelSummary.summary);
-            gui::property_row("[project] Integration", activeProfile->engine_integration_mode);
-            gui::property_row("[project] Include root", activeProfile->public_include_root);
-            gui::property_row("[project] Entry source", display_project_path(entrySource));
-            gui::property_row("[project] Build script", display_project_path(buildScript));
-            gui::property_row("[project] Windows project", display_project_path(projectFile));
-            gui::property_row("[project] Paths manifest", display_project_path(pathsManifest));
-            gui::property_row("[project] Debug output", display_project_path(outputExe));
-            gui::property_row("[project] Build log", display_project_path(buildLog));
-            gui::property_row("[project] Notes", display_project_path(notesPath));
-            gui::property_row("[project] Play target", path_exists(outputExe) ? "ready" : "build required");
-            gui::property_row("[project] Build state", path_exists(buildScript) ? "script ready" : "missing build script");
-            gui::property_row("[project] Manifest exists", path_exists(editor.projectManifest) ? "true" : "false");
-            gui::property_row("[project] Entry exists", path_exists(entrySource) ? "true" : "false");
-            gui::property_row("[project] Build script exists", path_exists(buildScript) ? "true" : "false");
-            gui::property_row("[project] Paths manifest exists", path_exists(pathsManifest) ? "true" : "false");
-            gui::property_row("[project] Output exists", path_exists(outputExe) ? "true" : "false");
-            gui::property_row("[project] Build log exists", path_exists(buildLog) ? "true" : "false");
-            gui::property_row("[project] Scene file status", file_ready_summary(editor.projectScenePath));
-            gui::property_row("[project] Scene file role", "metadata shell; live preview currently uses editor seed entities");
-            gui::property_row("[project] Seed objects", std::to_string(seedSummary.total));
-            gui::property_row("[project] Seed mix", summarize_seed_category_mix(seedSummary));
-            gui::property_row("[project] Archetype types", summarize_seed_type_list(seedSummary.types));
-            gui::property_row("[project] Archetype categories", summarize_seed_type_list(seedSummary.categories));
-            gui::property_row(
-                "[project] Primitive/object path",
-                "scene-owned seed entities are the current engine authoring baseline");
-            gui::property_row(
-                "[project] Visible/editor-only",
-                std::to_string(seedSummary.visibleCount) + " visible | " + std::to_string(seedSummary.editorOnlyCount) + " editor-only");
-            gui::wrapped_label(activeProfile->description, (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(
-                "Epoch's current primitive/object path starts with engine-owned scene seed entities and archetype types here, then grows into fuller authoring/runtime object systems from that truthful baseline instead of from hidden sample content.",
-                (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(editor.projectStatus, (std::max)(180.0f, log_size.x - 24.0f));
-            gui::wrapped_label(editor.projectBuildStatus, (std::max)(180.0f, log_size.x - 24.0f));
-            if (showDockEditorControls && gui::button(editor.projectNotesVisible ? "Hide Project Notes" : "Show Project Notes", { 220.0f, 30.0f }))
-                editor.projectNotesVisible = !editor.projectNotesVisible;
-            if (editor.projectNotesVisible)
-                gui::wrapped_label(read_project_notes(editor.projectRoot), (std::max)(180.0f, log_size.x - 24.0f));
-
-            if (showDockEditorControls)
-            {
-                for (const auto& profile : editor_project_profiles())
-                {
-                    const std::string buttonLabel = std::string(profile.display_name);
-                    if (gui::button(buttonLabel, { (std::max)(180.0f, log_size.x - 24.0f), 28.0f }))
-                    {
-                        set_project(editor, profile.id, true);
-                        epochnamespace::previewgrid::reset_camera(ctx.get());
-                    }
-                }
-            }
-
-            if (showDockEditorControls && gui::button("Save Active Project", { 220.0f, 30.0f }))
-                repair_active_project_evidence(editor);
-            if (showDockEditorControls && gui::button("Build Active Project", { 220.0f, 30.0f }))
-                start_project_build(editor, false, "Project bottom dock");
-            if (showDockEditorControls && gui::button("Create Game Project Shell", { 220.0f, 30.0f }))
-            {
-                const auto created = editor_create_project_shell(EditorProjectKind::Game);
-                editor.projectStatus = created.summary;
-                push_editor_log(editor, std::string("[project] ") + created.summary);
-                if (created.succeeded)
-                {
-                    const auto createdPathsManifest = std::filesystem::path{ created.root_path } / "project.paths.txt";
-                    const auto createdProjectFile = project_windows_vcxproj_path(created.root_path);
-                    push_editor_log(editor, std::string("[project] Root: ") + created.root_path);
-                    push_editor_log(editor, std::string("[project] Manifest: ") + created.manifest_path);
-                    push_editor_log(editor, std::string("[project] Entry source: ") + created.entry_source_path);
-                    push_editor_log(editor, std::string("[project] Build script: ") + created.build_script_path);
-                    push_editor_log(editor, std::string("[project] Paths manifest: ") + display_project_path(createdPathsManifest));
-                    push_editor_log(editor, std::string("[project] Windows project: ") + display_project_path(createdProjectFile));
-                    push_editor_log(editor, std::string("[project] Default script: ") + created.default_script_path);
-                    push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
-                    set_project(editor, created.project_id, true);
-                    editor.projectStatus = created.summary + " Active project loaded.";
-                    epochnamespace::previewgrid::reset_camera(ctx.get());
-                    append_project_note(
-                        editor,
-                        "Create Game Project Shell",
-                        created.summary,
-                        "Use Build Active Project, then the centered Run button. This is a ProjectLauncher game/software shell, not the self-iteration sandbox.");
-                }
-            }
-            if (showDockEditorControls && gui::button("Create Tool Project Shell", { 220.0f, 30.0f }))
-            {
-                const auto created = editor_create_project_shell(EditorProjectKind::Tool);
-                editor.projectStatus = created.summary;
-                push_editor_log(editor, std::string("[project] ") + created.summary);
-                if (created.succeeded)
-                {
-                    const auto createdPathsManifest = std::filesystem::path{ created.root_path } / "project.paths.txt";
-                    const auto createdProjectFile = project_windows_vcxproj_path(created.root_path);
-                    push_editor_log(editor, std::string("[project] Root: ") + created.root_path);
-                    push_editor_log(editor, std::string("[project] Manifest: ") + created.manifest_path);
-                    push_editor_log(editor, std::string("[project] Entry source: ") + created.entry_source_path);
-                    push_editor_log(editor, std::string("[project] Build script: ") + created.build_script_path);
-                    push_editor_log(editor, std::string("[project] Paths manifest: ") + display_project_path(createdPathsManifest));
-                    push_editor_log(editor, std::string("[project] Windows project: ") + display_project_path(createdProjectFile));
-                    push_editor_log(editor, std::string("[project] Default script: ") + created.default_script_path);
-                    push_editor_log(editor, std::string("[project] Embedded-engine include root: ") + created.public_include_root + " (" + created.engine_integration_mode + ").");
-                    set_project(editor, created.project_id, true);
-                    editor.projectStatus = created.summary + " Active project loaded.";
-                    epochnamespace::previewgrid::reset_camera(ctx.get());
-                    append_project_note(
-                        editor,
-                        "Create Tool Project Shell",
-                        created.summary,
-                        "Use Scripts or Tool Harness against this project shell, then the centered Run button when needed. Self-iteration remains controlled from the AI Sandbox.");
-                }
-            }
+            const std::vector<std::string> dockLines{
+                dockLine("[project] Active", activeProfile->display_name),
+                dockLine("[project] Kind", editor.projectKind),
+                dockLine("[project] Root", display_project_path(editor.projectRoot)),
+                dockLine("[project] Scene", display_project_path(editor.projectScenePath)),
+                dockLine("[project] Runtime", activeProfile->runtime_scene_id),
+                dockLine("[project] Run backend", project_run_backend_label(editor.projectRunBackend)),
+                dockLine("[project] Frame limit", frame_limit_label(editor.projectRunFrameLimitFps)),
+                dockLine("[project] Output", display_project_path(outputExe)),
+                dockLine("[project] Build log", display_project_path(buildLog)),
+                dockLine("[project] Play target", path_exists(outputExe) ? "ready" : "build required"),
+                "[project] Controls live in the central Project workspace. Bottom Dock is status-only."
+            };
+            renderDockStatusPanel("project", dockLines);
             break;
         }
         case EditorWorkspaceTab::Scripts:
@@ -5625,25 +5743,22 @@ namespace epochnamespace
         }
         case EditorWorkspaceTab::Assets:
         {
-            const float assetsContentWidth = (std::max)(180.0f, log_size.x - 24.0f);
             const auto modelSummary = editor_project_model_summary(editor.projectId);
-            gui::property_row("[assets] Project", editor.projectName);
-            gui::property_row("[assets] Project root", editor.projectRoot);
-            gui::property_row("[assets] Scene", editor.projectScenePath);
-            gui::property_row("[assets] Demo model", modelSummary.asset_path.empty() ? std::string("(none)") : modelSummary.asset_path);
-            gui::property_row("[assets] Model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path);
-            gui::property_row("[assets] Model parsed", modelSummary.parsed ? "true" : "false");
-            gui::wrapped_label(
-                "Bottom Dock > Assets is compact status only. Use the central Asset Browser for file cards, script creation, script validation, and future thumbnail/file-tree controls.",
-                assetsContentWidth);
-            gui::property_row("[assets] Selected", editor.selectedAssetPath.empty() ? std::string("(none)") : editor.selectedAssetPath);
             const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
-            gui::property_row("[script asset] Active", editor.activeScript);
-            gui::property_row("[script asset] Source", activeScriptSource);
-            gui::property_row(
-                "[script asset] Source exists",
-                std::filesystem::exists(std::filesystem::path{ activeScriptSource }) ? "true" : "false");
-            gui::wrapped_label(editor.scriptBuildStatus, assetsContentWidth);
+            const std::vector<std::string> dockLines{
+                dockLine("[assets] Project", editor.projectName),
+                dockLine("[assets] Project root", display_project_path(editor.projectRoot)),
+                dockLine("[assets] Scene", display_project_path(editor.projectScenePath)),
+                dockLine("[assets] Demo model", modelSummary.asset_path.empty() ? std::string("(none)") : modelSummary.asset_path),
+                dockLine("[assets] Model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path),
+                dockLine("[assets] Model parsed", modelSummary.parsed ? "true" : "false"),
+                dockLine("[assets] Selected", editor.selectedAssetPath.empty() ? std::string("(none)") : editor.selectedAssetPath),
+                dockLine("[script asset] Active", editor.activeScript),
+                dockLine("[script asset] Source", activeScriptSource),
+                dockLine("[script asset] Source exists", std::filesystem::exists(std::filesystem::path{ activeScriptSource }) ? "true" : "false"),
+                "[assets] Use the central Asset Browser for file cards, script creation, validation, and source editing."
+            };
+            renderDockStatusPanel("assets", dockLines);
             break;
         }
         case EditorWorkspaceTab::AI:
@@ -5655,7 +5770,7 @@ namespace epochnamespace
             const std::filesystem::path pathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
             const std::string activeScriptSource = editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
             const std::string latestPrompt = last_chat_line_with_prefix(chat, "you> ");
-            const std::string latestReply = last_chat_line_with_prefix(chat, "bot> ");
+            const std::string latestReply = last_chat_line_with_prefix(chat, "ai> ");
             const auto gateStatus = summarize_ai_review_gate(
                 editor,
                 buildLog,
@@ -5665,20 +5780,10 @@ namespace epochnamespace
                 latestPrompt,
                 latestReply);
             const std::string loopStage = ai_control_loop_stage(gateStatus);
-            const float aiContentWidth = (std::max)(180.0f, log_size.x - 24.0f);
 
             // Bottom Dock > AI stays diagnostic-only. Controls and model
             // selection live in the central AI Sandbox and Inspector panes.
 
-            const auto currentMcpRecord = [&]() {
-                return epoch::ai::McpCaptureRecord{
-                    .server = "editor",
-                    .tool = "self-iteration-guidance",
-                    .prompt = build_ai_self_iteration_prompt(editor),
-                    .normalized_output = epoch::ai::active_provider_summary(),
-                    .source_path = editor.projectScenePath.empty() ? editor.projectRoot : editor.projectScenePath
-                };
-            };
             const auto currentIterationPacket = [&]() {
                 std::vector<std::string> evidencePaths;
                 auto addEvidence = [&](const std::string& path) {
@@ -5734,10 +5839,6 @@ namespace epochnamespace
                     .eval_root = training.eval_root,
                     .evidence_paths = std::move(evidencePaths)
                 };
-            };
-
-            auto startAiContinuousBuild = [&](std::string reason, bool force) {
-                start_ai_continuous_project_build(editor, activeScriptSource, pathsManifest, reason, force);
             };
 
             bool aiBuildCompletedThisFrame = false;
@@ -5806,247 +5907,24 @@ namespace epochnamespace
                 editor.aiContinuousBuildStatus = "Evidence watcher armed; manual Queue Build Pass required.";
             }
 
-            const bool showSandboxControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Control;
-            const bool showToolingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling;
-            const bool showAssistantControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine;
-            const bool showLauncherControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Software;
-            const bool showTrainingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Training;
-            constexpr bool showWorkspaceActionButtons = false;
-
-            (void)showToolingControls;
-            (void)showAssistantControls;
-            (void)showLauncherControls;
-            (void)showTrainingControls;
-
-            gui::label("AI Diagnostics");
-            gui::property_row("[ai] Domain", ai_workspace_domain_name(editor.aiWorkspaceDomain));
-            gui::property_row("[model] Provider", epoch::ai::active_provider_summary());
-            gui::property_row("[model] Selected", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name());
-            gui::property_row("[ai] Loop stage", loopStage);
-            gui::property_row("[ai] Evidence", gateStatus.packetEvidenceSummary);
-            gui::property_row("[ai-build] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
-            gui::property_row("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false");
-            gui::property_row("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount));
-            gui::property_row("[ai-build] Status", editor.aiContinuousBuildStatus);
-            gui::property_row("[ai-tool] Runs", std::to_string(editor.aiToolHarnessRunCount));
-            gui::property_row("[ai-tool] Status", editor.aiToolHarnessStatus);
-            gui::property_row("[ai] Build log", display_project_path(buildLog));
-            gui::property_row("[ai] Output", display_project_path(outputExe));
-            gui::wrapped_label(
-                "Bottom Dock > AI is compact status only. Use the central AI Sandbox and Inspector for model selection, harness controls, self-iteration actions, and visualizer surfaces.",
-                aiContentWidth);
-
-            if (showWorkspaceActionButtons && showSandboxControls && gui::button(editor.aiContinuousBuildEnabled ? "Pause Evidence Watcher" : "Arm Evidence Watcher", { 260.0f, 30.0f }))
-            {
-                editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
-                editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
-                    ? "Evidence watcher armed; queue build passes manually."
-                    : "Evidence watcher paused.";
-                if (editor.aiContinuousBuildEnabled)
-                    editor.aiContinuousBuildFingerprint.clear();
-                push_editor_log(editor, editor.aiContinuousBuildEnabled
-                    ? "[ai-build] Evidence watcher armed."
-                    : "[ai-build] Evidence watcher paused.");
-                append_project_note(
-                    editor,
-                    editor.aiContinuousBuildEnabled ? "Evidence Watcher Armed" : "Evidence Watcher Paused",
-                    editor.aiContinuousBuildStatus,
-                    "The watcher observes evidence and never starts an automatic build; promotion remains human-gated.");
-            }
-
-            if (showWorkspaceActionButtons && showSandboxControls && gui::button("Queue Sandbox Build Pass", { 240.0f, 30.0f }))
-            {
-                start_self_iteration_sandbox_build(editor, "manual self-iteration sandbox build request", true);
-                append_project_note(
-                    editor,
-                    "Queue Sandbox Build Pass",
-                    editor.aiContinuousBuildStatus,
-                    "Wait for build evidence, then review the staged packet before promotion.");
-            }
-
-            if (showWorkspaceActionButtons && showToolingControls && gui::button("Run AI Tool Harness", { 220.0f, 30.0f }))
-            {
-                const std::string before = editor_tooling_state_summary(editor);
-                const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
-                editor.scriptBuildStatus = build.summary;
-                const bool ran = build.succeeded && editor_run_script(ctx.get(), editor.activeScript);
-                const std::string after = editor_tooling_state_summary(editor);
-                ++editor.aiToolHarnessRunCount;
-                editor.aiToolHarnessStatus = ran
-                    ? "Harness ran selected script and captured editor before/after evidence."
-                    : "Harness failed; inspect script build/run logs.";
-
-                epoch::ai::append_mcp_capture(epoch::ai::McpCaptureRecord{
-                    .server = "editor",
-                    .tool = "ai-tool-harness",
-                    .prompt = std::string("Build and run selected editor tooling script: ") + editor.activeScript,
-                    .normalized_output = std::string("build=") + (build.succeeded ? "pass" : "fail")
-                        + "; run=" + (ran ? "pass" : "fail")
-                        + "; before={" + before + "}; after={" + after + "}",
-                    .source_path = activeScriptSource
-                });
-
-                push_editor_log(editor, ran
-                    ? "[ai-tool] Harness ran selected script and captured before/after state."
-                    : "[ai-tool] Harness failed before a verified editor action.");
-                push_editor_log(editor, "[ai-tool] Before: " + before);
-                push_editor_log(editor, "[ai-tool] After: " + after);
-                append_project_note(
-                    editor,
-                    "Run AI Tool Harness",
-                    editor.aiToolHarnessStatus,
-                    std::string("Before: ") + before + " | After: " + after);
-
-                if (ran)
-                {
-                    const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
-                    if (!packetDir.empty())
-                    {
-                        push_editor_log(editor, "[ai-tool] Staged tool-harness packet: " + packetDir);
-                        append_project_note(
-                            editor,
-                            "Tool Harness Packet Staged",
-                            std::string("Packet staged at ") + packetDir,
-                            "Review this harness packet before promotion.");
-                    }
-                }
-            }
-
-            if (showWorkspaceActionButtons && (showSandboxControls || showTrainingControls) && gui::button("Stage Evidence Packet", { 220.0f, 30.0f }))
-            {
-                const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
-                if (packetDir.empty())
-                {
-                    push_editor_log(editor, "[ai] Failed to stage iteration packet.");
-                }
-                else
-                {
-                    push_editor_log(editor, "[ai] Staged AI iteration packet.");
-                    push_editor_log(editor, std::string("[ai] Iteration packet path: ") + packetDir);
-                    append_project_note(
-                        editor,
-                        "Manual Iteration Packet Staged",
-                        std::string("Packet staged at ") + packetDir,
-                        "Use this as the visible evidence handoff for the next approved self-iteration pass.");
-                }
-            }
-
-            if (showWorkspaceActionButtons && (showSandboxControls || showAssistantControls) && gui::button("Ask Selected Model For Plan", { 260.0f, 30.0f }))
-            {
-                if (epoch::ai::active_model_name().empty())
-                {
-                    push_editor_log(editor, "[ai] Select a local chat model before requesting a model plan.");
-                }
-                else
-                {
-                    const std::string packetDir = epoch::ai::stage_iteration_packet(currentIterationPacket());
-                    const std::string prompt = build_ai_project_output_review_prompt(
-                        editor,
-                        pathsManifest,
-                        buildLog,
-                        outputExe);
-                    submit_ai_prompt(prompt, "[ai] Submitted latest project output evidence to the selected local model.");
-                    append_project_note(
-                        editor,
-                        "Selected Model Builder Plan Requested",
-                        std::string("Model: ") + epoch::ai::active_model_name(),
-                        packetDir.empty()
-                            ? "Review the chat reply against current project/build/output evidence before approving work."
-                            : std::string("Packet staged at ") + packetDir + "; review the chat reply before approving work.");
-                }
-            }
-
-            if (showWorkspaceActionButtons && showSandboxControls && gui::button("Stage Scene Training Task", { 250.0f, 30.0f }))
-            {
-                auto packet = currentIterationPacket();
-                packet.packet_name = editor.projectId.empty()
-                    ? std::string("sandbox-scene-training")
-                    : editor.projectId + "-sandbox-scene-training";
-                packet.task_prompt = build_ai_sandbox_scene_training_prompt(editor);
-                packet.operator_notes =
-                    "EpochBot must use visible sandbox scene/tool/build evidence. Generic self-reporting like 'working fine' is invalid without paths, changed object state, and verifier output.";
-                packet.control_loop_stage = "Planner queued: sandbox scene-training task requires tool/build/runtime evidence";
-                const std::string packetDir = epoch::ai::stage_iteration_packet(packet);
-                if (packetDir.empty())
-                {
-                    push_editor_log(editor, "[ai] Failed to stage sandbox scene-training task.");
-                }
-                else
-                {
-                    push_editor_log(editor, "[ai] Staged sandbox scene-training task.");
-                    push_editor_log(editor, std::string("[ai] Sandbox training packet path: ") + packetDir);
-                    append_project_note(
-                        editor,
-                        "Sandbox Scene Training Task Staged",
-                        std::string("Packet staged at ") + packetDir,
-                        "Use this for watchable EpochBot scene-edit/test learning; reject answers without evidence paths or visible state changes.");
-                }
-            }
-
-            if (showWorkspaceActionButtons && showTrainingControls && gui::button("Capture Tool Evidence Snapshot", { 260.0f, 30.0f }))
-            {
-                epoch::ai::append_mcp_capture(currentMcpRecord());
-                push_editor_log(editor, "[ai] Captured tool evidence training snapshot.");
-                push_editor_log(editor, std::string("[ai] Tool evidence path: ") + training.mcp_capture_jsonl);
-                append_project_note(
-                    editor,
-                    "Capture Tool Evidence Snapshot",
-                    std::string("Tool evidence snapshot appended to ") + training.mcp_capture_jsonl,
-                    "Review captured evidence before curating or promoting training data.");
-            }
-
-            if (showWorkspaceActionButtons && showTrainingControls && gui::button("Promote Tool Evidence Snapshot", { 270.0f, 30.0f }))
-            {
-                const bool ok = epoch::ai::promote_mcp_capture_record(currentMcpRecord(), "epoch_mcp_curated");
-                push_editor_log(editor, ok
-                    ? "[ai] Promoted tool evidence snapshot into Engine/ai/datasets/curated."
-                    : "[ai] Failed to promote tool evidence snapshot.");
-                if (ok)
-                {
-                    push_editor_log(editor, std::string("[ai] Curated dataset root: ") + training.curated_dataset_root);
-                    append_project_note(
-                        editor,
-                        "Promote Tool Evidence Snapshot",
-                        std::string("Promoted into ") + training.curated_dataset_root,
-                        "Promotion happened only from the explicit Training domain control.");
-                }
-            }
-
-            if (showWorkspaceActionButtons && showTrainingControls && gui::button("Promote Scene Eval", { 220.0f, 30.0f }))
-            {
-                const bool ok = epoch::ai::promote_eval_case(epoch::ai::EvalCase{
-                    .name = editor.projectId + "-scene-guidance",
-                    .prompt = build_ai_scene_prompt(editor),
-                    .expected_contains = editor.projectName,
-                    .project_id = editor.projectId,
-                    .scene_id = editor.activeRuntimeScene
-                });
-                push_editor_log(editor, ok
-                    ? "[ai] Promoted scene eval into Engine/ai/evals."
-                    : "[ai] Failed to promote scene eval.");
-                if (ok)
-                    push_editor_log(editor, std::string("[ai] Eval suite root: ") + training.eval_root);
-            }
-
-            if (showWorkspaceActionButtons && showTrainingControls && gui::button("Promote Latest Chat Pair", { 220.0f, 30.0f }))
-            {
-                const std::string latestPrompt = last_chat_line_with_prefix(chat, "you> ");
-                const std::string latestReply = last_chat_line_with_prefix(chat, "bot> ");
-                const bool ok = !latestPrompt.empty() && !latestReply.empty()
-                    && latestReply != "(empty reply)"
-                    && epoch::ai::promote_dataset_record(epoch::ai::DatasetRecord{
-                        .prompt = latestPrompt,
-                        .answer = latestReply,
-                        .source = "editor_ai_chat_curated",
-                        .role = "assistant",
-                        .tags = { editor.projectId, editor.activeRuntimeScene, "editor-chat" }
-                    }, "epoch_editor_curated");
-                push_editor_log(editor, ok
-                    ? "[ai] Promoted latest chat pair into Engine/ai/datasets/curated."
-                    : "[ai] No valid chat pair available to curate.");
-                if (ok)
-                    push_editor_log(editor, std::string("[ai] Curated dataset root: ") + training.curated_dataset_root);
-            }
+            const std::vector<std::string> dockLines{
+                "AI Diagnostics",
+                dockLine("[ai] Domain", ai_workspace_domain_name(editor.aiWorkspaceDomain)),
+                dockLine("[model] Provider", epoch::ai::active_provider_summary()),
+                dockLine("[model] Selected", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name()),
+                dockLine("[ai] Loop stage", loopStage),
+                dockLine("[ai] Evidence", gateStatus.packetEvidenceSummary),
+                dockLine("[ai-build] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused"),
+                dockLine("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false"),
+                dockLine("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount)),
+                dockLine("[ai-build] Status", editor.aiContinuousBuildStatus),
+                dockLine("[ai-tool] Runs", std::to_string(editor.aiToolHarnessRunCount)),
+                dockLine("[ai-tool] Status", editor.aiToolHarnessStatus),
+                dockLine("[ai] Build log", display_project_path(buildLog)),
+                dockLine("[ai] Output", display_project_path(outputExe)),
+                "[ai] Controls and model selection live in AI Sandbox and Inspector; Bottom Dock is status-only."
+            };
+            renderDockStatusPanel("ai", dockLines);
             break;
         }
         case EditorWorkspaceTab::Systems:
@@ -6057,24 +5935,24 @@ namespace epochnamespace
                 ? static_cast<std::size_t>(std::thread::hardware_concurrency())
                 : std::size_t{ 6 });
             const std::string supportTier = recommended_support_tier(ctx, workerCount);
-            const float contentWidth = (std::max)(180.0f, log_size.x - 24.0f);
-
-            gui::property_row("[systems] Renderer", renderer_name(ctx));
-            gui::property_row("[systems] Ownership model", backend_ownership_model(ctx));
-            gui::property_row("[systems] Preview camera", preview_camera_name(ctx));
-            gui::property_row("[systems] Runtime target", editor.activeRuntimeScene);
-            gui::property_row("[systems] Registered systems", std::to_string(orderedSystems.size));
-            gui::property_row("[systems] Worker lanes", std::to_string(workerCount));
-            gui::property_row("[systems] Support tier", supportTier);
-            gui::property_row("[build] Compiler", compiler_identity());
-            gui::property_row("[build] Configuration", build_configuration_label());
             const std::filesystem::path phase5PacketRoot{ epoch::ai::iteration_packet_root() };
-            gui::property_row("[phase5] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
-            gui::property_row("[phase5] Build status", editor.aiContinuousBuildStatus);
-            gui::property_row("[phase5] Staged packets", staged_packet_count_summary(phase5PacketRoot));
-            gui::wrapped_label(
-                "Bottom Dock > Systems is compact status only. Use the central Systems workspace for graph surfaces, time controls, backend details, and live system lists.",
-                contentWidth);
+
+            const std::vector<std::string> dockLines{
+                dockLine("[systems] Renderer", renderer_name(ctx)),
+                dockLine("[systems] Ownership model", backend_ownership_model(ctx)),
+                dockLine("[systems] Preview camera", preview_camera_name(ctx)),
+                dockLine("[systems] Runtime target", editor.activeRuntimeScene),
+                dockLine("[systems] Registered systems", std::to_string(orderedSystems.size)),
+                dockLine("[systems] Worker lanes", std::to_string(workerCount)),
+                dockLine("[systems] Support tier", supportTier),
+                dockLine("[build] Compiler", compiler_identity()),
+                dockLine("[build] Configuration", build_configuration_label()),
+                dockLine("[phase5] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused"),
+                dockLine("[phase5] Build status", editor.aiContinuousBuildStatus),
+                dockLine("[phase5] Staged packets", staged_packet_count_summary(phase5PacketRoot)),
+                "[systems] Use the central Systems workspace for graph surfaces, time controls, backend details, and live system lists."
+            };
+            renderDockStatusPanel("systems", dockLines);
             break;
         }
         case EditorWorkspaceTab::Output:
@@ -6244,14 +6122,17 @@ namespace epochnamespace
         open_dropdown("Tools", TopMenu::Tools, dropdown_window_size(228.0f, 6), [&](gui::Vec2 pos)
         {
             menu_item("Camera: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
-                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
+                editor.projectCameraMode = epochnamespace::previewgrid::CameraMode::Editor;
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
                 push_editor_log(editor, "[tools] Camera mode set to Editor.");
             });
             menu_item("Camera: FPS", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
-                epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::FPS);
+                editor.projectCameraMode = epochnamespace::previewgrid::CameraMode::FPS;
+                epochnamespace::previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
                 push_editor_log(editor, "[tools] Camera mode set to FPS.");
             });
             menu_item("Camera: 2D Canvas", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
+                editor.projectCameraMode = epochnamespace::previewgrid::CameraMode::Canvas2D;
                 open_editor_surface(EditorMainSurface::Game2D, "Tools menu");
                 push_editor_log(editor, "[tools] Camera mode set to locked 2D Canvas.");
             });
@@ -6425,7 +6306,7 @@ namespace epochnamespace
             const float contentY = contentPos.y;
             gui::set_cursor({ contentPos.x + 8.0f, contentY });
             gui::wrapped_label(
-                "Runtime-safe editor settings live here first. Layout, workspace, preview, and Engine AI controls stay visible and reviewable instead of hidden in console output.",
+                "Runtime-safe editor settings live here first. Layout, workspace, preview, and OS AI controls stay visible and reviewable instead of hidden in console output.",
                 contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 54.0f });
             gui::property_row("[settings] Renderer", renderer_name(ctx), 148.0f);
@@ -6468,7 +6349,7 @@ namespace epochnamespace
                 push_editor_log(editor, "[settings] Editor layout reset.");
             }
             gui::set_cursor({ contentPos.x + 150.0f, contentY + 222.0f });
-            if (gui::button("Open Engine AI", { 150.0f, 30.0f }))
+            if (gui::button("Open OS AI", { 150.0f, 30.0f }))
             {
                 open_editor_surface(EditorMainSurface::AISandbox, "settings");
                 editor.showSettingsModal = false;
@@ -6569,6 +6450,7 @@ namespace epochnamespace
                 case epoch::package_registry::PackageKind::CoreOptIn: return "Core opt-in";
                 case epoch::package_registry::PackageKind::NetworkRuntime: return "Network runtime";
                 case epoch::package_registry::PackageKind::HeadlessServer: return "Headless server";
+                case epoch::package_registry::PackageKind::ModelAsset: return "OS model asset";
                 case epoch::package_registry::PackageKind::ResearchPrototype: return "Research prototype";
                 case epoch::package_registry::PackageKind::DownloadableSource: return "Downloadable source";
                 default: return "Unknown";
@@ -6603,6 +6485,13 @@ namespace epochnamespace
                 {
                     gui::wrapped_label(
                         "This package can create a server, listener, or network control surface. It remains blocked until a human explicitly approves the run/build gate.",
+                        contentWidth);
+                }
+                else if (selectedPackage && selectedPackage->kind == epoch::package_registry::PackageKind::ModelAsset)
+                {
+                    gui::property_row("Model cache", epoch::ai::local_model_root(), 96.0f);
+                    gui::wrapped_label(
+                        "OS model weights are not cloned with engine iterations. Install stages an on-demand download into cache/models; generated projects include the model only after an explicit package opt-in and license/notice review.",
                         contentWidth);
                 }
 
@@ -6648,6 +6537,10 @@ namespace epochnamespace
                         editor.packageInstallStatus = "Blocked: network/server packages require explicit human approval.";
                         editor.packageInstallProgress = 0.0f;
                         push_editor_log(editor, std::string("[package] Blocked ") + std::string(selectedPackage->id) + ": explicit network approval required.");
+                    }
+                    else if (selectedPackage->kind == epoch::package_registry::PackageKind::ModelAsset)
+                    {
+                        (void)stage_model_package_opt_in(editor, *selectedPackage);
                     }
                     else if (selectedPackage->kind == epoch::package_registry::PackageKind::DownloadableSource
                         || selectedPackage->kind == epoch::package_registry::PackageKind::ResearchPrototype)

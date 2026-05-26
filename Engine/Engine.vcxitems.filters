@@ -231,13 +231,13 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\main.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_bot.hpp">
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_model.hpp">
       <Filter>Header Files\ai</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_service.hpp">
       <Filter>Header Files\ai</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_types.hpp">
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_response.hpp">
       <Filter>Header Files\ai</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\app_api.h">

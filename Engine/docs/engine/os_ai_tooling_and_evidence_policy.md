@@ -1,21 +1,34 @@
-# AI Training Memory And Dataset Policy
+# OS AI Tooling And Evidence Policy
 
-This doc records the current working method for Epoch's AI training and smoke
-loop.
+This doc records the current working method for Epoch's operator-selected
+open-source model lanes, editor tool loop, evidence capture, and promotion
+gates. It replaces the older internal-bot/training framing: Epoch is not
+shipping a personal bundled model as the core plan, and model weights are
+operator-selected assets that download on demand.
 
-## Engine AI roles
+## OS AI roles
 
-Epoch documents three internal AI/control pieces:
+Epoch documents three AI/control pieces. The model direction is OS/open-source
+model integration, not internal bundled weights:
 
-1. EpochBot, the primary engine-owned trainable LLM/runtime path
+1. an engine-owned OS-model harness for memory, retrieval, planning, tool use,
+   verification, evidence metrics, and dataset/eval gates
 2. local MCP/control/tool harnesses that operate the editor and collect proof
-3. an offline/injectable OSS or tiny backup LLM path for fallback, generated
-   software embedding, and EpochBot training support
+3. operator-selected Qwen/Nemotron local model lanes for coding and review,
+   with FLUX/Wan/TRELLIS tracked as package-managed creative model lanes
 
-External local LLMs such as LM Studio are selected development helpers. They can
-speed up testing, evaluation, curation, and documentation/build work, but they
-are not hidden authority and are not the same thing as the internal backup LLM
-path.
+External local LLMs such as LM Studio are selected runtime/helper providers.
+They can speed up testing, evaluation, curation, and documentation/build work,
+but they are not hidden authority. Epoch does not treat bundled runtime model
+weights as the practical path.
+
+Canonical OS-model source pages:
+
+- `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16`
+- `https://huggingface.co/Qwen/Qwen3.6-27B`
+- `https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B`
+- `https://huggingface.co/microsoft/TRELLIS.2-4B`
+- `https://huggingface.co/black-forest-labs/FLUX.2-klein-4B`
 
 Model discovery is inventory only. Epoch may list available local models, but
 it must not auto-name or activate one from discovery. The operator-selected
@@ -30,15 +43,14 @@ Repo-safe:
 - `Engine/ai/datasets/schema/`
 - `Engine/ai/evals/`
 - `Engine/ai/manifests/`
-- `Engine/ai/tokenizer/`
 - `Engine/ai/prompts/`
 
 Local-only compiled artifacts:
 
+- executable-local `cache/models/` for on-demand OS model weights
+- executable-local `cache/ai/` for local AI runtime cache
 - `Engine/examples/ConsoleApplication1/workspace/ai/checkpoints/`
 - `Engine/examples/ConsoleApplication1/workspace/ai/iterations/`
-- `Engine/examples/ConsoleApplication1/workspace/ai/models/`
-- `Engine/examples/ConsoleApplication1/workspace/ai/cache/`
 - `Engine/examples/ConsoleApplication1/workspace/research/staged/`
 
 Use [research_import_and_promotion.md](research_import_and_promotion.md)
@@ -64,17 +76,24 @@ Iteration packets are staged truth only. They are useful because they bind one
 task, one project snapshot, one model/provider snapshot, and one set of
 evidence paths together before any later build/verify/promotion loop happens.
 
-## Local self-rebuilding direction
+## Local self-iteration direction
 
 Treat "self-rebuilding" as gated iteration over versioned artifacts rather than
 as an unconstrained model rewriting itself.
 
-- keep a fast seed/runtime model available for always-on local engine tasks
-- use stronger on-demand teacher/helper models for critique, labeling, and
-  candidate generation
-- build toward an engine-owned LLM plus backup tiny internal model from curated
-  Epoch evidence, editor/tool traces, evals, and reviewable sandbox exercises
-  rather than assuming any external helper is the final runtime brain
+- keep fast selected OS models available for bounded local engine tasks
+- download Qwen/Nemotron weights only on demand into `cache/models/`; engine
+  self-iteration may use selected models from cache or an already running local
+  endpoint, but it must not clone or bundle those weights for routine engine
+  iterations
+- include model weights in generated projects only after explicit package
+  opt-in plus license/notice review; otherwise projects should carry metadata
+  and download recipes only
+- use stronger on-demand local or hosted helpers for critique, labeling, and
+  candidate generation when the operator allows them
+- build toward an engine-owned harness around selected Qwen/Nemotron models from
+  curated Epoch evidence, editor/tool traces, evals, and reviewable sandbox
+  exercises rather than trying to ship a homemade bundled model runtime
 - let the verifier own promotion decisions through build, runtime, and scenario
   evidence
 - prefer adapters, prompts, datasets, tool schemas, and evals as the mutable
@@ -134,12 +153,12 @@ selects the active model in the editor.
 CLI and self-iteration runs can bind the same explicit selection with
 `EPOCH_AI_MODEL`, `EPOCH_OPENAI_MODEL`, `LM_STUDIO_MODEL`, or `OPENAI_MODEL`
 before launch. That is a deliberate operator override for a known local model
-such as `nvidia/nemotron-3-nano-4b`; it must not become an automatic
+such as `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16`; it must not become an automatic
 first-discovered-model selection path.
 
 For the current April 2026 workstation passes, LM Studio can provide multiple
 parallel helper lanes. Treat those lanes as drafting/review acceleration, not
-as automatic EpochBot model selection.
+as automatic OS AI model selection.
 
 Use local helpers aggressively for:
 
@@ -181,7 +200,9 @@ The runtime gate for this policy is `--editor-ai-gate-self-test`. It should pass
 before a helper model is trusted for a self-iteration review pass, and it should
 fail any reply that says the engine is "working fine" without evidence, omits
 child/self-test verifier proof, requests automatic promotion, or attempts to
-create a model-accessible server/listener/bypass channel.
+create a model-accessible server/listener/bypass channel. It also verifies that
+non-promotable assistant replies are blocked from capture promotion while an
+evidence-backed final answer remains eligible.
 
 Any generated app, server, listener, port bind, model-accessible control
 surface, or hidden bypass channel must remain inert until an explicit human
@@ -191,17 +212,22 @@ new model-accessible network surface.
 
 If a local helper returns useful-looking text only in `reasoning_content` while
 `content` is blank, treat that as a model/API configuration failure for
-user-visible EpochBot. Hidden reasoning must not be surfaced as chat output and
+user-visible OS AI. Hidden reasoning must not be surfaced as chat output and
 must not be promoted into curated training data as an assistant answer. Retry
 with a content-producing model/configuration, or keep the raw response only as
-private diagnostic evidence explaining why the pass was rejected.
+private diagnostic evidence explaining why the pass was rejected. The active
+source line now also rejects non-promotable assistant text before local raw
+training capture and MCP chat capture, including no-model/no-decode errors,
+local API errors, hidden-reasoning-only replies, and obvious leaked reasoning
+drafts.
 
-## Training and evaluation metrics
+## Evidence and evaluation metrics
 
-EpochBot needs measurable training pressure before it can become the engine's
-primary coding/runtime assistant. The current practical path is a 4B/20B
-candidate supervised by stronger local or hosted helpers, verified by tools, and
-promoted through scorecards instead of trust.
+Epoch's OS-model harness needs measurable evidence pressure before it can become
+the engine's primary coding/runtime assistant. The current practical path is
+Qwen/Nemotron model lanes supervised by stronger local or hosted helpers when
+available, verified by tools, and promoted through evidence gates instead of
+trust.
 
 Use these metrics for every candidate model, adapter, prompt, tool schema, or
 dataset promotion:
@@ -223,7 +249,7 @@ dataset promotion:
 The current deterministic seed is `--editor-ai-gate-self-test`, which now logs
 aggregate accept/reject, false-accept/false-reject, safety-block, average
 evidence-score, and accuracy statistics. Keep that gate green before treating
-Nemotron or any other local helper as a reviewer.
+Nemotron, Qwen, or any other selected OS model as a reviewer.
 
 Self-iteration is not complete just because a helper says it is. A completed
 iteration needs the same packet to show: project manifest, build log, output
