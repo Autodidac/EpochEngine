@@ -1,5 +1,22 @@
 # Epoch Changelog
 
+## [v0.84.51]
+- Bumped the active source line to `v0.84.51` for live engine-thread
+  accounting and hidden backend frame-cap cleanup.
+- Added `epoch::systems::threading` live-thread accounting with an RAII guard
+  used by the scheduler worker pool, task-graph workers, Windows/Linux context
+  render threads, AI chat async calls, self-iteration builds, and project build
+  async tasks.
+- Changed the editor toolbar and Systems surfaces from hardware-capacity
+  thread labels to live engine-thread counts, while keeping CPU capacity for
+  support-tier classification.
+- Removed the DirectX/D3D11 swapchain sync interval from the preview present
+  path so the core frame limiter owns pacing across backends.
+- Verified `ConsoleApplication1` Debug x64 with MSBuild after the live-thread
+  and DirectX present patch. Also verified `--editor-ai-gate-self-test`,
+  `--editor-project-self-test projectlauncher`, and
+  `--editor-project-self-test sandbox` from `x64/Debug`; all returned 0.
+
 ## [v0.84.50]
 - Bumped the active source line to `v0.84.50` for the toolbar/menu selected-state
   cleanup.

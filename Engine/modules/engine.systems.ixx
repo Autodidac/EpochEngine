@@ -49,6 +49,7 @@ export module engine.systems;
 // Engine headers (order-sensitive, header units)
 // ------------------------------------------------------------
 import engine.platform;
+import epoch.systems;
 import mpmcboundedqueue;   // Lock-free MPMCQueue<T>
 // import "anet.hpp";            // for poll()
 
@@ -113,6 +114,7 @@ namespace epochnamespace
 
         for (int i = 0; i < threadCount; ++i) {
             g_workers.emplace_back([] {
+                epoch::systems::threading::ScopedThreadActivity threadActivity{};
                 std::function<void()> job;
 
                 while (g_running) {

@@ -294,6 +294,7 @@ namespace epochnamespace
                 pendingPrompt = text;
 
                 pending.emplace(std::async(std::launch::async, [t = std::move(text)]() mutable {
+                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
                     return epoch::ai::send_to_engine_ai(t);
                 }));
             }
@@ -956,21 +957,21 @@ namespace epochnamespace
 
         [[nodiscard]] static SurfaceCanvas build_task_graph_surface(
             const SystemsSurfaceState& systems,
-            std::size_t workerCount,
+            std::size_t liveThreadCount,
             std::size_t systemCount)
         {
             constexpr int kSurfaceWidth = 1280;
             constexpr int kSurfaceHeight = 188;
             SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 16, 16, 20, 255 });
 
-            const int laneCount = (std::clamp)(static_cast<int>(workerCount == 0 ? 4 : workerCount), 2, 6);
+            const int laneCount = (std::clamp)(static_cast<int>(liveThreadCount == 0 ? 1 : liveThreadCount), 2, 6);
             const int laneGap = 8;
             const int laneHeight = (kSurfaceHeight - 34 - laneGap * (laneCount - 1)) / laneCount;
             const int baseX = 26 - systems.taskPan;
             const int taskWidth = (std::max)(34, static_cast<int>(56.0f * systems.taskZoom));
             const int taskGap = (std::max)(10, static_cast<int>(18.0f * systems.taskZoom));
-            const std::string taskHeader = std::string("TASK THREAD GRAPH  WORKERS ")
-                + std::to_string(workerCount)
+            const std::string taskHeader = std::string("TASK THREAD GRAPH  LIVE THREADS ")
+                + std::to_string(liveThreadCount)
                 + "  SYSTEMS "
                 + std::to_string(systemCount);
             draw_tiny_text(canvas, taskHeader, 24, 6, gui::Color{ 214, 224, 238, 255 }, 1);
@@ -2414,6 +2415,7 @@ namespace epochnamespace
             push_editor_log(editor, "[ai-build] Queued self-iteration build: " + std::string(reason));
 
             editor.aiContinuousBuildPending.emplace(std::async(std::launch::async, [root = editor.projectRoot]() {
+                epoch::systems::threading::ScopedThreadActivity threadActivity{};
                 return editor_build_project(root);
             }));
         }
@@ -3399,6 +3401,7 @@ namespace epochnamespace
             push_editor_log(editor, "[project] " + editor.projectBuildStatus);
 
             editor.projectBuildPending.emplace(std::async(std::launch::async, [root = editor.projectRoot]() {
+                epoch::systems::threading::ScopedThreadActivity threadActivity{};
                 return editor_build_project(root);
             }));
         }
@@ -4275,7 +4278,8 @@ namespace epochnamespace
                 launch_active_project_context();
         }
 
-        const std::size_t toolbarThreadCount = (std::max)(std::size_t{ 1 },
+        const std::size_t toolbarThreadCount = epoch::systems::threading::live_thread_count();
+        const std::size_t toolbarCpuThreadCount = (std::max)(std::size_t{ 1 },
             std::thread::hardware_concurrency() > 0
             ? static_cast<std::size_t>(std::thread::hardware_concurrency())
             : std::size_t{ 1 });
@@ -4285,6 +4289,7 @@ namespace epochnamespace
             std::string("v") + epochnamespace::GetEngineVersionString()
             + "  |  " + epochnamespace::GetEngineBuildTagString()
             + "  |  Threads " + std::to_string(toolbarThreadCount)
+            + "/" + std::to_string(toolbarCpuThreadCount)
             + "  |  " + renderer_name(ctx)
             + "  |  Zoom " + preview_zoom_text(ctx),
             (std::max)(180.0f, w - status_x - 12.0f));
@@ -5322,11 +5327,12 @@ namespace epochnamespace
             case EditorMainSurface::Systems:
             {
                 const auto orderedSystems = epoch::systems::Registry::instance().ordered_systems();
-                const std::size_t workerCount = (std::max)(std::size_t{ 1 },
+                const std::size_t hardwareThreadCount = (std::max)(std::size_t{ 1 },
                     std::thread::hardware_concurrency() > 0
                     ? static_cast<std::size_t>(std::thread::hardware_concurrency())
                     : std::size_t{ 6 });
-                const std::string supportTier = recommended_support_tier(ctx, workerCount);
+                const std::size_t liveThreadCount = epoch::systems::threading::live_thread_count();
+                const std::string supportTier = recommended_support_tier(ctx, hardwareThreadCount);
                 const std::string backendGuidance = backend_runtime_guidance(ctx, supportTier);
                 const std::string convergenceFocus = backend_convergence_focus(ctx);
                 const float graphGap = 14.0f;
@@ -5342,7 +5348,7 @@ namespace epochnamespace
                     epoch::ai::current_provider_mode() == epoch::ai::ProviderMode::McpOperations);
                 const auto taskCanvas = build_task_graph_surface(
                     editor.systems,
-                    workerCount,
+                    liveThreadCount,
                     orderedSystems.size);
                 const auto supportCanvas = build_support_tier_surface(
                     supportTier,
@@ -5368,6 +5374,8 @@ namespace epochnamespace
                 gui::label("Systems Workspace");
                 gui::property_row("[system] Renderer", renderer_name(ctx), 112.0f);
                 gui::property_row("[system] Platform", epochnamespace::GetEngineBuildTagString(), 112.0f);
+                gui::property_row("[system] Live threads", std::to_string(liveThreadCount), 112.0f);
+                gui::property_row("[system] CPU threads", std::to_string(hardwareThreadCount), 112.0f);
                 gui::property_row("[system] Panel host", editor.detachedPanelHostStatus, 112.0f);
                 gui::wrapped_label(
                     "Systems is reserved for render/backend/context routing, diagnostics, and future node/timeline/video surfaces. It intentionally disables the 3D scene preview while open.",
@@ -5930,11 +5938,12 @@ namespace epochnamespace
         case EditorWorkspaceTab::Systems:
         {
             const auto orderedSystems = epoch::systems::Registry::instance().ordered_systems();
-            const std::size_t workerCount = (std::max)(std::size_t{ 1 },
+            const std::size_t hardwareThreadCount = (std::max)(std::size_t{ 1 },
                 std::thread::hardware_concurrency() > 0
                 ? static_cast<std::size_t>(std::thread::hardware_concurrency())
                 : std::size_t{ 6 });
-            const std::string supportTier = recommended_support_tier(ctx, workerCount);
+            const std::size_t liveThreadCount = epoch::systems::threading::live_thread_count();
+            const std::string supportTier = recommended_support_tier(ctx, hardwareThreadCount);
             const std::filesystem::path phase5PacketRoot{ epoch::ai::iteration_packet_root() };
 
             const std::vector<std::string> dockLines{
@@ -5943,7 +5952,8 @@ namespace epochnamespace
                 dockLine("[systems] Preview camera", preview_camera_name(ctx)),
                 dockLine("[systems] Runtime target", editor.activeRuntimeScene),
                 dockLine("[systems] Registered systems", std::to_string(orderedSystems.size)),
-                dockLine("[systems] Worker lanes", std::to_string(workerCount)),
+                dockLine("[systems] Live threads", std::to_string(liveThreadCount)),
+                dockLine("[systems] CPU threads", std::to_string(hardwareThreadCount)),
                 dockLine("[systems] Support tier", supportTier),
                 dockLine("[build] Compiler", compiler_identity()),
                 dockLine("[build] Configuration", build_configuration_label()),

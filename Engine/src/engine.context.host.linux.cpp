@@ -84,6 +84,7 @@ import core.commandline;
 import engine.input;
 import engine.cli;
 import engine.telemetry;
+import epoch.systems;
 import perf.tier;
 
 // ---- helpers ----
@@ -1308,6 +1309,7 @@ namespace
 
         threads[xwin] = std::thread([this, raw]()
             {
+                epoch::systems::threading::ScopedThreadActivity threadActivity{};
                 RenderLoop(*raw);
             });
     }
@@ -1537,6 +1539,7 @@ namespace
                         kRenderThreadStartupStepDelay * static_cast<int>(launchIndex++));
                 threads[xwin] = std::thread([this, raw, startupDelay]()
                     {
+                        epoch::systems::threading::ScopedThreadActivity threadActivity{};
                         if (startupDelay.count() > 0)
                         {
                             epochnamespace::logger::get(kLogSys).logf(

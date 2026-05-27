@@ -704,6 +704,15 @@ engine shape and should be treated as starting truth for the next passes:
   use it for active/open state instead of relying only on transient hover or
   press state. Acceptance remains operator eye-test proof that half-selected
   menu/workspace buttons no longer flip-flop during normal OpenGL use.
+- `v0.84.51` separates live engine thread accounting from detected CPU thread
+  capacity. Engine-owned scheduler workers, task-graph workers, context render
+  threads, AI chat calls, self-iteration builds, and project build async tasks
+  now enter a shared RAII thread counter; the toolbar and Systems workspace show
+  live spawned threads alongside detected CPU/hardware threads. DirectX preview
+  present no longer uses a backend sync interval, keeping frame pacing owned by
+  the core limiter and the editor/project frame-limit controls. Acceptance:
+  operator eye-test confirms live thread counts rise/fall with active engine
+  work and FPS caps only follow explicit core limiter settings.
 - Canvas2D projection ownership has moved into `render.preview_grid` via one
   shared projection helper. Editor picking, OpenGL, DirectX, Raylib, SDL, SFML,
   Vulkan, and the software preview fallback now consume the same Canvas2D

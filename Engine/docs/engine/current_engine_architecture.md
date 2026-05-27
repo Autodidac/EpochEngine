@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.50`
+Current source version: `v0.84.51`
 
 ## Architecture highlights
 
@@ -25,7 +25,9 @@ Current source version: `v0.84.50`
 - **Task graph + scripting**: reload and background work are funneled through
   task scheduling rather than ad hoc threaded entry points, and editor-triggered
   compiled scripts now run through an explicit host API instead of a loose
-  filewatch-first loop.
+  filewatch-first loop. Engine-owned scheduler workers, task-graph workers,
+  context render threads, AI chat requests, self-iteration builds, and project
+  builds now enter the shared live-thread accounting guard.
 - **Project browser + asset cards**: the editor now exposes project-local script
   stub creation, project/engine script selection, a shallow file/folder browser,
   an `Assets` workspace with first-pass file-type thumbnail cards, and visible
@@ -67,8 +69,12 @@ Current source version: `v0.84.50`
   back to the checked-in loader; duplicate-loader masking with linker force
   flags is not part of the supported build shape.
 - **Editor status strip**: the in-editor status line now reports source/build
-  identity, thread capacity, active renderer, and zoom without repeating
-  launcher/editor mode labels.
+  identity, live engine-spawned threads, detected CPU thread capacity, active
+  renderer, and zoom without repeating launcher/editor mode labels.
+- **Frame pacing ownership**: `perf.tier` and the editor/project frame-limit
+  controls own pacing. Backends should not add hidden frame caps; DirectX/D3D11
+  preview present now uses sync interval `0` so the shared limiter remains the
+  authority.
 - **Voxel/planetary package direction**:
   `voxel_planetary_package_track.md` records the long-horizon voxel-first world
   spine and keeps operator prototypes as package-gated research inputs instead

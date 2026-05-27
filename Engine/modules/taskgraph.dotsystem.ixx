@@ -54,6 +54,7 @@ export module taskgraph.dotsystem;
 
 import mpmcboundedqueue;   // provides epochnamespace::MPMCQueue
 import engine.systems;     // provides epochnamespace::Task
+import epoch.systems;
 import core.logger;
 
 // ------------------------------------------------------------
@@ -204,6 +205,7 @@ export namespace epochnamespace::taskgraph
 
         void WorkerLoop()
         {
+            epoch::systems::threading::ScopedThreadActivity threadActivity{};
             Node* n = nullptr;
 
             while (Running_) {

@@ -85,6 +85,7 @@ import context.multiplexer;
 import context.type;
 import context.window;
 import engine.telemetry;
+import epoch.systems;
 import perf.tier;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
@@ -2759,7 +2760,11 @@ namespace epochnamespace::core
 
         auto& threads = Threads();
         if (!threads.contains(hwnd) && rawWin)
-            threads[hwnd] = std::thread([this, rawWin]() { RenderLoop(*rawWin); });
+            threads[hwnd] = std::thread([this, rawWin]()
+                {
+                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    RenderLoop(*rawWin);
+                });
 
         ArrangeDockedWindowsGrid();
     }
@@ -2870,6 +2875,7 @@ namespace epochnamespace::core
 
             threads[hwnd] = std::thread([this, hwnd, startupDelay]()
                 {
+                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
                     if (startupDelay.count() > 0)
                     {
                         epochnamespace::logger::get(kLogSys).logf(

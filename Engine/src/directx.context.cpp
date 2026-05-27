@@ -173,7 +173,7 @@ namespace epochnamespace::directxcontext
         (void)gui::render_deferred_batch(ctx.get());
         (void)gui::render_top_layer_batch(ctx.get());
 
-        (void)state.swapchain->Present(1, 0);
+        (void)state.swapchain->Present(0, 0);
 
         if (core::cli::smoke_requested)
         {

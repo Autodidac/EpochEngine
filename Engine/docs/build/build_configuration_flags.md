@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.50`
+Current source version: `v0.84.51`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -50,6 +50,18 @@ building during the migration.
 Backend-specific confirmation switches for OpenGL, SFML, SDL, Raylib, software,
 DirectX, and Vulkan inherit from the master backend confirmation macro unless you
 override them locally in `engine.config.hpp`.
+
+## Frame pacing and thread accounting
+
+- Core frame pacing is owned by `perf.tier` and the editor/project
+  `--frame-limit` path. Backends should not add hidden frame caps on top of the
+  core limiter; DirectX/D3D11 preview present uses sync interval `0` so the
+  shared limiter and UI presets remain authoritative.
+- Editor status displays distinguish live engine-spawned threads from detected
+  CPU/hardware thread capacity. Scheduler workers, task-graph workers,
+  Windows/Linux context render threads, AI chat calls, self-iteration builds,
+  and project build async tasks are counted by the shared
+  `epoch::systems::threading` RAII guard.
 
 ## Backend support snapshot
 
@@ -116,7 +128,11 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.84.50` is the current source line for the toolbar/menu selected-state
+- `v0.84.51` is the current source line for live engine-thread accounting and
+  backend frame-cap cleanup. The toolbar and Systems workspace now show live
+  engine-spawned thread counts alongside detected CPU thread capacity, while
+  DirectX no longer adds a backend sync cap over the core limiter.
+- `v0.84.50` kept the toolbar/menu selected-state
   cleanup. Top menu buttons and main editor workspace buttons now use the shared
   `engine.gui` selected-button primitive so active/open state stays visually
   deliberate instead of flickering through transient hover/press states.

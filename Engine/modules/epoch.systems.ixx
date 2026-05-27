@@ -37,8 +37,10 @@ module;
 // ABI-facing primitives (string_view/span/function_ref + forward decl epoch::string).
 #include "../include/_epoch.stl_types.hpp"
 
+#include <atomic>
 // For the template constraint checks (optional but useful).
 #include <concepts>
+#include <cstdint>
 #include <type_traits>
 
 export module epoch.systems;
@@ -73,6 +75,54 @@ export namespace epoch::systems
         create_fn  create = nullptr;
         destroy_fn destroy = nullptr;
     };
+
+    namespace threading
+    {
+        inline std::atomic<std::uint32_t> g_liveEngineThreads{ 0 };
+
+        [[nodiscard]] inline std::uint32_t live_thread_count() noexcept
+        {
+            return g_liveEngineThreads.load(std::memory_order_relaxed);
+        }
+
+        inline void thread_started() noexcept
+        {
+            g_liveEngineThreads.fetch_add(1, std::memory_order_relaxed);
+        }
+
+        inline void thread_finished() noexcept
+        {
+            auto current = g_liveEngineThreads.load(std::memory_order_relaxed);
+            while (current > 0)
+            {
+                if (g_liveEngineThreads.compare_exchange_weak(
+                    current,
+                    current - 1,
+                    std::memory_order_relaxed,
+                    std::memory_order_relaxed))
+                {
+                    return;
+                }
+            }
+        }
+
+        class ScopedThreadActivity
+        {
+        public:
+            ScopedThreadActivity() noexcept
+            {
+                thread_started();
+            }
+
+            ScopedThreadActivity(const ScopedThreadActivity&) = delete;
+            ScopedThreadActivity& operator=(const ScopedThreadActivity&) = delete;
+
+            ~ScopedThreadActivity() noexcept
+            {
+                thread_finished();
+            }
+        };
+    }
 
     template <class T>
     [[nodiscard]] inline SystemFactory make_factory() noexcept
