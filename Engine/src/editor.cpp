@@ -415,9 +415,12 @@ namespace epochnamespace
             std::string projectBuildOutputPath{};
             std::string projectBuildRunBackend{};
             double projectBuildRunFrameLimitFps{ 60.0 };
+            previewgrid::CameraMode projectBuildRunCameraMode{ previewgrid::CameraMode::Editor };
+            input::ProfilePreset projectBuildRunInputProfile{ input::ProfilePreset::EditorDefault };
             std::string projectRunBackend{ "opengl" };
             double projectRunFrameLimitFps{ 60.0 };
             previewgrid::CameraMode projectCameraMode{ previewgrid::CameraMode::Editor };
+            input::ProfilePreset inputProfilePreset{ input::ProfilePreset::EditorDefault };
             double editorFrameLimitFps{ 120.0 };
             std::string selectedProjectFile{};
             std::string selectedAssetPath{};
@@ -2111,6 +2114,12 @@ namespace epochnamespace
             previewgrid::CameraMode mode{ previewgrid::CameraMode::Editor };
         };
 
+        struct InputProfileChoice
+        {
+            std::string_view label{};
+            input::ProfilePreset preset{ input::ProfilePreset::EditorDefault };
+        };
+
         [[nodiscard]] std::span<const FrameLimitChoice> frame_limit_choices() noexcept
         {
             static constexpr std::array<FrameLimitChoice, 3> kChoices{ {
@@ -2146,6 +2155,27 @@ namespace epochnamespace
             return { kChoices.data(), kChoices.size() };
         }
 
+        [[nodiscard]] std::span<const InputProfileChoice> input_profile_choices() noexcept
+        {
+            static constexpr std::array<InputProfileChoice, 4> kChoices{ {
+                { "Editor Default", input::ProfilePreset::EditorDefault },
+                { "Runtime WASD", input::ProfilePreset::RuntimeWASD },
+                { "Arrow Pilot", input::ProfilePreset::ArrowPilot },
+                { "Left-Handed IJKL", input::ProfilePreset::LeftHanded }
+            } };
+            return { kChoices.data(), kChoices.size() };
+        }
+
+        [[nodiscard]] std::string_view input_profile_label(input::ProfilePreset preset) noexcept
+        {
+            return input::profile_preset_label(preset);
+        }
+
+        [[nodiscard]] std::string_view input_profile_argument(input::ProfilePreset preset) noexcept
+        {
+            return input::profile_preset_id(preset);
+        }
+
         [[nodiscard]] std::string_view project_camera_label(previewgrid::CameraMode mode) noexcept
         {
             for (const auto& choice : project_camera_choices())
@@ -2154,6 +2184,20 @@ namespace epochnamespace
                     return choice.label;
             }
             return "Editor orbit camera";
+        }
+
+        [[nodiscard]] std::string_view project_camera_argument(previewgrid::CameraMode mode) noexcept
+        {
+            switch (mode)
+            {
+            case previewgrid::CameraMode::FPS:
+                return "fps";
+            case previewgrid::CameraMode::Canvas2D:
+                return "canvas2d";
+            case previewgrid::CameraMode::Editor:
+            default:
+                return "editor";
+            }
         }
 
         [[nodiscard]] std::string vec3_text(const std::array<float, 3>& value)
@@ -3396,6 +3440,8 @@ namespace epochnamespace
             editor.projectBuildOutputPath = display_project_path(outputExe);
             editor.projectBuildRunBackend = editor.projectRunBackend.empty() ? std::string("opengl") : editor.projectRunBackend;
             editor.projectBuildRunFrameLimitFps = editor.projectRunFrameLimitFps;
+            editor.projectBuildRunCameraMode = editor.projectCameraMode;
+            editor.projectBuildRunInputProfile = editor.inputProfilePreset;
             editor.projectBuildStatus =
                 std::string(runAfterBuild ? "Build/run queued: " : "Build queued: ") + std::string(reason);
             push_editor_log(editor, "[project] " + editor.projectBuildStatus);
@@ -4002,7 +4048,12 @@ namespace epochnamespace
 
         auto play_active_context = [&]()
         {
-            const std::string sceneId = project_runtime_scene_id(editor);
+            const std::string sceneId =
+                project_runtime_scene_id(editor)
+                + "|camera="
+                + std::string(project_camera_argument(editor.projectCameraMode))
+                + "|input="
+                + std::string(input_profile_argument(editor.inputProfilePreset));
             if (ctx)
                 previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
             editor.projectStatus = std::string("Play In Editor requested: ") + sceneId;
@@ -4068,12 +4119,16 @@ namespace epochnamespace
                 const std::string sceneId = editor.projectBuildRunScene.empty() ? project_runtime_scene_id(editor) : editor.projectBuildRunScene;
                 const std::string runBackend = editor.projectBuildRunBackend.empty() ? std::string("opengl") : editor.projectBuildRunBackend;
                 const double runFrameLimit = editor.projectBuildRunFrameLimitFps;
+                const auto runCameraMode = editor.projectBuildRunCameraMode;
+                const auto runInputProfile = editor.projectBuildRunInputProfile;
 
                 editor.projectBuildRunAfterBuild = false;
                 editor.projectBuildRunScene.clear();
                 editor.projectBuildOutputPath.clear();
                 editor.projectBuildRunBackend.clear();
                 editor.projectBuildRunFrameLimitFps = editor.projectRunFrameLimitFps;
+                editor.projectBuildRunCameraMode = editor.projectCameraMode;
+                editor.projectBuildRunInputProfile = editor.inputProfilePreset;
 
                 if (!shouldRun)
                     return;
@@ -4103,7 +4158,9 @@ namespace epochnamespace
                     std::string("project-exe:") + display_project_path(outputPath)
                     + "|scene=" + sceneId
                     + "|backend=" + runBackend
-                    + "|fps=" + std::string(frame_limit_argument(runFrameLimit));
+                    + "|fps=" + std::string(frame_limit_argument(runFrameLimit))
+                    + "|camera=" + std::string(project_camera_argument(runCameraMode))
+                    + "|input=" + std::string(input_profile_argument(runInputProfile));
                 emit_command(EditorCommand::RunGame, playTarget);
                 push_editor_log(editor, std::string("[project] Single-context launch requested for ") + editor.projectName + ".");
                 push_editor_log(
@@ -4127,6 +4184,8 @@ namespace epochnamespace
                 editor.projectBuildRunScene.clear();
                 editor.projectBuildOutputPath.clear();
                 editor.projectBuildRunBackend.clear();
+                editor.projectBuildRunCameraMode = editor.projectCameraMode;
+                editor.projectBuildRunInputProfile = editor.inputProfilePreset;
                 editor.projectBuildStatus = std::string("Project build threw: ") + e.what();
                 push_editor_log(editor, "[project] Build threw: " + std::string(e.what()));
             }
@@ -5108,6 +5167,28 @@ namespace epochnamespace
                 {
                     gui::property_row("[project] Camera style", "Engine self-iteration mirrors the editor workbench.", 108.0f);
                 }
+                const auto inputChoices = input_profile_choices();
+                std::vector<std::string_view> inputChoiceLabels;
+                inputChoiceLabels.reserve(inputChoices.size());
+                for (const auto& choice : inputChoices)
+                    inputChoiceLabels.emplace_back(choice.label);
+                const auto inputSelect = gui::select_box(gui::SelectBoxOptions{
+                    .id = "project-input-profile-select",
+                    .placeholder = "Choose shared input profile",
+                    .selected = input_profile_label(editor.inputProfilePreset),
+                    .options = std::span<const std::string_view>{ inputChoiceLabels.data(), inputChoiceLabels.size() },
+                    .size = { (std::min)(centerWidth, 320.0f), 30.0f },
+                    .row_height = 28.0f,
+                    .max_visible_options = 4
+                });
+                if (inputSelect.changed && inputSelect.selected_index && *inputSelect.selected_index < inputChoices.size())
+                {
+                    editor.inputProfilePreset = inputChoices[*inputSelect.selected_index].preset;
+                    input::set_active_profile(editor.inputProfilePreset);
+                    push_editor_log(editor, std::string("[input] Shared profile set to ") + std::string(input_profile_label(editor.inputProfilePreset)) + ".");
+                }
+                gui::property_row("[project] Input profile", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
+                gui::wrapped_label("Shared input actions currently drive editor preview cameras and in-editor/project runtime cameras. Key rebinding UI is the next promotion gate; profiles keep controls universal now.", centerWidth);
                 gui::wrapped_label(
                     "Play In Editor runs the active project scene inside this editor. Launch Single Context builds the child executable and starts one selected backend as a standalone process.",
                     centerWidth);
@@ -6299,7 +6380,7 @@ namespace epochnamespace
 
         if (editor.showSettingsModal)
         {
-            const gui::Vec2 modalSize{ 560.0f, 352.0f };
+            const gui::Vec2 modalSize{ 600.0f, 408.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
@@ -6329,6 +6410,29 @@ namespace epochnamespace
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 150.0f });
             gui::property_row("[settings] AI model", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name(), 148.0f);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 176.0f });
+            const auto settingsInputChoices = input_profile_choices();
+            std::vector<std::string_view> settingsInputLabels;
+            settingsInputLabels.reserve(settingsInputChoices.size());
+            for (const auto& choice : settingsInputChoices)
+                settingsInputLabels.emplace_back(choice.label);
+            const auto settingsInputSelect = gui::select_box(gui::SelectBoxOptions{
+                .id = "editor-input-profile-select",
+                .placeholder = "Choose shared input profile",
+                .selected = input_profile_label(editor.inputProfilePreset),
+                .options = std::span<const std::string_view>{ settingsInputLabels.data(), settingsInputLabels.size() },
+                .size = { 260.0f, 30.0f },
+                .row_height = 28.0f,
+                .max_visible_options = 4
+            });
+            if (settingsInputSelect.changed && settingsInputSelect.selected_index && *settingsInputSelect.selected_index < settingsInputChoices.size())
+            {
+                editor.inputProfilePreset = settingsInputChoices[*settingsInputSelect.selected_index].preset;
+                input::set_active_profile(editor.inputProfilePreset);
+                push_editor_log(editor, std::string("[input] Shared profile set to ") + std::string(input_profile_label(editor.inputProfilePreset)) + ".");
+            }
+            gui::set_cursor({ contentPos.x + 286.0f, contentY + 180.0f });
+            gui::property_row("[settings] Input", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 218.0f });
             const auto settingsLimitChoices = frame_limit_choices();
             std::vector<std::string_view> settingsLimitLabels;
             settingsLimitLabels.reserve(settingsLimitChoices.size());
@@ -6350,21 +6454,21 @@ namespace epochnamespace
                 core::cli::frame_limit_fps = editor.editorFrameLimitFps;
                 push_editor_log(editor, std::string("[settings] Editor frame limit set to ") + std::string(settingsLimitChoices[*settingsLimitSelect.selected_index].label) + ".");
             }
-            gui::set_cursor({ contentPos.x + 258.0f, contentY + 180.0f });
+            gui::set_cursor({ contentPos.x + 286.0f, contentY + 222.0f });
             gui::property_row("[settings] Frame limit", std::string(frame_limit_label(editor.editorFrameLimitFps)), 148.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 222.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 270.0f });
             if (gui::button("Reset Layout", { 132.0f, 30.0f }))
             {
                 reset_editor_layout(editor);
                 push_editor_log(editor, "[settings] Editor layout reset.");
             }
-            gui::set_cursor({ contentPos.x + 150.0f, contentY + 222.0f });
+            gui::set_cursor({ contentPos.x + 150.0f, contentY + 270.0f });
             if (gui::button("Open OS AI", { 150.0f, 30.0f }))
             {
                 open_editor_surface(EditorMainSurface::AISandbox, "settings");
                 editor.showSettingsModal = false;
             }
-            gui::set_cursor({ contentPos.x + 308.0f, contentY + 222.0f });
+            gui::set_cursor({ contentPos.x + 308.0f, contentY + 270.0f });
             if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Watcher" : "Arm Watcher", { 132.0f, 30.0f }))
             {
                 editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
@@ -6377,7 +6481,7 @@ namespace epochnamespace
                     ? "[settings] Evidence watcher armed."
                     : "[settings] Evidence watcher paused.");
             }
-            gui::set_cursor({ contentPos.x + 448.0f, contentY + 222.0f });
+            gui::set_cursor({ contentPos.x + 448.0f, contentY + 270.0f });
             if (gui::button("Close", { 88.0f, 30.0f }))
                 editor.showSettingsModal = false;
             gui::end_modal_window();

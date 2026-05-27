@@ -278,7 +278,7 @@ namespace epochnamespace::core::cli
 #else
     export inline int directx_window_count = 0;
 #endif
-    export inline int software_window_count = 1;
+    export inline int software_window_count = 0;
 
     export [[nodiscard]] inline std::filesystem::path capture_output_root()
     {

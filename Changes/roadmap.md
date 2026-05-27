@@ -612,11 +612,24 @@ engine shape and should be treated as starting truth for the next passes:
   bottom Console Dock is status-only again; Project, Assets, AI, and Systems use
   Output-style selectable text panels and must not regain workflow buttons,
   package controls, graph controls, or model-selection controls.
-- viewport movement needs a shared input profile instead of hardcoded editor
-  assumptions. First-pass behavior adds `Home` to reset the preview camera; the
-  next gate is a reusable input-configuration system that can be enabled by
-  projects as an opt-in package/engine feature without bloating software or
-  single-player outputs that do not need it.
+- viewport movement now starts from a shared input profile instead of hardcoded
+  editor assumptions. `v0.84.53` added named movement/look/reset/cancel/confirm
+  actions, mapped `Home` to reset, and routed editor/project runtime camera
+  input through that spine. `v0.84.54` fixes the first profile-regression sweep:
+  Editor Default and Left-Handed no longer bind arrows as movement secondaries
+  while arrows are also look keys, and Arrow Pilot becomes a movement-first
+  profile that does not rotate and translate from the same key press. Editor
+  Settings and the Project workspace expose named input-profile selectors, and
+  Play In Editor plus single-context child launches carry the selected input
+  preset. The next gate is per-action key rebinding, project/package
+  serialization, and a polished Input Settings surface so projects can opt into
+  the same bindings without bloating software or single-player outputs that do
+  not need them.
+- project child launches must remain single-context runtime launches, not a
+  nested multicontext editor clone. `v0.84.54` makes the child process command
+  explicit with both `--standalone` and `--window-mode standalone`, while the
+  CLI default no longer initializes Software as part of the backend set unless
+  explicitly requested.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
@@ -713,6 +726,28 @@ engine shape and should be treated as starting truth for the next passes:
   the core limiter and the editor/project frame-limit controls. Acceptance:
   operator eye-test confirms live thread counts rise/fall with active engine
   work and FPS caps only follow explicit core limiter settings.
+- `v0.84.52` targets the OpenGL-only project-run/menu flip-flop: overlay-priority
+  frames now drain normal GUI after the scene instead of letting command menus,
+  modals, or project runtime panels fight the scene viewport for z-order.
+  Project runtime preview chrome is promoted into the explicit GUI top layer and
+  OpenGL project-runtime frames avoid a redundant pre-scene clear. Acceptance:
+  operator eye-test confirms Project Run no longer alternates GUI behind/in-front
+  of the scene and command/menu input remains usable while the scene is active.
+- `v0.84.53` started the universal input system. `engine.input` now exposes a
+  shared action/profile layer over raw keys, expands Win32 key mapping beyond
+  letters/numbers, and carries selected project camera style into Play In Editor
+  plus single-context child runs. Editor Settings and the Project workspace now
+  expose input profile selectors for Editor Default, Runtime WASD, Arrow Pilot,
+  and Left-Handed IJKL, and project runtime payloads carry the chosen profile.
+  `v0.84.54` de-conflicts those presets so WASD/QE or IJKL/UO move, arrows look
+  where enabled, Arrow Pilot moves with arrows without also turning the camera,
+  and `Home` remains reset. Future Input Settings work changes bindings through
+  profile data rather than per-view code.
+- `v0.84.54` also hardens the project-run/runtime split. Built child projects
+  are launched with explicit standalone window mode and the CLI backend defaults
+  no longer pre-enable the Software fallback backend. Acceptance: Project Run
+  starts one selected backend process, while Software appears only when
+  requested as a debug/safe fallback.
 - Canvas2D projection ownership has moved into `render.preview_grid` via one
   shared projection helper. Editor picking, OpenGL, DirectX, Raylib, SDL, SFML,
   Vulkan, and the software preview fallback now consume the same Canvas2D

@@ -1,5 +1,51 @@
 # Epoch Changelog
 
+## [v0.84.54]
+- Bumped the active source line to `v0.84.54` for a focused recent-regression
+  bug sweep.
+- De-conflicted the shared input presets so Editor Default and Left-Handed no
+  longer bind arrows as both movement secondaries and look keys. Arrow Pilot is
+  now a movement-first preset instead of rotating and translating from the same
+  key press.
+- Removed the stale CLI default that initialized the Software preview backend
+  even though auto/multicontext policy now starts without Software unless it is
+  explicitly requested.
+- Made built project child launches pass both `--standalone` and
+  `--window-mode standalone`, keeping Project Run on one selected backend even
+  if future default window-mode policy changes.
+- Updated the project-runtime camera help text and docs to state the real
+  default contract: WASD/QE move, arrows look, and `Home` resets through the
+  shared input profile.
+- Expanded the README positioning badge block with the current engine claims and
+  the centered Worlds First row requested for the public project intro.
+
+## [v0.84.53]
+- Bumped the active source line to `v0.84.53` for the first universal input
+  profile spine.
+- Added shared named input actions for movement, look, camera reset, cancel, and
+  confirm so editor and project-runtime controls can stop duplicating raw key
+  checks.
+- Expanded the Windows key map to cover navigation keys, function keys,
+  punctuation, and keypad keys. `Home` now reaches the shared reset-camera
+  action instead of being silently unmapped.
+- Routed editor camera movement and project runtime preview movement through
+  the shared action profile, and carried selected project camera style into both
+  Play In Editor and single-context child launch payloads.
+- Added visible Editor Settings and Project workspace selectors for the shared
+  input profile, including Editor Default, Runtime WASD, Arrow Pilot, and
+  Left-Handed IJKL presets. Project runtime payloads now carry the selected
+  input preset alongside camera style.
+
+## [v0.84.52]
+- Bumped the active source line to `v0.84.52` for the OpenGL
+  overlay/project-run stabilization pass.
+- OpenGL now honors GUI overlay priority by draining normal GUI after the scene
+  during menu/modal frames, keeping command menus and modal windows above the
+  scene viewport instead of alternating draw order.
+- Project runtime preview panels now render through the explicit GUI top layer
+  over full-window scene previews, and OpenGL project-runtime frames no longer
+  enqueue a redundant scene clear before the backend-owned frame clear.
+
 ## [v0.84.51]
 - Bumped the active source line to `v0.84.51` for live engine-thread
   accounting and hidden backend frame-cap cleanup.

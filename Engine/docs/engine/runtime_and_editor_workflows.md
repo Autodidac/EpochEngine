@@ -180,7 +180,8 @@ the same engine-owned path.
   transfer weights.
 - Project Run is project-owned, not editor-clone-owned. The Project workspace
   must expose the target backend/context and child project launches should use
-  standalone single-context flags such as `--standalone --backend opengl`.
+  standalone single-context flags such as
+  `--standalone --window-mode standalone --backend opengl`.
   If the expected child executable is missing after the build, the editor must
   block the run with visible evidence instead of falling back to a parent
   multicontext `Project Runtime` scene across every dock.
@@ -239,10 +240,14 @@ the same engine-owned path.
   and locked 2D canvas. That setting applies to Play In Editor and the project
   preview path; the engine self-iteration sandbox keeps following editor tools
   because it is an engine/editor manipulation lane.
-- viewport movement starts with the shared preview controls: LMB pan, RMB orbit,
-  wheel zoom, WASD/QE movement, and `Home` reset. The next promoted version
-  needs a configurable input profile that projects can opt into through the
-  package/engine feature system instead of inheriting every editor-only binding.
+- viewport movement starts with shared input actions: LMB pan, RMB orbit,
+  wheel zoom, movement/look actions, and `Home` reset. Editor Settings and the
+  Project workspace expose the first input-profile presets, and project runtime
+  launches carry the selected profile. The shipped presets keep movement and
+  look keys non-overlapping so a single key press does not translate and rotate
+  the camera at the same time. The next promoted version needs per-action
+  rebinding and project/package serialization so projects opt into bindings
+  instead of inheriting every editor-only control.
 - hot reload remains a development feature and needs smoke coverage instead of
   trust
 

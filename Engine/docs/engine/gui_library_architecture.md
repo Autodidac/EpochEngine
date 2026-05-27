@@ -22,11 +22,12 @@ logic.
 ## Draw Model Guardrail
 
 The current working draw model is a protected contract, not a playground. The
-OpenGL editor path is stable only when normal GUI/backend work is drained, the
-scene preview renders once, follow-up work is drained, only the explicit GUI
-top-layer batch for command menus/modal chrome is replayed above it, and
-capture/present happens afterward. That order is the baseline for menu, pane,
-and scene composition work.
+OpenGL editor path is stable only when ordinary frames drain normal GUI/backend
+work before the scene, overlay-priority frames drain normal GUI/backend work
+after the scene, the scene preview renders once, only the explicit GUI top-layer
+batch for command menus/modal chrome is replayed above it, and capture/present
+happens afterward. That order is the baseline for menu, pane, and scene
+composition work.
 
 Fix command-menu z-order, modal layering, resize chrome, and scene/pane
 composition by improving the GUI library or the explicit top-layer/draw-model
@@ -81,9 +82,13 @@ Before a control is considered ready, it needs:
   visible long-running editor action; do not draw one-off progress rows in
   Console Dock or domain code when `engine.gui` can own the behavior
 - input profiles are shared engine/editor contracts, not per-surface hacks.
-  Camera reset begins with the `Home` preview hotkey, but rebinding, project
-  export, and package opt-in must flow through a reusable input-configuration
-  surface before being promoted to generated projects
+  `v0.84.54` keeps movement bindings and look bindings non-overlapping in the
+  shipped presets, after `v0.84.53` introduced named
+  movement/look/reset/cancel/confirm actions, Win32 navigation-key coverage,
+  project runtime camera handoff, and visible Editor Settings/Project workspace
+  profile selectors. Rebinding, project export, and package opt-in must flow
+  through a reusable input-configuration surface before being promoted to
+  generated projects
 - text inputs must support basic desktop editing affordances before promotion:
   first-pass whole-field copy, cut, paste, select-all, and visible domain
   clipboard actions are acceptable, but true ranged text selection/caret

@@ -2097,6 +2097,59 @@ namespace epochnamespace::core
 
         thread_local std::unordered_map<Context*, PreviewLookState> g_preview_look_states{};
 
+        struct ProjectSceneLaunchOptions
+        {
+            std::string project_id{};
+            epochnamespace::previewgrid::CameraMode camera_mode{ epochnamespace::previewgrid::CameraMode::Editor };
+            input::ProfilePreset input_profile{ input::ProfilePreset::EditorDefault };
+        };
+
+        [[nodiscard]] epochnamespace::previewgrid::CameraMode camera_mode_from_argument(std::string_view value) noexcept
+        {
+            if (value == "fps" || value == "first-person" || value == "first_person" || value == "runtime")
+                return epochnamespace::previewgrid::CameraMode::FPS;
+            if (value == "canvas2d" || value == "2d" || value == "2d-canvas" || value == "canvas")
+                return epochnamespace::previewgrid::CameraMode::Canvas2D;
+            return epochnamespace::previewgrid::CameraMode::Editor;
+        }
+
+        [[nodiscard]] ProjectSceneLaunchOptions parse_project_scene_launch(std::string_view payload)
+        {
+            ProjectSceneLaunchOptions launch{};
+            std::string options{};
+
+            if (const auto marker = payload.find('|'); marker != std::string_view::npos)
+            {
+                launch.project_id = std::string(payload.substr(0, marker));
+                options = std::string(payload.substr(marker + 1));
+            }
+            else
+            {
+                launch.project_id = std::string(payload);
+            }
+
+            while (!options.empty())
+            {
+                const std::size_t nextOption = options.find('|');
+                const std::string option = nextOption == std::string::npos
+                    ? options
+                    : options.substr(0, nextOption);
+
+                constexpr std::string_view kCameraPrefix = "camera=";
+                constexpr std::string_view kInputPrefix = "input=";
+                if (option.starts_with(kCameraPrefix))
+                    launch.camera_mode = camera_mode_from_argument(std::string_view{ option }.substr(kCameraPrefix.size()));
+                else if (option.starts_with(kInputPrefix))
+                    launch.input_profile = input::profile_preset_from_id(std::string_view{ option }.substr(kInputPrefix.size()));
+
+                if (nextOption == std::string::npos)
+                    break;
+                options.erase(0, nextOption + 1);
+            }
+
+            return launch;
+        }
+
         using ContextGroup = std::pair<
             epochnamespace::core::ContextType,
             std::vector<std::shared_ptr<epochnamespace::core::Context>>
@@ -2112,6 +2165,8 @@ namespace epochnamespace::core
             std::string scene_argument{};
             std::string backend_argument{};
             std::string frame_limit_argument{};
+            std::string camera_argument{};
+            std::string input_argument{};
             if (const std::size_t optionMarker = payload.find('|'); optionMarker != std::string::npos)
             {
                 executable_payload = payload.substr(0, optionMarker);
@@ -2127,6 +2182,8 @@ namespace epochnamespace::core
                     constexpr std::string_view kBackendPrefix = "backend=";
                     constexpr std::string_view kFrameLimitPrefix = "fps=";
                     constexpr std::string_view kFrameLimitLongPrefix = "frame-limit=";
+                    constexpr std::string_view kCameraPrefix = "camera=";
+                    constexpr std::string_view kInputPrefix = "input=";
                     if (option.starts_with(kScenePrefix))
                         scene_argument = option.substr(kScenePrefix.size());
                     else if (option.starts_with(kBackendPrefix))
@@ -2135,6 +2192,10 @@ namespace epochnamespace::core
                         frame_limit_argument = option.substr(kFrameLimitPrefix.size());
                     else if (option.starts_with(kFrameLimitLongPrefix))
                         frame_limit_argument = option.substr(kFrameLimitLongPrefix.size());
+                    else if (option.starts_with(kCameraPrefix))
+                        camera_argument = option.substr(kCameraPrefix.size());
+                    else if (option.starts_with(kInputPrefix))
+                        input_argument = option.substr(kInputPrefix.size());
 
                     if (nextOption == std::string::npos)
                         break;
@@ -2144,6 +2205,22 @@ namespace epochnamespace::core
 
             if (backend_argument.empty())
                 backend_argument = "opengl";
+
+            std::string scene_to_launch = scene_argument;
+            if (!camera_argument.empty()
+                && scene_to_launch.starts_with("project:")
+                && scene_to_launch.find("|camera=") == std::string::npos)
+            {
+                scene_to_launch += "|camera=";
+                scene_to_launch += camera_argument;
+            }
+            if (!input_argument.empty()
+                && scene_to_launch.starts_with("project:")
+                && scene_to_launch.find("|input=") == std::string::npos)
+            {
+                scene_to_launch += "|input=";
+                scene_to_launch += input_argument;
+            }
 
             const std::filesystem::path executable = std::filesystem::path{
                 executable_payload
@@ -2167,10 +2244,10 @@ namespace epochnamespace::core
 
             PROCESS_INFORMATION process{};
             std::wstring command_line = L"\"" + executable.wstring() + L"\"";
-            command_line += L" --standalone";
-            if (!scene_argument.empty())
+            command_line += L" --standalone --window-mode standalone";
+            if (!scene_to_launch.empty())
             {
-                const std::wstring scene_wide{ scene_argument.begin(), scene_argument.end() };
+                const std::wstring scene_wide{ scene_to_launch.begin(), scene_to_launch.end() };
                 command_line += L" --scene \"" + scene_wide + L"\"";
             }
             if (!backend_argument.empty())
@@ -2218,9 +2295,9 @@ namespace epochnamespace::core
             CloseHandle(process.hProcess);
             return true;
 #else
-            std::string command = "\"" + executable.string() + "\" --standalone";
-            if (!scene_argument.empty())
-                command += " --scene \"" + scene_argument + "\"";
+            std::string command = "\"" + executable.string() + "\" --standalone --window-mode standalone";
+            if (!scene_to_launch.empty())
+                command += " --scene \"" + scene_to_launch + "\"";
             if (!backend_argument.empty())
                 command += " --backend \"" + backend_argument + "\"";
             if (!frame_limit_argument.empty())
@@ -2334,10 +2411,14 @@ namespace epochnamespace::core
         class ProjectPlayScene final : public epochnamespace::scene::Scene
         {
         public:
-            explicit ProjectPlayScene(std::string_view project_id)
-                : m_projectId(project_id)
+            explicit ProjectPlayScene(std::string_view project_payload)
             {
-                const auto* profile = epochnamespace::editor_find_project_profile(project_id);
+                const auto launch = parse_project_scene_launch(project_payload);
+                m_cameraMode = launch.camera_mode;
+                m_inputProfile = launch.input_profile;
+                input::set_active_profile(m_inputProfile);
+
+                const auto* profile = epochnamespace::editor_find_project_profile(launch.project_id);
                 if (!profile)
                     profile = &epochnamespace::editor_default_project_profile();
 
@@ -2361,7 +2442,7 @@ namespace epochnamespace::core
                 if (!ctx)
                     return false;
 
-                if (ctx->is_key_down_safe(input::Key::Escape))
+                if (input::action_pressed(input::Action::Cancel))
                 {
                     epochnamespace::previewgrid::clear_object_markers(ctx.get());
                     return false;
@@ -2384,11 +2465,21 @@ namespace epochnamespace::core
 
                 const bool mouse_left_down =
                     ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseLeft);
+                const bool mouse_right_down =
+                    ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseRight);
 
                 const int width = (std::max)(1, ctx->width > 0 ? ctx->width : ctx->get_width_safe());
                 const int height = (std::max)(1, ctx->height > 0 ? ctx->height : ctx->get_height_safe());
-                ctx->clear_safe();
+                const bool backendOwnsFrameClear =
+                    ctx->type == core::ContextType::OpenGL;
+                if (!backendOwnsFrameClear)
+                    ctx->clear_safe();
                 ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                if (!m_cameraApplied.contains(ctx.get()))
+                {
+                    epochnamespace::previewgrid::set_camera_mode(ctx.get(), m_cameraMode);
+                    m_cameraApplied[ctx.get()] = true;
+                }
                 ctx->set_scene_viewport({ 0, 0, width, height });
                 publish_project_play_markers(ctx.get(), std::span<const epochnamespace::EditorSceneSeedEntity>{
                     m_seedEntities.data(),
@@ -2397,6 +2488,67 @@ namespace epochnamespace::core
 
                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
 
+                const int wheelDelta = epochnamespace::gui::consume_mouse_wheel_delta();
+                if (input::action_pressed(input::Action::ResetCamera))
+                    epochnamespace::previewgrid::reset_camera(ctx.get());
+
+                const float forwardInput =
+                    (input::action_held(input::Action::MoveForward) ? 1.0f : 0.0f)
+                    - (input::action_held(input::Action::MoveBackward) ? 1.0f : 0.0f);
+                const float rightInput =
+                    (input::action_held(input::Action::MoveRight) ? 1.0f : 0.0f)
+                    - (input::action_held(input::Action::MoveLeft) ? 1.0f : 0.0f);
+                const float upInput =
+                    (input::action_held(input::Action::MoveUp) ? 1.0f : 0.0f)
+                    - (input::action_held(input::Action::MoveDown) ? 1.0f : 0.0f);
+                const float yawInput =
+                    (input::action_held(input::Action::LookRight) ? 1.0f : 0.0f)
+                    - (input::action_held(input::Action::LookLeft) ? 1.0f : 0.0f);
+                const float pitchInput =
+                    (input::action_held(input::Action::LookUp) ? 1.0f : 0.0f)
+                    - (input::action_held(input::Action::LookDown) ? 1.0f : 0.0f);
+
+                if (mouse_right_down && m_lookState.looking)
+                {
+                    const float mouseDeltaX = mouse_pos.x - m_lookState.last_mouse.x;
+                    const float mouseDeltaY = mouse_pos.y - m_lookState.last_mouse.y;
+                    const float sensitivity = input::mouse_look_sensitivity();
+                    epochnamespace::previewgrid::look_camera(
+                        ctx.get(),
+                        mouseDeltaX * sensitivity,
+                        -mouseDeltaY * sensitivity);
+                }
+                else if (mouse_left_down && !mouse_right_down && m_lookState.panning)
+                {
+                    const float mouseDeltaX = mouse_pos.x - m_lookState.last_mouse.x;
+                    const float mouseDeltaY = mouse_pos.y - m_lookState.last_mouse.y;
+                    epochnamespace::previewgrid::pan_camera_drag(
+                        ctx.get(),
+                        mouseDeltaX,
+                        -mouseDeltaY);
+                }
+
+                if (wheelDelta != 0)
+                {
+                    epochnamespace::previewgrid::zoom_camera(
+                        ctx.get(),
+                        (static_cast<float>(wheelDelta) / 120.0f) * input::wheel_zoom_step());
+                }
+
+                epochnamespace::previewgrid::step_camera(
+                    ctx.get(),
+                    dt,
+                    forwardInput,
+                    rightInput,
+                    upInput,
+                    yawInput,
+                    pitchInput);
+
+                m_lookState.last_mouse = mouse_pos;
+                m_lookState.looking = mouse_right_down;
+                m_lookState.panning = mouse_left_down && !mouse_right_down;
+
+                gui::begin_top_layer();
                 gui::begin_window("Project Runtime Preview", { 24.0f, 24.0f }, { 430.0f, 210.0f });
                 gui::label(std::string("Project: ") + m_projectName);
                 gui::label(std::string("World: ") + m_worldName);
@@ -2412,8 +2564,9 @@ namespace epochnamespace::core
                     + (m_modelSummary.summary.empty() ? std::string("(unavailable)") : m_modelSummary.summary),
                     390.0f);
                 gui::wrapped_label(m_description, 390.0f);
-                gui::wrapped_label("Esc returns to the editor. Runtime input is project-owned here; editor camera controls are disabled in this view.", 390.0f);
+                gui::wrapped_label("Esc returns to the editor. WASD/QE move, arrows look, and Home resets the active project camera through the shared input profile.", 390.0f);
                 gui::end_window();
+                gui::end_top_layer();
 
                 gui::end_frame();
                 ctx->present_safe();
@@ -2431,6 +2584,10 @@ namespace epochnamespace::core
             std::vector<epochnamespace::EditorSceneSeedEntity> m_seedEntities{};
             timing::Clock::time_point m_lastFrame{};
             bool m_hasLastFrame{ false };
+            epochnamespace::previewgrid::CameraMode m_cameraMode{ epochnamespace::previewgrid::CameraMode::Editor };
+            input::ProfilePreset m_inputProfile{ input::ProfilePreset::EditorDefault };
+            std::unordered_map<const void*, bool> m_cameraApplied{};
+            PreviewLookState m_lookState{};
         };
 
         [[nodiscard]] std::vector<ContextGroup> collect_backend_contexts_shared()
@@ -2874,33 +3031,33 @@ namespace epochnamespace::core
                                 {
                                     const int wheelDelta = epochnamespace::gui::consume_mouse_wheel_delta();
                                     const float forwardInput =
-                                        (ctx->is_key_held_safe(epochnamespace::input::Key::W) ? 1.0f : 0.0f)
-                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::S) ? 1.0f : 0.0f);
+                                        (epochnamespace::input::action_held(epochnamespace::input::Action::MoveForward) ? 1.0f : 0.0f)
+                                        - (epochnamespace::input::action_held(epochnamespace::input::Action::MoveBackward) ? 1.0f : 0.0f);
                                     const float rightInput =
-                                        (ctx->is_key_held_safe(epochnamespace::input::Key::D) ? 1.0f : 0.0f)
-                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::A) ? 1.0f : 0.0f);
+                                        (epochnamespace::input::action_held(epochnamespace::input::Action::MoveRight) ? 1.0f : 0.0f)
+                                        - (epochnamespace::input::action_held(epochnamespace::input::Action::MoveLeft) ? 1.0f : 0.0f);
                                     const float upInput =
-                                        (ctx->is_key_held_safe(epochnamespace::input::Key::E) ? 1.0f : 0.0f)
-                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::Q) ? 1.0f : 0.0f);
+                                        (epochnamespace::input::action_held(epochnamespace::input::Action::MoveUp) ? 1.0f : 0.0f)
+                                        - (epochnamespace::input::action_held(epochnamespace::input::Action::MoveDown) ? 1.0f : 0.0f);
                                     const float yawInput =
-                                        (ctx->is_key_held_safe(epochnamespace::input::Key::Right) ? 1.0f : 0.0f)
-                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::Left) ? 1.0f : 0.0f);
+                                        (epochnamespace::input::action_held(epochnamespace::input::Action::LookRight) ? 1.0f : 0.0f)
+                                        - (epochnamespace::input::action_held(epochnamespace::input::Action::LookLeft) ? 1.0f : 0.0f);
                                     const float pitchInput =
-                                        (ctx->is_key_held_safe(epochnamespace::input::Key::Up) ? 1.0f : 0.0f)
-                                        - (ctx->is_key_held_safe(epochnamespace::input::Key::Down) ? 1.0f : 0.0f);
+                                        (epochnamespace::input::action_held(epochnamespace::input::Action::LookUp) ? 1.0f : 0.0f)
+                                        - (epochnamespace::input::action_held(epochnamespace::input::Action::LookDown) ? 1.0f : 0.0f);
 
-                                    if (ctx->is_key_down_safe(epochnamespace::input::Key::Home))
+                                    if (epochnamespace::input::action_pressed(epochnamespace::input::Action::ResetCamera))
                                         epochnamespace::previewgrid::reset_camera(ctx.get());
 
                                     if (mouse_right_down && look_state.looking)
                                     {
                                         const float mouseDeltaX = mouse_pos.x - look_state.last_mouse.x;
                                         const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
-                                        constexpr float kMouseSensitivity = 0.20f;
+                                        const float mouseSensitivity = epochnamespace::input::mouse_look_sensitivity();
                                         epochnamespace::previewgrid::look_camera(
                                             ctx.get(),
-                                            mouseDeltaX * kMouseSensitivity,
-                                            -mouseDeltaY * kMouseSensitivity);
+                                            mouseDeltaX * mouseSensitivity,
+                                            -mouseDeltaY * mouseSensitivity);
                                     }
                                     else if (mouse_left_down && !mouse_right_down && look_state.panning)
                                     {
@@ -2914,10 +3071,9 @@ namespace epochnamespace::core
 
                                     if (wheelDelta != 0)
                                     {
-                                        constexpr float kWheelZoomStep = 1.3f;
                                         epochnamespace::previewgrid::zoom_camera(
                                             ctx.get(),
-                                            (static_cast<float>(wheelDelta) / 120.0f) * kWheelZoomStep);
+                                            (static_cast<float>(wheelDelta) / 120.0f) * epochnamespace::input::wheel_zoom_step());
                                     }
 
                                     epochnamespace::previewgrid::step_camera(

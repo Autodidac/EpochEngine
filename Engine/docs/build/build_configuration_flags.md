@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.51`
+Current source version: `v0.84.54`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -128,7 +128,20 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.84.51` is the current source line for live engine-thread accounting and
+- `v0.84.54` is the current source line for the input-profile bug sweep.
+  Editor Default and Left-Handed profiles keep movement keys separate from arrow
+  look keys, and Arrow Pilot is an alternate movement profile instead of a
+  movement/look overlap. Editor and project runtime camera movement still route
+  through named input actions, `Home` maps to camera reset, and project launch
+  payloads carry the selected camera style and input profile into Play In
+  Editor plus single-context child runs. Built child launches now pass
+  `--standalone --window-mode standalone`, and Software is no longer part of the
+  default backend count unless requested explicitly.
+- `v0.84.52` kept the OpenGL overlay/project-run
+  stabilization pass. OpenGL menu/modal frames now drain normal GUI after the
+  scene so command windows and project runtime panels stay above the active
+  viewport instead of flip-flopping with scene composition.
+- `v0.84.51` kept live engine-thread accounting and
   backend frame-cap cleanup. The toolbar and Systems workspace now show live
   engine-spawned thread counts alongside detected CPU thread capacity, while
   DirectX no longer adds a backend sync cap over the core limiter.
