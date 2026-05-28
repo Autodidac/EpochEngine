@@ -163,8 +163,9 @@ the same engine-owned path.
   the script host; it must not copy those implementations out of the kernel
   engine.
 - Forest Factory is a core editor/runtime descriptor lane, not a loose optional
-  dump. Asset > Open Forest Factory opens the current evidence/profile
-  workbench; Package Manager activation stages
+  dump. Asset > Open Forest Factory opens the current scene-backed Forest
+  Factory preview surface with deterministic editor primitives; Package Manager
+  activation stages
   `assets/packages/engine_forest_factory.package.json` and
   `assets/packages/engine_forest_factory/default.forest.json` in the active
   project. Package payload/source routing points at
@@ -180,7 +181,13 @@ the same engine-owned path.
   modal using the shared GUI progress bar. Selecting a package should update the
   selected package/status text immediately; pressing Install should either
   materialize a local package, stage a human-approved download/build gate, or
-  display the reason the package is blocked.
+  display the reason the package is blocked. The modal body is a clipped shared
+  GUI scroll area; package rows and progress bars must not bleed into the scene
+  or into command-menu/modal chrome.
+- Active project evidence repair now preserves the current editor entity list
+  and writes a minimal `.epoch` entity snapshot during explicit Save/Build/Run
+  paths. This is the current safety lane for editor modifications until the
+  full scene parser/serializer owns runtime/editor loading.
 - OS model package lanes are on-demand model assets. Qwen/Nemotron weights are
   staged to executable-local `cache/models/` only after operator action, are
   not cloned for engine self-iteration, and are included in generated projects

@@ -41,6 +41,11 @@ viewport should wrap their window draw in `gui::begin_top_layer()` /
 `gui::end_top_layer()` so the renderer can replay only those sprites after the
 scene pass. Do not rely on menu creation order alone for z-order.
 
+Menu hit regions must match the exact drawn dropdown size. A stale row count can
+make the outside-click guard close a menu while its drawn body is still being
+interacted with, which looks like command-menu flicker even when the renderer
+order is correct.
+
 On OpenGL, top-layer sprites are replay-only. They must not also be queued in
 the normal deferred GUI batch, or command menus can slowly flip between
 scene-under and scene-over composition while a dropdown is open. Backends that
@@ -52,6 +57,9 @@ normal-batch behavior until their presenter owns a matching replay pass.
 - Primitive widgets: labels, buttons, connected tabs, dropdown/select boxes,
   progress bars, text inputs, scrollable text panels, image/runtime-surface
   views, and future checkboxes, sliders, tree views, and list views.
+- Composite modal bodies: package manager, settings, source-update prompts, and
+  other dense control surfaces should put changing details inside clipped shared
+  scroll areas so progress bars and rows cannot bleed into scene or modal chrome.
 - Button state: use `gui::button_selected` for active/open toolbar, menu, tab,
   and window-chrome buttons so selection is explicit and does not flicker
   through transient hover/press state while top-layer GUI is replayed.

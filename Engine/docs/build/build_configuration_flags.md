@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.55`
+Current source version: `v0.84.57`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -128,7 +128,13 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.84.55` is the current source line for the focused GUI/script/OS-AI polish
+- `v0.84.57` is the current source line for the focused editor GUI and Forest
+  Factory stabilization pass. It keeps the protected OpenGL draw model intact
+  while fixing the Asset command-menu hit region, clipping Package Manager
+  details inside a shared GUI scroll area, making Forest Factory scene-backed,
+  and preserving current editor entities during explicit project evidence
+  repair.
+- `v0.84.55` was the source line for the focused GUI/script/OS-AI polish
   pass. Dropdown/select boxes now close on outside click, anchor near the
   selected value when opened, and keep scroll input inside active clips; built-in
   script assets use ASCII headers for the current source preview; generated

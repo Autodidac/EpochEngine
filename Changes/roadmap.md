@@ -655,6 +655,15 @@ engine shape and should be treated as starting truth for the next passes:
   `https://github.com/Autodidac/EpochEngineExtensions`; the Plant Lab repository
   stays recorded as reference/prototype source instead of being cloned into
   every project.
+- `v0.84.57` moves the Forest Factory workbench into the scene-backed editor
+  path with deterministic preview primitives instead of a manifest-only text
+  panel. It also fixes the Asset command-menu row-count mismatch that could
+  make command menus flip between open/closed over the scene, clips the Package
+  Manager modal body with the shared GUI scroll-area primitive, and saves a
+  minimal `.epoch` entity snapshot during explicit project evidence repair so
+  save/build/run no longer immediately discards current editor entity edits.
+  Full scene parser/serializer ownership, mature Forest Factory sliders/atlas
+  controls, and project payload emission remain acceptance-gated follow-ups.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

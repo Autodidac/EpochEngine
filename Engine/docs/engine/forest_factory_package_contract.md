@@ -11,8 +11,9 @@ shown in the older Plant Lab prototype line.
 - Package Registry owns package identity, provenance, activation mode, and
   security gates in `Engine/modules/package.registry.ixx`.
 - The editor Asset menu opens the current Forest Factory workbench surface,
-  which displays the deterministic profile, provenance repo, staged package
-  evidence, and preview estimates.
+  which now runs through the scene-backed editor viewport with deterministic
+  preview primitives while keeping provenance, staged package evidence, and
+  preview estimates documented.
 - Package payload/source routing belongs in
   `https://github.com/Autodidac/EpochEngineExtensions`.
 - The Package Manager stages project-visible manifests and deterministic seed
@@ -48,6 +49,9 @@ The first production contract exposes:
 - output categories: preview skeleton, mesh LOD, impostor, voxel occupancy, and
   seed asset
 - estimated preview stats for nodes, branches, leaves, vertices, and triangles
+- a scene-backed editor prototype made from deterministic preview primitives so
+  Forest Factory is visible in the same central 3D editor path as other
+  workspaces before the production mesh/voxel renderer lands
 
 ## Package Manager Behavior
 
@@ -69,9 +73,9 @@ download source, bind ports, create servers, or run package code automatically.
 
 Before Forest Factory graduates beyond this contract:
 
-- The current Forest Factory workbench graduates from a profile/evidence panel
-  into a dedicated 3D preview with proper tabs, sliders, atlas controls, mature
-  stage playback, and production GUI controls.
+- The current Forest Factory scene-backed prototype graduates into a dedicated
+  3D preview with proper tabs, sliders, atlas controls, mature-stage playback,
+  and production GUI controls.
 - Package activation can materialize project-local generated assets without
   polluting software projects or minimal game clones.
 - Generated outputs can feed mesh LOD, impostor, and voxel occupancy consumers.

@@ -51,6 +51,7 @@ module;
 #include <format>
 #include <fstream>
 #include <future>
+#include <iomanip>
 #include <initializer_list>
 #include <iterator>
 #include <mutex>
@@ -478,6 +479,9 @@ namespace epochnamespace
             std::size_t aiToolHarnessRunCount{ 0 };
         };
 
+        [[nodiscard]] bool load_editor_scene_snapshot(EditorState& state);
+        void save_editor_scene_snapshot(const EditorState& state);
+
         struct ContextPtrHash
         {
             std::size_t operator()(const core::Context* p) const noexcept
@@ -496,7 +500,9 @@ namespace epochnamespace
 
         [[nodiscard]] static bool main_surface_uses_scene(EditorMainSurface surface) noexcept
         {
-            return surface == EditorMainSurface::Scene || surface == EditorMainSurface::Game2D;
+            return surface == EditorMainSurface::Scene
+                || surface == EditorMainSurface::Game2D
+                || surface == EditorMainSurface::ForestFactory;
         }
 
         [[nodiscard]] static std::string_view main_surface_title(EditorMainSurface surface) noexcept
@@ -1272,6 +1278,8 @@ namespace epochnamespace
                 });
             }
 
+            (void)load_editor_scene_snapshot(state);
+
             state.selectedEntity = state.entities.empty() ? 0u : (std::min)(state.selectedEntity, state.entities.size() - 1u);
             if (writeLog)
                 push_editor_log(
@@ -1396,6 +1404,83 @@ namespace epochnamespace
             push_editor_log(state, "[2d] Added editor-only Canvas2D editing plane.");
         }
 
+        void ensure_forest_factory_preview_entities(EditorState& state)
+        {
+            const std::size_t beforeCount = state.entities.size();
+            auto upsert = [&](EditorEntity entity)
+            {
+                const auto existing = std::find_if(
+                    state.entities.begin(),
+                    state.entities.end(),
+                    [&](const EditorEntity& candidate)
+                    {
+                        return candidate.name == entity.name;
+                    });
+                if (existing != state.entities.end())
+                    *existing = std::move(entity);
+                else
+                    state.entities.push_back(std::move(entity));
+            };
+
+            EditorEntity stage{};
+            stage.name = "ForestFactoryStage";
+            stage.type = "Level";
+            stage.category = "ForestFactory";
+            stage.position = { 0.0f, -0.08f, 0.0f };
+            stage.scale = { 4.8f, 0.12f, 4.8f };
+            stage.editorOnly = true;
+            upsert(std::move(stage));
+
+            EditorEntity trunk{};
+            trunk.name = "ForestFactoryTrunk";
+            trunk.type = "ForestTrunk";
+            trunk.category = "ForestFactory";
+            trunk.position = { 0.0f, 0.72f, 0.0f };
+            trunk.scale = { 0.28f, 1.35f, 0.28f };
+            trunk.editorOnly = true;
+            upsert(std::move(trunk));
+
+            EditorEntity canopy{};
+            canopy.name = "ForestFactoryCanopy";
+            canopy.type = "ForestCanopy";
+            canopy.category = "ForestFactory";
+            canopy.position = { 0.0f, 1.65f, 0.0f };
+            canopy.scale = { 1.28f, 0.66f, 1.28f };
+            canopy.editorOnly = true;
+            upsert(std::move(canopy));
+
+            EditorEntity branchLeft{};
+            branchLeft.name = "ForestFactoryBranchLeft";
+            branchLeft.type = "ForestLeaf";
+            branchLeft.category = "ForestFactory";
+            branchLeft.position = { -0.82f, 1.22f, 0.0f };
+            branchLeft.scale = { 0.82f, 0.28f, 0.34f };
+            branchLeft.editorOnly = true;
+            upsert(std::move(branchLeft));
+
+            EditorEntity branchRight{};
+            branchRight.name = "ForestFactoryBranchRight";
+            branchRight.type = "ForestLeaf";
+            branchRight.category = "ForestFactory";
+            branchRight.position = { 0.82f, 1.22f, 0.0f };
+            branchRight.scale = { 0.82f, 0.28f, 0.34f };
+            branchRight.editorOnly = true;
+            upsert(std::move(branchRight));
+
+            const auto selected = std::find_if(
+                state.entities.begin(),
+                state.entities.end(),
+                [](const EditorEntity& entity)
+                {
+                    return entity.name == "ForestFactoryCanopy";
+                });
+            if (selected != state.entities.end())
+                state.selectedEntity = static_cast<std::size_t>(std::distance(state.entities.begin(), selected));
+
+            if (state.entities.size() != beforeCount)
+                push_editor_log(state, "[forest] Added scene-backed Forest Factory preview primitives.");
+        }
+
         void duplicate_selected_entity(EditorState& state)
         {
             if (state.entities.empty())
@@ -1448,6 +1533,12 @@ namespace epochnamespace
                 return { 0.28f, 0.94f, 0.48f };
             if (entity.type == "Camera")
                 return { 0.42f, 0.80f, 1.0f };
+            if (entity.category == "ForestFactory")
+            {
+                if (entity.type == "ForestTrunk")
+                    return { 0.58f, 0.36f, 0.20f };
+                return { 0.30f, 0.82f, 0.36f };
+            }
             if (entity.category == "World" || entity.type == "Level")
                 return { 0.62f, 0.78f, 0.98f };
             if (entity.editorOnly || entity.category == "Editor")
@@ -2293,6 +2384,104 @@ namespace epochnamespace
             if (path.is_absolute())
                 return path.lexically_normal();
             return (editor_runtime_root() / path).lexically_normal();
+        }
+
+        [[nodiscard]] std::filesystem::path active_editor_scene_path(const EditorState& state)
+        {
+            if (state.projectScenePath.empty())
+                return {};
+            return resolve_editor_path(std::filesystem::path{ state.projectScenePath });
+        }
+
+        void save_editor_scene_snapshot(const EditorState& state)
+        {
+            const auto scenePath = active_editor_scene_path(state);
+            if (scenePath.empty())
+                return;
+
+            std::error_code ec;
+            std::filesystem::create_directories(scenePath.parent_path(), ec);
+            if (ec)
+                return;
+
+            std::ofstream out(scenePath, std::ios::binary | std::ios::trunc);
+            if (!out)
+                return;
+
+            out << std::setprecision(6);
+            out << "scene " << std::quoted(state.activeWorld) << "\n";
+            out << "project " << std::quoted(state.projectId) << "\n";
+            out << "epoch_editor_entities 1\n";
+            for (const auto& entity : state.entities)
+            {
+                out << "entity "
+                    << std::quoted(entity.name) << ' '
+                    << std::quoted(entity.type) << ' '
+                    << std::quoted(entity.category) << ' '
+                    << "pos " << entity.position[0] << ' ' << entity.position[1] << ' ' << entity.position[2] << ' '
+                    << "rot " << entity.rotation[0] << ' ' << entity.rotation[1] << ' ' << entity.rotation[2] << ' '
+                    << "scale " << entity.scale[0] << ' ' << entity.scale[1] << ' ' << entity.scale[2] << ' '
+                    << "visible " << (entity.visible ? 1 : 0) << ' '
+                    << "editor_only " << (entity.editorOnly ? 1 : 0)
+                    << "\n";
+            }
+        }
+
+        [[nodiscard]] bool load_editor_scene_snapshot(EditorState& state)
+        {
+            const auto scenePath = active_editor_scene_path(state);
+            if (scenePath.empty())
+                return false;
+
+            std::ifstream in(scenePath, std::ios::binary);
+            if (!in)
+                return false;
+
+            std::vector<EditorEntity> loaded;
+            std::string line;
+            while (std::getline(in, line))
+            {
+                std::istringstream row(line);
+                std::string tag;
+                row >> tag;
+                if (tag != "entity")
+                    continue;
+
+                EditorEntity entity{};
+                std::string posTag;
+                std::string rotTag;
+                std::string scaleTag;
+                std::string visibleTag;
+                std::string editorOnlyTag;
+                int visible = 1;
+                int editorOnly = 0;
+                if (!(row
+                    >> std::quoted(entity.name)
+                    >> std::quoted(entity.type)
+                    >> std::quoted(entity.category)
+                    >> posTag >> entity.position[0] >> entity.position[1] >> entity.position[2]
+                    >> rotTag >> entity.rotation[0] >> entity.rotation[1] >> entity.rotation[2]
+                    >> scaleTag >> entity.scale[0] >> entity.scale[1] >> entity.scale[2]
+                    >> visibleTag >> visible
+                    >> editorOnlyTag >> editorOnly))
+                {
+                    continue;
+                }
+
+                if (posTag != "pos" || rotTag != "rot" || scaleTag != "scale" || visibleTag != "visible" || editorOnlyTag != "editor_only")
+                    continue;
+
+                entity.visible = visible != 0;
+                entity.editorOnly = editorOnly != 0;
+                loaded.push_back(std::move(entity));
+            }
+
+            if (loaded.empty())
+                return false;
+
+            state.entities = std::move(loaded);
+            state.selectedEntity = (std::min)(state.selectedEntity, state.entities.size() - 1u);
+            return true;
         }
 
         [[nodiscard]] std::filesystem::path project_entry_source_path(std::string_view projectRoot)
@@ -3235,13 +3424,23 @@ namespace epochnamespace
             const std::string requestedProject = projectId.empty()
                 ? std::string(editor_default_project_profile().id)
                 : std::string(projectId);
+            const std::string previousProject = editor.projectId;
+            const std::vector<EditorEntity> preservedEntities = editor.entities;
+            const std::size_t preservedSelected = editor.selectedEntity;
             const bool isSandbox = requestedProject == "sandbox";
             const auto ensured = editor_ensure_project_shell(requestedProject);
             editor.projectStatus = ensured.summary;
             editor.aiContinuousBuildFingerprint.clear();
             if (ensured.succeeded)
             {
-                set_project(editor, ensured.project_id.empty() ? requestedProject : ensured.project_id, true);
+                const std::string targetProject = ensured.project_id.empty() ? requestedProject : ensured.project_id;
+                set_project(editor, targetProject, true);
+                if (targetProject == previousProject && !preservedEntities.empty())
+                {
+                    editor.entities = preservedEntities;
+                    editor.selectedEntity = (std::min)(preservedSelected, editor.entities.size() - 1u);
+                    save_editor_scene_snapshot(editor);
+                }
                 editor.projectStatus = ensured.summary + " Active project saved.";
                 editor.aiContinuousBuildStatus = isSandbox
                     ? "Sandbox evidence saved; queue a self-iteration build to stage verifier evidence."
@@ -4348,11 +4547,20 @@ namespace epochnamespace
                 push_editor_log(editor, "[project] Project Workspace opened.");
                 break;
             case EditorMainSurface::ForestFactory:
+                editor.showOutliner = true;
                 editor.showInspector = true;
                 editor.showConsoleDock = true;
                 editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
-                push_editor_log(editor, "[forest] Forest Factory workspace opened.");
+                editor.previewMode = core::ScenePreviewMode::Editor;
+                editor.projectCameraMode = previewgrid::CameraMode::Editor;
+                ensure_forest_factory_preview_entities(editor);
+                if (ctx)
+                {
+                    epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
+                    epochnamespace::previewgrid::reset_camera(ctx.get());
+                }
+                push_editor_log(editor, "[forest] Forest Factory workspace opened with the scene-backed preview.");
                 break;
             case EditorMainSurface::AISandbox:
                 editor.workspaceTab = EditorWorkspaceTab::AI;
@@ -4567,7 +4775,7 @@ namespace epochnamespace
             {
             case TopMenu::File: return dropdown_window_size(192.0f, 4);
             case TopMenu::Edit: return dropdown_window_size(192.0f, 3);
-            case TopMenu::Asset: return dropdown_window_size(220.0f, 7);
+            case TopMenu::Asset: return dropdown_window_size(220.0f, 8);
             case TopMenu::Window: return dropdown_window_size(248.0f, 10);
             case TopMenu::Tools: return dropdown_window_size(228.0f, 6);
             case TopMenu::Help: return dropdown_window_size(192.0f, 2);
@@ -6664,7 +6872,8 @@ namespace epochnamespace
 
         if (editor.showPackageManagerModal)
         {
-            const gui::Vec2 modalSize{ 660.0f, 360.0f };
+            editor.openMenu = TopMenu::None;
+            const gui::Vec2 modalSize{ 720.0f, 430.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
@@ -6757,6 +6966,13 @@ namespace epochnamespace
             }
             else
             {
+                (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
+                    .id = "package-manager-detail-scroll",
+                    .size = { contentWidth, 224.0f },
+                    .content_height = 330.0f,
+                    .draw_background = true,
+                    .show_scrollbar = true
+                });
                 gui::property_row("Project", editor.projectName, 96.0f);
                 gui::property_row("Package", activePackageLabel, 96.0f);
                 gui::property_row("Type", selectedPackage ? std::string(packageKindText(selectedPackage->kind)) : std::string("(none)"), 96.0f);
@@ -6807,6 +7023,7 @@ namespace epochnamespace
                     .size = { (std::min)(contentWidth, 500.0f), 20.0f },
                     .show_percent = true
                 });
+                gui::end_scroll_area();
             }
 
             const gui::Vec2 buttonRow = gui::cursor_position();

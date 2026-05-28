@@ -1,5 +1,21 @@
 # Epoch Changelog
 
+## [v0.84.57]
+- Bumped the active source line to `v0.84.57` for a focused editor GUI and
+  Forest Factory stabilization pass.
+- Fixed the Asset command-menu hit region to match the actual drawn menu row
+  count, avoiding a menu outside-click mismatch that could reopen/close the
+  menu while the scene view was active.
+- Reworked the Package Manager modal body to use the shared GUI scroll-area
+  primitive so package details, progress, and install controls stay clipped
+  instead of bleeding over the modal and scene.
+- Promoted Forest Factory from a manifest/profile panel into a scene-backed
+  editor surface with deterministic preview primitives in the central viewport;
+  project payload emission remains package-gated.
+- Added a minimal editor scene snapshot path so active project save/build/run
+  preserves current editor entities instead of immediately reseeding default
+  profile elements.
+
 ## [v0.84.56]
 - Bumped the active source line to `v0.84.56` for the Forest Factory/package
   contract pass.
