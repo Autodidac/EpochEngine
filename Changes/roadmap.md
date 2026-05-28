@@ -664,6 +664,12 @@ engine shape and should be treated as starting truth for the next passes:
   save/build/run no longer immediately discards current editor entity edits.
   Full scene parser/serializer ownership, mature Forest Factory sliders/atlas
   controls, and project payload emission remain acceptance-gated follow-ups.
+- `v0.84.58` extends that saved-scene path into Play In Editor/runtime handoff:
+  the editor snapshots the active scene before in-editor play, the project play
+  runtime consumes the `.epoch` entity snapshot with project seed entities as
+  fallback, and same-project evidence repair preserves workspace, camera,
+  input-profile, selected backend, and frame-limit state instead of snapping the
+  editor back to defaults.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
@@ -1147,6 +1153,10 @@ engine shape and should be treated as starting truth for the next passes:
   helper-review rule. It must reject status-only "working fine" replies,
   missing-verifier evidence, bypass/server requests, and any review that tries
   to promote without human approval.
+- keep `--engine-validation-self-test` green as the broader non-GUI harness for
+  registered project profiles plus the OS AI evidence gate. It is the minimum
+  command-line proof before claiming project-run, generated-shell, or AI-gate
+  stability for a source push.
 - treat `Engine/ai/control/continuous_build_loop.json` as the current contract
   for the engine self-iteration control loop until a replay runner can enforce it
 - use MCP tool schemas as the canonical tool-bus contract and replay shape

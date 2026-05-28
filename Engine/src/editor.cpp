@@ -3427,6 +3427,14 @@ namespace epochnamespace
             const std::string previousProject = editor.projectId;
             const std::vector<EditorEntity> preservedEntities = editor.entities;
             const std::size_t preservedSelected = editor.selectedEntity;
+            const auto preservedPreviewMode = editor.previewMode;
+            const auto preservedWorkspaceTab = editor.workspaceTab;
+            const auto preservedDockStatusTab = editor.dockStatusTab;
+            const auto preservedMainSurface = editor.mainSurface;
+            const auto preservedProjectCameraMode = editor.projectCameraMode;
+            const auto preservedInputProfile = editor.inputProfilePreset;
+            const std::string preservedRunBackend = editor.projectRunBackend;
+            const double preservedRunFrameLimit = editor.projectRunFrameLimitFps;
             const bool isSandbox = requestedProject == "sandbox";
             const auto ensured = editor_ensure_project_shell(requestedProject);
             editor.projectStatus = ensured.summary;
@@ -3435,11 +3443,24 @@ namespace epochnamespace
             {
                 const std::string targetProject = ensured.project_id.empty() ? requestedProject : ensured.project_id;
                 set_project(editor, targetProject, true);
-                if (targetProject == previousProject && !preservedEntities.empty())
+                if (targetProject == previousProject)
                 {
-                    editor.entities = preservedEntities;
-                    editor.selectedEntity = (std::min)(preservedSelected, editor.entities.size() - 1u);
-                    save_editor_scene_snapshot(editor);
+                    editor.previewMode = preservedPreviewMode;
+                    editor.workspaceTab = preservedWorkspaceTab;
+                    editor.dockStatusTab = preservedDockStatusTab;
+                    editor.mainSurface = preservedMainSurface;
+                    editor.projectCameraMode = preservedProjectCameraMode;
+                    editor.inputProfilePreset = preservedInputProfile;
+                    editor.projectRunBackend = preservedRunBackend;
+                    editor.projectRunFrameLimitFps = preservedRunFrameLimit;
+                    input::set_active_profile(editor.inputProfilePreset);
+
+                    if (!preservedEntities.empty())
+                    {
+                        editor.entities = preservedEntities;
+                        editor.selectedEntity = (std::min)(preservedSelected, editor.entities.size() - 1u);
+                        save_editor_scene_snapshot(editor);
+                    }
                 }
                 editor.projectStatus = ensured.summary + " Active project saved.";
                 editor.aiContinuousBuildStatus = isSandbox
@@ -4351,6 +4372,7 @@ namespace epochnamespace
 
         auto play_active_context = [&]()
         {
+            save_editor_scene_snapshot(editor);
             const std::string sceneId =
                 project_runtime_scene_id(editor)
                 + "|camera="
@@ -4359,12 +4381,12 @@ namespace epochnamespace
                 + std::string(input_profile_argument(editor.inputProfilePreset));
             if (ctx)
                 previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
-            editor.projectStatus = std::string("Play In Editor requested: ") + sceneId;
-            push_editor_log(editor, std::string("[project] Play In Editor requested for ") + editor.projectName + ": " + sceneId);
+            editor.projectStatus = std::string("Play In Editor requested using saved editor scene snapshot: ") + sceneId;
+            push_editor_log(editor, std::string("[project] Play In Editor requested for ") + editor.projectName + " using saved scene snapshot: " + sceneId);
             append_project_note(
                 editor,
                 "Play In Editor",
-                "Running the active project scene inside the editor without launching a child process.",
+                "Running the saved active project scene snapshot inside the editor without launching a child process.",
                 sceneId);
             emit_command(EditorCommand::RunGame, sceneId);
         };

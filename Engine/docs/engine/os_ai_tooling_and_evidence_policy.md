@@ -202,7 +202,10 @@ fail any reply that says the engine is "working fine" without evidence, omits
 child/self-test verifier proof, requests automatic promotion, or attempts to
 create a model-accessible server/listener/bypass channel. It also verifies that
 non-promotable assistant replies are blocked from capture promotion while an
-evidence-backed final answer remains eligible.
+evidence-backed final answer remains eligible. `--engine-validation-self-test`
+wraps that AI gate with every registered editor project profile self-test, so a
+single non-GUI command can prove the current project shell and OS-AI evidence
+lanes before a source push.
 
 Any generated app, server, listener, port bind, model-accessible control
 surface, or hidden bypass channel must remain inert until an explicit human
@@ -249,7 +252,9 @@ dataset promotion:
 The current deterministic seed is `--editor-ai-gate-self-test`, which now logs
 aggregate accept/reject, false-accept/false-reject, safety-block, average
 evidence-score, and accuracy statistics. Keep that gate green before treating
-Nemotron, Qwen, or any other selected OS model as a reviewer.
+Nemotron, Qwen, or any other selected OS model as a reviewer. Use
+`--engine-validation-self-test` when project-shell build/run evidence must be
+validated in the same pass.
 
 Self-iteration is not complete just because a helper says it is. A completed
 iteration needs the same packet to show: project manifest, build log, output

@@ -164,6 +164,10 @@
   unless the operator explicitly asks for that exact run. A prior self-test run
   path was reported to crash/reset the GPU or machine, so prefer static review,
   source validation, and build-only checks until runtime proof is requested.
+- When the operator explicitly approves non-GUI runtime validation, prefer
+  `EpochEditor.exe --engine-validation-self-test` from the asset-bearing output
+  folder as the broad project-profile plus OS-AI evidence harness before
+  claiming generated-shell or AI-gate stability.
 - Run Windows local builds from asset-bearing output folders so runtime assets,
   fonts, shaders, scripts, captures, and logs resolve correctly:
 

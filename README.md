@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.57-1F7A4C?style=for-the-badge" alt="Current development source v0.84.57" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.58-1F7A4C?style=for-the-badge" alt="Current development source v0.84.58" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.57`.
+- Source is currently the active development line at `v0.84.58`.
 - The latest published stable runtime release is `v0.84.38`.
 - Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -120,6 +120,9 @@ OS AI model, tooling, and evidence rules live with the AI assets in
 - Non-GUI project-shell self-tests for Sandbox and ProjectLauncher, including
   `--editor-project-self-test <id>` from the checked-in engine and
   `--project-self-test` from generated child outputs.
+- A non-GUI `--engine-validation-self-test` harness that runs every registered
+  editor project profile self-test plus the OS AI evidence gate before claiming
+  project/runtime harness stability.
 - Engine-owned GUI/text rendering with reusable controls, workspace tabs,
   open/close panel visibility, and first-pass draggable splitters instead of
   middleware-owned editor UI.

@@ -6,7 +6,7 @@ Epoch is now documented as a module-first engine with the active runtime living
 under `Engine/modules/` and `Engine/src/`, while older compatibility/archive
 surfaces have been retired and mapped into active replacements.
 
-Current source version: `v0.84.57`
+Current source version: `v0.84.58`
 
 ## Architecture highlights
 
@@ -39,8 +39,9 @@ Current source version: `v0.84.57`
   into the bottom console dock.
 - **Generated project verification**: generated Sandbox and ProjectLauncher
   child builds now expose non-GUI self-tests, and the checked-in engine exposes
-  `--editor-project-self-test <id>`, so project shells can be materialized,
-  built, and verified without pretending a GUI launch happened.
+  `--editor-project-self-test <id>` plus `--engine-validation-self-test`, so
+  project shells can be materialized, built, and verified without pretending a
+  GUI launch happened.
 - **Generated project build gate**: editor Run/build requests are serialized
   while generated child projects still share the checked-in engine
   `StaticLib1` module/PDB output surface. A second request should fail visibly

@@ -335,6 +335,7 @@ namespace epochnamespace::core::cli
         bool editor_requested = false;
         bool editor_project_self_test_requested = false;
         bool editor_ai_gate_self_test_requested = false;
+        bool engine_validation_self_test_requested = false;
         RuntimePath runtime = RuntimePath::Epoch;
         std::string editor_project_self_test_id{};
     };
@@ -523,7 +524,13 @@ namespace epochnamespace::core::cli
                     "  --smoke                    Run bounded smoke flow where supported\n"
                     "  --updater-shell            Start the bootstrap updater shell\n"
                     "  --update, -u               Check for a newer epochengine build\n"
-                    "  --force                    Apply the available update immediately\n");
+                    "  --force                    Apply the available update immediately\n"
+                    "  --editor-project-self-test <id>\n"
+                    "                             Materialize, build, and child-smoke one project profile\n"
+                    "  --editor-ai-gate-self-test\n"
+                    "                             Validate the OS AI evidence/promotion gate\n"
+                    "  --engine-validation-self-test\n"
+                    "                             Run project, child-runtime, and AI gate validation lanes\n");
             }
             else if (key == "--version"sv || key == "-v"sv)
             {
@@ -583,6 +590,10 @@ namespace epochnamespace::core::cli
             else if (key == "--editor-ai-gate-self-test"sv)
             {
                 result.editor_ai_gate_self_test_requested = true;
+            }
+            else if (key == "--engine-validation-self-test"sv)
+            {
+                result.engine_validation_self_test_requested = true;
             }
             else if (key == "--menu"sv)
             {

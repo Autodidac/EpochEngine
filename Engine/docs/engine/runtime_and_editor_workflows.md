@@ -157,6 +157,10 @@ the same engine-owned path.
 - `--editor-ai-gate-self-test` runs the deterministic helper-review gate without
   launching the GUI. Use it before letting helper LLM replies influence curated
   training, eval promotion, or source-change planning.
+- `--engine-validation-self-test` runs every registered editor project profile
+  through the engine-side project self-test route and then runs the OS AI gate,
+  all without launching GUI windows. Use it before claiming project-run,
+  generated-shell, or AI-harness stability across the current source line.
 - generated game project shells can carry the `engine_arcade` local
   runtime-mini package. The package is a project asset/script option that
   invokes engine-owned mini-runtime scenes such as Snake/Tetris/Pacman through
@@ -770,6 +774,11 @@ engine binary. The second command proves the generated child output is runnable
 without opening GUI windows. The Sandbox route must report the
 engine-self-iteration sandbox identity; ProjectLauncher must report its launcher
 tool identity.
+
+`--engine-validation-self-test` chains the registered project profile self-tests
+and the AI evidence gate in one non-GUI pass. It is intentionally broader than a
+single profile smoke, but it still does not replace manual eye testing for GUI
+composition, command-menu z-order, renderer flicker, or dock behavior.
 
 As of `v0.84.30`, the engine-side command also appends an MCP-style tool
 capture and stages an AI iteration packet under

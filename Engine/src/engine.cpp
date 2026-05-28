@@ -60,6 +60,7 @@
 // Standard library imports
 // -----------------------------
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -67,6 +68,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -76,6 +78,7 @@
 #include <shared_mutex>
 #include <source_location>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -102,6 +105,7 @@ import context.type;
 import context.window;
 import core.context;
 import core.logger;
+import core.path;
 import core.time;
 import core.timer;
 
@@ -813,6 +817,33 @@ namespace epochnamespace::core
             "editor_ai_gate_self_test.result={}",
             failed ? "fail" : "pass");
         return failed ? 6 : 0;
+    }
+
+    [[nodiscard]] inline int run_engine_validation_self_test()
+    {
+        int result = 0;
+        log_editor_self_test_line("engine_validation_self_test.start=project_profiles_plus_ai_gate");
+
+        for (const auto& profile : epochnamespace::editor_project_profiles())
+        {
+            log_editor_self_test_line("engine_validation_self_test.project.begin=" + std::string(profile.id));
+            const int projectResult = run_editor_project_self_test(profile.id);
+            log_editor_self_test_line(
+                "engine_validation_self_test.project.result="
+                + std::string(profile.id)
+                + "; code="
+                + std::to_string(projectResult));
+            if (projectResult != 0 && result == 0)
+                result = projectResult;
+        }
+
+        const int aiGateResult = run_editor_ai_gate_self_test();
+        log_editor_self_test_line("engine_validation_self_test.ai_gate.code=" + std::to_string(aiGateResult));
+        if (aiGateResult != 0 && result == 0)
+            result = aiGateResult;
+
+        log_editor_self_test_line(std::string("engine_validation_self_test.result=") + (result == 0 ? "pass" : "fail"));
+        return result;
     }
 
     inline void apply_post_update_startup_cooldown(const std::string_view log_system)
@@ -2322,83 +2353,188 @@ namespace epochnamespace::core
 #endif
         }
 
-        [[nodiscard]] epochnamespace::previewgrid::Vec3 runtime_marker_color_for_seed(
-            const epochnamespace::EditorSceneSeedEntity& seed,
+        struct ProjectRuntimeEntity
+        {
+            std::string name{};
+            std::string type{};
+            std::string category{};
+            std::array<float, 3> position{ 0.0f, 0.0f, 0.0f };
+            std::array<float, 3> rotation{ 0.0f, 0.0f, 0.0f };
+            std::array<float, 3> scale{ 1.0f, 1.0f, 1.0f };
+            bool visible{ true };
+            bool editor_only{ false };
+        };
+
+        [[nodiscard]] std::vector<ProjectRuntimeEntity> project_runtime_entities_from_seeds(
+            std::span<const epochnamespace::EditorSceneSeedEntity> seeds)
+        {
+            std::vector<ProjectRuntimeEntity> entities{};
+            entities.reserve(seeds.size());
+            for (const auto& seed : seeds)
+            {
+                entities.push_back(ProjectRuntimeEntity{
+                    .name = std::string(seed.name),
+                    .type = std::string(seed.type),
+                    .category = std::string(seed.category),
+                    .position = seed.position,
+                    .rotation = seed.rotation,
+                    .scale = seed.scale,
+                    .visible = seed.visible,
+                    .editor_only = seed.editor_only
+                });
+            }
+            return entities;
+        }
+
+        [[nodiscard]] std::filesystem::path engine_runtime_root()
+        {
+            if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
+                return runtimeRoot;
+
+            std::error_code ec;
+            return std::filesystem::current_path(ec);
+        }
+
+        [[nodiscard]] std::filesystem::path resolve_runtime_scene_path(const std::filesystem::path& path)
+        {
+            if (path.empty())
+                return {};
+            if (path.is_absolute())
+                return path.lexically_normal();
+            return (engine_runtime_root() / path).lexically_normal();
+        }
+
+        [[nodiscard]] std::vector<ProjectRuntimeEntity> load_project_runtime_entities(
+            std::string_view scene_path,
+            std::span<const epochnamespace::EditorSceneSeedEntity> fallback_seeds)
+        {
+            auto fallback = project_runtime_entities_from_seeds(fallback_seeds);
+            if (scene_path.empty())
+                return fallback;
+
+            std::ifstream in(resolve_runtime_scene_path(std::filesystem::path{ scene_path }), std::ios::binary);
+            if (!in)
+                return fallback;
+
+            std::vector<ProjectRuntimeEntity> loaded{};
+            std::string line;
+            while (std::getline(in, line))
+            {
+                std::istringstream row(line);
+                std::string tag;
+                row >> tag;
+                if (tag != "entity")
+                    continue;
+
+                ProjectRuntimeEntity entity{};
+                std::string posTag;
+                std::string rotTag;
+                std::string scaleTag;
+                std::string visibleTag;
+                std::string editorOnlyTag;
+                int visible = 1;
+                int editorOnly = 0;
+                if (!(row
+                    >> std::quoted(entity.name)
+                    >> std::quoted(entity.type)
+                    >> std::quoted(entity.category)
+                    >> posTag >> entity.position[0] >> entity.position[1] >> entity.position[2]
+                    >> rotTag >> entity.rotation[0] >> entity.rotation[1] >> entity.rotation[2]
+                    >> scaleTag >> entity.scale[0] >> entity.scale[1] >> entity.scale[2]
+                    >> visibleTag >> visible
+                    >> editorOnlyTag >> editorOnly))
+                {
+                    continue;
+                }
+
+                if (posTag != "pos" || rotTag != "rot" || scaleTag != "scale" || visibleTag != "visible" || editorOnlyTag != "editor_only")
+                    continue;
+
+                entity.visible = visible != 0;
+                entity.editor_only = editorOnly != 0;
+                loaded.push_back(std::move(entity));
+            }
+
+            return loaded.empty() ? fallback : loaded;
+        }
+
+        [[nodiscard]] epochnamespace::previewgrid::Vec3 runtime_marker_color_for_entity(
+            const ProjectRuntimeEntity& entity,
             bool selected) noexcept
         {
             if (selected)
                 return { 1.00f, 0.86f, 0.24f };
-            if (seed.editor_only || seed.category == "Editor")
+            if (entity.editor_only || entity.category == "Editor")
                 return { 0.44f, 0.62f, 0.90f };
-            if (seed.type == "Light")
+            if (entity.type == "Light")
                 return { 1.00f, 0.82f, 0.30f };
-            if (seed.type == "Spawn")
+            if (entity.type == "Spawn")
                 return { 0.34f, 0.94f, 0.62f };
-            if (seed.category == "World" || seed.type == "Level")
+            if (entity.category == "World" || entity.type == "Level")
                 return { 0.70f, 0.78f, 0.90f };
             return { 0.95f, 0.62f, 0.28f };
         }
 
-        [[nodiscard]] float runtime_marker_radius_for_seed(const epochnamespace::EditorSceneSeedEntity& seed) noexcept
+        [[nodiscard]] float runtime_marker_radius_for_entity(const ProjectRuntimeEntity& entity) noexcept
         {
-            const float scaleMax = (std::max)(seed.scale[0], (std::max)(seed.scale[1], seed.scale[2]));
-            if (seed.type == "Light")
+            const float scaleMax = (std::max)(entity.scale[0], (std::max)(entity.scale[1], entity.scale[2]));
+            if (entity.type == "Light")
                 return 0.42f;
-            if (seed.type == "Spawn")
+            if (entity.type == "Spawn")
                 return 0.32f;
-            if (seed.type == "Camera")
+            if (entity.type == "Camera")
                 return 0.38f;
-            if (seed.category == "World" || seed.type == "Level")
+            if (entity.category == "World" || entity.type == "Level")
                 return 0.75f;
             return (std::clamp)(0.34f * scaleMax, 0.24f, 1.20f);
         }
 
-        [[nodiscard]] epochnamespace::previewgrid::ObjectPreviewPrimitive runtime_preview_primitive_for_seed(
-            const epochnamespace::EditorSceneSeedEntity& seed) noexcept
+        [[nodiscard]] epochnamespace::previewgrid::ObjectPreviewPrimitive runtime_preview_primitive_for_entity(
+            const ProjectRuntimeEntity& entity) noexcept
         {
-            if (seed.type == "Light")
+            if (entity.type == "Light")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Light;
-            if (seed.type == "Spawn")
+            if (entity.type == "Spawn")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Spawn;
-            if (seed.type == "Camera")
+            if (entity.type == "Camera")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
-            if (seed.category == "World" || seed.type == "Level")
+            if (entity.category == "World" || entity.type == "Level")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
             return epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube;
         }
 
-        [[nodiscard]] std::size_t visible_seed_count(std::span<const epochnamespace::EditorSceneSeedEntity> seeds) noexcept
+        [[nodiscard]] std::size_t visible_runtime_entity_count(std::span<const ProjectRuntimeEntity> entities) noexcept
         {
             std::size_t count = 0;
-            for (const auto& seed : seeds)
-                if (seed.visible)
+            for (const auto& entity : entities)
+                if (entity.visible)
                     ++count;
             return count;
         }
 
         void publish_project_play_markers(
             const epochnamespace::core::Context* ctx,
-            std::span<const epochnamespace::EditorSceneSeedEntity> seeds)
+            std::span<const ProjectRuntimeEntity> entities)
         {
             if (!ctx)
                 return;
 
             std::vector<epochnamespace::previewgrid::ObjectMarker> markers{};
-            markers.reserve(seeds.size());
-            for (std::size_t i = 0; i < seeds.size(); ++i)
+            markers.reserve(entities.size());
+            for (std::size_t i = 0; i < entities.size(); ++i)
             {
-                const auto& seed = seeds[i];
-                if (!seed.visible)
+                const auto& entity = entities[i];
+                if (!entity.visible)
                     continue;
 
                 markers.push_back(epochnamespace::previewgrid::ObjectMarker{
-                    .position{ seed.position[0], seed.position[1], seed.position[2] },
-                    .color = runtime_marker_color_for_seed(seed, i == 0u),
-                    .scale{ seed.scale[0], seed.scale[1], seed.scale[2] },
-                    .radius = runtime_marker_radius_for_seed(seed),
-                    .primitive = runtime_preview_primitive_for_seed(seed),
+                    .position{ entity.position[0], entity.position[1], entity.position[2] },
+                    .color = runtime_marker_color_for_entity(entity, i == 0u),
+                    .scale{ entity.scale[0], entity.scale[1], entity.scale[2] },
+                    .radius = runtime_marker_radius_for_entity(entity),
+                    .primitive = runtime_preview_primitive_for_entity(entity),
                     .selected = i == 0u,
-                    .editorOnly = seed.editor_only || seed.category == "Editor"
+                    .editorOnly = entity.editor_only || entity.category == "Editor"
                 });
             }
 
@@ -2429,7 +2565,10 @@ namespace epochnamespace::core
                 m_scriptName = std::string(profile->default_script);
                 m_description = std::string(profile->description);
                 m_modelSummary = epochnamespace::editor_project_model_summary(m_projectId);
-                m_seedEntities = epochnamespace::editor_seed_entities_for_project(m_projectId);
+                const auto seedEntities = epochnamespace::editor_seed_entities_for_project(m_projectId);
+                m_entities = load_project_runtime_entities(
+                    m_scenePath,
+                    std::span<const epochnamespace::EditorSceneSeedEntity>{ seedEntities.data(), seedEntities.size() });
             }
 
             void load() override
@@ -2481,9 +2620,9 @@ namespace epochnamespace::core
                     m_cameraApplied[ctx.get()] = true;
                 }
                 ctx->set_scene_viewport({ 0, 0, width, height });
-                publish_project_play_markers(ctx.get(), std::span<const epochnamespace::EditorSceneSeedEntity>{
-                    m_seedEntities.data(),
-                    m_seedEntities.size()
+                publish_project_play_markers(ctx.get(), std::span<const ProjectRuntimeEntity>{
+                    m_entities.data(),
+                    m_entities.size()
                 });
 
                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
@@ -2554,7 +2693,7 @@ namespace epochnamespace::core
                 gui::label(std::string("World: ") + m_worldName);
                 gui::label(std::string("Scene: ") + m_scenePath);
                 gui::label(std::string("Script: ") + m_scriptName);
-                gui::label(std::string("Preview Objects: ") + std::to_string(visible_seed_count(m_seedEntities)));
+                gui::label(std::string("Preview Objects: ") + std::to_string(visible_runtime_entity_count(m_entities)));
                 gui::wrapped_label(
                     std::string("Demo model: ")
                     + (m_modelSummary.asset_path.empty() ? std::string("(none)") : m_modelSummary.asset_path),
@@ -2581,7 +2720,7 @@ namespace epochnamespace::core
             std::string m_scriptName{};
             std::string m_description{};
             epochnamespace::EditorProjectModelSummary m_modelSummary{};
-            std::vector<epochnamespace::EditorSceneSeedEntity> m_seedEntities{};
+            std::vector<ProjectRuntimeEntity> m_entities{};
             timing::Clock::time_point m_lastFrame{};
             bool m_hasLastFrame{ false };
             epochnamespace::previewgrid::CameraMode m_cameraMode{ epochnamespace::previewgrid::CameraMode::Editor };
@@ -3898,6 +4037,9 @@ int WINAPI wWinMain(
         if (cli_result.editor_project_self_test_requested)
             return epochnamespace::core::run_editor_project_self_test(cli_result.editor_project_self_test_id);
 
+        if (cli_result.engine_validation_self_test_requested)
+            return epochnamespace::core::run_engine_validation_self_test();
+
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,
             .binary_url = urls::binary_url,
@@ -3959,6 +4101,9 @@ int main(int argc, char** argv)
 
         if (cli_result.editor_project_self_test_requested)
             return epochnamespace::core::run_editor_project_self_test(cli_result.editor_project_self_test_id);
+
+        if (cli_result.engine_validation_self_test_requested)
+            return epochnamespace::core::run_engine_validation_self_test();
 
         const epochnamespace::updater::UpdateChannel channel{
             .version_url = urls::version_url,

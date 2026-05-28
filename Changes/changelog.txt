@@ -1,5 +1,21 @@
 # Epoch Changelog
 
+## [v0.84.58]
+- Bumped the active source line to `v0.84.58` for a focused project-run and
+  validation-harness stabilization pass.
+- Preserved same-project editor state during evidence repair so project
+  materialization no longer resets the active workspace, dock tab, camera mode,
+  input profile, selected run backend, or frame-limit preference.
+- Made Play In Editor save the active scene snapshot before runtime handoff, and
+  made the project play runtime load the saved `.epoch` entity snapshot with the
+  registered project seed entities as fallback.
+- Added `--engine-validation-self-test`, a non-GUI aggregate harness that runs
+  every registered editor project profile self-test and then the OS AI evidence
+  gate.
+- Kept this pass out of the OpenGL draw-order path; command-menu/modal flicker
+  remains guarded by the existing draw-model contract and should only be changed
+  through explicit GUI-layer fixes.
+
 ## [v0.84.57]
 - Bumped the active source line to `v0.84.57` for a focused editor GUI and
   Forest Factory stabilization pass.
