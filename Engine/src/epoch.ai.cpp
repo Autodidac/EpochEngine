@@ -1211,12 +1211,9 @@ namespace epoch::ai
             " - Keep self-iteration separate from normal ProjectLauncher game/software editing unless the operator explicitly asks to change the project/editor scene.\n"
             " - When suggesting project or file work, keep it relevant to the active engine/runtime context instead of drifting into generic setup advice.\n";
 
-        // Best-of with a fast accept to reduce latency.
-        constexpr double kFastAcceptScore = 0.25; // placeholder (no scorer yet; kept for interface parity)
-
         const std::size_t n = std::max<std::size_t>(1, m_cfg.best_of);
 
-        // For now: no scorer; pick first non-empty.
+        // No scorer is active in this lane; first non-empty assistant content wins.
         for (std::size_t i = 0; i < n; ++i)
         {
             std::string txt = openai_chat_complete(
@@ -1237,12 +1234,8 @@ namespace epoch::ai
             {
                 out.text = txt;
                 out.score = 0.0;
-                // fast accept when first is good
-                if (i == 0) break;
-            }
-
-            if (out.score >= kFastAcceptScore)
                 break;
+            }
         }
 
         return out;

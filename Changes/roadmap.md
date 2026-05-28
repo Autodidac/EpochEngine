@@ -77,7 +77,13 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     remains: drain normal GUI/backend work, render the scene preview once, drain
     follow-up work, replay only the explicit GUI top-layer batch for command
     menus/modal chrome, then capture/present.
-17. MSVC x64 multicontext editor builds currently use the dynamic-vcpkg app lane
+17. GPU/runtime launches are approval-only. Do not run `EpochEditor.exe`, GUI
+    runtime probes, project self-tests, Sandbox self-tests, multicontext
+    launches, or commands that instantiate renderer contexts unless the operator
+    explicitly asks for that exact run. Static/source review and build-only
+    checks are the default validation path because the project self-test runtime
+    lane has been reported to crash/reset the GPU or machine.
+18. MSVC x64 multicontext editor builds currently use the dynamic-vcpkg app lane
     (`x64-windows`, `/MD`, `RAYLIB_DLL`). DLLs in the output folder are expected
     runtime dependencies for that lane; static-vcpkg all-backend work remains a
     separate acceptance-gated track because Raylib/SFML/SDL/GLAD static libs can
@@ -396,8 +402,8 @@ engine shape and should be treated as starting truth for the next passes:
 - a project-centric launcher/editor shell rather than a demo-first launch path
 - generated game/tool project creation and generated project discovery
 - a real project/assets dock with build, run, script, and diagnostics surfaces
-- project-local script stub creation from the Assets/project surface, with new
-  stubs written under the active project's `scripts/` folder and surfaced in
+- project-local script starter creation from the Assets/project surface, with new
+  starters written under the active project's `scripts/` folder and surfaced in
   project notes for build/run evidence
 - a shallow active-project file/folder browser that skips generated build/bin/.vs
   output and lets project scripts be selected without leaving the editor
@@ -630,6 +636,25 @@ engine shape and should be treated as starting truth for the next passes:
   explicit with both `--standalone` and `--window-mode standalone`, while the
   CLI default no longer initializes Software as part of the backend set unless
   explicitly requested.
+- `v0.84.55` tightens the reusable GUI/script/OS-AI surface without touching the
+  protected draw model: dropdown/select boxes now close on outside click and
+  anchor near the selected item when opened, scrollable text panels ignore wheel
+  input outside their active clip, built-in script assets use ASCII headers so
+  the current source preview stops showing high-byte banner question-mark
+  blocks, generated script wording is now "starter" instead of "stub", and the
+  stale OS-AI placeholder scorer was removed until a real verifier-backed
+  scoring lane exists.
+- `v0.84.56` starts making Forest Factory real instead of leaving it as a
+  package-name stub. The core `forest.factory` contract now carries presets,
+  temporal/branch controls, preview modes, output categories, and deterministic
+  preview-stat estimates. The Package Manager stages a visible
+  `engine_forest_factory` manifest/profile into an active project only after
+  explicit activation, while the Asset menu opens a Forest Factory workbench
+  that shows provenance, package/profile evidence, and estimated preview stats.
+  Package payload/source routing points at
+  `https://github.com/Autodidac/EpochEngineExtensions`; the Plant Lab repository
+  stays recorded as reference/prototype source instead of being cloned into
+  every project.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
@@ -1185,7 +1210,7 @@ engine shape and should be treated as starting truth for the next passes:
    scene loading, editing, saving, and play/runtime handoff.
 8. Start Android with an honest single-context bring-up, touch/input
    integration, packaging/install path, and asset-resolution discipline.
-9. Promote the first-pass file browser, script stub creator, and asset cards
+9. Promote the first-pass file browser, script starter creator, and asset cards
    into professional bounded editor controls with decoded thumbnails and
    editable script/source panes.
 10. Promote the Package Manager modal from local `engine_arcade` runtime-minis

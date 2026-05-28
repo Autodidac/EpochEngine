@@ -158,6 +158,12 @@
 
 ## Running And Validation
 
+- GPU/runtime launches are approval-only in this worktree. Do not run
+  `EpochEditor.exe`, GUI runtime probes, project self-tests, Sandbox self-tests,
+  multicontext launches, or other commands that instantiate renderer contexts
+  unless the operator explicitly asks for that exact run. A prior self-test run
+  path was reported to crash/reset the GPU or machine, so prefer static review,
+  source validation, and build-only checks until runtime proof is requested.
 - Run Windows local builds from asset-bearing output folders so runtime assets,
   fonts, shaders, scripts, captures, and logs resolve correctly:
 

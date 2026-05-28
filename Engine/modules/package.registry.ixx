@@ -52,6 +52,8 @@ export namespace epoch::package_registry
     };
 
     inline constexpr std::string_view kEpochEngineExtensionsRepo = "https://github.com/Autodidac/EpochEngineExtensions";
+    inline constexpr std::string_view kForestFactoryReferenceRepo = epoch::forest::kForestFactoryReferenceRepo;
+    inline constexpr std::string_view kForestFactoryPackageSourceRepo = kEpochEngineExtensionsRepo;
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
     inline constexpr std::string_view kEngineArcadeSceneId = "engine_arcade_scene";
     inline constexpr std::string_view kEngineForestFactoryPackageId = epoch::forest::kForestFactoryPackageId;
@@ -73,10 +75,11 @@ export namespace epoch::package_registry
         {
             .id = kEngineForestFactoryPackageId,
             .displayName = "Forest Factory",
-            .summary = "Deterministic procedural forest descriptors with project-local assets only when used.",
+            .summary = "Core temporal graph/L-system vegetation lab. Editor preview is built in; project assets are emitted only after explicit activation.",
             .kind = PackageKind::CoreOptIn,
             .activation = ActivationMode::MainSceneUse,
             .shipsInCore = true,
+            .externalSourceRepo = kForestFactoryPackageSourceRepo,
         },
         {
             .id = kEngineNetworkRuntimePackageId,
@@ -145,10 +148,10 @@ export namespace epoch::package_registry
         {
             .id = "research_forest_temporal_graph",
             .displayName = "Research Forest Factory Temporal Graph",
-            .summary = "Temporal graph and parametric L-system forest lab staged as Forest Factory reference material only.",
+            .summary = "Plant Lab source/prototype lineage used as Forest Factory reference material before production promotion.",
             .kind = PackageKind::ResearchPrototype,
             .activation = ActivationMode::ManualResearchImport,
-            .externalSourceRepo = kEpochEngineExtensionsRepo,
+            .externalSourceRepo = kForestFactoryReferenceRepo,
         },
         {
             .id = "research_planetary_terrain",

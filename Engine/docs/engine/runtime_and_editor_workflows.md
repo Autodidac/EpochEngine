@@ -70,7 +70,8 @@ the same engine-owned path.
   projects so Epoch remains a creative software platform as well as a game
   engine
 - the first generated shell flow should create a real on-disk project root,
-  manifest, world file, script stub, and README for both game and tool projects
+  manifest, world file, script starter, and README for both game and tool
+  projects
 - generated shells should land under repo-root `Projects/` so creation and
   discovery stay stable regardless of the current working directory
 - generated shells should emit `project.paths.txt` so the editor log, build
@@ -133,7 +134,7 @@ the same engine-owned path.
 - script source resolution should prefer the active project's local `scripts/`
   folder before falling back to template or engine-owned script roots, so the
   dock and editor run actions operate on the real generated project shell
-- script stub creation should append `PROJECT_NOTES.md` entries; a useful
+- script starter creation should append `PROJECT_NOTES.md` entries; a useful
   Sandbox iteration must leave at least one of: build log output, script-host
   log output, staged packet evidence, selected project file path, or project
   notes explaining what changed
@@ -161,6 +162,15 @@ the same engine-owned path.
   invokes engine-owned mini-runtime scenes such as Snake/Tetris/Pacman through
   the script host; it must not copy those implementations out of the kernel
   engine.
+- Forest Factory is a core editor/runtime descriptor lane, not a loose optional
+  dump. Asset > Open Forest Factory opens the current evidence/profile
+  workbench; Package Manager activation stages
+  `assets/packages/engine_forest_factory.package.json` and
+  `assets/packages/engine_forest_factory/default.forest.json` in the active
+  project. Package payload/source routing points at
+  `Autodidac/EpochEngineExtensions`; the Plant Lab repo remains recorded
+  provenance/reference source, and generated project payloads are still emitted
+  only after visible package activation or main-scene use.
 - the command-menu Package Manager is the intended modal surface for local
   runtime-mini packages first, then explicit downloadable source packages later.
   Downloadable source packages must compile through an updater-style human-gated
@@ -336,6 +346,8 @@ the same engine-owned path.
   manager, project settings, backend selection, and script/asset selectors can
   follow the same path instead of creating one-off UI. Open dropdowns own their
   mouse-wheel focus so parent scroll panes do not steal model-list scrolling.
+  Opening a dropdown anchors the list near the selected value, and clicking
+  outside the closed control or list closes it through the shared GUI primitive.
 - the stable Windows top-row contract is visible real child panes:
   `GLFW30`, `SDL_app`, and `SFML_Window`
 - helper `EpochChild` wrappers are implementation detail only:

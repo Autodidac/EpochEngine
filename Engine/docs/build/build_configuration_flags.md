@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.84.54`
+Current source version: `v0.84.55`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -128,15 +128,21 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.84.54` is the current source line for the input-profile bug sweep.
-  Editor Default and Left-Handed profiles keep movement keys separate from arrow
-  look keys, and Arrow Pilot is an alternate movement profile instead of a
-  movement/look overlap. Editor and project runtime camera movement still route
-  through named input actions, `Home` maps to camera reset, and project launch
-  payloads carry the selected camera style and input profile into Play In
-  Editor plus single-context child runs. Built child launches now pass
-  `--standalone --window-mode standalone`, and Software is no longer part of the
-  default backend count unless requested explicitly.
+- `v0.84.55` is the current source line for the focused GUI/script/OS-AI polish
+  pass. Dropdown/select boxes now close on outside click, anchor near the
+  selected value when opened, and keep scroll input inside active clips; built-in
+  script assets use ASCII headers for the current source preview; generated
+  project scripts are described as starters; and the OS-AI chat lane no longer
+  carries a fake placeholder scorer.
+- `v0.84.54` kept the input-profile bug sweep. Editor Default and Left-Handed
+  profiles keep movement keys separate from arrow look keys, and Arrow Pilot is
+  an alternate movement profile instead of a movement/look overlap. Editor and
+  project runtime camera movement still route through named input actions,
+  `Home` maps to camera reset, and project launch payloads carry the selected
+  camera style and input profile into Play In Editor plus single-context child
+  runs. Built child launches now pass `--standalone --window-mode standalone`,
+  and Software is no longer part of the default backend count unless requested
+  explicitly.
 - `v0.84.52` kept the OpenGL overlay/project-run
   stabilization pass. OpenGL menu/modal frames now drain normal GUI after the
   scene so command windows and project runtime panels stay above the active

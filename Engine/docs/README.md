@@ -50,6 +50,8 @@ Build-system reality to keep in mind:
   scripting, systems, and updater behavior
 - `engine/gui_library_architecture.md` - shared engine GUI primitives, layout,
   docking, theme/rendering, and editor-composition ownership rules
+- `engine/forest_factory_package_contract.md` - Forest Factory core/package
+  boundary, Plant Lab provenance, activation gates, and generated-project policy
 - `engine/backend_context_status.md` - backend/context inventory and practical
   guidance
 - `engine/backend_menu_overlay_status.md` - backend GUI parity and caution

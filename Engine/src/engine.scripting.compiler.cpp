@@ -31,7 +31,6 @@
 // Prefer standard library module imports in the module purview.
 #include <cstdlib>
 #include <filesystem>
-#include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -67,8 +66,11 @@ namespace epochnamespace::compiler
         args.emplace_back("-o");
         args.emplace_back(output.string());
 
-        // TODO: adjust include roots for your layout (keep as-is for now).
+        // Legacy CMake fallback: prefer project-local scripts, then engine include roots.
+        if (!input.parent_path().empty())
+            args.emplace_back("-I" + input.parent_path().string());
         args.emplace_back("-Iinclude");
+        args.emplace_back("-IEngine/include");
 
         // Match your engine defaults (no RTTI/exceptions) as requested.
         args.emplace_back("-fno-rtti");

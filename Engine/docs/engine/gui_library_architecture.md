@@ -77,6 +77,9 @@ Before a control is considered ready, it needs:
 - stable clipping and hit testing inside scrollable/resizable panes
 - dropdown/select boxes must keep their own mouse-wheel focus while open instead
   of letting a parent scroll pane consume the wheel first
+- dropdown/select boxes close on outside click and align the scroll position near
+  the selected option when opened; editor surfaces should not duplicate this
+  behavior in domain code
 - progress bars are shared GUI primitives for package installs, workspace
   loading, updater/cache operations, generated-project builds, and any future
   visible long-running editor action; do not draw one-off progress rows in
@@ -153,8 +156,9 @@ The current script surface is not a finished editor. It can locate and preview
 script source, but a production scripting workspace still needs editable code
 text, a visible caret and selection, copy/cut/paste/select-all, save/reload
 evidence, build/run feedback, and predictable keyboard focus without holding a
-mouse button down. Broken high-byte banners or mojibake in source previews must
-be sanitized for display without corrupting the saved source.
+mouse button down. Built-in script assets should use ASCII-safe source headers
+until the text renderer supports the full banner glyph set; any remaining
+high-byte source preview normalization must not corrupt the saved source.
 
 Script editing should use shared GUI text primitives, not a one-off asset panel
 hack. The acceptance gate is a script file that can be opened from Assets or the

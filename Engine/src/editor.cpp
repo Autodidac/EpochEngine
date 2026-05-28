@@ -80,6 +80,7 @@ import engine.cli;
 import scripting.system;
 import epoch.ai;
 import epoch.systems;
+import forest.factory;
 import package.registry;
 import perf.tier;
 import render.preview_grid;
@@ -134,6 +135,7 @@ namespace epochnamespace
             Game2D,
             Assets,
             Project,
+            ForestFactory,
             AISandbox,
             Systems
         };
@@ -509,6 +511,8 @@ namespace epochnamespace
                 return "Asset Browser";
             case EditorMainSurface::Project:
                 return "Project Workspace";
+            case EditorMainSurface::ForestFactory:
+                return "Forest Factory";
             case EditorMainSurface::AISandbox:
                 return "Self-Iteration Sandbox";
             case EditorMainSurface::Systems:
@@ -2997,7 +3001,7 @@ namespace epochnamespace
             return entries;
         }
 
-        [[nodiscard]] static std::string make_project_script_stub_text(std::string_view scriptId)
+        [[nodiscard]] static std::string make_project_script_starter_text(std::string_view scriptId)
         {
             return std::format(
                 "#if __has_include(<epoch.script_api.h>)\n"
@@ -3019,7 +3023,7 @@ namespace epochnamespace
                 "{{\n"
                 "    if (!host)\n"
                 "        return;\n\n"
-                "    host_log(host, \"{}: script stub executed.\");\n"
+                "    host_log(host, \"{}: script starter executed.\");\n"
                 "    if (host->rotate_all_entities_yaw)\n"
                 "    {{\n"
                 "        host->rotate_all_entities_yaw(host->user_data, 3.0f);\n"
@@ -3030,7 +3034,7 @@ namespace epochnamespace
                 scriptId);
         }
 
-        static void create_project_script_stub(EditorState& editor)
+        static void create_project_script_starter(EditorState& editor)
         {
             const std::string scriptIdBase = sanitize_script_id(editor.newScriptName);
             const auto scriptsRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "scripts";
@@ -3055,22 +3059,22 @@ namespace epochnamespace
             std::ofstream out(scriptPath, std::ios::binary);
             if (!out)
             {
-                editor.scriptBuildStatus = "Could not write project script stub.";
-                push_editor_log(editor, "[script] Failed to write script stub: " + display_project_path(scriptPath));
+                editor.scriptBuildStatus = "Could not write project script starter.";
+                push_editor_log(editor, "[script] Failed to write script starter: " + display_project_path(scriptPath));
                 return;
             }
 
-            out << make_project_script_stub_text(scriptId);
+            out << make_project_script_starter_text(scriptId);
             editor.activeScript = scriptId;
             editor.newScriptName = scriptId;
             editor.selectedProjectFile = display_project_path(scriptPath);
             editor.selectedAssetPath = editor.selectedProjectFile;
             (void)load_script_source_editor(editor, scriptPath, true);
-            editor.scriptBuildStatus = "Created project script stub: " + editor.selectedProjectFile;
-            push_editor_log(editor, "[script] Created project script stub '" + scriptId + "'.");
+            editor.scriptBuildStatus = "Created project script starter: " + editor.selectedProjectFile;
+            push_editor_log(editor, "[script] Created project script starter '" + scriptId + "'.");
             append_project_note(
                 editor,
-                "Create Project Script Stub",
+                "Create Project Script Starter",
                 std::string("Created ") + scriptId + ".ascript.cpp.",
                 "Use Build Selected Script to validate the script asset. The centered Run button remains reserved for the active generated project shell.");
         }
@@ -3399,6 +3403,106 @@ namespace epochnamespace
                 std::string("Staged ") + std::string(package.displayName) + " as an explicit project model package opt-in.",
                 "Weights remain outside source and are downloaded only after an operator-approved package download step.");
             push_editor_log(editor, "[package] Wrote model package manifest: " + display_project_path(manifestPath));
+            return true;
+        }
+
+        [[nodiscard]] bool stage_forest_factory_package_opt_in(
+            EditorState& editor,
+            const epoch::package_registry::PackageDescriptor& package)
+        {
+            if (editor.projectRoot.empty())
+            {
+                editor.packageInstallStatus = "No active project root for Forest Factory package activation.";
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
+
+            const std::string safeId = safe_package_artifact_id(package.id);
+            const std::filesystem::path projectRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
+            const std::filesystem::path packageDir = projectRoot / "assets" / "packages";
+            const std::filesystem::path forestDir = packageDir / safeId;
+            const std::filesystem::path manifestPath = packageDir / (safeId + ".package.json");
+            const std::filesystem::path profilePath = forestDir / "default.forest.json";
+
+            std::error_code ec;
+            std::filesystem::create_directories(forestDir, ec);
+            if (ec)
+            {
+                editor.packageInstallStatus = "Could not create Forest Factory package directory.";
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
+
+            const std::string packageId = editor_json_escape(package.id);
+            const std::string displayName = editor_json_escape(package.displayName);
+            const std::string sourceRepo = editor_json_escape(package.externalSourceRepo);
+            const std::string referenceRepo = editor_json_escape(epoch::forest::kForestFactoryReferenceRepo);
+            const std::string profileFile = editor_json_escape(profilePath.generic_string());
+
+            {
+                std::ofstream out(manifestPath, std::ios::binary | std::ios::trunc);
+                if (!out)
+                {
+                    editor.packageInstallStatus = "Could not write Forest Factory package manifest.";
+                    editor.packageInstallProgress = 0.0f;
+                    return false;
+                }
+
+                out
+                    << "{\n"
+                    << "  \"schema\": \"epoch.core.package.v1\",\n"
+                    << "  \"package_id\": \"" << packageId << "\",\n"
+                    << "  \"display_name\": \"" << displayName << "\",\n"
+                    << "  \"type\": \"core_opt_in\",\n"
+                    << "  \"source_repo\": \"" << sourceRepo << "\",\n"
+                    << "  \"reference_repo\": \"" << referenceRepo << "\",\n"
+                    << "  \"editor_workspace\": \"Forest Factory\",\n"
+                    << "  \"activation\": \"main_scene_use_or_explicit_package_install\",\n"
+                    << "  \"project_payload_policy\": \"emit descriptors/assets only after visible package activation\",\n"
+                    << "  \"default_profile\": \"" << profileFile << "\",\n"
+                    << "  \"runtime_outputs\": [\"preview_skeleton\", \"mesh_lod\", \"impostor\", \"voxel_occupancy\", \"seed_asset\"],\n"
+                    << "  \"requires_human_build_gate\": true,\n"
+                    << "  \"server_or_listener_allowed\": false\n"
+                    << "}\n";
+            }
+
+            {
+                std::ofstream out(profilePath, std::ios::binary | std::ios::trunc);
+                if (!out)
+                {
+                    editor.packageInstallStatus = "Could not write Forest Factory default profile.";
+                    editor.packageInstallProgress = 0.0f;
+                    return false;
+                }
+
+                out
+                    << "{\n"
+                    << "  \"schema\": \"epoch.forest.profile.v1\",\n"
+                    << "  \"preset\": \"tree\",\n"
+                    << "  \"mode\": \"3d\",\n"
+                    << "  \"seed\": 1337,\n"
+                    << "  \"technique\": \"temporal_graph_parametric_l_system\",\n"
+                    << "  \"source_repo\": \"" << sourceRepo << "\",\n"
+                    << "  \"reference_repo\": \"" << referenceRepo << "\",\n"
+                    << "  \"outputs\": {\n"
+                    << "    \"preview_skeleton\": true,\n"
+                    << "    \"mesh_lod\": true,\n"
+                    << "    \"impostor\": true,\n"
+                    << "    \"voxel_occupancy\": true,\n"
+                    << "    \"seed_asset\": true\n"
+                    << "  },\n"
+                    << "  \"project_inclusion\": \"explicit_package_activation_only\"\n"
+                    << "}\n";
+            }
+
+            editor.packageInstallStatus = "Forest Factory package staged; project payload waits for scene-use approval.";
+            editor.packageInstallProgress = 0.65f;
+            append_project_note(
+                editor,
+                "Stage Forest Factory Package",
+                "Staged the core Forest Factory package manifest and default deterministic profile.",
+                "Forest Factory is built into the editor, package payloads route through EpochEngineExtensions, and Plant Lab remains provenance/reference source.");
+            push_editor_log(editor, "[package] Wrote Forest Factory package manifest: " + display_project_path(manifestPath));
             return true;
         }
 
@@ -4242,6 +4346,13 @@ namespace epochnamespace
                 editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Project;
                 push_editor_log(editor, "[project] Project Workspace opened.");
+                break;
+            case EditorMainSurface::ForestFactory:
+                editor.showInspector = true;
+                editor.showConsoleDock = true;
+                editor.showAiChat = true;
+                editor.workspaceTab = EditorWorkspaceTab::Assets;
+                push_editor_log(editor, "[forest] Forest Factory workspace opened.");
                 break;
             case EditorMainSurface::AISandbox:
                 editor.workspaceTab = EditorWorkspaceTab::AI;
@@ -5269,7 +5380,7 @@ namespace epochnamespace
                 gui::property_row("[script asset] New", "type a safe id, then create a project-local .ascript.cpp", 120.0f);
                 (void)gui::edit_box(editor.newScriptName, { centerWidth, 28.0f }, 64, false);
                 if (gui::button("Create Script Asset", { (std::min)(220.0f, centerWidth), 30.0f }))
-                    create_project_script_stub(editor);
+                    create_project_script_starter(editor);
                 if (gui::button("Build Selected Script Asset", { (std::min)(240.0f, centerWidth), 30.0f }))
                 {
                     if (editor.scriptEditorDirty)
@@ -5288,6 +5399,68 @@ namespace epochnamespace
                         build.succeeded ? "Script asset validation passed against the active project shell." : "Script asset validation failed; inspect script diagnostics before running.");
                 }
                 draw_script_source_editor(editor, activeScriptSource, centerWidth, 220.0f);
+                break;
+            }
+            case EditorMainSurface::ForestFactory:
+            {
+                const auto forestPackage = std::find_if(
+                    epoch::package_registry::kKnownPackages.begin(),
+                    epoch::package_registry::kKnownPackages.end(),
+                    [](const epoch::package_registry::PackageDescriptor& package) {
+                        return package.id == epoch::package_registry::kEngineForestFactoryPackageId;
+                    });
+                const auto profile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
+                const auto stats = epoch::forest::estimate_preview_stats(profile);
+                const std::filesystem::path manifestPath =
+                    resolve_editor_path(std::filesystem::path{ editor.projectRoot })
+                    / "assets" / "packages" / "engine_forest_factory.package.json";
+                const std::filesystem::path profilePath =
+                    resolve_editor_path(std::filesystem::path{ editor.projectRoot })
+                    / "assets" / "packages" / "engine_forest_factory" / "default.forest.json";
+                const bool manifestReady = std::filesystem::exists(manifestPath);
+                const bool profileReady = std::filesystem::exists(profilePath);
+
+                gui::label("Forest Factory");
+                gui::wrapped_label(
+                    "Core temporal graph / parametric L-system vegetation lab. The editor owns the live Forest Factory surface; generated projects receive assets only after package activation or main-scene use approval.",
+                    centerWidth);
+                gui::property_row("[forest] Editor name", std::string(epoch::forest::kForestFactoryWorkspace), 148.0f);
+                gui::property_row("[forest] Technique", std::string(epoch::forest::kForestFactoryTechnique), 148.0f);
+                gui::property_row("[forest] Reference repo", std::string(epoch::forest::kForestFactoryReferenceRepo), 148.0f);
+                gui::property_row("[forest] Package", forestPackage != epoch::package_registry::kKnownPackages.end() ? std::string(forestPackage->displayName) : std::string("(missing registry entry)"), 148.0f);
+                gui::property_row("[forest] Package source", forestPackage != epoch::package_registry::kKnownPackages.end() ? std::string(forestPackage->externalSourceRepo) : std::string("(missing registry entry)"), 148.0f);
+                gui::property_row("[forest] Manifest", manifestReady ? display_project_path(manifestPath) : std::string("missing - activate through Package Manager"), 148.0f);
+                gui::property_row("[forest] Profile", profileReady ? display_project_path(profilePath) : std::string("missing - activate through Package Manager"), 148.0f);
+                gui::property_row("[forest] Preset", std::string(epoch::forest::preset_name(profile.preset)), 148.0f);
+                gui::property_row("[forest] Mode", profile.previewMode == epoch::forest::ForestPreviewMode::Mode3D ? "3D" : "2D", 148.0f);
+                gui::property_row("[forest] Stage", std::string(epoch::forest::stage_name(profile.editStage)), 148.0f);
+                gui::property_row("[forest] Seed", std::to_string(profile.seed.value), 148.0f);
+                gui::property_row("[forest] Time", std::format("{:.2f}s / {:.2f}s", profile.temporal.timeSeconds, profile.temporal.durationSeconds), 148.0f);
+                gui::property_row("[forest] Speed", std::format("{:.2f}x", profile.temporal.speed), 148.0f);
+                gui::property_row("[forest] Nodes", std::to_string(stats.nodes), 148.0f);
+                gui::property_row("[forest] Branches", std::to_string(stats.branches), 148.0f);
+                gui::property_row("[forest] Leaves", std::to_string(stats.leaves), 148.0f);
+                gui::property_row("[forest] Verts", std::to_string(stats.vertices), 148.0f);
+                gui::property_row("[forest] Tris", std::to_string(stats.triangles), 148.0f);
+                gui::wrapped_label(
+                    "Next gate: promote this data panel into the dedicated 3D Forest Factory editor scene with sliders, atlas controls, mature-stage playback, and project asset emission.",
+                    centerWidth);
+                if (gui::button("Open Package Manager", { 220.0f, 30.0f }))
+                {
+                    editor.showPackageManagerModal = true;
+                    editor.selectedPackageId = std::string(epoch::package_registry::kEngineForestFactoryPackageId);
+                    editor.packageInstallStatus = manifestReady && profileReady
+                        ? "Forest Factory project package is already staged."
+                        : "Select Install to stage the Forest Factory project package.";
+                    push_editor_log(editor, "[forest] Package Manager opened for Forest Factory.");
+                }
+                if (gui::button("Stage Forest Factory Package", { 260.0f, 30.0f }))
+                {
+                    if (forestPackage != epoch::package_registry::kKnownPackages.end())
+                        (void)stage_forest_factory_package_opt_in(editor, *forestPackage);
+                    else
+                        editor.packageInstallStatus = "Forest Factory package registry entry is missing.";
+                }
                 break;
             }
             case EditorMainSurface::AISandbox:
@@ -5745,14 +5918,14 @@ namespace epochnamespace
                 gui::property_row("[script] Hint", activeScript->diagnostic_hint);
             }
             gui::wrapped_label(
-                "Scripts compile with the engine/project and use the editor host API for callbacks. Create project-local stubs here and validate them with Build Selected Script. The centered Run button builds and launches the active project shell.",
+                "Scripts compile with the engine/project and use the editor host API for callbacks. Create project-local starters here and validate them with Build Selected Script. The centered Run button builds and launches the active project shell.",
                 scriptsContentWidth);
             gui::wrapped_label(editor.scriptBuildStatus, scriptsContentWidth);
 
             gui::property_row("[script] New script", "type a safe id, then create a project-local .ascript.cpp");
             (void)gui::edit_box(editor.newScriptName, { scriptsContentWidth, 28.0f }, 64, false);
-            if (showDockEditorControls && gui::button("Create Project Script Stub", { (std::min)(260.0f, scriptsContentWidth), 30.0f }))
-                create_project_script_stub(editor);
+            if (showDockEditorControls && gui::button("Create Project Script Starter", { (std::min)(280.0f, scriptsContentWidth), 30.0f }))
+                create_project_script_starter(editor);
 
             if (showDockEditorControls)
             {
@@ -6141,30 +6314,32 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 7), [&](gui::Vec2 pos)
+        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 8), [&](gui::Vec2 pos)
         {
             menu_item("Open Asset Browser", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
-                editor.workspaceTab = EditorWorkspaceTab::Assets;
-                push_editor_log(editor, "[assets] Asset browser opened.");
+                open_editor_surface(EditorMainSurface::Assets, "Asset menu");
             });
             menu_item("Package Manager...", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
                 editor.showPackageManagerModal = true;
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
                 push_editor_log(editor, "[assets] Package Manager opened.");
             });
-            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
+            menu_item("Open Forest Factory", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
+                open_editor_surface(EditorMainSurface::ForestFactory, "Asset menu");
+            });
+            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
                 add_entity(editor, "cube");
             });
-            menu_item("Add Light", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
+            menu_item("Add Light", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
                 add_entity(editor, "light");
             });
-            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
+            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
                 add_entity(editor, "spawn");
             });
-            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
+            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 218.0f }, 220.0f, [&]() {
                 duplicate_selected_entity(editor);
             });
-            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 218.0f }, 220.0f, [&]() {
+            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 252.0f }, 220.0f, [&]() {
                 delete_selected_entity(editor);
             });
         });
@@ -6503,6 +6678,8 @@ namespace epochnamespace
             const auto projectRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
             const auto engineArcadePackage = projectRoot / "assets" / "packages" / "engine_arcade.package.json";
             const auto engineArcadeScript = projectRoot / "scripts" / "engine_arcade_scene.ascript.cpp";
+            const auto forestFactoryPackage = projectRoot / "assets" / "packages" / "engine_forest_factory.package.json";
+            const auto forestFactoryProfile = projectRoot / "assets" / "packages" / "engine_forest_factory" / "default.forest.json";
             const auto knownPackages = epoch::package_registry::known_packages();
             std::vector<std::string_view> packageOptions;
             packageOptions.reserve(knownPackages.size());
@@ -6525,6 +6702,7 @@ namespace epochnamespace
                 ? std::string(selectedPackage->displayName)
                 : std::string("(none)");
             const bool engineArcadeInstalled = path_exists(engineArcadePackage) && path_exists(engineArcadeScript);
+            const bool forestFactoryStaged = path_exists(forestFactoryPackage) && path_exists(forestFactoryProfile);
 
             gui::begin_modal_window(gui::ModalWindowOptions{
                 .title = "Package Manager",
@@ -6595,6 +6773,15 @@ namespace epochnamespace
                     gui::property_row("Manifest", path_exists(engineArcadePackage) ? "installed" : "missing", 96.0f);
                     gui::property_row("Script asset", path_exists(engineArcadeScript) ? "installed" : "missing", 96.0f);
                 }
+                else if (selectedPackage && selectedPackage->id == epoch::package_registry::kEngineForestFactoryPackageId)
+                {
+                    gui::property_row("Workspace", "Forest Factory", 96.0f);
+                    gui::property_row("Manifest", path_exists(forestFactoryPackage) ? "staged" : "missing", 96.0f);
+                    gui::property_row("Profile", path_exists(forestFactoryProfile) ? "staged" : "missing", 96.0f);
+                    gui::wrapped_label(
+                        "Forest Factory is a core editor feature. Installing stages the project manifest/profile; generated project assets still require visible scene-use approval.",
+                        contentWidth);
+                }
                 else if (selectedPackage && selectedPackage->requiresExplicitNetworkApproval)
                 {
                     gui::wrapped_label(
@@ -6612,7 +6799,11 @@ namespace epochnamespace
                 gui::progress_bar(gui::ProgressBarOptions{
                     .label = "Install",
                     .status = editor.packageInstallStatus,
-                    .value = (std::max)(editor.packageInstallProgress, engineArcadeInstalled && editor.selectedPackageId == "engine_arcade" ? 1.0f : 0.0f),
+                    .value = (std::max)(
+                        editor.packageInstallProgress,
+                        engineArcadeInstalled && editor.selectedPackageId == "engine_arcade"
+                            ? 1.0f
+                            : (forestFactoryStaged && editor.selectedPackageId == epoch::package_registry::kEngineForestFactoryPackageId ? 0.65f : 0.0f)),
                     .size = { (std::min)(contentWidth, 500.0f), 20.0f },
                     .show_percent = true
                 });
@@ -6645,6 +6836,10 @@ namespace epochnamespace
                             editor.packageInstallProgress = 0.0f;
                             push_editor_log(editor, "[package] engine_arcade applies to game project shells, not the self-iteration sandbox or tool hubs.");
                         }
+                    }
+                    else if (selectedPackage->id == epoch::package_registry::kEngineForestFactoryPackageId)
+                    {
+                        (void)stage_forest_factory_package_opt_in(editor, *selectedPackage);
                     }
                     else if (selectedPackage->requiresExplicitNetworkApproval)
                     {

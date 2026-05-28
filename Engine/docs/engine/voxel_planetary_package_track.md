@@ -46,6 +46,11 @@ Epoch now treats the voxel and plant direction as two layers:
   project opt-in: opening the Forest Factory editor scene is allowed without
   adding package assets, but using a plant in the main scene must activate the
   `engine_forest_factory` package manifest and generated assets for that project.
+- The production Forest Factory package contract is tracked in
+  `forest_factory_package_contract.md`. The Plant Lab repository is provenance
+  and reference source; `Autodidac/EpochEngineExtensions` owns package payload
+  routing; EpochEngine mainline owns the renderer-neutral contract and
+  activation gate first.
 
 ## Prototype Inputs
 
@@ -111,8 +116,10 @@ Before any voxel package becomes tracked engine code:
   wiring them into editor workspaces or runtime packages.
 - Add package-manager support for local research packages with provenance and
   build/test evidence.
-- Add a Forest Factory 3D editor workspace and a voxel terrain preview workspace
-  once the GUI library has stable tabs, dropdowns, scrollable text, modals, and
-  copy/paste.
+- Add the full Forest Factory 3D editor workspace and a voxel terrain preview
+  workspace once the GUI library has stable tabs, dropdowns, scrollable text,
+  modals, and copy/paste. The first package activation record now exists; the
+  next gate is an actual editor workspace that consumes the deterministic
+  profile instead of only staging manifest files.
 - Connect OS AI planning to package evidence only after the gate can reject
   low-evidence or hidden-reasoning model output.

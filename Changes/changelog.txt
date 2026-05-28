@@ -1,5 +1,47 @@
 # Epoch Changelog
 
+## [v0.84.56]
+- Bumped the active source line to `v0.84.56` for the Forest Factory/package
+  contract pass.
+- Expanded `forest.factory` from a thin marker module into a deterministic
+  Forest Factory profile contract with presets, preview modes, edit stages,
+  temporal/branch controls, display toggles, output categories, and preview-stat
+  estimates.
+- Pointed the Forest Factory package source lane at
+  `Autodidac/EpochEngineExtensions` while keeping the Plant Lab repo as the
+  provenance/reference source and the editor-facing package name `Forest
+  Factory`.
+- Made Package Manager activation for Forest Factory stage a visible
+  project-local package manifest and default deterministic profile under
+  `assets/packages/engine_forest_factory/` without auto-running source,
+  listeners, or hidden package code.
+- Added an Asset menu Forest Factory workbench surface that displays the
+  deterministic profile, Plant Lab provenance repo, preview estimates, staged
+  package/profile evidence, and package activation controls before the full 3D
+  plant editor graduates.
+- Added a dedicated Forest Factory package contract doc so the core/package
+  boundary, Plant Lab provenance, project opt-in rule, and promotion gates stay
+  explicit.
+
+## [v0.84.55]
+- Bumped the active source line to `v0.84.55` for a focused GUI/script/OS-AI
+  polish pass.
+- Hardened the shared `engine.gui` dropdown/select box primitive so opening a
+  list anchors near the selected item, outside clicks close the list, open lists
+  keep their own scroll focus, and scrollable text panels only respond inside
+  the active clip.
+- Renamed generated project script wording from "stub" to "starter" and kept
+  project-local script creation tied to visible editor/build evidence.
+- Replaced high-byte banner art in the built-in script assets with ASCII source
+  headers so the current script preview stops turning license banners into
+  question-mark blocks.
+- Removed the stale OS-AI placeholder scorer constant; until a real verifier
+  scorer lands, the chat lane now explicitly accepts the first non-empty
+  assistant content only.
+- Cleaned the legacy CMake scripting compiler fallback by removing an unused
+  console include and documenting/adding real project-local and engine include
+  roots.
+
 ## [v0.84.54]
 - Bumped the active source line to `v0.84.54` for a focused recent-regression
   bug sweep.

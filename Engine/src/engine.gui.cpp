@@ -40,6 +40,7 @@ module;
 #include <cstring>
 #include <cmath>
 #include <filesystem>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -275,6 +276,7 @@ namespace epochnamespace::gui
         struct SelectBoxState
         {
             bool open = false;
+            bool alignSelectedOnOpen = false;
         };
 
         struct ScrollAreaFrame
@@ -3015,6 +3017,7 @@ namespace epochnamespace::gui
             : std::string(options.selected);
         selectedLabel += state.open ? "  ^" : "  v";
 
+        bool toggledThisFrame = false;
         if (button(selectedLabel, { width, closedHeight }))
         {
             const bool nextOpen = !state.open;
@@ -3022,13 +3025,19 @@ namespace epochnamespace::gui
             {
                 (void)otherKey;
                 otherState.open = false;
+                otherState.alignSelectedOnOpen = false;
             }
             state.open = nextOpen;
+            state.alignSelectedOnOpen = nextOpen;
+            toggledThisFrame = true;
         }
 
         result.opened = state.open;
         if (!state.open || options.options.empty())
+        {
+            state.alignSelectedOnOpen = false;
             return result;
+        }
 
         const std::size_t visibleCount = (std::max)(
             std::size_t{ 1 },
@@ -3036,8 +3045,37 @@ namespace epochnamespace::gui
                 ? options.options.size()
                 : options.max_visible_options));
         const float listHeight = (std::max)(rowHeight, static_cast<float>(visibleCount) * rowHeight + 2.0f);
-        const float contentHeight = static_cast<float>(options.options.size()) * (rowHeight + 2.0f);
+        const float optionPitch = rowHeight + 2.0f;
+        const float contentHeight = static_cast<float>(options.options.size()) * rowHeight
+            + static_cast<float>(options.options.size() - 1u) * 2.0f;
         const std::string listId = key + "-list";
+        const Vec2 listPos = g_frame.cursor;
+
+        if (state.alignSelectedOnOpen)
+        {
+            auto& scrollState = g_scrollAreaStates[scroll_panel_key(listId)];
+            const auto selectedIt = std::find(options.options.begin(), options.options.end(), options.selected);
+            if (selectedIt != options.options.end())
+            {
+                const auto selectedIndex = static_cast<std::size_t>(std::distance(options.options.begin(), selectedIt));
+                const float selectedY = static_cast<float>(selectedIndex) * optionPitch;
+                const float maxScroll = (std::max)(0.0f, contentHeight - listHeight);
+                scrollState.scrollY = (std::clamp)(selectedY - rowHeight, 0.0f, maxScroll);
+            }
+            state.alignSelectedOnOpen = false;
+        }
+
+        if (!toggledThisFrame && g_frame.justPressed)
+        {
+            const bool pressedClosed = point_in_rect(g_frame.mousePos, start.x, start.y, width, closedHeight);
+            const bool pressedList = point_in_rect(g_frame.mousePos, listPos.x, listPos.y, width, listHeight);
+            if (!pressedClosed && !pressedList)
+            {
+                state.open = false;
+                result.opened = false;
+                return result;
+            }
+        }
 
         (void)begin_scroll_area(ScrollAreaOptions{
             .id = listId,
@@ -3416,7 +3454,8 @@ namespace epochnamespace::gui
             state.firstLine = (std::min)(state.firstLine, maxFirstLine);
         state.lastLineCount = lineCount;
 
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
         if (hovered && g_frame.mouseWheelDelta != 0)
         {
             const int wheelSteps = (std::max)(1, std::abs(g_frame.mouseWheelDelta) / 120);
