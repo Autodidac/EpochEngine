@@ -22,12 +22,12 @@ logic.
 ## Draw Model Guardrail
 
 The current working draw model is a protected contract, not a playground. The
-OpenGL editor path is stable only when ordinary frames drain normal GUI/backend
-work before the scene, overlay-priority frames drain normal GUI/backend work
-after the scene, the scene preview renders once, only the explicit GUI top-layer
-batch for command menus/modal chrome is replayed above it, and capture/present
-happens afterward. That order is the baseline for menu, pane, and scene
-composition work.
+OpenGL editor path is stable only when it builds the normal GUI/backend batch
+before the scene, renders the scene preview once, drains follow-up work, replays
+only the explicit GUI top-layer batch for command menus/modal chrome above it,
+and captures/presents afterward. Overlay-priority state must not change the
+OpenGL frame order by itself; top-layer replay owns scene-over menu composition.
+That order is the baseline for menu, pane, and scene composition work.
 
 Fix command-menu z-order, modal layering, resize chrome, and scene/pane
 composition by improving the GUI library or the explicit top-layer/draw-model
@@ -47,10 +47,12 @@ interacted with, which looks like command-menu flicker even when the renderer
 order is correct.
 
 On OpenGL, top-layer sprites are replay-only. They must not also be queued in
-the normal deferred GUI batch, or command menus can slowly flip between
-scene-under and scene-over composition while a dropdown is open. Backends that
-do not yet consume the explicit top-layer replay path keep their existing
-normal-batch behavior until their presenter owns a matching replay pass.
+the normal deferred GUI batch, and the OpenGL renderer must not switch
+pre-scene/post-scene GUI drain order when a dropdown is open. Either condition
+can make command menus slowly flip between scene-under and scene-over
+composition. Backends that do not yet consume the explicit top-layer replay path
+keep their existing normal-batch behavior until their presenter owns a matching
+replay pass.
 
 ## Intended Layers
 

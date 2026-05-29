@@ -40,12 +40,11 @@ namespace epochnamespace::openglcontext
         } scoped{ previousContext };
 
         // Stable OpenGL editor draw contract:
-        // Normal frames drain GUI before the scene preview so the scene owns
-        // only its viewport. Modal/menu frames drain after the scene so command
-        // surfaces never fight the OpenGL viewport for z-order.
-        const bool overlayPriority = ctx->gui_overlay_priority();
-        if (!overlayPriority)
-            (void)queue.drain();
+        // Build the current GUI batch first, render the scene once, then replay
+        // only the explicit top-layer sprites above the scene. Keeping this
+        // order static prevents command menus from flip-flopping between
+        // scene-under and scene-over composition while a menu is open.
+        (void)queue.drain();
         openglbridge::render_scene_preview(ctx, framebufferWidth, framebufferHeight);
         (void)queue.drain();
         (void)gui::render_top_layer_batch(ctx.get());

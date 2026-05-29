@@ -74,9 +74,9 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     order, backend frame order, or ad hoc overlay replay behavior to chase a GUI
     symptom unless the mission is explicitly a draw-model improvement with build
     proof and manual flicker/z-order eye-test evidence. OpenGL's editor baseline
-    remains: drain normal GUI/backend work, render the scene preview once, drain
-    follow-up work, replay only the explicit GUI top-layer batch for command
-    menus/modal chrome, then capture/present.
+    remains: build the normal GUI/backend batch before the scene, render the
+    scene preview once, drain follow-up work, replay only the explicit GUI
+    top-layer batch for command menus/modal chrome, then capture/present.
 17. GPU/runtime launches are approval-only. Do not run `EpochEditor.exe`, GUI
     runtime probes, project self-tests, Sandbox self-tests, multicontext
     launches, or commands that instantiate renderer contexts unless the operator
@@ -670,6 +670,14 @@ engine shape and should be treated as starting truth for the next passes:
   fallback, and same-project evidence repair preserves workspace, camera,
   input-profile, selected backend, and frame-limit state instead of snapping the
   editor back to defaults.
+- `v0.84.59` narrows the remaining OpenGL command-menu flicker path by making
+  OpenGL GUI/scene composition order static again while keeping top-layer menu
+  replay above the scene. Overlay-priority state no longer toggles whether the
+  normal GUI batch drains before or after the scene, so command menus should not
+  slowly flip between scene-under and scene-over composition while Play In
+  Editor or a normal scene viewport is active. Acceptance: operator eye-test
+  confirms File/Edit/Asset/Window/Tools dropdowns and Package Manager modal stay
+  above the OpenGL scene without slow flicker.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

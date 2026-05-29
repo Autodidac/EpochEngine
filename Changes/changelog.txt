@@ -1,5 +1,16 @@
 # Epoch Changelog
 
+## [v0.84.59]
+- Bumped the active source line to `v0.84.59` for a focused OpenGL
+  command-menu flicker stabilization pass.
+- Kept Play In Editor/project-run behavior intact while making the OpenGL GUI
+  composition order deterministic: the GUI batch is built before the scene,
+  the scene renders once, follow-up work drains afterward, and only the
+  explicit top-layer batch is replayed above the scene.
+- This removes the overlay-priority frame-order toggle that could make command
+  menus flip between scene-under and scene-over composition while a scene was
+  open.
+
 ## [v0.84.58]
 - Bumped the active source line to `v0.84.58` for a focused project-run and
   validation-harness stabilization pass.
