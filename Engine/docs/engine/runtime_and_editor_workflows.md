@@ -40,11 +40,11 @@ the same engine-owned path.
   `cache/packages/`; generated/runtime atlases live under `cache/atlases/`.
   These folders are disposable runtime state, not public release payload and not
   tracked source.
-- OpenGL editor composition is scene-first: draw the scene preview, drain
-  queued render work, then render the latest persistent GUI batch. The
-  persistent batch is required because the OpenGL render thread can run between
-  editor/UI ticks; without replaying the latest GUI batch, frames can alternate
-  between scene+GUI and scene-only, which presents as flicker.
+- OpenGL editor composition is queue-explicit: build the normal GUI/backend
+  batch before the scene, render the scene preview once, drain follow-up work,
+  then replay only the explicit GUI top-layer batch for command menus and modal
+  chrome. This protected order keeps command windows scene-over without
+  reviving the slow scene/menu flicker.
 
 ## Project-centric runtime direction
 
@@ -144,6 +144,10 @@ the same engine-owned path.
 - generated child projects, including the Sandbox shell, should repair stale
   Windows toolset metadata to `v143` before invoking MSBuild, and the checked-in
   engine projects they reference should stay on the same VS 2022 toolset.
+- generated child projects must also repair their Windows app linker surface to
+  match the editor target: `RAYLIB_DLL`, `raylib.lib`, SDL3 static Windows
+  system libraries, and no mixed SFML static/dynamic library set. Backend
+  selection stays runtime-driven through `--backend`, not a project rewrite.
 - generated child projects expose `--project-self-test` so Sandbox and
   ProjectLauncher output can be verified without opening GUI windows.
 - the checked-in engine exposes `--editor-project-self-test <id>` for the same

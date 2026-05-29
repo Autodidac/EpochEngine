@@ -1,10 +1,7 @@
 /************************************************
- *  ¦¦¦¦¦¦¦+¦¦¦¦¦¦+  ¦¦¦¦¦¦+  ¦¦¦¦¦¦+¦¦+  ¦¦+   *
- *  ¦¦+----+¦¦+--¦¦+¦¦+---¦¦+¦¦+----+¦¦¦  ¦¦¦   *
- *  ¦¦¦¦¦+  ¦¦¦¦¦¦++¦¦¦   ¦¦¦¦¦¦     ¦¦¦¦¦¦¦¦   *
- *  ¦¦+--+  ¦¦+---+ ¦¦¦   ¦¦¦¦¦¦     ¦¦+--¦¦¦   *
- *  ¦¦¦¦¦¦¦+¦¦¦     +¦¦¦¦¦¦+++¦¦¦¦¦¦+¦¦¦  ¦¦¦   *
- *  +------++-+      +-----+  +-----++-+  +-+   *
+ *                    EPOCH                     *
+ *                                              *
+ *   Engine-owned editor scene/project source.  *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -736,7 +733,7 @@ namespace epochnamespace::editor
     };
 
     // =========================================================================
-    // AI-facing: convert “AI intents” into undoable editor commands.
+    // AI-facing: convert AI intents into undoable editor commands.
     // The key rule: AI never mutates the scene directly; it only emits ops.
     // =========================================================================
     enum class AiOpKind : std::uint8_t
@@ -762,7 +759,7 @@ namespace epochnamespace::editor
     
     // Applies AI ops as ONE undo step (atomic scene edit).
     // If any op fails, we stop early; already-applied commands remain in the batch.
-    // If you want all-or-nothing, add a “preflight validate” pass first.
+    // If you want all-or-nothing, add a preflight validate pass first.
     class CmdClearSelection final : public ICommand
     {
     public:
@@ -882,7 +879,7 @@ inline bool apply_ai_ops(CommandBus& bus, std::span<const AiOp> ops, std::string
 
     // Undoable selection commands (inline class defs keep this file self-contained).
     // =========================================================================
-    // “Proper editor scene” bootstrap:
+    // Proper editor scene bootstrap:
     // - creates a minimal editor-ready layout (camera root, lights, grid)
     // - demonstrates how AI can extend it through commands
     // =========================================================================
@@ -890,7 +887,7 @@ inline bool apply_ai_ops(CommandBus& bus, std::span<const AiOp> ops, std::string
     {
         auto b = bus.batch("Init Editor Scene");
 
-        // Root “Scene” node.
+        // Root Scene node.
         bus.submit(std::make_unique<CmdCreateEntity>("SceneRoot", std::nullopt));
 
         // Basic nodes (replace with your real camera/light components later).
@@ -902,7 +899,7 @@ inline bool apply_ai_ops(CommandBus& bus, std::span<const AiOp> ops, std::string
         Transform cam{};
         cam.position = { 0.0f, 2.0f, 6.0f };
         bus.submit(std::make_unique<CmdSetTransform>(2 /*best-effort*/, cam));
-        // NOTE: In a real ECS, you’d capture created ids from CmdCreateEntity.
+        // NOTE: In a real ECS, capture created ids from CmdCreateEntity.
         // Here, keep it simple: wire your own id routing once integrated.
     }
 
@@ -1759,6 +1756,21 @@ namespace
         }
     }
 
+    [[nodiscard]] static constexpr std::string_view generated_child_project_debug_defines() noexcept
+    {
+        return "ENGINE_STATICLIB;RAYLIB_DLL;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)";
+    }
+
+    [[nodiscard]] static constexpr std::string_view generated_child_project_release_defines() noexcept
+    {
+        return "ENGINE_STATICLIB;RAYLIB_DLL;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)";
+    }
+
+    [[nodiscard]] static constexpr std::string_view generated_child_project_link_dependencies() noexcept
+    {
+        return "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;%(AdditionalDependencies)";
+    }
+
     [[nodiscard]] static bool repair_generated_windows_child_project_build_files(const fs::path& root)
     {
         const fs::path projectFile = generated_project_windows_vcxproj_path(root);
@@ -1772,6 +1784,38 @@ namespace
             replace_all(projectText, "<PlatformToolset>v142</PlatformToolset>", "<PlatformToolset>v143</PlatformToolset>");
             replace_all(projectText, "<PlatformToolset>v145</PlatformToolset>", "<PlatformToolset>v143</PlatformToolset>");
             replace_all(projectText, "<LanguageStandard>stdcpplatest</LanguageStandard>", "<LanguageStandard>stdcpp23</LanguageStandard>");
+            replace_all(
+                projectText,
+                "<PreprocessorDefinitions>ENGINE_STATICLIB;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>",
+                std::string("<PreprocessorDefinitions>") + std::string(generated_child_project_debug_defines()) + "</PreprocessorDefinitions>");
+            replace_all(
+                projectText,
+                "<PreprocessorDefinitions>ENGINE_STATICLIB;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>",
+                std::string("<PreprocessorDefinitions>") + std::string(generated_child_project_release_defines()) + "</PreprocessorDefinitions>");
+            replace_all(
+                projectText,
+                "sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)",
+                generated_child_project_link_dependencies());
+            replace_all(
+                projectText,
+                "sfml-graphics.lib;sfml-window.lib;sfml-system.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)",
+                generated_child_project_link_dependencies());
+            replace_all(
+                projectText,
+                "<Command>if exist \"$(EpochVcpkgInstallRoot)debug\\bin\\*.dll\" xcopy /Y /D \"$(EpochVcpkgInstallRoot)debug\\bin\\*.dll\" \"$(OutDir)\" &gt;nul</Command>",
+                "<Command>if \"$(VcpkgUseStatic)\" NEQ \"true\" if exist \"$(EpochVcpkgInstallRoot)debug\\bin\\*.dll\" xcopy /Y /D \"$(EpochVcpkgInstallRoot)debug\\bin\\*.dll\" \"$(OutDir)\" &gt;nul</Command>");
+            replace_all(
+                projectText,
+                "<Command>if exist \"$(EpochVcpkgInstallRoot)bin\\*.dll\" xcopy /Y /D \"$(EpochVcpkgInstallRoot)bin\\*.dll\" \"$(OutDir)\" &gt;nul</Command>",
+                "<Command>if \"$(VcpkgUseStatic)\" NEQ \"true\" if exist \"$(EpochVcpkgInstallRoot)bin\\*.dll\" xcopy /Y /D \"$(EpochVcpkgInstallRoot)bin\\*.dll\" \"$(OutDir)\" &gt;nul</Command>");
+            replace_all(
+                projectText,
+                "<Target Name=\"EpochCopyDebugVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">",
+                "<Target Name=\"EpochCopyDebugVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64' And '$(VcpkgUseStatic)'!='true'\">");
+            replace_all(
+                projectText,
+                "<Target Name=\"EpochCopyReleaseVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">",
+                "<Target Name=\"EpochCopyReleaseVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Release|x64' And '$(VcpkgUseStatic)'!='true'\">");
             if (projectText != original && !write_text_file(projectFile, projectText))
                 return false;
         }
@@ -2325,7 +2369,7 @@ namespace
             "    <ClCompile>\n"
             "      <WarningLevel>Level3</WarningLevel>\n"
             "      <SDLCheck>true</SDLCheck>\n"
-            "      <PreprocessorDefinitions>ENGINE_STATICLIB;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
+            "      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
             "      <ConformanceMode>true</ConformanceMode>\n"
             "      <LanguageStandard>stdcpp23</LanguageStandard>\n"
             "      <LanguageStandard_C>stdc17</LanguageStandard_C>\n"
@@ -2338,12 +2382,12 @@ namespace
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
             "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)debug\\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
             "    <PostBuildEvent>\n"
             "      <Message>Copy vcpkg debug runtime DLLs</Message>\n"
-            "      <Command>if exist \"$(EpochVcpkgInstallRoot)debug\\bin\\*.dll\" xcopy /Y /D \"$(EpochVcpkgInstallRoot)debug\\bin\\*.dll\" \"$(OutDir)\" &gt;nul</Command>\n"
+            "      <Command>if \"$(VcpkgUseStatic)\" NEQ \"true\" if exist \"$(EpochVcpkgInstallRoot)debug\\bin\\*.dll\" xcopy /Y /D \"$(EpochVcpkgInstallRoot)debug\\bin\\*.dll\" \"$(OutDir)\" &gt;nul</Command>\n"
             "    </PostBuildEvent>\n"
             "  </ItemDefinitionGroup>\n"
             "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n"
@@ -2352,7 +2396,7 @@ namespace
             "      <FunctionLevelLinking>false</FunctionLevelLinking>\n"
             "      <IntrinsicFunctions>false</IntrinsicFunctions>\n"
             "      <SDLCheck>true</SDLCheck>\n"
-            "      <PreprocessorDefinitions>ENGINE_STATICLIB;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
+            "      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
             "      <ConformanceMode>true</ConformanceMode>\n"
             "      <LanguageStandard>stdcpp23</LanguageStandard>\n"
             "      <LanguageStandard_C>stdc17</LanguageStandard_C>\n"
@@ -2365,22 +2409,22 @@ namespace
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
             "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
             "    <PostBuildEvent>\n"
             "      <Message>Copy vcpkg release runtime DLLs</Message>\n"
-            "      <Command>if exist \"$(EpochVcpkgInstallRoot)bin\\*.dll\" xcopy /Y /D \"$(EpochVcpkgInstallRoot)bin\\*.dll\" \"$(OutDir)\" &gt;nul</Command>\n"
+            "      <Command>if \"$(VcpkgUseStatic)\" NEQ \"true\" if exist \"$(EpochVcpkgInstallRoot)bin\\*.dll\" xcopy /Y /D \"$(EpochVcpkgInstallRoot)bin\\*.dll\" \"$(OutDir)\" &gt;nul</Command>\n"
             "    </PostBuildEvent>\n"
             "  </ItemDefinitionGroup>\n"
             "  <Import Project=\"$(VCTargetsPath)\\Microsoft.Cpp.targets\" />\n"
-            "  <Target Name=\"EpochCopyDebugVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n"
+            "  <Target Name=\"EpochCopyDebugVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64' And '$(VcpkgUseStatic)'!='true'\">\n"
             "    <ItemGroup>\n"
             "      <EpochDebugVcpkgRuntimeDlls Include=\"$(EpochVcpkgInstallRoot)debug\\bin\\*.dll\" />\n"
             "    </ItemGroup>\n"
             "    <Copy SourceFiles=\"@(EpochDebugVcpkgRuntimeDlls)\" DestinationFolder=\"$(OutDir)\" SkipUnchangedFiles=\"true\" Condition=\"'@(EpochDebugVcpkgRuntimeDlls)'!=''\" />\n"
             "  </Target>\n"
-            "  <Target Name=\"EpochCopyReleaseVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n"
+            "  <Target Name=\"EpochCopyReleaseVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Release|x64' And '$(VcpkgUseStatic)'!='true'\">\n"
             "    <ItemGroup>\n"
             "      <EpochReleaseVcpkgRuntimeDlls Include=\"$(EpochVcpkgInstallRoot)bin\\*.dll\" />\n"
             "    </ItemGroup>\n"

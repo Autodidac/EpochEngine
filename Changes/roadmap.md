@@ -1055,6 +1055,11 @@ engine shape and should be treated as starting truth for the next passes:
   - hard fail with diagnostics
 - keep Visual Studio, repo-root CMake, and packaged runtime path behavior
   aligned
+- keep generated Windows child project files in linker parity with the editor
+  app target. The current project backend switch path is runtime-driven through
+  `--backend`, so child `.vcxproj` files must carry `RAYLIB_DLL`, `raylib.lib`,
+  SDL3 static Windows system libs, and no SFML static/dynamic mixture before
+  Raylib, Vulkan, or other single-context project launches can be trusted.
 - keep the project-script compiler honest across normal Windows developer
   environments instead of assuming one lucky `clang++` path is always present
 - finish the low-risk include/src cleanup and module-aware source grouping

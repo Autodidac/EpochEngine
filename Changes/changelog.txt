@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.84.60]
+- Bumped the active source line to `v0.84.60` for generated project backend
+  build parity after the OpenGL command-menu flicker fix was eye-test
+  confirmed.
+- Updated generated Windows child project files and their repair path to match
+  the editor app linker shape: `RAYLIB_DLL`, `raylib.lib`, SDL3 static Windows
+  system libraries, and no SFML static/dynamic library mixture.
+- Kept backend selection runtime-driven through the project `--backend` launch
+  argument so switching Raylib/Vulkan/other project contexts does not rewrite
+  the project architecture or touch the stabilized OpenGL draw model.
+- Build-only validation passed for `StaticLib1`, `ConsoleApplication1`, and the
+  generated `ProjectLauncher` Debug x64 shell. Runtime/self-test execution was
+  intentionally left for an operator eye-test because recent GPU/driver crashes
+  make automated renderer launches unsafe in this pass.
+
 ## [v0.84.59]
 - Bumped the active source line to `v0.84.59` for a focused OpenGL
   command-menu flicker stabilization pass.
