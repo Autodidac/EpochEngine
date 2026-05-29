@@ -108,18 +108,21 @@
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='x64'">x64-windows</VcpkgTriplet>
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='Win32'">x86-windows</VcpkgTriplet>
     <VcpkgManifestInstall>true</VcpkgManifestInstall>
+    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')">true</VcpkgUseStatic>
+    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
+    <EpochRaylibDllDefine Condition="'$(VcpkgUseStatic)'!='true'">RAYLIB_DLL;</EpochRaylibDllDefine>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <VcpkgUseStatic>false</VcpkgUseStatic>
+    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <VcpkgUseStatic>false</VcpkgUseStatic>
+    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <VcpkgUseStatic>false</VcpkgUseStatic>
+    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <VcpkgUseStatic>false</VcpkgUseStatic>
+    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64' or '$(Configuration)|$(Platform)'=='Release|x64'">
     <EpochVcpkgInstallRoot>$(SolutionDir)Engine\vcpkg_installed\$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
@@ -166,7 +169,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;_DEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)_DEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -197,7 +200,7 @@
       <FunctionLevelLinking>false</FunctionLevelLinking>
       <IntrinsicFunctions>false</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;NDEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)NDEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>

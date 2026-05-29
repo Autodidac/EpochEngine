@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.84.62]
+- Bumped the active source line to `v0.84.62` for a focused project-run and
+  static-vcpkg linkage stabilization pass.
+- Made Launch Single Context save/repair project evidence, then launch the
+  current child executable immediately when source/build inputs are older than
+  the output. Source, script, project file, build script, or engine static-lib
+  changes still force the normal serialized rebuild path.
+- Aligned generated Sandbox child artifacts with the `EpochEngine` executable
+  stem so the editor no longer looks for a stale `Sandbox.exe` output while the
+  project shell emits `EpochEngine.exe`.
+- Made MSVC project and generated child project raylib DLL-import definitions
+  conditional on the vcpkg triplet. Dynamic `x64-windows` keeps `RAYLIB_DLL`;
+  static triplets omit it so raylib bridge objects do not request unresolved
+  `__imp_*` symbols.
+
 ## [v0.84.61]
 - Bumped the active source line to `v0.84.61` for a safe GUI/OS-model/project-run
   flow pass that avoids renderer draw-order changes.

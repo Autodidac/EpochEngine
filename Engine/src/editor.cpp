@@ -2498,16 +2498,23 @@ namespace epochnamespace
             return resolve_editor_path(std::filesystem::path{ projectRoot }) / "build_project.ps1";
         }
 
+        [[nodiscard]] std::string project_artifact_stem(std::string_view projectRoot)
+        {
+            const std::filesystem::path root = resolve_editor_path(std::filesystem::path{ projectRoot });
+            const std::string stem = root.filename().string();
+            return stem == "Sandbox" ? std::string{ "EpochEngine" } : stem;
+        }
+
         [[nodiscard]] std::filesystem::path project_windows_vcxproj_path(std::string_view projectRoot)
         {
             const std::filesystem::path root = resolve_editor_path(std::filesystem::path{ projectRoot });
-            return root / (root.filename().string() + ".vcxproj");
+            return root / (project_artifact_stem(projectRoot) + ".vcxproj");
         }
 
         [[nodiscard]] std::filesystem::path project_output_exe_path(std::string_view projectRoot)
         {
             const std::filesystem::path root = resolve_editor_path(std::filesystem::path{ projectRoot });
-            return root / "bin" / "windows" / "Debug" / "x64" / (root.filename().string() + ".exe");
+            return root / "bin" / "windows" / "Debug" / "x64" / (project_artifact_stem(projectRoot) + ".exe");
         }
 
         [[nodiscard]] std::filesystem::path project_build_log_path(std::string_view projectRoot)
@@ -3737,6 +3744,74 @@ namespace epochnamespace
             return editor.activeRuntimeScene.empty() ? std::string("project:projectlauncher") : editor.activeRuntimeScene;
         }
 
+        struct ProjectBuildFreshness
+        {
+            bool rebuildRequired{ true };
+            std::string reason{ "build state unknown" };
+        };
+
+        [[nodiscard]] bool file_is_newer_than(
+            const std::filesystem::path& input,
+            const std::filesystem::file_time_type outputTime,
+            std::string& changedInput)
+        {
+            std::error_code ec;
+            const std::filesystem::path resolved = resolve_editor_path(input);
+            if (resolved.empty() || !std::filesystem::exists(resolved, ec) || ec)
+                return false;
+
+            const auto inputTime = std::filesystem::last_write_time(resolved, ec);
+            if (ec)
+                return false;
+
+            if (inputTime > outputTime)
+            {
+                changedInput = display_project_path(resolved);
+                return true;
+            }
+
+            return false;
+        }
+
+        [[nodiscard]] ProjectBuildFreshness project_child_build_freshness(const EditorState& editor)
+        {
+            if (editor.projectRoot.empty())
+                return { true, "no active project root" };
+
+            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+            std::error_code ec;
+            if (!std::filesystem::exists(outputExe, ec) || ec)
+                return { true, "child executable missing" };
+
+            const auto outputTime = std::filesystem::last_write_time(outputExe, ec);
+            if (ec)
+                return { true, "child executable timestamp unavailable" };
+
+            std::vector<std::filesystem::path> buildInputs{
+                project_entry_source_path(editor.projectRoot),
+                project_windows_vcxproj_path(editor.projectRoot),
+                project_windows_build_script_path(editor.projectRoot),
+                resolve_editor_path(std::filesystem::path{ "x64" } / "Debug" / "StaticLib1.lib")
+            };
+
+            const std::string activeScriptSource =
+                editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
+            if (!activeScriptSource.empty())
+                buildInputs.emplace_back(activeScriptSource);
+
+            // Scene and manifest data are runtime inputs. They are saved before launch
+            // but should not force a relink; Build Active Project remains available
+            // when the operator intentionally wants a fresh child executable.
+            for (const auto& input : buildInputs)
+            {
+                std::string changedInput;
+                if (file_is_newer_than(input, outputTime, changedInput))
+                    return { true, std::string("build input changed: ") + changedInput };
+            }
+
+            return { false, "child executable is current" };
+        }
+
         void start_project_build(EditorState& editor, bool runAfterBuild, std::string_view reason)
         {
             if (editor.projectBuildPending)
@@ -4413,7 +4488,48 @@ namespace epochnamespace
                     "Project launch remains project-owned so script assets cannot crash the project run path by accident.");
             }
 
-            start_project_build(editor, true, "Launch Single Context");
+            save_editor_scene_snapshot(editor);
+            repair_active_project_evidence(editor);
+
+            const ProjectBuildFreshness freshness = project_child_build_freshness(editor);
+            if (freshness.rebuildRequired)
+            {
+                start_project_build(editor, true, std::string("Launch Single Context - ") + freshness.reason);
+                return;
+            }
+
+            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+            if (!path_exists(outputExe))
+            {
+                editor.projectBuildStatus = "Launch blocked: child executable disappeared before launch.";
+                push_editor_log(editor, "[project] Launch blocked: child executable disappeared before launch.");
+                return;
+            }
+
+            const std::string sceneId = project_runtime_scene_id(editor);
+            const std::string runBackend = editor.projectRunBackend.empty() ? std::string("opengl") : editor.projectRunBackend;
+            const std::string playTarget =
+                std::string("project-exe:") + display_project_path(outputExe)
+                + "|scene=" + sceneId
+                + "|backend=" + runBackend
+                + "|fps=" + std::string(frame_limit_argument(editor.projectRunFrameLimitFps))
+                + "|camera=" + std::string(project_camera_argument(editor.projectCameraMode))
+                + "|input=" + std::string(input_profile_argument(editor.inputProfilePreset));
+
+            editor.projectBuildStatus = "Launching existing child executable; build inputs are current.";
+            emit_command(EditorCommand::RunGame, playTarget);
+            push_editor_log(
+                editor,
+                std::string("[project] Launching current child executable in standalone ")
+                + std::string(project_run_backend_label(runBackend))
+                + " at " + std::string(frame_limit_label(editor.projectRunFrameLimitFps))
+                + ": " + sceneId);
+            append_project_note(
+                editor,
+                "Launch Single Context",
+                std::string("Launching current child executable without rebuilding in standalone ")
+                + std::string(project_run_backend_label(runBackend)) + ".",
+                playTarget);
         };
 
         auto poll_project_build = [&]()
@@ -5535,7 +5651,7 @@ namespace epochnamespace
                 gui::property_row("[project] Input profile", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
                 gui::wrapped_label("Shared input actions currently drive editor preview cameras and in-editor/project runtime cameras. Key rebinding UI is the next promotion gate; profiles keep controls universal now.", centerWidth);
                 gui::wrapped_label(
-                    "Play In Editor runs the active project scene inside this editor. Launch Single Context builds the child executable and starts one selected backend as a standalone process.",
+                    "Play In Editor runs the active project scene inside this editor. Launch Single Context starts the current child executable when build inputs are fresh, and only rebuilds when source or project build files changed.",
                     centerWidth);
                 if (gui::button("Save Active Project", { 220.0f, 30.0f }))
                     repair_active_project_evidence(editor);

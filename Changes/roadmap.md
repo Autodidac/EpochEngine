@@ -685,6 +685,14 @@ engine shape and should be treated as starting truth for the next passes:
   auto` payloads clamp to OpenGL single-context launch, and Linux/WSL project-run
   choices expose only the currently proven OpenGL lane until other backends have
   runtime evidence.
+- `v0.84.62` keeps the renderer/draw model untouched and narrows Project Run
+  latency: Launch Single Context now uses a child-build freshness gate, launches
+  an existing current executable directly, and rebuilds only when source, script,
+  project build files, or the engine static library are newer than the child
+  output. The pass also aligns Sandbox child artifact naming with the emitted
+  `EpochEngine.exe` stem and makes generated/MSVC raylib DLL-import definitions
+  conditional so static-vcpkg experiments do not request dynamic `__imp_*`
+  symbols.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

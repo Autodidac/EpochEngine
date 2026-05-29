@@ -215,9 +215,17 @@ the same engine-owned path.
   If the expected child executable is missing after the build, the editor must
   block the run with visible evidence instead of falling back to a parent
   multicontext `Project Runtime` scene across every dock.
+- Launch Single Context uses a child-build freshness gate. The editor saves and
+  repairs project evidence, then launches the existing child executable when the
+  output is newer than the project entry source, active script source, generated
+  Windows project file, generated build script, and engine static library. When
+  any of those inputs are newer or the output is missing, the normal serialized
+  project build path still runs before launch. Scene and manifest writes are
+  runtime inputs and should not force a relink by themselves.
 - The centered Run button follows the same split: normal generated projects
-  save, build, and launch through the selected single-context child backend; the
-  engine self-iteration lane stays editor-shaped because it manipulates the
+  save project evidence and launch through the selected single-context child
+  backend, rebuilding only when the freshness gate says the executable is stale;
+  the engine self-iteration lane stays editor-shaped because it manipulates the
   checked-out engine and needs visible build/review evidence.
 - workspace changes from the launcher/editor toolbar may use short loading
   feedback through the shared GUI progress primitive only after that feedback is
@@ -250,12 +258,14 @@ the same engine-owned path.
 - project shells should only be materialized by explicit operator action:
   File > Save Project, Project > Save Active Project, or the centered Run
   button. Merely selecting a project profile must not create files silently.
-- the centered Run button now saves and rebuilds normal generated projects, then
-  launches the selected single-context child backend. If the build fails, launch
-  is canceled so stale `Projects/**/bin/...` outputs are not mistaken for the
-  result of the current run. The engine self-iteration sandbox is intentionally
-  excluded from that generated-project launch path and remains editor-shaped for
-  visible engine manipulation, build evidence, and review gates.
+- the centered Run button now saves normal generated-project evidence, checks
+  child executable freshness, rebuilds only when source/build inputs are stale,
+  and launches the selected single-context child backend. If the build fails,
+  launch is canceled so stale `Projects/**/bin/...` outputs are not mistaken for
+  the result of the current run. The engine self-iteration sandbox is
+  intentionally excluded from that generated-project launch path and remains
+  editor-shaped for visible engine manipulation, build evidence, and review
+  gates.
 - generated project builds are serialized inside the editor process, and emitted
   Windows `build_project.ps1` scripts also take a repo-level build lock. Until
   ProjectLauncher/Sandbox child builds have isolated engine-object/module/PDB

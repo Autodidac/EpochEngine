@@ -1758,12 +1758,12 @@ namespace
 
     [[nodiscard]] static constexpr std::string_view generated_child_project_debug_defines() noexcept
     {
-        return "ENGINE_STATICLIB;RAYLIB_DLL;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)";
+        return "ENGINE_STATICLIB;$(EpochRaylibDllDefine)_DEBUG;_CONSOLE;%(PreprocessorDefinitions)";
     }
 
     [[nodiscard]] static constexpr std::string_view generated_child_project_release_defines() noexcept
     {
-        return "ENGINE_STATICLIB;RAYLIB_DLL;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)";
+        return "ENGINE_STATICLIB;$(EpochRaylibDllDefine)NDEBUG;_CONSOLE;%(PreprocessorDefinitions)";
     }
 
     [[nodiscard]] static constexpr std::string_view generated_child_project_link_dependencies() noexcept
@@ -1786,11 +1786,25 @@ namespace
             replace_all(projectText, "<LanguageStandard>stdcpplatest</LanguageStandard>", "<LanguageStandard>stdcpp23</LanguageStandard>");
             replace_all(
                 projectText,
+                "<VcpkgUseStatic>false</VcpkgUseStatic>",
+                "<VcpkgUseStatic Condition=\"'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')\">true</VcpkgUseStatic>\n"
+                "    <VcpkgUseStatic Condition=\"'$(VcpkgUseStatic)'==''\">false</VcpkgUseStatic>\n"
+                "    <EpochRaylibDllDefine Condition=\"'$(VcpkgUseStatic)'!='true'\">RAYLIB_DLL;</EpochRaylibDllDefine>");
+            replace_all(
+                projectText,
                 "<PreprocessorDefinitions>ENGINE_STATICLIB;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>",
                 std::string("<PreprocessorDefinitions>") + std::string(generated_child_project_debug_defines()) + "</PreprocessorDefinitions>");
             replace_all(
                 projectText,
+                "<PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>",
+                std::string("<PreprocessorDefinitions>") + std::string(generated_child_project_debug_defines()) + "</PreprocessorDefinitions>");
+            replace_all(
+                projectText,
                 "<PreprocessorDefinitions>ENGINE_STATICLIB;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>",
+                std::string("<PreprocessorDefinitions>") + std::string(generated_child_project_release_defines()) + "</PreprocessorDefinitions>");
+            replace_all(
+                projectText,
+                "<PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>",
                 std::string("<PreprocessorDefinitions>") + std::string(generated_child_project_release_defines()) + "</PreprocessorDefinitions>");
             replace_all(
                 projectText,
@@ -2363,13 +2377,15 @@ namespace
             "  </PropertyGroup>\n"
             "  <PropertyGroup Label=\"Vcpkg\">\n"
             "    <VcpkgEnableManifest>true</VcpkgEnableManifest>\n"
-            "    <VcpkgUseStatic>false</VcpkgUseStatic>\n"
+            "    <VcpkgUseStatic Condition=\"'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')\">true</VcpkgUseStatic>\n"
+            "    <VcpkgUseStatic Condition=\"'$(VcpkgUseStatic)'==''\">false</VcpkgUseStatic>\n"
+            "    <EpochRaylibDllDefine Condition=\"'$(VcpkgUseStatic)'!='true'\">RAYLIB_DLL;</EpochRaylibDllDefine>\n"
             "  </PropertyGroup>\n"
             "  <ItemDefinitionGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n"
             "    <ClCompile>\n"
             "      <WarningLevel>Level3</WarningLevel>\n"
             "      <SDLCheck>true</SDLCheck>\n"
-            "      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
+            "      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
             "      <ConformanceMode>true</ConformanceMode>\n"
             "      <LanguageStandard>stdcpp23</LanguageStandard>\n"
             "      <LanguageStandard_C>stdc17</LanguageStandard_C>\n"
@@ -2396,7 +2412,7 @@ namespace
             "      <FunctionLevelLinking>false</FunctionLevelLinking>\n"
             "      <IntrinsicFunctions>false</IntrinsicFunctions>\n"
             "      <SDLCheck>true</SDLCheck>\n"
-            "      <PreprocessorDefinitions>ENGINE_STATICLIB;RAYLIB_DLL;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
+            "      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
             "      <ConformanceMode>true</ConformanceMode>\n"
             "      <LanguageStandard>stdcpp23</LanguageStandard>\n"
             "      <LanguageStandard_C>stdc17</LanguageStandard_C>\n"
