@@ -7132,7 +7132,7 @@ namespace epochnamespace
                 (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                     .id = "package-manager-detail-scroll",
                     .size = { contentWidth, 224.0f },
-                    .content_height = 330.0f,
+                    .content_height = 300.0f,
                     .draw_background = true,
                     .show_scrollbar = true
                 });
@@ -7180,18 +7180,23 @@ namespace epochnamespace
                         contentWidth);
                 }
 
+                gui::end_scroll_area();
+            }
+
+            if (!packageSelect.opened)
+            {
+                const float packageProgress = (std::max)(
+                    editor.packageInstallProgress,
+                    engineArcadeInstalled && editor.selectedPackageId == "engine_arcade"
+                        ? 1.0f
+                        : (forestFactoryStaged && editor.selectedPackageId == epoch::package_registry::kEngineForestFactoryPackageId ? 0.65f : 0.0f));
                 gui::progress_bar(gui::ProgressBarOptions{
                     .label = "Install",
                     .status = editor.packageInstallStatus,
-                    .value = (std::max)(
-                        editor.packageInstallProgress,
-                        engineArcadeInstalled && editor.selectedPackageId == "engine_arcade"
-                            ? 1.0f
-                            : (forestFactoryStaged && editor.selectedPackageId == epoch::package_registry::kEngineForestFactoryPackageId ? 0.65f : 0.0f)),
-                    .size = { (std::min)(contentWidth, 500.0f), 20.0f },
+                    .value = packageProgress,
+                    .size = { contentWidth, 20.0f },
                     .show_percent = true
                 });
-                gui::end_scroll_area();
             }
 
             const gui::Vec2 buttonRow = gui::cursor_position();

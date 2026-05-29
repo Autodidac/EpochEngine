@@ -61,7 +61,9 @@ replay pass.
   views, and future checkboxes, sliders, tree views, and list views.
 - Composite modal bodies: package manager, settings, source-update prompts, and
   other dense control surfaces should put changing details inside clipped shared
-  scroll areas so progress bars and rows cannot bleed into scene or modal chrome.
+  scroll areas. Progress bars, action buttons, and modal-level status chrome stay
+  outside the scrolling body so scroll extents cannot bleed them into the scene
+  viewport or debugger area.
 - Button state: use `gui::button_selected` for active/open toolbar, menu, tab,
   and window-chrome buttons so selection is explicit and does not flicker
   through transient hover/press state while top-layer GUI is replayed.

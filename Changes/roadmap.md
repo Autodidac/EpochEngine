@@ -693,6 +693,12 @@ engine shape and should be treated as starting truth for the next passes:
   `EpochEngine.exe` stem and makes generated/MSVC raylib DLL-import definitions
   conditional so static-vcpkg experiments do not request dynamic `__imp_*`
   symbols.
+- `v0.84.63` keeps the renderer/draw model untouched and fixes the Package
+  Manager modal containment path: package details remain clipped inside their
+  scroll area, while install progress is fixed modal chrome below the details
+  body. Acceptance: operator eye-test confirms the progress row no longer
+  smears/bleeds across the OpenGL scene or debugger area while the modal is
+  open.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

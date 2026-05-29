@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.84.63]
+- Bumped the active source line to `v0.84.63` for a focused Package Manager GUI
+  containment pass.
+- Moved the Package Manager install progress bar out of the scrolling details
+  body and into fixed modal chrome so long package status text cannot bleed
+  across the scene/debugger area when the modal is open.
+- Kept the protected renderer/draw model untouched; validation is build-only
+  until an operator-approved runtime eye test confirms the modal remains above
+  the scene without command-menu flicker regression.
+
 ## [v0.84.62]
 - Bumped the active source line to `v0.84.62` for a focused project-run and
   static-vcpkg linkage stabilization pass.
