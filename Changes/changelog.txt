@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.84.61]
+- Bumped the active source line to `v0.84.61` for a safe GUI/OS-model/project-run
+  flow pass that avoids renderer draw-order changes.
+- Made non-output Console Dock tabs compact status-only text again instead of
+  selectable property-table blocks, while keeping Output as the selectable log
+  surface.
+- Added visible AI Sandbox model-package entry buttons for Nemotron 3 Nano 4B
+  BF16 and Qwen 3.6 27B. These open the Package Manager on the selected
+  OS-model package and stage only `cache/models` download plans after Install.
+- Clamped stale generated-project `--backend auto` launches to explicit OpenGL
+  single-context child execution so project Run cannot silently revive the
+  parented multicontext runtime path.
+- Restricted Linux/WSL project-run backend choices to the currently proven
+  single OpenGL lane until other Linux child backends have runtime evidence.
+
 ## [v0.84.60]
 - Bumped the active source line to `v0.84.60` for generated project backend
   build parity after the OpenGL command-menu flicker fix was eye-test

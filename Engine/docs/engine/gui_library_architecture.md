@@ -126,11 +126,11 @@ belong in proper GUI windows:
   instead of hiding control in a separate floating window.
 - Scripting needs a real code/text editor surface, not a Console Dock submenu.
 
-Current bottom-dock non-output tabs should use the same selectable
-`scroll_text_panel` presentation as `Output`. Do not reintroduce property-row
-blocks, buttons, dropdowns, or progress widgets into Project, Assets, AI, or
-Systems dock pages; those controls belong in central workspaces, modal windows,
-or Inspector-owned panels.
+Current bottom-dock non-output tabs should use compact status-only text inside
+`scroll_text_panel`; only `Output` owns selectable log text. Do not reintroduce
+property-row blocks, buttons, dropdowns, selection tables, or progress widgets
+into Project, Assets, AI, or Systems dock pages; those controls belong in
+central workspaces, modal windows, or Inspector-owned panels.
 
 ## Artifact And Smear Guard
 

@@ -616,7 +616,7 @@ engine shape and should be treated as starting truth for the next passes:
   generated projects build and launch through the selected single-context child
   backend, while the engine self-iteration lane remains editor-shaped. The
   bottom Console Dock is status-only again; Project, Assets, AI, and Systems use
-  Output-style selectable text panels and must not regain workflow buttons,
+  compact non-selectable text panels and must not regain workflow buttons,
   package controls, graph controls, or model-selection controls.
 - viewport movement now starts from a shared input profile instead of hardcoded
   editor assumptions. `v0.84.53` added named movement/look/reset/cancel/confirm
@@ -678,6 +678,13 @@ engine shape and should be treated as starting truth for the next passes:
   Editor or a normal scene viewport is active. Acceptance: operator eye-test
   confirms File/Edit/Asset/Window/Tools dropdowns and Package Manager modal stay
   above the OpenGL scene without slow flicker.
+- `v0.84.61` keeps that protected draw model untouched while tightening workflow
+  presentation: non-output Console Dock tabs are compact status-only text again,
+  AI Sandbox exposes direct Nemotron/Qwen model-package entry buttons that stage
+  `cache/models` download plans through Package Manager, stale child `--backend
+  auto` payloads clamp to OpenGL single-context launch, and Linux/WSL project-run
+  choices expose only the currently proven OpenGL lane until other backends have
+  runtime evidence.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

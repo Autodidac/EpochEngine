@@ -2174,6 +2174,10 @@ namespace epochnamespace
                 { "SDL single context", "sdl" },
                 { "SFML single context", "sfml" }
             } };
+#elif defined(__linux__)
+            static constexpr std::array<ProjectRunBackendChoice, 1> kChoices{ {
+                { "OpenGL single context", "opengl" }
+            } };
 #else
             static constexpr std::array<ProjectRunBackendChoice, 5> kChoices{ {
                 { "OpenGL single context", "opengl" },
@@ -5755,6 +5759,24 @@ namespace epochnamespace
                 gui::label("Latest Sandbox Notes");
                 gui::wrapped_label(tail_text(read_project_notes(editor.projectRoot), 1500), centerWidth);
                 render_ai_model_picker(editor, (std::min)(centerWidth, 460.0f));
+                gui::wrapped_label(
+                    "Model package lanes stage operator-approved download plans under executable-local cache/models; weights are never cloned into routine engine iterations.",
+                    centerWidth);
+                std::array<gui::InlineButtonSpec, 2> modelPackageActions{ {
+                    { "Stage Nemotron Model", 180.0f },
+                    { "Stage Qwen 27B Model", 180.0f }
+                } };
+                if (auto clicked = gui::inline_button_row(modelPackageActions, 28.0f, 8.0f))
+                {
+                    const std::string_view packageId = *clicked == 0
+                        ? epoch::package_registry::kNemotronNanoPackageId
+                        : epoch::package_registry::kQwenCoderPackageId;
+                    editor.selectedPackageId = std::string(packageId);
+                    editor.showPackageManagerModal = true;
+                    editor.packageInstallStatus = "Model package selected; press Install to stage the cache/models download plan.";
+                    editor.packageInstallProgress = 0.0f;
+                    push_editor_log(editor, std::string("[ai] Opened OS model package lane: ") + std::string(packageId) + ".");
+                }
 
                 gui::label("OS AI Chat");
                 (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
@@ -6074,7 +6096,10 @@ namespace epochnamespace
         }
 
         auto dockLine = [](std::string_view label, std::string_view value) {
-            return std::format("{:<28} {}", label, value);
+            std::string line{ label };
+            line += ": ";
+            line += value;
+            return line;
         };
         auto renderDockStatusPanel = [&](std::string_view id, const std::vector<std::string>& lines) {
             const gui::Vec2 panelCursor = gui::cursor_position();
@@ -6084,7 +6109,7 @@ namespace epochnamespace
                 .size = { (std::max)(180.0f, log_size.x - 24.0f), panelHeight },
                 .lines = lines,
                 .max_line_chars = 1024,
-                .selectable = true,
+                .selectable = false,
                 .stick_to_bottom = false
             });
         };
@@ -7028,7 +7053,12 @@ namespace epochnamespace
                 }
                 else if (selectedPackage && selectedPackage->kind == epoch::package_registry::PackageKind::ModelAsset)
                 {
+                    const std::string safeId = safe_package_artifact_id(selectedPackage->id);
+                    const std::filesystem::path modelCacheDir =
+                        resolve_editor_path(std::filesystem::path{ epoch::ai::local_model_root() }) / safeId;
                     gui::property_row("Model cache", epoch::ai::local_model_root(), 96.0f);
+                    gui::property_row("Package cache", display_project_path(modelCacheDir), 96.0f);
+                    gui::property_row("Download plan", display_project_path(modelCacheDir / "download.plan.json"), 96.0f);
                     gui::wrapped_label(
                         "OS model weights are not cloned with engine iterations. Install stages an on-demand download into cache/models; generated projects include the model only after an explicit package opt-in and license/notice review.",
                         contentWidth);

@@ -202,11 +202,16 @@ the same engine-owned path.
   only by explicit package opt-in with license/notice review. The current gate
   writes a project-local `*.model.package.json` opt-in manifest and a
   cache-local `download.plan.json` before any future downloader is allowed to
-  transfer weights.
+  transfer weights. AI Sandbox now exposes direct model-package entry buttons
+  for Nemotron 3 Nano 4B BF16 and Qwen 3.6 27B so the download-plan workflow is
+  visible without hunting through the full Package Manager list.
 - Project Run is project-owned, not editor-clone-owned. The Project workspace
   must expose the target backend/context and child project launches should use
   standalone single-context flags such as
   `--standalone --window-mode standalone --backend opengl`.
+  Empty or stale `auto` backend payloads are clamped to `opengl` before the
+  child process is launched so generated projects do not accidentally revive the
+  parented multicontext shell.
   If the expected child executable is missing after the build, the editor must
   block the run with visible evidence instead of falling back to a parent
   multicontext `Project Runtime` scene across every dock.
@@ -755,6 +760,11 @@ default. The current WSL-proven runtime path is a single OpenGL editor context.
 Do not automatically fall back to Vulkan in WSL; Vulkan remains explicit
 validation work on that lane until it is locally proven, and DirectX is
 Windows-only.
+
+Project-run backend selection on Linux/WSL currently exposes only the proven
+OpenGL single-context choice in the editor. Other Linux backends can still be
+compiled or launched as explicit validation work, but they should not be
+presented as normal project-run choices until runtime proof exists.
 
 Other renderer/tool outputs can still exist on Linux as project output choices,
 but they should launch as explicit child processes from visible editor controls

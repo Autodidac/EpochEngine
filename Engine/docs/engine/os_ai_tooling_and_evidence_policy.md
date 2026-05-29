@@ -86,6 +86,11 @@ as an unconstrained model rewriting itself.
   self-iteration may use selected models from cache or an already running local
   endpoint, but it must not clone or bundle those weights for routine engine
   iterations
+- expose Qwen/Nemotron model-package actions from AI Sandbox and Package
+  Manager. The first safe action writes an explicit download plan under
+  `cache/models/<package>/download.plan.json`; a future downloader must still
+  keep operator approval, license/notice review, and project opt-in separate
+  from model discovery.
 - include model weights in generated projects only after explicit package
   opt-in plus license/notice review; otherwise projects should carry metadata
   and download recipes only

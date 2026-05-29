@@ -2234,7 +2234,10 @@ namespace epochnamespace::core
                 }
             }
 
-            if (backend_argument.empty())
+            if (backend_argument.empty()
+                || backend_argument == "auto"
+                || backend_argument == "Auto"
+                || backend_argument == "AUTO")
                 backend_argument = "opengl";
 
             std::string scene_to_launch = scene_argument;
