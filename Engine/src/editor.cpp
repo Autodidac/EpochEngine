@@ -74,6 +74,7 @@ import engine.version;
 import spritehandle;
 import core.context;
 import core.path;
+import core.time;
 import context.commandqueue;
 import context.type;
 import engine.input;
@@ -85,6 +86,7 @@ import forest.factory;
 import package.registry;
 import perf.tier;
 import render.preview_grid;
+import saveload.system;
 
 namespace epochnamespace
 {
@@ -137,6 +139,7 @@ namespace epochnamespace
             Assets,
             Project,
             ForestFactory,
+            Timeline,
             AISandbox,
             Systems
         };
@@ -440,6 +443,8 @@ namespace epochnamespace
             bool sceneDragHasPlaneHit{ false };
             EditorTimeSnapshot timeSnapshot{};
             EditorTimeControl timeControl{};
+            epoch::saveload::StreamingSaveConfig streamingSaveConfig{};
+            epoch::saveload::StreamingSaveStatus streamingSaveStatus{};
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
             EditorWorkspaceTab dockStatusTab{ EditorWorkspaceTab::Output };
@@ -519,6 +524,8 @@ namespace epochnamespace
                 return "Project Workspace";
             case EditorMainSurface::ForestFactory:
                 return "Forest Factory";
+            case EditorMainSurface::Timeline:
+                return "Timeline Editor";
             case EditorMainSurface::AISandbox:
                 return "Self-Iteration Sandbox";
             case EditorMainSurface::Systems:
@@ -600,6 +607,24 @@ namespace epochnamespace
             if (dt_seconds <= 0.0)
                 return "0 Hz";
             return std::format("{:.0f} Hz", 1.0 / dt_seconds);
+        }
+
+        [[nodiscard]] static epoch::core::time::simulation_stats timeline_stats_from_editor(
+            const EditorState& editor) noexcept
+        {
+            return epoch::core::time::simulation_stats{
+                .frame_index = editor.timeSnapshot.frame_index,
+                .simulated_steps = editor.timeSnapshot.simulated_steps,
+                .step_budget = editor.timeSnapshot.step_budget,
+                .real_dt_seconds = editor.timeSnapshot.real_dt_seconds,
+                .scaled_dt_seconds = editor.timeSnapshot.scaled_dt_seconds,
+                .fixed_dt_seconds = editor.timeSnapshot.fixed_dt_seconds,
+                .accumulator_seconds = editor.timeSnapshot.accumulator_seconds,
+                .simulated_seconds = editor.timeSnapshot.simulated_seconds,
+                .time_scale = editor.timeSnapshot.time_scale,
+                .paused = editor.timeSnapshot.paused,
+                .max_steps_per_frame = editor.timeSnapshot.max_steps_per_frame
+            };
         }
 
         struct SurfaceCanvas
@@ -4808,6 +4833,14 @@ namespace epochnamespace
                 }
                 push_editor_log(editor, "[forest] Forest Factory workspace opened with the scene-backed preview.");
                 break;
+            case EditorMainSurface::Timeline:
+                editor.showInspector = true;
+                editor.showConsoleDock = true;
+                editor.showAiChat = true;
+                editor.workspaceTab = EditorWorkspaceTab::Systems;
+                epoch::saveload::clamp_streaming_save_config(editor.streamingSaveConfig);
+                push_editor_log(editor, "[timeline] Timeline Editor opened on the shared 4D time spine.");
+                break;
             case EditorMainSurface::AISandbox:
                 editor.workspaceTab = EditorWorkspaceTab::AI;
                 editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
@@ -4836,20 +4869,22 @@ namespace epochnamespace
 
         auto render_main_surface_tabs = [&]()
         {
-            const std::array<gui::SegmentedButtonSpec, 7> tabs{{
+            const std::array<gui::SegmentedButtonSpec, 8> tabs{{
                 { "Perspective", 118.0f, editor.mainSurface == EditorMainSurface::Scene },
                 { "Game/2D", 96.0f, editor.mainSurface == EditorMainSurface::Game2D },
                 { "Assets", 82.0f, editor.mainSurface == EditorMainSurface::Assets },
                 { "Forest Factory", 132.0f, editor.mainSurface == EditorMainSurface::ForestFactory },
+                { "Timeline", 96.0f, editor.mainSurface == EditorMainSurface::Timeline },
                 { "Project", 92.0f, editor.mainSurface == EditorMainSurface::Project },
                 { "AI Sandbox", 122.0f, editor.mainSurface == EditorMainSurface::AISandbox },
                 { "Systems", 90.0f, editor.mainSurface == EditorMainSurface::Systems }
             }};
-            const std::array<EditorMainSurface, 7> surfaces{{
+            const std::array<EditorMainSurface, 8> surfaces{{
                 EditorMainSurface::Scene,
                 EditorMainSurface::Game2D,
                 EditorMainSurface::Assets,
                 EditorMainSurface::ForestFactory,
+                EditorMainSurface::Timeline,
                 EditorMainSurface::Project,
                 EditorMainSurface::AISandbox,
                 EditorMainSurface::Systems
@@ -4929,6 +4964,7 @@ namespace epochnamespace
         const std::string runtime_tab = "Game/2D";
         const std::string assets_tab = "Assets";
         const std::string forest_tab = "Forest Factory";
+        const std::string timeline_tab = "Timeline";
         const std::string project_tab = "Project";
         const std::string ai_control_tab = "AI Sandbox";
         const std::string systems_tab = "Systems";
@@ -4952,6 +4988,11 @@ namespace epochnamespace
         if (gui::button_selected(forest_tab, { 164.0f, tab_h }, editor.mainSurface == EditorMainSurface::ForestFactory))
             open_editor_surface(EditorMainSurface::ForestFactory, "toolbar");
         tab_x += 164.0f + tab_gap;
+
+        gui::set_cursor({ tab_x, tab_y });
+        if (gui::button_selected(timeline_tab, { 118.0f, tab_h }, editor.mainSurface == EditorMainSurface::Timeline))
+            open_editor_surface(EditorMainSurface::Timeline, "toolbar");
+        tab_x += 118.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button_selected(project_tab, { 144.0f, tab_h }, editor.mainSurface == EditorMainSurface::Project))
@@ -5956,6 +5997,89 @@ namespace epochnamespace
                     else
                         editor.packageInstallStatus = "Forest Factory package registry entry is missing.";
                 }
+                break;
+            }
+            case EditorMainSurface::Timeline:
+            {
+                auto timelineStats = timeline_stats_from_editor(editor);
+                epoch::saveload::clamp_streaming_save_config(editor.streamingSaveConfig);
+                editor.streamingSaveStatus.active = editor.streamingSaveConfig.enabled;
+                if (epoch::saveload::should_capture_checkpoint(
+                    editor.streamingSaveConfig,
+                    editor.streamingSaveStatus,
+                    timelineStats))
+                {
+                    epoch::saveload::mark_checkpoint_captured(
+                        editor.streamingSaveStatus,
+                        editor.streamingSaveConfig,
+                        timelineStats);
+                    push_editor_log(editor, "[timeline] Auto-staged timeline checkpoint: " + editor.streamingSaveStatus.last_snapshot_label);
+                }
+
+                gui::label("Timeline Editor");
+                gui::wrapped_label(
+                    "Epoch treats time as a first-class 4D authoring spine. This surface exposes the shared simulation clock, timeline checkpoint gates, and the configurable streaming-save contract without pretending scene serialization is finished.",
+                    centerWidth);
+                gui::property_row("[timeline] Frame", std::to_string(timelineStats.frame_index), 132.0f);
+                gui::property_row("[timeline] Simulated", format_seconds(timelineStats.simulated_seconds), 132.0f);
+                gui::property_row("[timeline] Fixed step", std::string(format_ms(timelineStats.fixed_dt_seconds)) + " / " + format_rate(timelineStats.fixed_dt_seconds), 132.0f);
+                gui::property_row("[timeline] Step budget", std::to_string(timelineStats.step_budget), 132.0f);
+                gui::property_row("[timeline] Time scale", std::format("{:.2f}x", timelineStats.time_scale), 132.0f);
+                gui::property_row("[timeline] Stream mode", std::string(epoch::saveload::mode_name(editor.streamingSaveConfig.mode)), 132.0f);
+                gui::property_row("[timeline] Stream state", epoch::saveload::describe_streaming_save(editor.streamingSaveConfig, editor.streamingSaveStatus), 132.0f);
+                gui::property_row("[timeline] Last key", editor.streamingSaveStatus.last_snapshot_label.empty() ? std::string("(none staged)") : editor.streamingSaveStatus.last_snapshot_label, 132.0f);
+                gui::property_row("[timeline] Target", editor.streamingSaveStatus.last_output_path.empty() ? editor.streamingSaveConfig.target_root : editor.streamingSaveStatus.last_output_path, 132.0f);
+
+                const std::array streamButtons{
+                    gui::InlineButtonSpec{ .label = editor.streamingSaveConfig.enabled ? "Pause Stream" : "Arm Stream", .width = 118.0f },
+                    gui::InlineButtonSpec{ .label = "Manual Key", .width = 96.0f },
+                    gui::InlineButtonSpec{ .label = "15s Mode", .width = 84.0f },
+                    gui::InlineButtonSpec{ .label = "120f Mode", .width = 92.0f },
+                    gui::InlineButtonSpec{ .label = "Timeline Key", .width = 112.0f }
+                };
+                if (const auto action = gui::inline_button_row(streamButtons, 26.0f, 6.0f))
+                {
+                    switch (*action)
+                    {
+                    case 0:
+                        editor.streamingSaveConfig.enabled = !editor.streamingSaveConfig.enabled;
+                        editor.streamingSaveStatus.active = editor.streamingSaveConfig.enabled;
+                        editor.streamingSaveStatus.message = editor.streamingSaveConfig.enabled
+                            ? "Timeline save stream armed; checkpoints stage as reviewable evidence."
+                            : "Timeline save stream is disabled.";
+                        push_editor_log(editor, editor.streamingSaveConfig.enabled
+                            ? "[timeline] Streaming save contract armed."
+                            : "[timeline] Streaming save contract paused.");
+                        break;
+                    case 1:
+                        epoch::saveload::mark_checkpoint_captured(
+                            editor.streamingSaveStatus,
+                            editor.streamingSaveConfig,
+                            timelineStats);
+                        push_editor_log(editor, "[timeline] Manual checkpoint staged: " + editor.streamingSaveStatus.last_snapshot_label);
+                        break;
+                    case 2:
+                        editor.streamingSaveConfig.mode = epoch::saveload::SaveStreamMode::Interval;
+                        editor.streamingSaveConfig.interval_seconds = 15.0;
+                        push_editor_log(editor, "[timeline] Streaming save mode set to 15 second intervals.");
+                        break;
+                    case 3:
+                        editor.streamingSaveConfig.mode = epoch::saveload::SaveStreamMode::FrameInterval;
+                        editor.streamingSaveConfig.frame_interval = 120;
+                        push_editor_log(editor, "[timeline] Streaming save mode set to 120 frame intervals.");
+                        break;
+                    case 4:
+                        editor.streamingSaveConfig.mode = epoch::saveload::SaveStreamMode::TimelineKey;
+                        push_editor_log(editor, "[timeline] Streaming save mode set to timeline key staging.");
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                gui::wrapped_label(editor.streamingSaveStatus.message, centerWidth);
+                gui::wrapped_label(
+                    "Next gate: connect this contract to scene parser/serializer ownership so .epoch snapshots and replay keys are persisted from real scene data instead of editor-only seed profiles.",
+                    centerWidth);
                 break;
             }
             case EditorMainSurface::AISandbox:

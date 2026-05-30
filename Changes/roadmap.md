@@ -741,6 +741,14 @@ engine shape and should be treated as starting truth for the next passes:
   script editing no longer requires holding the mouse, selected text copies from
   the right-click context menu, single-character edits stay responsive, and the
   command-menu/button flicker fix remains intact in OpenGL.
+- `v0.84.68` promotes the 4D/time-based engine direction from roadmap intent
+  into a first central Timeline Editor surface. `saveload.system`,
+  `scenesnapshot`, and `sceneserializer` now define configurable streaming-save
+  modes, checkpoint labels, scene object snapshots, timeline keys, and
+  deterministic text output. Acceptance remains staged: the Timeline Editor can
+  show/configure checkpoint flow now, but full replay/persistence is not
+  complete until `.epoch` scene parsing/serialization owns live editor/runtime
+  loading and checkpoint restore.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
@@ -1112,7 +1120,8 @@ engine shape and should be treated as starting truth for the next passes:
   with another temporary debug-only panel
 - continue carrying the shared time-system spine deeper into runtime and scene
   ownership
-- add replay/timeline hook points without pretending the full replay stack is
+- keep the Timeline Editor wired to `core.time`, streaming-save config, and
+  scene snapshot/serializer contracts without pretending full replay restore is
   already shipped
 - keep backend ownership explicit inside live tooling surfaces
 

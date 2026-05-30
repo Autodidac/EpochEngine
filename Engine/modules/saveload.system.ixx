@@ -1,218 +1,138 @@
-/************************************************
- *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
- *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
- *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
- *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
- *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
- *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
- *                                              *
- *   This file is part of the Epoch   Project.  *
- *   epochengine - Modular C++ Framework        *
- *                                              *
- *   SPDX-License-Identifier:                   *
- *   LicenseRef-MIT-NoSell                      *
- *                                              *
- *   Provided "AS IS", without warranty         *
- *   of any kind.                               *
- *                                              *
- *   Use permitted for Non-Commercial           *
- *   Purposes ONLY, without prior               *
- *   commercial licensing agreement.            *
- *                                              *
- *   Redistribution Allowed with This Notice    *
- *   and LICENSE file.                          *
- *                                              *
- *   No obligation to disclose                  *
- *   modifications.                             *
- *                                              *
- *   See LICENSE file for full terms.           *
- *                                              *
- ***********************************************/
+// SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Copyright (c) 2026 Adam Rushford
+
 module;
+
+#include <algorithm>
+#include <cstdint>
+#include <format>
+#include <string>
+#include <string_view>
 
 export module saveload.system;
 
-//import aengine.eventsystem;
+import core.time;
 
-//
-//#include <zlib.h>
-//
-//#include <string>
-//#include <string_view>
-//#include <vector>
-//#include <map>
-//#include <iostream>
-//#include <fstream>
-//#include <sstream>
-//
-//namespace epochnamespace {
-//
-//    namespace detail {
-//        [[nodiscard]] inline std::string encode_utf8_char(char32_t codepoint) {
-//            std::string utf8;
-//            if (codepoint == 0) {
-//                return utf8;
-//            }
-//
-//            if (codepoint <= 0x7F) {
-//                utf8.push_back(static_cast<char>(codepoint));
-//            }
-//            else if (codepoint <= 0x7FF) {
-//                utf8.push_back(static_cast<char>(0xC0 | ((codepoint >> 6) & 0x1F)));
-//                utf8.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-//            }
-//            else if (codepoint <= 0xFFFF) {
-//                utf8.push_back(static_cast<char>(0xE0 | ((codepoint >> 12) & 0x0F)));
-//                utf8.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-//                utf8.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-//            }
-//            else {
-//                utf8.push_back(static_cast<char>(0xF0 | ((codepoint >> 18) & 0x07)));
-//                utf8.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
-//                utf8.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-//                utf8.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-//            }
-//
-//            return utf8;
-//        }
-//
-//        [[nodiscard]] inline char32_t decode_utf8_char(std::string_view utf8) {
-//            if (utf8.empty()) {
-//                return 0;
-//            }
-//
-//            const unsigned char* bytes = reinterpret_cast<const unsigned char*>(utf8.data());
-//            const auto size = utf8.size();
-//
-//            if (bytes[0] <= 0x7F) {
-//                return bytes[0];
-//            }
-//            if ((bytes[0] & 0xE0) == 0xC0 && size >= 2) {
-//                return static_cast<char32_t>(((bytes[0] & 0x1F) << 6) |
-//                                             (bytes[1] & 0x3F));
-//            }
-//            if ((bytes[0] & 0xF0) == 0xE0 && size >= 3) {
-//                return static_cast<char32_t>(((bytes[0] & 0x0F) << 12) |
-//                                             ((bytes[1] & 0x3F) << 6) |
-//                                             (bytes[2] & 0x3F));
-//            }
-//            if ((bytes[0] & 0xF8) == 0xF0 && size >= 4) {
-//                return static_cast<char32_t>(((bytes[0] & 0x07) << 18) |
-//                                             ((bytes[1] & 0x3F) << 12) |
-//                                             ((bytes[2] & 0x3F) << 6) |
-//                                             (bytes[3] & 0x3F));
-//            }
-//
-//            return 0;
-//        }
-//    } // namespace detail
-//
-//    class SaveSystem {
-//    public:
-//        static void SaveGame(const std::string& filename, const std::vector<epochnamespace::events::Event>& events) {
-//           std::ofstream ofs(filename, std::ios::binary);  
-//           if (!ofs) {  
-//               Route save failures through core.logger before exposing them to editor evidence panels.
-//               return;  
-//           }  
-//
-//           std::string data;  
-//           for (const auto& event : events) {  
-//               data += event_type_to_string(event.type) + ":";  
-//               for (const auto& pair : event.data) {  
-//                   data += pair.first + "=" + pair.second + ";";  
-//               }  
-//               data += "x=" + std::to_string(event.x) + ";";  
-//               data += "y=" + std::to_string(event.y) + ";";  
-//               data += "key=" + std::to_string(event.key) + ";";  
-//
-//               data += "text=" + detail::encode_utf8_char(event.text) + ";";
-//               data += "\n";
-//           }
-//
-//           std::string compressedData = CompressData(data);  
-//           ofs.write(compressedData.c_str(), compressedData.size());  
-//           ofs.close();  
-//        }
-//
-//        static void LoadGame(const std::string& filename, std::vector<epochnamespace::events::Event>& events) {
-//            std::ifstream ifs(filename, std::ios::binary);
-//            if (!ifs) {
-//                Route load failures through core.logger before exposing them to editor evidence panels.
-//                return;
-//            }
-//
-//            std::string compressedData((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-//            std::string data = DecompressData(compressedData);
-//
-//            size_t pos = 0;
-//            while ((pos = data.find('\n')) != std::string::npos) {
-//                std::string line = data.substr(0, pos);
-//                events::Event event;
-//
-//                size_t typeEnd = line.find(':');
-//                if (typeEnd == std::string::npos) {
-//                    data.erase(0, pos + 1);
-//                    continue;
-//                }
-//
-//                event.type = epochnamespace::events::event_type_from(line.substr(0, typeEnd));
-//                std::string details = line.substr(typeEnd + 1);
-//
-//                size_t semicolonPos;
-//                while ((semicolonPos = details.find(';')) != std::string::npos) {
-//                    std::string keyValue = details.substr(0, semicolonPos);
-//                    size_t equalPos = keyValue.find('=');
-//                    if (equalPos != std::string::npos) {
-//                        std::string key = keyValue.substr(0, equalPos);
-//                        std::string value = keyValue.substr(equalPos + 1);
-//
-//                        if (key == "x") {
-//                            event.x = std::stof(value);
-//                        }
-//                        else if (key == "y") {
-//                            event.y = std::stof(value);
-//                        }
-//                        else if (key == "key") {
-//                            event.key = std::stoi(value);
-//                        }
-//                        else if (key == "text") {
-//                            event.text = detail::decode_utf8_char(value);
-//                        }
-//                        else {
-//                            event.data[key] = value;
-//                        }
-//                    }
-//                    details.erase(0, semicolonPos + 1);
-//                }
-//
-//                events.push_back(event);
-//                data.erase(0, pos + 1);
-//            }
-//
-//            ifs.close();
-//        }
-//
-//    private:
-//        static std::string CompressData(const std::string& data) {
-//            uLongf compressedSize = compressBound(static_cast<uLong>(data.size()));
-//            std::vector<Bytef> compressedData(compressedSize);
-//            if (compress(compressedData.data(), &compressedSize, reinterpret_cast<const Bytef*>(data.data()), static_cast<uLong>(data.size())) != Z_OK) {
-//                return data;
-//            }
-//            compressedData.resize(compressedSize);
-//            return std::string(reinterpret_cast<char*>(compressedData.data()), compressedSize);
-//        }
-//
-//        static std::string DecompressData(const std::string& compressedData) {
-//            uLongf decompressedSize = static_cast<uLong>(compressedData.size()) * 4;
-//            std::vector<Bytef> decompressedData(decompressedSize);
-//            while (uncompress(decompressedData.data(), &decompressedSize, reinterpret_cast<const Bytef*>(compressedData.data()), static_cast<uLong>(compressedData.size())) == Z_BUF_ERROR) {
-//                decompressedSize *= 2;
-//                decompressedData.resize(decompressedSize);
-//            }
-//            return std::string(reinterpret_cast<char*>(decompressedData.data()), decompressedSize);
-//        }
-//    };
-//
-//}  // namespace epochnamespace
+export namespace epoch::saveload
+{
+    enum class SaveStreamMode : unsigned char
+    {
+        Manual = 0,
+        Interval,
+        FrameInterval,
+        TimelineKey
+    };
+
+    struct StreamingSaveConfig
+    {
+        bool enabled = false;
+        SaveStreamMode mode = SaveStreamMode::Manual;
+        double interval_seconds = 15.0;
+        std::uint64_t frame_interval = 120;
+        std::uint32_t max_snapshots = 32;
+        std::string profile_name = "editor_timeline";
+        std::string target_root = "cache/saves/timeline";
+        bool include_scene = true;
+        bool include_timeline = true;
+        bool include_packages = false;
+    };
+
+    struct StreamingSaveStatus
+    {
+        bool active = false;
+        std::uint64_t last_frame_index = 0;
+        double last_simulated_seconds = 0.0;
+        std::uint32_t staged_snapshot_count = 0;
+        std::string last_snapshot_label{};
+        std::string last_output_path{};
+        std::string message = "Timeline save stream is disabled.";
+    };
+
+    [[nodiscard]] inline std::string_view mode_name(SaveStreamMode mode) noexcept
+    {
+        switch (mode)
+        {
+        case SaveStreamMode::Manual:
+            return "Manual";
+        case SaveStreamMode::Interval:
+            return "Time interval";
+        case SaveStreamMode::FrameInterval:
+            return "Frame interval";
+        case SaveStreamMode::TimelineKey:
+            return "Timeline key";
+        default:
+            return "Unknown";
+        }
+    }
+
+    inline void clamp_streaming_save_config(StreamingSaveConfig& config) noexcept
+    {
+        config.interval_seconds = (std::clamp)(config.interval_seconds, 0.25, 3600.0);
+        config.frame_interval = (std::clamp)(config.frame_interval, std::uint64_t{ 1 }, std::uint64_t{ 1'000'000 });
+        config.max_snapshots = (std::clamp)(config.max_snapshots, 1u, 4096u);
+        if (config.profile_name.empty())
+            config.profile_name = "editor_timeline";
+        if (config.target_root.empty())
+            config.target_root = "cache/saves/timeline";
+    }
+
+    [[nodiscard]] inline bool should_capture_checkpoint(
+        const StreamingSaveConfig& config,
+        const StreamingSaveStatus& status,
+        const epoch::core::time::simulation_stats& stats) noexcept
+    {
+        if (!config.enabled)
+            return false;
+
+        switch (config.mode)
+        {
+        case SaveStreamMode::Manual:
+            return false;
+        case SaveStreamMode::Interval:
+            return stats.simulated_seconds - status.last_simulated_seconds >= config.interval_seconds;
+        case SaveStreamMode::FrameInterval:
+            return stats.frame_index >= status.last_frame_index
+                && stats.frame_index - status.last_frame_index >= config.frame_interval;
+        case SaveStreamMode::TimelineKey:
+            return status.staged_snapshot_count == 0;
+        default:
+            return false;
+        }
+    }
+
+    [[nodiscard]] inline std::string checkpoint_label(
+        std::string_view profile,
+        const epoch::core::time::simulation_stats& stats)
+    {
+        const std::string safeProfile = profile.empty() ? std::string("editor_timeline") : std::string(profile);
+        return std::format("{}_frame_{:012}_t_{:.3f}", safeProfile, stats.frame_index, stats.simulated_seconds);
+    }
+
+    inline void mark_checkpoint_captured(
+        StreamingSaveStatus& status,
+        const StreamingSaveConfig& config,
+        const epoch::core::time::simulation_stats& stats)
+    {
+        status.active = config.enabled;
+        status.last_frame_index = stats.frame_index;
+        status.last_simulated_seconds = stats.simulated_seconds;
+        status.staged_snapshot_count = (std::min)(
+            status.staged_snapshot_count + 1u,
+            config.max_snapshots);
+        status.last_snapshot_label = checkpoint_label(config.profile_name, stats);
+        status.last_output_path = config.target_root + "/" + status.last_snapshot_label + ".epochsnap";
+        status.message = "Timeline checkpoint staged for review.";
+    }
+
+    [[nodiscard]] inline std::string describe_streaming_save(
+        const StreamingSaveConfig& config,
+        const StreamingSaveStatus& status)
+    {
+        return std::format(
+            "{} | {} | {} snapshots | target {}",
+            config.enabled ? "enabled" : "disabled",
+            mode_name(config.mode),
+            status.staged_snapshot_count,
+            config.target_root);
+    }
+}

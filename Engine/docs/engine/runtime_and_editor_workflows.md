@@ -468,17 +468,19 @@ the same engine-owned path.
   - single-step
   - shared stats for editor/runtime/systems visibility
   - step-budget and frame-cap pacing visibility
-- future work should route scene play, scripting, pacing, and later
-  timeline/replay behavior through that shared clock ownership instead of
-  inventing parallel timing systems
-- Systems is the first live editor home for this information before fuller
-  timeline/replay tooling exists
-- Epoch's long-term editor model is 4D/time-based. A dedicated Timeline
-  workspace should own keyed events, replay scrubbing, deterministic scene-time
-  inspection, and feature-complete timing controls on top of `core.time`.
-  Configurable streaming save/checkpoint behavior belongs beside that timeline
-  path so scene/project state can be captured incrementally instead of only
-  through manual file snapshots.
+- scene play, scripting, pacing, timeline, and replay behavior should route
+  through that shared clock ownership instead of inventing parallel timing
+  systems
+- Systems remains the diagnostics surface for live pacing and frame-step state
+- the Timeline Editor is the first dedicated 4D/time-based workspace. It reads
+  the shared `core.time` stats, exposes manual/interval/frame/timeline-key
+  checkpoint modes, and owns configurable streaming-save status beside the
+  editor scene flow.
+- `saveload.system`, `scenesnapshot`, and `sceneserializer` are the current
+  contract layer for timeline checkpoints: they define streaming-save config,
+  checkpoint labels, scene object snapshots, timeline keys, and deterministic
+  text serialization. The next acceptance gate is wiring those contracts into
+  real `.epoch` scene parser/serializer persistence and replay restore.
 
 ## Hardware support strategy
 

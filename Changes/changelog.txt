@@ -1,5 +1,22 @@
 # Epoch Changelog
 
+## [v0.84.68]
+- Bumped the active source line to `v0.84.68` for the first 4D/time-based
+  Timeline Editor and streaming-save contract pass.
+- Added real `saveload.system`, `scenesnapshot`, and `sceneserializer` module
+  contracts so timeline checkpoints, scene object snapshots, and deterministic
+  text serialization have owned engine surfaces instead of loose roadmap notes.
+- Added a central Timeline Editor workspace that reads the shared `core.time`
+  simulation stats, exposes manual/interval/frame/timeline-key checkpoint
+  modes, and stages visible stream status without touching the protected
+  renderer/draw model.
+- Documented the acceptance gate clearly: this pass owns configuration,
+  checkpoint labeling, and snapshot serialization contracts; full scene-file
+  replay/persistence still requires the scene parser/serializer to own live
+  editor/runtime loading.
+- Validation: MSVC Debug x64 `ConsoleApplication1` build passed with
+  `/m:1 /clp:ErrorsOnly`. Runtime/eye-test validation is still operator-gated.
+
 ## [v0.84.67]
 - Bumped the active source line to `v0.84.67` for a focused shared source-editor
   behavior pass.
