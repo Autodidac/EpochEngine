@@ -4,6 +4,7 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 #include <string_view>
 
 #include "../include/_epoch.stl_types.hpp"
@@ -135,6 +136,33 @@ export namespace epoch::forest
         std::uint32_t triangles{};
     };
 
+    inline constexpr std::size_t kForestPreviewMaxSegments = 256u;
+    inline constexpr std::size_t kForestPreviewMaxLeaves = 384u;
+
+    struct ForestPreviewSegment
+    {
+        epoch::voxel::Float3 start{};
+        epoch::voxel::Float3 end{};
+        float radius{0.08F};
+        std::uint32_t depth{};
+    };
+
+    struct ForestPreviewLeaf
+    {
+        epoch::voxel::Float3 position{};
+        float size{0.24F};
+        std::uint32_t sourceSegment{};
+    };
+
+    struct ForestPreviewGeometry
+    {
+        std::array<ForestPreviewSegment, kForestPreviewMaxSegments> segments{};
+        std::size_t segmentCount{};
+        std::array<ForestPreviewLeaf, kForestPreviewMaxLeaves> leaves{};
+        std::size_t leafCount{};
+        ForestPreviewStats stats{};
+    };
+
     struct ForestLodRequest
     {
         ForestOutputKind output{ForestOutputKind::PreviewSkeleton};
@@ -241,6 +269,48 @@ export namespace epoch::forest
                config.targetHeightMeters > 0.0F;
     }
 
+    [[nodiscard]] inline float clamp01(float value) noexcept
+    {
+        return (std::clamp)(value, 0.0F, 1.0F);
+    }
+
+    [[nodiscard]] inline float degrees_to_radians(float degrees) noexcept
+    {
+        return degrees * 0.017453292519943295769F;
+    }
+
+    [[nodiscard]] inline epoch::voxel::Float3 add(epoch::voxel::Float3 lhs, epoch::voxel::Float3 rhs) noexcept
+    {
+        return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z };
+    }
+
+    [[nodiscard]] inline epoch::voxel::Float3 scale(epoch::voxel::Float3 value, float amount) noexcept
+    {
+        return { value.x * amount, value.y * amount, value.z * amount };
+    }
+
+    [[nodiscard]] inline epoch::voxel::Float3 normalize(epoch::voxel::Float3 value) noexcept
+    {
+        const float length = std::sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
+        if (length <= 0.0001F)
+            return { 0.0F, 1.0F, 0.0F };
+        const float inv = 1.0F / length;
+        return { value.x * inv, value.y * inv, value.z * inv };
+    }
+
+    [[nodiscard]] inline float deterministic_jitter(ForestSeed seed, std::uint32_t depth, std::uint32_t child) noexcept
+    {
+        std::uint64_t value = seed.value ^ (static_cast<std::uint64_t>(depth + 1u) * 0x9E3779B97F4A7C15ull);
+        value ^= static_cast<std::uint64_t>(child + 17u) * 0xBF58476D1CE4E5B9ull;
+        value ^= value >> 30u;
+        value *= 0xBF58476D1CE4E5B9ull;
+        value ^= value >> 27u;
+        value *= 0x94D049BB133111EBull;
+        value ^= value >> 31u;
+        const auto unit = static_cast<float>(value & 0xFFFFu) / 65535.0F;
+        return unit * 2.0F - 1.0F;
+    }
+
     [[nodiscard]] constexpr ForestPreviewStats estimate_preview_stats(const ForestFactoryProfile& profile) noexcept
     {
         std::uint32_t nodes = 1;
@@ -273,6 +343,110 @@ export namespace epoch::forest
             .vertices = vertices,
             .triangles = triangles
         };
+    }
+
+    [[nodiscard]] inline ForestPreviewGeometry build_preview_geometry(const ForestFactoryProfile& profile) noexcept
+    {
+        ForestPreviewGeometry geometry{};
+        const float duration = (std::max)(0.001F, profile.temporal.durationSeconds);
+        const float temporalProgress = profile.temporal.reverse
+            ? (1.0F - clamp01(profile.temporal.timeSeconds / duration))
+            : clamp01(profile.temporal.timeSeconds / duration);
+        const float growth = (std::max)(0.18F, temporalProgress);
+        const std::uint32_t levels = (std::min)(profile.branch.levels, profile.config.maxBranchDepth);
+        const std::uint32_t children = (std::max)(1u, profile.branch.childrenPerNode);
+        const float trunkHeight = profile.config.targetHeightMeters * 0.36F * growth;
+
+        auto add_segment = [&](epoch::voxel::Float3 start, epoch::voxel::Float3 direction, float length, float radius, std::uint32_t depth) noexcept -> std::size_t
+        {
+            if (geometry.segmentCount >= geometry.segments.size())
+                return geometry.segmentCount;
+
+            const auto index = geometry.segmentCount++;
+            geometry.segments[index] = ForestPreviewSegment{
+                .start = start,
+                .end = add(start, scale(normalize(direction), length)),
+                .radius = radius,
+                .depth = depth
+            };
+            return index;
+        };
+
+        const auto trunkIndex = add_segment({ 0.0F, 0.0F, 0.0F }, { 0.0F, 1.0F, 0.0F }, trunkHeight, profile.config.trunkRadiusMeters, 0u);
+        (void)trunkIndex;
+
+        std::array<std::size_t, kForestPreviewMaxSegments> frontier{};
+        std::array<std::size_t, kForestPreviewMaxSegments> nextFrontier{};
+        std::size_t frontierCount = geometry.segmentCount > 0u ? 1u : 0u;
+        frontier[0] = 0u;
+
+        for (std::uint32_t depth = 1u; depth <= levels && frontierCount > 0u; ++depth)
+        {
+            std::size_t nextCount = 0u;
+            const float depthFactor = static_cast<float>(depth) / static_cast<float>((std::max)(1u, levels));
+            const float length = profile.branch.branchLengthMeters * growth * (1.0F - depthFactor * 0.42F);
+            const float radius = (std::max)(0.025F, profile.config.trunkRadiusMeters * (1.0F - depthFactor * 0.72F));
+            const float pitch = degrees_to_radians(profile.branch.angleDegrees + profile.branch.upwardBend * 18.0F);
+            const float upward = (std::max)(0.12F, std::sin(pitch) + profile.branch.upwardBend * (1.0F - depthFactor));
+            const float outward = (std::max)(0.08F, std::cos(pitch) * profile.branch.outwardBias);
+
+            for (std::size_t parentIndex = 0u; parentIndex < frontierCount; ++parentIndex)
+            {
+                const auto& parent = geometry.segments[frontier[parentIndex]];
+                for (std::uint32_t child = 0u; child < children; ++child)
+                {
+                    const float childRatio = children > 1u
+                        ? static_cast<float>(child) / static_cast<float>(children)
+                        : 0.0F;
+                    const float yawDegrees =
+                        childRatio * profile.branch.spreadDegrees
+                        + profile.branch.twistDegrees * static_cast<float>(depth)
+                        + deterministic_jitter(profile.seed, depth, child) * profile.branch.jitterDegrees;
+                    const float yaw = degrees_to_radians(yawDegrees);
+                    const epoch::voxel::Float3 direction = normalize({
+                        std::cos(yaw) * outward,
+                        upward - profile.branch.sag * depthFactor,
+                        std::sin(yaw) * outward
+                    });
+                    const std::size_t segmentIndex = add_segment(parent.end, direction, length, radius, depth);
+                    if (segmentIndex >= geometry.segments.size() || segmentIndex >= geometry.segmentCount)
+                        continue;
+                    if (nextCount < nextFrontier.size())
+                        nextFrontier[nextCount++] = segmentIndex;
+                }
+            }
+
+            frontier = nextFrontier;
+            frontierCount = nextCount;
+        }
+
+        const float leafSize = profile.preset == ForestPreset::Fern ? 0.34F : (profile.preset == ForestPreset::Bush ? 0.28F : 0.24F);
+        const std::uint32_t leafCopies = profile.preset == ForestPreset::Fern ? 3u : 1u;
+        for (std::size_t i = 1u; i < geometry.segmentCount && geometry.leafCount < geometry.leaves.size(); ++i)
+        {
+            const auto& segment = geometry.segments[i];
+            if (segment.depth + 1u < levels)
+                continue;
+
+            for (std::uint32_t copy = 0u; copy < leafCopies && geometry.leafCount < geometry.leaves.size(); ++copy)
+            {
+                const float offset = (static_cast<float>(copy) - static_cast<float>(leafCopies - 1u) * 0.5F) * 0.08F;
+                geometry.leaves[geometry.leafCount++] = ForestPreviewLeaf{
+                    .position = add(segment.end, { offset, 0.02F * static_cast<float>(copy), -offset }),
+                    .size = leafSize,
+                    .sourceSegment = static_cast<std::uint32_t>(i)
+                };
+            }
+        }
+
+        geometry.stats = ForestPreviewStats{
+            .nodes = static_cast<std::uint32_t>(geometry.segmentCount + 1u),
+            .branches = static_cast<std::uint32_t>(geometry.segmentCount > 0u ? geometry.segmentCount - 1u : 0u),
+            .leaves = static_cast<std::uint32_t>(geometry.leafCount),
+            .vertices = static_cast<std::uint32_t>(geometry.segmentCount * 12u + geometry.leafCount * 6u),
+            .triangles = static_cast<std::uint32_t>(geometry.segmentCount * 8u + geometry.leafCount * 2u)
+        };
+        return geometry;
     }
 
     [[nodiscard]] constexpr bool requires_project_activation(ForestOutputKind output) noexcept

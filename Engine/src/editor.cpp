@@ -1407,6 +1407,16 @@ namespace epochnamespace
         void ensure_forest_factory_preview_entities(EditorState& state)
         {
             const std::size_t beforeCount = state.entities.size();
+            const auto profile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
+            const auto geometry = epoch::forest::build_preview_geometry(profile);
+
+            std::erase_if(
+                state.entities,
+                [](const EditorEntity& entity)
+                {
+                    return entity.category == "ForestFactory";
+                });
+
             auto upsert = [&](EditorEntity entity)
             {
                 const auto existing = std::find_if(
@@ -1426,59 +1436,50 @@ namespace epochnamespace
             stage.name = "ForestFactoryStage";
             stage.type = "Level";
             stage.category = "ForestFactory";
-            stage.position = { 0.0f, -0.08f, 0.0f };
-            stage.scale = { 4.8f, 0.12f, 4.8f };
+            stage.position = { 0.0f, -0.06f, 0.0f };
+            stage.scale = { 5.2f, 0.08f, 5.2f };
             stage.editorOnly = true;
             upsert(std::move(stage));
 
-            EditorEntity trunk{};
-            trunk.name = "ForestFactoryTrunk";
-            trunk.type = "ForestTrunk";
-            trunk.category = "ForestFactory";
-            trunk.position = { 0.0f, 0.72f, 0.0f };
-            trunk.scale = { 0.28f, 1.35f, 0.28f };
-            trunk.editorOnly = true;
-            upsert(std::move(trunk));
+            for (std::size_t i = 0u; i < geometry.segmentCount; ++i)
+            {
+                const auto& segment = geometry.segments[i];
+                EditorEntity node{};
+                node.name = std::format("ForestFactoryNode_{:03}", i);
+                node.type = i == 0u ? "ForestTrunkNode" : "ForestBranchNode";
+                node.category = "ForestFactory";
+                node.position = { segment.end.x, segment.end.y, segment.end.z };
+                const float nodeSize = (std::max)(0.08f, segment.radius * 2.4f);
+                node.scale = { nodeSize, nodeSize, nodeSize };
+                node.editorOnly = true;
+                upsert(std::move(node));
+            }
 
-            EditorEntity canopy{};
-            canopy.name = "ForestFactoryCanopy";
-            canopy.type = "ForestCanopy";
-            canopy.category = "ForestFactory";
-            canopy.position = { 0.0f, 1.65f, 0.0f };
-            canopy.scale = { 1.28f, 0.66f, 1.28f };
-            canopy.editorOnly = true;
-            upsert(std::move(canopy));
-
-            EditorEntity branchLeft{};
-            branchLeft.name = "ForestFactoryBranchLeft";
-            branchLeft.type = "ForestLeaf";
-            branchLeft.category = "ForestFactory";
-            branchLeft.position = { -0.82f, 1.22f, 0.0f };
-            branchLeft.scale = { 0.82f, 0.28f, 0.34f };
-            branchLeft.editorOnly = true;
-            upsert(std::move(branchLeft));
-
-            EditorEntity branchRight{};
-            branchRight.name = "ForestFactoryBranchRight";
-            branchRight.type = "ForestLeaf";
-            branchRight.category = "ForestFactory";
-            branchRight.position = { 0.82f, 1.22f, 0.0f };
-            branchRight.scale = { 0.82f, 0.28f, 0.34f };
-            branchRight.editorOnly = true;
-            upsert(std::move(branchRight));
+            for (std::size_t i = 0u; i < geometry.leafCount; ++i)
+            {
+                const auto& leaf = geometry.leaves[i];
+                EditorEntity leafNode{};
+                leafNode.name = std::format("ForestFactoryLeaf_{:03}", i);
+                leafNode.type = "ForestLeaf";
+                leafNode.category = "ForestFactory";
+                leafNode.position = { leaf.position.x, leaf.position.y, leaf.position.z };
+                leafNode.scale = { leaf.size, leaf.size * 0.42f, leaf.size };
+                leafNode.editorOnly = true;
+                upsert(std::move(leafNode));
+            }
 
             const auto selected = std::find_if(
                 state.entities.begin(),
                 state.entities.end(),
                 [](const EditorEntity& entity)
                 {
-                    return entity.name == "ForestFactoryCanopy";
+                    return entity.name.rfind("ForestFactoryLeaf_", 0) == 0;
                 });
             if (selected != state.entities.end())
                 state.selectedEntity = static_cast<std::size_t>(std::distance(state.entities.begin(), selected));
 
             if (state.entities.size() != beforeCount)
-                push_editor_log(state, "[forest] Added scene-backed Forest Factory preview primitives.");
+                push_editor_log(state, "[forest] Rebuilt temporal graph Forest Factory scene preview.");
         }
 
         void duplicate_selected_entity(EditorState& state)
@@ -1535,8 +1536,12 @@ namespace epochnamespace
                 return { 0.42f, 0.80f, 1.0f };
             if (entity.category == "ForestFactory")
             {
-                if (entity.type == "ForestTrunk")
+                if (entity.type == "ForestTrunkNode")
                     return { 0.58f, 0.36f, 0.20f };
+                if (entity.type == "ForestBranchNode")
+                    return { 0.42f, 0.70f, 0.32f };
+                if (entity.type == "ForestLeaf")
+                    return { 0.22f, 0.86f, 0.38f };
                 return { 0.30f, 0.82f, 0.36f };
             }
             if (entity.category == "World" || entity.type == "Level")
@@ -1557,6 +1562,8 @@ namespace epochnamespace
                 return 0.38f;
             if (entity.category == "World" || entity.type == "Level")
                 return 0.75f;
+            if (entity.category == "ForestFactory")
+                return (std::clamp)(0.55f * scaleMax, 0.14f, 0.42f);
             return (std::clamp)(0.34f * scaleMax, 0.24f, 1.20f);
         }
 
@@ -4712,18 +4719,20 @@ namespace epochnamespace
 
         auto render_main_surface_tabs = [&]()
         {
-            const std::array<gui::SegmentedButtonSpec, 6> tabs{{
+            const std::array<gui::SegmentedButtonSpec, 7> tabs{{
                 { "Perspective", 118.0f, editor.mainSurface == EditorMainSurface::Scene },
                 { "Game/2D", 96.0f, editor.mainSurface == EditorMainSurface::Game2D },
                 { "Assets", 82.0f, editor.mainSurface == EditorMainSurface::Assets },
+                { "Forest Factory", 132.0f, editor.mainSurface == EditorMainSurface::ForestFactory },
                 { "Project", 92.0f, editor.mainSurface == EditorMainSurface::Project },
                 { "AI Sandbox", 122.0f, editor.mainSurface == EditorMainSurface::AISandbox },
                 { "Systems", 90.0f, editor.mainSurface == EditorMainSurface::Systems }
             }};
-            const std::array<EditorMainSurface, 6> surfaces{{
+            const std::array<EditorMainSurface, 7> surfaces{{
                 EditorMainSurface::Scene,
                 EditorMainSurface::Game2D,
                 EditorMainSurface::Assets,
+                EditorMainSurface::ForestFactory,
                 EditorMainSurface::Project,
                 EditorMainSurface::AISandbox,
                 EditorMainSurface::Systems
@@ -4802,6 +4811,7 @@ namespace epochnamespace
         const std::string editor_tab = "Editor Mode";
         const std::string runtime_tab = "Game/2D";
         const std::string assets_tab = "Assets";
+        const std::string forest_tab = "Forest Factory";
         const std::string project_tab = "Project";
         const std::string ai_control_tab = "AI Sandbox";
         const std::string systems_tab = "Systems";
@@ -4822,14 +4832,19 @@ namespace epochnamespace
         tab_x += 124.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(project_tab, { 164.0f, tab_h }, editor.mainSurface == EditorMainSurface::Project))
-            open_editor_surface(EditorMainSurface::Project, "toolbar");
+        if (gui::button_selected(forest_tab, { 164.0f, tab_h }, editor.mainSurface == EditorMainSurface::ForestFactory))
+            open_editor_surface(EditorMainSurface::ForestFactory, "toolbar");
         tab_x += 164.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(ai_control_tab, { 180.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox))
+        if (gui::button_selected(project_tab, { 144.0f, tab_h }, editor.mainSurface == EditorMainSurface::Project))
+            open_editor_surface(EditorMainSurface::Project, "toolbar");
+        tab_x += 144.0f + tab_gap;
+
+        gui::set_cursor({ tab_x, tab_y });
+        if (gui::button_selected(ai_control_tab, { 160.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox))
             open_editor_surface(EditorMainSurface::AISandbox, "toolbar");
-        tab_x += 180.0f + tab_gap;
+        tab_x += 160.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button_selected(systems_tab, { 124.0f, tab_h }, editor.mainSurface == EditorMainSurface::Systems))
@@ -4953,7 +4968,7 @@ namespace epochnamespace
             }
         }
 
-        if (editor.openMenu != TopMenu::None && gui::was_mouse_pressed())
+        if (editor.openMenu != TopMenu::None && (gui::was_mouse_pressed() || gui::was_mouse_right_pressed()))
         {
             const auto buttonBounds = top_menu_button_bounds(editor.openMenu);
             const gui::Vec2 dropdownPos = dropdown_position_for(editor.openMenu);
@@ -5734,7 +5749,8 @@ namespace epochnamespace
                         return package.id == epoch::package_registry::kEngineForestFactoryPackageId;
                     });
                 const auto profile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
-                const auto stats = epoch::forest::estimate_preview_stats(profile);
+                const auto geometry = epoch::forest::build_preview_geometry(profile);
+                const auto stats = geometry.stats;
                 const std::filesystem::path manifestPath =
                     resolve_editor_path(std::filesystem::path{ editor.projectRoot })
                     / "assets" / "packages" / "engine_forest_factory.package.json";
@@ -5746,7 +5762,7 @@ namespace epochnamespace
 
                 gui::label("Forest Factory");
                 gui::wrapped_label(
-                    "Core temporal graph / parametric L-system vegetation lab. The editor owns the live Forest Factory surface; generated projects receive assets only after package activation or main-scene use approval.",
+                    "Core temporal graph / parametric L-system vegetation lab. Forest Factory owns a live editor scene preview; generated projects receive assets only after package activation or main-scene use approval.",
                     centerWidth);
                 gui::property_row("[forest] Editor name", std::string(epoch::forest::kForestFactoryWorkspace), 148.0f);
                 gui::property_row("[forest] Technique", std::string(epoch::forest::kForestFactoryTechnique), 148.0f);
@@ -5764,14 +5780,15 @@ namespace epochnamespace
                 gui::property_row("[forest] Nodes", std::to_string(stats.nodes), 148.0f);
                 gui::property_row("[forest] Branches", std::to_string(stats.branches), 148.0f);
                 gui::property_row("[forest] Leaves", std::to_string(stats.leaves), 148.0f);
+                gui::property_row("[forest] Preview segments", std::to_string(geometry.segmentCount), 148.0f);
                 gui::property_row("[forest] Verts", std::to_string(stats.vertices), 148.0f);
                 gui::property_row("[forest] Tris", std::to_string(stats.triangles), 148.0f);
                 gui::wrapped_label(
-                    "Scene preview: Forest Factory owns editor-only stage/trunk/canopy/branch primitives now. Package activation emits reusable project assets only after an explicit install/stage gate.",
+                    "Scene preview: Forest Factory now emits deterministic temporal graph nodes and leaves into its editor-only scene. Package activation emits reusable project assets only after an explicit install/stage gate.",
                     centerWidth);
                 std::array<gui::InlineButtonSpec, 3> forestActions{ {
-                    { "Refresh Scene Preview", 188.0f },
-                    { "Select Canopy", 128.0f },
+                    { "Regenerate Temporal Graph", 228.0f },
+                    { "Select Lead Tip", 132.0f },
                     { "Reset Forest Data", 146.0f }
                 } };
                 if (auto clicked = gui::inline_button_row(forestActions, 30.0f, 8.0f))
@@ -5779,7 +5796,7 @@ namespace epochnamespace
                     if (*clicked == 0)
                     {
                         ensure_forest_factory_preview_entities(editor);
-                        push_editor_log(editor, "[forest] Refreshed scene-backed Forest Factory preview primitives.");
+                        push_editor_log(editor, "[forest] Regenerated deterministic temporal graph preview.");
                     }
                     else if (*clicked == 1)
                     {
@@ -5788,12 +5805,12 @@ namespace epochnamespace
                             editor.entities.end(),
                             [](const EditorEntity& entity)
                             {
-                                return entity.name == "ForestFactoryCanopy";
+                                return entity.name.rfind("ForestFactoryLeaf_", 0) == 0;
                             });
                         if (selected != editor.entities.end())
                         {
                             editor.selectedEntity = static_cast<std::size_t>(std::distance(editor.entities.begin(), selected));
-                            push_editor_log(editor, "[forest] Selected ForestFactoryCanopy.");
+                            push_editor_log(editor, "[forest] Selected the first visible Forest Factory lead tip.");
                         }
                         else
                         {
@@ -6696,7 +6713,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 8), [&](gui::Vec2 pos)
+        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 7), [&](gui::Vec2 pos)
         {
             menu_item("Open Asset Browser", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
                 open_editor_surface(EditorMainSurface::Assets, "Asset menu");
@@ -6706,22 +6723,19 @@ namespace epochnamespace
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
                 push_editor_log(editor, "[assets] Package Manager opened.");
             });
-            menu_item("Open Forest Factory", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
-                open_editor_surface(EditorMainSurface::ForestFactory, "Asset menu");
-            });
-            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
+            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
                 add_entity(editor, "cube");
             });
-            menu_item("Add Light", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
+            menu_item("Add Light", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
                 add_entity(editor, "light");
             });
-            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
+            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
                 add_entity(editor, "spawn");
             });
-            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 218.0f }, 220.0f, [&]() {
+            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
                 duplicate_selected_entity(editor);
             });
-            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 252.0f }, 220.0f, [&]() {
+            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 218.0f }, 220.0f, [&]() {
                 delete_selected_entity(editor);
             });
         });

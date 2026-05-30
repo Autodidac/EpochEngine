@@ -1,5 +1,24 @@
 # Epoch Changelog
 
+## [v0.84.65]
+- Bumped the active source line to `v0.84.65` for a focused GUI input
+  stabilization and Forest Factory scene pass.
+- Kept the protected renderer/draw model untouched while making command menus
+  and select boxes dismiss on any outside left/right click, so stale menu focus
+  does not fight normal editor or scripting input.
+- Stabilized reusable button/tab pressed-state visuals so toolbar, tab, and
+  scripting buttons retain their selected/pressed state instead of flashing
+  through hover/default colors during GUI replay.
+- Reworked the reusable `engine.gui` source editor to process text input
+  directly and render only visible source lines inside the scroll clip, keeping
+  large script editing responsive while preserving right-click
+  Select All/Copy/Cut/Paste actions.
+- Moved Forest Factory out of the Asset command menu and into its own central
+  editor workspace button, backed by deterministic temporal-graph preview
+  entities from `forest.factory` instead of placeholder block spawning.
+- Validation: MSVC Debug x64 `ConsoleApplication1` build passed with
+  `/m:1 /clp:ErrorsOnly`.
+
 ## [v0.84.64]
 - Bumped the active source line to `v0.84.64` for a focused GUI-library script
   editing and window-chrome pass.

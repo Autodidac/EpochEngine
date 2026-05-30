@@ -53,6 +53,11 @@ make the outside-click guard close a menu while its drawn body is still being
 interacted with, which looks like command-menu flicker even when the renderer
 order is correct.
 
+Outside-click dismissal is input-modal, not left-button-only. Command menus and
+select boxes must drop focus on any click outside their active bounds, including
+right-clicks used to open context menus elsewhere, so stale menu capture cannot
+slow text editing or make toolbar buttons flash through inactive states.
+
 On OpenGL, top-layer sprites are replay-only. They must not also be queued in
 the normal deferred GUI batch, and the OpenGL renderer must not switch
 pre-scene/post-scene GUI drain order when a dropdown is open. Either condition
@@ -103,6 +108,11 @@ Before a control is considered ready, it needs:
   loading, updater/cache operations, generated-project builds, and any future
   visible long-running editor action; do not draw one-off progress rows in
   Console Dock or domain code when `engine.gui` can own the behavior
+- source editors are shared GUI primitives. They process text input directly,
+  render only visible source lines inside the scroll clip, and expose
+  right-click Select All/Copy/Cut/Paste through the GUI context-menu path;
+  editor workspaces should not replace them with static text dumps or ad hoc
+  clipboard buttons.
 - input profiles are shared engine/editor contracts, not per-surface hacks.
   `v0.84.54` keeps movement bindings and look bindings non-overlapping in the
   shipped presets, after `v0.84.53` introduced named

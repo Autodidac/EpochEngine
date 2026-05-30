@@ -171,8 +171,9 @@ the same engine-owned path.
   the script host; it must not copy those implementations out of the kernel
   engine.
 - Forest Factory is a core editor/runtime descriptor lane, not a loose optional
-  dump. Asset > Open Forest Factory opens the current scene-backed Forest
-  Factory preview surface with deterministic editor primitives; Package Manager
+  dump. The top editor workspace row owns the `Forest Factory` surface, which
+  opens the current scene-backed deterministic temporal-graph preview instead of
+  hiding plant work behind an Asset command-menu action. Package Manager
   activation stages
   `assets/packages/engine_forest_factory.package.json` and
   `assets/packages/engine_forest_factory/default.forest.json` in the active

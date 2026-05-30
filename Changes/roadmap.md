@@ -707,6 +707,17 @@ engine shape and should be treated as starting truth for the next passes:
   titlebar chrome and adds Forest Factory scene-preview refresh/selection
   controls while leaving mature plant editing, sliders, and project payload
   emission acceptance-gated.
+- `v0.84.65` keeps that same draw-model boundary and tightens GUI input
+  behavior: command menus/select boxes now dismiss on outside left or right
+  click, reusable buttons/tabs keep stable pressed-state visuals, and the
+  source editor renders only visible source lines so single-character script
+  edits do not walk the whole file each frame. Forest Factory now has its own
+  central editor workspace button and builds a deterministic temporal-graph
+  preview from `forest.factory` data instead of using the Asset menu to add a
+  few placeholder blocks. Acceptance remains visual: operator eye-test must
+  confirm no command-menu flicker regression, responsive script typing, and a
+  real Forest Factory preview path before mature sliders/atlas/export tools are
+  marked complete.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

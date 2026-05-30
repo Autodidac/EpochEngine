@@ -2485,7 +2485,7 @@ namespace epochnamespace::gui
         const auto& palette = active_palette();
 
         const SpriteHandle background =
-            selected ? palette.buttonActive
+            selected || pressed ? palette.buttonActive
             : hovered ? palette.buttonHover
             : palette.buttonNormal;
 
@@ -2999,6 +2999,53 @@ namespace epochnamespace::gui
         g_frame.caretVisible = true;
     }
 
+    [[nodiscard]] static std::size_t line_count_for_text(std::string_view text) noexcept
+    {
+        if (text.empty())
+            return 1u;
+
+        std::size_t count = 1u;
+        for (const char ch : text)
+            if (ch == '\n')
+                ++count;
+        return count;
+    }
+
+    [[nodiscard]] static std::size_t line_start_for_index(std::string_view text, std::size_t targetLine) noexcept
+    {
+        if (targetLine == 0u)
+            return 0u;
+
+        std::size_t line = 0u;
+        for (std::size_t i = 0; i < text.size(); ++i)
+        {
+            if (text[i] == '\n')
+            {
+                ++line;
+                if (line == targetLine)
+                    return (std::min)(i + 1u, text.size());
+            }
+        }
+
+        return text.size();
+    }
+
+    [[nodiscard]] static std::string_view line_view_from_offset(std::string_view text, std::size_t& offset) noexcept
+    {
+        if (offset >= text.size())
+            return {};
+
+        const std::size_t start = offset;
+        while (offset < text.size() && text[offset] != '\n')
+            ++offset;
+
+        const std::size_t end = offset;
+        if (offset < text.size() && text[offset] == '\n')
+            ++offset;
+
+        return text.substr(start, end - start);
+    }
+
     SourceEditorResult source_editor(std::string& text, const SourceEditorOptions& options) noexcept
     {
         SourceEditorResult result{};
@@ -3021,24 +3068,177 @@ namespace epochnamespace::gui
         const float scrollbarReserve = 12.0f;
         const float editorWidth = (std::max)(64.0f, width - scrollbarReserve);
         const float contentWidth = (std::max)(1.0f, editorWidth - 2.0f * kBoxInnerPadding);
-        const float textHeight = measure_wrapped_text_height(text, contentWidth, kFontScale)
+        const float lineAdvance = line_advance_amount(kFontScale);
+        const float baseHeight = base_line_height(kFontScale);
+        const std::size_t lineCount = line_count_for_text(text);
+        const float textHeight = static_cast<float>(lineCount) * lineAdvance
             + 2.0f * kBoxInnerPadding
             + kContentPadding;
         const float editorContentHeight = (std::max)(height - 4.0f, textHeight);
+        const bool hoveredEditor = point_in_rect(g_frame.mousePos, pos.x, pos.y, editorWidth, height)
+            && point_in_active_clip(g_frame.mousePos);
+        const void* textId = static_cast<const void*>(&text);
+        const void* ctxKey = static_cast<const void*>(g_frame.ctx);
+        const auto& palette = active_palette();
+        const std::size_t limit = (options.max_chars == 0)
+            ? std::numeric_limits<std::size_t>::max()
+            : options.max_chars;
 
-        (void)begin_scroll_area(ScrollAreaOptions{
-            .id = id + "-scroll",
+        const bool pointerPressed = g_frame.justPressed || g_frame.rightJustPressed;
+        const void* currentActiveWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
+        bool& wholeFieldSelected = g_textFieldSelectAllStates[textId];
+        if (pointerPressed)
+        {
+            if (hoveredEditor)
+            {
+                g_contextActiveWidgets[ctxKey] = textId;
+                g_frame.caretTimer = 0.0f;
+                g_frame.caretVisible = true;
+                if (g_frame.justPressed)
+                    wholeFieldSelected = false;
+            }
+            else if (currentActiveWidget == textId && !state.contextMenuOpen)
+            {
+                g_contextActiveWidgets[ctxKey] = nullptr;
+                wholeFieldSelected = false;
+            }
+        }
+
+        const bool active = g_contextActiveWidgets[ctxKey] == textId;
+        result.edit.active = active;
+
+        if (active)
+        {
+            const auto replace_selection_if_needed = [&]() noexcept
+            {
+                if (!wholeFieldSelected)
+                    return;
+                if (!text.empty())
+                {
+                    text.clear();
+                    result.edit.changed = true;
+                }
+                wholeFieldSelected = false;
+            };
+
+            for (const auto& evt : g_frame.events)
+            {
+                switch (evt.type)
+                {
+                case EventType::TextInput:
+                    replace_selection_if_needed();
+                    append_text_limited(text, evt.text, limit, true, result.edit.changed);
+                    break;
+
+                case EventType::KeyDown:
+                    if (evt.ctrl_down && (evt.key == 'C' || evt.key == 'c'))
+                    {
+                        (void)clipboard_write_text(text);
+                    }
+                    else if (evt.ctrl_down && (evt.key == 'X' || evt.key == 'x'))
+                    {
+                        (void)clipboard_write_text(text);
+                        if (!text.empty())
+                        {
+                            text.clear();
+                            result.edit.changed = true;
+                        }
+                        wholeFieldSelected = false;
+                    }
+                    else if (evt.ctrl_down && (evt.key == 'V' || evt.key == 'v'))
+                    {
+                        replace_selection_if_needed();
+                        append_text_limited(text, clipboard_read_text(), limit, true, result.edit.changed);
+                    }
+                    else if (evt.ctrl_down && (evt.key == 'A' || evt.key == 'a'))
+                    {
+                        wholeFieldSelected = true;
+                    }
+                    else if (evt.key == 8 || evt.key == 127)
+                    {
+                        if (wholeFieldSelected)
+                        {
+                            if (!text.empty())
+                            {
+                                text.clear();
+                                result.edit.changed = true;
+                            }
+                            wholeFieldSelected = false;
+                        }
+                        else if (!text.empty())
+                        {
+                            text.pop_back();
+                            result.edit.changed = true;
+                        }
+                    }
+                    else if (evt.key == 27)
+                    {
+                        g_contextActiveWidgets[ctxKey] = nullptr;
+                        wholeFieldSelected = false;
+                        result.edit.active = false;
+                    }
+                    else if (evt.key == 13)
+                    {
+                        replace_selection_if_needed();
+                        if (text.size() < limit)
+                        {
+                            text.push_back('\n');
+                            result.edit.changed = true;
+                        }
+                    }
+                    break;
+
+                default:
+                    break;
+                }
+            }
+        }
+
+        draw_sprite(active ? palette.textFieldActive : palette.textField, pos.x, pos.y, editorWidth, height);
+        const std::string scrollId = id + "-scroll";
+
+        const auto scroll = begin_scroll_area(ScrollAreaOptions{
+            .id = scrollId,
             .size = { width, height },
             .content_height = editorContentHeight,
-            .draw_background = true,
+            .draw_background = false,
             .show_scrollbar = true
         });
 
-        result.edit = edit_box(text, { editorWidth, editorContentHeight }, options.max_chars, true);
+        const float textX = g_frame.cursor.x + kBoxInnerPadding;
+        const float firstTextY = g_frame.cursor.y + kBoxInnerPadding;
+        const std::size_t firstVisibleLine = static_cast<std::size_t>((std::max)(0.0f, scroll.scroll_y) / (std::max)(1.0f, lineAdvance));
+        const std::size_t visibleLineBudget = static_cast<std::size_t>(height / (std::max)(1.0f, lineAdvance)) + 4u;
+
+        if (active && wholeFieldSelected && !text.empty())
+            draw_sprite(palette.buttonActive, pos.x + 1.0f, pos.y + 1.0f, (std::max)(1.0f, editorWidth - 2.0f), (std::max)(1.0f, height - 2.0f));
+
+        std::size_t offset = line_start_for_index(text, firstVisibleLine);
+        float lineY = firstTextY + static_cast<float>(firstVisibleLine) * lineAdvance;
+        for (std::size_t line = 0u; line < visibleLineBudget && firstVisibleLine + line < lineCount; ++line)
+        {
+            const std::string_view lineText = line_view_from_offset(text, offset);
+            draw_text_line(lineText, textX, lineY, kFontScale);
+            lineY += lineAdvance;
+        }
+
+        if (active && g_frame.caretVisible && !wholeFieldSelected)
+        {
+            const std::size_t lastLineIndex = lineCount > 0u ? lineCount - 1u : 0u;
+            std::size_t lastLineOffset = line_start_for_index(text, lastLineIndex);
+            const std::string_view lastLine = line_view_from_offset(text, lastLineOffset);
+            const float caretX = std::clamp(
+                textX + measure_text_width(lastLine, kFontScale),
+                textX,
+                textX + (std::max)(1.0f, contentWidth) - 1.0f);
+            const float caretY = firstTextY + static_cast<float>(lastLineIndex) * lineAdvance;
+            if (caretY + baseHeight >= pos.y && caretY <= pos.y + height)
+                draw_caret(caretX, caretY, baseHeight);
+        }
+
+        g_frame.cursor = { pos.x, pos.y - scroll.scroll_y + editorContentHeight };
         end_scroll_area();
 
-        const bool hoveredEditor = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
-            && point_in_active_clip(g_frame.mousePos);
         bool openedThisFrame = false;
         if (options.show_context_menu && g_frame.rightJustPressed && hoveredEditor)
         {
@@ -3211,7 +3411,7 @@ namespace epochnamespace::gui
                 pressedKey = 0;
 
             const SpriteHandle background =
-                tab.active ? palette.panelBackground
+                tab.active || pressed ? palette.panelBackground
                 : hovered ? palette.buttonHover
                 : palette.buttonNormal;
             draw_sprite(background, x, rowStart.y, width, h);
@@ -3351,7 +3551,7 @@ namespace epochnamespace::gui
             state.alignSelectedOnOpen = false;
         }
 
-        if (!toggledThisFrame && g_frame.justPressed)
+        if (!toggledThisFrame && (g_frame.justPressed || g_frame.rightJustPressed))
         {
             const bool pressedClosed = point_in_rect(g_frame.mousePos, start.x, start.y, width, closedHeight);
             const bool pressedList = point_in_rect(g_frame.mousePos, listPos.x, listPos.y, width, listHeight);

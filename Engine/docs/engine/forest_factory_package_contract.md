@@ -10,10 +10,10 @@ shown in the older Plant Lab prototype line.
   `Engine/modules/forest.factory.ixx`.
 - Package Registry owns package identity, provenance, activation mode, and
   security gates in `Engine/modules/package.registry.ixx`.
-- The editor Asset menu opens the current Forest Factory workbench surface,
-  which now runs through the scene-backed editor viewport with deterministic
-  preview primitives while keeping provenance, staged package evidence, and
-  preview estimates documented.
+- The editor workspace row opens the current Forest Factory workbench surface,
+  which runs through the scene-backed editor viewport with deterministic
+  temporal-graph preview entities while keeping provenance, staged package
+  evidence, and preview estimates documented.
 - Package payload/source routing belongs in
   `https://github.com/Autodidac/EpochEngineExtensions`.
 - The Package Manager stages project-visible manifests and deterministic seed
@@ -52,6 +52,8 @@ The first production contract exposes:
 - a scene-backed editor prototype made from deterministic preview primitives so
   Forest Factory is visible in the same central 3D editor path as other
   workspaces before the production mesh/voxel renderer lands
+- dedicated editor workspace access from the main toolbar instead of an Asset
+  command-menu shortcut that spawns placeholder geometry
 
 ## Package Manager Behavior
 
