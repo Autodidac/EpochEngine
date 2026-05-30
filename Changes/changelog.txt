@@ -1,5 +1,16 @@
 # Epoch Changelog
 
+## [v0.84.82]
+- Bumped the active source line to `v0.84.82` for checkpoint restore/replay
+  planning.
+- Added non-reading checkpoint restore plans to `saveload.system`, mirroring the
+  staged snapshot, scene payload, manifest path, and checkpoint label needed by
+  the future human-approved replay gate.
+- Expanded `--engine-contract-self-test` coverage to validate restore-plan path
+  evidence against the matching write plan.
+- Surfaced the restore-plan summary in the Timeline Editor when a checkpoint
+  record is staged, without adding live disk reads or changing renderer order.
+
 ## [v0.84.81]
 - Bumped the active source line to `v0.84.81` for streaming-save cadence
   visibility.

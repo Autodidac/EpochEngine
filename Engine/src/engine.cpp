@@ -786,6 +786,7 @@ namespace epochnamespace::core
             snapshot.timeline_keys.size());
         const auto checkpointPackage = epoch::saveload::make_checkpoint_package(checkpointRecord, snapshotText);
         const auto checkpointWritePlan = epoch::saveload::make_checkpoint_write_plan(saveConfig, checkpointPackage);
+        const auto checkpointRestorePlan = epoch::saveload::make_checkpoint_restore_plan(saveConfig, checkpointRecord);
         const std::string checkpointManifestLine = checkpointPackage.manifest_line;
         check(
             "snapshot.lookup",
@@ -850,6 +851,14 @@ namespace epochnamespace::core
             && checkpointWritePlan.scene_payload_path.find(".epoch") != std::string::npos
             && checkpointWritePlan.manifest_path.find("manifest.timeline.log") != std::string::npos
             && epoch::saveload::checkpoint_write_plan_summary(checkpointWritePlan).find("write plan") != std::string::npos);
+        check(
+            "checkpoint.restore_plan",
+            checkpointRestorePlan.valid
+            && checkpointRestorePlan.checkpoint_label == checkpointRecord.label
+            && checkpointRestorePlan.snapshot_path == checkpointRecord.output_path
+            && checkpointRestorePlan.scene_payload_path == checkpointWritePlan.scene_payload_path
+            && checkpointRestorePlan.manifest_path == checkpointWritePlan.manifest_path
+            && epoch::saveload::checkpoint_restore_plan_summary(checkpointRestorePlan).find("restore plan") != std::string::npos);
 
         log_editor_self_test_line(std::string("engine_contract_self_test.summary=") + snapshotSummary);
         log_editor_self_test_line(std::string("engine_contract_self_test.result=") + (failed ? "fail" : "pass"));

@@ -113,6 +113,17 @@ export namespace epoch::saveload
         std::string message{};
     };
 
+    struct StreamingCheckpointRestorePlan
+    {
+        bool valid = false;
+        std::string root_path{};
+        std::string snapshot_path{};
+        std::string scene_payload_path{};
+        std::string manifest_path{};
+        std::string checkpoint_label{};
+        std::string message{};
+    };
+
     struct StreamingSaveCadencePlan
     {
         bool enabled = false;
@@ -636,6 +647,29 @@ export namespace epoch::saveload
         return plan;
     }
 
+    [[nodiscard]] inline StreamingCheckpointRestorePlan make_checkpoint_restore_plan(
+        const StreamingSaveConfig& config,
+        const StreamingCheckpointRecord& record)
+    {
+        StreamingCheckpointRestorePlan plan{};
+        plan.root_path = config.target_root.empty() ? "cache/saves/timeline" : config.target_root;
+        plan.checkpoint_label = record.label;
+        plan.snapshot_path = record.output_path.empty()
+            ? join_stream_path(plan.root_path, record.label + ".epochsnap")
+            : record.output_path;
+        plan.scene_payload_path = join_stream_path(plan.root_path, record.label + ".epoch");
+        plan.manifest_path = join_stream_path(plan.root_path, "manifest.timeline.log");
+        plan.valid = record.valid
+            && !plan.checkpoint_label.empty()
+            && !plan.snapshot_path.empty()
+            && !plan.scene_payload_path.empty()
+            && !plan.manifest_path.empty();
+        plan.message = plan.valid
+            ? "Checkpoint restore plan is ready for the human-approved replay gate."
+            : "Checkpoint restore plan is blocked by missing checkpoint evidence.";
+        return plan;
+    }
+
     [[nodiscard]] inline std::string checkpoint_package_summary(const StreamingCheckpointPackage& package)
     {
         if (!validate_checkpoint_package(package))
@@ -657,6 +691,18 @@ export namespace epoch::saveload
             "write plan | snapshot {} | manifest {} | scene {}",
             plan.snapshot_path,
             plan.manifest_path,
+            plan.scene_payload_path);
+    }
+
+    [[nodiscard]] inline std::string checkpoint_restore_plan_summary(const StreamingCheckpointRestorePlan& plan)
+    {
+        if (!plan.valid)
+            return plan.message.empty() ? std::string("No checkpoint restore plan staged.") : plan.message;
+
+        return std::format(
+            "restore plan | checkpoint {} | snapshot {} | scene {}",
+            plan.checkpoint_label,
+            plan.snapshot_path,
             plan.scene_payload_path);
     }
 

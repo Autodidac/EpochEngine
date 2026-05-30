@@ -6129,9 +6129,16 @@ namespace epochnamespace
                 gui::property_row("[timeline] Manifest", epoch::saveload::join_stream_path(editor.streamingSaveConfig.target_root, "manifest.timeline.log"), 132.0f);
                 if (editor.lastCheckpointRecord.valid)
                 {
+                    const auto restorePlan = epoch::saveload::make_checkpoint_restore_plan(
+                        editor.streamingSaveConfig,
+                        editor.lastCheckpointRecord);
                     gui::property_row(
                         "[timeline] Scene payload",
                         epoch::saveload::join_stream_path(editor.streamingSaveConfig.target_root, editor.lastCheckpointRecord.label + ".epoch"),
+                        132.0f);
+                    gui::property_row(
+                        "[timeline] Restore",
+                        epoch::saveload::checkpoint_restore_plan_summary(restorePlan),
                         132.0f);
                 }
 

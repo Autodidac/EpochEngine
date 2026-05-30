@@ -526,6 +526,9 @@ the same engine-owned path.
   now, waiting for a manual/timeline-key action, or scheduled by frame/seconds
   from shared `core.time` stats. The Timeline Editor displays that next-capture
   summary while disk writing remains gated.
+- Checkpoint restore plans mirror the staged write layout for the future replay
+  gate. They name the checkpoint label, snapshot path, scene payload path, and
+  manifest path without reading disk or mutating the live scene.
 - `engine.input` is the shared input profile spine. The default editor profile
   now names camera reset-to-center, frame selection, clipboard copy/paste,
   right-click context menu, play-in-editor, timeline play/step, and package

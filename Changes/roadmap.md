@@ -840,6 +840,11 @@ engine shape and should be treated as starting truth for the next passes:
   summary beside the profile/write-plan rows. Acceptance remains staged:
   editable profile dropdowns, visible lane rendering, disk writes, and replay
   restore still require GUI/runtime proof.
+- `v0.84.82` adds the matching non-reading restore/replay plan for staged
+  checkpoints. Restore plans mirror the snapshot path, serialized scene payload
+  path, manifest path, and checkpoint label from the write-plan contract so the
+  future replay gate can be reviewed before disk reads or live scene restore are
+  enabled.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
