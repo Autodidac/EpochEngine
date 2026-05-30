@@ -4,6 +4,7 @@
 module;
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <string>
@@ -94,6 +95,39 @@ export namespace epoch::timeline
         bool locked = false;
     };
 
+    struct TimelineLaneLayoutConfig
+    {
+        double pixel_width = 640.0;
+        double header_width = 120.0;
+        double lane_height = 28.0;
+        double lane_gap = 4.0;
+        double top_padding = 0.0;
+    };
+
+    struct TimelineLaneGeometry
+    {
+        std::string track_id{};
+        std::string label{};
+        TimelineTrackKind kind = TimelineTrackKind::Scene;
+        double x = 0.0;
+        double y = 0.0;
+        double width = 0.0;
+        double height = 28.0;
+        bool enabled = true;
+        bool locked = false;
+    };
+
+    struct TimelineEventMarker
+    {
+        std::string track_id{};
+        std::string label{};
+        TimelineEventKind kind = TimelineEventKind::Checkpoint;
+        double x = 0.0;
+        double y = 0.0;
+        double radius = 4.0;
+        bool visible = false;
+    };
+
     [[nodiscard]] inline std::string_view track_kind_name(TimelineTrackKind kind) noexcept
     {
         switch (kind)
@@ -166,6 +200,21 @@ export namespace epoch::timeline
             view.visible_start_seconds,
             0.0,
             (std::max)(0.0, duration - view.visible_duration_seconds));
+    }
+
+    inline void clamp_lane_layout_config(TimelineLaneLayoutConfig& layout) noexcept
+    {
+        layout.pixel_width = (std::clamp)(layout.pixel_width, 128.0, 65'536.0);
+        layout.header_width = (std::clamp)(layout.header_width, 0.0, layout.pixel_width * 0.75);
+        layout.lane_height = (std::clamp)(layout.lane_height, 12.0, 240.0);
+        layout.lane_gap = (std::clamp)(layout.lane_gap, 0.0, 80.0);
+        layout.top_padding = (std::clamp)(layout.top_padding, 0.0, 4096.0);
+    }
+
+    [[nodiscard]] inline double lane_content_width(TimelineLaneLayoutConfig layout) noexcept
+    {
+        clamp_lane_layout_config(layout);
+        return (std::max)(1.0, layout.pixel_width - layout.header_width);
     }
 
     [[nodiscard]] inline bool event_is_visible(
@@ -310,6 +359,94 @@ export namespace epoch::timeline
                 return event_is_visible(event, view);
             }));
         return metrics;
+    }
+
+    [[nodiscard]] inline std::vector<TimelineLaneGeometry> make_lane_geometry(
+        const std::vector<TimelineTrack>& tracks,
+        TimelineLaneLayoutConfig layout)
+    {
+        clamp_lane_layout_config(layout);
+        std::vector<TimelineLaneGeometry> lanes;
+        lanes.reserve(tracks.size());
+
+        double y = layout.top_padding;
+        for (const auto& track : tracks)
+        {
+            lanes.push_back(TimelineLaneGeometry{
+                .track_id = track.id,
+                .label = track.label,
+                .kind = track.kind,
+                .x = layout.header_width,
+                .y = y,
+                .width = lane_content_width(layout),
+                .height = layout.lane_height,
+                .enabled = track.enabled,
+                .locked = track.locked
+            });
+            y += layout.lane_height + layout.lane_gap;
+        }
+
+        return lanes;
+    }
+
+    [[nodiscard]] inline std::vector<TimelineEventMarker> make_event_markers(
+        const std::vector<TimelineTrack>& tracks,
+        const std::vector<TimelineEvent>& events,
+        TimelineViewConfig view,
+        TimelineLaneLayoutConfig layout,
+        double timeline_duration_seconds)
+    {
+        clamp_view_config(view, timeline_duration_seconds);
+        clamp_lane_layout_config(layout);
+        view.pixel_width = lane_content_width(layout);
+
+        const auto lanes = make_lane_geometry(tracks, layout);
+        std::vector<TimelineEventMarker> markers;
+        markers.reserve(events.size());
+
+        for (const auto& event : events)
+        {
+            const auto laneIt = std::find_if(
+                lanes.begin(),
+                lanes.end(),
+                [&](const TimelineLaneGeometry& lane)
+                {
+                    return lane.track_id == event.track_id;
+                });
+            if (laneIt == lanes.end())
+                continue;
+
+            const bool visible = event_is_visible(event, view);
+            markers.push_back(TimelineEventMarker{
+                .track_id = event.track_id,
+                .label = event.label,
+                .kind = event.kind,
+                .x = layout.header_width + event_position_x(event, view),
+                .y = laneIt->y + (laneIt->height * 0.5),
+                .radius = visible ? 5.0 : 3.0,
+                .visible = visible
+            });
+        }
+
+        return markers;
+    }
+
+    [[nodiscard]] inline std::string describe_lane_layout(
+        const std::vector<TimelineLaneGeometry>& lanes,
+        const std::vector<TimelineEventMarker>& markers)
+    {
+        const auto visibleMarkers = static_cast<std::size_t>(std::count_if(
+            markers.begin(),
+            markers.end(),
+            [](const TimelineEventMarker& marker)
+            {
+                return marker.visible;
+            }));
+        return std::format(
+            "{} lanes | {} markers | {} visible",
+            lanes.size(),
+            markers.size(),
+            visibleMarkers);
     }
 
     [[nodiscard]] inline std::string describe_view(

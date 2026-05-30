@@ -643,7 +643,7 @@ namespace epochnamespace::core
         auto timelineTracks = epoch::timeline::default_editor_tracks();
         epoch::timeline::TimelineState timelineState{};
         timelineState.playing = true;
-        timelineState.duration_seconds = 2.0;
+        timelineState.duration_seconds = 8.0;
         timelineState.fixed_dt_seconds = 1.0 / 60.0;
         epoch::timeline::sync_to_simulation(timelineState, timeStats);
         std::vector<epoch::timeline::TimelineEvent> timelineEvents{};
@@ -680,6 +680,25 @@ namespace epochnamespace::core
             timelineTracks,
             timelineEvents,
             timelineView);
+        const epoch::timeline::TimelineLaneLayoutConfig timelineLaneLayout{
+            .pixel_width = 500.0,
+            .header_width = 100.0,
+            .lane_height = 24.0,
+            .lane_gap = 4.0,
+            .top_padding = 6.0
+        };
+        const auto timelineLanes = epoch::timeline::make_lane_geometry(
+            timelineTracks,
+            timelineLaneLayout);
+        const auto timelineMarkers = epoch::timeline::make_event_markers(
+            timelineTracks,
+            timelineEvents,
+            timelineView,
+            timelineLaneLayout,
+            timelineState.duration_seconds);
+        const std::string timelineLaneSummary = epoch::timeline::describe_lane_layout(
+            timelineLanes,
+            timelineMarkers);
         check(
             "timeline.model",
             timelineTracks.size() == 4u
@@ -696,6 +715,17 @@ namespace epochnamespace::core
             && timelineTrackSummaries[1].event_count == 1u
             && timelineTrackSummaries[2].event_count == 1u
             && timelineViewSummary.find("timeline view 0.00-5.00s") != std::string::npos);
+        check(
+            "timeline.lane_layout",
+            timelineLanes.size() == 4u
+            && timelineMarkers.size() == 2u
+            && timelineMarkers[0].visible
+            && timelineMarkers[0].x > 179.9
+            && timelineMarkers[0].x < 180.1
+            && timelineMarkers[1].visible
+            && timelineMarkers[1].x > 419.9
+            && timelineMarkers[1].x < 420.1
+            && timelineLaneSummary.find("4 lanes | 2 markers | 2 visible") != std::string::npos);
 
         const auto inputProfile = epochnamespace::input::make_profile(epochnamespace::input::ProfilePreset::EditorDefault);
         const auto resetBinding = inputProfile.bindings[

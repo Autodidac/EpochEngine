@@ -1,5 +1,16 @@
 # Epoch Changelog
 
+## [v0.84.79]
+- Bumped the active source line to `v0.84.79` for Timeline Editor lane layout
+  contracts.
+- Added data-driven timeline lane geometry and event marker placement so the 4D
+  editor can draw rows and keyed events from shared `timeline.system` data.
+- Expanded the pure engine contract self-test with lane/marker placement checks
+  and corrected its local timeline duration so the playhead expectation is
+  internally consistent.
+- Surfaced the active timeline lane/marker layout summary in the Timeline Editor
+  workspace without changing renderer draw order or launching GPU runtime proof.
+
 ## [v0.84.78]
 - Bumped the active source line to `v0.84.78` for descriptor-backed
   streaming-save profile work.

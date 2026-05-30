@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.78-1F7A4C?style=for-the-badge" alt="Current development source v0.84.78" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.79-1F7A4C?style=for-the-badge" alt="Current development source v0.84.79" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.78`.
+- Source is currently the active development line at `v0.84.79`.
 - The latest published stable runtime release is `v0.84.38`.
 - Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -146,6 +146,9 @@ OS AI model, tooling, and evidence rules live with the AI assets in
 - A first `timeline.system` contract for editor tracks, keyed events, playhead
   scrubbing, recording gates, and scene-key conversion so timeline UI can grow
   from real 4D engine data instead of loose status buttons.
+- Timeline lane layout contracts that turn tracks and keyed events into row
+  geometry and marker positions before the editor promotes a full visual
+  timeline lane renderer.
 - Descriptor-backed streaming-save profiles and checkpoint records that make
   profile IDs, human labels, retention, output paths, scene/timeline inclusion,
   and manifest-line evidence visible before the full disk writer/restore loop

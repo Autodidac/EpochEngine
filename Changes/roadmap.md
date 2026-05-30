@@ -821,6 +821,13 @@ engine shape and should be treated as starting truth for the next passes:
   pure engine contract self-test validates profile lookup/application. Acceptance
   remains staged: selectable profile dropdowns, disk writer promotion, replay
   restore, and real timeline lane editing still need GUI/runtime proof.
+- `v0.84.79` adds the first timeline lane/marker layout contract. Tracks now
+  produce lane rectangles, keyed events produce marker positions inside the
+  visible time range, and the Timeline Editor reports the shared lane/marker
+  summary before drawing a full visual lane renderer. Acceptance remains staged:
+  the next GUI pass must turn these metrics into selectable lanes, draggable
+  keys, visible scrub handles, and persisted layout without disturbing the
+  protected scene/GUI draw order.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

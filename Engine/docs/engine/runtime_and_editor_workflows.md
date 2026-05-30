@@ -497,6 +497,10 @@ the same engine-owned path.
   seconds-per-pixel, playhead X, visible key count, and per-track event summaries
   are data outputs that the editor can render as lanes once the GUI library has
   proper timeline controls.
+- Timeline lane layout is also engine data. Tracks produce lane rectangles and
+  keyed events produce marker positions inside the visible range, so the editor
+  can grow selectable/draggable 4D timeline lanes from validated data instead of
+  hardcoded drawing.
 - `saveload.system`, `scenesnapshot`, and `sceneserializer` are the current
   contract layer for timeline checkpoints: they define streaming-save config,
   checkpoint labels, scene object snapshots, timeline keys, and deterministic
