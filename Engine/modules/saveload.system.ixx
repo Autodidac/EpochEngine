@@ -157,6 +157,23 @@ export namespace epoch::saveload
         std::string message{};
     };
 
+    struct StreamingSaveProfileChangePlan
+    {
+        bool valid = false;
+        std::string from_profile_id{};
+        std::string to_profile_id{};
+        std::string to_label{};
+        SaveStreamMode mode = SaveStreamMode::Manual;
+        bool enabled = false;
+        double interval_seconds = 0.0;
+        std::uint64_t frame_interval = 0;
+        std::uint32_t max_snapshots = 0;
+        bool include_scene = true;
+        bool include_timeline = true;
+        bool include_packages = false;
+        std::string message{};
+    };
+
     struct StreamingSaveCadencePlan
     {
         bool enabled = false;
@@ -571,6 +588,58 @@ export namespace epoch::saveload
             config.include_scene ? "on" : "off",
             config.include_timeline ? "on" : "off",
             config.include_packages ? "on" : "off");
+    }
+
+    [[nodiscard]] inline StreamingSaveProfileChangePlan make_streaming_save_profile_change_plan(
+        const StreamingSaveConfig& current,
+        StreamingSaveProfile target)
+    {
+        StreamingSaveProfileChangePlan plan{};
+        plan.from_profile_id = std::string(stream_profile_id(detect_streaming_save_profile(current)));
+
+        const auto* descriptor = find_streaming_save_profile(target);
+        if (descriptor == nullptr)
+        {
+            plan.message = "Unknown streaming-save profile.";
+            return plan;
+        }
+
+        StreamingSaveConfig staged = current;
+        apply_streaming_save_profile(staged, target);
+
+        plan.valid = true;
+        plan.to_profile_id = std::string(descriptor->id);
+        plan.to_label = std::string(descriptor->label);
+        plan.mode = staged.mode;
+        plan.enabled = staged.enabled;
+        plan.interval_seconds = staged.interval_seconds;
+        plan.frame_interval = staged.frame_interval;
+        plan.max_snapshots = staged.max_snapshots;
+        plan.include_scene = staged.include_scene;
+        plan.include_timeline = staged.include_timeline;
+        plan.include_packages = staged.include_packages;
+        plan.message = std::format(
+            "profile change {} -> {} | {} | {}",
+            plan.from_profile_id,
+            plan.to_profile_id,
+            mode_name(plan.mode),
+            describe_retention(staged));
+        return plan;
+    }
+
+    [[nodiscard]] inline std::string streaming_save_profile_change_summary(
+        const StreamingSaveProfileChangePlan& plan)
+    {
+        if (!plan.valid)
+            return plan.message.empty() ? "No streaming-save profile change staged." : plan.message;
+
+        return std::format(
+            "{} -> {} | {} | {} | max {}",
+            plan.from_profile_id,
+            plan.to_profile_id,
+            mode_name(plan.mode),
+            plan.enabled ? "enabled" : "manual",
+            plan.max_snapshots);
     }
 
     [[nodiscard]] inline std::string checkpoint_record_summary(const StreamingCheckpointRecord& record)

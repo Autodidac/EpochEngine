@@ -6114,8 +6114,12 @@ namespace epochnamespace
                     gui::property_row("[timeline] Profile id", std::string(profileDescriptor->id), 132.0f);
                     gui::property_row("[timeline] Profile detail", std::string(profileDescriptor->summary), 132.0f);
                 }
+                const auto timelineKeyedProfilePlan = epoch::saveload::make_streaming_save_profile_change_plan(
+                    editor.streamingSaveConfig,
+                    epoch::saveload::StreamingSaveProfile::TimelineKeyed);
                 gui::property_row("[timeline] Stream mode", std::string(epoch::saveload::mode_name(editor.streamingSaveConfig.mode)), 132.0f);
                 gui::property_row("[timeline] Save profile", std::string(epoch::saveload::stream_profile_name(activeSaveProfile)), 132.0f);
+                gui::property_row("[timeline] Profile gate", epoch::saveload::streaming_save_profile_change_summary(timelineKeyedProfilePlan), 132.0f);
                 gui::property_row("[timeline] Retention", epoch::saveload::describe_retention(editor.streamingSaveConfig), 132.0f);
                 const auto activeSaveCadence = epoch::saveload::make_streaming_save_cadence_plan(
                     editor.streamingSaveConfig,

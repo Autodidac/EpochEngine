@@ -537,6 +537,9 @@ the same engine-owned path.
   checkpoint records against the active rolling-retention cap and report retained
   versus prune-candidate checkpoints for the Timeline Editor, but no cleanup or
   delete operation is enabled until a separate human-approved disk gate exists.
+- Streaming-save profile-change plans are review-first. They let the Timeline
+  Editor show what an interval/frame/manual/keyed profile transition would change
+  before any dropdown mutates live save configuration.
 - `engine.input` is the shared input profile spine. The default editor profile
   now names camera reset-to-center, frame selection, clipboard copy/paste,
   right-click context menu, play-in-editor, timeline play/step, and package

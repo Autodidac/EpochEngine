@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.84.85]
+- Bumped the active source line to `v0.84.85` for Timeline Editor
+  streaming-save profile-change planning.
+- Added profile-change plan helpers to `saveload.system` so future Timeline
+  Editor dropdowns can preview mode, cadence, retention, and included-data
+  changes before mutating live save settings.
+- Expanded `--engine-contract-self-test` coverage around interval-to-keyed
+  profile transition evidence.
+- Surfaced the profile-change gate summary in the Timeline Editor.
+
 ## [v0.84.84]
 - Bumped the active source line to `v0.84.84` for non-destructive streaming
   checkpoint retention planning.

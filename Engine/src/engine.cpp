@@ -634,6 +634,9 @@ namespace epochnamespace::core
         epoch::saveload::apply_streaming_save_profile(
             keyedSaveConfig,
             epoch::saveload::StreamingSaveProfile::TimelineKeyed);
+        const auto saveProfileChangePlan = epoch::saveload::make_streaming_save_profile_change_plan(
+            saveConfig,
+            epoch::saveload::StreamingSaveProfile::TimelineKeyed);
         check(
             "timeline.stream_profiles",
             epoch::saveload::validate_streaming_save_profile_descriptors()
@@ -649,6 +652,14 @@ namespace epochnamespace::core
             && keyedSaveConfig.max_snapshots == 256u
             && epoch::saveload::stream_profile_id(epoch::saveload::StreamingSaveProfile::EditorFrame120) == std::string_view{ "editor_frame_120" }
             && epoch::saveload::stream_profile_summary(epoch::saveload::StreamingSaveProfile::TimelineKeyed).find("timeline keys") != std::string_view::npos);
+        check(
+            "timeline.profile_change",
+            saveProfileChangePlan.valid
+            && saveProfileChangePlan.from_profile_id == "editor_interval_15s"
+            && saveProfileChangePlan.to_profile_id == "timeline_keyed"
+            && saveProfileChangePlan.mode == epoch::saveload::SaveStreamMode::TimelineKey
+            && saveProfileChangePlan.max_snapshots == 256u
+            && epoch::saveload::streaming_save_profile_change_summary(saveProfileChangePlan).find("timeline_keyed") != std::string::npos);
 
         auto timelineTracks = epoch::timeline::default_editor_tracks();
         epoch::timeline::TimelineState timelineState{};

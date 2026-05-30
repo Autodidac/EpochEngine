@@ -858,6 +858,13 @@ engine shape and should be treated as starting truth for the next passes:
   Editor exposes that cleanup summary without deleting files. Acceptance remains
   staged: retention execution still requires a human-approved disk cleanup gate
   plus runtime-safe UI proof.
+- `v0.84.85` adds streaming-save profile-change plans so future Timeline Editor
+  dropdowns can preview a profile transition before mutating live save settings.
+  The contract reports source/target profile IDs, mode, enabled/manual state,
+  cadence, retention cap, and included-data flags, and the pure self-test covers
+  the interval-to-keyed transition. Acceptance remains staged: clickable profile
+  selection still needs GUI/runtime proof and must not revive command-menu or
+  button flicker.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
