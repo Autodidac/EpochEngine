@@ -783,6 +783,12 @@ engine shape and should be treated as starting truth for the next passes:
   scene object data and timeline keys, but live `.epoch` scene restore,
   streaming disk writes, and editor/runtime replay still need runtime-safe
   proof before they are called complete.
+- `v0.84.74` adds a deterministic streaming-checkpoint package contract:
+  `saveload.system` now binds a checkpoint record, scene payload, manifest line,
+  and payload hash before any runtime disk writer is promoted. Acceptance
+  remains staged: the pure contract lane can now verify package validity and
+  parser restore from the staged payload, but actual file writes, rolling
+  retention cleanup, and editor/runtime replay still require runtime-safe proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

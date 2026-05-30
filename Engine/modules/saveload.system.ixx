@@ -9,6 +9,7 @@ module;
 #include <format>
 #include <string>
 #include <string_view>
+#include <utility>
 
 export module saveload.system;
 
@@ -72,6 +73,16 @@ export namespace epoch::saveload
         bool include_packages = false;
         std::size_t scene_text_bytes = 0;
         std::size_t timeline_key_count = 0;
+    };
+
+    struct StreamingCheckpointPackage
+    {
+        bool valid = false;
+        StreamingCheckpointRecord record{};
+        std::string manifest_line{};
+        std::string scene_text{};
+        std::uint64_t scene_text_hash = 0;
+        std::string message{};
     };
 
     [[nodiscard]] inline std::string_view mode_name(SaveStreamMode mode) noexcept
@@ -268,6 +279,22 @@ export namespace epoch::saveload
             record.scene_text_bytes);
     }
 
+    [[nodiscard]] inline std::uint64_t checkpoint_payload_hash(std::string_view payload) noexcept
+    {
+        std::uint64_t hash = 14'695'981'039'346'656'037ull;
+        for (const char ch : payload)
+        {
+            hash ^= static_cast<unsigned char>(ch);
+            hash *= 1'099'511'628'211ull;
+        }
+        return hash;
+    }
+
+    [[nodiscard]] inline std::string checkpoint_payload_hash_text(std::uint64_t hash)
+    {
+        return std::format("{:016X}", hash);
+    }
+
     [[nodiscard]] inline std::string checkpoint_manifest_line(const StreamingCheckpointRecord& record)
     {
         if (!record.valid)
@@ -282,6 +309,55 @@ export namespace epoch::saveload
             record.simulated_seconds,
             record.scene_text_bytes,
             record.timeline_key_count);
+    }
+
+    [[nodiscard]] inline StreamingCheckpointPackage make_checkpoint_package(
+        const StreamingCheckpointRecord& record,
+        std::string scene_text)
+    {
+        StreamingCheckpointPackage package{};
+        package.record = record;
+        package.scene_text = std::move(scene_text);
+        package.scene_text_hash = checkpoint_payload_hash(package.scene_text);
+        package.valid = record.valid
+            && !package.scene_text.empty()
+            && record.scene_text_bytes == package.scene_text.size();
+        package.manifest_line = checkpoint_manifest_line(record);
+        if (package.valid)
+        {
+            package.manifest_line += " hash \"";
+            package.manifest_line += checkpoint_payload_hash_text(package.scene_text_hash);
+            package.manifest_line += "\"";
+            package.message = "Checkpoint package staged for deterministic restore.";
+        }
+        else
+        {
+            package.message = "Checkpoint package is invalid or incomplete.";
+        }
+        return package;
+    }
+
+    [[nodiscard]] inline bool validate_checkpoint_package(const StreamingCheckpointPackage& package)
+    {
+        if (!package.valid || !package.record.valid || package.scene_text.empty())
+            return false;
+        if (package.record.scene_text_bytes != package.scene_text.size())
+            return false;
+        if (package.scene_text_hash != checkpoint_payload_hash(package.scene_text))
+            return false;
+        return package.manifest_line.find(checkpoint_payload_hash_text(package.scene_text_hash)) != std::string::npos;
+    }
+
+    [[nodiscard]] inline std::string checkpoint_package_summary(const StreamingCheckpointPackage& package)
+    {
+        if (!validate_checkpoint_package(package))
+            return "No valid checkpoint package staged.";
+
+        return std::format(
+            "{} | hash {} | {}",
+            checkpoint_record_summary(package.record),
+            checkpoint_payload_hash_text(package.scene_text_hash),
+            package.message);
     }
 
     [[nodiscard]] inline std::string describe_streaming_save(

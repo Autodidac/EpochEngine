@@ -499,11 +499,15 @@ the same engine-owned path.
   records carry retention, output path, included-data flags, scene payload byte
   counts, and timeline-key counts so build-safe tests can verify evidence before
   any runtime writer/restore path is promoted.
+- Streaming-checkpoint packages now bind the checkpoint record, deterministic
+  scene payload, manifest line, and payload hash. This gives the writer/restore
+  path an auditable package shape before real disk writes, rolling cleanup, or
+  editor/runtime replay are claimed complete.
 - The non-GUI engine contract self-test now exercises the Forest Factory,
-  streaming-save, and scene snapshot serializer/parser contracts before the
-  heavier project-profile and OS-AI validation gates. New timeline or package
-  contracts should join that lane before being exposed as generated-project
-  behavior.
+  streaming-save package, and scene snapshot serializer/parser contracts before
+  the heavier project-profile and OS-AI validation gates. New timeline or
+  package contracts should join that lane before being exposed as
+  generated-project behavior.
 
 ## Hardware support strategy
 

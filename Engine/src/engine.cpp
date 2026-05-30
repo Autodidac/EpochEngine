@@ -638,7 +638,8 @@ namespace epochnamespace::core
             timeStats,
             snapshotText.size(),
             snapshot.timeline_keys.size());
-        const std::string checkpointManifestLine = epoch::saveload::checkpoint_manifest_line(checkpointRecord);
+        const auto checkpointPackage = epoch::saveload::make_checkpoint_package(checkpointRecord, snapshotText);
+        const std::string checkpointManifestLine = checkpointPackage.manifest_line;
         check(
             "snapshot.lookup",
             epoch::scene::find_object(snapshot, "StarterCube") != nullptr
@@ -687,6 +688,13 @@ namespace epochnamespace::core
             && checkpointRecord.timeline_key_count == snapshot.timeline_keys.size()
             && checkpointManifestLine.find("checkpoint \"editor_timeline_frame_") != std::string::npos
             && checkpointManifestLine.find("timeline_keys 3") != std::string::npos);
+        check(
+            "checkpoint.package",
+            epoch::saveload::validate_checkpoint_package(checkpointPackage)
+            && checkpointPackage.scene_text == snapshotText
+            && checkpointManifestLine.find("hash \"") != std::string::npos
+            && epoch::saveload::checkpoint_package_summary(checkpointPackage).find("deterministic restore") != std::string::npos
+            && epoch::scene::parse_snapshot_text(checkpointPackage.scene_text).ok);
 
         log_editor_self_test_line(std::string("engine_contract_self_test.summary=") + snapshotSummary);
         log_editor_self_test_line(std::string("engine_contract_self_test.result=") + (failed ? "fail" : "pass"));

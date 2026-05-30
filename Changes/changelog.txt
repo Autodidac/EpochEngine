@@ -1,5 +1,14 @@
 # Epoch Changelog
 
+## [v0.84.74]
+- Bumped the active source line to `v0.84.74` for the first streaming-checkpoint
+  package contract.
+- Added deterministic checkpoint package staging to `saveload.system`, binding
+  the checkpoint record, scene snapshot payload, manifest line, and payload hash
+  before any runtime disk writer is promoted.
+- Expanded the engine contract self-test to validate checkpoint packages and
+  prove their staged scene payload can still restore through the snapshot parser.
+
 ## [v0.84.73]
 - Bumped the active source line to `v0.84.73` for the first deterministic scene
   snapshot parser contract.
