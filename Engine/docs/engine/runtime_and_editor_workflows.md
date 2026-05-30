@@ -493,6 +493,11 @@ the same engine-owned path.
   checkpoint labels, scene object snapshots, timeline keys, and deterministic
   text serialization. The next acceptance gate is wiring those contracts into
   real `.epoch` scene parser/serializer persistence and replay restore.
+- Streaming-save profiles currently cover manual review, 15-second editor
+  streams, 120-frame editor streams, and timeline-keyed streams. Checkpoint
+  records carry retention, output path, included-data flags, scene payload byte
+  counts, and timeline-key counts so build-safe tests can verify evidence before
+  any runtime writer/restore path is promoted.
 - The non-GUI engine contract self-test now exercises the Forest Factory,
   streaming-save, and scene snapshot/serializer contracts before the heavier
   project-profile and OS-AI validation gates. New timeline or package contracts

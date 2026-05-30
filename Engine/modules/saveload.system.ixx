@@ -4,6 +4,7 @@
 module;
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <string>
@@ -21,6 +22,14 @@ export namespace epoch::saveload
         Interval,
         FrameInterval,
         TimelineKey
+    };
+
+    enum class StreamingSaveProfile : unsigned char
+    {
+        ManualReview = 0,
+        EditorInterval15s,
+        EditorFrame120,
+        TimelineKeyed
     };
 
     struct StreamingSaveConfig
@@ -48,6 +57,23 @@ export namespace epoch::saveload
         std::string message = "Timeline save stream is disabled.";
     };
 
+    struct StreamingCheckpointRecord
+    {
+        bool valid = false;
+        std::string label{};
+        std::string output_path{};
+        std::string stream_profile{};
+        SaveStreamMode mode = SaveStreamMode::Manual;
+        std::uint64_t frame_index = 0;
+        double simulated_seconds = 0.0;
+        std::uint32_t retained_snapshot_count = 0;
+        bool include_scene = true;
+        bool include_timeline = true;
+        bool include_packages = false;
+        std::size_t scene_text_bytes = 0;
+        std::size_t timeline_key_count = 0;
+    };
+
     [[nodiscard]] inline std::string_view mode_name(SaveStreamMode mode) noexcept
     {
         switch (mode)
@@ -65,6 +91,23 @@ export namespace epoch::saveload
         }
     }
 
+    [[nodiscard]] inline std::string_view stream_profile_name(StreamingSaveProfile profile) noexcept
+    {
+        switch (profile)
+        {
+        case StreamingSaveProfile::ManualReview:
+            return "Manual review";
+        case StreamingSaveProfile::EditorInterval15s:
+            return "Editor 15s stream";
+        case StreamingSaveProfile::EditorFrame120:
+            return "Editor 120f stream";
+        case StreamingSaveProfile::TimelineKeyed:
+            return "Timeline keyed stream";
+        default:
+            return "Unknown";
+        }
+    }
+
     inline void clamp_streaming_save_config(StreamingSaveConfig& config) noexcept
     {
         config.interval_seconds = (std::clamp)(config.interval_seconds, 0.25, 3600.0);
@@ -74,6 +117,57 @@ export namespace epoch::saveload
             config.profile_name = "editor_timeline";
         if (config.target_root.empty())
             config.target_root = "cache/saves/timeline";
+    }
+
+    inline void apply_streaming_save_profile(
+        StreamingSaveConfig& config,
+        StreamingSaveProfile profile)
+    {
+        switch (profile)
+        {
+        case StreamingSaveProfile::ManualReview:
+            config.enabled = false;
+            config.mode = SaveStreamMode::Manual;
+            config.max_snapshots = 32;
+            break;
+        case StreamingSaveProfile::EditorInterval15s:
+            config.enabled = true;
+            config.mode = SaveStreamMode::Interval;
+            config.interval_seconds = 15.0;
+            config.max_snapshots = 96;
+            break;
+        case StreamingSaveProfile::EditorFrame120:
+            config.enabled = true;
+            config.mode = SaveStreamMode::FrameInterval;
+            config.frame_interval = 120;
+            config.max_snapshots = 120;
+            break;
+        case StreamingSaveProfile::TimelineKeyed:
+            config.enabled = true;
+            config.mode = SaveStreamMode::TimelineKey;
+            config.max_snapshots = 256;
+            break;
+        default:
+            break;
+        }
+
+        config.include_scene = true;
+        config.include_timeline = true;
+        clamp_streaming_save_config(config);
+    }
+
+    [[nodiscard]] inline StreamingSaveProfile detect_streaming_save_profile(
+        const StreamingSaveConfig& config) noexcept
+    {
+        if (!config.enabled || config.mode == SaveStreamMode::Manual)
+            return StreamingSaveProfile::ManualReview;
+        if (config.mode == SaveStreamMode::Interval)
+            return StreamingSaveProfile::EditorInterval15s;
+        if (config.mode == SaveStreamMode::FrameInterval)
+            return StreamingSaveProfile::EditorFrame120;
+        if (config.mode == SaveStreamMode::TimelineKey)
+            return StreamingSaveProfile::TimelineKeyed;
+        return StreamingSaveProfile::ManualReview;
     }
 
     [[nodiscard]] inline bool should_capture_checkpoint(
@@ -122,6 +216,72 @@ export namespace epoch::saveload
         status.last_snapshot_label = checkpoint_label(config.profile_name, stats);
         status.last_output_path = config.target_root + "/" + status.last_snapshot_label + ".epochsnap";
         status.message = "Timeline checkpoint staged for review.";
+    }
+
+    [[nodiscard]] inline StreamingCheckpointRecord make_checkpoint_record(
+        const StreamingSaveConfig& config,
+        const StreamingSaveStatus& status,
+        const epoch::core::time::simulation_stats& stats,
+        std::size_t scene_text_bytes,
+        std::size_t timeline_key_count)
+    {
+        return StreamingCheckpointRecord{
+            .valid = !status.last_snapshot_label.empty() && !status.last_output_path.empty(),
+            .label = status.last_snapshot_label,
+            .output_path = status.last_output_path,
+            .stream_profile = std::string(stream_profile_name(detect_streaming_save_profile(config))),
+            .mode = config.mode,
+            .frame_index = stats.frame_index,
+            .simulated_seconds = stats.simulated_seconds,
+            .retained_snapshot_count = status.staged_snapshot_count,
+            .include_scene = config.include_scene,
+            .include_timeline = config.include_timeline,
+            .include_packages = config.include_packages,
+            .scene_text_bytes = scene_text_bytes,
+            .timeline_key_count = timeline_key_count
+        };
+    }
+
+    [[nodiscard]] inline std::string describe_retention(const StreamingSaveConfig& config)
+    {
+        return std::format(
+            "rolling {} checkpoint{} | scene {} | timeline {} | packages {}",
+            config.max_snapshots,
+            config.max_snapshots == 1u ? "" : "s",
+            config.include_scene ? "on" : "off",
+            config.include_timeline ? "on" : "off",
+            config.include_packages ? "on" : "off");
+    }
+
+    [[nodiscard]] inline std::string checkpoint_record_summary(const StreamingCheckpointRecord& record)
+    {
+        if (!record.valid)
+            return "No checkpoint record staged.";
+
+        return std::format(
+            "{} | {} | frame {} | {:.3f}s | {} keys | {} bytes",
+            record.stream_profile,
+            record.label,
+            record.frame_index,
+            record.simulated_seconds,
+            record.timeline_key_count,
+            record.scene_text_bytes);
+    }
+
+    [[nodiscard]] inline std::string checkpoint_manifest_line(const StreamingCheckpointRecord& record)
+    {
+        if (!record.valid)
+            return "checkpoint invalid";
+
+        return std::format(
+            "checkpoint \"{}\" path \"{}\" mode \"{}\" frame {} time {:.6f} scene_bytes {} timeline_keys {}",
+            record.label,
+            record.output_path,
+            mode_name(record.mode),
+            record.frame_index,
+            record.simulated_seconds,
+            record.scene_text_bytes,
+            record.timeline_key_count);
     }
 
     [[nodiscard]] inline std::string describe_streaming_save(

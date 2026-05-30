@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.84.72]
+- Bumped the active source line to `v0.84.72` for the streaming-save profile
+  contract pass.
+- Added named streaming-save profiles, checkpoint records, retention
+  descriptions, and manifest-line generation to `saveload.system`.
+- Wired the Timeline Editor to show the active save profile, rolling retention
+  policy, and last checkpoint record while reusing profile application helpers
+  for interval, frame, and timeline-key modes.
+- Expanded the build-safe engine contract self-test to verify checkpoint record
+  payload sizes, timeline-key counts, and manifest evidence before any runtime
+  writer or restore flow is claimed complete.
+
 ## [v0.84.71]
 - Bumped the active source line to `v0.84.71` for a stronger 4D timeline spine.
 - Added the `timeline.system` module with editor timeline tracks, keyed events,

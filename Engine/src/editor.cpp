@@ -446,6 +446,7 @@ namespace epochnamespace
             EditorTimeControl timeControl{};
             epoch::saveload::StreamingSaveConfig streamingSaveConfig{};
             epoch::saveload::StreamingSaveStatus streamingSaveStatus{};
+            epoch::saveload::StreamingCheckpointRecord lastCheckpointRecord{};
             epoch::timeline::TimelineState timelineState{};
             std::vector<epoch::timeline::TimelineTrack> timelineTracks{};
             std::vector<epoch::timeline::TimelineEvent> timelineEvents{};
@@ -6048,6 +6049,12 @@ namespace epochnamespace
                         "PersistentLevel",
                         editor.streamingSaveStatus.last_output_path));
                     epoch::timeline::sort_events(editor.timelineEvents);
+                    editor.lastCheckpointRecord = epoch::saveload::make_checkpoint_record(
+                        editor.streamingSaveConfig,
+                        editor.streamingSaveStatus,
+                        timelineStats,
+                        0u,
+                        editor.timelineEvents.size());
                     push_editor_log(editor, "[timeline] Auto-staged timeline checkpoint: " + editor.streamingSaveStatus.last_snapshot_label);
                 }
 
@@ -6069,8 +6076,11 @@ namespace epochnamespace
                 else
                     gui::property_row("[timeline] Next key", "(none)", 132.0f);
                 gui::property_row("[timeline] Stream mode", std::string(epoch::saveload::mode_name(editor.streamingSaveConfig.mode)), 132.0f);
+                gui::property_row("[timeline] Save profile", std::string(epoch::saveload::stream_profile_name(epoch::saveload::detect_streaming_save_profile(editor.streamingSaveConfig))), 132.0f);
+                gui::property_row("[timeline] Retention", epoch::saveload::describe_retention(editor.streamingSaveConfig), 132.0f);
                 gui::property_row("[timeline] Stream state", epoch::saveload::describe_streaming_save(editor.streamingSaveConfig, editor.streamingSaveStatus), 132.0f);
                 gui::property_row("[timeline] Last key", editor.streamingSaveStatus.last_snapshot_label.empty() ? std::string("(none staged)") : editor.streamingSaveStatus.last_snapshot_label, 132.0f);
+                gui::property_row("[timeline] Last record", epoch::saveload::checkpoint_record_summary(editor.lastCheckpointRecord), 132.0f);
                 gui::property_row("[timeline] Target", editor.streamingSaveStatus.last_output_path.empty() ? editor.streamingSaveConfig.target_root : editor.streamingSaveStatus.last_output_path, 132.0f);
 
                 const std::array playbackButtons{
@@ -6148,20 +6158,30 @@ namespace epochnamespace
                             "PersistentLevel",
                             editor.streamingSaveStatus.last_output_path));
                         epoch::timeline::sort_events(editor.timelineEvents);
+                        editor.lastCheckpointRecord = epoch::saveload::make_checkpoint_record(
+                            editor.streamingSaveConfig,
+                            editor.streamingSaveStatus,
+                            timelineStats,
+                            0u,
+                            editor.timelineEvents.size());
                         push_editor_log(editor, "[timeline] Manual checkpoint staged: " + editor.streamingSaveStatus.last_snapshot_label);
                         break;
                     case 2:
-                        editor.streamingSaveConfig.mode = epoch::saveload::SaveStreamMode::Interval;
-                        editor.streamingSaveConfig.interval_seconds = 15.0;
+                        epoch::saveload::apply_streaming_save_profile(
+                            editor.streamingSaveConfig,
+                            epoch::saveload::StreamingSaveProfile::EditorInterval15s);
                         push_editor_log(editor, "[timeline] Streaming save mode set to 15 second intervals.");
                         break;
                     case 3:
-                        editor.streamingSaveConfig.mode = epoch::saveload::SaveStreamMode::FrameInterval;
-                        editor.streamingSaveConfig.frame_interval = 120;
+                        epoch::saveload::apply_streaming_save_profile(
+                            editor.streamingSaveConfig,
+                            epoch::saveload::StreamingSaveProfile::EditorFrame120);
                         push_editor_log(editor, "[timeline] Streaming save mode set to 120 frame intervals.");
                         break;
                     case 4:
-                        editor.streamingSaveConfig.mode = epoch::saveload::SaveStreamMode::TimelineKey;
+                        epoch::saveload::apply_streaming_save_profile(
+                            editor.streamingSaveConfig,
+                            epoch::saveload::StreamingSaveProfile::TimelineKeyed);
                         push_editor_log(editor, "[timeline] Streaming save mode set to timeline key staging.");
                         break;
                     default:

@@ -576,7 +576,9 @@ namespace epochnamespace::core
             shouldCapture
             && saveStatus.staged_snapshot_count == 1u
             && saveStatus.last_snapshot_label.find("editor_timeline_frame_") != std::string::npos
-            && saveDescription.find("enabled") != std::string::npos);
+            && saveDescription.find("enabled") != std::string::npos
+            && epoch::saveload::detect_streaming_save_profile(saveConfig) == epoch::saveload::StreamingSaveProfile::EditorInterval15s
+            && epoch::saveload::describe_retention(saveConfig).find("rolling 1 checkpoint") != std::string::npos);
 
         auto timelineTracks = epoch::timeline::default_editor_tracks();
         epoch::timeline::TimelineState timelineState{};
@@ -629,6 +631,13 @@ namespace epochnamespace::core
         const auto categoryCounts = epoch::scene::object_count_by_category(snapshot);
         const std::string snapshotText = epoch::scene::serialize_snapshot_text(snapshot);
         const std::string snapshotSummary = epoch::scene::snapshot_summary(snapshot);
+        const auto checkpointRecord = epoch::saveload::make_checkpoint_record(
+            saveConfig,
+            saveStatus,
+            timeStats,
+            snapshotText.size(),
+            snapshot.timeline_keys.size());
+        const std::string checkpointManifestLine = epoch::saveload::checkpoint_manifest_line(checkpointRecord);
         check(
             "snapshot.lookup",
             epoch::scene::find_object(snapshot, "StarterCube") != nullptr
@@ -645,6 +654,13 @@ namespace epochnamespace::core
             && snapshotText.find("Persistent\\nLevel") != std::string::npos
             && snapshotText.find("payload\\tvalue") != std::string::npos
             && snapshotSummary.find("objects 1") != std::string::npos);
+        check(
+            "checkpoint.record",
+            checkpointRecord.valid
+            && checkpointRecord.scene_text_bytes == snapshotText.size()
+            && checkpointRecord.timeline_key_count == snapshot.timeline_keys.size()
+            && checkpointManifestLine.find("checkpoint \"editor_timeline_frame_") != std::string::npos
+            && checkpointManifestLine.find("timeline_keys 3") != std::string::npos);
 
         log_editor_self_test_line(std::string("engine_contract_self_test.summary=") + snapshotSummary);
         log_editor_self_test_line(std::string("engine_contract_self_test.result=") + (failed ? "fail" : "pass"));

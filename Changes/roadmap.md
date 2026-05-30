@@ -771,6 +771,12 @@ engine shape and should be treated as starting truth for the next passes:
   staged: this makes timeline UI and streaming-save gates contract-backed, but
   full replay/restore still requires scene parser/serializer ownership and
   runtime-safe persistence proof.
+- `v0.84.72` deepens the configurable streaming-save contract with named
+  profiles, rolling-retention descriptions, checkpoint records, and manifest
+  lines. Acceptance remains staged: profiles and records are now visible and
+  build-tested, but the actual writer/restore pipeline still needs explicit
+  scene parser/serializer ownership and operator-approved runtime proof before
+  being called complete.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
