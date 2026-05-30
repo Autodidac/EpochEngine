@@ -718,6 +718,18 @@ engine shape and should be treated as starting truth for the next passes:
   confirm no command-menu flicker regression, responsive script typing, and a
   real Forest Factory preview path before mature sliders/atlas/export tools are
   marked complete.
+- `v0.84.66` responds to the 2026-05-29 Forest Factory/operator screenshot:
+  raw temporal-graph segments and foliage were overpublished as many large
+  selected cubes, causing the preview to read as a yellow spike plus floating
+  green debris instead of a controlled editor plant prototype. The fix keeps
+  the renderer draw model untouched, publishes only a curated trunk/branch/
+  canopy preview budget, prevents Forest Factory markers from stealing normal
+  scene selection, keeps their natural preview colors when selected, and latches
+  reusable GUI pressed-state visuals through the release frame to reduce button
+  flicker. Acceptance remains visual/operator-gated: confirm Forest Factory
+  reads as an intentional preview, command menus do not reintroduce OpenGL
+  flicker, and script editor typing remains responsive before marking the
+  mature editor controls complete.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

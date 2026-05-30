@@ -2477,7 +2477,7 @@ namespace epochnamespace::gui
         if (hovered && g_frame.justPressed)
             pressedKey = pressKey;
 
-        const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+        const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
         const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
         if (g_frame.justReleased && pressedKey == pressKey)
             pressedKey = 0;
@@ -2552,7 +2552,7 @@ namespace epochnamespace::gui
         if (hovered && g_frame.justPressed)
             pressedKey = pressKey;
 
-        const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+        const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
         const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
         if (g_frame.justReleased && pressedKey == pressKey)
             pressedKey = 0;
@@ -2592,7 +2592,7 @@ namespace epochnamespace::gui
         if (hovered && g_frame.justPressed)
             pressedKey = pressKey;
 
-        const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+        const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
         const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
         if (g_frame.justReleased && pressedKey == pressKey)
             pressedKey = 0;
@@ -2600,7 +2600,8 @@ namespace epochnamespace::gui
         const auto& palette = active_palette();
 
         const SpriteHandle background =
-            hovered ? palette.buttonHover
+            pressed ? palette.buttonActive
+            : hovered ? palette.buttonHover
             : palette.buttonNormal;
 
         draw_sprite(background, pos.x, pos.y, width, height);
@@ -3404,7 +3405,7 @@ namespace epochnamespace::gui
             if (hovered && g_frame.justPressed)
                 pressedKey = pressKey;
 
-            const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+            const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
             if (g_frame.justReleased && hovered && pressedKey == pressKey)
                 clicked = i;
             if (g_frame.justReleased && pressedKey == pressKey)
@@ -3584,7 +3585,7 @@ namespace epochnamespace::gui
             if (hovered && g_frame.justPressed)
                 pressedKey = pressKey;
 
-            const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+            const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
             const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
             if (g_frame.justReleased && pressedKey == pressKey)
                 pressedKey = 0;

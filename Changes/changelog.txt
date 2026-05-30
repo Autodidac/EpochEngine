@@ -1,5 +1,22 @@
 # Epoch Changelog
 
+## [v0.84.66]
+- Bumped the active source line to `v0.84.66` for a surgical GUI press-state
+  and Forest Factory preview stabilization pass.
+- Kept the protected OpenGL draw model untouched while making reusable buttons,
+  image buttons, tabs, titlebar close controls, and select-box options hold
+  their pressed/active color through the release frame instead of flashing back
+  through hover/default state.
+- Rebuilt the Forest Factory scene preview publication to preserve normal scene
+  selection, keep Forest Factory preview markers editor-only, use natural
+  trunk/branch/canopy colors even when selected, and publish a smaller curated
+  temporal-graph preview instead of every raw segment/leaf as oversized cubes.
+- Corrected the Asset command-menu dropdown height so its hit region no longer
+  reserves a stale phantom row after Forest Factory moved to its own workspace.
+- Validation: MSVC Debug x64 `ConsoleApplication1` build passed three times with
+  `/m:1 /clp:ErrorsOnly`. Runtime/eye-test validation is still operator-gated
+  because this pass intentionally avoided launching renderer contexts.
+
 ## [v0.84.65]
 - Bumped the active source line to `v0.84.65` for a focused GUI input
   stabilization and Forest Factory scene pass.

@@ -79,6 +79,10 @@ replay pass.
 - Button state: use `gui::button_selected` for active/open toolbar, menu, tab,
   and window-chrome buttons so selection is explicit and does not flicker
   through transient hover/press state while top-layer GUI is replayed.
+- Pressed state is release-frame stable. Reusable buttons, image buttons, tabs,
+  titlebar close controls, and select-box options keep their active color until
+  the click release has been processed, so GUI replay cannot flash controls back
+  through hover/default colors on the same frame that an action fires.
 - Layout and docking: windows, splitters, resize handles, scroll extents,
   focus routing, z-order, modal scrims, context menus, and future popout hosts.
 - Theme and rendering: palette ownership, font/glyph metrics, clipping,

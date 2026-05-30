@@ -1407,15 +1407,30 @@ namespace epochnamespace
         void ensure_forest_factory_preview_entities(EditorState& state)
         {
             const std::size_t beforeCount = state.entities.size();
-            const auto profile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
+            auto profile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
+            profile.config.targetHeightMeters = 4.2F;
+            profile.config.trunkRadiusMeters = 0.09F;
+            profile.branch.levels = 4u;
+            profile.branch.branchLengthMeters = 0.92F;
+            profile.branch.startHeightMeters = 0.24F;
             const auto geometry = epoch::forest::build_preview_geometry(profile);
+
+            const auto is_forest_entity = [](const EditorEntity& entity) noexcept
+            {
+                return entity.category == "ForestFactory";
+            };
+
+            std::string previousSelection{};
+            if (!state.entities.empty())
+            {
+                const std::size_t selectedIndex = (std::min)(state.selectedEntity, state.entities.size() - 1u);
+                if (!is_forest_entity(state.entities[selectedIndex]))
+                    previousSelection = state.entities[selectedIndex].name;
+            }
 
             std::erase_if(
                 state.entities,
-                [](const EditorEntity& entity)
-                {
-                    return entity.category == "ForestFactory";
-                });
+                is_forest_entity);
 
             auto upsert = [&](EditorEntity entity)
             {
@@ -1437,49 +1452,262 @@ namespace epochnamespace
             stage.type = "Level";
             stage.category = "ForestFactory";
             stage.position = { 0.0f, -0.06f, 0.0f };
-            stage.scale = { 5.2f, 0.08f, 5.2f };
+            stage.scale = { 5.8f, 0.08f, 5.8f };
             stage.editorOnly = true;
             upsert(std::move(stage));
 
-            for (std::size_t i = 0u; i < geometry.segmentCount; ++i)
+            constexpr float kPreviewScale = 0.58F;
+            auto scaled_position = [](epoch::voxel::Float3 value) noexcept
+            {
+                constexpr float scale = 0.58F;
+                return std::array<float, 3>{
+                    value.x * scale,
+                    value.y * scale,
+                    value.z * scale
+                };
+            };
+
+            if (geometry.segmentCount > 0u)
+            {
+                const auto& trunk = geometry.segments[0];
+                EditorEntity trunkEntity{};
+                trunkEntity.name = "ForestFactoryTrunk";
+                trunkEntity.type = "ForestTrunk";
+                trunkEntity.category = "ForestFactory";
+                trunkEntity.position = {
+                    (trunk.start.x + trunk.end.x) * 0.5F * kPreviewScale,
+                    (trunk.start.y + trunk.end.y) * 0.5F * kPreviewScale,
+                    (trunk.start.z + trunk.end.z) * 0.5F * kPreviewScale
+                };
+                const float trunkHeight = (std::max)(0.32F, (trunk.end.y - trunk.start.y) * kPreviewScale);
+                const float trunkWidth = (std::max)(0.12F, trunk.radius * 2.8F * kPreviewScale);
+                trunkEntity.scale = { trunkWidth, trunkHeight, trunkWidth };
+                trunkEntity.editorOnly = true;
+                upsert(std::move(trunkEntity));
+            }
+
+            const std::size_t branchBudget = (std::min)(geometry.segmentCount > 0u ? geometry.segmentCount - 1u : 0u, std::size_t{ 32u });
+            const std::size_t branchStep = branchBudget > 0u
+                ? (std::max)(std::size_t{ 1u }, (geometry.segmentCount - 1u) / branchBudget)
+                : 1u;
+            std::size_t branchOrdinal = 0u;
+            for (std::size_t i = 1u; i < geometry.segmentCount && branchOrdinal < branchBudget; i += branchStep, ++branchOrdinal)
             {
                 const auto& segment = geometry.segments[i];
                 EditorEntity node{};
-                node.name = std::format("ForestFactoryNode_{:03}", i);
-                node.type = i == 0u ? "ForestTrunkNode" : "ForestBranchNode";
+                node.name = std::format("ForestFactoryBranch_{:02}", branchOrdinal);
+                node.type = "ForestBranchJoint";
                 node.category = "ForestFactory";
-                node.position = { segment.end.x, segment.end.y, segment.end.z };
-                const float nodeSize = (std::max)(0.08f, segment.radius * 2.4f);
+                node.position = scaled_position(segment.end);
+                const float nodeSize = (std::clamp)(segment.radius * 2.1F * kPreviewScale, 0.055F, 0.16F);
                 node.scale = { nodeSize, nodeSize, nodeSize };
                 node.editorOnly = true;
                 upsert(std::move(node));
             }
 
-            for (std::size_t i = 0u; i < geometry.leafCount; ++i)
+            const std::size_t canopyBudget = (std::min)(geometry.leafCount, std::size_t{ 28u });
+            const std::size_t leafStep = canopyBudget > 0u
+                ? (std::max)(std::size_t{ 1u }, geometry.leafCount / canopyBudget)
+                : 1u;
+            std::size_t canopyOrdinal = 0u;
+            for (std::size_t i = 0u; i < geometry.leafCount && canopyOrdinal < canopyBudget; i += leafStep, ++canopyOrdinal)
             {
                 const auto& leaf = geometry.leaves[i];
                 EditorEntity leafNode{};
-                leafNode.name = std::format("ForestFactoryLeaf_{:03}", i);
-                leafNode.type = "ForestLeaf";
+                leafNode.name = std::format("ForestFactoryCanopy_{:02}", canopyOrdinal);
+                leafNode.type = "ForestFoliageCluster";
                 leafNode.category = "ForestFactory";
-                leafNode.position = { leaf.position.x, leaf.position.y, leaf.position.z };
-                leafNode.scale = { leaf.size, leaf.size * 0.42f, leaf.size };
+                leafNode.position = scaled_position(leaf.position);
+                const float leafSize = (std::clamp)(leaf.size * 1.15F * kPreviewScale, 0.10F, 0.24F);
+                leafNode.scale = { leafSize, leafSize * 0.62F, leafSize };
                 leafNode.editorOnly = true;
                 upsert(std::move(leafNode));
             }
 
-            const auto selected = std::find_if(
-                state.entities.begin(),
-                state.entities.end(),
-                [](const EditorEntity& entity)
-                {
-                    return entity.name.rfind("ForestFactoryLeaf_", 0) == 0;
-                });
-            if (selected != state.entities.end())
-                state.selectedEntity = static_cast<std::size_t>(std::distance(state.entities.begin(), selected));
+            auto restored = previousSelection.empty()
+                ? state.entities.end()
+                : std::find_if(
+                    state.entities.begin(),
+                    state.entities.end(),
+                    [&](const EditorEntity& entity)
+                    {
+                        return entity.name == previousSelection;
+                    });
+            if (restored == state.entities.end())
+            {
+                restored = std::find_if(
+                    state.entities.begin(),
+                    state.entities.end(),
+                    [&](const EditorEntity& entity)
+                    {
+                        return !is_forest_entity(entity);
+                    });
+            }
+            if (restored != state.entities.end())
+                state.selectedEntity = static_cast<std::size_t>(std::distance(state.entities.begin(), restored));
+            else
+                state.selectedEntity = 0u;
 
             if (state.entities.size() != beforeCount)
-                push_editor_log(state, "[forest] Rebuilt temporal graph Forest Factory scene preview.");
+            {
+                push_editor_log(
+                    state,
+                    std::format(
+                        "[forest] Rebuilt temporal graph Forest Factory preview: {} segments, {} canopy markers.",
+                        geometry.segmentCount,
+                        canopyBudget));
+            }
+        }
+
+        [[nodiscard]] bool is_forest_factory_entity(const EditorEntity& entity) noexcept
+        {
+            return entity.category == "ForestFactory";
+        }
+
+        [[nodiscard]] bool is_selected_forest_factory_entity(const EditorEntity& entity, bool selected) noexcept
+        {
+            return selected && is_forest_factory_entity(entity);
+        }
+
+        [[nodiscard]] epochnamespace::previewgrid::Vec3 forest_factory_color_for_entity(
+            const EditorEntity& entity) noexcept
+        {
+            if (entity.type == "ForestTrunk")
+                return { 0.58f, 0.36f, 0.20f };
+            if (entity.type == "ForestBranchJoint")
+                return { 0.42f, 0.70f, 0.32f };
+            if (entity.type == "ForestFoliageCluster")
+                return { 0.22f, 0.86f, 0.38f };
+            return { 0.30f, 0.82f, 0.36f };
+        }
+
+        [[nodiscard]] float forest_factory_radius_for_entity(const EditorEntity& entity) noexcept
+        {
+            const float scaleMax = (std::max)(entity.scale[0], (std::max)(entity.scale[1], entity.scale[2]));
+            if (entity.type == "ForestTrunk")
+                return (std::clamp)(0.22f * scaleMax, 0.16f, 0.34f);
+            if (entity.type == "ForestBranchJoint")
+                return (std::clamp)(0.34f * scaleMax, 0.16f, 0.24f);
+            if (entity.type == "ForestFoliageCluster")
+                return (std::clamp)(0.38f * scaleMax, 0.16f, 0.28f);
+            return (std::clamp)(0.34f * scaleMax, 0.16f, 0.36f);
+        }
+
+        [[nodiscard]] epochnamespace::previewgrid::Vec3 marker_color_for_entity(
+            const EditorEntity& entity,
+            bool selected) noexcept
+        {
+            if (is_selected_forest_factory_entity(entity, selected))
+                return forest_factory_color_for_entity(entity);
+            if (selected)
+                return { 1.0f, 0.93f, 0.32f };
+            if (entity.type == "Light")
+                return { 1.0f, 0.82f, 0.25f };
+            if (entity.type == "Spawn")
+                return { 0.28f, 0.94f, 0.48f };
+            if (entity.type == "Camera")
+                return { 0.42f, 0.80f, 1.0f };
+            if (entity.category == "ForestFactory")
+                return forest_factory_color_for_entity(entity);
+            if (entity.category == "World" || entity.type == "Level")
+                return { 0.62f, 0.78f, 0.98f };
+            if (entity.editorOnly || entity.category == "Editor")
+                return { 0.72f, 0.72f, 0.78f };
+            return { 0.95f, 0.62f, 0.28f };
+        }
+
+        [[nodiscard]] float marker_radius_for_entity(const EditorEntity& entity) noexcept
+        {
+            const float scaleMax = (std::max)(entity.scale[0], (std::max)(entity.scale[1], entity.scale[2]));
+            if (entity.type == "Light")
+                return 0.42f;
+            if (entity.type == "Spawn")
+                return 0.32f;
+            if (entity.type == "Camera")
+                return 0.38f;
+            if (entity.category == "World" || entity.type == "Level")
+                return 0.75f;
+            if (entity.category == "ForestFactory")
+                return forest_factory_radius_for_entity(entity);
+            return (std::clamp)(0.34f * scaleMax, 0.24f, 1.20f);
+        }
+
+        [[nodiscard]] epochnamespace::previewgrid::ObjectPreviewPrimitive preview_primitive_for_entity(
+            const EditorEntity& entity) noexcept
+        {
+            if (entity.type == "Light")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Light;
+            if (entity.type == "Spawn")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Spawn;
+            if (entity.type == "Camera")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
+            if (entity.type == "Canvas2D")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Canvas2D;
+            if (entity.category == "World" || entity.type == "Level")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
+            return epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube;
+        }
+
+        [[nodiscard]] epochnamespace::previewgrid::Vec3 selection_color_for_entity(
+            const EditorEntity& entity,
+            bool selected) noexcept
+        {
+            if (is_selected_forest_factory_entity(entity, selected))
+                return forest_factory_color_for_entity(entity);
+            return marker_color_for_entity(entity, selected);
+        }
+
+        [[nodiscard]] bool marker_selected_for_entity(const EditorEntity& entity, bool selected) noexcept
+        {
+            return selected && !is_forest_factory_entity(entity);
+        }
+
+        [[nodiscard]] std::size_t visible_entity_count(const EditorState& state) noexcept
+        {
+            std::size_t count = 0;
+            for (const auto& entity : state.entities)
+                if (entity.visible)
+                    ++count;
+            return count;
+        }
+
+        void publish_editor_preview_markers(const core::Context* ctx, const EditorState& state)
+        {
+            if (!ctx || state.previewMode != core::ScenePreviewMode::Editor)
+            {
+                epochnamespace::previewgrid::clear_object_markers(ctx);
+                return;
+            }
+
+            std::vector<epochnamespace::previewgrid::ObjectMarker> markers{};
+            markers.reserve(state.entities.size());
+            for (std::size_t i = 0; i < state.entities.size(); ++i)
+            {
+                const auto& entity = state.entities[i];
+                if (!entity.visible)
+                    continue;
+
+                const bool selected = i == (std::min)(state.selectedEntity, state.entities.size() - 1u);
+                markers.push_back(epochnamespace::previewgrid::ObjectMarker{
+                    .position{
+                        entity.position[0],
+                        entity.position[1],
+                        entity.position[2]
+                    },
+                    .color = selection_color_for_entity(entity, selected),
+                    .scale{
+                        entity.scale[0],
+                        entity.scale[1],
+                        entity.scale[2]
+                    },
+                    .radius = marker_radius_for_entity(entity),
+                    .primitive = preview_primitive_for_entity(entity),
+                    .selected = marker_selected_for_entity(entity, selected),
+                    .editorOnly = entity.editorOnly || entity.category == "Editor" || is_forest_factory_entity(entity)
+                });
+            }
+
+            epochnamespace::previewgrid::set_object_markers(ctx, std::move(markers));
         }
 
         void duplicate_selected_entity(EditorState& state)
@@ -1520,117 +1748,6 @@ namespace epochnamespace
                 state.selectedEntity = selectedIndex;
 
             push_editor_log(state, std::string("[entity] Deleted ") + name + ".");
-        }
-
-        [[nodiscard]] epochnamespace::previewgrid::Vec3 marker_color_for_entity(
-            const EditorEntity& entity,
-            bool selected) noexcept
-        {
-            if (selected)
-                return { 1.0f, 0.93f, 0.32f };
-            if (entity.type == "Light")
-                return { 1.0f, 0.82f, 0.25f };
-            if (entity.type == "Spawn")
-                return { 0.28f, 0.94f, 0.48f };
-            if (entity.type == "Camera")
-                return { 0.42f, 0.80f, 1.0f };
-            if (entity.category == "ForestFactory")
-            {
-                if (entity.type == "ForestTrunkNode")
-                    return { 0.58f, 0.36f, 0.20f };
-                if (entity.type == "ForestBranchNode")
-                    return { 0.42f, 0.70f, 0.32f };
-                if (entity.type == "ForestLeaf")
-                    return { 0.22f, 0.86f, 0.38f };
-                return { 0.30f, 0.82f, 0.36f };
-            }
-            if (entity.category == "World" || entity.type == "Level")
-                return { 0.62f, 0.78f, 0.98f };
-            if (entity.editorOnly || entity.category == "Editor")
-                return { 0.72f, 0.72f, 0.78f };
-            return { 0.95f, 0.62f, 0.28f };
-        }
-
-        [[nodiscard]] float marker_radius_for_entity(const EditorEntity& entity) noexcept
-        {
-            const float scaleMax = (std::max)(entity.scale[0], (std::max)(entity.scale[1], entity.scale[2]));
-            if (entity.type == "Light")
-                return 0.42f;
-            if (entity.type == "Spawn")
-                return 0.32f;
-            if (entity.type == "Camera")
-                return 0.38f;
-            if (entity.category == "World" || entity.type == "Level")
-                return 0.75f;
-            if (entity.category == "ForestFactory")
-                return (std::clamp)(0.55f * scaleMax, 0.14f, 0.42f);
-            return (std::clamp)(0.34f * scaleMax, 0.24f, 1.20f);
-        }
-
-        [[nodiscard]] epochnamespace::previewgrid::ObjectPreviewPrimitive preview_primitive_for_entity(
-            const EditorEntity& entity) noexcept
-        {
-            if (entity.type == "Light")
-                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Light;
-            if (entity.type == "Spawn")
-                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Spawn;
-            if (entity.type == "Camera")
-                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
-            if (entity.type == "Canvas2D")
-                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Canvas2D;
-            if (entity.category == "World" || entity.type == "Level")
-                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
-            return epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube;
-        }
-
-        [[nodiscard]] std::size_t visible_entity_count(const EditorState& state) noexcept
-        {
-            std::size_t count = 0;
-            for (const auto& entity : state.entities)
-                if (entity.visible)
-                    ++count;
-            return count;
-        }
-
-        void publish_editor_preview_markers(const core::Context* ctx, const EditorState& state)
-        {
-            if (!ctx || state.previewMode != core::ScenePreviewMode::Editor)
-            {
-                epochnamespace::previewgrid::clear_object_markers(ctx);
-                return;
-            }
-
-            std::vector<epochnamespace::previewgrid::ObjectMarker> markers{};
-            markers.reserve(state.entities.size());
-            for (std::size_t i = 0; i < state.entities.size(); ++i)
-            {
-                const auto& entity = state.entities[i];
-                if (!entity.visible)
-                    continue;
-
-                const bool selected = i == (std::min)(state.selectedEntity, state.entities.size() - 1u);
-                markers.push_back(epochnamespace::previewgrid::ObjectMarker{
-                    .position{
-                        entity.position[0],
-                        entity.position[1],
-                        entity.position[2]
-                    },
-                    .color = marker_color_for_entity(entity, selected),
-                    .scale{
-                        entity.scale[0],
-                        entity.scale[1],
-                        entity.scale[2]
-                    },
-                    .radius = marker_radius_for_entity(entity),
-                    .primitive = preview_primitive_for_entity(entity),
-                    .selected = selected,
-                    .editorOnly = entity.editorOnly || entity.category == "Editor"
-                });
-            }
-
-            epochnamespace::previewgrid::set_object_markers(
-                ctx,
-                std::span<const epochnamespace::previewgrid::ObjectMarker>{ markers.data(), markers.size() });
         }
 
         [[nodiscard]] bool project_editor_entity_to_screen(
@@ -4912,7 +5029,7 @@ namespace epochnamespace
             {
             case TopMenu::File: return dropdown_window_size(192.0f, 4);
             case TopMenu::Edit: return dropdown_window_size(192.0f, 3);
-            case TopMenu::Asset: return dropdown_window_size(220.0f, 8);
+            case TopMenu::Asset: return dropdown_window_size(220.0f, 7);
             case TopMenu::Window: return dropdown_window_size(248.0f, 10);
             case TopMenu::Tools: return dropdown_window_size(228.0f, 6);
             case TopMenu::Help: return dropdown_window_size(192.0f, 2);
