@@ -828,6 +828,12 @@ engine shape and should be treated as starting truth for the next passes:
   the next GUI pass must turn these metrics into selectable lanes, draggable
   keys, visible scrub handles, and persisted layout without disturbing the
   protected scene/GUI draw order.
+- `v0.84.80` adds the next streaming-save writer contract without writing files
+  yet. `saveload.system` now creates checkpoint write plans that bind the staged
+  snapshot path, serialized scene payload path, manifest path, manifest line,
+  and validity message. The Timeline Editor surfaces those paths so the future
+  human-approved writer gate can be reviewed before disk persistence, rolling
+  cleanup, or replay restore are claimed complete.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

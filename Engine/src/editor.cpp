@@ -6121,6 +6121,14 @@ namespace epochnamespace
                 gui::property_row("[timeline] Last key", editor.streamingSaveStatus.last_snapshot_label.empty() ? std::string("(none staged)") : editor.streamingSaveStatus.last_snapshot_label, 132.0f);
                 gui::property_row("[timeline] Last record", epoch::saveload::checkpoint_record_summary(editor.lastCheckpointRecord), 132.0f);
                 gui::property_row("[timeline] Target", editor.streamingSaveStatus.last_output_path.empty() ? editor.streamingSaveConfig.target_root : editor.streamingSaveStatus.last_output_path, 132.0f);
+                gui::property_row("[timeline] Manifest", epoch::saveload::join_stream_path(editor.streamingSaveConfig.target_root, "manifest.timeline.log"), 132.0f);
+                if (editor.lastCheckpointRecord.valid)
+                {
+                    gui::property_row(
+                        "[timeline] Scene payload",
+                        epoch::saveload::join_stream_path(editor.streamingSaveConfig.target_root, editor.lastCheckpointRecord.label + ".epoch"),
+                        132.0f);
+                }
 
                 const std::array playbackButtons{
                     gui::InlineButtonSpec{ .label = "Rewind", .width = 76.0f },

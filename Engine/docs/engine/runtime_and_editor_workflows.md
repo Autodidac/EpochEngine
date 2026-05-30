@@ -518,6 +518,10 @@ the same engine-owned path.
   scene payload, manifest line, and payload hash. This gives the writer/restore
   path an auditable package shape before real disk writes, rolling cleanup, or
   editor/runtime replay are claimed complete.
+- Checkpoint write plans are now explicit but non-writing. They stage the
+  snapshot path, serialized scene payload path, manifest path, and manifest line
+  under the configured streaming-save root so the Timeline Editor can expose the
+  future write layout before a human-approved disk writer/restore gate lands.
 - `engine.input` is the shared input profile spine. The default editor profile
   now names camera reset-to-center, frame selection, clipboard copy/paste,
   right-click context menu, play-in-editor, timeline play/step, and package

@@ -102,6 +102,17 @@ export namespace epoch::saveload
         std::string message{};
     };
 
+    struct StreamingCheckpointWritePlan
+    {
+        bool valid = false;
+        std::string root_path{};
+        std::string snapshot_path{};
+        std::string scene_payload_path{};
+        std::string manifest_path{};
+        std::string manifest_line{};
+        std::string message{};
+    };
+
     inline constexpr std::array<StreamingSaveProfileDescriptor, 4> kStreamingSaveProfileDescriptors{ {
         {
             .profile = StreamingSaveProfile::ManualReview,
@@ -361,6 +372,18 @@ export namespace epoch::saveload
         return std::format("{}_frame_{:012}_t_{:.3f}", safeProfile, stats.frame_index, stats.simulated_seconds);
     }
 
+    [[nodiscard]] inline std::string join_stream_path(std::string_view root, std::string_view leaf)
+    {
+        std::string result = root.empty() ? std::string("cache/saves/timeline") : std::string(root);
+        while (!result.empty() && (result.back() == '/' || result.back() == '\\'))
+            result.pop_back();
+        if (leaf.empty())
+            return result;
+        result.push_back('/');
+        result += leaf;
+        return result;
+    }
+
     inline void mark_checkpoint_captured(
         StreamingSaveStatus& status,
         const StreamingSaveConfig& config,
@@ -496,6 +519,29 @@ export namespace epoch::saveload
         return package.manifest_line.find(checkpoint_payload_hash_text(package.scene_text_hash)) != std::string::npos;
     }
 
+    [[nodiscard]] inline StreamingCheckpointWritePlan make_checkpoint_write_plan(
+        const StreamingSaveConfig& config,
+        const StreamingCheckpointPackage& package)
+    {
+        StreamingCheckpointWritePlan plan{};
+        plan.root_path = config.target_root.empty() ? "cache/saves/timeline" : config.target_root;
+        plan.snapshot_path = package.record.output_path.empty()
+            ? join_stream_path(plan.root_path, package.record.label + ".epochsnap")
+            : package.record.output_path;
+        plan.scene_payload_path = join_stream_path(plan.root_path, package.record.label + ".epoch");
+        plan.manifest_path = join_stream_path(plan.root_path, "manifest.timeline.log");
+        plan.manifest_line = package.manifest_line;
+        plan.valid = validate_checkpoint_package(package)
+            && !package.record.label.empty()
+            && !plan.snapshot_path.empty()
+            && !plan.scene_payload_path.empty()
+            && !plan.manifest_path.empty();
+        plan.message = plan.valid
+            ? "Checkpoint write plan is ready for the human-approved writer gate."
+            : "Checkpoint write plan is blocked by incomplete checkpoint evidence.";
+        return plan;
+    }
+
     [[nodiscard]] inline std::string checkpoint_package_summary(const StreamingCheckpointPackage& package)
     {
         if (!validate_checkpoint_package(package))
@@ -506,6 +552,18 @@ export namespace epoch::saveload
             checkpoint_record_summary(package.record),
             checkpoint_payload_hash_text(package.scene_text_hash),
             package.message);
+    }
+
+    [[nodiscard]] inline std::string checkpoint_write_plan_summary(const StreamingCheckpointWritePlan& plan)
+    {
+        if (!plan.valid)
+            return plan.message.empty() ? std::string("No checkpoint write plan staged.") : plan.message;
+
+        return std::format(
+            "write plan | snapshot {} | manifest {} | scene {}",
+            plan.snapshot_path,
+            plan.manifest_path,
+            plan.scene_payload_path);
     }
 
     [[nodiscard]] inline std::string describe_streaming_save(

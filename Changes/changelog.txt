@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.84.80]
+- Bumped the active source line to `v0.84.80` for the next streaming-save writer
+  contract slice.
+- Added non-writing checkpoint write plans to `saveload.system`, staging the
+  snapshot path, serialized scene payload path, manifest path, manifest line,
+  and validity message before any runtime disk writer is promoted.
+- Expanded the pure engine contract self-test to validate checkpoint write-plan
+  path evidence beside checkpoint records and deterministic checkpoint packages.
+- Surfaced the staged manifest and scene payload paths in the Timeline Editor
+  so the 4D streaming-save workflow can show where future approved writes will
+  land without touching disk during build-safe validation.
+
 ## [v0.84.79]
 - Bumped the active source line to `v0.84.79` for Timeline Editor lane layout
   contracts.
