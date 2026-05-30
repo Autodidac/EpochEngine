@@ -865,6 +865,12 @@ engine shape and should be treated as starting truth for the next passes:
   the interval-to-keyed transition. Acceptance remains staged: clickable profile
   selection still needs GUI/runtime proof and must not revive command-menu or
   button flicker.
+- `v0.84.86` repairs the hosted Linux Clang full-engine CMake path after Forest
+  Factory editor integration exposed a strict module-visibility gap. `editor.cpp`
+  now imports `voxel.field` directly before using `epoch::voxel::Float3`; this is
+  a build-only repair and intentionally leaves renderer ordering, GUI draw-model,
+  Package Manager layout, and Timeline/Forest Factory runtime behavior untouched
+  for the next acceptance-gated pass.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

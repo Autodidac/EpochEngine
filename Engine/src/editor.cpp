@@ -82,6 +82,7 @@ import engine.cli;
 import scripting.system;
 import epoch.ai;
 import epoch.systems;
+import voxel.field;
 import forest.factory;
 import package.registry;
 import perf.tier;

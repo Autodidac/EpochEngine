@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.84.86]
+- Bumped the active source line to `v0.84.86` for the hosted Linux Clang
+  full-engine CMake repair.
+- Imported `voxel.field` directly in `editor.cpp` so Clang's module visibility
+  rules see `epoch::voxel::Float3` at the Forest Factory editor call site.
+- Kept the fix surgical: no renderer ordering, GUI draw-model, or package
+  workflow behavior was changed.
+
 ## [v0.84.85]
 - Bumped the active source line to `v0.84.85` for Timeline Editor
   streaming-save profile-change planning.
