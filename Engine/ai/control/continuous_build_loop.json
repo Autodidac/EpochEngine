@@ -8,11 +8,13 @@
     "control_bot": "local MCP/control",
     "primary_coder_model": "operator-selected Qwen/Qwen3.6-27B lane for coding, planning, and larger review tasks",
     "fast_reviewer_model": "operator-selected nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16 lane for fast local review, status, and bounded helper tasks",
-    "creative_model_lanes": "operator-selected FLUX.2 klein, Wan2.1 VACE, and TRELLIS.2 package lanes for future image/video/3D asset workflows"
+    "creative_model_lanes": "operator-selected Bonsai Image 4B, Wan2.1 VACE, and TRELLIS.2 package lanes for future image/video/3D asset workflows; Bonsai Ternary 4B is the preferred local image lane, Bonsai Binary 4B is the low-memory option, and FLUX.2 Klein 4B remains a higher-memory fallback"
   },
   "model_source_pages": [
     "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
     "https://huggingface.co/Qwen/Qwen3.6-27B",
+    "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "https://huggingface.co/prism-ml/bonsai-image-binary-4B-mlx-1bit",
     "https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B",
     "https://huggingface.co/microsoft/TRELLIS.2-4B",
     "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B"
@@ -30,7 +32,7 @@
   "selected_model_policy": {
     "gui_activation": "model discovery is separate from activation; the operator must choose a model before chat/tooling is active",
     "cli_activation": "non-GUI self-iteration may use EPOCH_AI_MODEL, EPOCH_OPENAI_MODEL, LM_STUDIO_MODEL, or OPENAI_MODEL as an explicit operator-selected reviewer model",
-    "download_activation": "Qwen and Nemotron weights download only on explicit operator demand into executable-local cache/models",
+    "download_activation": "Qwen, Nemotron, Bonsai, FLUX, Wan, and TRELLIS weights download only on explicit operator demand into executable-local cache/models",
     "project_inclusion": "generated projects may include model weights only after explicit package opt-in with license and notice review",
     "forbidden_fallback": "do not activate the first discovered model automatically"
   },

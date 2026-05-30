@@ -44,21 +44,31 @@ Epoch documents these Hugging Face pages as the current OS-model source lanes:
 | --- | --- | --- | --- |
 | Fast coding/review | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | Fast local helper for status, review, and bounded planning | NVIDIA Open Model License |
 | Heavy coding/planning | `Qwen/Qwen3.6-27B` | Larger local coding/planning helper | Apache-2.0 |
+| Preferred image package | `prism-ml/bonsai-image-ternary-4B-mlx-2bit` | Default local image generation/editing lane; best quality/footprint balance | Apache-2.0 |
+| Low-memory image package | `prism-ml/bonsai-image-binary-4B-mlx-1bit` | Optional local image lane; smallest local footprint | Apache-2.0 |
+| Higher-memory image fallback | `black-forest-labs/FLUX.2-klein-4B` | Optional image generation/editing fallback when memory budget allows | Apache-2.0 |
 | Video/editing package | `Wan-AI/Wan2.1-VACE-1.3B` | Future video generation/editing package lane | Apache-2.0 |
 | 3D asset package | `microsoft/TRELLIS.2-4B` | Future textured/PBR 3D asset package lane | MIT |
-| Image package | `black-forest-labs/FLUX.2-klein-4B` | Future image generation/editing package lane | Apache-2.0 |
 
 Source pages:
 
 - `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16`
 - `https://huggingface.co/Qwen/Qwen3.6-27B`
+- `https://huggingface.co/prism-ml/bonsai-image-ternary-4B-mlx-2bit`
+- `https://huggingface.co/prism-ml/bonsai-image-binary-4B-mlx-1bit`
+- `https://huggingface.co/black-forest-labs/FLUX.2-klein-4B`
 - `https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B`
 - `https://huggingface.co/microsoft/TRELLIS.2-4B`
-- `https://huggingface.co/black-forest-labs/FLUX.2-klein-4B`
 
 These pages are metadata and download targets, not permission to bundle weights
 blindly. Package/release work must preserve license files, notices, provenance,
 and any model-specific redistribution requirements.
+
+Image-lane Apache-2.0 handling is tracked under
+`Engine/third_party/licenses/`: the shared Apache-2.0 license text lives at
+`apache-2.0/LICENSE.txt`, and image model attribution/NOTICE requirements live
+under `model-assets/`. Generated projects or releases that redistribute model
+weights must carry those notices plus any upstream NOTICE or modification records.
 
 ## On-Demand Model Cache And Project Inclusion
 
@@ -71,6 +81,14 @@ The coding/review model lanes are:
 
 - `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` for fast local review and bounded planning
 - `Qwen/Qwen3.6-27B` for heavier coding, planning, and review passes
+
+The preferred local image-generation lane is
+`prism-ml/bonsai-image-ternary-4B-mlx-2bit`. Use
+`prism-ml/bonsai-image-binary-4B-mlx-1bit` when footprint matters more than
+quality, and keep `black-forest-labs/FLUX.2-klein-4B` as an optional
+higher-memory fallback. All three image lanes are metadata/download recipes by
+default; weights stay in executable-local `cache/models/` after explicit
+operator action.
 
 Generated projects do not inherit model weights by default. A project may carry
 model metadata/download recipes, but copying or packaging weights into a project

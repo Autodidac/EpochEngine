@@ -62,8 +62,11 @@ export namespace epoch::package_registry
     inline constexpr std::string_view kEngineListenServerPackageId = "engine_client_listen_server";
     inline constexpr std::string_view kNemotronNanoPackageId = "os_model_nemotron_3_nano_4b_bf16";
     inline constexpr std::string_view kQwenCoderPackageId = "os_model_qwen_27b";
+    inline constexpr std::string_view kBonsaiImageTernaryPackageId = "os_model_bonsai_image_ternary_4b_mlx_2bit";
+    inline constexpr std::string_view kBonsaiImageBinaryPackageId = "os_model_bonsai_image_binary_4b_mlx_1bit";
+    inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_klein_4b";
 
-    inline constexpr std::array<PackageDescriptor, 12> kKnownPackages{{
+    inline constexpr std::array<PackageDescriptor, 15> kKnownPackages{{
         {
             .id = kEngineArcadePackageId,
             .displayName = "Engine Arcade",
@@ -128,6 +131,33 @@ export namespace epoch::package_registry
             .activation = ActivationMode::ModelDownloadOptIn,
             .requiresHumanBuildGate = true,
             .externalSourceRepo = "https://huggingface.co/Qwen/Qwen3.6-27B",
+        },
+        {
+            .id = kBonsaiImageTernaryPackageId,
+            .displayName = "Bonsai Image Ternary 4B",
+            .summary = "Preferred local image generation/editing model lane for the best quality/footprint balance. Weights download on demand into cache/models.",
+            .kind = PackageKind::ModelAsset,
+            .activation = ActivationMode::ModelDownloadOptIn,
+            .requiresHumanBuildGate = true,
+            .externalSourceRepo = "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+        },
+        {
+            .id = kBonsaiImageBinaryPackageId,
+            .displayName = "Bonsai Image Binary 4B",
+            .summary = "Optional low-memory local image generation/editing model lane for the smallest local footprint. Weights download on demand into cache/models.",
+            .kind = PackageKind::ModelAsset,
+            .activation = ActivationMode::ModelDownloadOptIn,
+            .requiresHumanBuildGate = true,
+            .externalSourceRepo = "https://huggingface.co/prism-ml/bonsai-image-binary-4B-mlx-1bit",
+        },
+        {
+            .id = kFluxKleinImagePackageId,
+            .displayName = "FLUX.2 Klein 4B",
+            .summary = "Optional higher-memory fallback image generation/editing model lane. Bonsai Ternary 4B remains the recommended local default.",
+            .kind = PackageKind::ModelAsset,
+            .activation = ActivationMode::ModelDownloadOptIn,
+            .requiresHumanBuildGate = true,
+            .externalSourceRepo = "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
         },
         {
             .id = "research_voxel_planetoid",

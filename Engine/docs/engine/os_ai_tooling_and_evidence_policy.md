@@ -15,7 +15,8 @@ model integration, not internal bundled weights:
    verification, evidence metrics, and dataset/eval gates
 2. local MCP/control/tool harnesses that operate the editor and collect proof
 3. operator-selected Qwen/Nemotron local model lanes for coding and review,
-   with FLUX/Wan/TRELLIS tracked as package-managed creative model lanes
+   with Bonsai/Wan/TRELLIS tracked as package-managed creative model lanes and
+   FLUX.2 Klein kept as a higher-memory image fallback
 
 External local LLMs such as LM Studio are selected runtime/helper providers.
 They can speed up testing, evaluation, curation, and documentation/build work,
@@ -26,6 +27,8 @@ Canonical OS-model source pages:
 
 - `https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16`
 - `https://huggingface.co/Qwen/Qwen3.6-27B`
+- `https://huggingface.co/prism-ml/bonsai-image-ternary-4B-mlx-2bit`
+- `https://huggingface.co/prism-ml/bonsai-image-binary-4B-mlx-1bit`
 - `https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B`
 - `https://huggingface.co/microsoft/TRELLIS.2-4B`
 - `https://huggingface.co/black-forest-labs/FLUX.2-klein-4B`
@@ -34,6 +37,12 @@ Model discovery is inventory only. Epoch may list available local models, but
 it must not auto-name or activate one from discovery. The operator-selected
 model is the only active runtime/helper target for in-editor calls unless a
 phase explicitly allows extra helper lanes for drafting or review.
+
+Apache-2.0 image-lane notices are tracked in `Engine/third_party/licenses/`.
+Package Manager and generated-project exports must preserve the shared
+Apache-2.0 license text, upstream NOTICE files when present, source URLs,
+attribution metadata, and any modification/quantization notice before model
+weights are redistributed.
 
 ## Storage rules
 
@@ -82,12 +91,14 @@ Treat "self-rebuilding" as gated iteration over versioned artifacts rather than
 as an unconstrained model rewriting itself.
 
 - keep fast selected OS models available for bounded local engine tasks
-- download Qwen/Nemotron weights only on demand into `cache/models/`; engine
-  self-iteration may use selected models from cache or an already running local
-  endpoint, but it must not clone or bundle those weights for routine engine
-  iterations
-- expose Qwen/Nemotron model-package actions from AI Sandbox and Package
-  Manager. The first safe action writes an explicit download plan under
+- download Qwen/Nemotron/Bonsai/FLUX/Wan/TRELLIS weights only on demand into
+  `cache/models/`; engine self-iteration may use selected models from cache or
+  an already running local endpoint, but it must not clone or bundle those
+  weights for routine engine iterations
+- expose model-package actions from AI Sandbox and Package Manager. Bonsai
+  Ternary 4B is the recommended local image default, Bonsai Binary 4B is the
+  low-memory image lane, and FLUX.2 Klein 4B stays an optional higher-memory
+  fallback. The first safe action writes an explicit download plan under
   `cache/models/<package>/download.plan.json`; a future downloader must still
   keep operator approval, license/notice review, and project opt-in separate
   from model discovery.
@@ -96,9 +107,10 @@ as an unconstrained model rewriting itself.
   and download recipes only
 - use stronger on-demand local or hosted helpers for critique, labeling, and
   candidate generation when the operator allows them
-- build toward an engine-owned harness around selected Qwen/Nemotron models from
-  curated Epoch evidence, editor/tool traces, evals, and reviewable sandbox
-  exercises rather than trying to ship a homemade bundled model runtime
+- build toward an engine-owned harness around selected Qwen/Nemotron models and
+  package-managed creative lanes from curated Epoch evidence, editor/tool
+  traces, evals, and reviewable sandbox exercises rather than trying to ship a
+  homemade bundled model runtime
 - let the verifier own promotion decisions through build, runtime, and scenario
   evidence
 - prefer adapters, prompts, datasets, tool schemas, and evals as the mutable

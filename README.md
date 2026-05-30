@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.66-1F7A4C?style=for-the-badge" alt="Current development source v0.84.66" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.67-1F7A4C?style=for-the-badge" alt="Current development source v0.84.67" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.66`.
+- Source is currently the active development line at `v0.84.67`.
 - The latest published stable runtime release is `v0.84.38`.
 - Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -143,10 +143,12 @@ OS AI model, tooling, and evidence rules live with the AI assets in
   single-step, and early editor-facing diagnostics.
 - A staged AI workspace centered on an engine-owned OS-model harness around
   operator-selected `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` and `Qwen/Qwen3.6-27B`
-  coding/review lanes plus future `FLUX.2-klein-4B`, `Wan2.1-VACE-1.3B`, and
-  `TRELLIS.2-4B` creative package lanes. The self-iteration sandbox stages
-  visible evidence before any promotion, downloads Qwen/Nemotron weights only
-  on demand into `cache/models/`, and includes model weights in generated
+  coding/review lanes plus future Bonsai Image 4B, `Wan2.1-VACE-1.3B`, and
+  `TRELLIS.2-4B` creative package lanes. Bonsai Ternary 4B is the preferred
+  local image-generation lane, Bonsai Binary 4B is the low-memory option, and
+  `FLUX.2-klein-4B` remains a higher-memory fallback. The self-iteration
+  sandbox stages visible evidence before any promotion, downloads model weights
+  only on demand into `cache/models/`, and includes model weights in generated
   projects only after explicit package opt-in and license/notice review.
 - Executable-root asset, shader, script, font, log, and capture resolution so
   local runs stop depending on whatever folder the process happened to launch

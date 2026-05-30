@@ -32,6 +32,26 @@
   ],
   "creative_model_lanes": [
     {
+      "id": "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+      "url": "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+      "license": "apache-2.0",
+      "role": "preferred local image generation/editing package lane",
+      "purpose": "best quality/footprint balance",
+      "download_target": "cache/models/prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+      "recommended_default": true,
+      "project_bundle_default": false
+    },
+    {
+      "id": "prism-ml/bonsai-image-binary-4B-mlx-1bit",
+      "url": "https://huggingface.co/prism-ml/bonsai-image-binary-4B-mlx-1bit",
+      "license": "apache-2.0",
+      "role": "optional low-memory local image generation/editing package lane",
+      "purpose": "smallest local footprint",
+      "download_target": "cache/models/prism-ml/bonsai-image-binary-4B-mlx-1bit",
+      "recommended_default": false,
+      "project_bundle_default": false
+    },
+    {
       "id": "Wan-AI/Wan2.1-VACE-1.3B",
       "url": "https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B",
       "license": "apache-2.0",
@@ -47,8 +67,11 @@
       "id": "black-forest-labs/FLUX.2-klein-4B",
       "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
       "license": "apache-2.0",
-      "role": "image generation/editing package lane"
+      "role": "optional higher-memory image generation/editing fallback lane",
+      "download_target": "cache/models/black-forest-labs/FLUX.2-klein-4B",
+      "recommended_default": false,
+      "project_bundle_default": false
     }
   ],
-  "notes": "Epoch does not ship bundled model weights. Qwen and Nemotron weights are downloaded on demand into executable-local cache/models when the operator requests them. Engine self-iteration uses selected OS model lanes through evidence gates; generated projects include model weights only after an explicit package opt-in with license/notice review."
+  "notes": "Epoch does not ship bundled model weights. Qwen, Nemotron, Bonsai, FLUX, Wan, and TRELLIS weights are downloaded on demand into executable-local cache/models when the operator requests them. Bonsai Ternary 4B is the recommended default local image lane; Bonsai Binary 4B is the low-memory lane; FLUX.2 Klein 4B remains a higher-memory fallback. Engine self-iteration uses selected OS model lanes through evidence gates; generated projects include model weights only after an explicit package opt-in with license/notice review."
 }

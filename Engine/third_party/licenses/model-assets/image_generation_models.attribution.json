@@ -1,0 +1,41 @@
+{
+  "purpose": "Epoch Package Manager metadata for local image-generation model lanes. No model weights are tracked in this repository.",
+  "cache_root": "cache/models",
+  "license_text": "Engine/third_party/licenses/apache-2.0/LICENSE.txt",
+  "notice_plan": "Engine/third_party/licenses/model-assets/image_generation_models.NOTICE.md",
+  "models": [
+    {
+      "id": "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+      "display_name": "Bonsai Image Ternary 4B",
+      "source_url": "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+      "license": "apache-2.0",
+      "runtime_role": "preferred local image generation/editing lane",
+      "purpose": "best quality/footprint balance",
+      "recommended_default": true,
+      "download_target": "cache/models/prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+      "redistribution_default": "metadata-only; weights require explicit package opt-in, license preservation, notice preservation, and human approval"
+    },
+    {
+      "id": "prism-ml/bonsai-image-binary-4B-mlx-1bit",
+      "display_name": "Bonsai Image Binary 4B",
+      "source_url": "https://huggingface.co/prism-ml/bonsai-image-binary-4B-mlx-1bit",
+      "license": "apache-2.0",
+      "runtime_role": "optional low-memory local image generation/editing lane",
+      "purpose": "smallest local footprint",
+      "recommended_default": false,
+      "download_target": "cache/models/prism-ml/bonsai-image-binary-4B-mlx-1bit",
+      "redistribution_default": "metadata-only; weights require explicit package opt-in, license preservation, notice preservation, and human approval"
+    },
+    {
+      "id": "black-forest-labs/FLUX.2-klein-4B",
+      "display_name": "FLUX.2 Klein 4B",
+      "source_url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
+      "license": "apache-2.0",
+      "runtime_role": "optional higher-memory local image generation/editing fallback lane",
+      "purpose": "fallback for projects that deliberately choose a larger image model",
+      "recommended_default": false,
+      "download_target": "cache/models/black-forest-labs/FLUX.2-klein-4B",
+      "redistribution_default": "metadata-only; weights require explicit package opt-in, license preservation, notice preservation, and human approval"
+    }
+  ]
+}

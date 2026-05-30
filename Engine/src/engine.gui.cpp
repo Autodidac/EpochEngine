@@ -285,6 +285,10 @@ namespace epochnamespace::gui
         {
             bool contextMenuOpen = false;
             Vec2 contextMenuPos{};
+            std::size_t cursorIndex = 0;
+            std::size_t selectionAnchor = 0;
+            bool hasSelection = false;
+            bool draggingSelection = false;
         };
 
         struct ScrollAreaFrame
@@ -3047,6 +3051,165 @@ namespace epochnamespace::gui
         return text.substr(start, end - start);
     }
 
+    [[nodiscard]] static std::pair<std::size_t, std::size_t> source_editor_selection_range(
+        const SourceEditorState& state,
+        std::size_t textSize) noexcept
+    {
+        if (!state.hasSelection || state.cursorIndex == state.selectionAnchor)
+            return { 0u, 0u };
+
+        const std::size_t begin = (std::min)(state.cursorIndex, state.selectionAnchor);
+        const std::size_t end = (std::max)(state.cursorIndex, state.selectionAnchor);
+        return {
+            (std::min)(begin, textSize),
+            (std::min)(end, textSize)
+        };
+    }
+
+    [[nodiscard]] static bool source_editor_has_selection(const SourceEditorState& state, std::size_t textSize) noexcept
+    {
+        const auto [begin, end] = source_editor_selection_range(state, textSize);
+        return end > begin;
+    }
+
+    static void clamp_source_editor_cursor(SourceEditorState& state, std::size_t textSize) noexcept
+    {
+        state.cursorIndex = (std::min)(state.cursorIndex, textSize);
+        state.selectionAnchor = (std::min)(state.selectionAnchor, textSize);
+        state.hasSelection = state.hasSelection && state.cursorIndex != state.selectionAnchor;
+    }
+
+    [[nodiscard]] static std::size_t source_editor_line_end_for_start(std::string_view text, std::size_t lineStart) noexcept
+    {
+        std::size_t end = (std::min)(lineStart, text.size());
+        while (end < text.size() && text[end] != '\n')
+            ++end;
+        return end;
+    }
+
+    [[nodiscard]] static float source_editor_x_for_index(
+        std::string_view text,
+        std::size_t lineStart,
+        std::size_t index,
+        float scale) noexcept
+    {
+        index = (std::min)(index, text.size());
+        lineStart = (std::min)(lineStart, index);
+        return measure_text_width(text.substr(lineStart, index - lineStart), scale);
+    }
+
+    [[nodiscard]] static std::size_t source_editor_index_from_point(
+        std::string_view text,
+        float pointerX,
+        float pointerY,
+        float textX,
+        float firstTextY,
+        float scrollY,
+        float lineAdvance,
+        float scale) noexcept
+    {
+        const float relativeY = (std::max)(0.0f, pointerY - firstTextY + scrollY);
+        const std::size_t lineIndex = static_cast<std::size_t>(relativeY / (std::max)(1.0f, lineAdvance));
+        const std::size_t lineStart = line_start_for_index(text, lineIndex);
+        const std::size_t lineEnd = source_editor_line_end_for_start(text, lineStart);
+        const float localX = pointerX - textX;
+
+        if (localX <= 0.0f)
+            return lineStart;
+
+        float penX = 0.0f;
+        for (std::size_t i = lineStart; i < lineEnd; ++i)
+        {
+            const unsigned char raw = static_cast<unsigned char>(text[i]);
+            if (is_utf8_continuation_byte(raw))
+                continue;
+
+            const unsigned char ch = safe_draw_char(raw);
+            const float advance = glyph_advance_with_kerning(ch, next_drawable_char(text, i), scale);
+            if (localX <= penX + advance * 0.5f)
+                return i;
+            penX += advance;
+        }
+
+        return lineEnd;
+    }
+
+    static void source_editor_set_cursor(SourceEditorState& state, std::size_t index, bool extendSelection, std::size_t textSize) noexcept
+    {
+        index = (std::min)(index, textSize);
+        if (!extendSelection)
+            state.selectionAnchor = index;
+        state.cursorIndex = index;
+        state.hasSelection = state.cursorIndex != state.selectionAnchor;
+    }
+
+    [[nodiscard]] static std::string source_editor_selected_text(std::string_view text, const SourceEditorState& state)
+    {
+        const auto [begin, end] = source_editor_selection_range(state, text.size());
+        if (end <= begin)
+            return std::string(text);
+        return std::string(text.substr(begin, end - begin));
+    }
+
+    static bool source_editor_delete_selection(std::string& text, SourceEditorState& state)
+    {
+        const auto [begin, end] = source_editor_selection_range(state, text.size());
+        if (end <= begin)
+        {
+            state.hasSelection = false;
+            state.selectionAnchor = state.cursorIndex;
+            return false;
+        }
+
+        text.erase(begin, end - begin);
+        state.cursorIndex = begin;
+        state.selectionAnchor = begin;
+        state.hasSelection = false;
+        return true;
+    }
+
+    static void source_editor_insert_text_limited(
+        std::string& text,
+        SourceEditorState& state,
+        std::string_view incoming,
+        std::size_t limit,
+        bool& changed)
+    {
+        source_editor_delete_selection(text, state);
+
+        const std::size_t cursor = (std::min)(state.cursorIndex, text.size());
+        const std::size_t available = limit > text.size() ? limit - text.size() : 0u;
+        if (available == 0u)
+            return;
+
+        std::string filtered{};
+        filtered.reserve((std::min)(incoming.size(), available));
+        for (char ch : incoming)
+        {
+            if (filtered.size() >= available)
+                break;
+            if (ch == '\r')
+                continue;
+            if (ch == '\n')
+            {
+                filtered.push_back('\n');
+                continue;
+            }
+            if (static_cast<unsigned char>(ch) < 32u)
+                continue;
+            filtered.push_back(ch);
+        }
+
+        if (filtered.empty())
+            return;
+
+        text.insert(cursor, filtered);
+        state.cursorIndex = cursor + filtered.size();
+        state.selectionAnchor = state.cursorIndex;
+        state.hasSelection = false;
+        changed = true;
+    }
+
     SourceEditorResult source_editor(std::string& text, const SourceEditorOptions& options) noexcept
     {
         SourceEditorResult result{};
@@ -3087,7 +3250,7 @@ namespace epochnamespace::gui
 
         const bool pointerPressed = g_frame.justPressed || g_frame.rightJustPressed;
         const void* currentActiveWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
-        bool& wholeFieldSelected = g_textFieldSelectAllStates[textId];
+        clamp_source_editor_cursor(state, text.size());
         if (pointerPressed)
         {
             if (hoveredEditor)
@@ -3095,13 +3258,11 @@ namespace epochnamespace::gui
                 g_contextActiveWidgets[ctxKey] = textId;
                 g_frame.caretTimer = 0.0f;
                 g_frame.caretVisible = true;
-                if (g_frame.justPressed)
-                    wholeFieldSelected = false;
             }
             else if (currentActiveWidget == textId && !state.contextMenuOpen)
             {
                 g_contextActiveWidgets[ctxKey] = nullptr;
-                wholeFieldSelected = false;
+                state.draggingSelection = false;
             }
         }
 
@@ -3112,14 +3273,8 @@ namespace epochnamespace::gui
         {
             const auto replace_selection_if_needed = [&]() noexcept
             {
-                if (!wholeFieldSelected)
-                    return;
-                if (!text.empty())
-                {
-                    text.clear();
+                if (source_editor_delete_selection(text, state))
                     result.edit.changed = true;
-                }
-                wholeFieldSelected = false;
             };
 
             for (const auto& evt : g_frame.events)
@@ -3127,65 +3282,91 @@ namespace epochnamespace::gui
                 switch (evt.type)
                 {
                 case EventType::TextInput:
-                    replace_selection_if_needed();
-                    append_text_limited(text, evt.text, limit, true, result.edit.changed);
+                    source_editor_insert_text_limited(text, state, evt.text, limit, result.edit.changed);
                     break;
 
                 case EventType::KeyDown:
                     if (evt.ctrl_down && (evt.key == 'C' || evt.key == 'c'))
                     {
-                        (void)clipboard_write_text(text);
+                        result.copied = clipboard_write_text(source_editor_selected_text(text, state));
                     }
                     else if (evt.ctrl_down && (evt.key == 'X' || evt.key == 'x'))
                     {
-                        (void)clipboard_write_text(text);
-                        if (!text.empty())
+                        result.cut = clipboard_write_text(source_editor_selected_text(text, state));
+                        if (source_editor_has_selection(state, text.size()))
                         {
-                            text.clear();
-                            result.edit.changed = true;
+                            replace_selection_if_needed();
                         }
-                        wholeFieldSelected = false;
                     }
                     else if (evt.ctrl_down && (evt.key == 'V' || evt.key == 'v'))
                     {
-                        replace_selection_if_needed();
-                        append_text_limited(text, clipboard_read_text(), limit, true, result.edit.changed);
+                        source_editor_insert_text_limited(text, state, clipboard_read_text(), limit, result.edit.changed);
+                        result.pasted = true;
                     }
                     else if (evt.ctrl_down && (evt.key == 'A' || evt.key == 'a'))
                     {
-                        wholeFieldSelected = true;
+                        state.selectionAnchor = 0u;
+                        state.cursorIndex = text.size();
+                        state.hasSelection = !text.empty();
+                        result.selected_all = state.hasSelection;
                     }
                     else if (evt.key == 8 || evt.key == 127)
                     {
-                        if (wholeFieldSelected)
+                        if (source_editor_has_selection(state, text.size()))
                         {
-                            if (!text.empty())
-                            {
-                                text.clear();
-                                result.edit.changed = true;
-                            }
-                            wholeFieldSelected = false;
+                            replace_selection_if_needed();
                         }
-                        else if (!text.empty())
+                        else if (evt.key == 8 && state.cursorIndex > 0u)
                         {
-                            text.pop_back();
+                            const std::size_t eraseIndex = state.cursorIndex - 1u;
+                            text.erase(eraseIndex, 1u);
+                            state.cursorIndex = eraseIndex;
+                            state.selectionAnchor = eraseIndex;
+                            result.edit.changed = true;
+                        }
+                        else if (evt.key == 127 && state.cursorIndex < text.size())
+                        {
+                            text.erase(state.cursorIndex, 1u);
                             result.edit.changed = true;
                         }
                     }
                     else if (evt.key == 27)
                     {
                         g_contextActiveWidgets[ctxKey] = nullptr;
-                        wholeFieldSelected = false;
+                        state.draggingSelection = false;
+                        state.hasSelection = false;
+                        state.selectionAnchor = state.cursorIndex;
                         result.edit.active = false;
                     }
                     else if (evt.key == 13)
                     {
-                        replace_selection_if_needed();
-                        if (text.size() < limit)
-                        {
-                            text.push_back('\n');
-                            result.edit.changed = true;
-                        }
+                        source_editor_insert_text_limited(text, state, "\n", limit, result.edit.changed);
+                    }
+                    else if (evt.key == 37) // VK_LEFT
+                    {
+                        const std::size_t next = state.cursorIndex > 0u ? state.cursorIndex - 1u : 0u;
+                        source_editor_set_cursor(state, next, evt.shift_down, text.size());
+                    }
+                    else if (evt.key == 39) // VK_RIGHT
+                    {
+                        const std::size_t next = (std::min)(state.cursorIndex + 1u, text.size());
+                        source_editor_set_cursor(state, next, evt.shift_down, text.size());
+                    }
+                    else if (evt.key == 36) // VK_HOME
+                    {
+                        std::size_t lineStart = 0u;
+                        for (std::size_t i = 0u; i < (std::min)(state.cursorIndex, text.size()); ++i)
+                            if (text[i] == '\n')
+                                lineStart = i + 1u;
+                        source_editor_set_cursor(state, lineStart, evt.shift_down, text.size());
+                    }
+                    else if (evt.key == 35) // VK_END
+                    {
+                        std::size_t currentLineStart = 0u;
+                        for (std::size_t i = 0u; i < (std::min)(state.cursorIndex, text.size()); ++i)
+                            if (text[i] == '\n')
+                                currentLineStart = i + 1u;
+                        source_editor_set_cursor(state, source_editor_line_end_for_start(text, currentLineStart), evt.shift_down, text.size());
                     }
                     break;
 
@@ -3211,28 +3392,82 @@ namespace epochnamespace::gui
         const std::size_t firstVisibleLine = static_cast<std::size_t>((std::max)(0.0f, scroll.scroll_y) / (std::max)(1.0f, lineAdvance));
         const std::size_t visibleLineBudget = static_cast<std::size_t>(height / (std::max)(1.0f, lineAdvance)) + 4u;
 
-        if (active && wholeFieldSelected && !text.empty())
-            draw_sprite(palette.buttonActive, pos.x + 1.0f, pos.y + 1.0f, (std::max)(1.0f, editorWidth - 2.0f), (std::max)(1.0f, height - 2.0f));
+        if (active && g_frame.justPressed && hoveredEditor)
+        {
+            const std::size_t cursor = source_editor_index_from_point(
+                text,
+                g_frame.mousePos.x,
+                g_frame.mousePos.y,
+                textX,
+                firstTextY,
+                scroll.scroll_y,
+                lineAdvance,
+                kFontScale);
+            source_editor_set_cursor(state, cursor, false, text.size());
+            state.draggingSelection = true;
+        }
+        else if (active && state.draggingSelection && g_frame.mouseDown)
+        {
+            const std::size_t cursor = source_editor_index_from_point(
+                text,
+                g_frame.mousePos.x,
+                g_frame.mousePos.y,
+                textX,
+                firstTextY,
+                scroll.scroll_y,
+                lineAdvance,
+                kFontScale);
+            source_editor_set_cursor(state, cursor, true, text.size());
+        }
+
+        if (!g_frame.mouseDown)
+            state.draggingSelection = false;
 
         std::size_t offset = line_start_for_index(text, firstVisibleLine);
         float lineY = firstTextY + static_cast<float>(firstVisibleLine) * lineAdvance;
+        const auto [selectionBegin, selectionEnd] = source_editor_selection_range(state, text.size());
         for (std::size_t line = 0u; line < visibleLineBudget && firstVisibleLine + line < lineCount; ++line)
         {
+            const std::size_t lineStart = offset;
             const std::string_view lineText = line_view_from_offset(text, offset);
+            const std::size_t lineEnd = lineStart + lineText.size();
+
+            if (selectionEnd > selectionBegin && selectionEnd >= lineStart && selectionBegin <= lineEnd)
+            {
+                const std::size_t highlightBegin = (std::max)(selectionBegin, lineStart);
+                const std::size_t highlightEnd = (std::min)(selectionEnd, lineEnd);
+                const float highlightX = textX + source_editor_x_for_index(text, lineStart, highlightBegin, kFontScale);
+                float highlightWidth = source_editor_x_for_index(text, lineStart, highlightEnd, kFontScale)
+                    - source_editor_x_for_index(text, lineStart, highlightBegin, kFontScale);
+                if (selectionEnd > lineEnd && highlightEnd == lineEnd)
+                    highlightWidth += space_advance(kFontScale) * 0.75f;
+                if (highlightWidth > 0.0f)
+                    draw_sprite(palette.buttonActive, highlightX, lineY - 1.0f, highlightWidth, baseHeight + 2.0f);
+            }
+
             draw_text_line(lineText, textX, lineY, kFontScale);
             lineY += lineAdvance;
         }
 
-        if (active && g_frame.caretVisible && !wholeFieldSelected)
+        if (active && g_frame.caretVisible && !source_editor_has_selection(state, text.size()))
         {
-            const std::size_t lastLineIndex = lineCount > 0u ? lineCount - 1u : 0u;
-            std::size_t lastLineOffset = line_start_for_index(text, lastLineIndex);
-            const std::string_view lastLine = line_view_from_offset(text, lastLineOffset);
+            const std::size_t cursor = (std::min)(state.cursorIndex, text.size());
+            std::size_t caretLineIndex = 0u;
+            std::size_t caretLineStart = 0u;
+            for (std::size_t i = 0u; i < cursor; ++i)
+            {
+                if (text[i] == '\n')
+                {
+                    ++caretLineIndex;
+                    caretLineStart = i + 1u;
+                }
+            }
+
             const float caretX = std::clamp(
-                textX + measure_text_width(lastLine, kFontScale),
+                textX + source_editor_x_for_index(text, caretLineStart, cursor, kFontScale),
                 textX,
                 textX + (std::max)(1.0f, contentWidth) - 1.0f);
-            const float caretY = firstTextY + static_cast<float>(lastLineIndex) * lineAdvance;
+            const float caretY = firstTextY + static_cast<float>(caretLineIndex) * lineAdvance;
             if (caretY + baseHeight >= pos.y && caretY <= pos.y + height)
                 draw_caret(caretX, caretY, baseHeight);
         }
@@ -3259,7 +3494,7 @@ namespace epochnamespace::gui
             menuPos.y = (std::min)(menuPos.y, (std::max)(0.0f, g_frame.origin.y + g_frame.windowSize.y - menuHeight - kContentPadding));
 
             const bool hoveredMenu = point_in_rect(g_frame.mousePos, menuPos.x, menuPos.y, menuWidth, menuHeight);
-            if (!openedThisFrame && (g_frame.justPressed || g_frame.rightJustPressed) && !hoveredMenu && !hoveredEditor)
+            if (!openedThisFrame && (g_frame.justPressed || g_frame.rightJustPressed) && !hoveredMenu)
                 state.contextMenuOpen = false;
 
             if (state.contextMenuOpen)
@@ -3292,28 +3527,30 @@ namespace epochnamespace::gui
 
                 if (button("Select All", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
-                    select_all_text_in_edit_box(text);
-                    result.selected_all = true;
+                    state.selectionAnchor = 0u;
+                    state.cursorIndex = text.size();
+                    state.hasSelection = !text.empty();
+                    result.selected_all = state.hasSelection;
                     state.contextMenuOpen = false;
                 }
                 if (button("Copy", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
-                    result.copied = clipboard_write_text(text);
+                    result.copied = clipboard_write_text(source_editor_selected_text(text, state));
                     state.contextMenuOpen = false;
                 }
                 if (button("Cut", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
-                    result.cut = clipboard_write_text(text);
-                    if (result.cut && !text.empty())
+                    result.cut = clipboard_write_text(source_editor_selected_text(text, state));
+                    if (result.cut && source_editor_has_selection(state, text.size()))
                     {
-                        text.clear();
+                        (void)source_editor_delete_selection(text, state);
                         result.edit.changed = true;
                     }
                     state.contextMenuOpen = false;
                 }
                 if (button("Paste", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
-                    append_text_limited(text, clipboard_read_text(), options.max_chars, true, result.edit.changed);
+                    source_editor_insert_text_limited(text, state, clipboard_read_text(), options.max_chars, result.edit.changed);
                     result.pasted = true;
                     state.contextMenuOpen = false;
                 }

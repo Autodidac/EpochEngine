@@ -114,9 +114,10 @@ Before a control is considered ready, it needs:
   Console Dock or domain code when `engine.gui` can own the behavior
 - source editors are shared GUI primitives. They process text input directly,
   render only visible source lines inside the scroll clip, and expose
-  right-click Select All/Copy/Cut/Paste through the GUI context-menu path;
-  editor workspaces should not replace them with static text dumps or ad hoc
-  clipboard buttons.
+  click-to-caret placement, drag ranged selection, focused navigation hotkeys,
+  Ctrl+A/C/X/V, and right-click Select All/Copy/Cut/Paste through the GUI
+  context-menu path; editor workspaces should not replace them with static text
+  dumps or ad hoc clipboard buttons.
 - input profiles are shared engine/editor contracts, not per-surface hacks.
   `v0.84.54` keeps movement bindings and look bindings non-overlapping in the
   shipped presets, after `v0.84.53` introduced named
@@ -126,9 +127,9 @@ Before a control is considered ready, it needs:
   through a reusable input-configuration surface before being promoted to
   generated projects
 - text inputs must support basic desktop editing affordances before promotion:
-  first-pass whole-field copy, cut, paste, select-all, and visible domain
-  clipboard actions are acceptable, but true ranged text selection/caret
-  movement remains the next gate
+  focused editing, visible caret state, ranged selection, copy, cut, paste,
+  select-all, stable scroll focus, and context-menu actions without requiring a
+  held mouse button
 - keyboard/mouse focus behavior that does not leak across panes or contexts
 - backend-safe rendering through the shared GUI replay path
 - a documented owner and expected consumers
@@ -177,21 +178,23 @@ must never be promoted to chat output.
 The Assets workspace owns the first visible Script Source Editor surface. It
 loads the active `.ascript.cpp` through the shared `engine.gui` source-editor
 primitive, not an editor-local clipboard hack. The primitive owns scrollable
-multiline editing, right-click Select All/Copy/Cut/Paste, focused hotkeys, and
-visible whole-field selection feedback. Save/Reload remain editor evidence
-actions because they touch project files. Promotion to a real code editor still
-requires ranged selection, keyboard navigation, syntax-aware display, and a
-cleaner split between preview, editor, and build actions.
+multiline editing, click-to-caret placement, drag ranged selection, Ctrl+A/C/X/V,
+Left/Right/Home/End navigation, and right-click Select All/Copy/Cut/Paste.
+Save/Reload remain editor evidence actions because they touch project files.
+Promotion to a real code editor still requires syntax-aware display, line/column
+status, search, undo/redo, and a cleaner split between preview, editor, and build
+actions.
 
 ## Script Editor And Clipboard Gate
 
-The current script surface is not a finished editor. It can locate and preview
-script source, but a production scripting workspace still needs editable code
-text, a visible caret and selection, copy/cut/paste/select-all, save/reload
-evidence, build/run feedback, and predictable keyboard focus without holding a
-mouse button down. Built-in script assets should use ASCII-safe source headers
-until the text renderer supports the full banner glyph set; any remaining
-high-byte source preview normalization must not corrupt the saved source.
+The current script surface is not a finished editor. It can locate and edit
+script source through the shared source-editor primitive, but a production
+scripting workspace still needs syntax-aware code text, line numbers, search,
+undo/redo, save/reload evidence, build/run feedback, and predictable keyboard
+focus across all docked contexts. Built-in script assets should use ASCII-safe
+source headers until the text renderer supports the full banner glyph set; any
+remaining high-byte source preview normalization must not corrupt the saved
+source.
 
 Script editing should use shared GUI text/source-editor primitives, not a
 one-off asset panel hack. The acceptance gate is a script file that can be

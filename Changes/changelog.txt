@@ -1,5 +1,30 @@
 # Epoch Changelog
 
+## [v0.84.67]
+- Bumped the active source line to `v0.84.67` for a focused shared source-editor
+  behavior pass.
+- Kept the protected renderer/draw model untouched while adding real cursor and
+  ranged-selection state to the reusable `engine.gui` source editor.
+- Source editor text can now be clicked to place the caret, dragged to select a
+  range, copied/cut/pasted through Ctrl+A/C/X/V or the right-click context menu,
+  and navigated with Left/Right/Home/End without clearing the whole file.
+- Context-menu source actions now operate on the selected range when one exists
+  and dismiss on outside clicks, leaving Save/Reload as the only editor-domain
+  file actions.
+- Switched the local image-generation plan from raw FLUX.2 Klein 4B as the
+  default to Bonsai Image Ternary 4B (`prism-ml/bonsai-image-ternary-4B-mlx-2bit`)
+  as the recommended quality/footprint lane, added Bonsai Binary 4B as the
+  low-memory lane, and kept FLUX.2 Klein 4B as an optional higher-memory
+  fallback.
+- Added Bonsai/FLUX model package descriptors, OS-model manifest metadata,
+  Apache-2.0 license/notice tracking, and roadmap/docs updates without adding
+  model weights to the repo.
+- Added the 4D/time-engine Timeline Editor and configurable streaming-save
+  mission to the roadmap so `core.time` grows into editor timeline/replay
+  tooling instead of a standalone diagnostics panel.
+- Validation: MSVC Debug x64 `ConsoleApplication1` build passed with
+  `/m:1 /clp:ErrorsOnly`. Runtime/eye-test validation is still operator-gated.
+
 ## [v0.84.66]
 - Bumped the active source line to `v0.84.66` for a surgical GUI press-state
   and Forest Factory preview stabilization pass.

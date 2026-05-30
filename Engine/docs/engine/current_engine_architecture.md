@@ -53,7 +53,8 @@ Current source version: `v0.84.58`
   retrieval, planning, tool use, verification, evidence metrics, and
   dataset/eval gates; local MCP/control/tool harnesses operate the editor and
   collect proof; operator-selected Qwen/Nemotron model lanes provide coding and
-  review, with FLUX/Wan/TRELLIS tracked as creative model package lanes.
+  review, with Bonsai/Wan/TRELLIS tracked as creative model package lanes and
+  FLUX.2 Klein preserved as a higher-memory image fallback.
   Assistant replies now
   pass a non-promotable-response guard before local raw training capture or MCP
   chat evidence can record them.

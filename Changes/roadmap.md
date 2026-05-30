@@ -46,13 +46,16 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     - local MCP/control/tool harnesses that operate the editor and collect proof
     - operator-selected OS model lanes: `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` and
       `Qwen/Qwen3.6-27B` for coding/review, plus
-      `Wan-AI/Wan2.1-VACE-1.3B`, `microsoft/TRELLIS.2-4B`, and
-      `black-forest-labs/FLUX.2-klein-4B` as future package-managed creative
-      lanes
-    - on-demand model asset gates: Qwen/Nemotron weights live under
-      executable-local `cache/models/` only after operator action, are not
-      cloned for engine self-iteration, and enter generated projects only after
-      explicit package opt-in plus license/notice review
+      `prism-ml/bonsai-image-ternary-4B-mlx-2bit`,
+      `prism-ml/bonsai-image-binary-4B-mlx-1bit`,
+      `Wan-AI/Wan2.1-VACE-1.3B`, and `microsoft/TRELLIS.2-4B` as
+      package-managed creative lanes. Bonsai Ternary 4B is the recommended local
+      image default, Bonsai Binary 4B is the low-memory option, and
+      `black-forest-labs/FLUX.2-klein-4B` remains a higher-memory fallback.
+    - on-demand model asset gates: Qwen/Nemotron/Bonsai/FLUX/Wan/TRELLIS weights
+      live under executable-local `cache/models/` only after operator action,
+      are not cloned for engine self-iteration, and enter generated projects
+      only after explicit package opt-in plus license/notice review
 12. AI may generate local game, tool, app, and server project artifacts only
     through visible, reviewable requests. It must not create or run apps/services
     that provide model bypass channels, self-accessible servers, hidden control
@@ -730,6 +733,14 @@ engine shape and should be treated as starting truth for the next passes:
   reads as an intentional preview, command menus do not reintroduce OpenGL
   flicker, and script editor typing remains responsive before marking the
   mature editor controls complete.
+- `v0.84.67` keeps the same renderer boundary and promotes the shared
+  `engine.gui` source editor from whole-field editing toward a normal desktop
+  text surface: click-to-caret, drag ranged selection, selected-range
+  copy/cut/paste, Ctrl+A/C/X/V, and Left/Right/Home/End navigation now live in
+  the reusable primitive. Acceptance remains operator/runtime-gated: verify
+  script editing no longer requires holding the mouse, selected text copies from
+  the right-click context menu, single-character edits stay responsive, and the
+  command-menu/button flicker fix remains intact in OpenGL.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
@@ -955,10 +966,16 @@ engine shape and should be treated as starting truth for the next passes:
   build/test pass rate, and self-iteration completion rate before promoting
   helper output into curated data.
 - Internal bundled-model work is retired. OS AI work now focuses on a
-  production harness around selected Nemotron 3 Nano/Qwen models and the approved
-  FLUX/Wan/TRELLIS creative package lanes, with curated traces, prompts,
-  adapters, evidence gates, and package/runtime integration as the mutable
-  artifacts.
+  production harness around selected Nemotron 3 Nano/Qwen models and the
+  approved Bonsai/Wan/TRELLIS creative package lanes. Bonsai Ternary 4B is the
+  preferred local image lane, Bonsai Binary 4B is the low-memory option, and
+  FLUX.2 Klein 4B stays a higher-memory fallback. Curated traces, prompts,
+  adapters, evidence gates, notices, and package/runtime integration are the
+  mutable artifacts.
+- Epoch is a 4D/time-based engine. The time spine needs a dedicated Timeline
+  Editor mission with keyed events, replay scrubbing, scene-time inspection, and
+  configurable streaming save/checkpoint controls built from the existing
+  `core.time` ownership instead of a parallel timing system.
 
 ## Phase Progress
 

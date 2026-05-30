@@ -197,15 +197,17 @@ the same engine-owned path.
   and writes a minimal `.epoch` entity snapshot during explicit Save/Build/Run
   paths. This is the current safety lane for editor modifications until the
   full scene parser/serializer owns runtime/editor loading.
-- OS model package lanes are on-demand model assets. Qwen/Nemotron weights are
-  staged to executable-local `cache/models/` only after operator action, are
-  not cloned for engine self-iteration, and are included in generated projects
-  only by explicit package opt-in with license/notice review. The current gate
-  writes a project-local `*.model.package.json` opt-in manifest and a
-  cache-local `download.plan.json` before any future downloader is allowed to
-  transfer weights. AI Sandbox now exposes direct model-package entry buttons
-  for Nemotron 3 Nano 4B BF16 and Qwen 3.6 27B so the download-plan workflow is
-  visible without hunting through the full Package Manager list.
+- OS model package lanes are on-demand model assets. Qwen, Nemotron, Bonsai,
+  FLUX, Wan, and TRELLIS weights are staged to executable-local `cache/models/`
+  only after operator action, are not cloned for engine self-iteration, and are
+  included in generated projects only by explicit package opt-in with
+  license/notice review. The current gate writes a project-local
+  `*.model.package.json` opt-in manifest and a cache-local `download.plan.json`
+  before any future downloader is allowed to transfer weights. AI Sandbox now
+  exposes direct model-package entry buttons for Nemotron 3 Nano 4B BF16, Qwen
+  3.6 27B, and the image lanes. Bonsai Ternary 4B is the recommended local
+  image default, Bonsai Binary 4B is the low-memory lane, and FLUX.2 Klein 4B is
+  retained as the optional higher-memory fallback.
 - Project Run is project-owned, not editor-clone-owned. The Project workspace
   must expose the target backend/context and child project launches should use
   standalone single-context flags such as
@@ -471,6 +473,12 @@ the same engine-owned path.
   inventing parallel timing systems
 - Systems is the first live editor home for this information before fuller
   timeline/replay tooling exists
+- Epoch's long-term editor model is 4D/time-based. A dedicated Timeline
+  workspace should own keyed events, replay scrubbing, deterministic scene-time
+  inspection, and feature-complete timing controls on top of `core.time`.
+  Configurable streaming save/checkpoint behavior belongs beside that timeline
+  path so scene/project state can be captured incrementally instead of only
+  through manual file snapshots.
 
 ## Hardware support strategy
 
@@ -609,7 +617,8 @@ Epoch documents three AI/control pieces:
 - local tool/MCP control harnesses that operate the editor and collect proof
 - operator-selected Qwen/Nemotron local model lanes for coding, review,
   fallback, and future generated-software embedding where licensing allows, with
-  FLUX/Wan/TRELLIS tracked as package-managed creative model lanes
+  Bonsai/Wan/TRELLIS tracked as package-managed creative model lanes and
+  FLUX.2 Klein kept as a higher-memory image fallback
 
 External local OpenAI-compatible LLMs such as LM Studio or Ollama are selected
 runtime/helper providers. They can help with testing, evals, dataset cleanup,
