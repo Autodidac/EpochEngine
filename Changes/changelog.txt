@@ -1,5 +1,22 @@
 # Epoch Changelog
 
+## [v0.84.64]
+- Bumped the active source line to `v0.84.64` for a focused GUI-library script
+  editing and window-chrome pass.
+- Added reusable `engine.gui` source-editor plumbing with scrollable multiline
+  editing, right-click context menu actions for Select All/Copy/Cut/Paste, and
+  visible whole-field selection feedback instead of editor-owned clipboard
+  buttons.
+- Promoted titlebar close buttons into a shared GUI primitive so docked panes
+  draw the close affordance in the titlebar without pushing content down into an
+  extra row.
+- Expanded the Forest Factory workbench controls with scene-preview refresh and
+  canopy selection actions while keeping package/project emission behind the
+  existing explicit activation gate.
+- Updated the agent and GUI architecture contracts to forbid editor-only custom
+  controls when a reusable `engine.gui` primitive is the correct engine-level
+  shape.
+
 ## [v0.84.63]
 - Bumped the active source line to `v0.84.63` for a focused Package Manager GUI
   containment pass.

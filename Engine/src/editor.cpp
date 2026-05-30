@@ -2783,67 +2783,47 @@ namespace epochnamespace
                 editor.scriptEditorDirty ? std::string("Modified; save before build/run.") : editor.scriptEditorStatus,
                 130.0f);
 
-            const auto edit = gui::edit_box(
+            const auto sourceEditor = gui::source_editor(
                 editor.scriptEditorText,
-                { (std::max)(180.0f, width), (std::max)(120.0f, height) },
-                256u * 1024u,
-                true);
-            if (edit.changed)
+                gui::SourceEditorOptions{
+                    .id = "script-source-editor",
+                    .size = { (std::max)(180.0f, width), (std::max)(180.0f, height) },
+                    .max_chars = 256u * 1024u,
+                    .show_context_menu = true
+                });
+            if (sourceEditor.edit.changed)
             {
                 editor.scriptEditorDirty = true;
                 editor.scriptEditorStatus = "Modified.";
             }
+            if (sourceEditor.selected_all)
+                editor.scriptEditorStatus = "Selected script source.";
+            if (sourceEditor.copied)
+            {
+                editor.scriptEditorStatus = "Copied script source to clipboard.";
+                push_editor_log(editor, "[script] Copied source to clipboard.");
+            }
+            if (sourceEditor.cut)
+            {
+                editor.scriptEditorDirty = true;
+                editor.scriptEditorStatus = "Cut script source to clipboard.";
+                push_editor_log(editor, "[script] Cut source to clipboard.");
+            }
+            if (sourceEditor.pasted)
+            {
+                editor.scriptEditorDirty = true;
+                editor.scriptEditorStatus = "Pasted clipboard text into script source.";
+                push_editor_log(editor, "[script] Pasted clipboard text into source editor.");
+            }
 
-            std::array<gui::InlineButtonSpec, 4> scriptEditActions{ {
-                { "Copy Source", 118.0f },
-                { "Paste Clipboard", 146.0f },
+            gui::wrapped_label("Right-click the source editor for Select All, Copy, Cut, and Paste. Ctrl+A/C/X/V work while focused.", width);
+            std::array<gui::InlineButtonSpec, 2> scriptEditActions{ {
                 { "Save", 72.0f },
                 { "Reload", 86.0f }
             } };
             if (auto clicked = gui::inline_button_row(scriptEditActions, 28.0f, 8.0f))
             {
                 if (*clicked == 0)
-                {
-                    if (gui::set_clipboard_text(editor.scriptEditorText))
-                    {
-                        editor.scriptEditorStatus = "Copied script source to clipboard.";
-                        push_editor_log(editor, "[script] Copied source to clipboard.");
-                    }
-                    else
-                    {
-                        editor.scriptEditorStatus = "Clipboard copy failed.";
-                        push_editor_log(editor, "[script] Clipboard copy failed.");
-                    }
-                }
-                else if (*clicked == 1)
-                {
-                    constexpr std::size_t kMaxEditableScriptBytes = 256u * 1024u;
-                    const std::string clipboard = gui::clipboard_text();
-                    if (clipboard.empty())
-                    {
-                        editor.scriptEditorStatus = "Clipboard is empty.";
-                    }
-                    else
-                    {
-                        const std::size_t remaining = editor.scriptEditorText.size() < kMaxEditableScriptBytes
-                            ? kMaxEditableScriptBytes - editor.scriptEditorText.size()
-                            : 0u;
-                        if (remaining == 0u)
-                        {
-                            editor.scriptEditorStatus = "Script source is at the editor size limit.";
-                        }
-                        else
-                        {
-                            editor.scriptEditorText.append(clipboard.substr(0u, remaining));
-                            editor.scriptEditorDirty = true;
-                            editor.scriptEditorStatus = clipboard.size() > remaining
-                                ? "Pasted truncated clipboard text at end of script."
-                                : "Pasted clipboard text at end of script.";
-                            push_editor_log(editor, "[script] Pasted clipboard text into source editor.");
-                        }
-                    }
-                }
-                else if (*clicked == 2)
                 {
                     if (save_script_source_editor(editor))
                     {
@@ -2859,7 +2839,7 @@ namespace epochnamespace
                         push_editor_log(editor, "[script] Save failed: " + editor.scriptEditorStatus);
                     }
                 }
-                else if (*clicked == 3)
+                else if (*clicked == 1)
                 {
                     if (load_script_source_editor(editor, sourcePath, true))
                         push_editor_log(editor, "[script] Reloaded source: " + editor.scriptEditorPath);
@@ -4989,14 +4969,8 @@ namespace epochnamespace
 
         auto render_titlebar_close = [&](gui::Vec2 panel_pos, gui::Vec2 panel_size, auto&& close_handler)
         {
-            if (panel_size.x < 48.0f || panel_size.y < 28.0f)
-                return;
-
-            const gui::Vec2 restore = gui::cursor_position();
-            gui::set_cursor({ panel_pos.x + (std::max)(0.0f, panel_size.x - 34.0f), restore.y });
-            if (gui::button("X", { 24.0f, 22.0f }))
+            if (gui::titlebar_close_button(panel_pos, panel_size))
                 close_handler();
-            gui::set_cursor({ restore.x, restore.y + 28.0f });
         };
 
         auto render_outliner_window = [&]()
@@ -5748,7 +5722,7 @@ namespace epochnamespace
                         build.summary,
                         build.succeeded ? "Script asset validation passed against the active project shell." : "Script asset validation failed; inspect script diagnostics before running.");
                 }
-                draw_script_source_editor(editor, activeScriptSource, centerWidth, 220.0f);
+                draw_script_source_editor(editor, activeScriptSource, centerWidth, 360.0f);
                 break;
             }
             case EditorMainSurface::ForestFactory:
@@ -5793,8 +5767,45 @@ namespace epochnamespace
                 gui::property_row("[forest] Verts", std::to_string(stats.vertices), 148.0f);
                 gui::property_row("[forest] Tris", std::to_string(stats.triangles), 148.0f);
                 gui::wrapped_label(
-                    "Next gate: promote this data panel into the dedicated 3D Forest Factory editor scene with sliders, atlas controls, mature-stage playback, and project asset emission.",
+                    "Scene preview: Forest Factory owns editor-only stage/trunk/canopy/branch primitives now. Package activation emits reusable project assets only after an explicit install/stage gate.",
                     centerWidth);
+                std::array<gui::InlineButtonSpec, 3> forestActions{ {
+                    { "Refresh Scene Preview", 188.0f },
+                    { "Select Canopy", 128.0f },
+                    { "Reset Forest Data", 146.0f }
+                } };
+                if (auto clicked = gui::inline_button_row(forestActions, 30.0f, 8.0f))
+                {
+                    if (*clicked == 0)
+                    {
+                        ensure_forest_factory_preview_entities(editor);
+                        push_editor_log(editor, "[forest] Refreshed scene-backed Forest Factory preview primitives.");
+                    }
+                    else if (*clicked == 1)
+                    {
+                        const auto selected = std::find_if(
+                            editor.entities.begin(),
+                            editor.entities.end(),
+                            [](const EditorEntity& entity)
+                            {
+                                return entity.name == "ForestFactoryCanopy";
+                            });
+                        if (selected != editor.entities.end())
+                        {
+                            editor.selectedEntity = static_cast<std::size_t>(std::distance(editor.entities.begin(), selected));
+                            push_editor_log(editor, "[forest] Selected ForestFactoryCanopy.");
+                        }
+                        else
+                        {
+                            ensure_forest_factory_preview_entities(editor);
+                        }
+                    }
+                    else if (*clicked == 2)
+                    {
+                        editor.packageInstallStatus = "Forest Factory data reset is staged behind package activation; current preview primitives remain editor-only.";
+                        push_editor_log(editor, "[forest] Reset requested; package-backed data reset remains gated.");
+                    }
+                }
                 if (gui::button("Open Package Manager", { 220.0f, 30.0f }))
                 {
                     editor.showPackageManagerModal = true;

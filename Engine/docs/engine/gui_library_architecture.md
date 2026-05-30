@@ -19,6 +19,13 @@ editor domains consume them. Editor workspaces should not reimplement generic
 buttons, tabs, dropdowns, scroll areas, text inputs, modal chrome, or clipping
 logic.
 
+The practical rule is strict: if an editor surface needs a control that normal
+software would also need, create or extend the shared GUI primitive first. A
+static text box is not an edit box, and one-off buttons are not a clipboard or
+context-menu system. This keeps Epoch GUI reusable for future projects that may
+ship mostly or entirely as GUI software, possibly with a custom renderer behind
+the same control library.
+
 ## Draw Model Guardrail
 
 The current working draw model is a protected contract, not a playground. The
@@ -154,13 +161,13 @@ must never be promoted to chat output.
 ## Script Editing Gate
 
 The Assets workspace owns the first visible Script Source Editor surface. It
-loads the active `.ascript.cpp`, allows multiline edits through the shared
-`engine.gui` text input, exposes explicit Copy Source and Paste Clipboard
-actions, and saves/reloads through the same evidence log used by project
-actions. This is only the first production-safe step. Promotion to a real code
-editor still requires internal scroll/caret positioning, ranged selection,
-keyboard navigation, syntax-aware display, and a cleaner split between preview,
-editor, and build actions.
+loads the active `.ascript.cpp` through the shared `engine.gui` source-editor
+primitive, not an editor-local clipboard hack. The primitive owns scrollable
+multiline editing, right-click Select All/Copy/Cut/Paste, focused hotkeys, and
+visible whole-field selection feedback. Save/Reload remain editor evidence
+actions because they touch project files. Promotion to a real code editor still
+requires ranged selection, keyboard navigation, syntax-aware display, and a
+cleaner split between preview, editor, and build actions.
 
 ## Script Editor And Clipboard Gate
 
@@ -172,10 +179,16 @@ mouse button down. Built-in script assets should use ASCII-safe source headers
 until the text renderer supports the full banner glyph set; any remaining
 high-byte source preview normalization must not corrupt the saved source.
 
-Script editing should use shared GUI text primitives, not a one-off asset panel
-hack. The acceptance gate is a script file that can be opened from Assets or the
-Script Editor workspace, edited, saved, reloaded, copied/pasted, built, and run
-with visible evidence and no Console Dock-only control path.
+Script editing should use shared GUI text/source-editor primitives, not a
+one-off asset panel hack. The acceptance gate is a script file that can be
+opened from Assets or the Script Editor workspace, edited, selected, saved,
+reloaded, copied/pasted from a right-click context menu, built, and run with
+visible evidence and no Console Dock-only control path.
+
+Window chrome follows the same rule: close buttons, titlebar controls, context
+menus, scroll areas, text inputs, and future tabs/splitters belong in
+`engine.gui` first. Editor domains compose those primitives and should not draw
+their own ad hoc copies.
 
 ## Safe Split Plan
 

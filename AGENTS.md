@@ -210,6 +210,11 @@
   modal layers, splitters, and future context menus belong there first; editor
   workspaces should compose them instead of reimplementing controls or stuffing
   workflow UI into Console Dock output.
+- Do not add editor-only custom GUI when a reusable primitive is missing. Build
+  the primitive in `engine.gui` first, then consume it from the editor,
+  launcher, package manager, AI surfaces, and generated software projects so the
+  GUI can become a separate reusable engine library/target instead of a pile of
+  one-off overlays.
 - Do not toy with the working draw model. OpenGL editor stability depends on the
   established order: drain normal GUI/backend work, render the scene once, drain
   follow-up work, replay only the explicit GUI top-layer batch for command menus

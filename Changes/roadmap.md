@@ -699,6 +699,14 @@ engine shape and should be treated as starting truth for the next passes:
   body. Acceptance: operator eye-test confirms the progress row no longer
   smears/bleeds across the OpenGL scene or debugger area while the modal is
   open.
+- `v0.84.64` keeps the renderer/draw model untouched and moves script editing
+  behavior into reusable `engine.gui` primitives: source surfaces are scrollable
+  multiline editors with right-click Select All/Copy/Cut/Paste, visible
+  whole-field selection feedback, and Save/Reload as evidence actions instead
+  of ad hoc clipboard buttons. The same pass moves pane close buttons into
+  titlebar chrome and adds Forest Factory scene-preview refresh/selection
+  controls while leaving mature plant editing, sliders, and project payload
+  emission acceptance-gated.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

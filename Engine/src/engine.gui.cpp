@@ -252,8 +252,10 @@ namespace epochnamespace::gui
         static std::unordered_map<const void*, std::vector<InputEvent>, PtrHash> g_contextPendingEvents{};
         static std::mutex g_contextPendingEventsMutex{};
         static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextMouseDownStates{};
+        static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextRightMouseDownStates{};
         static thread_local std::unordered_map<const void*, const void*, PtrHash> g_contextActiveWidgets{};
         static thread_local std::unordered_map<const void*, std::size_t, PtrHash> g_contextPressedButtonKeys{};
+        static thread_local std::unordered_map<const void*, bool, PtrHash> g_textFieldSelectAllStates{};
 
         struct ScrollTextState
         {
@@ -279,6 +281,12 @@ namespace epochnamespace::gui
             bool alignSelectedOnOpen = false;
         };
 
+        struct SourceEditorState
+        {
+            bool contextMenuOpen = false;
+            Vec2 contextMenuPos{};
+        };
+
         struct ScrollAreaFrame
         {
             std::string key{};
@@ -296,6 +304,7 @@ namespace epochnamespace::gui
         static thread_local std::unordered_map<std::string, ScrollTextState> g_scrollTextStates{};
         static thread_local std::unordered_map<std::string, ScrollAreaState> g_scrollAreaStates{};
         static thread_local std::unordered_map<std::string, SelectBoxState> g_selectBoxStates{};
+        static thread_local std::unordered_map<std::string, SourceEditorState> g_sourceEditorStates{};
         static thread_local std::vector<ScrollAreaFrame> g_scrollAreaStack{};
 
         [[nodiscard]] static bool any_select_box_open() noexcept
@@ -330,9 +339,13 @@ namespace epochnamespace::gui
 
             bool mouseDown = false;
             bool prevMouseDown = false;
+            bool mouseRightDown = false;
+            bool prevMouseRightDown = false;
             bool justReleased = false;
+            bool rightJustReleased = false;
             bool insideWindow = false;
             bool justPressed = false;
+            bool rightJustPressed = false;
             int mouseWheelDelta = 0;
 
             std::optional<WidgetBounds> lastButtonBounds{};
@@ -1965,6 +1978,7 @@ namespace epochnamespace::gui
         g_deferredDrawBatches.erase(ctx);
         g_topLayerDrawBatches.erase(ctx);
         g_contextMouseDownStates.erase(ctx);
+        g_contextRightMouseDownStates.erase(ctx);
         g_contextActiveWidgets.erase(ctx);
         g_contextPressedButtonKeys.erase(ctx);
         const std::string scrollPrefix = std::to_string(reinterpret_cast<std::uintptr_t>(ctx)) + "|";
@@ -1986,6 +2000,13 @@ namespace epochnamespace::gui
         {
             if (it->first.starts_with(scrollPrefix))
                 it = g_selectBoxStates.erase(it);
+            else
+                ++it;
+        }
+        for (auto it = g_sourceEditorStates.begin(); it != g_sourceEditorStates.end();)
+        {
+            if (it->first.starts_with(scrollPrefix))
+                it = g_sourceEditorStates.erase(it);
             else
                 ++it;
         }
@@ -2072,12 +2093,16 @@ namespace epochnamespace::gui
         g_frame.caretVisible = g_frame.caretTimer < (kCaretBlinkPeriod * 0.5f);
 
         bool prevMouseDown = g_frame.mouseDown;
+        bool prevMouseRightDown = g_frame.mouseRightDown;
         if (rawCtx)
         {
             if (const auto it = g_contextMouseDownStates.find(rawCtx); it != g_contextMouseDownStates.end())
                 prevMouseDown = it->second;
+            if (const auto it = g_contextRightMouseDownStates.find(rawCtx); it != g_contextRightMouseDownStates.end())
+                prevMouseRightDown = it->second;
         }
         bool currentMouseDown = mouse_down;
+        bool currentMouseRightDown = prevMouseRightDown;
         Vec2 currentMousePos = mouse_pos;
         g_frame.mouseWheelDelta = 0;
 
@@ -2103,8 +2128,20 @@ namespace epochnamespace::gui
             switch (evt.type)
             {
             case EventType::MouseMove: currentMousePos = evt.mouse_pos; break;
-            case EventType::MouseDown: currentMouseDown = true;  currentMousePos = evt.mouse_pos; break;
-            case EventType::MouseUp:   currentMouseDown = false; currentMousePos = evt.mouse_pos; break;
+            case EventType::MouseDown:
+                if (evt.mouse_button == 1)
+                    currentMouseRightDown = true;
+                else
+                    currentMouseDown = true;
+                currentMousePos = evt.mouse_pos;
+                break;
+            case EventType::MouseUp:
+                if (evt.mouse_button == 1)
+                    currentMouseRightDown = false;
+                else
+                    currentMouseDown = false;
+                currentMousePos = evt.mouse_pos;
+                break;
             case EventType::MouseWheel:
                 currentMousePos = evt.mouse_pos;
                 g_frame.mouseWheelDelta += evt.wheel_delta;
@@ -2115,9 +2152,13 @@ namespace epochnamespace::gui
 
         g_frame.prevMouseDown = prevMouseDown;
         g_frame.mouseDown = currentMouseDown;
+        g_frame.prevMouseRightDown = prevMouseRightDown;
+        g_frame.mouseRightDown = currentMouseRightDown;
         g_frame.mousePos = currentMousePos;
         g_frame.justPressed = (!prevMouseDown && currentMouseDown);
         g_frame.justReleased = (prevMouseDown && !currentMouseDown);
+        g_frame.rightJustPressed = (!prevMouseRightDown && currentMouseRightDown);
+        g_frame.rightJustReleased = (prevMouseRightDown && !currentMouseRightDown);
         g_frame.queuedDraws.clear();
         g_frame.topLayerDraws.clear();
         g_frame.topLayerDepth = 0;
@@ -2127,6 +2168,7 @@ namespace epochnamespace::gui
             if (g_frame.justPressed)
                 g_contextPressedButtonKeys[rawCtx] = 0;
             g_contextMouseDownStates[rawCtx] = currentMouseDown;
+            g_contextRightMouseDownStates[rawCtx] = currentMouseRightDown;
         }
 
         reset_frame();
@@ -2141,6 +2183,8 @@ namespace epochnamespace::gui
         g_frame.events.clear();
         g_frame.justPressed = false;
         g_frame.justReleased = false;
+        g_frame.rightJustPressed = false;
+        g_frame.rightJustReleased = false;
         g_frame.mouseWheelDelta = 0;
         g_frame.topLayerDepth = 0;
     }
@@ -2163,6 +2207,21 @@ namespace epochnamespace::gui
     bool was_mouse_released() noexcept
     {
         return g_frame.justReleased;
+    }
+
+    bool is_mouse_right_down() noexcept
+    {
+        return g_frame.mouseRightDown;
+    }
+
+    bool was_mouse_right_pressed() noexcept
+    {
+        return g_frame.rightJustPressed;
+    }
+
+    bool was_mouse_right_released() noexcept
+    {
+        return g_frame.rightJustReleased;
     }
 
     void push_theme(ThemeVariant theme) noexcept
@@ -2476,6 +2535,48 @@ namespace epochnamespace::gui
         return button_with_state(label, size, selected);
     }
 
+    bool titlebar_close_button(Vec2 window_position, Vec2 window_size) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx || window_size.x < 44.0f || window_size.y < 24.0f)
+            return false;
+
+        const float width = 24.0f;
+        const float height = 22.0f;
+        const Vec2 pos{
+            window_position.x + (std::max)(0.0f, window_size.x - width - kContentPadding),
+            window_position.y + 5.0f
+        };
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
+        const std::size_t pressKey = widget_press_key("window-close", pos, { width, height });
+        auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+        if (hovered && g_frame.justPressed)
+            pressedKey = pressKey;
+
+        const bool pressed = g_frame.mouseDown && pressedKey == pressKey;
+        const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
+        if (g_frame.justReleased && pressedKey == pressKey)
+            pressedKey = 0;
+
+        const auto& palette = active_palette();
+        const SpriteHandle background =
+            pressed ? palette.buttonActive
+            : hovered ? palette.buttonHover
+            : palette.buttonNormal;
+        draw_sprite(background, pos.x, pos.y, width, height);
+        if (hovered || pressed)
+        {
+            draw_sprite(palette.textFieldActive, pos.x, pos.y, width, 2.0f);
+            draw_sprite(palette.textFieldActive, pos.x, pos.y, 2.0f, height);
+        }
+
+        const float textWidth = measure_text_width("X", kFontScale);
+        const float textX = pos.x + std::floor((std::max)(0.0f, width - textWidth) * 0.5f);
+        const float textY = pos.y + std::floor((std::max)(0.0f, height - base_line_height(kFontScale)) * 0.5f) + 1.0f;
+        draw_text_line("X", textX, textY, kFontScale);
+        g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
+        return clicked;
+    }
+
     bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return false;
@@ -2722,19 +2823,23 @@ namespace epochnamespace::gui
         const void* id = static_cast<const void*>(&text);
         const void* ctxKey = static_cast<const void*>(g_frame.ctx);
         const void* activeWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
+        bool& wholeFieldSelected = g_textFieldSelectAllStates[id];
         const auto& palette = active_palette();
 
-        if (g_frame.justPressed)
+        if (g_frame.justPressed || g_frame.rightJustPressed)
         {
             if (hovered)
             {
                 activeWidget = id;
                 g_frame.caretTimer = 0.0f;
                 g_frame.caretVisible = true;
+                if (g_frame.justPressed)
+                    wholeFieldSelected = false;
             }
             else if (activeWidget == id)
             {
                 activeWidget = nullptr;
+                wholeFieldSelected = false;
             }
         }
 
@@ -2759,11 +2864,24 @@ namespace epochnamespace::gui
         // Handle input first (mutates `text`)
         if (active)
         {
+            const auto replace_selection_if_needed = [&]() noexcept
+            {
+                if (!wholeFieldSelected)
+                    return;
+                if (!text.empty())
+                {
+                    text.clear();
+                    result.changed = true;
+                }
+                wholeFieldSelected = false;
+            };
+
             for (const auto& evt : g_frame.events)
             {
                 switch (evt.type)
                 {
                 case EventType::TextInput:
+                    replace_selection_if_needed();
                     append_text_limited(text, evt.text, limit, multiline, result.changed);
                     break;
 
@@ -2780,19 +2898,33 @@ namespace epochnamespace::gui
                             text.clear();
                             result.changed = true;
                         }
+                        wholeFieldSelected = false;
                     }
                     else if (evt.ctrl_down && (evt.key == 'V' || evt.key == 'v'))
                     {
+                        replace_selection_if_needed();
                         append_text_limited(text, clipboard_read_text(), limit, multiline, result.changed);
                     }
                     else if (evt.ctrl_down && (evt.key == 'A' || evt.key == 'a'))
                     {
-                        // Selection ranges are a follow-up; copy/cut operate on the whole focused field for now.
-                        (void)clipboard_write_text(text);
+                        wholeFieldSelected = true;
                     }
                     else if (evt.key == 8 || evt.key == 127) // backspace/del-ish
                     {
-                        if (!text.empty()) { text.pop_back(); result.changed = true; }
+                        if (wholeFieldSelected)
+                        {
+                            if (!text.empty())
+                            {
+                                text.clear();
+                                result.changed = true;
+                            }
+                            wholeFieldSelected = false;
+                        }
+                        else if (!text.empty())
+                        {
+                            text.pop_back();
+                            result.changed = true;
+                        }
                     }
                     else if (evt.key == 27) // ESC
                     {
@@ -2800,11 +2932,13 @@ namespace epochnamespace::gui
                         if (ctxKey)
                             g_contextActiveWidgets[ctxKey] = nullptr;
                         result.active = false;
+                        wholeFieldSelected = false;
                     }
                     else if (evt.key == 13) // ENTER
                     {
                         if (multiline)
                         {
+                            replace_selection_if_needed();
                             if (text.size() < limit) { text.push_back('\n'); result.changed = true; }
                         }
                         else
@@ -2823,8 +2957,17 @@ namespace epochnamespace::gui
         // Create view after edits.
         const std::string_view sv{ text };
 
-        if (multiline) draw_wrapped_text(sv, textX, textY, contentWidth, kFontScale);
-        else           draw_text_line(sv, textX, textY, kFontScale);
+        {
+            ContentClipScope clip(
+                { pos.x + 1.0f, pos.y + 1.0f },
+                { pos.x + width - 1.0f, pos.y + height - 1.0f });
+
+            if (active && wholeFieldSelected && !text.empty())
+                draw_sprite(palette.buttonActive, textX, textY, contentWidth, contentHeight);
+
+            if (multiline) draw_wrapped_text(sv, textX, textY, contentWidth, kFontScale);
+            else           draw_text_line(sv, textX, textY, kFontScale);
+        }
 
         if (active && g_frame.caretVisible)
         {
@@ -2843,6 +2986,149 @@ namespace epochnamespace::gui
         }
 
         advance_cursor({ 0.0f, height + kContentPadding });
+        return result;
+    }
+
+    void select_all_text_in_edit_box(std::string& text) noexcept
+    {
+        const void* id = static_cast<const void*>(&text);
+        g_textFieldSelectAllStates[id] = true;
+        if (g_frame.ctx)
+            g_contextActiveWidgets[static_cast<const void*>(g_frame.ctx)] = id;
+        g_frame.caretTimer = 0.0f;
+        g_frame.caretVisible = true;
+    }
+
+    SourceEditorResult source_editor(std::string& text, const SourceEditorOptions& options) noexcept
+    {
+        SourceEditorResult result{};
+        if (!g_frame.insideWindow || !g_frame.ctx)
+            return result;
+
+        ensure_resources();
+
+        const Vec2 pos = g_frame.cursor;
+        const float availableWidth = content_available_width(pos.x);
+        const float width = options.size.x > 0.0f
+            ? (std::max)(96.0f, options.size.x)
+            : availableWidth;
+        const float height = (std::max)(120.0f, options.size.y > 0.0f ? options.size.y : 220.0f);
+        const std::string id = options.id.empty()
+            ? std::to_string(reinterpret_cast<std::uintptr_t>(&text))
+            : std::string(options.id);
+        auto& state = g_sourceEditorStates[scroll_panel_key(id)];
+
+        const float scrollbarReserve = 12.0f;
+        const float editorWidth = (std::max)(64.0f, width - scrollbarReserve);
+        const float contentWidth = (std::max)(1.0f, editorWidth - 2.0f * kBoxInnerPadding);
+        const float textHeight = measure_wrapped_text_height(text, contentWidth, kFontScale)
+            + 2.0f * kBoxInnerPadding
+            + kContentPadding;
+        const float editorContentHeight = (std::max)(height - 4.0f, textHeight);
+
+        (void)begin_scroll_area(ScrollAreaOptions{
+            .id = id + "-scroll",
+            .size = { width, height },
+            .content_height = editorContentHeight,
+            .draw_background = true,
+            .show_scrollbar = true
+        });
+
+        result.edit = edit_box(text, { editorWidth, editorContentHeight }, options.max_chars, true);
+        end_scroll_area();
+
+        const bool hoveredEditor = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
+        bool openedThisFrame = false;
+        if (options.show_context_menu && g_frame.rightJustPressed && hoveredEditor)
+        {
+            state.contextMenuOpen = true;
+            state.contextMenuPos = g_frame.mousePos;
+            openedThisFrame = true;
+        }
+
+        if (state.contextMenuOpen)
+        {
+            const float rowHeight = 28.0f;
+            const float menuPadding = 4.0f;
+            const float menuWidth = 172.0f;
+            const float menuHeight = menuPadding * 2.0f + rowHeight * 4.0f + kContentPadding * 3.0f;
+            Vec2 menuPos = state.contextMenuPos;
+            menuPos.x = (std::min)(menuPos.x, (std::max)(0.0f, g_frame.origin.x + g_frame.windowSize.x - menuWidth - kContentPadding));
+            menuPos.y = (std::min)(menuPos.y, (std::max)(0.0f, g_frame.origin.y + g_frame.windowSize.y - menuHeight - kContentPadding));
+
+            const bool hoveredMenu = point_in_rect(g_frame.mousePos, menuPos.x, menuPos.y, menuWidth, menuHeight);
+            if (!openedThisFrame && (g_frame.justPressed || g_frame.rightJustPressed) && !hoveredMenu && !hoveredEditor)
+                state.contextMenuOpen = false;
+
+            if (state.contextMenuOpen)
+            {
+                const Vec2 savedCursor = g_frame.cursor;
+                const Vec2 savedOrigin = g_frame.origin;
+                const Vec2 savedWindowSize = g_frame.windowSize;
+                const Vec2 savedContentMin = g_frame.contentMin;
+                const Vec2 savedContentMax = g_frame.contentMax;
+                const bool savedInsideWindow = g_frame.insideWindow;
+                const std::string savedWindowKey = g_frame.windowKey;
+                const std::uint64_t savedWidgetSerial = g_frame.widgetSerial;
+
+                begin_top_layer();
+                const auto& palette = active_palette();
+                draw_sprite(palette.windowBackground, menuPos.x, menuPos.y, menuWidth, menuHeight);
+                draw_sprite(palette.titleBar, menuPos.x, menuPos.y, menuWidth, 2.0f);
+                draw_sprite(palette.titleBar, menuPos.x, menuPos.y, 2.0f, menuHeight);
+                draw_sprite(palette.panelBackground, menuPos.x + menuWidth - 2.0f, menuPos.y, 2.0f, menuHeight);
+                draw_sprite(palette.panelBackground, menuPos.x, menuPos.y + menuHeight - 2.0f, menuWidth, 2.0f);
+
+                g_frame.insideWindow = true;
+                g_frame.windowKey = id + "-context-menu";
+                g_frame.widgetSerial = 0;
+                g_frame.origin = menuPos;
+                g_frame.windowSize = { menuWidth, menuHeight };
+                g_frame.contentMin = { menuPos.x + menuPadding, menuPos.y + menuPadding };
+                g_frame.contentMax = { menuPos.x + menuWidth - menuPadding, menuPos.y + menuHeight - menuPadding };
+                set_cursor(g_frame.contentMin);
+
+                if (button("Select All", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    select_all_text_in_edit_box(text);
+                    result.selected_all = true;
+                    state.contextMenuOpen = false;
+                }
+                if (button("Copy", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    result.copied = clipboard_write_text(text);
+                    state.contextMenuOpen = false;
+                }
+                if (button("Cut", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    result.cut = clipboard_write_text(text);
+                    if (result.cut && !text.empty())
+                    {
+                        text.clear();
+                        result.edit.changed = true;
+                    }
+                    state.contextMenuOpen = false;
+                }
+                if (button("Paste", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    append_text_limited(text, clipboard_read_text(), options.max_chars, true, result.edit.changed);
+                    result.pasted = true;
+                    state.contextMenuOpen = false;
+                }
+
+                g_frame.cursor = savedCursor;
+                g_frame.origin = savedOrigin;
+                g_frame.windowSize = savedWindowSize;
+                g_frame.contentMin = savedContentMin;
+                g_frame.contentMax = savedContentMax;
+                g_frame.insideWindow = savedInsideWindow;
+                g_frame.windowKey = savedWindowKey;
+                g_frame.widgetSerial = savedWidgetSerial;
+                end_top_layer();
+            }
+        }
+
         return result;
     }
 

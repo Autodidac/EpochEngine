@@ -127,7 +127,8 @@ namespace
         epochnamespace::gui::EventType type,
         LPARAM lParam,
         int wheelDelta = 0,
-        bool screenCoordinates = false) noexcept
+        bool screenCoordinates = false,
+        int mouseButton = 0) noexcept
     {
         if (!ctx)
             return;
@@ -135,6 +136,7 @@ namespace
         epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
             .type = type,
             .mouse_pos = client_mouse_position(hwnd, lParam, screenCoordinates),
+            .mouse_button = mouseButton,
             .wheel_delta = wheelDelta
         });
     }
@@ -1395,11 +1397,19 @@ namespace
             ::SetFocus(hwnd);
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
             break;
+        case WM_RBUTTONDOWN:
+            remember_gui_input_owner(hwnd);
+            ::SetFocus(hwnd);
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam, 0, false, 1);
+            break;
         case WM_MOUSEMOVE:
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseMove, lParam);
             break;
         case WM_LBUTTONUP:
             push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam);
+            break;
+        case WM_RBUTTONUP:
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam, 0, false, 1);
             break;
         case WM_MOUSEWHEEL:
             push_gui_mouse_event(
@@ -1447,8 +1457,10 @@ namespace
             forward_gui_input_message(hwnd, msg, wp, lp);
             return 0;
         case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
         case WM_MOUSEWHEEL:
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
@@ -3585,6 +3597,20 @@ namespace epochnamespace::core
         case WM_NCDESTROY:
             forget_gui_input_owner(hwnd);
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_RBUTTONDOWN:
+        {
+            remember_gui_input_owner(hwnd);
+            ::SetFocus(hwnd);
+            const auto ctx = resolveGuiContext();
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam, 0, false, 1);
+            return 0;
+        }
+        case WM_RBUTTONUP:
+        {
+            const auto ctx = resolveGuiContext();
+            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam, 0, false, 1);
+            return 0;
+        }
         case WM_NCLBUTTONDOWN:
         case WM_LBUTTONDOWN:
         {

@@ -86,6 +86,7 @@ namespace epochnamespace::gui
     {
         EventType type{ EventType::None };
         Vec2 mouse_pos{};
+        int mouse_button{};
         int wheel_delta{};
         int key{};
         bool ctrl_down{};
@@ -105,6 +106,23 @@ namespace epochnamespace::gui
         bool active{};
         bool changed{};
         bool submitted{};
+    };
+
+    export struct SourceEditorOptions
+    {
+        std::string_view id{};
+        Vec2 size{};
+        std::size_t max_chars{ 256u * 1024u };
+        bool show_context_menu{ true };
+    };
+
+    export struct SourceEditorResult
+    {
+        EditBoxResult edit{};
+        bool copied{};
+        bool cut{};
+        bool pasted{};
+        bool selected_all{};
     };
 
     export struct ConsoleWindowOptions
@@ -231,6 +249,9 @@ namespace epochnamespace::gui
     export bool is_mouse_down() noexcept;
     export bool was_mouse_pressed() noexcept;
     export bool was_mouse_released() noexcept;
+    export bool is_mouse_right_down() noexcept;
+    export bool was_mouse_right_pressed() noexcept;
+    export bool was_mouse_right_released() noexcept;
 
     export void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background) noexcept;
@@ -249,6 +270,7 @@ namespace epochnamespace::gui
 
     export bool button(std::string_view label, Vec2 size) noexcept;
     export bool button_selected(std::string_view label, Vec2 size, bool selected) noexcept;
+    export bool titlebar_close_button(Vec2 window_position, Vec2 window_size) noexcept;
     export bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept;
     export void image(const SpriteHandle& sprite, Vec2 size) noexcept;
     export [[nodiscard]] SpriteHandle register_runtime_surface(
@@ -275,6 +297,8 @@ namespace epochnamespace::gui
         Vec2 size,
         std::size_t max_chars = 0,
         bool multiline = false) noexcept;
+    export void select_all_text_in_edit_box(std::string& text) noexcept;
+    export SourceEditorResult source_editor(std::string& text, const SourceEditorOptions& options) noexcept;
     export [[nodiscard]] std::string clipboard_text() noexcept;
     export bool set_clipboard_text(std::string_view text) noexcept;
 
