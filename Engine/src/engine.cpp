@@ -109,6 +109,11 @@ import core.path;
 import core.time;
 import core.timer;
 
+import forest.factory;
+import saveload.system;
+import scenesnapshot;
+import sceneserializer;
+
 import engine.gui;
 import gui.menu;
 import editor;
@@ -504,6 +509,115 @@ namespace epochnamespace::core
             std::source_location::current());
     }
 
+    [[nodiscard]] inline int run_engine_contract_self_test()
+    {
+        bool failed = false;
+        const auto check = [&failed](std::string_view name, bool passed)
+        {
+            log_editor_self_test_line(
+                "engine_contract_self_test."
+                + std::string(name)
+                + "="
+                + (passed ? std::string{ "pass" } : std::string{ "fail" }));
+            failed = failed || !passed;
+        };
+
+        log_editor_self_test_line("engine_contract_self_test.start=forest_timeline_snapshot");
+
+        auto forestProfile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
+        forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;
+        const auto forestEstimate = epoch::forest::estimate_preview_stats(forestProfile);
+        const auto forestGeometry = epoch::forest::build_preview_geometry(forestProfile);
+        const auto previewActivation = epoch::forest::activation_for_editor_preview();
+        const auto sceneActivation = epoch::forest::activation_for_scene_use();
+        check("forest.config", epoch::forest::valid(forestProfile.config));
+        check("forest.estimate", forestEstimate.nodes > 1u && forestEstimate.branches > 0u);
+        check(
+            "forest.geometry",
+            forestGeometry.segmentCount > 0u
+            && forestGeometry.leafCount > 0u
+            && forestGeometry.segmentCount <= epoch::forest::kForestPreviewMaxSegments
+            && forestGeometry.leafCount <= epoch::forest::kForestPreviewMaxLeaves);
+        check(
+            "forest.activation",
+            !previewActivation.includeInGeneratedProject
+            && sceneActivation.includeInGeneratedProject
+            && sceneActivation.emitPackageManifest
+            && sceneActivation.attachToMainScene);
+
+        epoch::saveload::StreamingSaveConfig saveConfig{};
+        saveConfig.enabled = true;
+        saveConfig.mode = epoch::saveload::SaveStreamMode::Interval;
+        saveConfig.interval_seconds = -3.0;
+        saveConfig.frame_interval = 0;
+        saveConfig.max_snapshots = 0;
+        saveConfig.profile_name.clear();
+        saveConfig.target_root.clear();
+        epoch::saveload::clamp_streaming_save_config(saveConfig);
+
+        epoch::saveload::StreamingSaveStatus saveStatus{};
+        epoch::core::time::simulation_stats timeStats{};
+        timeStats.frame_index = 240;
+        timeStats.simulated_seconds = 4.0;
+
+        const bool shouldCapture = epoch::saveload::should_capture_checkpoint(saveConfig, saveStatus, timeStats);
+        epoch::saveload::mark_checkpoint_captured(saveStatus, saveConfig, timeStats);
+        const std::string saveDescription = epoch::saveload::describe_streaming_save(saveConfig, saveStatus);
+        check(
+            "timeline.clamp",
+            saveConfig.interval_seconds == 0.25
+            && saveConfig.frame_interval == 1u
+            && saveConfig.max_snapshots == 1u
+            && saveConfig.profile_name == "editor_timeline"
+            && saveConfig.target_root == "cache/saves/timeline");
+        check(
+            "timeline.capture",
+            shouldCapture
+            && saveStatus.staged_snapshot_count == 1u
+            && saveStatus.last_snapshot_label.find("editor_timeline_frame_") != std::string::npos
+            && saveDescription.find("enabled") != std::string::npos);
+
+        epoch::scene::SceneSnapshot snapshot{};
+        snapshot.scene_id = "timeline \"contract\"";
+        snapshot.world_name = "Persistent\nLevel";
+        snapshot.captured_frame_index = timeStats.frame_index;
+        snapshot.captured_simulated_seconds = timeStats.simulated_seconds;
+
+        epoch::scene::SceneObjectSnapshot object{};
+        object.name = "StarterCube";
+        object.type = "StaticMesh";
+        object.category = "Gameplay";
+        object.position = { 0.0F, 0.5F, 0.0F };
+        snapshot.objects.push_back(object);
+        snapshot.timeline_keys.push_back(epoch::scene::make_timeline_key(2.0, 120, "later", "checkpoint", "StarterCube", "late"));
+        snapshot.timeline_keys.push_back(epoch::scene::make_timeline_key(1.0, 60, "first", "checkpoint", "StarterCube", "payload\tvalue"));
+        epoch::scene::sort_timeline_keys(snapshot);
+
+        const auto categoryCounts = epoch::scene::object_count_by_category(snapshot);
+        const std::string snapshotText = epoch::scene::serialize_snapshot_text(snapshot);
+        const std::string snapshotSummary = epoch::scene::snapshot_summary(snapshot);
+        check(
+            "snapshot.lookup",
+            epoch::scene::find_object(snapshot, "StarterCube") != nullptr
+            && categoryCounts.contains("Gameplay")
+            && categoryCounts.at("Gameplay") == 1u);
+        check(
+            "snapshot.timeline_sort",
+            snapshot.timeline_keys.size() == 2u
+            && snapshot.timeline_keys.front().frame_index == 60u);
+        check(
+            "snapshot.serialize",
+            snapshotText.find("epoch_snapshot 1") != std::string::npos
+            && snapshotText.find("timeline \\\"contract\\\"") != std::string::npos
+            && snapshotText.find("Persistent\\nLevel") != std::string::npos
+            && snapshotText.find("payload\\tvalue") != std::string::npos
+            && snapshotSummary.find("objects 1") != std::string::npos);
+
+        log_editor_self_test_line(std::string("engine_contract_self_test.summary=") + snapshotSummary);
+        log_editor_self_test_line(std::string("engine_contract_self_test.result=") + (failed ? "fail" : "pass"));
+        return failed ? 7 : 0;
+    }
+
     [[nodiscard]] inline int run_editor_project_self_test(std::string_view project_id)
     {
         if (project_id.empty())
@@ -822,7 +936,12 @@ namespace epochnamespace::core
     [[nodiscard]] inline int run_engine_validation_self_test()
     {
         int result = 0;
-        log_editor_self_test_line("engine_validation_self_test.start=project_profiles_plus_ai_gate");
+        log_editor_self_test_line("engine_validation_self_test.start=contracts_plus_project_profiles_plus_ai_gate");
+
+        const int contractResult = run_engine_contract_self_test();
+        log_editor_self_test_line("engine_validation_self_test.contracts.code=" + std::to_string(contractResult));
+        if (contractResult != 0 && result == 0)
+            result = contractResult;
 
         for (const auto& profile : epochnamespace::editor_project_profiles())
         {

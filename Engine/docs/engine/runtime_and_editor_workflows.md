@@ -161,10 +161,13 @@ the same engine-owned path.
 - `--editor-ai-gate-self-test` runs the deterministic helper-review gate without
   launching the GUI. Use it before letting helper LLM replies influence curated
   training, eval promotion, or source-change planning.
-- `--engine-validation-self-test` runs every registered editor project profile
-  through the engine-side project self-test route and then runs the OS AI gate,
-  all without launching GUI windows. Use it before claiming project-run,
-  generated-shell, or AI-harness stability across the current source line.
+- `--engine-validation-self-test` first runs the pure engine contract lane for
+  Forest Factory, timeline streaming-save, and scene snapshot/serializer
+  behavior, then runs every registered editor project profile through the
+  engine-side project self-test route, then runs the OS AI gate. The contract
+  lane is build-safe, but the full validation command remains operator-gated in
+  this worktree because project self-tests can create child processes and touch
+  renderer/runtime state.
 - generated game project shells can carry the `engine_arcade` local
   runtime-mini package. The package is a project asset/script option that
   invokes engine-owned mini-runtime scenes such as Snake/Tetris/Pacman through
@@ -481,6 +484,10 @@ the same engine-owned path.
   checkpoint labels, scene object snapshots, timeline keys, and deterministic
   text serialization. The next acceptance gate is wiring those contracts into
   real `.epoch` scene parser/serializer persistence and replay restore.
+- The non-GUI engine contract self-test now exercises the Forest Factory,
+  streaming-save, and scene snapshot/serializer contracts before the heavier
+  project-profile and OS-AI validation gates. New timeline or package contracts
+  should join that lane before being exposed as generated-project behavior.
 
 ## Hardware support strategy
 

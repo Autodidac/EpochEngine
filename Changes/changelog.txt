@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.84.69]
+- Bumped the active source line to `v0.84.69` for a build-safe engine contract
+  self-test pass covering the newest 4D/time and Forest Factory contracts.
+- Added a pure `engine_contract_self_test` lane inside the existing engine
+  validation harness. It checks Forest Factory profile validity, preview geometry
+  budgets, scene-use activation policy, streaming-save clamp/capture behavior,
+  timeline checkpoint labeling, scene object lookup/counting, timeline-key
+  sorting, and deterministic snapshot text escaping without launching a renderer.
+- Updated `--engine-validation-self-test` logging so it reports the contract
+  self-test before the heavier project-profile and OS-AI gates. Runtime execution
+  remains operator-gated because project self-tests can still create child
+  processes and renderer contexts.
+- Validation: MSVC Debug x64 `ConsoleApplication1` build passed with
+  `/m:1 /clp:ErrorsOnly`. Runtime/eye-test validation is still operator-gated.
+
 ## [v0.84.68]
 - Bumped the active source line to `v0.84.68` for the first 4D/time-based
   Timeline Editor and streaming-save contract pass.

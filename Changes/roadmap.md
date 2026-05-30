@@ -749,6 +749,15 @@ engine shape and should be treated as starting truth for the next passes:
   show/configure checkpoint flow now, but full replay/persistence is not
   complete until `.epoch` scene parsing/serialization owns live editor/runtime
   loading and checkpoint restore.
+- `v0.84.69` adds a build-safe engine contract self-test lane before the heavier
+  project/AI validation path. It verifies Forest Factory profile/preview
+  contracts, scene-use activation policy, streaming-save clamp/capture behavior,
+  checkpoint labels, scene snapshot lookup/counting, timeline sorting, and
+  deterministic text escaping without opening a renderer. Acceptance remains
+  staged: this gives source/build evidence for the contracts, while full
+  `--engine-validation-self-test` execution and GUI eye-test proof stay
+  operator-gated because project self-tests and renderer contexts can touch live
+  GPU/runtime state.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
@@ -1123,6 +1132,9 @@ engine shape and should be treated as starting truth for the next passes:
 - keep the Timeline Editor wired to `core.time`, streaming-save config, and
   scene snapshot/serializer contracts without pretending full replay restore is
   already shipped
+- keep the engine contract self-test expanded with every new timeline,
+  Forest Factory, package, input, and scene-persistence contract before those
+  contracts are promoted into project-generation or OS-model workflows
 - keep backend ownership explicit inside live tooling surfaces
 
 ### 4. Asset, Build, And Packaging Discipline
