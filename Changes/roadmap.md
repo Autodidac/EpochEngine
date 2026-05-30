@@ -845,6 +845,13 @@ engine shape and should be treated as starting truth for the next passes:
   path, manifest path, and checkpoint label from the write-plan contract so the
   future replay gate can be reviewed before disk reads or live scene restore are
   enabled.
+- `v0.84.83` adds the first guarded checkpoint writer implementation. It can
+  create parent directories, write the serialized scene payload, write snapshot
+  metadata, and append the manifest line, but only when passed an explicit human
+  approval object. The pure engine contract self-test verifies the blocked gate
+  and snapshot payload shape without writing files. Acceptance remains staged:
+  no editor auto-write, rolling cleanup, or live replay restore is enabled until
+  the writer gate has runtime-safe UI proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

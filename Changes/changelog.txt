@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.84.83]
+- Bumped the active source line to `v0.84.83` for the first guarded
+  streaming-save writer implementation.
+- Added approval-gated checkpoint writing helpers to `saveload.system` so
+  scene payload, snapshot metadata, and manifest append operations have one
+  owned path instead of future ad hoc file writes.
+- Expanded `--engine-contract-self-test` coverage around the blocked writer
+  gate and snapshot metadata payload without writing files during build-safe
+  validation.
+- Surfaced the blocked writer-gate status in the Timeline Editor beside the
+  staged write/restore paths.
+
 ## [v0.84.82]
 - Bumped the active source line to `v0.84.82` for checkpoint restore/replay
   planning.

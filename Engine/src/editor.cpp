@@ -6133,8 +6133,12 @@ namespace epochnamespace
                         editor.streamingSaveConfig,
                         editor.lastCheckpointRecord);
                     gui::property_row(
+                        "[timeline] Writer gate",
+                        epoch::saveload::checkpoint_writer_approval_summary(epoch::saveload::StreamingCheckpointWriteApproval{}),
+                        132.0f);
+                    gui::property_row(
                         "[timeline] Scene payload",
-                        epoch::saveload::join_stream_path(editor.streamingSaveConfig.target_root, editor.lastCheckpointRecord.label + ".epoch"),
+                        restorePlan.scene_payload_path,
                         132.0f);
                     gui::property_row(
                         "[timeline] Restore",

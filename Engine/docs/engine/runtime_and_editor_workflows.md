@@ -529,6 +529,10 @@ the same engine-owned path.
 - Checkpoint restore plans mirror the staged write layout for the future replay
   gate. They name the checkpoint label, snapshot path, scene payload path, and
   manifest path without reading disk or mutating the live scene.
+- The checkpoint writer path exists but remains approval-gated. It writes scene
+  payload, snapshot metadata, and manifest entries only when an explicit human
+  approval object is supplied; the build-safe contract lane verifies the blocked
+  gate and metadata payload without touching disk.
 - `engine.input` is the shared input profile spine. The default editor profile
   now names camera reset-to-center, frame selection, clipboard copy/paste,
   right-click context menu, play-in-editor, timeline play/step, and package

@@ -787,6 +787,13 @@ namespace epochnamespace::core
         const auto checkpointPackage = epoch::saveload::make_checkpoint_package(checkpointRecord, snapshotText);
         const auto checkpointWritePlan = epoch::saveload::make_checkpoint_write_plan(saveConfig, checkpointPackage);
         const auto checkpointRestorePlan = epoch::saveload::make_checkpoint_restore_plan(saveConfig, checkpointRecord);
+        const auto blockedWriteResult = epoch::saveload::write_checkpoint_package(
+            checkpointWritePlan,
+            checkpointPackage,
+            epoch::saveload::StreamingCheckpointWriteApproval{});
+        const std::string checkpointSnapshotPayload = epoch::saveload::checkpoint_snapshot_payload(
+            checkpointWritePlan,
+            checkpointPackage);
         const std::string checkpointManifestLine = checkpointPackage.manifest_line;
         check(
             "snapshot.lookup",
@@ -859,6 +866,14 @@ namespace epochnamespace::core
             && checkpointRestorePlan.scene_payload_path == checkpointWritePlan.scene_payload_path
             && checkpointRestorePlan.manifest_path == checkpointWritePlan.manifest_path
             && epoch::saveload::checkpoint_restore_plan_summary(checkpointRestorePlan).find("restore plan") != std::string::npos);
+        check(
+            "checkpoint.writer_gate",
+            blockedWriteResult.blocked
+            && !blockedWriteResult.succeeded
+            && !blockedWriteResult.wrote_scene_payload
+            && checkpointSnapshotPayload.find("epoch_checkpoint 1") != std::string::npos
+            && checkpointSnapshotPayload.find(checkpointWritePlan.scene_payload_path) != std::string::npos
+            && blockedWriteResult.message.find("human approval") != std::string::npos);
 
         log_editor_self_test_line(std::string("engine_contract_self_test.summary=") + snapshotSummary);
         log_editor_self_test_line(std::string("engine_contract_self_test.result=") + (failed ? "fail" : "pass"));

@@ -7,9 +7,12 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <format>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 export module saveload.system;
@@ -121,6 +124,23 @@ export namespace epoch::saveload
         std::string scene_payload_path{};
         std::string manifest_path{};
         std::string checkpoint_label{};
+        std::string message{};
+    };
+
+    struct StreamingCheckpointWriteApproval
+    {
+        bool approved = false;
+        std::string approved_by{};
+        std::string reason{};
+    };
+
+    struct StreamingCheckpointWriteResult
+    {
+        bool succeeded = false;
+        bool blocked = false;
+        bool wrote_snapshot = false;
+        bool wrote_scene_payload = false;
+        bool wrote_manifest = false;
         std::string message{};
     };
 
@@ -566,6 +586,18 @@ export namespace epoch::saveload
         return hash;
     }
 
+    [[nodiscard]] inline std::string checkpoint_writer_approval_summary(
+        const StreamingCheckpointWriteApproval& approval)
+    {
+        if (!approval.approved)
+            return "Writer gate blocked: human approval is required.";
+
+        return std::format(
+            "Writer gate approved by {}: {}",
+            approval.approved_by.empty() ? "operator" : approval.approved_by,
+            approval.reason.empty() ? "checkpoint persistence" : approval.reason);
+    }
+
     [[nodiscard]] inline std::string checkpoint_payload_hash_text(std::uint64_t hash)
     {
         return std::format("{:016X}", hash);
@@ -585,6 +617,28 @@ export namespace epoch::saveload
             record.simulated_seconds,
             record.scene_text_bytes,
             record.timeline_key_count);
+    }
+
+    [[nodiscard]] inline std::string checkpoint_snapshot_payload(
+        const StreamingCheckpointWritePlan& plan,
+        const StreamingCheckpointPackage& package)
+    {
+        return std::format(
+            "epoch_checkpoint 1\n"
+            "label \"{}\"\n"
+            "snapshot \"{}\"\n"
+            "scene \"{}\"\n"
+            "manifest \"{}\"\n"
+            "scene_bytes {}\n"
+            "timeline_keys {}\n"
+            "hash \"{}\"\n",
+            package.record.label,
+            plan.snapshot_path,
+            plan.scene_payload_path,
+            plan.manifest_path,
+            package.record.scene_text_bytes,
+            package.record.timeline_key_count,
+            checkpoint_payload_hash_text(package.scene_text_hash));
     }
 
     [[nodiscard]] inline StreamingCheckpointPackage make_checkpoint_package(
@@ -704,6 +758,92 @@ export namespace epoch::saveload
             plan.checkpoint_label,
             plan.snapshot_path,
             plan.scene_payload_path);
+    }
+
+    [[nodiscard]] inline bool ensure_parent_directory_for_path(
+        std::string_view pathText,
+        std::string& errorMessage)
+    {
+        std::error_code ec{};
+        const std::filesystem::path path{ std::string(pathText) };
+        const auto parent = path.parent_path();
+        if (parent.empty() || std::filesystem::exists(parent, ec))
+            return !ec;
+
+        if (std::filesystem::create_directories(parent, ec))
+            return true;
+
+        if (!ec && std::filesystem::exists(parent))
+            return true;
+
+        errorMessage = std::format("Could not create checkpoint directory: {}", parent.generic_string());
+        return false;
+    }
+
+    [[nodiscard]] inline StreamingCheckpointWriteResult write_checkpoint_package(
+        const StreamingCheckpointWritePlan& plan,
+        const StreamingCheckpointPackage& package,
+        const StreamingCheckpointWriteApproval& approval)
+    {
+        StreamingCheckpointWriteResult result{};
+        if (!approval.approved)
+        {
+            result.blocked = true;
+            result.message = checkpoint_writer_approval_summary(approval);
+            return result;
+        }
+
+        if (!plan.valid || !validate_checkpoint_package(package))
+        {
+            result.message = "Checkpoint writer blocked: write plan or package evidence is invalid.";
+            return result;
+        }
+
+        if (!ensure_parent_directory_for_path(plan.scene_payload_path, result.message)
+            || !ensure_parent_directory_for_path(plan.snapshot_path, result.message)
+            || !ensure_parent_directory_for_path(plan.manifest_path, result.message))
+        {
+            return result;
+        }
+
+        {
+            std::ofstream sceneOut{ plan.scene_payload_path, std::ios::binary | std::ios::trunc };
+            if (!sceneOut)
+            {
+                result.message = "Checkpoint writer failed to open scene payload.";
+                return result;
+            }
+            sceneOut << package.scene_text;
+            result.wrote_scene_payload = true;
+        }
+
+        {
+            std::ofstream snapshotOut{ plan.snapshot_path, std::ios::binary | std::ios::trunc };
+            if (!snapshotOut)
+            {
+                result.message = "Checkpoint writer failed to open snapshot metadata.";
+                return result;
+            }
+            snapshotOut << checkpoint_snapshot_payload(plan, package);
+            result.wrote_snapshot = true;
+        }
+
+        {
+            std::ofstream manifestOut{ plan.manifest_path, std::ios::binary | std::ios::app };
+            if (!manifestOut)
+            {
+                result.message = "Checkpoint writer failed to open checkpoint manifest.";
+                return result;
+            }
+            manifestOut << plan.manifest_line << '\n';
+            result.wrote_manifest = true;
+        }
+
+        result.succeeded = result.wrote_scene_payload && result.wrote_snapshot && result.wrote_manifest;
+        result.message = result.succeeded
+            ? "Checkpoint package written through the approved streaming-save writer gate."
+            : "Checkpoint writer did not complete every output.";
+        return result;
     }
 
     [[nodiscard]] inline std::string describe_streaming_save(
