@@ -1,5 +1,16 @@
 # Epoch Changelog
 
+## [v0.84.81]
+- Bumped the active source line to `v0.84.81` for streaming-save cadence
+  visibility.
+- Added `StreamingSaveCadencePlan` helpers so `saveload.system` can report
+  whether a checkpoint is due now or scheduled by seconds/frames from shared
+  `core.time` stats.
+- Expanded `--engine-contract-self-test` coverage to validate due and scheduled
+  cadence summaries without launching renderer contexts.
+- Surfaced the next-capture cadence summary in the Timeline Editor beside the
+  streaming-save profile, retention, and checkpoint write-plan paths.
+
 ## [v0.84.80]
 - Bumped the active source line to `v0.84.80` for the next streaming-save writer
   contract slice.

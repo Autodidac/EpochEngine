@@ -834,6 +834,12 @@ engine shape and should be treated as starting truth for the next passes:
   and validity message. The Timeline Editor surfaces those paths so the future
   human-approved writer gate can be reviewed before disk persistence, rolling
   cleanup, or replay restore are claimed complete.
+- `v0.84.81` adds streaming-save cadence planning. `saveload.system` can now
+  report whether a checkpoint is due now or scheduled by seconds/frames from the
+  shared `core.time` stats, and the Timeline Editor exposes that next-capture
+  summary beside the profile/write-plan rows. Acceptance remains staged:
+  editable profile dropdowns, visible lane rendering, disk writes, and replay
+  restore still require GUI/runtime proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

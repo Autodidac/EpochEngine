@@ -598,8 +598,10 @@ namespace epochnamespace::core
         timeStats.frame_index = 240;
         timeStats.simulated_seconds = 4.0;
 
+        const auto saveCadenceDue = epoch::saveload::make_streaming_save_cadence_plan(saveConfig, saveStatus, timeStats);
         const bool shouldCapture = epoch::saveload::should_capture_checkpoint(saveConfig, saveStatus, timeStats);
         epoch::saveload::mark_checkpoint_captured(saveStatus, saveConfig, timeStats);
+        const auto saveCadenceScheduled = epoch::saveload::make_streaming_save_cadence_plan(saveConfig, saveStatus, timeStats);
         const std::string saveDescription = epoch::saveload::describe_streaming_save(saveConfig, saveStatus);
         check(
             "timeline.clamp",
@@ -611,11 +613,19 @@ namespace epochnamespace::core
         check(
             "timeline.capture",
             shouldCapture
+            && saveCadenceDue.capture_due
             && saveStatus.staged_snapshot_count == 1u
             && saveStatus.last_snapshot_label.find("editor_timeline_frame_") != std::string::npos
             && saveDescription.find("enabled") != std::string::npos
             && epoch::saveload::detect_streaming_save_profile(saveConfig) == epoch::saveload::StreamingSaveProfile::EditorInterval15s
             && epoch::saveload::describe_retention(saveConfig).find("rolling 1 checkpoint") != std::string::npos);
+        check(
+            "timeline.cadence",
+            !saveCadenceScheduled.capture_due
+            && saveCadenceScheduled.next_seconds > timeStats.simulated_seconds
+            && saveCadenceScheduled.seconds_until > 0.0
+            && epoch::saveload::streaming_save_cadence_summary(saveCadenceDue).find("capture due") != std::string::npos
+            && epoch::saveload::streaming_save_cadence_summary(saveCadenceScheduled).find("Time interval") != std::string::npos);
 
         const auto* intervalSaveProfile = epoch::saveload::find_streaming_save_profile(
             epoch::saveload::StreamingSaveProfile::EditorInterval15s);

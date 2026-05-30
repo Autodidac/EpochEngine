@@ -113,6 +113,20 @@ export namespace epoch::saveload
         std::string message{};
     };
 
+    struct StreamingSaveCadencePlan
+    {
+        bool enabled = false;
+        bool capture_due = false;
+        SaveStreamMode mode = SaveStreamMode::Manual;
+        std::uint64_t current_frame = 0;
+        std::uint64_t next_frame = 0;
+        std::uint64_t frames_until = 0;
+        double current_seconds = 0.0;
+        double next_seconds = 0.0;
+        double seconds_until = 0.0;
+        std::string message{};
+    };
+
     inline constexpr std::array<StreamingSaveProfileDescriptor, 4> kStreamingSaveProfileDescriptors{ {
         {
             .profile = StreamingSaveProfile::ManualReview,
@@ -362,6 +376,86 @@ export namespace epoch::saveload
         default:
             return false;
         }
+    }
+
+    [[nodiscard]] inline StreamingSaveCadencePlan make_streaming_save_cadence_plan(
+        const StreamingSaveConfig& config,
+        const StreamingSaveStatus& status,
+        const epoch::core::time::simulation_stats& stats)
+    {
+        StreamingSaveCadencePlan plan{};
+        plan.enabled = config.enabled;
+        plan.capture_due = should_capture_checkpoint(config, status, stats);
+        plan.mode = config.mode;
+        plan.current_frame = stats.frame_index;
+        plan.current_seconds = stats.simulated_seconds;
+
+        if (!config.enabled)
+        {
+            plan.message = "Streaming save is disabled.";
+            return plan;
+        }
+
+        switch (config.mode)
+        {
+        case SaveStreamMode::Manual:
+            plan.next_frame = stats.frame_index;
+            plan.next_seconds = stats.simulated_seconds;
+            plan.message = "Manual stream waits for an explicit checkpoint action.";
+            break;
+        case SaveStreamMode::Interval:
+            plan.next_seconds = status.last_simulated_seconds + (std::max)(0.25, config.interval_seconds);
+            plan.seconds_until = plan.capture_due ? 0.0 : (std::max)(0.0, plan.next_seconds - stats.simulated_seconds);
+            plan.next_frame = stats.frame_index;
+            plan.message = plan.capture_due
+                ? "Time-interval checkpoint is due now."
+                : "Time-interval checkpoint is scheduled.";
+            break;
+        case SaveStreamMode::FrameInterval:
+        {
+            const std::uint64_t interval = (std::max)(std::uint64_t{ 1 }, config.frame_interval);
+            plan.next_frame = status.last_frame_index + interval;
+            plan.frames_until = plan.capture_due || plan.next_frame <= stats.frame_index ? 0u : plan.next_frame - stats.frame_index;
+            plan.seconds_until = static_cast<double>(plan.frames_until) * (std::max)(1.0 / 240.0, stats.fixed_dt_seconds);
+            plan.next_seconds = stats.simulated_seconds + plan.seconds_until;
+            plan.message = plan.capture_due
+                ? "Frame-interval checkpoint is due now."
+                : "Frame-interval checkpoint is scheduled.";
+            break;
+        }
+        case SaveStreamMode::TimelineKey:
+            plan.next_frame = stats.frame_index;
+            plan.next_seconds = stats.simulated_seconds;
+            plan.message = plan.capture_due
+                ? "Timeline-key stream is armed for the next explicit key."
+                : "Timeline-key stream is waiting for another explicit key.";
+            break;
+        default:
+            plan.message = "Unknown streaming-save cadence.";
+            break;
+        }
+
+        return plan;
+    }
+
+    [[nodiscard]] inline std::string streaming_save_cadence_summary(const StreamingSaveCadencePlan& plan)
+    {
+        if (!plan.enabled)
+            return plan.message.empty() ? std::string("Streaming save is disabled.") : plan.message;
+
+        if (plan.mode == SaveStreamMode::Manual || plan.mode == SaveStreamMode::TimelineKey)
+            return plan.message;
+
+        if (plan.capture_due)
+            return std::format("{} | capture due now | frame {} | {:.3f}s", mode_name(plan.mode), plan.current_frame, plan.current_seconds);
+
+        return std::format(
+            "{} | next frame {} | {:.3f}s | wait {}f / {:.3f}s",
+            mode_name(plan.mode),
+            plan.next_frame,
+            plan.next_seconds,
+            plan.frames_until,
+            plan.seconds_until);
     }
 
     [[nodiscard]] inline std::string checkpoint_label(

@@ -522,6 +522,10 @@ the same engine-owned path.
   snapshot path, serialized scene payload path, manifest path, and manifest line
   under the configured streaming-save root so the Timeline Editor can expose the
   future write layout before a human-approved disk writer/restore gate lands.
+- Streaming-save cadence plans make the next checkpoint decision visible: due
+  now, waiting for a manual/timeline-key action, or scheduled by frame/seconds
+  from shared `core.time` stats. The Timeline Editor displays that next-capture
+  summary while disk writing remains gated.
 - `engine.input` is the shared input profile spine. The default editor profile
   now names camera reset-to-center, frame selection, clipboard copy/paste,
   right-click context menu, play-in-editor, timeline play/step, and package
