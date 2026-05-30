@@ -4159,6 +4159,9 @@ int WINAPI wWinMain(
         if (cli_result.editor_project_self_test_requested)
             return epochnamespace::core::run_editor_project_self_test(cli_result.editor_project_self_test_id);
 
+        if (cli_result.engine_contract_self_test_requested)
+            return epochnamespace::core::run_engine_contract_self_test();
+
         if (cli_result.engine_validation_self_test_requested)
             return epochnamespace::core::run_engine_validation_self_test();
 
@@ -4223,6 +4226,9 @@ int main(int argc, char** argv)
 
         if (cli_result.editor_project_self_test_requested)
             return epochnamespace::core::run_editor_project_self_test(cli_result.editor_project_self_test_id);
+
+        if (cli_result.engine_contract_self_test_requested)
+            return epochnamespace::core::run_engine_contract_self_test();
 
         if (cli_result.engine_validation_self_test_requested)
             return epochnamespace::core::run_engine_validation_self_test();

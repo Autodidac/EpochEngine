@@ -758,6 +758,13 @@ engine shape and should be treated as starting truth for the next passes:
   `--engine-validation-self-test` execution and GUI eye-test proof stay
   operator-gated because project self-tests and renderer contexts can touch live
   GPU/runtime state.
+- `v0.84.70` exposes that lane directly as `--engine-contract-self-test` so
+  agents and operators can run the pure Forest Factory/timeline/snapshot
+  contract checks without materializing projects, starting child runtimes,
+  touching updater flow, or instantiating renderer contexts. This is the default
+  safe quick-check before expanding contracts into project generation or OS
+  model workflows; the broader `--engine-validation-self-test` remains a
+  heavier operator-gated route.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
@@ -1135,6 +1142,9 @@ engine shape and should be treated as starting truth for the next passes:
 - keep the engine contract self-test expanded with every new timeline,
   Forest Factory, package, input, and scene-persistence contract before those
   contracts are promoted into project-generation or OS-model workflows
+- prefer `--engine-contract-self-test` for build-safe agent churn when runtime
+  launches are not explicitly approved; reserve `--engine-validation-self-test`
+  for the heavier materialize/build/child-runtime/AI gate proof path
 - keep backend ownership explicit inside live tooling surfaces
 
 ### 4. Asset, Build, And Packaging Discipline

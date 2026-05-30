@@ -335,6 +335,7 @@ namespace epochnamespace::core::cli
         bool editor_requested = false;
         bool editor_project_self_test_requested = false;
         bool editor_ai_gate_self_test_requested = false;
+        bool engine_contract_self_test_requested = false;
         bool engine_validation_self_test_requested = false;
         RuntimePath runtime = RuntimePath::Epoch;
         std::string editor_project_self_test_id{};
@@ -507,6 +508,8 @@ namespace epochnamespace::core::cli
                     "                             Materialize and build an editor project shell, then exit\n"
                     "  --editor-ai-gate-self-test\n"
                     "                             Run deterministic self-iteration helper gate checks, then exit\n"
+                    "  --engine-contract-self-test\n"
+                    "                             Run pure engine contract checks, then exit\n"
                     "  --menu                     Start the menu + games loop\n"
                     "  --runtime <epoch|legacy>   Select epoch-native or legacy parity runtime\n"
                     "  --epoch-native             Shortcut for --runtime epoch\n"
@@ -529,6 +532,8 @@ namespace epochnamespace::core::cli
                     "                             Materialize, build, and child-smoke one project profile\n"
                     "  --editor-ai-gate-self-test\n"
                     "                             Validate the OS AI evidence/promotion gate\n"
+                    "  --engine-contract-self-test\n"
+                    "                             Validate Forest Factory, timeline, and scene snapshot contracts only\n"
                     "  --engine-validation-self-test\n"
                     "                             Run project, child-runtime, and AI gate validation lanes\n");
             }
@@ -590,6 +595,10 @@ namespace epochnamespace::core::cli
             else if (key == "--editor-ai-gate-self-test"sv)
             {
                 result.editor_ai_gate_self_test_requested = true;
+            }
+            else if (key == "--engine-contract-self-test"sv)
+            {
+                result.engine_contract_self_test_requested = true;
             }
             else if (key == "--engine-validation-self-test"sv)
             {

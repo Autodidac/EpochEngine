@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.84.70]
+- Bumped the active source line to `v0.84.70` for a safer harness split.
+- Added a dedicated `--engine-contract-self-test` CLI route that runs only the
+  pure Forest Factory, timeline streaming-save, and scene snapshot/serializer
+  contract checks, then exits before project-profile builds, child runtimes, OS
+  AI gates, updater work, or renderer startup.
+- Kept `--engine-validation-self-test` as the broader aggregate path, but
+  documented the new contract-only route as the build-safe default for quick
+  contract verification in this worktree.
+
 ## [v0.84.69]
 - Bumped the active source line to `v0.84.69` for a build-safe engine contract
   self-test pass covering the newest 4D/time and Forest Factory contracts.

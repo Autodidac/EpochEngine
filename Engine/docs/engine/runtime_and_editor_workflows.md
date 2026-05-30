@@ -161,6 +161,11 @@ the same engine-owned path.
 - `--editor-ai-gate-self-test` runs the deterministic helper-review gate without
   launching the GUI. Use it before letting helper LLM replies influence curated
   training, eval promotion, or source-change planning.
+- `--engine-contract-self-test` runs only the pure Forest Factory,
+  timeline streaming-save, and scene snapshot/serializer checks, then exits
+  before project-profile builds, child runtimes, updater work, OS-AI gates, or
+  renderer startup. Use this as the safe fast contract check when GUI/runtime
+  validation is not explicitly approved.
 - `--engine-validation-self-test` first runs the pure engine contract lane for
   Forest Factory, timeline streaming-save, and scene snapshot/serializer
   behavior, then runs every registered editor project profile through the
