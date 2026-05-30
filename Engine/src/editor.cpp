@@ -6132,9 +6132,19 @@ namespace epochnamespace
                     const auto restorePlan = epoch::saveload::make_checkpoint_restore_plan(
                         editor.streamingSaveConfig,
                         editor.lastCheckpointRecord);
+                    const std::array retentionRecords{
+                        editor.lastCheckpointRecord
+                    };
+                    const auto retentionPlan = epoch::saveload::make_checkpoint_retention_plan(
+                        editor.streamingSaveConfig,
+                        retentionRecords);
                     gui::property_row(
                         "[timeline] Writer gate",
                         epoch::saveload::checkpoint_writer_approval_summary(epoch::saveload::StreamingCheckpointWriteApproval{}),
+                        132.0f);
+                    gui::property_row(
+                        "[timeline] Cleanup",
+                        epoch::saveload::checkpoint_retention_plan_summary(retentionPlan),
                         132.0f);
                     gui::property_row(
                         "[timeline] Scene payload",

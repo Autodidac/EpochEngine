@@ -787,6 +787,19 @@ namespace epochnamespace::core
         const auto checkpointPackage = epoch::saveload::make_checkpoint_package(checkpointRecord, snapshotText);
         const auto checkpointWritePlan = epoch::saveload::make_checkpoint_write_plan(saveConfig, checkpointPackage);
         const auto checkpointRestorePlan = epoch::saveload::make_checkpoint_restore_plan(saveConfig, checkpointRecord);
+        std::vector<epoch::saveload::StreamingCheckpointRecord> retentionRecords{};
+        retentionRecords.push_back(checkpointRecord);
+        retentionRecords.push_back(checkpointRecord);
+        retentionRecords.back().label = "editor_timeline_frame_0121";
+        retentionRecords.back().output_path = "cache/saves/timeline/editor_timeline_frame_0121.checkpoint";
+        retentionRecords.push_back(checkpointRecord);
+        retentionRecords.back().label = "editor_timeline_frame_0122";
+        retentionRecords.back().output_path = "cache/saves/timeline/editor_timeline_frame_0122.checkpoint";
+        epoch::saveload::StreamingSaveConfig retentionConfig = saveConfig;
+        retentionConfig.max_snapshots = 2u;
+        const auto checkpointRetentionPlan = epoch::saveload::make_checkpoint_retention_plan(
+            retentionConfig,
+            retentionRecords);
         const auto blockedWriteResult = epoch::saveload::write_checkpoint_package(
             checkpointWritePlan,
             checkpointPackage,
@@ -866,6 +879,15 @@ namespace epochnamespace::core
             && checkpointRestorePlan.scene_payload_path == checkpointWritePlan.scene_payload_path
             && checkpointRestorePlan.manifest_path == checkpointWritePlan.manifest_path
             && epoch::saveload::checkpoint_restore_plan_summary(checkpointRestorePlan).find("restore plan") != std::string::npos);
+        check(
+            "checkpoint.retention_plan",
+            checkpointRetentionPlan.valid
+            && checkpointRetentionPlan.source_count == 3u
+            && checkpointRetentionPlan.retained_count == 2u
+            && checkpointRetentionPlan.prune_labels.size() == 1u
+            && checkpointRetentionPlan.prune_labels.front() == checkpointRecord.label
+            && checkpointRetentionPlan.prune_snapshot_paths.front() == checkpointRecord.output_path
+            && epoch::saveload::checkpoint_retention_plan_summary(checkpointRetentionPlan).find("prune 1") != std::string::npos);
         check(
             "checkpoint.writer_gate",
             blockedWriteResult.blocked

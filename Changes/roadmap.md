@@ -852,6 +852,12 @@ engine shape and should be treated as starting truth for the next passes:
   and snapshot payload shape without writing files. Acceptance remains staged:
   no editor auto-write, rolling cleanup, or live replay restore is enabled until
   the writer gate has runtime-safe UI proof.
+- `v0.84.84` adds the matching non-destructive checkpoint retention plan. The
+  save/load contract can now report which staged checkpoint records would be
+  retained or pruned under the active rolling-retention cap, and the Timeline
+  Editor exposes that cleanup summary without deleting files. Acceptance remains
+  staged: retention execution still requires a human-approved disk cleanup gate
+  plus runtime-safe UI proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

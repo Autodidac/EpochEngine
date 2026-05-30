@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.84.84]
+- Bumped the active source line to `v0.84.84` for non-destructive streaming
+  checkpoint retention planning.
+- Added checkpoint retention-plan helpers to `saveload.system` so rolling
+  cleanup can be reviewed from checkpoint records before any delete path exists.
+- Expanded `--engine-contract-self-test` coverage around retained/pruned
+  checkpoint decisions without touching disk.
+- Surfaced the cleanup plan summary in the Timeline Editor beside the blocked
+  writer and restore rows.
+
 ## [v0.84.83]
 - Bumped the active source line to `v0.84.83` for the first guarded
   streaming-save writer implementation.

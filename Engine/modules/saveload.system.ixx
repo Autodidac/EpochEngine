@@ -10,10 +10,12 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <format>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 export module saveload.system;
 
@@ -141,6 +143,17 @@ export namespace epoch::saveload
         bool wrote_snapshot = false;
         bool wrote_scene_payload = false;
         bool wrote_manifest = false;
+        std::string message{};
+    };
+
+    struct StreamingCheckpointRetentionPlan
+    {
+        bool valid = false;
+        std::uint32_t max_snapshots = 0;
+        std::size_t source_count = 0;
+        std::size_t retained_count = 0;
+        std::vector<std::string> prune_labels{};
+        std::vector<std::string> prune_snapshot_paths{};
         std::string message{};
     };
 
@@ -758,6 +771,49 @@ export namespace epoch::saveload
             plan.checkpoint_label,
             plan.snapshot_path,
             plan.scene_payload_path);
+    }
+
+    [[nodiscard]] inline StreamingCheckpointRetentionPlan make_checkpoint_retention_plan(
+        const StreamingSaveConfig& config,
+        std::span<const StreamingCheckpointRecord> records)
+    {
+        StreamingCheckpointRetentionPlan plan{};
+        plan.max_snapshots = (std::max)(1u, config.max_snapshots);
+        plan.source_count = records.size();
+        plan.valid = config.enabled || !records.empty();
+
+        if (records.size() <= plan.max_snapshots)
+        {
+            plan.retained_count = records.size();
+            plan.message = "Retention plan keeps every staged checkpoint.";
+            return plan;
+        }
+
+        const std::size_t pruneCount = records.size() - plan.max_snapshots;
+        plan.retained_count = plan.max_snapshots;
+        plan.prune_labels.reserve(pruneCount);
+        plan.prune_snapshot_paths.reserve(pruneCount);
+        for (std::size_t index = 0; index < pruneCount; ++index)
+        {
+            plan.prune_labels.push_back(records[index].label);
+            plan.prune_snapshot_paths.push_back(records[index].output_path);
+        }
+
+        plan.message = std::format("Retention plan prunes {} old checkpoint{}.", pruneCount, pruneCount == 1u ? "" : "s");
+        return plan;
+    }
+
+    [[nodiscard]] inline std::string checkpoint_retention_plan_summary(const StreamingCheckpointRetentionPlan& plan)
+    {
+        if (!plan.valid)
+            return "No checkpoint retention plan staged.";
+
+        return std::format(
+            "retention plan | retained {}/{} | prune {} | max {}",
+            plan.retained_count,
+            plan.source_count,
+            plan.prune_labels.size(),
+            plan.max_snapshots);
     }
 
     [[nodiscard]] inline bool ensure_parent_directory_for_path(
