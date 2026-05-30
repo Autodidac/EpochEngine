@@ -1,5 +1,6 @@
 module;
 
+#include <cstddef>
 #include <array>
 #include <cstdint>
 #include <span>
@@ -49,6 +50,15 @@ export namespace epoch::package_registry
         bool headlessCapable{};
         bool requiresExplicitNetworkApproval{};
         std::string_view externalSourceRepo{};
+    };
+
+    struct RegistryValidation
+    {
+        bool ok{};
+        std::size_t packageCount{};
+        std::size_t modelAssetCount{};
+        std::size_t networkSensitiveCount{};
+        std::size_t duplicateIdCount{};
     };
 
     inline constexpr std::string_view kEpochEngineExtensionsRepo = "https://github.com/Autodidac/EpochEngineExtensions";
@@ -206,6 +216,38 @@ export namespace epoch::package_registry
         return {kKnownPackages.data(), kKnownPackages.size()};
     }
 
+    [[nodiscard]] constexpr std::string_view package_kind_name(PackageKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case PackageKind::RuntimeMini: return "Runtime mini";
+        case PackageKind::CoreOptIn: return "Core opt-in";
+        case PackageKind::NetworkRuntime: return "Network runtime";
+        case PackageKind::HeadlessServer: return "Headless server";
+        case PackageKind::ModelAsset: return "Model asset";
+        case PackageKind::ResearchPrototype: return "Research prototype";
+        case PackageKind::DownloadableSource: return "Downloadable source";
+        }
+
+        return "Unknown";
+    }
+
+    [[nodiscard]] constexpr std::string_view activation_mode_name(ActivationMode activation) noexcept
+    {
+        switch (activation)
+        {
+        case ActivationMode::ProjectOptIn: return "Project opt-in";
+        case ActivationMode::MainSceneUse: return "Main-scene use";
+        case ActivationMode::HeadlessServerOptIn: return "Headless server opt-in";
+        case ActivationMode::ClientListenServerOptIn: return "Client listen-server opt-in";
+        case ActivationMode::ModelDownloadOptIn: return "Model download opt-in";
+        case ActivationMode::ManualResearchImport: return "Manual research import";
+        case ActivationMode::DownloadedOptIn: return "Downloaded opt-in";
+        }
+
+        return "Unknown";
+    }
+
     [[nodiscard]] constexpr const PackageDescriptor* find(std::string_view id) noexcept
     {
         for (const auto& package : kKnownPackages)
@@ -217,6 +259,34 @@ export namespace epoch::package_registry
         }
 
         return nullptr;
+    }
+
+    [[nodiscard]] constexpr bool is_network_sensitive(const PackageDescriptor& package) noexcept
+    {
+        return package.serverOrListenerAllowed ||
+               package.requiresExplicitNetworkApproval ||
+               package.activation == ActivationMode::HeadlessServerOptIn ||
+               package.activation == ActivationMode::ClientListenServerOptIn;
+    }
+
+    [[nodiscard]] constexpr bool is_model_asset(std::string_view id) noexcept
+    {
+        const auto* package = find(id);
+        return package != nullptr && package->kind == PackageKind::ModelAsset;
+    }
+
+    [[nodiscard]] constexpr bool is_research_or_downloadable(std::string_view id) noexcept
+    {
+        const auto* package = find(id);
+        return package != nullptr &&
+               (package->kind == PackageKind::ResearchPrototype ||
+                package->kind == PackageKind::DownloadableSource);
+    }
+
+    [[nodiscard]] constexpr bool ships_in_core_without_default_project_payload(std::string_view id) noexcept
+    {
+        const auto* package = find(id);
+        return package != nullptr && package->shipsInCore && !package->includeInGeneratedProject;
     }
 
     [[nodiscard]] constexpr bool is_core_opt_in(std::string_view id) noexcept
@@ -249,5 +319,90 @@ export namespace epoch::package_registry
     {
         const auto* package = find(id);
         return package != nullptr ? package->externalSourceRepo : std::string_view{};
+    }
+
+    [[nodiscard]] constexpr std::string_view recommended_local_image_model_id() noexcept
+    {
+        return kBonsaiImageTernaryPackageId;
+    }
+
+    [[nodiscard]] constexpr bool validate_descriptor(const PackageDescriptor& package) noexcept
+    {
+        if (package.id.empty() || package.displayName.empty() || package.summary.empty())
+        {
+            return false;
+        }
+
+        if (is_network_sensitive(package) &&
+            (!package.requiresExplicitNetworkApproval || !package.requiresHumanBuildGate))
+        {
+            return false;
+        }
+
+        if (package.kind == PackageKind::ModelAsset &&
+            (package.activation != ActivationMode::ModelDownloadOptIn ||
+             package.externalSourceRepo.empty() ||
+             !package.requiresHumanBuildGate))
+        {
+            return false;
+        }
+
+        if ((package.kind == PackageKind::ResearchPrototype ||
+             package.kind == PackageKind::DownloadableSource) &&
+            (package.externalSourceRepo.empty() || !package.requiresHumanBuildGate))
+        {
+            return false;
+        }
+
+        if (package.activation == ActivationMode::ManualResearchImport &&
+            package.externalSourceRepo.empty())
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    [[nodiscard]] constexpr std::size_t duplicate_id_count() noexcept
+    {
+        std::size_t duplicates = 0;
+        for (std::size_t left = 0; left < kKnownPackages.size(); ++left)
+        {
+            for (std::size_t right = left + 1; right < kKnownPackages.size(); ++right)
+            {
+                if (kKnownPackages[left].id == kKnownPackages[right].id)
+                {
+                    ++duplicates;
+                }
+            }
+        }
+
+        return duplicates;
+    }
+
+    [[nodiscard]] constexpr RegistryValidation validate_registry() noexcept
+    {
+        RegistryValidation result{};
+        result.packageCount = kKnownPackages.size();
+        result.duplicateIdCount = duplicate_id_count();
+        result.ok = result.duplicateIdCount == 0;
+
+        for (const auto& package : kKnownPackages)
+        {
+            result.ok = result.ok && validate_descriptor(package);
+
+            if (package.kind == PackageKind::ModelAsset)
+            {
+                ++result.modelAssetCount;
+            }
+
+            if (is_network_sensitive(package))
+            {
+                ++result.networkSensitiveCount;
+            }
+        }
+
+        result.ok = result.ok && is_model_asset(recommended_local_image_model_id());
+        return result;
     }
 }

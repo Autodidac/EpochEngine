@@ -161,17 +161,18 @@ the same engine-owned path.
 - `--editor-ai-gate-self-test` runs the deterministic helper-review gate without
   launching the GUI. Use it before letting helper LLM replies influence curated
   training, eval promotion, or source-change planning.
-- `--engine-contract-self-test` runs only the pure Forest Factory,
-  timeline streaming-save, and scene snapshot/serializer checks, then exits
-  before project-profile builds, child runtimes, updater work, OS-AI gates, or
-  renderer startup. Use this as the safe fast contract check when GUI/runtime
-  validation is not explicitly approved.
+- `--engine-contract-self-test` runs only the pure Forest Factory, package
+  registry/model-gate, timeline streaming-save, input profile, and scene
+  snapshot/serializer checks, then exits before project-profile builds, child
+  runtimes, updater work, OS-AI gates, or renderer startup. Use this as the safe
+  fast contract check when GUI/runtime validation is not explicitly approved.
 - `--engine-validation-self-test` first runs the pure engine contract lane for
-  Forest Factory, timeline streaming-save, and scene snapshot/serializer
-  behavior, then runs every registered editor project profile through the
-  engine-side project self-test route, then runs the OS AI gate. The contract
-  lane is build-safe, but the full validation command remains operator-gated in
-  this worktree because project self-tests can create child processes and touch
+  Forest Factory, package registry/model-gate, timeline streaming-save, input
+  profile, and scene snapshot/serializer behavior, then runs every registered
+  editor project profile through the engine-side project self-test route, then
+  runs the OS AI gate. The contract lane is build-safe, but the full validation
+  command remains operator-gated in this worktree because project self-tests can
+  create child processes and touch
   renderer/runtime state.
 - generated game project shells can carry the `engine_arcade` local
   runtime-mini package. The package is a project asset/script option that
@@ -484,6 +485,10 @@ the same engine-owned path.
   the shared `core.time` stats, exposes manual/interval/frame/timeline-key
   checkpoint modes, and owns configurable streaming-save status beside the
   editor scene flow.
+- Epoch's 4D direction means timing is not a side panel: timeline authoring,
+  streaming-save cadence, checkpoint retention, replay keys, package preview
+  playback, and future deterministic simulation review all route through the
+  shared time spine before they become generated-project behavior.
 - `timeline.system` is the first explicit timeline data model. It owns editor
   tracks, keyed events, playhead state, scrub helpers, recording-gate state, and
   conversion into scene timeline keys so the UI can grow around engine data
@@ -511,10 +516,10 @@ the same engine-owned path.
   shortcuts, and project/package export should treat input profiles as explicit
   opt-in data.
 - The non-GUI engine contract self-test now exercises the Forest Factory,
-  streaming-save package, input profile, and scene snapshot serializer/parser
-  contracts before the heavier project-profile and OS-AI validation gates. New
-  timeline, package, or input contracts should join that lane before being exposed as
-  generated-project behavior.
+  package registry, streaming-save package, input profile, and scene snapshot
+  serializer/parser contracts before the heavier project-profile and OS-AI
+  validation gates. New timeline, package, model, or input contracts should join
+  that lane before being exposed as generated-project behavior.
 
 ## Hardware support strategy
 

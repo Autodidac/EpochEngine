@@ -10,6 +10,10 @@ shown in the older Plant Lab prototype line.
   `Engine/modules/forest.factory.ixx`.
 - Package Registry owns package identity, provenance, activation mode, and
   security gates in `Engine/modules/package.registry.ixx`.
+- `package.registry` validation is part of the non-GUI
+  `--engine-contract-self-test` lane, so Forest Factory must remain a core
+  opt-in package that ships in the engine but does not enter generated projects
+  until main-scene use or package activation is visible.
 - The editor workspace row opens the current Forest Factory workbench surface,
   which runs through the scene-backed editor viewport with deterministic
   temporal-graph preview entities while keeping provenance, staged package
@@ -70,6 +74,9 @@ Installing the package stages:
 
 This is a visible project activation record, not a hidden import. It does not
 download source, bind ports, create servers, or run package code automatically.
+The package descriptor must keep `Main-scene use` activation, the
+`EpochEngineExtensions` source route, and a human build gate so the Package
+Manager UI stays tied to the validated registry instead of local-only text.
 
 ## Acceptance Gates
 

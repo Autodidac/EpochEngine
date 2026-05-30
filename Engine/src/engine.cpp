@@ -110,6 +110,7 @@ import core.time;
 import core.timer;
 
 import forest.factory;
+import package.registry;
 import saveload.system;
 import scenesnapshot;
 import sceneserializer;
@@ -523,7 +524,7 @@ namespace epochnamespace::core
             failed = failed || !passed;
         };
 
-        log_editor_self_test_line("engine_contract_self_test.start=forest_timeline_snapshot");
+        log_editor_self_test_line("engine_contract_self_test.start=forest_package_timeline_snapshot");
 
         auto forestProfile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
         forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;
@@ -545,6 +546,42 @@ namespace epochnamespace::core
             && sceneActivation.includeInGeneratedProject
             && sceneActivation.emitPackageManifest
             && sceneActivation.attachToMainScene);
+
+        const auto packageValidation = epoch::package_registry::validate_registry();
+        const auto* forestPackage = epoch::package_registry::find(epoch::package_registry::kEngineForestFactoryPackageId);
+        const auto* bonsaiPackage = epoch::package_registry::find(epoch::package_registry::recommended_local_image_model_id());
+        const auto* qwenPackage = epoch::package_registry::find(epoch::package_registry::kQwenCoderPackageId);
+        const auto* nemotronPackage = epoch::package_registry::find(epoch::package_registry::kNemotronNanoPackageId);
+        check(
+            "package.registry",
+            packageValidation.ok
+            && packageValidation.packageCount == epoch::package_registry::known_packages().size()
+            && packageValidation.duplicateIdCount == 0u
+            && packageValidation.modelAssetCount >= 5u
+            && packageValidation.networkSensitiveCount >= 2u);
+        check(
+            "package.forest_factory",
+            forestPackage != nullptr
+            && forestPackage->kind == epoch::package_registry::PackageKind::CoreOptIn
+            && forestPackage->activation == epoch::package_registry::ActivationMode::MainSceneUse
+            && epoch::package_registry::is_core_opt_in(forestPackage->id)
+            && epoch::package_registry::ships_in_core_without_default_project_payload(forestPackage->id)
+            && epoch::package_registry::external_source_repo(forestPackage->id).find("EpochEngineExtensions") != std::string_view::npos);
+        check(
+            "package.os_models",
+            bonsaiPackage != nullptr
+            && qwenPackage != nullptr
+            && nemotronPackage != nullptr
+            && epoch::package_registry::is_model_asset(bonsaiPackage->id)
+            && epoch::package_registry::is_model_asset(qwenPackage->id)
+            && epoch::package_registry::is_model_asset(nemotronPackage->id)
+            && epoch::package_registry::must_use_human_build_gate(bonsaiPackage->id)
+            && epoch::package_registry::activation_mode_name(bonsaiPackage->activation) == std::string_view{ "Model download opt-in" });
+        check(
+            "package.network_gates",
+            epoch::package_registry::requires_explicit_network_approval(epoch::package_registry::kEngineAuthoritativeServerPackageId)
+            && epoch::package_registry::can_create_server_or_listener_after_approval(epoch::package_registry::kEngineListenServerPackageId)
+            && epoch::package_registry::must_use_human_build_gate("missing_package"));
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;

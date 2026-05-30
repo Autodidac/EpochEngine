@@ -797,6 +797,15 @@ engine shape and should be treated as starting truth for the next passes:
   text, right-click menus, project single-context launch controls, and editor
   input settings, but live event routing and GUI editing of bindings still need
   runtime-safe eye-test proof.
+- `v0.84.76` validates the package/model surface as a first-class engine
+  contract instead of loose Package Manager text. `package.registry` now exposes
+  package kind labels, activation labels, Bonsai-as-default local image model
+  selection, core-without-project-payload checks, network-sensitive gates, and a
+  deterministic registry validator. The pure engine contract self-test now
+  proves Forest Factory activation, Qwen/Nemotron/Bonsai model lanes, and
+  server/listener approval gates without launching renderer contexts. Acceptance
+  remains staged: Package Manager layout, actual download/build progress, and
+  project opt-in payload writes still require GUI/runtime eye-test proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

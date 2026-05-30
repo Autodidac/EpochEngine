@@ -7484,21 +7484,6 @@ namespace epochnamespace
                 ? std::string(selectedPackage->displayName)
                 : std::string("(none)");
 
-            const auto packageKindText = [](epoch::package_registry::PackageKind kind) noexcept -> std::string_view
-            {
-                switch (kind)
-                {
-                case epoch::package_registry::PackageKind::RuntimeMini: return "Runtime mini";
-                case epoch::package_registry::PackageKind::CoreOptIn: return "Core opt-in";
-                case epoch::package_registry::PackageKind::NetworkRuntime: return "Network runtime";
-                case epoch::package_registry::PackageKind::HeadlessServer: return "Headless server";
-                case epoch::package_registry::PackageKind::ModelAsset: return "OS model asset";
-                case epoch::package_registry::PackageKind::ResearchPrototype: return "Research prototype";
-                case epoch::package_registry::PackageKind::DownloadableSource: return "Downloadable source";
-                default: return "Unknown";
-                }
-            };
-
             if (packageSelect.opened)
             {
                 gui::wrapped_label(
@@ -7516,7 +7501,8 @@ namespace epochnamespace
                 });
                 gui::property_row("Project", editor.projectName, 96.0f);
                 gui::property_row("Package", activePackageLabel, 96.0f);
-                gui::property_row("Type", selectedPackage ? std::string(packageKindText(selectedPackage->kind)) : std::string("(none)"), 96.0f);
+                gui::property_row("Type", selectedPackage ? std::string(epoch::package_registry::package_kind_name(selectedPackage->kind)) : std::string("(none)"), 96.0f);
+                gui::property_row("Activation", selectedPackage ? std::string(epoch::package_registry::activation_mode_name(selectedPackage->activation)) : std::string("(none)"), 96.0f);
                 gui::property_row("Source", selectedPackage && !selectedPackage->externalSourceRepo.empty()
                     ? std::string(selectedPackage->externalSourceRepo)
                     : std::string("engine builtin"), 96.0f);

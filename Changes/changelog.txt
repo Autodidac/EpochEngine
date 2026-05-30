@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.84.76]
+- Bumped the active source line to `v0.84.76` for package-registry contract
+  validation.
+- Added `package.registry` helper surfaces for package kind names, activation
+  mode names, model/default-image selection, core-without-project-payload checks,
+  network-sensitive gates, and deterministic registry validation.
+- Expanded `--engine-contract-self-test` coverage so Forest Factory, Bonsai
+  local image model defaults, Qwen/Nemotron model lanes, and server/listener
+  package gates are verified without launching GPU contexts.
+- Reused the shared package-registry display helpers in the Package Manager so
+  editor UI text stays tied to the validated registry instead of local lambdas.
+
 ## [v0.84.75]
 - Bumped the active source line to `v0.84.75` for the universal input contract
   expansion.
