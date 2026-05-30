@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.84.73]
+- Bumped the active source line to `v0.84.73` for the first deterministic scene
+  snapshot parser contract.
+- Added `parse_snapshot_text` beside the existing snapshot serializer so the
+  build-safe timeline/persistence lane can prove serializer/parser round trips
+  without launching a renderer or claiming full `.epoch` scene restore.
+- Expanded the engine contract self-test to verify escaped scene/world text,
+  object transform data, timeline-key payloads, and camera-cut keys survive the
+  deterministic snapshot round trip.
+
 ## [v0.84.72]
 - Bumped the active source line to `v0.84.72` for the streaming-save profile
   contract pass.

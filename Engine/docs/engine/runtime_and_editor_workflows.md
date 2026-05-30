@@ -491,17 +491,19 @@ the same engine-owned path.
 - `saveload.system`, `scenesnapshot`, and `sceneserializer` are the current
   contract layer for timeline checkpoints: they define streaming-save config,
   checkpoint labels, scene object snapshots, timeline keys, and deterministic
-  text serialization. The next acceptance gate is wiring those contracts into
-  real `.epoch` scene parser/serializer persistence and replay restore.
+  text serialization plus parser round-trip. The next acceptance gate is wiring
+  those contracts into real `.epoch` scene persistence, disk writing, and replay
+  restore.
 - Streaming-save profiles currently cover manual review, 15-second editor
   streams, 120-frame editor streams, and timeline-keyed streams. Checkpoint
   records carry retention, output path, included-data flags, scene payload byte
   counts, and timeline-key counts so build-safe tests can verify evidence before
   any runtime writer/restore path is promoted.
 - The non-GUI engine contract self-test now exercises the Forest Factory,
-  streaming-save, and scene snapshot/serializer contracts before the heavier
-  project-profile and OS-AI validation gates. New timeline or package contracts
-  should join that lane before being exposed as generated-project behavior.
+  streaming-save, and scene snapshot serializer/parser contracts before the
+  heavier project-profile and OS-AI validation gates. New timeline or package
+  contracts should join that lane before being exposed as generated-project
+  behavior.
 
 ## Hardware support strategy
 

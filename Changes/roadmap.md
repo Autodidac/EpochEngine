@@ -777,6 +777,12 @@ engine shape and should be treated as starting truth for the next passes:
   build-tested, but the actual writer/restore pipeline still needs explicit
   scene parser/serializer ownership and operator-approved runtime proof before
   being called complete.
+- `v0.84.73` adds the first deterministic scene snapshot parser beside the
+  serializer and covers it with the pure engine contract self-test. Acceptance
+  remains staged: serializer/parser round-trip is now build-safe evidence for
+  scene object data and timeline keys, but live `.epoch` scene restore,
+  streaming disk writes, and editor/runtime replay still need runtime-safe
+  proof before they are called complete.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

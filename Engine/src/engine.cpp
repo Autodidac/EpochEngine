@@ -631,6 +631,7 @@ namespace epochnamespace::core
         const auto categoryCounts = epoch::scene::object_count_by_category(snapshot);
         const std::string snapshotText = epoch::scene::serialize_snapshot_text(snapshot);
         const std::string snapshotSummary = epoch::scene::snapshot_summary(snapshot);
+        const auto parsedSnapshot = epoch::scene::parse_snapshot_text(snapshotText);
         const auto checkpointRecord = epoch::saveload::make_checkpoint_record(
             saveConfig,
             saveStatus,
@@ -654,6 +655,31 @@ namespace epochnamespace::core
             && snapshotText.find("Persistent\\nLevel") != std::string::npos
             && snapshotText.find("payload\\tvalue") != std::string::npos
             && snapshotSummary.find("objects 1") != std::string::npos);
+
+        bool parsedHasEscapedPayload = false;
+        bool parsedHasCameraCut = false;
+        if (parsedSnapshot.ok)
+        {
+            for (const auto& key : parsedSnapshot.snapshot.timeline_keys)
+            {
+                parsedHasEscapedPayload = parsedHasEscapedPayload || key.payload == "payload\tvalue";
+                parsedHasCameraCut = parsedHasCameraCut || key.event_kind == "Camera cut";
+            }
+        }
+        check(
+            "snapshot.parse_round_trip",
+            parsedSnapshot.ok
+            && parsedSnapshot.snapshot.scene_id == snapshot.scene_id
+            && parsedSnapshot.snapshot.world_name == snapshot.world_name
+            && parsedSnapshot.snapshot.captured_frame_index == snapshot.captured_frame_index
+            && parsedSnapshot.snapshot.captured_simulated_seconds == snapshot.captured_simulated_seconds
+            && parsedSnapshot.snapshot.objects.size() == 1u
+            && parsedSnapshot.snapshot.objects.front().name == "StarterCube"
+            && parsedSnapshot.snapshot.objects.front().category == "Gameplay"
+            && parsedSnapshot.snapshot.objects.front().position[1] == 0.5F
+            && parsedSnapshot.snapshot.timeline_keys.size() == snapshot.timeline_keys.size()
+            && parsedHasEscapedPayload
+            && parsedHasCameraCut);
         check(
             "checkpoint.record",
             checkpointRecord.valid

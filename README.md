@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.72-1F7A4C?style=for-the-badge" alt="Current development source v0.84.72" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.73-1F7A4C?style=for-the-badge" alt="Current development source v0.84.73" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.72`.
+- Source is currently the active development line at `v0.84.73`.
 - The latest published stable runtime release is `v0.84.38`.
 - Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -141,7 +141,8 @@ OS AI model, tooling, and evidence rules live with the AI assets in
   AI-loop graph surfaces for renderer/runtime ownership diagnostics.
 - A 4D/time-based Timeline Editor surface backed by the shared `core.time`
   spine, with checkpoint stream configuration, manual/interval key staging, and
-  first scene snapshot/serializer contracts ready for the next persistence gate.
+  deterministic scene snapshot serializer/parser contracts ready for the next
+  persistence gate.
 - A first `timeline.system` contract for editor tracks, keyed events, playhead
   scrubbing, recording gates, and scene-key conversion so timeline UI can grow
   from real 4D engine data instead of loose status buttons.
@@ -150,7 +151,8 @@ OS AI model, tooling, and evidence rules live with the AI assets in
   visible before the full disk writer/restore loop is promoted.
 - A build-safe `--engine-contract-self-test` lane that validates Forest Factory preview
   descriptors, streaming-save checkpoint behavior, and deterministic scene
-  snapshot serialization before the heavier project/AI validation lanes.
+  snapshot serialization plus parser round-trip before the heavier project/AI
+  validation lanes.
 - A staged AI workspace centered on an engine-owned OS-model harness around
   operator-selected `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` and `Qwen/Qwen3.6-27B`
   coding/review lanes plus future Bonsai Image 4B, `Wan2.1-VACE-1.3B`, and
