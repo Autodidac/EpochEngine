@@ -4,6 +4,7 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -47,6 +48,22 @@ export namespace epoch::saveload
         bool include_packages = false;
     };
 
+    struct StreamingSaveProfileDescriptor
+    {
+        StreamingSaveProfile profile = StreamingSaveProfile::ManualReview;
+        std::string_view id{};
+        std::string_view label{};
+        std::string_view summary{};
+        SaveStreamMode mode = SaveStreamMode::Manual;
+        bool enabled = false;
+        double interval_seconds = 15.0;
+        std::uint64_t frame_interval = 120;
+        std::uint32_t max_snapshots = 32;
+        bool include_scene = true;
+        bool include_timeline = true;
+        bool include_packages = false;
+    };
+
     struct StreamingSaveStatus
     {
         bool active = false;
@@ -85,6 +102,97 @@ export namespace epoch::saveload
         std::string message{};
     };
 
+    inline constexpr std::array<StreamingSaveProfileDescriptor, 4> kStreamingSaveProfileDescriptors{ {
+        {
+            .profile = StreamingSaveProfile::ManualReview,
+            .id = "manual_review",
+            .label = "Manual review",
+            .summary = "Manual checkpoint staging for human-reviewed timeline saves.",
+            .mode = SaveStreamMode::Manual,
+            .enabled = false,
+            .interval_seconds = 15.0,
+            .frame_interval = 120,
+            .max_snapshots = 32,
+            .include_scene = true,
+            .include_timeline = true,
+            .include_packages = false
+        },
+        {
+            .profile = StreamingSaveProfile::EditorInterval15s,
+            .id = "editor_interval_15s",
+            .label = "Editor 15s stream",
+            .summary = "Capture review checkpoints every 15 simulated seconds.",
+            .mode = SaveStreamMode::Interval,
+            .enabled = true,
+            .interval_seconds = 15.0,
+            .frame_interval = 120,
+            .max_snapshots = 96,
+            .include_scene = true,
+            .include_timeline = true,
+            .include_packages = false
+        },
+        {
+            .profile = StreamingSaveProfile::EditorFrame120,
+            .id = "editor_frame_120",
+            .label = "Editor 120f stream",
+            .summary = "Capture review checkpoints every 120 simulation frames.",
+            .mode = SaveStreamMode::FrameInterval,
+            .enabled = true,
+            .interval_seconds = 15.0,
+            .frame_interval = 120,
+            .max_snapshots = 120,
+            .include_scene = true,
+            .include_timeline = true,
+            .include_packages = false
+        },
+        {
+            .profile = StreamingSaveProfile::TimelineKeyed,
+            .id = "timeline_keyed",
+            .label = "Timeline keyed stream",
+            .summary = "Capture on explicit timeline keys for deterministic replay gates.",
+            .mode = SaveStreamMode::TimelineKey,
+            .enabled = true,
+            .interval_seconds = 15.0,
+            .frame_interval = 120,
+            .max_snapshots = 256,
+            .include_scene = true,
+            .include_timeline = true,
+            .include_packages = false
+        }
+    } };
+
+    [[nodiscard]] inline constexpr const std::array<StreamingSaveProfileDescriptor, 4>& streaming_save_profiles() noexcept
+    {
+        return kStreamingSaveProfileDescriptors;
+    }
+
+    [[nodiscard]] inline constexpr std::size_t streaming_save_profile_count() noexcept
+    {
+        return kStreamingSaveProfileDescriptors.size();
+    }
+
+    [[nodiscard]] inline constexpr const StreamingSaveProfileDescriptor* find_streaming_save_profile(
+        StreamingSaveProfile profile) noexcept
+    {
+        for (const auto& descriptor : kStreamingSaveProfileDescriptors)
+        {
+            if (descriptor.profile == profile)
+                return &descriptor;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] inline constexpr const StreamingSaveProfileDescriptor* find_streaming_save_profile(
+        std::string_view id) noexcept
+    {
+        for (const auto& descriptor : kStreamingSaveProfileDescriptors)
+        {
+            if (descriptor.id == id)
+                return &descriptor;
+        }
+        return nullptr;
+    }
+
     [[nodiscard]] inline std::string_view mode_name(SaveStreamMode mode) noexcept
     {
         switch (mode)
@@ -104,19 +212,77 @@ export namespace epoch::saveload
 
     [[nodiscard]] inline std::string_view stream_profile_name(StreamingSaveProfile profile) noexcept
     {
-        switch (profile)
+        if (const auto* descriptor = find_streaming_save_profile(profile))
+            return descriptor->label;
+        return "Unknown";
+    }
+
+    [[nodiscard]] inline std::string_view stream_profile_id(StreamingSaveProfile profile) noexcept
+    {
+        if (const auto* descriptor = find_streaming_save_profile(profile))
+            return descriptor->id;
+        return "unknown";
+    }
+
+    [[nodiscard]] inline std::string_view stream_profile_summary(StreamingSaveProfile profile) noexcept
+    {
+        if (const auto* descriptor = find_streaming_save_profile(profile))
+            return descriptor->summary;
+        return "Unknown streaming-save profile.";
+    }
+
+    [[nodiscard]] inline constexpr bool validate_streaming_save_profile_descriptors() noexcept
+    {
+        bool hasManual = false;
+        bool hasInterval = false;
+        bool hasFrame = false;
+        bool hasKeyed = false;
+
+        for (std::size_t i = 0; i < kStreamingSaveProfileDescriptors.size(); ++i)
         {
-        case StreamingSaveProfile::ManualReview:
-            return "Manual review";
-        case StreamingSaveProfile::EditorInterval15s:
-            return "Editor 15s stream";
-        case StreamingSaveProfile::EditorFrame120:
-            return "Editor 120f stream";
-        case StreamingSaveProfile::TimelineKeyed:
-            return "Timeline keyed stream";
-        default:
-            return "Unknown";
+            const auto& descriptor = kStreamingSaveProfileDescriptors[i];
+            if (descriptor.id.empty() || descriptor.label.empty() || descriptor.summary.empty())
+                return false;
+            if (descriptor.max_snapshots == 0u)
+                return false;
+            if (!descriptor.include_scene || !descriptor.include_timeline)
+                return false;
+
+            for (std::size_t j = i + 1; j < kStreamingSaveProfileDescriptors.size(); ++j)
+            {
+                if (descriptor.id == kStreamingSaveProfileDescriptors[j].id
+                    || descriptor.profile == kStreamingSaveProfileDescriptors[j].profile)
+                {
+                    return false;
+                }
+            }
+
+            switch (descriptor.profile)
+            {
+            case StreamingSaveProfile::ManualReview:
+                hasManual = descriptor.mode == SaveStreamMode::Manual && !descriptor.enabled;
+                break;
+            case StreamingSaveProfile::EditorInterval15s:
+                hasInterval = descriptor.mode == SaveStreamMode::Interval
+                    && descriptor.enabled
+                    && descriptor.interval_seconds == 15.0;
+                break;
+            case StreamingSaveProfile::EditorFrame120:
+                hasFrame = descriptor.mode == SaveStreamMode::FrameInterval
+                    && descriptor.enabled
+                    && descriptor.frame_interval == 120u;
+                break;
+            case StreamingSaveProfile::TimelineKeyed:
+                hasKeyed = descriptor.mode == SaveStreamMode::TimelineKey
+                    && descriptor.enabled
+                    && descriptor.max_snapshots == 256u;
+                break;
+            default:
+                return false;
+            }
         }
+
+        return hasManual && hasInterval && hasFrame && hasKeyed;
     }
 
     inline void clamp_streaming_save_config(StreamingSaveConfig& config) noexcept
@@ -134,36 +300,18 @@ export namespace epoch::saveload
         StreamingSaveConfig& config,
         StreamingSaveProfile profile)
     {
-        switch (profile)
+        if (const auto* descriptor = find_streaming_save_profile(profile))
         {
-        case StreamingSaveProfile::ManualReview:
-            config.enabled = false;
-            config.mode = SaveStreamMode::Manual;
-            config.max_snapshots = 32;
-            break;
-        case StreamingSaveProfile::EditorInterval15s:
-            config.enabled = true;
-            config.mode = SaveStreamMode::Interval;
-            config.interval_seconds = 15.0;
-            config.max_snapshots = 96;
-            break;
-        case StreamingSaveProfile::EditorFrame120:
-            config.enabled = true;
-            config.mode = SaveStreamMode::FrameInterval;
-            config.frame_interval = 120;
-            config.max_snapshots = 120;
-            break;
-        case StreamingSaveProfile::TimelineKeyed:
-            config.enabled = true;
-            config.mode = SaveStreamMode::TimelineKey;
-            config.max_snapshots = 256;
-            break;
-        default:
-            break;
+            config.enabled = descriptor->enabled;
+            config.mode = descriptor->mode;
+            config.interval_seconds = descriptor->interval_seconds;
+            config.frame_interval = descriptor->frame_interval;
+            config.max_snapshots = descriptor->max_snapshots;
+            config.include_scene = descriptor->include_scene;
+            config.include_timeline = descriptor->include_timeline;
+            config.include_packages = descriptor->include_packages;
         }
 
-        config.include_scene = true;
-        config.include_timeline = true;
         clamp_streaming_save_config(config);
     }
 

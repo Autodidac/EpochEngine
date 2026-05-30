@@ -503,11 +503,13 @@ the same engine-owned path.
   text serialization plus parser round-trip. The next acceptance gate is wiring
   those contracts into real `.epoch` scene persistence, disk writing, and replay
   restore.
-- Streaming-save profiles currently cover manual review, 15-second editor
-  streams, 120-frame editor streams, and timeline-keyed streams. Checkpoint
-  records carry retention, output path, included-data flags, scene payload byte
-  counts, and timeline-key counts so build-safe tests can verify evidence before
-  any runtime writer/restore path is promoted.
+- Streaming-save profiles are descriptor-backed engine data, not loose UI
+  switches. `saveload.system` owns stable profile IDs, labels, summaries,
+  activation defaults, retention caps, and included-data flags for manual
+  review, 15-second editor streams, 120-frame editor streams, and timeline-keyed
+  streams. Checkpoint records carry retention, output path, included-data flags,
+  scene payload byte counts, and timeline-key counts so build-safe tests can
+  verify evidence before any runtime writer/restore path is promoted.
 - Streaming-checkpoint packages now bind the checkpoint record, deterministic
   scene payload, manifest line, and payload hash. This gives the writer/restore
   path an auditable package shape before real disk writes, rolling cleanup, or

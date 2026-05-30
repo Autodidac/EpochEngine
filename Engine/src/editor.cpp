@@ -6087,8 +6087,14 @@ namespace epochnamespace
                     gui::property_row("[timeline] Next key", epoch::timeline::describe_event(*nextEvent), 132.0f);
                 else
                     gui::property_row("[timeline] Next key", "(none)", 132.0f);
+                const auto activeSaveProfile = epoch::saveload::detect_streaming_save_profile(editor.streamingSaveConfig);
+                if (const auto* profileDescriptor = epoch::saveload::find_streaming_save_profile(activeSaveProfile))
+                {
+                    gui::property_row("[timeline] Profile id", std::string(profileDescriptor->id), 132.0f);
+                    gui::property_row("[timeline] Profile detail", std::string(profileDescriptor->summary), 132.0f);
+                }
                 gui::property_row("[timeline] Stream mode", std::string(epoch::saveload::mode_name(editor.streamingSaveConfig.mode)), 132.0f);
-                gui::property_row("[timeline] Save profile", std::string(epoch::saveload::stream_profile_name(epoch::saveload::detect_streaming_save_profile(editor.streamingSaveConfig))), 132.0f);
+                gui::property_row("[timeline] Save profile", std::string(epoch::saveload::stream_profile_name(activeSaveProfile)), 132.0f);
                 gui::property_row("[timeline] Retention", epoch::saveload::describe_retention(editor.streamingSaveConfig), 132.0f);
                 gui::property_row("[timeline] Stream state", epoch::saveload::describe_streaming_save(editor.streamingSaveConfig, editor.streamingSaveStatus), 132.0f);
                 gui::property_row("[timeline] Last key", editor.streamingSaveStatus.last_snapshot_label.empty() ? std::string("(none staged)") : editor.streamingSaveStatus.last_snapshot_label, 132.0f);

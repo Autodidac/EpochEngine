@@ -813,6 +813,14 @@ engine shape and should be treated as starting truth for the next passes:
   `--engine-contract-self-test` covers the metrics. Acceptance remains staged:
   real timeline lanes, editable keys, drag/scrub UI, persistence writing, and
   replay restore still require the shared GUI library and runtime-safe proof.
+- `v0.84.78` makes streaming-save profiles descriptor-backed instead of
+  switch-only. `saveload.system` now owns stable profile IDs, labels, summaries,
+  defaults, retention caps, and included-data flags for manual review,
+  15-second editor streams, 120-frame editor streams, and timeline-keyed replay
+  gates. The Timeline Editor displays the active descriptor metadata and the
+  pure engine contract self-test validates profile lookup/application. Acceptance
+  remains staged: selectable profile dropdowns, disk writer promotion, replay
+  restore, and real timeline lane editing still need GUI/runtime proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

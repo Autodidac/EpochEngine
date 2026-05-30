@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.84.78]
+- Bumped the active source line to `v0.84.78` for descriptor-backed
+  streaming-save profile work.
+- Added reusable streaming-save profile descriptors with stable IDs, labels,
+  summaries, activation defaults, retention caps, and included-data flags so
+  settings/dropdown UI can bind to engine-owned data instead of switches.
+- Expanded `--engine-contract-self-test` coverage to validate the profile table,
+  timeline-keyed profile application, profile lookup by ID, and profile summary
+  metadata without launching renderer contexts.
+- Surfaced the active profile ID and profile detail in the Timeline Editor
+  workspace while preserving the existing scene/render draw model.
+
 ## [v0.84.77]
 - Bumped the active source line to `v0.84.77` for the next 4D Timeline Editor
   data-spine slice.

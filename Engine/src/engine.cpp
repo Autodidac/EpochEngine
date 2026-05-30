@@ -617,6 +617,29 @@ namespace epochnamespace::core
             && epoch::saveload::detect_streaming_save_profile(saveConfig) == epoch::saveload::StreamingSaveProfile::EditorInterval15s
             && epoch::saveload::describe_retention(saveConfig).find("rolling 1 checkpoint") != std::string::npos);
 
+        const auto* intervalSaveProfile = epoch::saveload::find_streaming_save_profile(
+            epoch::saveload::StreamingSaveProfile::EditorInterval15s);
+        const auto* keyedSaveProfile = epoch::saveload::find_streaming_save_profile("timeline_keyed");
+        epoch::saveload::StreamingSaveConfig keyedSaveConfig{};
+        epoch::saveload::apply_streaming_save_profile(
+            keyedSaveConfig,
+            epoch::saveload::StreamingSaveProfile::TimelineKeyed);
+        check(
+            "timeline.stream_profiles",
+            epoch::saveload::validate_streaming_save_profile_descriptors()
+            && epoch::saveload::streaming_save_profile_count() == 4u
+            && intervalSaveProfile != nullptr
+            && intervalSaveProfile->mode == epoch::saveload::SaveStreamMode::Interval
+            && intervalSaveProfile->enabled
+            && intervalSaveProfile->interval_seconds == 15.0
+            && keyedSaveProfile != nullptr
+            && keyedSaveProfile->profile == epoch::saveload::StreamingSaveProfile::TimelineKeyed
+            && keyedSaveConfig.enabled
+            && keyedSaveConfig.mode == epoch::saveload::SaveStreamMode::TimelineKey
+            && keyedSaveConfig.max_snapshots == 256u
+            && epoch::saveload::stream_profile_id(epoch::saveload::StreamingSaveProfile::EditorFrame120) == std::string_view{ "editor_frame_120" }
+            && epoch::saveload::stream_profile_summary(epoch::saveload::StreamingSaveProfile::TimelineKeyed).find("timeline keys") != std::string_view::npos);
+
         auto timelineTracks = epoch::timeline::default_editor_tracks();
         epoch::timeline::TimelineState timelineState{};
         timelineState.playing = true;
