@@ -484,6 +484,10 @@ the same engine-owned path.
   the shared `core.time` stats, exposes manual/interval/frame/timeline-key
   checkpoint modes, and owns configurable streaming-save status beside the
   editor scene flow.
+- `timeline.system` is the first explicit timeline data model. It owns editor
+  tracks, keyed events, playhead state, scrub helpers, recording-gate state, and
+  conversion into scene timeline keys so the UI can grow around engine data
+  instead of ad hoc status buttons.
 - `saveload.system`, `scenesnapshot`, and `sceneserializer` are the current
   contract layer for timeline checkpoints: they define streaming-save config,
   checkpoint labels, scene object snapshots, timeline keys, and deterministic

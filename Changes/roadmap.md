@@ -765,6 +765,12 @@ engine shape and should be treated as starting truth for the next passes:
   safe quick-check before expanding contracts into project generation or OS
   model workflows; the broader `--engine-validation-self-test` remains a
   heavier operator-gated route.
+- `v0.84.71` gives the 4D Timeline Editor its first dedicated data spine:
+  `timeline.system` now owns editor tracks, keyed events, playhead state,
+  scrubbing helpers, event sorting, and scene-key conversion. Acceptance remains
+  staged: this makes timeline UI and streaming-save gates contract-backed, but
+  full replay/restore still requires scene parser/serializer ownership and
+  runtime-safe persistence proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

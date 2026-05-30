@@ -87,6 +87,7 @@ import package.registry;
 import perf.tier;
 import render.preview_grid;
 import saveload.system;
+import timeline.system;
 
 namespace epochnamespace
 {
@@ -445,6 +446,9 @@ namespace epochnamespace
             EditorTimeControl timeControl{};
             epoch::saveload::StreamingSaveConfig streamingSaveConfig{};
             epoch::saveload::StreamingSaveStatus streamingSaveStatus{};
+            epoch::timeline::TimelineState timelineState{};
+            std::vector<epoch::timeline::TimelineTrack> timelineTracks{};
+            std::vector<epoch::timeline::TimelineEvent> timelineEvents{};
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
             EditorWorkspaceTab dockStatusTab{ EditorWorkspaceTab::Output };
@@ -625,6 +629,26 @@ namespace epochnamespace
                 .paused = editor.timeSnapshot.paused,
                 .max_steps_per_frame = editor.timeSnapshot.max_steps_per_frame
             };
+        }
+
+        static void ensure_timeline_defaults(EditorState& editor)
+        {
+            if (editor.timelineTracks.empty())
+                editor.timelineTracks = epoch::timeline::default_editor_tracks();
+
+            if (editor.timelineEvents.empty())
+            {
+                editor.timelineEvents.push_back(epoch::timeline::TimelineEvent{
+                    .track_id = "save",
+                    .kind = epoch::timeline::TimelineEventKind::Checkpoint,
+                    .simulated_seconds = 0.0,
+                    .frame_index = 0,
+                    .label = "Initial checkpoint gate",
+                    .target_name = "PersistentLevel",
+                    .payload = "streaming-save start"
+                });
+                epoch::timeline::sort_events(editor.timelineEvents);
+            }
         }
 
         struct SurfaceCanvas
@@ -6001,7 +6025,10 @@ namespace epochnamespace
             }
             case EditorMainSurface::Timeline:
             {
+                ensure_timeline_defaults(editor);
                 auto timelineStats = timeline_stats_from_editor(editor);
+                epoch::timeline::sync_to_simulation(editor.timelineState, timelineStats);
+                epoch::timeline::clamp_state(editor.timelineState);
                 epoch::saveload::clamp_streaming_save_config(editor.streamingSaveConfig);
                 editor.streamingSaveStatus.active = editor.streamingSaveConfig.enabled;
                 if (epoch::saveload::should_capture_checkpoint(
@@ -6013,6 +6040,14 @@ namespace epochnamespace
                         editor.streamingSaveStatus,
                         editor.streamingSaveConfig,
                         timelineStats);
+                    editor.timelineEvents.push_back(epoch::timeline::make_event_from_stats(
+                        "save",
+                        epoch::timeline::TimelineEventKind::Checkpoint,
+                        timelineStats,
+                        editor.streamingSaveStatus.last_snapshot_label,
+                        "PersistentLevel",
+                        editor.streamingSaveStatus.last_output_path));
+                    epoch::timeline::sort_events(editor.timelineEvents);
                     push_editor_log(editor, "[timeline] Auto-staged timeline checkpoint: " + editor.streamingSaveStatus.last_snapshot_label);
                 }
 
@@ -6025,10 +6060,59 @@ namespace epochnamespace
                 gui::property_row("[timeline] Fixed step", std::string(format_ms(timelineStats.fixed_dt_seconds)) + " / " + format_rate(timelineStats.fixed_dt_seconds), 132.0f);
                 gui::property_row("[timeline] Step budget", std::to_string(timelineStats.step_budget), 132.0f);
                 gui::property_row("[timeline] Time scale", std::format("{:.2f}x", timelineStats.time_scale), 132.0f);
+                gui::property_row("[timeline] Playhead", std::format("{:.2f}s / frame {}", editor.timelineState.playhead_seconds, editor.timelineState.playhead_frame), 132.0f);
+                gui::property_row("[timeline] Duration", std::format("{:.2f}s", editor.timelineState.duration_seconds), 132.0f);
+                gui::property_row("[timeline] Tracks", std::format("{} enabled / {}", epoch::timeline::enabled_track_count(editor.timelineTracks), editor.timelineTracks.size()), 132.0f);
+                gui::property_row("[timeline] Keys", std::to_string(editor.timelineEvents.size()), 132.0f);
+                if (const auto* nextEvent = epoch::timeline::next_event_after(editor.timelineEvents, editor.timelineState.playhead_seconds))
+                    gui::property_row("[timeline] Next key", epoch::timeline::describe_event(*nextEvent), 132.0f);
+                else
+                    gui::property_row("[timeline] Next key", "(none)", 132.0f);
                 gui::property_row("[timeline] Stream mode", std::string(epoch::saveload::mode_name(editor.streamingSaveConfig.mode)), 132.0f);
                 gui::property_row("[timeline] Stream state", epoch::saveload::describe_streaming_save(editor.streamingSaveConfig, editor.streamingSaveStatus), 132.0f);
                 gui::property_row("[timeline] Last key", editor.streamingSaveStatus.last_snapshot_label.empty() ? std::string("(none staged)") : editor.streamingSaveStatus.last_snapshot_label, 132.0f);
                 gui::property_row("[timeline] Target", editor.streamingSaveStatus.last_output_path.empty() ? editor.streamingSaveConfig.target_root : editor.streamingSaveStatus.last_output_path, 132.0f);
+
+                const std::array playbackButtons{
+                    gui::InlineButtonSpec{ .label = "Rewind", .width = 76.0f },
+                    gui::InlineButtonSpec{ .label = "-1s", .width = 56.0f },
+                    gui::InlineButtonSpec{ .label = editor.timelineState.playing ? "Pause" : "Play", .width = 72.0f },
+                    gui::InlineButtonSpec{ .label = "+1s", .width = 56.0f },
+                    gui::InlineButtonSpec{ .label = editor.timelineState.recording ? "Stop Rec" : "Record Gate", .width = 112.0f }
+                };
+                if (const auto action = gui::inline_button_row(playbackButtons, 26.0f, 6.0f))
+                {
+                    switch (*action)
+                    {
+                    case 0:
+                        editor.timelineState.playhead_seconds = 0.0;
+                        editor.timelineState.playhead_frame = 0;
+                        push_editor_log(editor, "[timeline] Playhead rewound to the beginning.");
+                        break;
+                    case 1:
+                        epoch::timeline::scrub_seconds(editor.timelineState, -1.0);
+                        push_editor_log(editor, "[timeline] Playhead scrubbed backward.");
+                        break;
+                    case 2:
+                        editor.timelineState.playing = !editor.timelineState.playing;
+                        push_editor_log(editor, editor.timelineState.playing
+                            ? "[timeline] Timeline playback follows the shared simulation clock."
+                            : "[timeline] Timeline playback paused for scrubbing.");
+                        break;
+                    case 3:
+                        epoch::timeline::scrub_seconds(editor.timelineState, 1.0);
+                        push_editor_log(editor, "[timeline] Playhead scrubbed forward.");
+                        break;
+                    case 4:
+                        editor.timelineState.recording = !editor.timelineState.recording;
+                        push_editor_log(editor, editor.timelineState.recording
+                            ? "[timeline] Timeline recording gate armed for visible editor events."
+                            : "[timeline] Timeline recording gate paused.");
+                        break;
+                    default:
+                        break;
+                    }
+                }
 
                 const std::array streamButtons{
                     gui::InlineButtonSpec{ .label = editor.streamingSaveConfig.enabled ? "Pause Stream" : "Arm Stream", .width = 118.0f },
@@ -6056,6 +6140,14 @@ namespace epochnamespace
                             editor.streamingSaveStatus,
                             editor.streamingSaveConfig,
                             timelineStats);
+                        editor.timelineEvents.push_back(epoch::timeline::make_event_from_stats(
+                            "save",
+                            epoch::timeline::TimelineEventKind::Checkpoint,
+                            timelineStats,
+                            editor.streamingSaveStatus.last_snapshot_label,
+                            "PersistentLevel",
+                            editor.streamingSaveStatus.last_output_path));
+                        epoch::timeline::sort_events(editor.timelineEvents);
                         push_editor_log(editor, "[timeline] Manual checkpoint staged: " + editor.streamingSaveStatus.last_snapshot_label);
                         break;
                     case 2:
@@ -6078,7 +6170,7 @@ namespace epochnamespace
                 }
                 gui::wrapped_label(editor.streamingSaveStatus.message, centerWidth);
                 gui::wrapped_label(
-                    "Next gate: connect this contract to scene parser/serializer ownership so .epoch snapshots and replay keys are persisted from real scene data instead of editor-only seed profiles.",
+                    "Next gate: bind timeline events to the scene parser/serializer and streaming-save writer so .epoch snapshots, replay keys, and restore points round-trip from live editor state.",
                     centerWidth);
                 break;
             }

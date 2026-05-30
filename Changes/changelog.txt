@@ -1,5 +1,16 @@
 # Epoch Changelog
 
+## [v0.84.71]
+- Bumped the active source line to `v0.84.71` for a stronger 4D timeline spine.
+- Added the `timeline.system` module with editor timeline tracks, keyed events,
+  playhead state, scrubbing helpers, event sorting, and conversion into scene
+  timeline keys.
+- Extended the Timeline Editor surface so it shows timeline playhead/duration,
+  track/key counts, the next event, playback/scrub controls, and recording-gate
+  state beside the existing streaming-save checkpoint controls.
+- Expanded the build-safe engine contract self-test so timeline tracks/events
+  are verified before broader renderer/project/AI validation.
+
 ## [v0.84.70]
 - Bumped the active source line to `v0.84.70` for a safer harness split.
 - Added a dedicated `--engine-contract-self-test` CLI route that runs only the

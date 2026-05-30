@@ -113,6 +113,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.platform_utils.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.menu.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\saveload.system.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\timeline.system.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.telemetry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scripting.system.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.allocator.ixx" />

@@ -659,6 +659,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\saveload.system.ixx">
       <Filter>Module Files\ixx\events</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\timeline.system.ixx">
+      <Filter>Module Files\ixx\events</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\event.movement.ixx">
       <Filter>Module Files\ixx\events</Filter>
     </ClCompile>

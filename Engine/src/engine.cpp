@@ -113,6 +113,7 @@ import forest.factory;
 import saveload.system;
 import scenesnapshot;
 import sceneserializer;
+import timeline.system;
 
 import engine.gui;
 import gui.menu;
@@ -577,6 +578,37 @@ namespace epochnamespace::core
             && saveStatus.last_snapshot_label.find("editor_timeline_frame_") != std::string::npos
             && saveDescription.find("enabled") != std::string::npos);
 
+        auto timelineTracks = epoch::timeline::default_editor_tracks();
+        epoch::timeline::TimelineState timelineState{};
+        timelineState.playing = true;
+        timelineState.duration_seconds = 2.0;
+        timelineState.fixed_dt_seconds = 1.0 / 60.0;
+        epoch::timeline::sync_to_simulation(timelineState, timeStats);
+        std::vector<epoch::timeline::TimelineEvent> timelineEvents{};
+        timelineEvents.push_back(epoch::timeline::make_event_from_stats(
+            "save",
+            epoch::timeline::TimelineEventKind::Checkpoint,
+            timeStats,
+            saveStatus.last_snapshot_label,
+            "PersistentLevel",
+            saveStatus.last_output_path));
+        timelineEvents.push_back(epoch::timeline::TimelineEvent{
+            .track_id = "camera",
+            .kind = epoch::timeline::TimelineEventKind::CameraCut,
+            .simulated_seconds = 1.0,
+            .frame_index = 60,
+            .label = "camera cut",
+            .target_name = "EditorCamera"
+        });
+        epoch::timeline::sort_events(timelineEvents);
+        const auto sceneKey = epoch::timeline::to_scene_timeline_key(timelineEvents.front());
+        check(
+            "timeline.model",
+            timelineTracks.size() == 4u
+            && epoch::timeline::enabled_track_count(timelineTracks) == 4u
+            && timelineEvents.front().frame_index == 60u
+            && sceneKey.event_kind == "Camera cut");
+
         epoch::scene::SceneSnapshot snapshot{};
         snapshot.scene_id = "timeline \"contract\"";
         snapshot.world_name = "Persistent\nLevel";
@@ -591,6 +623,7 @@ namespace epochnamespace::core
         snapshot.objects.push_back(object);
         snapshot.timeline_keys.push_back(epoch::scene::make_timeline_key(2.0, 120, "later", "checkpoint", "StarterCube", "late"));
         snapshot.timeline_keys.push_back(epoch::scene::make_timeline_key(1.0, 60, "first", "checkpoint", "StarterCube", "payload\tvalue"));
+        snapshot.timeline_keys.push_back(epoch::timeline::to_scene_timeline_key(timelineEvents.front()));
         epoch::scene::sort_timeline_keys(snapshot);
 
         const auto categoryCounts = epoch::scene::object_count_by_category(snapshot);
@@ -603,7 +636,7 @@ namespace epochnamespace::core
             && categoryCounts.at("Gameplay") == 1u);
         check(
             "snapshot.timeline_sort",
-            snapshot.timeline_keys.size() == 2u
+            snapshot.timeline_keys.size() == 3u
             && snapshot.timeline_keys.front().frame_index == 60u);
         check(
             "snapshot.serialize",
