@@ -611,6 +611,26 @@ namespace epochnamespace::core
             && timelineEvents.front().frame_index == 60u
             && sceneKey.event_kind == "Camera cut");
 
+        const auto inputProfile = epochnamespace::input::make_profile(epochnamespace::input::ProfilePreset::EditorDefault);
+        const auto resetBinding = inputProfile.bindings[
+            epochnamespace::input::action_index(epochnamespace::input::Action::ResetCamera)];
+        const auto copyBinding = inputProfile.bindings[
+            epochnamespace::input::action_index(epochnamespace::input::Action::ClipboardCopy)];
+        const auto contextBinding = inputProfile.bindings[
+            epochnamespace::input::action_index(epochnamespace::input::Action::ContextMenu)];
+        const std::string inputSummary = epochnamespace::input::profile_summary(epochnamespace::input::ProfilePreset::EditorDefault);
+        check(
+            "input.profile",
+            epochnamespace::input::validate_profile(inputProfile)
+            && epochnamespace::input::bound_action_count(inputProfile) == static_cast<std::size_t>(epochnamespace::input::Action::Count)
+            && resetBinding.primary == epochnamespace::input::Key::Home
+            && copyBinding.primary == epochnamespace::input::Key::C
+            && copyBinding.control
+            && contextBinding.mouse == epochnamespace::input::MouseButton::MouseRight
+            && epochnamespace::input::action_label(epochnamespace::input::Action::ResetCamera) == std::string_view{ "Reset Camera To Center" }
+            && inputSummary.find("reset Home") != std::string::npos
+            && inputSummary.find("context Mouse Right") != std::string::npos);
+
         epoch::scene::SceneSnapshot snapshot{};
         snapshot.scene_id = "timeline \"contract\"";
         snapshot.world_name = "Persistent\nLevel";

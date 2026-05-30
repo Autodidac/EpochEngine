@@ -37,6 +37,7 @@ module;
 #include <cstdint>
 #include <mutex>
 #include <shared_mutex>
+#include <string>
 #include <string_view>
 #include <thread>
 
@@ -137,6 +138,14 @@ namespace epochnamespace::input
         ResetCamera,
         Cancel,
         Confirm,
+        FrameSelection,
+        ClipboardCopy,
+        ClipboardPaste,
+        ContextMenu,
+        PlayInEditor,
+        TimelinePlayPause,
+        TimelineStepFrame,
+        PackageInstallSelected,
         Count
     };
 
@@ -145,6 +154,10 @@ namespace epochnamespace::input
         Action action{ Action::Count };
         Key primary{ Key::Unknown };
         Key secondary{ Key::Unknown };
+        bool control{ false };
+        bool shift{ false };
+        bool alt{ false };
+        MouseButton mouse{ MouseButton::MouseCount };
     };
 
     export struct InputProfile
@@ -168,22 +181,51 @@ namespace epochnamespace::input
         return static_cast<std::size_t>(action);
     }
 
+    export inline constexpr ActionBinding key_binding(
+        Action action,
+        Key primary,
+        Key secondary = Key::Unknown,
+        bool control = false,
+        bool shift = false,
+        bool alt = false) noexcept
+    {
+        return { action, primary, secondary, control, shift, alt, MouseButton::MouseCount };
+    }
+
+    export inline constexpr ActionBinding mouse_binding(
+        Action action,
+        MouseButton mouse,
+        bool control = false,
+        bool shift = false,
+        bool alt = false) noexcept
+    {
+        return { action, Key::Unknown, Key::Unknown, control, shift, alt, mouse };
+    }
+
     export inline constexpr InputProfile make_default_profile() noexcept
     {
         InputProfile profile{};
-        profile.bindings[action_index(Action::MoveForward)] = { Action::MoveForward, Key::W, Key::Unknown };
-        profile.bindings[action_index(Action::MoveBackward)] = { Action::MoveBackward, Key::S, Key::Unknown };
-        profile.bindings[action_index(Action::MoveLeft)] = { Action::MoveLeft, Key::A, Key::Unknown };
-        profile.bindings[action_index(Action::MoveRight)] = { Action::MoveRight, Key::D, Key::Unknown };
-        profile.bindings[action_index(Action::MoveUp)] = { Action::MoveUp, Key::E, Key::PageUp };
-        profile.bindings[action_index(Action::MoveDown)] = { Action::MoveDown, Key::Q, Key::PageDown };
-        profile.bindings[action_index(Action::LookLeft)] = { Action::LookLeft, Key::Left, Key::Unknown };
-        profile.bindings[action_index(Action::LookRight)] = { Action::LookRight, Key::Right, Key::Unknown };
-        profile.bindings[action_index(Action::LookUp)] = { Action::LookUp, Key::Up, Key::Unknown };
-        profile.bindings[action_index(Action::LookDown)] = { Action::LookDown, Key::Down, Key::Unknown };
-        profile.bindings[action_index(Action::ResetCamera)] = { Action::ResetCamera, Key::Home, Key::Unknown };
-        profile.bindings[action_index(Action::Cancel)] = { Action::Cancel, Key::Escape, Key::Unknown };
-        profile.bindings[action_index(Action::Confirm)] = { Action::Confirm, Key::Enter, Key::KPEnter };
+        profile.bindings[action_index(Action::MoveForward)] = key_binding(Action::MoveForward, Key::W);
+        profile.bindings[action_index(Action::MoveBackward)] = key_binding(Action::MoveBackward, Key::S);
+        profile.bindings[action_index(Action::MoveLeft)] = key_binding(Action::MoveLeft, Key::A);
+        profile.bindings[action_index(Action::MoveRight)] = key_binding(Action::MoveRight, Key::D);
+        profile.bindings[action_index(Action::MoveUp)] = key_binding(Action::MoveUp, Key::E, Key::PageUp);
+        profile.bindings[action_index(Action::MoveDown)] = key_binding(Action::MoveDown, Key::Q, Key::PageDown);
+        profile.bindings[action_index(Action::LookLeft)] = key_binding(Action::LookLeft, Key::Left);
+        profile.bindings[action_index(Action::LookRight)] = key_binding(Action::LookRight, Key::Right);
+        profile.bindings[action_index(Action::LookUp)] = key_binding(Action::LookUp, Key::Up);
+        profile.bindings[action_index(Action::LookDown)] = key_binding(Action::LookDown, Key::Down);
+        profile.bindings[action_index(Action::ResetCamera)] = key_binding(Action::ResetCamera, Key::Home);
+        profile.bindings[action_index(Action::Cancel)] = key_binding(Action::Cancel, Key::Escape);
+        profile.bindings[action_index(Action::Confirm)] = key_binding(Action::Confirm, Key::Enter, Key::KPEnter);
+        profile.bindings[action_index(Action::FrameSelection)] = key_binding(Action::FrameSelection, Key::F);
+        profile.bindings[action_index(Action::ClipboardCopy)] = key_binding(Action::ClipboardCopy, Key::C, Key::Unknown, true);
+        profile.bindings[action_index(Action::ClipboardPaste)] = key_binding(Action::ClipboardPaste, Key::V, Key::Unknown, true);
+        profile.bindings[action_index(Action::ContextMenu)] = mouse_binding(Action::ContextMenu, MouseButton::MouseRight);
+        profile.bindings[action_index(Action::PlayInEditor)] = key_binding(Action::PlayInEditor, Key::Enter, Key::KPEnter, true);
+        profile.bindings[action_index(Action::TimelinePlayPause)] = key_binding(Action::TimelinePlayPause, Key::Space);
+        profile.bindings[action_index(Action::TimelineStepFrame)] = key_binding(Action::TimelineStepFrame, Key::Period);
+        profile.bindings[action_index(Action::PackageInstallSelected)] = key_binding(Action::PackageInstallSelected, Key::I, Key::Unknown, true);
         return profile;
     }
 
@@ -198,24 +240,24 @@ namespace epochnamespace::input
             profile.wheel_zoom_step = 1.00f;
             break;
         case ProfilePreset::ArrowPilot:
-            profile.bindings[action_index(Action::MoveForward)] = { Action::MoveForward, Key::Up, Key::W };
-            profile.bindings[action_index(Action::MoveBackward)] = { Action::MoveBackward, Key::Down, Key::S };
-            profile.bindings[action_index(Action::MoveLeft)] = { Action::MoveLeft, Key::Left, Key::A };
-            profile.bindings[action_index(Action::MoveRight)] = { Action::MoveRight, Key::Right, Key::D };
-            profile.bindings[action_index(Action::LookLeft)] = { Action::LookLeft, Key::Unknown, Key::Unknown };
-            profile.bindings[action_index(Action::LookRight)] = { Action::LookRight, Key::Unknown, Key::Unknown };
-            profile.bindings[action_index(Action::LookUp)] = { Action::LookUp, Key::Unknown, Key::Unknown };
-            profile.bindings[action_index(Action::LookDown)] = { Action::LookDown, Key::Unknown, Key::Unknown };
+            profile.bindings[action_index(Action::MoveForward)] = key_binding(Action::MoveForward, Key::Up, Key::W);
+            profile.bindings[action_index(Action::MoveBackward)] = key_binding(Action::MoveBackward, Key::Down, Key::S);
+            profile.bindings[action_index(Action::MoveLeft)] = key_binding(Action::MoveLeft, Key::Left, Key::A);
+            profile.bindings[action_index(Action::MoveRight)] = key_binding(Action::MoveRight, Key::Right, Key::D);
+            profile.bindings[action_index(Action::LookLeft)] = key_binding(Action::LookLeft, Key::Unknown);
+            profile.bindings[action_index(Action::LookRight)] = key_binding(Action::LookRight, Key::Unknown);
+            profile.bindings[action_index(Action::LookUp)] = key_binding(Action::LookUp, Key::Unknown);
+            profile.bindings[action_index(Action::LookDown)] = key_binding(Action::LookDown, Key::Unknown);
             profile.mouse_look_sensitivity = 0.12f;
             profile.wheel_zoom_step = 0.90f;
             break;
         case ProfilePreset::LeftHanded:
-            profile.bindings[action_index(Action::MoveForward)] = { Action::MoveForward, Key::I, Key::Unknown };
-            profile.bindings[action_index(Action::MoveBackward)] = { Action::MoveBackward, Key::K, Key::Unknown };
-            profile.bindings[action_index(Action::MoveLeft)] = { Action::MoveLeft, Key::J, Key::Unknown };
-            profile.bindings[action_index(Action::MoveRight)] = { Action::MoveRight, Key::L, Key::Unknown };
-            profile.bindings[action_index(Action::MoveUp)] = { Action::MoveUp, Key::U, Key::PageUp };
-            profile.bindings[action_index(Action::MoveDown)] = { Action::MoveDown, Key::O, Key::PageDown };
+            profile.bindings[action_index(Action::MoveForward)] = key_binding(Action::MoveForward, Key::I);
+            profile.bindings[action_index(Action::MoveBackward)] = key_binding(Action::MoveBackward, Key::K);
+            profile.bindings[action_index(Action::MoveLeft)] = key_binding(Action::MoveLeft, Key::J);
+            profile.bindings[action_index(Action::MoveRight)] = key_binding(Action::MoveRight, Key::L);
+            profile.bindings[action_index(Action::MoveUp)] = key_binding(Action::MoveUp, Key::U, Key::PageUp);
+            profile.bindings[action_index(Action::MoveDown)] = key_binding(Action::MoveDown, Key::O, Key::PageDown);
             profile.mouse_look_sensitivity = 0.16f;
             profile.wheel_zoom_step = 1.00f;
             break;
@@ -271,6 +313,163 @@ namespace epochnamespace::input
         if (id == "left-handed" || id == "left" || id == "ijkl")
             return ProfilePreset::LeftHanded;
         return ProfilePreset::EditorDefault;
+    }
+
+    export inline constexpr std::string_view action_label(Action action) noexcept
+    {
+        switch (action)
+        {
+        case Action::MoveForward: return "Move Forward";
+        case Action::MoveBackward: return "Move Backward";
+        case Action::MoveLeft: return "Move Left";
+        case Action::MoveRight: return "Move Right";
+        case Action::MoveUp: return "Move Up";
+        case Action::MoveDown: return "Move Down";
+        case Action::LookLeft: return "Look Left";
+        case Action::LookRight: return "Look Right";
+        case Action::LookUp: return "Look Up";
+        case Action::LookDown: return "Look Down";
+        case Action::ResetCamera: return "Reset Camera To Center";
+        case Action::Cancel: return "Cancel";
+        case Action::Confirm: return "Confirm";
+        case Action::FrameSelection: return "Frame Selection";
+        case Action::ClipboardCopy: return "Copy";
+        case Action::ClipboardPaste: return "Paste";
+        case Action::ContextMenu: return "Context Menu";
+        case Action::PlayInEditor: return "Play In Editor";
+        case Action::TimelinePlayPause: return "Timeline Play/Pause";
+        case Action::TimelineStepFrame: return "Timeline Step Frame";
+        case Action::PackageInstallSelected: return "Install Selected Package";
+        case Action::Count:
+        default:
+            return "Unknown";
+        }
+    }
+
+    export inline std::string key_name(Key key)
+    {
+        const auto value = static_cast<int>(key);
+        if (value >= static_cast<int>(Key::A) && value <= static_cast<int>(Key::Z))
+            return std::string(1, static_cast<char>('A' + value - static_cast<int>(Key::A)));
+        if (value >= static_cast<int>(Key::Num0) && value <= static_cast<int>(Key::Num9))
+            return std::string(1, static_cast<char>('0' + value - static_cast<int>(Key::Num0)));
+
+        switch (key)
+        {
+        case Key::Space: return "Space";
+        case Key::Escape: return "Escape";
+        case Key::Enter: return "Enter";
+        case Key::Tab: return "Tab";
+        case Key::Backspace: return "Backspace";
+        case Key::Insert: return "Insert";
+        case Key::Delete: return "Delete";
+        case Key::Right: return "Right";
+        case Key::Left: return "Left";
+        case Key::Down: return "Down";
+        case Key::Up: return "Up";
+        case Key::PageUp: return "PageUp";
+        case Key::PageDown: return "PageDown";
+        case Key::Home: return "Home";
+        case Key::End: return "End";
+        case Key::Period: return ".";
+        case Key::KPEnter: return "Keypad Enter";
+        case Key::Unknown:
+        default:
+            return "Unbound";
+        }
+    }
+
+    export inline std::string mouse_button_name(MouseButton mouse)
+    {
+        switch (mouse)
+        {
+        case MouseButton::MouseLeft: return "Mouse Left";
+        case MouseButton::MouseRight: return "Mouse Right";
+        case MouseButton::MouseMiddle: return "Mouse Middle";
+        case MouseButton::MouseButton4: return "Mouse 4";
+        case MouseButton::MouseButton5: return "Mouse 5";
+        case MouseButton::MouseButton6: return "Mouse 6";
+        case MouseButton::MouseButton7: return "Mouse 7";
+        case MouseButton::MouseButton8: return "Mouse 8";
+        case MouseButton::MouseCount:
+        default:
+            return "No Mouse";
+        }
+    }
+
+    export inline std::string binding_text(const ActionBinding& binding)
+    {
+        std::string text{};
+        if (binding.control)
+            text += "Ctrl+";
+        if (binding.shift)
+            text += "Shift+";
+        if (binding.alt)
+            text += "Alt+";
+
+        if (binding.mouse != MouseButton::MouseCount)
+        {
+            text += mouse_button_name(binding.mouse);
+        }
+        else
+        {
+            text += key_name(binding.primary);
+            if (binding.secondary != Key::Unknown)
+            {
+                text += " / ";
+                text += key_name(binding.secondary);
+            }
+        }
+
+        return text;
+    }
+
+    export inline bool validate_profile(const InputProfile& profile) noexcept
+    {
+        if (profile.mouse_look_sensitivity < 0.01f || profile.wheel_zoom_step < 0.05f)
+            return false;
+
+        for (std::size_t index = 0; index < profile.bindings.size(); ++index)
+        {
+            const auto expectedAction = static_cast<Action>(index);
+            const auto& binding = profile.bindings[index];
+            if (binding.action != expectedAction)
+                return false;
+        }
+
+        return true;
+    }
+
+    export inline std::size_t bound_action_count(const InputProfile& profile) noexcept
+    {
+        std::size_t count = 0;
+        for (const auto& binding : profile.bindings)
+        {
+            if (binding.primary != Key::Unknown
+                || binding.secondary != Key::Unknown
+                || binding.mouse != MouseButton::MouseCount)
+            {
+                ++count;
+            }
+        }
+
+        return count;
+    }
+
+    export inline std::string profile_summary(ProfilePreset preset)
+    {
+        const InputProfile profile = make_profile(preset);
+        std::string summary{ "input profile " };
+        summary += std::string(profile_preset_label(preset));
+        summary += " actions ";
+        summary += std::to_string(static_cast<std::size_t>(Action::Count));
+        summary += " bound ";
+        summary += std::to_string(bound_action_count(profile));
+        summary += " reset ";
+        summary += binding_text(profile.bindings[action_index(Action::ResetCamera)]);
+        summary += " context ";
+        summary += binding_text(profile.bindings[action_index(Action::ContextMenu)]);
+        return summary;
     }
 
     // --------------------------------------------------------
@@ -362,7 +561,35 @@ namespace epochnamespace::input
         if (index >= profile.bindings.size())
             return;
 
-        profile.bindings[index] = { action, primary, secondary };
+        profile.bindings[index] = key_binding(action, primary, secondary);
+        set_active_profile(profile);
+    }
+
+    export inline void set_action_binding(
+        Action action,
+        Key primary,
+        Key secondary,
+        bool control,
+        bool shift,
+        bool alt)
+    {
+        auto profile = active_profile_snapshot();
+        const auto index = action_index(action);
+        if (index >= profile.bindings.size())
+            return;
+
+        profile.bindings[index] = key_binding(action, primary, secondary, control, shift, alt);
+        set_active_profile(profile);
+    }
+
+    export inline void set_action_mouse_binding(Action action, MouseButton mouse)
+    {
+        auto profile = active_profile_snapshot();
+        const auto index = action_index(action);
+        if (index >= profile.bindings.size())
+            return;
+
+        profile.bindings[index] = mouse_binding(action, mouse);
         set_active_profile(profile);
     }
 
@@ -572,20 +799,6 @@ namespace epochnamespace::input
         return keyPressed.test(static_cast<size_t>(k));
     }
 
-    export inline bool action_held(Action action)
-    {
-        const auto binding = binding_for(action);
-        return (binding.primary != Key::Unknown && is_key_held(binding.primary))
-            || (binding.secondary != Key::Unknown && is_key_held(binding.secondary));
-    }
-
-    export inline bool action_pressed(Action action)
-    {
-        const auto binding = binding_for(action);
-        return (binding.primary != Key::Unknown && is_key_down(binding.primary))
-            || (binding.secondary != Key::Unknown && is_key_down(binding.secondary));
-    }
-
     export inline bool is_mouse_button_held(MouseButton b)
     {
         std::shared_lock lock(g_inputMutex);
@@ -596,6 +809,56 @@ namespace epochnamespace::input
     {
         std::shared_lock lock(g_inputMutex);
         return mousePressed.test(static_cast<size_t>(b));
+    }
+
+    export inline bool binding_modifiers_satisfied(const ActionBinding& binding)
+    {
+        const bool controlHeld = is_key_held(Key::LeftControl) || is_key_held(Key::RightControl);
+        const bool shiftHeld = is_key_held(Key::LeftShift) || is_key_held(Key::RightShift);
+        const bool altHeld = is_key_held(Key::LeftAlt) || is_key_held(Key::RightAlt);
+        return (!binding.control || controlHeld)
+            && (!binding.shift || shiftHeld)
+            && (!binding.alt || altHeld);
+    }
+
+    export inline bool binding_key_held(const ActionBinding& binding)
+    {
+        return binding_modifiers_satisfied(binding)
+            && ((binding.primary != Key::Unknown && is_key_held(binding.primary))
+                || (binding.secondary != Key::Unknown && is_key_held(binding.secondary)));
+    }
+
+    export inline bool binding_key_pressed(const ActionBinding& binding)
+    {
+        return binding_modifiers_satisfied(binding)
+            && ((binding.primary != Key::Unknown && is_key_down(binding.primary))
+                || (binding.secondary != Key::Unknown && is_key_down(binding.secondary)));
+    }
+
+    export inline bool binding_mouse_held(const ActionBinding& binding)
+    {
+        return binding.mouse != MouseButton::MouseCount
+            && binding_modifiers_satisfied(binding)
+            && is_mouse_button_held(binding.mouse);
+    }
+
+    export inline bool binding_mouse_pressed(const ActionBinding& binding)
+    {
+        return binding.mouse != MouseButton::MouseCount
+            && binding_modifiers_satisfied(binding)
+            && is_mouse_button_down(binding.mouse);
+    }
+
+    export inline bool action_held(Action action)
+    {
+        const auto binding = binding_for(action);
+        return binding_key_held(binding) || binding_mouse_held(binding);
+    }
+
+    export inline bool action_pressed(Action action)
+    {
+        const auto binding = binding_for(action);
+        return binding_key_pressed(binding) || binding_mouse_pressed(binding);
     }
 } // namespace epochnamespace::input
 

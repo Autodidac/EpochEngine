@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.74-1F7A4C?style=for-the-badge" alt="Current development source v0.84.74" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.84.75-1F7A4C?style=for-the-badge" alt="Current development source v0.84.75" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.84.74`.
+- Source is currently the active development line at `v0.84.75`.
 - The latest published stable runtime release is `v0.84.38`.
 - Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -152,6 +152,10 @@ OS AI model, tooling, and evidence rules live with the AI assets in
 - Deterministic checkpoint package contracts that bind a checkpoint record,
   serialized scene payload, manifest line, and payload hash before runtime disk
   writing is promoted.
+- A broader universal input profile contract with named camera, editor,
+  clipboard, context-menu, timeline, project, and package-install actions,
+  including the Home camera-center reset and right-click context-menu binding
+  needed by the editor GUI spine.
 - A build-safe `--engine-contract-self-test` lane that validates Forest Factory preview
   descriptors, streaming-save checkpoint behavior, and deterministic scene
   snapshot serialization plus parser round-trip before the heavier project/AI

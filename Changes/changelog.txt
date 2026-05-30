@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.84.75]
+- Bumped the active source line to `v0.84.75` for the universal input contract
+  expansion.
+- Extended `engine.input` with named editor/project actions for camera center
+  reset, frame selection, clipboard copy/paste, right-click context menu,
+  play-in-editor, timeline play/step, and package install.
+- Added modifier-aware key bindings and mouse-action bindings so the shared
+  profile contract can cover future selectable text, context menus, timeline
+  controls, and package-manager controls without each workspace inventing its
+  own input path.
+- Expanded `--engine-contract-self-test` coverage so the build-safe lane proves
+  the default editor input profile, Home reset, Ctrl+C copy, right-click context
+  menu, and profile summary before runtime/event-router promotion.
+
 ## [v0.84.74]
 - Bumped the active source line to `v0.84.74` for the first streaming-checkpoint
   package contract.

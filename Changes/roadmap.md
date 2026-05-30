@@ -789,6 +789,14 @@ engine shape and should be treated as starting truth for the next passes:
   remains staged: the pure contract lane can now verify package validity and
   parser restore from the staged payload, but actual file writes, rolling
   retention cleanup, and editor/runtime replay still require runtime-safe proof.
+- `v0.84.75` expands the universal input profile contract inside `engine.input`:
+  camera center reset, frame selection, clipboard, context-menu, play-in-editor,
+  timeline, and package-install actions now have named bindings, modifier
+  support, mouse bindings, validation, summaries, and contract self-test
+  coverage. Acceptance remains staged: this is the data spine for selectable
+  text, right-click menus, project single-context launch controls, and editor
+  input settings, but live event routing and GUI editing of bindings still need
+  runtime-safe eye-test proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

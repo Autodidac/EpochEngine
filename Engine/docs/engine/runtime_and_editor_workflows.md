@@ -503,10 +503,17 @@ the same engine-owned path.
   scene payload, manifest line, and payload hash. This gives the writer/restore
   path an auditable package shape before real disk writes, rolling cleanup, or
   editor/runtime replay are claimed complete.
+- `engine.input` is the shared input profile spine. The default editor profile
+  now names camera reset-to-center, frame selection, clipboard copy/paste,
+  right-click context menu, play-in-editor, timeline play/step, and package
+  install actions with modifier-aware key bindings and mouse bindings. GUI
+  surfaces should consume those named actions instead of hardcoding per-window
+  shortcuts, and project/package export should treat input profiles as explicit
+  opt-in data.
 - The non-GUI engine contract self-test now exercises the Forest Factory,
-  streaming-save package, and scene snapshot serializer/parser contracts before
-  the heavier project-profile and OS-AI validation gates. New timeline or
-  package contracts should join that lane before being exposed as
+  streaming-save package, input profile, and scene snapshot serializer/parser
+  contracts before the heavier project-profile and OS-AI validation gates. New
+  timeline, package, or input contracts should join that lane before being exposed as
   generated-project behavior.
 
 ## Hardware support strategy
