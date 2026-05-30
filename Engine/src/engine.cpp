@@ -641,12 +641,38 @@ namespace epochnamespace::core
         });
         epoch::timeline::sort_events(timelineEvents);
         const auto sceneKey = epoch::timeline::to_scene_timeline_key(timelineEvents.front());
+        const epoch::timeline::TimelineViewConfig timelineView{
+            .visible_start_seconds = 0.0,
+            .visible_duration_seconds = 5.0,
+            .pixel_width = 500.0
+        };
+        const auto timelineMetrics = epoch::timeline::make_view_metrics(
+            timelineState,
+            timelineTracks,
+            timelineEvents,
+            timelineView);
+        const auto timelineTrackSummaries = epoch::timeline::summarize_tracks(timelineTracks, timelineEvents);
+        const std::string timelineViewSummary = epoch::timeline::describe_view(
+            timelineState,
+            timelineTracks,
+            timelineEvents,
+            timelineView);
         check(
             "timeline.model",
             timelineTracks.size() == 4u
             && epoch::timeline::enabled_track_count(timelineTracks) == 4u
             && timelineEvents.front().frame_index == 60u
             && sceneKey.event_kind == "Camera cut");
+        check(
+            "timeline.view",
+            timelineMetrics.visible_event_count == 2u
+            && timelineMetrics.enabled_track_count == 4u
+            && timelineMetrics.playhead_x > 399.9
+            && timelineMetrics.playhead_x < 400.1
+            && timelineTrackSummaries.size() == 4u
+            && timelineTrackSummaries[1].event_count == 1u
+            && timelineTrackSummaries[2].event_count == 1u
+            && timelineViewSummary.find("timeline view 0.00-5.00s") != std::string::npos);
 
         const auto inputProfile = epochnamespace::input::make_profile(epochnamespace::input::ProfilePreset::EditorDefault);
         const auto resetBinding = inputProfile.bindings[

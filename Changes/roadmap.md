@@ -806,6 +806,13 @@ engine shape and should be treated as starting truth for the next passes:
   server/listener approval gates without launching renderer contexts. Acceptance
   remains staged: Package Manager layout, actual download/build progress, and
   project opt-in payload writes still require GUI/runtime eye-test proof.
+- `v0.84.77` adds the next build-safe Timeline Editor data shape: timeline view
+  metrics now describe visible time ranges, seconds-per-pixel, playhead X,
+  visible event counts, and per-track event summaries. The Timeline Editor can
+  display a view summary from shared data instead of hardcoded status text, and
+  `--engine-contract-self-test` covers the metrics. Acceptance remains staged:
+  real timeline lanes, editable keys, drag/scrub UI, persistence writing, and
+  replay restore still require the shared GUI library and runtime-safe proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

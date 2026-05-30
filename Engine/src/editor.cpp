@@ -6071,6 +6071,18 @@ namespace epochnamespace
                 gui::property_row("[timeline] Duration", std::format("{:.2f}s", editor.timelineState.duration_seconds), 132.0f);
                 gui::property_row("[timeline] Tracks", std::format("{} enabled / {}", epoch::timeline::enabled_track_count(editor.timelineTracks), editor.timelineTracks.size()), 132.0f);
                 gui::property_row("[timeline] Keys", std::to_string(editor.timelineEvents.size()), 132.0f);
+                gui::property_row(
+                    "[timeline] View",
+                    epoch::timeline::describe_view(
+                        editor.timelineState,
+                        editor.timelineTracks,
+                        editor.timelineEvents,
+                        epoch::timeline::TimelineViewConfig{
+                            .visible_start_seconds = (std::max)(0.0, editor.timelineState.playhead_seconds - 5.0),
+                            .visible_duration_seconds = 10.0,
+                            .pixel_width = (std::max)(320.0f, centerWidth)
+                        }),
+                    132.0f);
                 if (const auto* nextEvent = epoch::timeline::next_event_after(editor.timelineEvents, editor.timelineState.playhead_seconds))
                     gui::property_row("[timeline] Next key", epoch::timeline::describe_event(*nextEvent), 132.0f);
                 else

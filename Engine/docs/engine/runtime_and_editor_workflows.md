@@ -493,6 +493,10 @@ the same engine-owned path.
   tracks, keyed events, playhead state, scrub helpers, recording-gate state, and
   conversion into scene timeline keys so the UI can grow around engine data
   instead of ad hoc status buttons.
+- Timeline view metrics now live in `timeline.system` too: visible range,
+  seconds-per-pixel, playhead X, visible key count, and per-track event summaries
+  are data outputs that the editor can render as lanes once the GUI library has
+  proper timeline controls.
 - `saveload.system`, `scenesnapshot`, and `sceneserializer` are the current
   contract layer for timeline checkpoints: they define streaming-save config,
   checkpoint labels, scene object snapshots, timeline keys, and deterministic

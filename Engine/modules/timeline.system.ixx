@@ -66,6 +66,34 @@ export namespace epoch::timeline
         bool recording = false;
     };
 
+    struct TimelineViewConfig
+    {
+        double visible_start_seconds = 0.0;
+        double visible_duration_seconds = 10.0;
+        double pixel_width = 640.0;
+    };
+
+    struct TimelineViewMetrics
+    {
+        double visible_start_seconds = 0.0;
+        double visible_end_seconds = 10.0;
+        double visible_duration_seconds = 10.0;
+        double seconds_per_pixel = 1.0 / 64.0;
+        double playhead_x = 0.0;
+        std::size_t visible_event_count = 0;
+        std::size_t enabled_track_count = 0;
+    };
+
+    struct TimelineTrackSummary
+    {
+        std::string id{};
+        std::string label{};
+        TimelineTrackKind kind = TimelineTrackKind::Scene;
+        std::size_t event_count = 0;
+        bool enabled = true;
+        bool locked = false;
+    };
+
     [[nodiscard]] inline std::string_view track_kind_name(TimelineTrackKind kind) noexcept
     {
         switch (kind)
@@ -127,6 +155,34 @@ export namespace epoch::timeline
     {
         state.playhead_seconds += delta_seconds;
         clamp_state(state);
+    }
+
+    inline void clamp_view_config(TimelineViewConfig& view, double timeline_duration_seconds) noexcept
+    {
+        const double duration = (std::max)(1.0, timeline_duration_seconds);
+        view.pixel_width = (std::clamp)(view.pixel_width, 64.0, 65'536.0);
+        view.visible_duration_seconds = (std::clamp)(view.visible_duration_seconds, 0.25, duration);
+        view.visible_start_seconds = (std::clamp)(
+            view.visible_start_seconds,
+            0.0,
+            (std::max)(0.0, duration - view.visible_duration_seconds));
+    }
+
+    [[nodiscard]] inline bool event_is_visible(
+        const TimelineEvent& event,
+        const TimelineViewConfig& view) noexcept
+    {
+        return event.simulated_seconds >= view.visible_start_seconds &&
+               event.simulated_seconds <= view.visible_start_seconds + view.visible_duration_seconds;
+    }
+
+    [[nodiscard]] inline double event_position_x(
+        const TimelineEvent& event,
+        const TimelineViewConfig& view) noexcept
+    {
+        const double normalized = (event.simulated_seconds - view.visible_start_seconds) /
+            (std::max)(0.000001, view.visible_duration_seconds);
+        return (std::clamp)(normalized, 0.0, 1.0) * view.pixel_width;
     }
 
     [[nodiscard]] inline TimelineEvent make_event_from_stats(
@@ -194,6 +250,82 @@ export namespace epoch::timeline
             event.simulated_seconds,
             event.frame_index,
             event.label.empty() ? std::string("(unlabeled)") : event.label);
+    }
+
+    [[nodiscard]] inline std::vector<TimelineTrackSummary> summarize_tracks(
+        const std::vector<TimelineTrack>& tracks,
+        const std::vector<TimelineEvent>& events)
+    {
+        std::vector<TimelineTrackSummary> summaries;
+        summaries.reserve(tracks.size());
+
+        for (const auto& track : tracks)
+        {
+            const auto event_count = static_cast<std::size_t>(std::count_if(
+                events.begin(),
+                events.end(),
+                [&](const TimelineEvent& event)
+                {
+                    return event.track_id == track.id;
+                }));
+
+            summaries.push_back(TimelineTrackSummary{
+                .id = track.id,
+                .label = track.label,
+                .kind = track.kind,
+                .event_count = event_count,
+                .enabled = track.enabled,
+                .locked = track.locked
+            });
+        }
+
+        return summaries;
+    }
+
+    [[nodiscard]] inline TimelineViewMetrics make_view_metrics(
+        TimelineState state,
+        const std::vector<TimelineTrack>& tracks,
+        const std::vector<TimelineEvent>& events,
+        TimelineViewConfig view)
+    {
+        clamp_state(state);
+        clamp_view_config(view, state.duration_seconds);
+
+        TimelineViewMetrics metrics{};
+        metrics.visible_start_seconds = view.visible_start_seconds;
+        metrics.visible_end_seconds = view.visible_start_seconds + view.visible_duration_seconds;
+        metrics.visible_duration_seconds = view.visible_duration_seconds;
+        metrics.seconds_per_pixel = view.visible_duration_seconds / view.pixel_width;
+        metrics.playhead_x = (std::clamp)(
+            (state.playhead_seconds - view.visible_start_seconds) /
+                (std::max)(0.000001, view.visible_duration_seconds),
+            0.0,
+            1.0) * view.pixel_width;
+        metrics.enabled_track_count = enabled_track_count(tracks);
+        metrics.visible_event_count = static_cast<std::size_t>(std::count_if(
+            events.begin(),
+            events.end(),
+            [&](const TimelineEvent& event)
+            {
+                return event_is_visible(event, view);
+            }));
+        return metrics;
+    }
+
+    [[nodiscard]] inline std::string describe_view(
+        const TimelineState& state,
+        const std::vector<TimelineTrack>& tracks,
+        const std::vector<TimelineEvent>& events,
+        const TimelineViewConfig& view)
+    {
+        const auto metrics = make_view_metrics(state, tracks, events, view);
+        return std::format(
+            "timeline view {:.2f}-{:.2f}s | playhead x {:.1f} | events {} | tracks {}",
+            metrics.visible_start_seconds,
+            metrics.visible_end_seconds,
+            metrics.playhead_x,
+            metrics.visible_event_count,
+            metrics.enabled_track_count);
     }
 
     [[nodiscard]] inline epoch::scene::SceneTimelineKey to_scene_timeline_key(const TimelineEvent& event)

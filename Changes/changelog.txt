@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.84.77]
+- Bumped the active source line to `v0.84.77` for the next 4D Timeline Editor
+  data-spine slice.
+- Added reusable timeline view contracts for visible time ranges, playhead
+  placement, seconds-per-pixel metrics, visible event counts, and per-track
+  summaries so editor timeline drawing can be data-driven instead of ad hoc UI.
+- Expanded `--engine-contract-self-test` coverage to verify timeline view metrics
+  beside timeline sorting, event conversion, streaming-save checkpoints, and
+  snapshot parser round trips.
+- Surfaced the new timeline view summary in the Timeline Editor workspace
+  without changing renderer draw order or launching GPU runtime validation.
+
 ## [v0.84.76]
 - Bumped the active source line to `v0.84.76` for package-registry contract
   validation.
