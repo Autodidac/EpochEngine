@@ -97,6 +97,10 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     actual model-weight downloader still needs its own approval, byte-count,
     resume, license/notice, and cache verification gate before it can claim a
     download is running.
+20. `v0.86.00` is the active feature-line consolidation point. The Linux Clang
+    full-engine lane carries a documented Clang 18.1.3 optimizer-ICE workaround
+    for `gamecore.ixx` only; remove it only after a newer compiler or module
+    refactor proves the Release build no longer crashes.
 
 ## Release And Source Policy
 
@@ -882,6 +886,11 @@ engine shape and should be treated as starting truth for the next passes:
   focus keys, selected OS models initialize immediately, leaked
   reasoning/debug-only helper text is rejected from visible chat, and model
   package staging no longer looks like a frozen 35% download.
+- `v0.86.00` is the feature-line refresh checkpoint. It keeps the `v0.84.87`
+  OS AI/model-package repairs, records the current roadmap/log archive state,
+  and adds a Linux Clang full-engine build guard for a Clang 18.1.3 optimizer
+  crash in `gamecore.ixx` without changing renderer order, GUI draw-model, or
+  runtime behavior.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

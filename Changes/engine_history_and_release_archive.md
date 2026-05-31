@@ -25,7 +25,7 @@ archive for historical context and milestone tracing.
 Current orientation:
 
 - Latest published stable runtime line: `v0.84.05`
-- Current development source line: `v0.84.23`
+- Current development source line: `v0.86.00`
 
 ## What the engine has become so far
 
@@ -67,6 +67,17 @@ From the archived work in this file, a few themes are clear:
 These notes were previously tracked in `post_v0_83_work_collated.md`. They stay
 here because they explain the active engine/editor direction more directly than
 the older updater-era release cadence alone.
+
+### [Work Log | Development line] v0.86.00
+
+`v0.86.00` consolidates the active feature line after the recent OS AI,
+package-manager, timeline, model-package, Forest Factory, and editor-stability
+work. The source line keeps the current OS-model direction, executable-local
+cache lanes, and reviewable package/model gates while preserving the protected
+OpenGL GUI/scene draw model. It also records a build-only Linux Clang
+full-engine workaround for a Clang 18.1.3 Release optimizer crash in
+`gamecore.ixx`; only that tiny module is compiled without optimization on Linux
+Clang until a compiler or module-graph update proves the workaround unnecessary.
 
 ### [Work Log | Development line] v0.84.23
 

@@ -184,6 +184,7 @@ export namespace epochnamespace::net {
         HSteamNetConnection h = g_sn->ConnectByIPAddress(ipAddr, 0, nullptr);
         return Connection{ SteamConn{h} };
 #endif
+        throw std::logic_error("Unsupported networking backend mode");
     }
 
     // Async send: send data asynchronously on the connection

@@ -45,13 +45,13 @@ module;
 #if defined(EPOCH_OVERRIDE_VERSION_MINOR)
 #  define EPOCH_VERSION_MINOR_VALUE EPOCH_OVERRIDE_VERSION_MINOR
 #else
-#  define EPOCH_VERSION_MINOR_VALUE 84
+#  define EPOCH_VERSION_MINOR_VALUE 86
 #endif
 
 #if defined(EPOCH_OVERRIDE_VERSION_REVISION)
 #  define EPOCH_VERSION_REVISION_VALUE EPOCH_OVERRIDE_VERSION_REVISION
 #else
-#  define EPOCH_VERSION_REVISION_VALUE 87
+#  define EPOCH_VERSION_REVISION_VALUE 0
 #endif
 
 #if defined(EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_MAJOR)
@@ -205,7 +205,7 @@ namespace epochnamespace
         std::snprintf(
             buffer.data(),
             buffer.size(),
-            "%d.%d.%d",
+            "%d.%d.%02d",
             major,
             minor,
             revision
@@ -224,7 +224,7 @@ namespace epochnamespace
         std::snprintf(
             buffer.data(),
             buffer.size(),
-            "%d.%d.%d",
+            "%d.%d.%02d",
             GetPackagedMajor(),
             GetPackagedMinor(),
             GetPackagedRevision()

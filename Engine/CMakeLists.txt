@@ -900,6 +900,17 @@ if(NOT (UNIX AND NOT APPLE))
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\]).*\.linux\.ixx$]])
 endif()
 
+if(UNIX AND NOT APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # Clang 18.1.3 can ICE in the Release optimizer while compiling this tiny
+    # module unit. Keep the hosted Linux full-engine lane buildable without
+    # changing gamecore behavior or hiding real compile/link diagnostics.
+    set_source_files_properties(
+        ${EPOCH_MODULE_DIR}/gamecore.ixx
+        PROPERTIES
+            COMPILE_OPTIONS "-O0"
+    )
+endif()
+
 if(NOT EPOCH_RAYLIB_ACTIVE)
     set_source_files_properties(
         src/context_raylib.cpp
