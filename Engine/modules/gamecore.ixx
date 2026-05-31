@@ -33,14 +33,9 @@ module;
 
 #include <vector>
 #include <utility>
-#include <span>
 #include <cassert>
 
 export module gamecore;
-
-
-import atlas.manager;
-import atlas.texture;
 
 /**************************************************************
  *   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•—     â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ–ˆâ•—   â–ˆâ–ˆâ•—    â–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—    *
@@ -124,20 +119,5 @@ export namespace epochnamespace
             return in_bounds(w, h, x, y) && grid[idx(w, x, y)] == free_tile_value;
         }
 
-        // --- Shared atlas pointers storage ---
-        inline std::vector<const TextureAtlas*> g_atlases;
-
-        // Register an atlas pointer into the shared vector
-        inline void register_atlas(const TextureAtlas& atlas) {
-            const size_t idx = static_cast<size_t>(atlas.index);
-            if (g_atlases.size() <= idx)
-                g_atlases.resize(idx + 1, nullptr);
-            g_atlases[idx] = &atlas;
-        }
-
-        // Retrieve shared atlas pointers for rendering
-        inline std::span<const TextureAtlas* const> get_atlases() noexcept {
-            return { g_atlases.data(), g_atlases.size() };
-        }
     }
 }

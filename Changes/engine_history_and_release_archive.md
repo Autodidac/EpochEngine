@@ -74,10 +74,10 @@ the older updater-era release cadence alone.
 package-manager, timeline, model-package, Forest Factory, and editor-stability
 work. The source line keeps the current OS-model direction, executable-local
 cache lanes, and reviewable package/model gates while preserving the protected
-OpenGL GUI/scene draw model. It also records a build-only Linux Clang
-full-engine workaround for a Clang 18.1.3 Release optimizer crash in
-`gamecore.ixx`; only that tiny module is compiled without optimization on Linux
-Clang until a compiler or module-graph update proves the workaround unnecessary.
+OpenGL GUI/scene draw model. It also records the Linux Clang full-engine
+optimizer crash reduction in `gamecore.ixx`: the module now stays focused on
+grid helpers and no longer imports atlas modules or exports unused atlas
+registry state, so the Clang-only `-O0` source workaround is no longer needed.
 
 ### [Work Log | Development line] v0.84.23
 
