@@ -3781,8 +3781,8 @@ namespace epochnamespace
                     << "}\n";
             }
 
-            editor.packageInstallStatus = "Model package opt-in staged; download plan is waiting in cache/models.";
-            editor.packageInstallProgress = 0.35f;
+            editor.packageInstallStatus = "Model download plan staged in cache/models; weight transfer has not started.";
+            editor.packageInstallProgress = 1.0f;
             append_project_note(
                 editor,
                 "Stage OS Model Package",

@@ -91,6 +91,12 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     runtime dependencies for that lane; static-vcpkg all-backend work remains a
     separate acceptance-gated track because Raylib/SFML/SDL/GLAD static libs can
     export overlapping STB, GLAD, and math symbols.
+19. Model package install UI must distinguish staged evidence from transfer
+    progress. `v0.84.87` fixes the misleading 35% model-package state by
+    reporting `cache/models/.../download.plan.json` staging as complete; the
+    actual model-weight downloader still needs its own approval, byte-count,
+    resume, license/notice, and cache verification gate before it can claim a
+    download is running.
 
 ## Release And Source Policy
 
@@ -871,6 +877,11 @@ engine shape and should be treated as starting truth for the next passes:
   a build-only repair and intentionally leaves renderer ordering, GUI draw-model,
   Package Manager layout, and Timeline/Forest Factory runtime behavior untouched
   for the next acceptance-gated pass.
+- `v0.84.87` repairs OS AI chat/editor input regressions without touching the
+  renderer draw model: shared AI chat input fields now have independent widget
+  focus keys, selected OS models initialize immediately, leaked
+  reasoning/debug-only helper text is rejected from visible chat, and model
+  package staging no longer looks like a frozen 35% download.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

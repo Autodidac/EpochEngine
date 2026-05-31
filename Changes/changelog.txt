@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.84.87]
+- Bumped the active source line to `v0.84.87` for the OS AI chat/model package
+  stability pass.
+- Gave GUI edit boxes per-widget focus identity so the central AI Sandbox chat
+  and bottom AI Chat can share one backing input string without double-typing or
+  double-submit behavior.
+- Activating a local model from the OS AI model selector now initializes the
+  selected OS AI client immediately instead of waiting for the next chat submit.
+- Hidden-reasoning/debug model replies are now rejected from visible chat output
+  as well as from capture promotion.
+- Corrected model package progress reporting: Package Manager now marks
+  `cache/models/.../download.plan.json` staging as complete evidence instead of
+  pretending a real weight download is stuck at 35%. The actual byte-transfer
+  downloader remains a separate acceptance-gated task.
+
 ## [v0.84.86]
 - Bumped the active source line to `v0.84.86` for the hosted Linux Clang
   full-engine CMake repair.

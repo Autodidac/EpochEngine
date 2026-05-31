@@ -96,8 +96,9 @@ requires an explicit package opt-in plus license and notice review. This keeps
 normal games/software lean while still allowing large OS models to be included
 when a project deliberately needs them. The first editor gate writes a
 project-local `*.model.package.json` manifest and a cache-local
-`download.plan.json`; actual weight transfer remains a separate
-operator-approved Package Manager step.
+`download.plan.json`; the Package Manager should mark that plan as staged
+evidence rather than displaying a partial transfer. Actual weight transfer
+remains a separate operator-approved Package Manager step.
 
 ## Current AI Architecture
 
@@ -260,8 +261,8 @@ model fallback.
 
 If a selected model returns blank visible assistant content and only
 `reasoning_content`, Epoch rejects that reply as a model/API configuration
-failure. Hidden reasoning is never displayed as chat and is never promoted as
-curated assistant training data.
+failure. Hidden reasoning and obvious reasoning/debug drafts are never
+displayed as chat and are never promoted as curated assistant training data.
 
 ## Server And Addon Safety
 

@@ -1013,6 +1013,22 @@ namespace epochnamespace::gui
             return h == 0 ? 1 : h;
         }
 
+        [[nodiscard]] static const void* widget_focus_key(
+            std::string_view label,
+            const void* owner,
+            Vec2 pos,
+            Vec2 size) noexcept
+        {
+            std::size_t h = widget_press_key(label, pos, size);
+            const auto mix = [&h](std::uint64_t value) noexcept
+            {
+                h ^= static_cast<std::size_t>(value);
+                h *= static_cast<std::size_t>(1099511628211ull);
+            };
+            mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(owner)));
+            return reinterpret_cast<const void*>(h == 0 ? 1 : h);
+        }
+
         [[nodiscard]] static float base_line_height(float scale) noexcept
         {
             const auto& metrics = g_resources.font.metrics;
@@ -2825,7 +2841,7 @@ namespace epochnamespace::gui
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
             && point_in_active_clip(g_frame.mousePos);
-        const void* id = static_cast<const void*>(&text);
+        const void* id = widget_focus_key("edit-box", static_cast<const void*>(&text), pos, { width, height });
         const void* ctxKey = static_cast<const void*>(g_frame.ctx);
         const void* activeWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
         bool& wholeFieldSelected = g_textFieldSelectAllStates[id];

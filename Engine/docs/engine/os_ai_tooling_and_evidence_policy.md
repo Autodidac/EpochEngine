@@ -101,7 +101,9 @@ as an unconstrained model rewriting itself.
   fallback. The first safe action writes an explicit download plan under
   `cache/models/<package>/download.plan.json`; a future downloader must still
   keep operator approval, license/notice review, and project opt-in separate
-  from model discovery.
+  from model discovery. The editor must report that plan as staged evidence,
+  not as a partial weight download, until an actual byte-transfer downloader is
+  implemented and verified.
 - include model weights in generated projects only after explicit package
   opt-in plus license/notice review; otherwise projects should carry metadata
   and download recipes only

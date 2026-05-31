@@ -1431,6 +1431,7 @@ namespace epoch::ai
         g_engineAi = nullptr;
         g_selectedModel = selected;
         g_modelDetectionStatus = "Selected model: " + selected;
+        init_engine_ai();
 
         std::string msg = "AI model selected: ";
         msg += selected;
@@ -1826,6 +1827,7 @@ namespace epoch::ai
         else if (!reply.text.empty())
         {
             core::log::warn("ai", "Skipped non-promotable MCP chat capture.");
+            return "Local model returned reasoning/debug text instead of final assistant content. Adjust the local model chat template or choose a content-producing OS model before using Engine AI chat.";
         }
         if (reply.text.empty())
             return std::string("No decodable reply from selected local model '") + g_selectedModel
