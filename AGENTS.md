@@ -122,6 +122,13 @@
   through an updater-style, human-approved build/run gate and must not
   auto-create servers, listeners, hidden control surfaces, or model-bypass
   channels.
+- Editor update checks are platform-dependent. A Windows update must only be
+  surfaced when the current hosted Windows build lane is green; a Linux update
+  must only be surfaced when the current hosted Linux build lane is green. If an
+  update probe is being tested by pushing a small upstream commit and rewinding
+  the local checkout, confirm the tree is clean first, push the test commit, then
+  rewind only the local checkout to the pre-test commit so the editor can detect
+  the newer remote without losing operator work.
 - Server-capable work is package-gated. Authoritative dedicated headless server
   support is optional, not the default networking model; client
   listen/nondedicated and future client-predicted competitive paths remain
