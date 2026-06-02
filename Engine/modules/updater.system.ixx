@@ -443,6 +443,18 @@ namespace epochnamespace::updater
             bool update_available{ false };
         };
 
+        struct BuildStatusResult
+        {
+            bool checked{ false };
+            bool ok{ false };
+            bool pending{ false };
+            std::string job_name;
+            std::string status;
+            std::string conclusion;
+            std::string url;
+            std::string reason;
+        };
+
         [[nodiscard]] inline std::filesystem::path env_path(const char* name)
         {
 #if defined(_WIN32)
@@ -906,6 +918,117 @@ namespace epochnamespace::updater
             }
 
             return resolved;
+        }
+
+        [[nodiscard]] inline bool text_matches_ci_job(
+            const std::string& value,
+            const std::string& job_name)
+        {
+            if (value.empty() || job_name.empty())
+                return false;
+
+            const auto normalized_value = lower_ascii(value);
+            const auto normalized_job = lower_ascii(job_name);
+            return normalized_value == normalized_job
+                || normalized_value.find(normalized_job) != std::string::npos;
+        }
+
+        [[nodiscard]] inline BuildStatusResult check_platform_build_status(
+            const std::string& runs_api_url,
+            const std::string& job_name)
+        {
+            BuildStatusResult result{};
+            result.job_name = job_name;
+
+            if (runs_api_url.empty() || job_name.empty())
+            {
+                result.reason = "No platform build gate is configured.";
+                return result;
+            }
+
+            const auto runs_json_path =
+                make_temp_download_path("actions_runs").replace_extension(".json");
+            if (!download_file(runs_api_url, runs_json_path.string()))
+            {
+                result.reason = "Could not download GitHub Actions run metadata.";
+                return result;
+            }
+
+            const auto runs_json = read_text_file(runs_json_path);
+            std::error_code ec;
+            std::filesystem::remove(runs_json_path, ec);
+            if (runs_json.empty())
+            {
+                result.reason = "GitHub Actions run metadata was empty.";
+                return result;
+            }
+
+            const auto workflow_runs = extract_json_array_text(runs_json, "workflow_runs");
+            if (workflow_runs.empty())
+            {
+                result.reason = "GitHub Actions response did not contain workflow runs.";
+                return result;
+            }
+
+            for (const auto& run_object : extract_json_objects(workflow_runs))
+            {
+                const auto jobs_url = extract_json_string_field(run_object, "jobs_url");
+                if (jobs_url.empty())
+                    continue;
+
+                const auto jobs_json_path =
+                    make_temp_download_path("actions_jobs").replace_extension(".json");
+                if (!download_file(jobs_url, jobs_json_path.string()))
+                    continue;
+
+                const auto jobs_json = read_text_file(jobs_json_path);
+                std::filesystem::remove(jobs_json_path, ec);
+                if (jobs_json.empty())
+                    continue;
+
+                const auto jobs_array = extract_json_array_text(jobs_json, "jobs");
+                if (jobs_array.empty())
+                    continue;
+
+                for (const auto& job_object : extract_json_objects(jobs_array))
+                {
+                    const auto candidate_name = extract_json_string_field(job_object, "name");
+                    if (!text_matches_ci_job(candidate_name, job_name))
+                        continue;
+
+                    result.checked = true;
+                    result.job_name = candidate_name.empty() ? job_name : candidate_name;
+                    result.status = extract_json_string_field(job_object, "status");
+                    result.conclusion = extract_json_string_field(job_object, "conclusion");
+                    result.url = extract_json_string_field(job_object, "html_url");
+
+                    if (result.status != "completed")
+                    {
+                        result.pending = true;
+                        result.reason = "Platform build is still " + result.status + ".";
+                        return result;
+                    }
+
+                    result.ok = result.conclusion == "success";
+                    if (result.ok)
+                    {
+                        result.reason = "Platform build succeeded.";
+                    }
+                    else if (!result.conclusion.empty())
+                    {
+                        result.reason = "Platform build concluded with " + result.conclusion + ".";
+                    }
+                    else
+                    {
+                        result.reason = "Platform build completed without a success conclusion.";
+                    }
+
+                    return result;
+                }
+            }
+
+            result.reason = "No matching platform build job was found for '" + job_name + "'.";
+            return result;
         }
 
         [[nodiscard]] inline std::string capture_process_output(
@@ -2571,6 +2694,14 @@ namespace epochnamespace::updater
         std::string source_local_version;
         std::string source_remote_version;
         bool source_update_available{ false };
+        bool platform_build_checked{ false };
+        bool platform_build_ok{ false };
+        bool platform_build_pending{ false };
+        std::string platform_build_job;
+        std::string platform_build_status;
+        std::string platform_build_conclusion;
+        std::string platform_build_url;
+        std::string platform_build_reason;
     };
 
     export struct UpdateChannel
@@ -2579,6 +2710,8 @@ namespace epochnamespace::updater
         std::string binary_url;
         std::string source_url;
         std::string source_version_url;
+        std::string platform_build_status_url;
+        std::string platform_build_job_name;
     };
 
 #if defined(_WIN32)
@@ -3100,7 +3233,7 @@ namespace epochnamespace::updater
         const auto handoff_log = target_binary.parent_path() / "epoch_update_handoff.log";
 
         std::error_code replacement_exists_ec;
-        if (!fs::exists(new_binary, replacement_exists_ec))
+        if (!std::filesystem::exists(new_binary, replacement_exists_ec))
         {
             const std::string message = "Binary replacement aborted because the downloaded replacement is missing: "
                 + new_binary.string();
@@ -3218,7 +3351,7 @@ namespace epochnamespace::updater
         const bool chain_after_restart = !restart_auto_command.empty();
 
         std::error_code extracted_exists_ec;
-        if (!fs::exists(extracted_binary, extracted_exists_ec))
+        if (!std::filesystem::exists(extracted_binary, extracted_exists_ec))
         {
             const std::string message = "Packaged replacement aborted because the extracted runtime binary is missing: "
                 + extracted_binary.string();
@@ -3315,7 +3448,7 @@ namespace epochnamespace::updater
         const bool chain_after_restart = !restart_auto_command.empty();
 
         std::error_code extracted_exists_ec;
-        if (!fs::exists(extracted_binary, extracted_exists_ec))
+        if (!std::filesystem::exists(extracted_binary, extracted_exists_ec))
         {
             const std::string message = "Packaged replacement aborted because the extracted runtime binary is missing: "
                 + extracted_binary.string();
@@ -3894,6 +4027,45 @@ namespace epochnamespace::updater
                 result.source_remote_version = source_status.remote;
                 result.source_update_available = source_status.update_available;
             }
+        }
+
+        const bool candidate_update_available =
+            packaged_status.update_available
+            || (source_status.ok && source_status.update_available);
+        if (candidate_update_available)
+        {
+            const auto build_status = system_detail::check_platform_build_status(
+                channel.platform_build_status_url,
+                channel.platform_build_job_name);
+
+            result.platform_build_checked = build_status.checked;
+            result.platform_build_ok = build_status.ok;
+            result.platform_build_pending = build_status.pending;
+            result.platform_build_job = build_status.job_name;
+            result.platform_build_status = build_status.status;
+            result.platform_build_conclusion = build_status.conclusion;
+            result.platform_build_url = build_status.url;
+            result.platform_build_reason = build_status.reason;
+
+            if (!build_status.ok)
+            {
+                packaged_status.update_available = false;
+                source_status.update_available = false;
+                result.packaged_update_available = false;
+                result.source_update_available = false;
+                result.update_available = false;
+                result.force_required = false;
+
+                const std::string job =
+                    build_status.job_name.empty() ? std::string{ "platform build" } : build_status.job_name;
+                const std::string reason =
+                    build_status.reason.empty() ? std::string{ "build status could not be proven." } : build_status.reason;
+                system_detail::log_info("Update withheld until " + job + " is green: " + reason);
+                return result;
+            }
+
+            if (!build_status.job_name.empty())
+                system_detail::log_info("Update platform build gate passed: " + build_status.job_name);
         }
 
         if (packaged_status.update_available)

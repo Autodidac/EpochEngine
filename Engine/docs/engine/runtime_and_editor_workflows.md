@@ -34,6 +34,10 @@ the same engine-owned path.
 - source checkout installs still use the same binary-first rule; only after
   packaged parity or absence of a newer package should they rebuild from the
   GitHub source snapshot using the platform build path
+- editor update checks must also prove the matching hosted build lane before
+  surfacing an update: Windows waits for `windows-msvc`, Linux waits for
+  `linux-clang-engine`, and pending/failing/missing job evidence withholds the
+  update affordance
 - runtime-created update/package/cache data is app-local: updater work,
   temporary probes, extraction folders, and helper tools live under
   `cache/updates/`; downloaded release/source packages live under

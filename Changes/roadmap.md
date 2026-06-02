@@ -103,7 +103,8 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     the lane no longer carries a Clang-only `-O0` workaround. The automatic
     editor update check is also guarded so a packaged update must contain a
     verified replacement executable before Epoch launches a handoff script or
-    closes the running editor.
+    closes the running editor, and the current platform's CI lane must be green
+    before the editor advertises an update.
 
 ## Release And Source Policy
 
@@ -142,6 +143,9 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 - The updater remains binary-first and platform-specific: check the newest
   packaged runtime for the current platform first, then continue to source only
   when the packaged runtime is already version-equal or newer.
+- Update availability is also platform-build-gated: Windows checks the
+  `windows-msvc` Actions job, Linux checks `linux-clang-engine`, and
+  queued/running/failing/missing build evidence withholds update UI/actions.
 - GitHub source archives stay full source snapshots. Do not slim them down to
   imitate runtime/bootstrap packages.
 - Commit titles stay descriptive and versionless. Version numbers belong in:

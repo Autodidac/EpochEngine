@@ -621,11 +621,26 @@ namespace epochnamespace
             channel.binary_url = updater::PROJECT_BINARY_URL();
             channel.source_url = updater::PROJECT_SOURCE_URL();
             channel.source_version_url = updater::PROJECT_SOURCE_VERSION_URL();
+            channel.platform_build_status_url = updater::PROJECT_ACTION_RUNS_API_URL();
+            channel.platform_build_job_name = updater::PROJECT_UPDATE_BUILD_JOB_NAME();
             return channel;
         }
 
         [[nodiscard]] std::string describe_update_result(const updater::UpdateCommandResult& result)
         {
+            if (!result.platform_build_ok
+                && (!result.platform_build_reason.empty() || result.platform_build_checked))
+            {
+                std::string message = "Update withheld";
+                if (!result.platform_build_job.empty())
+                    message += " for " + result.platform_build_job;
+                if (!result.platform_build_reason.empty())
+                    message += ": " + result.platform_build_reason;
+                else
+                    message += ": platform build status is not proven.";
+                return message;
+            }
+
             if (result.packaged_update_available)
             {
                 if (!result.remote_version.empty())

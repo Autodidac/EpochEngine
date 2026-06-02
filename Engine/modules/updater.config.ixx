@@ -272,6 +272,27 @@ namespace epochnamespace::updater
         return {};
     }
 
+    export inline std::string PROJECT_ACTION_RUNS_API_URL()
+    {
+        return std::string{ GITHUB_API_BASE }
+            + std::string{ OWNER } + "/"
+            + std::string{ REPO } + "/actions/runs?branch="
+            + std::string{ BRANCH } + "&per_page=10";
+    }
+
+    export inline std::string PROJECT_UPDATE_BUILD_JOB_NAME()
+    {
+        switch (platform::current_platform())
+        {
+        case platform::RuntimePlatform::Windows:
+            return "windows-msvc";
+        case platform::RuntimePlatform::Linux:
+            return "linux-clang-engine";
+        default:
+            return {};
+        }
+    }
+
     export inline std::string PROJECT_RELEASE_API_URL()
     {
         return std::string{ GITHUB_API_BASE }

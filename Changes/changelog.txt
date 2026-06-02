@@ -25,6 +25,10 @@
   executable exists before launching a self-replacement script or closing the
   editor, with batch-side guards logging missing payloads instead of silently
   shutting down without updating.
+- Added a platform CI readiness gate to automatic update checks: Windows
+  requires the latest `windows-msvc` job to be green, Linux requires
+  `linux-clang-engine`, and queued/running/failing/missing jobs withhold the
+  update button instead of offering a potentially broken runtime.
 - Removed the Linux Clang `gamecore.ixx` optimizer workaround by fixing the
   module shape directly: `gamecore` now owns only grid helpers and no longer
   imports atlas modules or exports an unused atlas pointer registry.
