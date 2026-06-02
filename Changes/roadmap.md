@@ -97,10 +97,13 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     actual model-weight downloader still needs its own approval, byte-count,
     resume, license/notice, and cache verification gate before it can claim a
     download is running.
-20. `v0.86.00` is the active feature-line consolidation point. The Linux Clang
+20. `v0.86.02` is the active feature-line consolidation point. The Linux Clang
     full-engine optimizer crash in `gamecore.ixx` was reduced in source by
     removing unused atlas imports/registry state from the grid-helper module;
-    the lane no longer carries a Clang-only `-O0` workaround.
+    the lane no longer carries a Clang-only `-O0` workaround. The automatic
+    editor update check is also guarded so a packaged update must contain a
+    verified replacement executable before Epoch launches a handoff script or
+    closes the running editor.
 
 ## Release And Source Policy
 
@@ -614,11 +617,12 @@ engine shape and should be treated as starting truth for the next passes:
   game modules. The command-menu Package Manager modal is the intended GUI
   surface for local packages first; future downloadable source packages must
   route through an updater-style build/approval gate.
-- Package Manager now needs visible per-package state instead of silent buttons:
-  selection uses the shared dropdown primitive, Install updates a shared
-  `engine.gui` progress bar/status line, downloadable packages remain staged
-  behind human approval, and Console Dock mirrors compact status only instead of
-  controlling package/editor workflows.
+- Package Manager now needs visible per-package state instead of silent buttons
+  or a single cramped combo box: selection uses a shared scrollable package list,
+  each row exposes its own Install/Remove/Review Gate action, Install updates a
+  shared `engine.gui` progress bar/status line, downloadable packages remain
+  staged behind human approval, and Console Dock mirrors compact status only
+  instead of controlling package/editor workflows.
 - project Run must be operator-selectable by runtime backend/context. The
   current acceptance gate is that the Project workspace selector launches built
   child projects as standalone single-context processes with explicit backend
@@ -886,12 +890,35 @@ engine shape and should be treated as starting truth for the next passes:
   focus keys, selected OS models initialize immediately, leaked
   reasoning/debug-only helper text is rejected from visible chat, and model
   package staging no longer looks like a frozen 35% download.
-- `v0.86.00` is the feature-line refresh checkpoint. It keeps the `v0.84.87`
+- `v0.86.02` is the feature-line refresh checkpoint. It keeps the `v0.84.87`
   OS AI/model-package repairs, records the current roadmap/log archive state,
   and resolves the Linux Clang full-engine optimizer crash in `gamecore.ixx`
   by keeping `gamecore` focused on grid helpers instead of importing atlas
-  modules or exporting unused atlas state. Renderer order, GUI draw-model, and
-  runtime behavior stay unchanged.
+  modules or exporting unused atlas state. The same checkpoint trims default
+  editor seed clutter, moves Package Manager toward a list/action/detail modal,
+  removes the fake Forest Factory floor/stage object, refines Systems graph,
+  and hardens automatic updater handoff so a missing packaged runtime payload
+  logs a failure instead of shutting down without updating.
+  labels without changing renderer order or the protected GUI draw model.
+- The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
+  `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
+  `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,
+  Video Editor, AI Sandbox, and Systems should remain internal/provenance terms
+  only when needed, not the primary user-facing navigation.
+- Package Manager list rows should behave like selectable text/link rows with
+  separate Install/Remove/Review Gate actions. Package names, package summaries,
+  and status evidence are not fake buttons; the shared GUI library now owns a
+  `text_link` primitive as the first step toward reusable automatic list/content
+  containers.
+- Automatic content containers remain an active GUI-library mission: scroll
+  areas, link rows, action rows, progress bars, edit boxes, source editors, and
+  future virtualized lists should resize from available content/viewport rules
+  instead of each editor workspace hardcoding row geometry.
+- Current Forest Factory acceptance remains open: the buildable preview may act
+  as a node/low-LOD visualization, but the mature target is still a Plant
+  Lab-grade Forest Factory scene with temporal graph controls, atlas/export
+  tools, package activation, and project payload emission backed by runtime
+  proof.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving
@@ -1123,10 +1150,12 @@ engine shape and should be treated as starting truth for the next passes:
   FLUX.2 Klein 4B stays a higher-memory fallback. Curated traces, prompts,
   adapters, evidence gates, notices, and package/runtime integration are the
   mutable artifacts.
-- Epoch is a 4D/time-based engine. The time spine needs a dedicated Timeline
-  Editor mission with keyed events, replay scrubbing, scene-time inspection, and
-  configurable streaming save/checkpoint controls built from the existing
-  `core.time` ownership instead of a parallel timing system.
+- Epoch is a 4D/time-based engine. The time spine now routes through the Video
+  Editor mission: keyed events, replay scrubbing, scene-time inspection,
+  timeline graphing, controlled timed projects, video editing, and configurable
+  streaming save/checkpoint controls are built from existing `core.time`
+  ownership instead of a parallel timing system. Systems must not reclaim those
+  controls now that Video Editor owns them.
 
 ## Phase Progress
 
@@ -1238,7 +1267,7 @@ engine shape and should be treated as starting truth for the next passes:
   draggable splitters, resize handles, and column controls must be common engine
   GUI primitives rather than per-pane hacks
 - enforce the GUI library boundary: new tabs, dropdowns, window chrome,
-  package-manager controls, scripting views, AI control surfaces, and Systems
+  package-manager controls, scripting views, Intelligence surfaces, and System Info
   panels land in `engine.gui` primitives/layout first, with editor workspaces
   composing them afterward
 - replace file-type asset cards with decoded image/model thumbnails and make the
@@ -1249,23 +1278,23 @@ engine shape and should be treated as starting truth for the next passes:
   must own focus, z-order, teardown, redock, and evidence logging before it can
   become part of normal AI/editor operation.
 
-### 3. Systems Workspace And Time Spine
+### 3. System Info And Time Spine
 
 - deepen pacing diagnostics, perf-select guidance, and hardware guidance in the
-  Systems workspace
-- surface the renderer feature matrix in Systems as present/partial/missing
+  System Info workspace
+- surface the renderer feature matrix in System Info as present/partial/missing
   backend capability status before claiming new renderer features complete
-- keep compiler/language/CI validation status visible in Systems so build
+- keep compiler/language/CI validation status visible in System Info so build
   confidence stays tied to the live editor surface
 - use that build-confidence baseline to feed the AI workspace with current
   build logs/output before task packets are promoted toward Phase 5 replay
-- build on the graph/time surfaces that already exist instead of replacing them
-  with another temporary debug-only panel
+- build on the graph surfaces that already exist instead of replacing them with
+  another temporary debug-only panel
 - continue carrying the shared time-system spine deeper into runtime and scene
   ownership
-- keep the Timeline Editor wired to `core.time`, streaming-save config, and
-  scene snapshot/serializer contracts without pretending full replay restore is
-  already shipped
+- keep Video wired to `core.time`, streaming-save config, scene
+  snapshot/serializer contracts, and the bottom scene timeline strip without
+  pretending full replay restore or video editing is already shipped
 - keep the engine contract self-test expanded with every new timeline,
   Forest Factory, package, input, and scene-persistence contract before those
   contracts are promoted into project-generation or OS-model workflows
@@ -1344,9 +1373,9 @@ engine shape and should be treated as starting truth for the next passes:
 - keep project evidence repair available in the Self-Iteration Sandbox domain
   so Phase 5 work can recover from missing generated shells without leaving the
   editor
-- keep the central AI Control Surface and Inspector actions synchronized. The
+- keep the central Intelligence surface and Inspector actions synchronized. The
   bottom Console Dock remains status/log/visual feedback, while the Inspector is
-  a quick-command/details pane and the central AI Sandbox is the discoverable
+  a quick-command/details pane and the central Intelligence workspace is the discoverable
   operator surface until dedicated AI editor windows land.
 - promote only staged packets that include root-resolved project/build/output
   evidence; cwd-dependent evidence is considered invalid
@@ -1476,6 +1505,10 @@ engine shape and should be treated as starting truth for the next passes:
     into a reviewable package workflow for local and downloadable source
     packages, with explicit human approval before build/run and no auto-created
     servers or hidden model-accessible channels.
+    The active UI direction is a reusable list/action/detail surface, not a
+    combo-box-only modal: packages should show status, provenance, install or
+    remove actions, review-gate state, and bounded progress without bleeding into
+    the scene or Console Dock.
     Network/server packages must keep the same boundary: shared network runtime
     contracts may be inert engine capabilities, optional authoritative
     dedicated headless server support must be a deliberate project choice, and
@@ -1497,12 +1530,14 @@ engine shape and should be treated as starting truth for the next passes:
   acting as metadata-only placeholders.
 - The launcher remains project/context/update focused instead of collapsing back
   into a fake demo shell.
-- The Systems workspace shows real graph/tooling surfaces plus time
-  diagnostics.
+- The System Info workspace shows real render/backend/context graph and tooling
+  diagnostics. Time controls, pacing diagnostics, playhead state, and
+  streaming-save cadence belong to Video.
 - Renderer feature support is tracked through the feature matrix and only
   marked complete after backend-specific validation or an explicit deferral
   note.
-- The engine owns one shared simulation clock and exposes real time controls.
+- The engine owns one shared simulation clock and exposes real time controls
+  through Video and the bottom scene timeline strip.
 - Multicontext proof stays honest:
   all six panes are real, detached shells behave like real top-level windows,
   and helper hosts do not linger incorrectly.

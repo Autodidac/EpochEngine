@@ -270,6 +270,7 @@ namespace epochnamespace::gui
 
     export bool button(std::string_view label, Vec2 size) noexcept;
     export bool button_selected(std::string_view label, Vec2 size, bool selected) noexcept;
+    export bool text_link(std::string_view label, Vec2 size, bool selected = false) noexcept;
     export bool titlebar_close_button(Vec2 window_position, Vec2 window_size) noexcept;
     export bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept;
     export void image(const SpriteHandle& sprite, Vec2 size) noexcept;

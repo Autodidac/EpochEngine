@@ -1,9 +1,30 @@
 # Epoch Changelog
 
-## [v0.86.00]
-- Bumped the active source line to `v0.86.00` for the current feature-line
+## [v0.86.02]
+- Bumped the active source line to `v0.86.02` for the current feature-line
   refresh after the OS AI/model-package, timeline, package-manager, and
   editor-stability work crossed a larger integration boundary.
+- Promoted the old Timeline Editor surface into the `Video` workspace:
+  shared `core.time` controls, pacing buttons, playhead status, streaming-save
+  cadence, and timeline/video authoring now live there instead of in Systems.
+- Scene-backed editor workspaces now reserve a bottom Video Timeline strip when
+  there is room, shrinking the scene viewport so 3D/2D rendering does not draw
+  behind timeline controls or graph chrome.
+- Trimmed Systems back toward its intended role as render/backend/context graph
+  diagnostics with a clear pointer to Video for time-spine ownership.
+- Normalized the top editor workspace labels to the current operator-facing set:
+  `3D Scene`, `2D Scene/UI`, `Assets`, `Plant Lab`, `Video`, `Project`,
+  `Intelligence`, and `System Info`.
+- Added a reusable GUI `text_link` primitive and moved Package Manager package
+  names/status rows away from fake button/details controls while keeping
+  Install/Remove/Review Gate as explicit actions.
+- Replaced the modal-first update affordance with an automatic editor startup
+  update check and a main-toolbar update button that appears only when an
+  update is proven available.
+- Hardened the packaged updater handoff so Epoch verifies the replacement
+  executable exists before launching a self-replacement script or closing the
+  editor, with batch-side guards logging missing payloads instead of silently
+  shutting down without updating.
 - Removed the Linux Clang `gamecore.ixx` optimizer workaround by fixing the
   module shape directly: `gamecore` now owns only grid helpers and no longer
   imports atlas modules or exports an unused atlas pointer registry.
@@ -12,6 +33,21 @@
 - Refreshed the roadmap and release-history archive so the active source line,
   Clang-engine lane, and current OS AI/package progress are recorded in the
   durable change logs.
+- Reworked the Package Manager modal from a dropdown-only selector into a
+  scrollable package list with per-package Install/Remove/Review Gate actions,
+  selected-package detail evidence, and bounded progress/status chrome.
+- Trimmed default editor seed clutter: Sandbox, Project Hub, and software/tool
+  profiles now start from workspace/camera/light ownership instead of spawning
+  starter grids, cubes, player starts, tray panels, or fake tool panels by
+  default.
+- Removed the last visible Project Hub launcher workspace seed box; the profile
+  now starts from camera/light preview ownership only.
+- Removed the fake Forest Factory floor/stage object from the scene preview and
+  fixed Forest Factory selection to target generated canopy preview nodes rather
+  than stale leaf names.
+- Refined Systems graph surfaces with clearer render/task lanes, stage details,
+  evidence labels, and the OS AI evidence-loop title while keeping the protected
+  renderer draw model untouched.
 
 ## [v0.84.87]
 - Bumped the active source line to `v0.84.87` for the OS AI chat/model package

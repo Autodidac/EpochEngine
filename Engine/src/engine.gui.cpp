@@ -2555,6 +2555,61 @@ namespace epochnamespace::gui
         return button_with_state(label, size, selected);
     }
 
+    bool text_link(std::string_view label, Vec2 size, bool selected) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx)
+            return false;
+
+        const Vec2 pos = g_frame.cursor;
+        const float baseHeight = base_line_height(kFontScale);
+        const float minWidth = space_advance(kFontScale) + 2.0f * kContentPadding;
+        const float width = (std::max)(static_cast<float>(size.x), minWidth);
+        const float height = (std::max)(static_cast<float>(size.y), baseHeight + 2.0f * kBoxInnerPadding);
+
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
+        const std::size_t pressKey = widget_press_key(label, pos, { width, height });
+        auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+        if (hovered && g_frame.justPressed)
+            pressedKey = pressKey;
+
+        const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
+        const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
+        if (g_frame.justReleased && pressedKey == pressKey)
+            pressedKey = 0;
+
+        const auto& palette = active_palette();
+        if (selected)
+        {
+            draw_sprite(palette.panelBackground, pos.x, pos.y, width, height);
+            draw_sprite(palette.textFieldActive, pos.x, pos.y, 3.0f, height);
+        }
+        else if (hovered || pressed)
+        {
+            draw_sprite(palette.buttonHover, pos.x, pos.y, width, height);
+        }
+
+        const SpriteHandle accent = selected
+            ? palette.textFieldActive
+            : hovered || pressed ? palette.buttonHover
+            : palette.titleBar;
+        draw_sprite(accent, pos.x, pos.y + height - 2.0f, width, 2.0f);
+
+        const std::string fittedLabel = fit_text_to_width(
+            label,
+            (std::max)(1.0f, width - 2.0f * kContentPadding - 2.0f),
+            kFontScale);
+        const std::string_view displayLabel = fittedLabel.empty()
+            ? label
+            : std::string_view{ fittedLabel };
+        const float textY = pos.y + std::floor((std::max)(0.0f, (height - baseHeight) * 0.5f)) + 1.0f;
+        draw_text_line(displayLabel, pos.x + kContentPadding, textY, kFontScale);
+
+        g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
+        advance_cursor({ 0.0f, height + kContentPadding });
+        return clicked;
+    }
+
     bool titlebar_close_button(Vec2 window_position, Vec2 window_size) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx || window_size.x < 44.0f || window_size.y < 24.0f)

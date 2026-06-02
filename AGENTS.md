@@ -5,9 +5,10 @@
 - Epoch is a C++23 engine/tooling repo. Active engine work is under
   `Engine/src/`, `Engine/modules/`, `Engine/include/`, `Engine/resource/`,
   `Engine/ai/`, and `Engine/examples/`.
-- Start with `README.md`, `Engine/docs/README.md`, and `Changes/cpp.md` before
-  making broad changes. Build and runtime details live in `Engine/docs/build/`
-  and `Engine/docs/engine/`.
+- Skim `README.md`, `Engine/docs/README.md`, and `Changes/cpp.md` before broad
+  changes when they are relevant, but do not let documentation reading replace
+  source inspection, implementation, and validation. Build and runtime details
+  live in `Engine/docs/build/` and `Engine/docs/engine/`.
 - Use the documentation map, not random README guesses:
   `Changes/roadmap.md` is the active planning contract, `Changes/changelog.txt`
   records current version work, `Engine/docs/README.md` is the docs index,
@@ -59,6 +60,22 @@
 - Sync the repository before starting substantive work: inspect the current
   branch, dirty state, remotes, and fetched upstream before editing project
   files.
+- Default to code-first churn. Each substantive pass should choose a concrete
+  source/system acceptance gate first, then write or refactor production C++ to
+  move that gate. Documentation-only passes are allowed only when explicitly
+  requested, when preserving a new/completed system contract, or when a
+  safety/build/release gate would be lost without the note.
+- Use docs as checkpoints, not the main deliverable. Update docs after
+  source/build evidence exists, and keep the update short: new systems,
+  completed/promoted systems, changed public contracts, changed build/runtime
+  commands, package/security/AI gates, or confirmed operator observations.
+- Do not spend a pass expanding prose while the engine has obvious code gaps. If
+  documentation work starts taking longer than the source fix, stop and return
+  to implementation unless the task is documentation itself.
+- Favor production code volume and system completion over artificial line count.
+  Epoch needs engine-scale code growth, but never pad with placeholders,
+  duplicate wrappers, fake UI, or dead code. New lines must compile, integrate,
+  clarify ownership, and move an acceptance gate.
 - Treat Epoch as a professional production engine at every step. "First pass"
   means narrow scope, not throwaway code: every checked-in change should have
   clear ownership, real behavior, build/test evidence, and a documented follow-up
@@ -67,8 +84,10 @@
   Progress, Active Mission Tracks, Current Push Order, and Acceptance Gates to
   choose the next small batch of work.
 - Keep the roadmap, changelog, version surfaces, and relevant engine docs
-  updated as facts are confirmed. Do not mark roadmap work complete until the
-  corresponding build/test/manual evidence exists.
+  updated as facts are confirmed, but treat them as after-action records. New
+  systems, completed/promoted systems, build/runtime workflow changes,
+  package/security/AI gates, and durable operator observations are priority doc
+  updates; routine implementation details are not.
 - Prefer short, reviewable batches: implement a focused set of changes, build
   and test them, document what changed, then commit only after the batch is
   stable.
@@ -83,10 +102,10 @@
   AI behavior gaps, or workflow regressions, update `Changes/roadmap.md` and
   the relevant engine/AI docs with the observation, current evidence, and next
   acceptance gate before the detail is lost.
-- Current churn prompt for each pass: read `Changes/roadmap.md`, pick the next
-  smallest acceptance-gated batch, document every confirmed user observation,
-  keep source/version/changelog/docs aligned, build/test what changed, and do
-  not claim completion for unverified GUI, AI, project, or renderer behavior.
+- Current churn prompt for each pass: read `Changes/roadmap.md` only enough to
+  pick the next source acceptance gate, implement/refactor first, build/test what
+  changed, then record only new/completed systems and changed contracts. Do not
+  claim completion for unverified GUI, AI, project, or renderer behavior.
 - OS AI and helper models may generate local games, tools, apps, or server
   project code only as reviewable artifacts. They must not create or run any
   app/service that gives the model a bypass channel, self-accessible server,
@@ -119,6 +138,35 @@
   prototypes are package candidates first, not direct mainline imports. Stage
   them with provenance, source/hash, build/test commands, limitations, and a
   clear engine API boundary before promoting any subset into active source.
+
+## Source Organization And Refactor Direction
+
+- Renaming, sorting, reviewing, and moving files is active source work, not
+  cosmetic cleanup. Do it continuously in small, build-proven batches so the
+  codebase gains room for engine-scale development without becoming harder to
+  reason about.
+- Before moving files, inventory includes/imports, module ownership, MSVC
+  projects/filters, CMake targets, runtime asset references, and docs links. A
+  move is complete only when all of those references are updated and the relevant
+  build path proves the new layout.
+- Public/external headers belong under `Engine/include/...`; internal
+  implementation headers stay near their owning source under `Engine/src/...` or
+  module-private paths. Backend-specific platform includes stay inside
+  backend-owned translation units.
+- Prefer owned folders over flat dumps as systems mature: `src/gui`,
+  `src/editor`, `src/project`, `src/packages`, `src/render/<backend>`,
+  `src/ai`, `src/platform`, and similar ownership boundaries are the target
+  direction. Stage one family at a time.
+- Start carving large mixed files into owned systems: editor workspace routing,
+  GUI primitives, Package Manager, source editor, project run/build, Forest
+  Factory, Video/timeline, input profiles, System Info graphs, OS model tooling,
+  and backend host plumbing.
+- Do not broad-rename files just for aesthetics. Every rename should clarify
+  ownership, remove ambiguity, align MSVC/CMake/module structure, or unblock
+  future implementation work.
+- Compatibility shims are allowed only when they preserve a working path during
+  a focused move; document the owner and removal condition in the smallest
+  relevant code comment or follow-up note.
 
 ## Build Commands
 

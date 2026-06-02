@@ -70,7 +70,8 @@ replay pass.
 
 - Primitive widgets: labels, buttons, connected tabs, dropdown/select boxes,
   progress bars, text inputs, scrollable text panels, image/runtime-surface
-  views, and future checkboxes, sliders, tree views, and list views.
+  views, checkable/action list rows, and future sliders, tree views, and richer
+  list views.
 - Composite modal bodies: package manager, settings, source-update prompts, and
   other dense control surfaces should put changing details inside clipped shared
   scroll areas. Progress bars, action buttons, and modal-level status chrome stay
@@ -112,6 +113,15 @@ Before a control is considered ready, it needs:
   loading, updater/cache operations, generated-project builds, and any future
   visible long-running editor action; do not draw one-off progress rows in
   Console Dock or domain code when `engine.gui` can own the behavior
+- Package Manager uses a reusable list/action/detail shape. Package selection
+  should not be a cramped one-line combo box when rows need per-package status,
+  Install/Remove/Review Gate actions, provenance, and bounded progress. Package
+  names and row summaries use selectable `text_link` rows, not fake buttons;
+  only true commands remain buttons.
+- automatic content containers are a GUI-library responsibility. Lists,
+  details panes, source editors, progress rows, graph canvases, and modal bodies
+  should resize from viewport/content constraints through reusable primitives so
+  editor workspaces do not keep reinventing brittle row math.
 - source editors are shared GUI primitives. They process text input directly,
   render only visible source lines inside the scroll clip, and expose
   click-to-caret placement, drag ranged selection, focused navigation hotkeys,
@@ -142,8 +152,10 @@ status, build evidence, model selection state, and logs, but central workflows
 belong in proper GUI windows:
 
 - Project and package controls belong in Project/Package workspaces or modals.
-- Systems graphs and time controls belong in the Systems workspace.
-- AI sandbox controls belong in the AI workspace and Inspector, with compact
+- System Info graphs belong in the System Info workspace. Shared `core.time` controls,
+  timeline graphing, streaming-save cadence, and video-authoring controls belong
+  in Video or the bottom scene timeline strip.
+- Intelligence controls belong in the Intelligence workspace and Inspector, with compact
   status mirrored in the dock only when useful. The World Outliner may expose an
   `OS AI` tab with compact model/loop state, chat transcript, prompt entry,
   and plan controls because that keeps the selected AI model attached to normal editor chrome

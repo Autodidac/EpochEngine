@@ -1593,10 +1593,7 @@ namespace
         return {
             { "PersistentLevel", "Level", "World" },
             { "EditorCamera", "Camera", "Editor", { 0.0f, 1.5f, 5.0f } },
-            { "DirectionalLight", "Light", "Lighting", { 2.0f, 4.0f, 1.0f }, { -35.0f, 45.0f, 0.0f } },
-            { "WorldGrid", "Helper", "Editor", { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 10.0f, 1.0f, 10.0f }, true, true },
-            { "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } },
-            { "PlayerStart", "Spawn", "Gameplay", { 0.0f, 0.0f, -2.0f } }
+            { "DirectionalLight", "Light", "Lighting", { 2.0f, 4.0f, 1.0f }, { -35.0f, 45.0f, 0.0f } }
         };
     }
 
@@ -1628,12 +1625,8 @@ namespace
     [[nodiscard]] std::vector<EditorSceneSeedEntity> project_launcher_seed_entities()
     {
         return {
-            { "LauncherWorkspace", "Level", "World" },
             { "OverviewCamera", "Camera", "Editor", { 0.0f, 6.0f, 9.0f }, { -34.0f, 0.0f, 0.0f } },
-            { "KeyLight", "Light", "Lighting", { 1.5f, 5.5f, 2.0f }, { -40.0f, 25.0f, 0.0f } },
-            { "ProjectTray", "LauncherPanel", "Editor", { -2.0f, 0.0f, 1.5f } },
-            { "ContextTray", "LauncherPanel", "Editor", { 2.0f, 0.0f, 1.5f } },
-            { "SettingsTray", "LauncherPanel", "Editor", { 0.0f, 0.0f, -1.5f } }
+            { "KeyLight", "Light", "Lighting", { 1.5f, 5.5f, 2.0f }, { -40.0f, 25.0f, 0.0f } }
         };
     }
 
@@ -1642,10 +1635,7 @@ namespace
         return {
             { "ToolWorkspace", "Level", "World" },
             { "EditorCamera", "Camera", "Editor", { 0.0f, 4.5f, 9.0f }, { -28.0f, 0.0f, 0.0f } },
-            { "KeyLight", "Light", "Lighting", { 2.0f, 6.5f, 2.0f }, { -34.0f, 35.0f, 0.0f } },
-            { "UiShell", "ToolWindow", "Software", { 0.0f, 0.0f, 0.0f } },
-            { "ScriptConsole", "Console", "Software", { -2.0f, 0.0f, 1.0f } },
-            { "TaskBoard", "TaskGraph", "Software", { 2.0f, 0.0f, -1.0f } }
+            { "KeyLight", "Light", "Lighting", { 2.0f, 6.5f, 2.0f }, { -34.0f, 35.0f, 0.0f } }
         };
     }
 

@@ -3099,6 +3099,16 @@ namespace epochnamespace::updater
         const auto script_path = system_detail::make_temp_script_path("replace_binary");
         const auto handoff_log = target_binary.parent_path() / "epoch_update_handoff.log";
 
+        std::error_code replacement_exists_ec;
+        if (!fs::exists(new_binary, replacement_exists_ec))
+        {
+            const std::string message = "Binary replacement aborted because the downloaded replacement is missing: "
+                + new_binary.string();
+            system_detail::log_error(message);
+            system_detail::append_log_line(handoff_log, "[ERROR] " + message);
+            return false;
+        }
+
         std::ofstream bat(script_path, std::ios::binary);
         if (!bat)
         {
@@ -3207,6 +3217,16 @@ namespace epochnamespace::updater
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
         const bool chain_after_restart = !restart_auto_command.empty();
 
+        std::error_code extracted_exists_ec;
+        if (!fs::exists(extracted_binary, extracted_exists_ec))
+        {
+            const std::string message = "Packaged replacement aborted because the extracted runtime binary is missing: "
+                + extracted_binary.string();
+            system_detail::log_error(message);
+            system_detail::append_log_line(handoff_log, "[ERROR] " + message);
+            return false;
+        }
+
         std::ofstream bat(script_path, std::ios::binary);
         if (!bat)
         {
@@ -3227,6 +3247,10 @@ namespace epochnamespace::updater
             << ">> \"%LOG%\" echo [INFO] TARGETEXE=%TARGETEXE%\r\n"
             << ">> \"%LOG%\" echo [INFO] NEWEXE=%NEWEXE%\r\n"
             << ">> \"%LOG%\" echo [INFO] EXTRACTED=%EXTRACTED%\r\n"
+            << "if not exist \"%NEWEXE%\" (\r\n"
+            << "  >> \"%LOG%\" echo [ERROR] Extracted runtime binary is missing.\r\n"
+            << "  exit /b 1\r\n"
+            << ")\r\n"
             << "for /L %%I in (1,1,60) do (\r\n"
             << "  del /F /Q \"%TARGETEXE%\" >nul 2>&1\r\n"
             << "  if exist \"%TARGETEXE%\" (\r\n"
@@ -3289,6 +3313,16 @@ namespace epochnamespace::updater
         const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
         const bool chain_after_restart = !restart_auto_command.empty();
+
+        std::error_code extracted_exists_ec;
+        if (!fs::exists(extracted_binary, extracted_exists_ec))
+        {
+            const std::string message = "Packaged replacement aborted because the extracted runtime binary is missing: "
+                + extracted_binary.string();
+            system_detail::log_error(message);
+            system_detail::append_log_line(handoff_log, "[ERROR] " + message);
+            return false;
+        }
 
         std::ofstream sh(script_path, std::ios::binary);
         if (!sh)

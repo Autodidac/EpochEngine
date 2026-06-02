@@ -89,6 +89,8 @@ import perf.tier;
 import render.preview_grid;
 import saveload.system;
 import timeline.system;
+import updater.config;
+import updater.system;
 
 namespace epochnamespace
 {
@@ -112,6 +114,15 @@ namespace epochnamespace
             None = 0,
             SmartUpdate,
             SourceUpdate
+        };
+
+        enum class EditorUpdateState : unsigned char
+        {
+            Idle = 0,
+            Checking,
+            Available,
+            RestartReady,
+            Failed
         };
 
         enum class AiWorkspaceDomain : unsigned char
@@ -474,6 +485,11 @@ namespace epochnamespace
             std::string selectedPackageId{ "engine_arcade" };
             std::string packageInstallStatus{ "Select a package and press Install." };
             float packageInstallProgress{ 0.0f };
+            EditorUpdateState updateState{ EditorUpdateState::Idle };
+            std::string updateStatus{ "Updates have not been checked." };
+            std::optional<std::future<updater::UpdateCommandResult>> updateCheckPending{};
+            updater::UpdateCommandResult lastUpdateCheck{};
+            bool autoUpdateCheckQueued{ true };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
@@ -521,21 +537,21 @@ namespace epochnamespace
             switch (surface)
             {
             case EditorMainSurface::Scene:
-                return "Perspective";
+                return "3D Scene";
             case EditorMainSurface::Game2D:
-                return "Game / 2D View";
+                return "2D Scene/UI";
             case EditorMainSurface::Assets:
-                return "Asset Browser";
+                return "Assets";
             case EditorMainSurface::Project:
-                return "Project Workspace";
+                return "Project";
             case EditorMainSurface::ForestFactory:
-                return "Forest Factory";
+                return "Plant Lab";
             case EditorMainSurface::Timeline:
-                return "Timeline Editor";
+                return "Video";
             case EditorMainSurface::AISandbox:
-                return "Self-Iteration Sandbox";
+                return "Intelligence";
             case EditorMainSurface::Systems:
-                return "Systems Workspace";
+                return "System Info";
             default:
                 return "Workspace";
             }
@@ -596,6 +612,105 @@ namespace epochnamespace
             constexpr std::size_t kMaxLogLines = 10;
             if (state.logLines.size() > kMaxLogLines)
                 state.logLines.erase(state.logLines.begin(), state.logLines.begin() + static_cast<std::ptrdiff_t>(state.logLines.size() - kMaxLogLines));
+        }
+
+        [[nodiscard]] updater::UpdateChannel editor_update_channel()
+        {
+            updater::UpdateChannel channel{};
+            channel.version_url = updater::PROJECT_PACKAGED_VERSION_URL();
+            channel.binary_url = updater::PROJECT_BINARY_URL();
+            channel.source_url = updater::PROJECT_SOURCE_URL();
+            channel.source_version_url = updater::PROJECT_SOURCE_VERSION_URL();
+            return channel;
+        }
+
+        [[nodiscard]] std::string describe_update_result(const updater::UpdateCommandResult& result)
+        {
+            if (result.packaged_update_available)
+            {
+                if (!result.remote_version.empty())
+                    return std::string{ "Packaged update available: " } + result.remote_version;
+                return "Packaged update available.";
+            }
+
+            if (result.source_update_available)
+            {
+                if (!result.source_remote_version.empty())
+                    return std::string{ "Source update available: " } + result.source_remote_version;
+                return "Source update available.";
+            }
+
+            return "Epoch is already current.";
+        }
+
+        [[nodiscard]] std::string update_toolbar_button_label(EditorUpdateState state)
+        {
+            switch (state)
+            {
+            case EditorUpdateState::Available:
+                return "Update Available";
+            case EditorUpdateState::RestartReady:
+                return "Restart Program";
+            case EditorUpdateState::Checking:
+                return "Checking...";
+            case EditorUpdateState::Failed:
+                return "Update Check Failed";
+            case EditorUpdateState::Idle:
+            default:
+                return "Update";
+            }
+        }
+
+        void start_editor_update_check(EditorState& editor)
+        {
+            if (editor.updateCheckPending.has_value())
+            {
+                push_editor_log(editor, "[update] Update check is already running.");
+                return;
+            }
+
+            editor.updateState = EditorUpdateState::Checking;
+            editor.updateStatus = "Checking for updates...";
+            push_editor_log(editor, "[update] Checking for available Epoch updates.");
+
+            editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
+                epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                return updater::run_update_command(editor_update_channel(), false);
+            }));
+        }
+
+        void pump_editor_update_check(EditorState& editor)
+        {
+            if (!editor.updateCheckPending.has_value())
+                return;
+
+            if (editor.updateCheckPending->wait_for(0s) != std::future_status::ready)
+                return;
+
+            try
+            {
+                editor.lastUpdateCheck = editor.updateCheckPending->get();
+                editor.updateCheckPending.reset();
+
+                if (editor.lastUpdateCheck.update_available || editor.lastUpdateCheck.force_required)
+                {
+                    editor.updateState = EditorUpdateState::Available;
+                    editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                    return;
+                }
+
+                editor.updateState = EditorUpdateState::Idle;
+                editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+            }
+            catch (...)
+            {
+                editor.updateCheckPending.reset();
+                editor.updateState = EditorUpdateState::Failed;
+                editor.updateStatus = "Update check failed; see updater logs for details.";
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+            }
         }
 
         [[nodiscard]] static std::string format_ms(double seconds)
@@ -944,77 +1059,81 @@ namespace epochnamespace
             bool expose_ai_inputs)
         {
             constexpr int kSurfaceWidth = 1280;
-            constexpr int kSurfaceHeight = 188;
+            constexpr int kSurfaceHeight = 220;
             SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 14, 18, 24, 255 });
 
             for (int x = 0; x < kSurfaceWidth; x += 40)
                 canvas.fill_rect(x, 0, 1, kSurfaceHeight, gui::Color{ 24, 30, 39, 255 });
 
-            for (int y = 24; y < kSurfaceHeight; y += 36)
+            for (int y = 34; y < kSurfaceHeight; y += 42)
                 canvas.hline(0, y, kSurfaceWidth, gui::Color{ 20, 26, 34, 255 });
 
             struct Stage
             {
+                std::string_view name{};
+                std::string_view detail{};
+                int lane{};
                 gui::Color fill{};
                 gui::Color accent{};
             };
 
             const std::array<Stage, 8> stages{{
-                { { 64, 86, 135, 255 }, { 154, 190, 255, 255 } },
-                { { 54, 92, 148, 255 }, { 135, 188, 255, 255 } },
-                { { 53, 117, 142, 255 }, { 102, 216, 255, 255 } },
-                { { 70, 132, 96, 255 }, { 124, 244, 159, 255 } },
-                { { 146, 123, 57, 255 }, { 255, 219, 112, 255 } },
-                { { 109, 84, 145, 255 }, { 203, 164, 255, 255 } },
-                { { 112, 96, 152, 255 }, { 222, 192, 255, 255 } },
-                { expose_ai_inputs ? gui::Color{ 157, 88, 112, 255 } : gui::Color{ 118, 86, 123, 255 },
+                { "CAPTURE", "backend frame", 0, { 64, 86, 135, 255 }, { 154, 190, 255, 255 } },
+                { "CULL", "visible set", 0, { 54, 92, 148, 255 }, { 135, 188, 255, 255 } },
+                { "SURFACE", "scene texture", 1, { 53, 117, 142, 255 }, { 102, 216, 255, 255 } },
+                { "LIGHT", "helpers + scene", 1, { 70, 132, 96, 255 }, { 124, 244, 159, 255 } },
+                { "TEMPORAL", "timing spine", 2, { 146, 123, 57, 255 }, { 255, 219, 112, 255 } },
+                { "PRESENT", "single swap", 2, { 109, 84, 145, 255 }, { 203, 164, 255, 255 } },
+                { "GUI TOP", "modal/chrome", 3, { 112, 96, 152, 255 }, { 222, 192, 255, 255 } },
+                { "OS AI", "evidence gated", 3,
+                  expose_ai_inputs ? gui::Color{ 157, 88, 112, 255 } : gui::Color{ 118, 86, 123, 255 },
                   expose_ai_inputs ? gui::Color{ 255, 171, 193, 255 } : gui::Color{ 205, 170, 216, 255 } }
             }};
-            constexpr std::array<std::string_view, 8> stageNames{
-                "CAPTURE",
-                "VISIBLE",
-                "SURFACE",
-                "LIGHT",
-                "TEMP",
-                "PRESENT",
-                "DOCK",
-                "AI MCP"
-            };
 
-            const int stageWidth = (std::max)(76, static_cast<int>(96.0f * systems.renderZoom));
-            const int stageHeight = 56;
-            const int gap = (std::max)(20, static_cast<int>(44.0f * systems.renderZoom));
-            const int baseX = 26 - systems.renderPan;
-            const int y = 58;
+            const int stageWidth = (std::max)(104, static_cast<int>(118.0f * systems.renderZoom));
+            const int stageHeight = 46;
+            const int gap = (std::max)(18, static_cast<int>(34.0f * systems.renderZoom));
+            const int baseX = 146 - systems.renderPan;
+            constexpr std::array<int, 4> laneY{ 48, 86, 124, 162 };
+            constexpr std::array<std::string_view, 4> laneNames{ "GPU", "SCENE", "TIME", "UI/AI" };
 
-            canvas.fill_rect(18, 18, kSurfaceWidth - 36, 18, gui::Color{ 30, 38, 48, 255 });
-            canvas.fill_rect(18, kSurfaceHeight - 26, kSurfaceWidth - 36, 12, gui::Color{ 28, 33, 41, 255 });
-            canvas.fill_rect(18, kSurfaceHeight - 26, 120, 12, gui::Color{ 89, 110, 138, 255 });
-            canvas.fill_rect(18 + 128, kSurfaceHeight - 26, 140, 12, gui::Color{ 98, 152, 116, 255 });
-            canvas.fill_rect(18 + 276, kSurfaceHeight - 26, 180, 12, gui::Color{ 149, 122, 60, 255 });
-            draw_tiny_text(canvas, "RENDER FRAME GRAPH", 30, 22, gui::Color{ 210, 224, 242, 255 }, 2);
+            canvas.fill_rect(18, 14, kSurfaceWidth - 36, 24, gui::Color{ 30, 38, 48, 255 });
+            draw_tiny_text(canvas, "RENDER FRAME GRAPH - scene once, GUI top layer after scene, one present", 30, 20, gui::Color{ 210, 224, 242, 255 }, 1);
+            canvas.fill_rect(18, kSurfaceHeight - 28, kSurfaceWidth - 36, 14, gui::Color{ 28, 33, 41, 255 });
+            canvas.fill_rect(18, kSurfaceHeight - 28, 180, 14, gui::Color{ 89, 110, 138, 255 });
+            canvas.fill_rect(210, kSurfaceHeight - 28, 210, 14, gui::Color{ 98, 152, 116, 255 });
+            canvas.fill_rect(432, kSurfaceHeight - 28, 236, 14, gui::Color{ 149, 122, 60, 255 });
+
+            for (std::size_t lane = 0; lane < laneY.size(); ++lane)
+            {
+                const int y = laneY[lane];
+                canvas.fill_rect(20, y + 15, kSurfaceWidth - 40, 2, gui::Color{ 37, 43, 55, 255 });
+                canvas.fill_rect(26, y, 94, 30, gui::Color{ 26, 32, 42, 255 });
+                canvas.stroke_rect(26, y, 94, 30, gui::Color{ 255, 255, 255, 24 });
+                draw_tiny_text(canvas, laneNames[lane], 42, y + 9, gui::Color{ 196, 208, 224, 255 }, 1);
+            }
 
             for (std::size_t i = 0; i < stages.size(); ++i)
             {
                 const int x = baseX + static_cast<int>(i) * (stageWidth + gap);
                 const auto& stage = stages[i];
+                const int y = laneY[static_cast<std::size_t>(stage.lane)] - 8;
 
                 if (i != 0)
                 {
                     const int prevCenter = x - gap + gap / 2;
-                    canvas.fill_rect(prevCenter - 1, y + stageHeight / 2 - 3, gap + 2, 6, gui::Color{ 56, 63, 82, 255 });
+                    canvas.fill_rect(prevCenter - 1, y + stageHeight / 2 - 2, gap + 2, 4, gui::Color{ 56, 63, 82, 255 });
                 }
 
                 canvas.fill_rect(x, y, stageWidth, stageHeight, stage.fill);
                 canvas.stroke_rect(x, y, stageWidth, stageHeight, stage.accent);
-                canvas.fill_rect(x + 10, y + 10, (std::max)(16, stageWidth / 4), stageHeight - 20, gui::Color{ 255, 255, 255, 32 });
-                canvas.fill_rect(x + stageWidth - 14, y + 14, 6, stageHeight - 28, stage.accent);
-                canvas.fill_rect(x + 6, y - 12, (std::max)(18, stageWidth / 3), 6, stage.accent);
-                canvas.vline(x + stageWidth / 2, y + stageHeight + 8, 18, gui::Color{ 50, 58, 72, 255 }, 2);
-                draw_tiny_text(canvas, stageNames[i], x + 12, y + 20, gui::Color{ 232, 238, 248, 255 }, 2);
+                canvas.fill_rect(x + 8, y + 8, 18, stageHeight - 16, gui::Color{ 255, 255, 255, 32 });
+                canvas.fill_rect(x + stageWidth - 12, y + 10, 5, stageHeight - 20, stage.accent);
+                draw_tiny_text(canvas, stage.name, x + 34, y + 10, gui::Color{ 232, 238, 248, 255 }, 1);
+                draw_tiny_text(canvas, stage.detail, x + 34, y + 27, gui::Color{ 190, 202, 218, 255 }, 1);
             }
 
-            draw_tiny_text(canvas, "BLUE GPU   GREEN CPU   GOLD PRESENT", 30, kSurfaceHeight - 22, gui::Color{ 220, 226, 236, 255 }, 1);
+            draw_tiny_text(canvas, "BLUE backend   GREEN scene/cpu   GOLD timing   PURPLE present/ui   PINK gated OS AI", 30, kSurfaceHeight - 24, gui::Color{ 220, 226, 236, 255 }, 1);
 
             return canvas;
         }
@@ -1025,20 +1144,21 @@ namespace epochnamespace
             std::size_t systemCount)
         {
             constexpr int kSurfaceWidth = 1280;
-            constexpr int kSurfaceHeight = 188;
-            SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 16, 16, 20, 255 });
+            constexpr int kSurfaceHeight = 220;
+            SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 15, 18, 24, 255 });
 
-            const int laneCount = (std::clamp)(static_cast<int>(liveThreadCount == 0 ? 1 : liveThreadCount), 2, 6);
-            const int laneGap = 8;
-            const int laneHeight = (kSurfaceHeight - 34 - laneGap * (laneCount - 1)) / laneCount;
-            const int baseX = 26 - systems.taskPan;
-            const int taskWidth = (std::max)(34, static_cast<int>(56.0f * systems.taskZoom));
-            const int taskGap = (std::max)(10, static_cast<int>(18.0f * systems.taskZoom));
+            const int laneCount = (std::clamp)(static_cast<int>(liveThreadCount == 0 ? 1 : liveThreadCount), 2, 8);
+            const int laneGap = 6;
+            const int laneHeight = (kSurfaceHeight - 58 - laneGap * (laneCount - 1)) / laneCount;
+            const int baseX = 142 - systems.taskPan;
+            const int taskWidth = (std::max)(46, static_cast<int>(70.0f * systems.taskZoom));
+            const int taskGap = (std::max)(12, static_cast<int>(20.0f * systems.taskZoom));
             const std::string taskHeader = std::string("TASK THREAD GRAPH  LIVE THREADS ")
                 + std::to_string(liveThreadCount)
                 + "  SYSTEMS "
                 + std::to_string(systemCount);
-            draw_tiny_text(canvas, taskHeader, 24, 6, gui::Color{ 214, 224, 238, 255 }, 1);
+            canvas.fill_rect(18, 14, kSurfaceWidth - 36, 24, gui::Color{ 30, 38, 48, 255 });
+            draw_tiny_text(canvas, taskHeader, 30, 20, gui::Color{ 214, 224, 238, 255 }, 1);
 
             const std::array<gui::Color, 5> taskColors{{
                 { 86, 142, 255, 255 },
@@ -1055,25 +1175,31 @@ namespace epochnamespace
                 "OUTPUT"
             };
 
+            for (int x = baseX; x < kSurfaceWidth; x += taskWidth + taskGap)
+                canvas.vline(x, 44, kSurfaceHeight - 58, gui::Color{ 28, 32, 42, 255 });
+
             for (int lane = 0; lane < laneCount; ++lane)
             {
-                const int y = 20 + lane * (laneHeight + laneGap);
-                canvas.fill_rect(0, y + laneHeight / 2, kSurfaceWidth, 2, gui::Color{ 38, 42, 52, 255 });
-                canvas.fill_rect(4, y, 8, laneHeight, gui::Color{ 72, 76, 92, 255 });
-                draw_tiny_text(canvas, std::string("L") + std::to_string(lane + 1), 18, y + 6, gui::Color{ 188, 198, 214, 255 }, 1);
+                const int y = 48 + lane * (laneHeight + laneGap);
+                canvas.fill_rect(24, y, kSurfaceWidth - 48, laneHeight, gui::Color{ 20, 25, 34, 255 });
+                canvas.stroke_rect(24, y, kSurfaceWidth - 48, laneHeight, gui::Color{ 255, 255, 255, 20 });
+                canvas.fill_rect(32, y + 4, 82, laneHeight - 8, gui::Color{ 31, 38, 50, 255 });
+                draw_tiny_text(canvas, std::string("LANE ") + std::to_string(lane + 1), 46, y + (std::max)(4, laneHeight / 2 - 5), gui::Color{ 198, 210, 226, 255 }, 1);
 
                 const int blocks = 5 + static_cast<int>((systemCount + static_cast<std::size_t>(lane)) % 4u);
                 for (int block = 0; block < blocks; ++block)
                 {
                     const int x = baseX + block * (taskWidth + taskGap) + lane * 18;
                     const gui::Color fill = taskColors[(static_cast<std::size_t>(block) + static_cast<std::size_t>(lane)) % taskColors.size()];
-                    canvas.fill_rect(x, y + 3, taskWidth, laneHeight - 6, fill);
-                    canvas.stroke_rect(x, y + 3, taskWidth, laneHeight - 6, gui::Color{ 255, 255, 255, 42 });
+                    const int taskHeight = (std::max)(12, laneHeight - 8 - (block % 3) * 3);
+                    const int taskY = y + (laneHeight - taskHeight) / 2;
+                    canvas.fill_rect(x, taskY, taskWidth, taskHeight, fill);
+                    canvas.stroke_rect(x, taskY, taskWidth, taskHeight, gui::Color{ 255, 255, 255, 46 });
                     draw_tiny_text(
                         canvas,
                         taskNames[(static_cast<std::size_t>(block) + static_cast<std::size_t>(lane)) % taskNames.size()],
                         x + 6,
-                        y + (std::max)(4, laneHeight / 2 - 4),
+                        taskY + (std::max)(3, taskHeight / 2 - 4),
                         gui::Color{ 238, 242, 248, 255 },
                         1);
                     if (block != 0)
@@ -1081,8 +1207,9 @@ namespace epochnamespace
                 }
             }
 
-            for (int x = 18; x < kSurfaceWidth; x += 96)
-                canvas.vline(x, 0, kSurfaceHeight, gui::Color{ 28, 31, 40, 255 });
+            canvas.fill_rect(18, kSurfaceHeight - 28, kSurfaceWidth - 36, 14, gui::Color{ 28, 33, 41, 255 });
+            canvas.fill_rect(18, kSurfaceHeight - 28, (std::min)(kSurfaceWidth - 36, static_cast<int>(liveThreadCount) * 16 + 80), 14, gui::Color{ 89, 132, 184, 255 });
+            draw_tiny_text(canvas, "INPUT -> SYSTEMS -> SCRIPTS -> OS AI -> OUTPUT   live lanes are capped visually, not logically", 30, kSurfaceHeight - 24, gui::Color{ 220, 226, 236, 255 }, 1);
 
             return canvas;
         }
@@ -1165,7 +1292,7 @@ namespace epochnamespace
                 "VERIFY",
                 "GATE"
             };
-            draw_tiny_text(canvas, "AI SELF ITERATION LOOP", 34, 12, gui::Color{ 214, 224, 238, 255 }, 1);
+            draw_tiny_text(canvas, "OS AI EVIDENCE LOOP", 34, 12, gui::Color{ 214, 224, 238, 255 }, 1);
 
             int active = 4;
             for (int i = 0; i < 5; ++i)
@@ -1498,15 +1625,6 @@ namespace epochnamespace
                     state.entities.push_back(std::move(entity));
             };
 
-            EditorEntity stage{};
-            stage.name = "ForestFactoryStage";
-            stage.type = "Level";
-            stage.category = "ForestFactory";
-            stage.position = { 0.0f, -0.06f, 0.0f };
-            stage.scale = { 5.8f, 0.08f, 5.8f };
-            stage.editorOnly = true;
-            upsert(std::move(stage));
-
             constexpr float kPreviewScale = 0.58F;
             auto scaled_position = [](epoch::voxel::Float3 value) noexcept
             {
@@ -1604,7 +1722,7 @@ namespace epochnamespace
                 push_editor_log(
                     state,
                     std::format(
-                        "[forest] Rebuilt temporal graph Forest Factory preview: {} segments, {} canopy markers.",
+                        "[forest] Rebuilt temporal graph Plant Lab preview: {} segments, {} canopy markers.",
                         geometry.segmentCount,
                         canopyBudget));
             }
@@ -3798,7 +3916,7 @@ namespace epochnamespace
         {
             if (editor.projectRoot.empty())
             {
-                editor.packageInstallStatus = "No active project root for Forest Factory package activation.";
+                editor.packageInstallStatus = "No active project root for Plant Lab package activation.";
                 editor.packageInstallProgress = 0.0f;
                 return false;
             }
@@ -3814,7 +3932,7 @@ namespace epochnamespace
             std::filesystem::create_directories(forestDir, ec);
             if (ec)
             {
-                editor.packageInstallStatus = "Could not create Forest Factory package directory.";
+                editor.packageInstallStatus = "Could not create Plant Lab package directory.";
                 editor.packageInstallProgress = 0.0f;
                 return false;
             }
@@ -3829,7 +3947,7 @@ namespace epochnamespace
                 std::ofstream out(manifestPath, std::ios::binary | std::ios::trunc);
                 if (!out)
                 {
-                    editor.packageInstallStatus = "Could not write Forest Factory package manifest.";
+                    editor.packageInstallStatus = "Could not write Plant Lab package manifest.";
                     editor.packageInstallProgress = 0.0f;
                     return false;
                 }
@@ -3842,7 +3960,7 @@ namespace epochnamespace
                     << "  \"type\": \"core_opt_in\",\n"
                     << "  \"source_repo\": \"" << sourceRepo << "\",\n"
                     << "  \"reference_repo\": \"" << referenceRepo << "\",\n"
-                    << "  \"editor_workspace\": \"Forest Factory\",\n"
+                    << "  \"editor_workspace\": \"Plant Lab\",\n"
                     << "  \"activation\": \"main_scene_use_or_explicit_package_install\",\n"
                     << "  \"project_payload_policy\": \"emit descriptors/assets only after visible package activation\",\n"
                     << "  \"default_profile\": \"" << profileFile << "\",\n"
@@ -3856,7 +3974,7 @@ namespace epochnamespace
                 std::ofstream out(profilePath, std::ios::binary | std::ios::trunc);
                 if (!out)
                 {
-                    editor.packageInstallStatus = "Could not write Forest Factory default profile.";
+                    editor.packageInstallStatus = "Could not write Plant Lab default profile.";
                     editor.packageInstallProgress = 0.0f;
                     return false;
                 }
@@ -3881,14 +3999,14 @@ namespace epochnamespace
                     << "}\n";
             }
 
-            editor.packageInstallStatus = "Forest Factory package staged; project payload waits for scene-use approval.";
+            editor.packageInstallStatus = "Plant Lab package staged; project payload waits for scene-use approval.";
             editor.packageInstallProgress = 0.65f;
             append_project_note(
                 editor,
-                "Stage Forest Factory Package",
-                "Staged the core Forest Factory package manifest and default deterministic profile.",
-                "Forest Factory is built into the editor, package payloads route through EpochEngineExtensions, and Plant Lab remains provenance/reference source.");
-            push_editor_log(editor, "[package] Wrote Forest Factory package manifest: " + display_project_path(manifestPath));
+                "Stage Plant Lab Package",
+                "Staged the core Plant Lab package manifest and default deterministic profile.",
+                "Plant Lab is built into the editor, package payloads route through EpochEngineExtensions, and the Forest Factory descriptor lane remains the core engine contract.");
+            push_editor_log(editor, "[package] Wrote Plant Lab package manifest: " + display_project_path(manifestPath));
             return true;
         }
 
@@ -4299,9 +4417,15 @@ namespace epochnamespace
                 if (!requestedProjectId.empty() && it->second.projectId == requestedProjectId)
                     push_editor_log(it->second, std::string("[project] Preloaded active project from environment: ") + requestedProjectId + ".");
                 if (it->second.automationCommand == EditorAutomationCommand::SmartUpdate)
+                {
+                    it->second.autoUpdateCheckQueued = false;
                     push_editor_log(it->second, "[info] Auto command armed: smart update.");
+                }
                 else if (it->second.automationCommand == EditorAutomationCommand::SourceUpdate)
+                {
+                    it->second.autoUpdateCheckQueued = false;
                     push_editor_log(it->second, "[info] Auto command armed: source update.");
+                }
             }
             return it->second;
         }
@@ -4472,6 +4596,12 @@ namespace epochnamespace
         auto& editor = editor_state_for(ctx);
         auto& chat = chat_state_for(ctx);
         chat.pump();
+        if (editor.autoUpdateCheckQueued)
+        {
+            editor.autoUpdateCheckQueued = false;
+            start_editor_update_check(editor);
+        }
+        pump_editor_update_check(editor);
         if (editor.workspaceTab == EditorWorkspaceTab::AI
             && editor.aiWorkspaceDomain == AiWorkspaceDomain::Control
             && editor.projectId != "sandbox")
@@ -4827,7 +4957,7 @@ namespace epochnamespace
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Canvas2D);
                     epochnamespace::previewgrid::reset_camera(ctx.get());
                 }
-                push_editor_log(editor, "[editor] Game/2D workbench opened with the locked Canvas2D camera.");
+                push_editor_log(editor, "[editor] 2D Scene/UI opened with the locked Canvas2D camera.");
                 break;
             case EditorMainSurface::Assets:
                 editor.showInspector = true;
@@ -4857,15 +4987,15 @@ namespace epochnamespace
                     epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
                     epochnamespace::previewgrid::reset_camera(ctx.get());
                 }
-                push_editor_log(editor, "[forest] Forest Factory workspace opened with the scene-backed preview.");
+                push_editor_log(editor, "[forest] Plant Lab opened with the scene-backed Forest Factory preview.");
                 break;
             case EditorMainSurface::Timeline:
                 editor.showInspector = true;
                 editor.showConsoleDock = true;
                 editor.showAiChat = true;
-                editor.workspaceTab = EditorWorkspaceTab::Systems;
+                editor.workspaceTab = EditorWorkspaceTab::Output;
                 epoch::saveload::clamp_streaming_save_config(editor.streamingSaveConfig);
-                push_editor_log(editor, "[timeline] Timeline Editor opened on the shared 4D time spine.");
+                push_editor_log(editor, "[timeline] Video opened on the shared 4D time spine.");
                 break;
             case EditorMainSurface::AISandbox:
                 editor.workspaceTab = EditorWorkspaceTab::AI;
@@ -4881,7 +5011,7 @@ namespace epochnamespace
                 editor.showConsoleDock = true;
                 editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Systems;
-                push_editor_log(editor, "[systems] Systems Workspace opened.");
+                push_editor_log(editor, "[systems] System Info opened.");
                 break;
             default:
                 break;
@@ -4896,14 +5026,14 @@ namespace epochnamespace
         auto render_main_surface_tabs = [&]()
         {
             const std::array<gui::SegmentedButtonSpec, 8> tabs{{
-                { "Perspective", 118.0f, editor.mainSurface == EditorMainSurface::Scene },
-                { "Game/2D", 96.0f, editor.mainSurface == EditorMainSurface::Game2D },
-                { "Assets", 82.0f, editor.mainSurface == EditorMainSurface::Assets },
-                { "Forest Factory", 132.0f, editor.mainSurface == EditorMainSurface::ForestFactory },
-                { "Timeline", 96.0f, editor.mainSurface == EditorMainSurface::Timeline },
-                { "Project", 92.0f, editor.mainSurface == EditorMainSurface::Project },
-                { "AI Sandbox", 122.0f, editor.mainSurface == EditorMainSurface::AISandbox },
-                { "Systems", 90.0f, editor.mainSurface == EditorMainSurface::Systems }
+                { "3D Scene", 96.0f, editor.mainSurface == EditorMainSurface::Scene },
+                { "2D Scene/UI", 116.0f, editor.mainSurface == EditorMainSurface::Game2D },
+                { "Assets", 74.0f, editor.mainSurface == EditorMainSurface::Assets },
+                { "Plant Lab", 92.0f, editor.mainSurface == EditorMainSurface::ForestFactory },
+                { "Video", 70.0f, editor.mainSurface == EditorMainSurface::Timeline },
+                { "Project", 84.0f, editor.mainSurface == EditorMainSurface::Project },
+                { "Intelligence", 116.0f, editor.mainSurface == EditorMainSurface::AISandbox },
+                { "System Info", 108.0f, editor.mainSurface == EditorMainSurface::Systems }
             }};
             const std::array<EditorMainSurface, 8> surfaces{{
                 EditorMainSurface::Scene,
@@ -4965,12 +5095,35 @@ namespace epochnamespace
                 launch_active_project_context();
         }
 
+        float status_anchor_x = run_button_x + run_button_w + 14.0f;
+        if (editor.updateState == EditorUpdateState::Available
+            || editor.updateState == EditorUpdateState::RestartReady)
+        {
+            constexpr float update_button_w = 154.0f;
+            gui::set_cursor({ status_anchor_x, toolbar_button_y });
+            if (gui::button(update_toolbar_button_label(editor.updateState), { update_button_w, toolbar_button_h }))
+            {
+                if (editor.updateState == EditorUpdateState::RestartReady)
+                {
+                    emit_command(EditorCommand::UpdateApplication);
+                    push_editor_log(editor, "[update] Restart/update handoff requested from toolbar.");
+                }
+                else
+                {
+                    editor.showUpdateConfirmModal = true;
+                    editor.showSourceUpdateConfirmModal = false;
+                    push_editor_log(editor, "[update] Update available. Awaiting confirmation.");
+                }
+            }
+            status_anchor_x += update_button_w + 10.0f;
+        }
+
         const std::size_t toolbarThreadCount = epoch::systems::threading::live_thread_count();
         const std::size_t toolbarCpuThreadCount = (std::max)(std::size_t{ 1 },
             std::thread::hardware_concurrency() > 0
             ? static_cast<std::size_t>(std::thread::hardware_concurrency())
             : std::size_t{ 1 });
-        const float status_x = (std::max)(toolbar_x + 12.0f, run_button_x + run_button_w + 14.0f);
+        const float status_x = (std::max)(toolbar_x + 12.0f, status_anchor_x);
         gui::set_cursor({ status_x, toolbar_button_y + 4.0f });
         gui::wrapped_label(
             std::string("v") + epochnamespace::GetEngineVersionString()
@@ -4986,52 +5139,52 @@ namespace epochnamespace
         const float tab_gap = 8.0f;
         float tab_x = 16.0f;
 
-        const std::string editor_tab = "Editor Mode";
-        const std::string runtime_tab = "Game/2D";
+        const std::string editor_tab = "3D Scene";
+        const std::string runtime_tab = "2D Scene/UI";
         const std::string assets_tab = "Assets";
-        const std::string forest_tab = "Forest Factory";
-        const std::string timeline_tab = "Timeline";
+        const std::string forest_tab = "Plant Lab";
+        const std::string timeline_tab = "Video";
         const std::string project_tab = "Project";
-        const std::string ai_control_tab = "AI Sandbox";
-        const std::string systems_tab = "Systems";
+        const std::string ai_control_tab = "Intelligence";
+        const std::string systems_tab = "System Info";
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(editor_tab, { 180.0f, tab_h }, editor.mainSurface == EditorMainSurface::Scene))
+        if (gui::button_selected(editor_tab, { 136.0f, tab_h }, editor.mainSurface == EditorMainSurface::Scene))
             open_editor_surface(EditorMainSurface::Scene, "toolbar");
-        tab_x += 180.0f + tab_gap;
+        tab_x += 136.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(runtime_tab, { 156.0f, tab_h }, editor.mainSurface == EditorMainSurface::Game2D))
+        if (gui::button_selected(runtime_tab, { 142.0f, tab_h }, editor.mainSurface == EditorMainSurface::Game2D))
             open_editor_surface(EditorMainSurface::Game2D, "toolbar");
-        tab_x += 156.0f + tab_gap;
+        tab_x += 142.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(assets_tab, { 124.0f, tab_h }, editor.mainSurface == EditorMainSurface::Assets))
+        if (gui::button_selected(assets_tab, { 104.0f, tab_h }, editor.mainSurface == EditorMainSurface::Assets))
             open_editor_surface(EditorMainSurface::Assets, "toolbar");
-        tab_x += 124.0f + tab_gap;
+        tab_x += 104.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(forest_tab, { 164.0f, tab_h }, editor.mainSurface == EditorMainSurface::ForestFactory))
+        if (gui::button_selected(forest_tab, { 116.0f, tab_h }, editor.mainSurface == EditorMainSurface::ForestFactory))
             open_editor_surface(EditorMainSurface::ForestFactory, "toolbar");
-        tab_x += 164.0f + tab_gap;
+        tab_x += 116.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(timeline_tab, { 118.0f, tab_h }, editor.mainSurface == EditorMainSurface::Timeline))
+        if (gui::button_selected(timeline_tab, { 92.0f, tab_h }, editor.mainSurface == EditorMainSurface::Timeline))
             open_editor_surface(EditorMainSurface::Timeline, "toolbar");
-        tab_x += 118.0f + tab_gap;
+        tab_x += 92.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(project_tab, { 144.0f, tab_h }, editor.mainSurface == EditorMainSurface::Project))
+        if (gui::button_selected(project_tab, { 112.0f, tab_h }, editor.mainSurface == EditorMainSurface::Project))
             open_editor_surface(EditorMainSurface::Project, "toolbar");
-        tab_x += 144.0f + tab_gap;
+        tab_x += 112.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(ai_control_tab, { 160.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox))
+        if (gui::button_selected(ai_control_tab, { 142.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox))
             open_editor_surface(EditorMainSurface::AISandbox, "toolbar");
-        tab_x += 160.0f + tab_gap;
+        tab_x += 142.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(systems_tab, { 124.0f, tab_h }, editor.mainSurface == EditorMainSurface::Systems))
+        if (gui::button_selected(systems_tab, { 132.0f, tab_h }, editor.mainSurface == EditorMainSurface::Systems))
             open_editor_surface(EditorMainSurface::Systems, "toolbar");
 
         gui::end_window();
@@ -5098,7 +5251,7 @@ namespace epochnamespace
             case TopMenu::Edit: return dropdown_window_size(192.0f, 3);
             case TopMenu::Asset: return dropdown_window_size(220.0f, 7);
             case TopMenu::Window: return dropdown_window_size(248.0f, 10);
-            case TopMenu::Tools: return dropdown_window_size(228.0f, 6);
+            case TopMenu::Tools: return dropdown_window_size(228.0f, 5);
             case TopMenu::Help: return dropdown_window_size(192.0f, 2);
             case TopMenu::None:
             default: return {};
@@ -5657,6 +5810,109 @@ namespace epochnamespace
         }
         };
 
+        auto render_timeline_time_controls = [&](float availableWidth, bool compact)
+        {
+            ensure_timeline_defaults(editor);
+            const auto timelineStats = timeline_stats_from_editor(editor);
+            epoch::timeline::sync_to_simulation(editor.timelineState, timelineStats);
+            epoch::timeline::clamp_state(editor.timelineState);
+
+            const float width = (std::max)(180.0f, availableWidth);
+            const float playheadValue = static_cast<float>(std::clamp(
+                editor.timelineState.duration_seconds > 0.0
+                    ? editor.timelineState.playhead_seconds / editor.timelineState.duration_seconds
+                    : 0.0,
+                0.0,
+                1.0));
+            gui::progress_bar(gui::ProgressBarOptions{
+                .label = "Timeline Playhead",
+                .status = std::format("{:.2f}s / {:.2f}s", editor.timelineState.playhead_seconds, editor.timelineState.duration_seconds),
+                .value = playheadValue,
+                .size = { width, compact ? 18.0f : 22.0f },
+                .show_percent = false
+            });
+
+            if (compact)
+            {
+                gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running", 104.0f);
+                gui::property_row(
+                    "[time] Step",
+                    std::format("{} / {} @ {}", editor.timeSnapshot.step_budget, editor.timeSnapshot.max_steps_per_frame, format_rate(editor.timeSnapshot.fixed_dt_seconds)),
+                    104.0f);
+                return;
+            }
+
+            const std::string pacingHealth = pacing_health_summary(editor.timeSnapshot);
+            gui::label("Time Spine Controls");
+            gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running", 132.0f);
+            gui::property_row("[time] Frame dt", format_ms(editor.timeSnapshot.real_dt_seconds), 132.0f);
+            gui::property_row("[time] Scaled dt", format_ms(editor.timeSnapshot.scaled_dt_seconds), 132.0f);
+            gui::property_row(
+                "[time] Fixed step",
+                std::string(format_ms(editor.timeSnapshot.fixed_dt_seconds)) + " / " + format_rate(editor.timeSnapshot.fixed_dt_seconds),
+                132.0f);
+            gui::property_row("[time] Simulated", format_seconds(editor.timeSnapshot.simulated_seconds), 132.0f);
+            gui::property_row("[time] Accumulator", format_ms(editor.timeSnapshot.accumulator_seconds), 132.0f);
+            gui::property_row(
+                "[time] Step budget",
+                std::format("{} / {}", editor.timeSnapshot.step_budget, editor.timeSnapshot.max_steps_per_frame),
+                132.0f);
+            gui::property_row("[time] Time scale", std::format("{:.2f}x", editor.timeSnapshot.time_scale), 132.0f);
+            gui::property_row("[time] Pacing health", pacingHealth, 132.0f);
+
+            const std::array timeButtons{
+                gui::InlineButtonSpec{ .label = editor.timeControl.paused ? "Resume" : "Pause", .width = 74.0f },
+                gui::InlineButtonSpec{ .label = "Step", .width = 52.0f },
+                gui::InlineButtonSpec{ .label = "0.5x", .width = 48.0f },
+                gui::InlineButtonSpec{ .label = "1x", .width = 42.0f },
+                gui::InlineButtonSpec{ .label = "2x", .width = 42.0f }
+            };
+            if (const auto action = gui::inline_button_row(timeButtons, 24.0f, 6.0f))
+            {
+                switch (*action)
+                {
+                case 0: editor.timeControl.paused = !editor.timeControl.paused; break;
+                case 1: editor.timeControl.step_once = true; break;
+                case 2: editor.timeControl.time_scale = 0.5; break;
+                case 3: editor.timeControl.time_scale = 1.0; break;
+                case 4: editor.timeControl.time_scale = 2.0; break;
+                default: break;
+                }
+            }
+
+            const std::array cadenceButtons{
+                gui::InlineButtonSpec{ .label = "30 Hz", .width = 56.0f },
+                gui::InlineButtonSpec{ .label = "60 Hz", .width = 56.0f },
+                gui::InlineButtonSpec{ .label = "120 Hz", .width = 64.0f }
+            };
+            if (const auto action = gui::inline_button_row(cadenceButtons, 24.0f, 6.0f))
+            {
+                switch (*action)
+                {
+                case 0: editor.timeControl.fixed_dt_seconds = 1.0 / 30.0; break;
+                case 1: editor.timeControl.fixed_dt_seconds = 1.0 / 60.0; break;
+                case 2: editor.timeControl.fixed_dt_seconds = 1.0 / 120.0; break;
+                default: break;
+                }
+            }
+
+            const std::array budgetButtons{
+                gui::InlineButtonSpec{ .label = "4 steps", .width = 64.0f },
+                gui::InlineButtonSpec{ .label = "8 steps", .width = 64.0f },
+                gui::InlineButtonSpec{ .label = "12 steps", .width = 72.0f }
+            };
+            if (const auto action = gui::inline_button_row(budgetButtons, 24.0f, 6.0f))
+            {
+                switch (*action)
+                {
+                case 0: editor.timeControl.max_steps_per_frame = 4; break;
+                case 1: editor.timeControl.max_steps_per_frame = 8; break;
+                case 2: editor.timeControl.max_steps_per_frame = 12; break;
+                default: break;
+                }
+            }
+        };
+
         const bool active_center_uses_scene = main_surface_uses_scene(editor.mainSurface);
         if (editor.surfaceSettleFrames > 0)
             --editor.surfaceSettleFrames;
@@ -5670,9 +5926,16 @@ namespace epochnamespace
             const std::string_view sceneTitle = main_surface_title(editor.mainSurface);
             gui::label(std::string(sceneTitle));
             const gui::Vec2 scene_pos = gui::cursor_position();
+            const float sceneAvailableWidth = (std::max)(48.0f, viewport_pos.x + viewport_size.x - scene_pos.x);
+            const float sceneAvailableHeight = (std::max)(48.0f, viewport_pos.y + viewport_size.y - scene_pos.y);
+            const bool showSceneTimeline = sceneAvailableHeight > 190.0f;
+            const float timelineStripGap = showSceneTimeline ? 6.0f : 0.0f;
+            const float timelineStripHeight = showSceneTimeline
+                ? (std::min)(118.0f, (std::max)(82.0f, sceneAvailableHeight * 0.20f))
+                : 0.0f;
             const gui::Vec2 scene_size{
-                (std::max)(48.0f, viewport_pos.x + viewport_size.x - scene_pos.x),
-                (std::max)(48.0f, viewport_pos.y + viewport_size.y - scene_pos.y)
+                sceneAvailableWidth,
+                (std::max)(48.0f, sceneAvailableHeight - timelineStripHeight - timelineStripGap)
             };
             result.scene_viewport = gui::scene_viewport({}, scene_pos, scene_size);
             ctx->set_scene_preview_mode(editor.previewMode);
@@ -5685,6 +5948,13 @@ namespace epochnamespace
             });
             update_scene_object_interaction(ctx, editor, result);
             publish_editor_preview_markers(ctx.get(), editor);
+
+            if (showSceneTimeline)
+            {
+                gui::set_cursor({ scene_pos.x, scene_pos.y + scene_size.y + timelineStripGap });
+                gui::label("Video Timeline");
+                render_timeline_time_controls(scene_size.x, true);
+            }
         }
         else
         {
@@ -5849,7 +6119,7 @@ namespace epochnamespace
                 gui::property_row("[assets] Model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path, 120.0f);
                 gui::property_row("[assets] Model parsed", modelSummary.parsed ? "true" : "false", 120.0f);
                 gui::wrapped_label(
-                    "This surface is the project asset browser: scenes, models, images, text, and script files as normal project assets. Sandbox controls stay in AI Sandbox and are only for engine self-iteration.",
+                    "This surface is the project asset browser: scenes, models, images, text, and script files as normal project assets. Self-iteration controls stay in Intelligence and are only for engine work.",
                     centerWidth);
 
                 const auto assetEntries = collect_asset_browser_entries(editor);
@@ -5944,9 +6214,9 @@ namespace epochnamespace
                 const bool manifestReady = std::filesystem::exists(manifestPath);
                 const bool profileReady = std::filesystem::exists(profilePath);
 
-                gui::label("Forest Factory");
+                gui::label("Plant Lab");
                 gui::wrapped_label(
-                    "Core temporal graph / parametric L-system vegetation lab. Forest Factory owns a live editor scene preview; generated projects receive assets only after package activation or main-scene use approval.",
+                    "Core temporal graph / parametric L-system vegetation lab. Plant Lab owns a live editor scene preview; generated projects receive assets only after package activation or main-scene use approval.",
                     centerWidth);
                 gui::property_row("[forest] Editor name", std::string(epoch::forest::kForestFactoryWorkspace), 148.0f);
                 gui::property_row("[forest] Technique", std::string(epoch::forest::kForestFactoryTechnique), 148.0f);
@@ -5968,7 +6238,7 @@ namespace epochnamespace
                 gui::property_row("[forest] Verts", std::to_string(stats.vertices), 148.0f);
                 gui::property_row("[forest] Tris", std::to_string(stats.triangles), 148.0f);
                 gui::wrapped_label(
-                    "Scene preview: Forest Factory now emits deterministic temporal graph nodes and leaves into its editor-only scene. Package activation emits reusable project assets only after an explicit install/stage gate.",
+                    "Scene preview: Plant Lab now emits deterministic temporal graph nodes and leaves into its editor-only scene. Package activation emits reusable project assets only after an explicit install/stage gate.",
                     centerWidth);
                 std::array<gui::InlineButtonSpec, 3> forestActions{ {
                     { "Regenerate Temporal Graph", 228.0f },
@@ -5989,12 +6259,12 @@ namespace epochnamespace
                             editor.entities.end(),
                             [](const EditorEntity& entity)
                             {
-                                return entity.name.rfind("ForestFactoryLeaf_", 0) == 0;
+                                return entity.name.rfind("ForestFactoryCanopy_", 0) == 0;
                             });
                         if (selected != editor.entities.end())
                         {
                             editor.selectedEntity = static_cast<std::size_t>(std::distance(editor.entities.begin(), selected));
-                            push_editor_log(editor, "[forest] Selected the first visible Forest Factory lead tip.");
+                            push_editor_log(editor, "[forest] Selected the first visible Plant Lab lead tip.");
                         }
                         else
                         {
@@ -6003,7 +6273,7 @@ namespace epochnamespace
                     }
                     else if (*clicked == 2)
                     {
-                        editor.packageInstallStatus = "Forest Factory data reset is staged behind package activation; current preview primitives remain editor-only.";
+                        editor.packageInstallStatus = "Plant Lab data reset is staged behind package activation; current preview primitives remain editor-only.";
                         push_editor_log(editor, "[forest] Reset requested; package-backed data reset remains gated.");
                     }
                 }
@@ -6012,16 +6282,16 @@ namespace epochnamespace
                     editor.showPackageManagerModal = true;
                     editor.selectedPackageId = std::string(epoch::package_registry::kEngineForestFactoryPackageId);
                     editor.packageInstallStatus = manifestReady && profileReady
-                        ? "Forest Factory project package is already staged."
-                        : "Select Install to stage the Forest Factory project package.";
-                    push_editor_log(editor, "[forest] Package Manager opened for Forest Factory.");
+                        ? "Plant Lab project package is already staged."
+                        : "Select Install to stage the Plant Lab project package.";
+                    push_editor_log(editor, "[forest] Package Manager opened for Plant Lab.");
                 }
-                if (gui::button("Stage Forest Factory Package", { 260.0f, 30.0f }))
+                if (gui::button("Stage Plant Lab Package", { 240.0f, 30.0f }))
                 {
                     if (forestPackage != epoch::package_registry::kKnownPackages.end())
                         (void)stage_forest_factory_package_opt_in(editor, *forestPackage);
                     else
-                        editor.packageInstallStatus = "Forest Factory package registry entry is missing.";
+                        editor.packageInstallStatus = "Plant Lab package registry entry is missing.";
                 }
                 break;
             }
@@ -6059,10 +6329,12 @@ namespace epochnamespace
                     push_editor_log(editor, "[timeline] Auto-staged timeline checkpoint: " + editor.streamingSaveStatus.last_snapshot_label);
                 }
 
-                gui::label("Timeline Editor");
+                gui::label("Video");
                 gui::wrapped_label(
-                    "Epoch treats time as a first-class 4D authoring spine. This surface exposes the shared simulation clock, timeline checkpoint gates, and the configurable streaming-save contract without pretending scene serialization is finished.",
+                    "Epoch treats time as a first-class 4D authoring spine. This surface owns the shared simulation clock controls, timeline graph, video-editing path, checkpoint gates, and configurable streaming-save contract without pretending scene serialization is finished.",
                     centerWidth);
+                render_timeline_time_controls(centerWidth, false);
+                gui::label("Timeline Data");
                 gui::property_row("[timeline] Frame", std::to_string(timelineStats.frame_index), 132.0f);
                 gui::property_row("[timeline] Simulated", format_seconds(timelineStats.simulated_seconds), 132.0f);
                 gui::property_row("[timeline] Fixed step", std::string(format_ms(timelineStats.fixed_dt_seconds)) + " / " + format_rate(timelineStats.fixed_dt_seconds), 132.0f);
@@ -6418,8 +6690,8 @@ namespace epochnamespace
                 const std::string convergenceFocus = backend_convergence_focus(ctx);
                 const float graphGap = 14.0f;
                 const float graphWidth = (std::max)(260.0f, centerWidth);
-                const float graphHeight = 208.0f;
-                const float supportHeight = 96.0f;
+                const float graphHeight = 248.0f;
+                const float supportHeight = 118.0f;
                 constexpr int kGraphInputCooldownFrames = 6;
                 if (editor.systems.graphInputCooldownFrames > 0)
                     --editor.systems.graphInputCooldownFrames;
@@ -6434,7 +6706,6 @@ namespace epochnamespace
                 const auto supportCanvas = build_support_tier_surface(
                     supportTier,
                     ctx && ctx->type == core::ContextType::Software);
-                const std::string pacingHealth = pacing_health_summary(editor.timeSnapshot);
 
                 editor.systems.renderSurface = gui::register_runtime_surface(
                     "systems-render-graph",
@@ -6452,73 +6723,19 @@ namespace epochnamespace
                     static_cast<std::uint32_t>(supportCanvas.width),
                     static_cast<std::uint32_t>(supportCanvas.height));
 
-                gui::label("Systems Workspace");
+                gui::label("System Info");
                 gui::property_row("[system] Renderer", renderer_name(ctx), 112.0f);
                 gui::property_row("[system] Platform", epochnamespace::GetEngineBuildTagString(), 112.0f);
                 gui::property_row("[system] Live threads", std::to_string(liveThreadCount), 112.0f);
                 gui::property_row("[system] CPU threads", std::to_string(hardwareThreadCount), 112.0f);
                 gui::property_row("[system] Panel host", editor.detachedPanelHostStatus, 112.0f);
                 gui::wrapped_label(
-                    "Systems is reserved for render/backend/context routing, diagnostics, and future node/timeline/video surfaces. It intentionally disables the 3D scene preview while open.",
+                    "System Info is reserved for render/backend/context routing and diagnostics. Video owns time controls, timeline graphing, streaming-save cadence, and video-authoring surfaces.",
                     centerWidth);
-                gui::label("Time Controls");
-                gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running", 132.0f);
-                gui::property_row("[time] Frame dt", format_ms(editor.timeSnapshot.real_dt_seconds), 132.0f);
                 gui::property_row(
-                    "[time] Fixed step",
-                    std::string(format_ms(editor.timeSnapshot.fixed_dt_seconds)) + " / " + format_rate(editor.timeSnapshot.fixed_dt_seconds),
+                    "[timeline] Owner",
+                    "Video owns playhead, step, cadence, streaming-save, and video timing controls.",
                     132.0f);
-                gui::property_row("[time] Simulated", format_seconds(editor.timeSnapshot.simulated_seconds), 132.0f);
-                gui::property_row("[time] Pacing health", pacingHealth, 132.0f);
-                const std::array timeButtons{
-                    gui::InlineButtonSpec{ .label = editor.timeControl.paused ? "Resume" : "Pause", .width = 74.0f },
-                    gui::InlineButtonSpec{ .label = "Step", .width = 52.0f },
-                    gui::InlineButtonSpec{ .label = "0.5x", .width = 48.0f },
-                    gui::InlineButtonSpec{ .label = "1x", .width = 42.0f },
-                    gui::InlineButtonSpec{ .label = "2x", .width = 42.0f }
-                };
-                if (const auto action = gui::inline_button_row(timeButtons, 24.0f, 6.0f))
-                {
-                    switch (*action)
-                    {
-                    case 0: editor.timeControl.paused = !editor.timeControl.paused; break;
-                    case 1: editor.timeControl.step_once = true; break;
-                    case 2: editor.timeControl.time_scale = 0.5; break;
-                    case 3: editor.timeControl.time_scale = 1.0; break;
-                    case 4: editor.timeControl.time_scale = 2.0; break;
-                    default: break;
-                    }
-                }
-                const std::array cadenceButtons{
-                    gui::InlineButtonSpec{ .label = "30 Hz", .width = 56.0f },
-                    gui::InlineButtonSpec{ .label = "60 Hz", .width = 56.0f },
-                    gui::InlineButtonSpec{ .label = "120 Hz", .width = 64.0f }
-                };
-                if (const auto action = gui::inline_button_row(cadenceButtons, 24.0f, 6.0f))
-                {
-                    switch (*action)
-                    {
-                    case 0: editor.timeControl.fixed_dt_seconds = 1.0 / 30.0; break;
-                    case 1: editor.timeControl.fixed_dt_seconds = 1.0 / 60.0; break;
-                    case 2: editor.timeControl.fixed_dt_seconds = 1.0 / 120.0; break;
-                    default: break;
-                    }
-                }
-                const std::array budgetButtons{
-                    gui::InlineButtonSpec{ .label = "4 steps", .width = 64.0f },
-                    gui::InlineButtonSpec{ .label = "8 steps", .width = 64.0f },
-                    gui::InlineButtonSpec{ .label = "12 steps", .width = 72.0f }
-                };
-                if (const auto action = gui::inline_button_row(budgetButtons, 24.0f, 6.0f))
-                {
-                    switch (*action)
-                    {
-                    case 0: editor.timeControl.max_steps_per_frame = 4; break;
-                    case 1: editor.timeControl.max_steps_per_frame = 8; break;
-                    case 2: editor.timeControl.max_steps_per_frame = 12; break;
-                    default: break;
-                    }
-                }
                 const auto systemsOrigin = gui::cursor_position();
                 const float titleY = systemsOrigin.y + 6.0f;
                 const float controlsY = titleY + gui::line_height() + 4.0f;
@@ -6874,7 +7091,7 @@ namespace epochnamespace
             const std::string loopStage = ai_control_loop_stage(gateStatus);
 
             // Bottom Dock > AI stays diagnostic-only. Controls and model
-            // selection live in the central AI Sandbox and Inspector panes.
+            // selection live in the central Intelligence and Inspector panes.
 
             const auto currentIterationPacket = [&]() {
                 std::vector<std::string> evidencePaths;
@@ -7014,7 +7231,7 @@ namespace epochnamespace
                 dockLine("[ai-tool] Status", editor.aiToolHarnessStatus),
                 dockLine("[ai] Build log", display_project_path(buildLog)),
                 dockLine("[ai] Output", display_project_path(outputExe)),
-                "[ai] Controls and model selection live in AI Sandbox and Inspector; Bottom Dock is status-only."
+                "[ai] Controls and model selection live in Intelligence and Inspector; Bottom Dock is status-only."
             };
             renderDockStatusPanel("ai", dockLines);
             break;
@@ -7044,7 +7261,7 @@ namespace epochnamespace
                 dockLine("[phase5] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused"),
                 dockLine("[phase5] Build status", editor.aiContinuousBuildStatus),
                 dockLine("[phase5] Staged packets", staged_packet_count_summary(phase5PacketRoot)),
-                "[systems] Use the central Systems workspace for graph surfaces, time controls, backend details, and live system lists."
+                "[systems] Use the central System Info workspace for graph surfaces, backend details, and live system lists. Video owns time controls and timeline/video authoring."
             };
             renderDockStatusPanel("systems", dockLines);
             break;
@@ -7212,7 +7429,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Tools", TopMenu::Tools, dropdown_window_size(228.0f, 6), [&](gui::Vec2 pos)
+        open_dropdown("Tools", TopMenu::Tools, dropdown_window_size(228.0f, 5), [&](gui::Vec2 pos)
         {
             menu_item("Camera: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
                 editor.projectCameraMode = epochnamespace::previewgrid::CameraMode::Editor;
@@ -7235,11 +7452,6 @@ namespace epochnamespace
             });
             menu_item("Save Project", { pos.x + 12.0f, pos.y + 150.0f }, 228.0f, [&]() {
                 repair_active_project_evidence(editor);
-            });
-            menu_item("Update to Latest...", { pos.x + 12.0f, pos.y + 184.0f }, 228.0f, [&]() {
-                editor.showUpdateConfirmModal = true;
-                editor.showSourceUpdateConfirmModal = false;
-                push_editor_log(editor, "[tools] Latest update requested. Awaiting confirmation.");
             });
         });
 
@@ -7271,11 +7483,11 @@ namespace epochnamespace
             const gui::Vec2 contentPos = gui::cursor_position();
             const float contentY = contentPos.y;
             gui::set_cursor({ contentPos.x + 8.0f, contentY });
-            gui::wrapped_label("Update to Latest checks the newest packaged release first.", contentWidth);
+            gui::wrapped_label("An Epoch update is available. Confirm to download the packaged release or fall back to source when needed.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 36.0f });
-            gui::wrapped_label("If the packaged release is already current, Epoch falls back to the latest main source.", contentWidth);
+            gui::wrapped_label(editor.updateStatus, contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 84.0f });
-            gui::wrapped_label("That source fallback restores dependencies, rebuilds Epoch, and replaces this runtime.", contentWidth);
+            gui::wrapped_label("The updater runs through the executable-local cache and restarts Epoch after the replacement handoff.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 132.0f });
             gui::wrapped_label("Use Advanced Source only when you intentionally want to skip straight to a rebuild from main.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 180.0f });
@@ -7285,9 +7497,11 @@ namespace epochnamespace
                 push_editor_log(editor, "[command] Update canceled.");
             }
             gui::set_cursor({ contentPos.x + 148.0f, contentPos.y + 180.0f });
-            if (gui::button("Update to Latest", { 168.0f, 30.0f }))
+            if (gui::button("Download Update", { 168.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
+                editor.updateState = EditorUpdateState::Checking;
+                editor.updateStatus = "Downloading and verifying update package. Epoch closes only after a verified replacement handoff starts.";
                 emit_command(EditorCommand::UpdateApplication);
                 push_editor_log(editor, "[command] Smart update confirmed.");
             }
@@ -7325,7 +7539,7 @@ namespace epochnamespace
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 84.0f });
             gui::wrapped_label("Epoch restores dependencies, rebuilds from source, and replaces this runtime.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 132.0f });
-            gui::wrapped_label("For normal updates, use Update to Latest and let it fall back automatically when needed.", contentWidth);
+            gui::wrapped_label("For normal updates, let the startup update check expose the toolbar update button when a newer packaged/source path exists.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 184.0f });
             if (gui::button("Back", { 120.0f, 30.0f }))
             {
@@ -7492,7 +7706,7 @@ namespace epochnamespace
         if (editor.showPackageManagerModal)
         {
             editor.openMenu = TopMenu::None;
-            const gui::Vec2 modalSize{ 720.0f, 430.0f };
+            const gui::Vec2 modalSize{ 820.0f, 560.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
@@ -7509,28 +7723,157 @@ namespace epochnamespace
             const auto forestFactoryPackage = projectRoot / "assets" / "packages" / "engine_forest_factory.package.json";
             const auto forestFactoryProfile = projectRoot / "assets" / "packages" / "engine_forest_factory" / "default.forest.json";
             const auto knownPackages = epoch::package_registry::known_packages();
-            std::vector<std::string_view> packageOptions;
-            packageOptions.reserve(knownPackages.size());
             const epoch::package_registry::PackageDescriptor* selectedPackage = nullptr;
-            for (std::size_t i = 0; i < knownPackages.size(); ++i)
+            if (editor.selectedPackageId.empty() && !knownPackages.empty())
             {
-                const auto& package = knownPackages[i];
-                packageOptions.push_back(package.displayName);
-                if (editor.selectedPackageId.empty() || package.id == editor.selectedPackageId)
-                {
+                selectedPackage = &knownPackages.front();
+                editor.selectedPackageId = std::string(selectedPackage->id);
+            }
+            for (const auto& package : knownPackages)
+            {
+                if (package.id == editor.selectedPackageId)
                     selectedPackage = &package;
-                }
             }
             if (!selectedPackage && !knownPackages.empty())
             {
                 selectedPackage = &knownPackages.front();
                 editor.selectedPackageId = std::string(selectedPackage->id);
             }
-            const std::string selectedPackageLabel = selectedPackage
-                ? std::string(selectedPackage->displayName)
-                : std::string("(none)");
             const bool engineArcadeInstalled = path_exists(engineArcadePackage) && path_exists(engineArcadeScript);
             const bool forestFactoryStaged = path_exists(forestFactoryPackage) && path_exists(forestFactoryProfile);
+
+            auto model_download_plan_path = [&](const epoch::package_registry::PackageDescriptor& package)
+            {
+                const std::string safeId = safe_package_artifact_id(package.id);
+                return resolve_editor_path(std::filesystem::path{ epoch::ai::local_model_root() }) / safeId / "download.plan.json";
+            };
+
+            auto package_installed = [&](const epoch::package_registry::PackageDescriptor& package)
+            {
+                if (package.id == epoch::package_registry::kEngineArcadePackageId)
+                    return engineArcadeInstalled;
+                if (package.id == epoch::package_registry::kEngineForestFactoryPackageId)
+                    return forestFactoryStaged;
+                if (package.kind == epoch::package_registry::PackageKind::ModelAsset)
+                    return path_exists(model_download_plan_path(package));
+                return false;
+            };
+
+            auto package_status = [&](const epoch::package_registry::PackageDescriptor& package)
+            {
+                if (package_installed(package))
+                    return std::string("staged");
+                if (package.requiresExplicitNetworkApproval)
+                    return std::string("blocked by approval gate");
+                if (package.kind == epoch::package_registry::PackageKind::DownloadableSource
+                    || package.kind == epoch::package_registry::PackageKind::ResearchPrototype)
+                    return std::string("source gate available");
+                if (package.shipsInCore)
+                    return std::string("core");
+                return std::string("available");
+            };
+
+            auto select_package = [&](const epoch::package_registry::PackageDescriptor& package)
+            {
+                selectedPackage = &package;
+                editor.selectedPackageId = std::string(package.id);
+                editor.packageInstallStatus = std::string("Selected ") + std::string(package.displayName) + ".";
+                editor.packageInstallProgress = package_installed(package) ? 1.0f : 0.0f;
+            };
+
+            auto install_package = [&](const epoch::package_registry::PackageDescriptor& package)
+            {
+                select_package(package);
+                if (package.id == epoch::package_registry::kEngineArcadePackageId)
+                {
+                    if (engineArcadeEligible)
+                    {
+                        repair_active_project_evidence(editor);
+                        editor.packageInstallStatus = engineArcadeInstalled
+                            ? "Engine Arcade already installed."
+                            : "Engine Arcade staged into the active project.";
+                        editor.packageInstallProgress = 1.0f;
+                        push_editor_log(editor, "[package] Requested engine_arcade local runtime-mini package materialization.");
+                    }
+                    else
+                    {
+                        editor.packageInstallStatus = "Engine Arcade applies to game project shells, not sandbox/tool hubs.";
+                        editor.packageInstallProgress = 0.0f;
+                        push_editor_log(editor, "[package] engine_arcade applies to game project shells, not the self-iteration sandbox or tool hubs.");
+                    }
+                    return;
+                }
+
+                if (package.id == epoch::package_registry::kEngineForestFactoryPackageId)
+                {
+                    (void)stage_forest_factory_package_opt_in(editor, package);
+                    return;
+                }
+
+                if (package.requiresExplicitNetworkApproval)
+                {
+                    editor.packageInstallStatus = "Blocked: network/server packages require explicit human approval.";
+                    editor.packageInstallProgress = 0.0f;
+                    push_editor_log(editor, std::string("[package] Blocked ") + std::string(package.id) + ": explicit network approval required.");
+                    return;
+                }
+
+                if (package.kind == epoch::package_registry::PackageKind::ModelAsset)
+                {
+                    (void)stage_model_package_opt_in(editor, package);
+                    return;
+                }
+
+                if (package.kind == epoch::package_registry::PackageKind::DownloadableSource
+                    || package.kind == epoch::package_registry::PackageKind::ResearchPrototype)
+                {
+                    editor.packageInstallStatus = "Download/build gate staged; cache/packages fetch is not automatic.";
+                    editor.packageInstallProgress = 0.15f;
+                    push_editor_log(editor, std::string("[package] Staged download/build gate for ") + std::string(package.id) + ".");
+                    return;
+                }
+
+                editor.packageInstallStatus = "Core opt-in package selected; activate it from the matching editor surface.";
+                editor.packageInstallProgress = 0.35f;
+                push_editor_log(editor, std::string("[package] Selected core opt-in package ") + std::string(package.id) + ".");
+            };
+
+            auto remove_package = [&](const epoch::package_registry::PackageDescriptor& package)
+            {
+                select_package(package);
+                std::error_code ec{};
+                if (package.id == epoch::package_registry::kEngineArcadePackageId)
+                {
+                    (void)std::filesystem::remove(engineArcadePackage, ec);
+                    ec.clear();
+                    (void)std::filesystem::remove(engineArcadeScript, ec);
+                    editor.packageInstallStatus = "Engine Arcade project-local manifest/script removed.";
+                    editor.packageInstallProgress = 0.0f;
+                    push_editor_log(editor, "[package] Removed engine_arcade project-local package files.");
+                    return;
+                }
+                if (package.id == epoch::package_registry::kEngineForestFactoryPackageId)
+                {
+                    (void)std::filesystem::remove(forestFactoryPackage, ec);
+                    ec.clear();
+                    (void)std::filesystem::remove(forestFactoryProfile, ec);
+                    editor.packageInstallStatus = "Plant Lab project manifest/profile removed; core editor workspace remains available.";
+                    editor.packageInstallProgress = 0.0f;
+                    push_editor_log(editor, "[package] Removed forest_factory project-local package files.");
+                    return;
+                }
+                if (package.kind == epoch::package_registry::PackageKind::ModelAsset)
+                {
+                    (void)std::filesystem::remove(model_download_plan_path(package), ec);
+                    editor.packageInstallStatus = "Model download plan removed. Existing weights, if any, stay in cache/models for manual review.";
+                    editor.packageInstallProgress = 0.0f;
+                    push_editor_log(editor, std::string("[package] Removed model download plan for ") + std::string(package.id) + ".");
+                    return;
+                }
+
+                editor.packageInstallStatus = "No project-local payload exists for this package yet.";
+                editor.packageInstallProgress = 0.0f;
+            };
 
             gui::begin_modal_window(gui::ModalWindowOptions{
                 .title = "Package Manager",
@@ -7542,163 +7885,133 @@ namespace epochnamespace
             gui::wrapped_label(
                 "Local packages are reviewable engine/project assets. Downloadable source packages use a human-approved source/build gate and must never auto-run services.",
                 contentWidth);
-            const auto packageSelect = gui::select_box(gui::SelectBoxOptions{
-                .id = "package-manager-package-select",
-                .placeholder = "Choose package",
-                .selected = selectedPackageLabel,
-                .options = std::span<const std::string_view>{ packageOptions.data(), packageOptions.size() },
-                .size = { contentWidth, 30.0f },
-                .row_height = 28.0f,
-                .max_visible_options = 6
+
+            gui::label("Available Packages");
+            (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
+                .id = "package-manager-package-list",
+                .size = { contentWidth, 222.0f },
+                .content_height = (std::max)(222.0f, static_cast<float>(knownPackages.size()) * 68.0f + 12.0f),
+                .draw_background = true,
+                .show_scrollbar = true
             });
-            if (packageSelect.changed && packageSelect.selected_index && *packageSelect.selected_index < knownPackages.size())
+            for (const auto& package : knownPackages)
             {
-                selectedPackage = &knownPackages[*packageSelect.selected_index];
-                editor.selectedPackageId = std::string(selectedPackage->id);
-                editor.packageInstallStatus = std::string("Selected ") + std::string(selectedPackage->displayName) + ".";
-                editor.packageInstallProgress = 0.0f;
+                const bool isSelected = selectedPackage && package.id == selectedPackage->id;
+                const bool isInstalled = package_installed(package);
+                const bool isBlocked = package.requiresExplicitNetworkApproval;
+                const std::string rowLabel = std::string(isInstalled ? "[x] " : (isBlocked ? "[!] " : "[ ] "))
+                    + std::string(package.displayName);
+                const gui::Vec2 rowPos = gui::cursor_position();
+                constexpr float kPackageActionWidth = 122.0f;
+                constexpr float kPackageRowHeight = 64.0f;
+                const float packageLinkWidth = (std::max)(160.0f, contentWidth - kPackageActionWidth - 24.0f);
+                if (gui::text_link(rowLabel, { packageLinkWidth, 28.0f }, isSelected))
+                    select_package(package);
+                gui::set_cursor({ rowPos.x + contentWidth - kPackageActionWidth - 8.0f, rowPos.y });
+                if (gui::button(isInstalled ? "Remove" : (isBlocked ? "Review Gate" : "Install"), { 114.0f, 28.0f }))
+                {
+                    if (isInstalled)
+                        remove_package(package);
+                    else
+                        install_package(package);
+                }
+                gui::set_cursor({ rowPos.x + 18.0f, rowPos.y + 31.0f });
+                gui::wrapped_label(
+                    std::string(epoch::package_registry::package_kind_name(package.kind))
+                        + " | " + package_status(package),
+                    (std::max)(120.0f, packageLinkWidth - 18.0f));
+                gui::set_cursor(rowPos);
+                gui::advance_cursor({ 0.0f, kPackageRowHeight });
             }
+            gui::end_scroll_area();
+
             const std::string activePackageLabel = selectedPackage
                 ? std::string(selectedPackage->displayName)
                 : std::string("(none)");
 
-            if (packageSelect.opened)
+            gui::label("Selected Package");
+            (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
+                .id = "package-manager-detail-scroll",
+                .size = { contentWidth, 150.0f },
+                .content_height = 248.0f,
+                .draw_background = true,
+                .show_scrollbar = true
+            });
+            gui::property_row("Project", editor.projectName, 104.0f);
+            gui::property_row("Package", activePackageLabel, 104.0f);
+            gui::property_row("Type", selectedPackage ? std::string(epoch::package_registry::package_kind_name(selectedPackage->kind)) : std::string("(none)"), 104.0f);
+            gui::property_row("Activation", selectedPackage ? std::string(epoch::package_registry::activation_mode_name(selectedPackage->activation)) : std::string("(none)"), 104.0f);
+            gui::property_row("Status", selectedPackage ? package_status(*selectedPackage) : std::string("(none)"), 104.0f);
+            gui::property_row("Source", selectedPackage && !selectedPackage->externalSourceRepo.empty()
+                ? std::string(selectedPackage->externalSourceRepo)
+                : std::string("engine builtin"), 104.0f);
+
+            if (selectedPackage && !selectedPackage->summary.empty())
+                gui::wrapped_label(std::string(selectedPackage->summary), contentWidth - 20.0f);
+
+            if (selectedPackage && selectedPackage->id == epoch::package_registry::kEngineArcadePackageId)
+            {
+                gui::property_row("Availability", engineArcadeEligible ? "available for this project" : "not applicable to this project", 104.0f);
+                gui::property_row("Manifest", path_exists(engineArcadePackage) ? "installed" : "missing", 104.0f);
+                gui::property_row("Script asset", path_exists(engineArcadeScript) ? "installed" : "missing", 104.0f);
+            }
+            else if (selectedPackage && selectedPackage->id == epoch::package_registry::kEngineForestFactoryPackageId)
+            {
+                gui::property_row("Workspace", "Plant Lab", 104.0f);
+                gui::property_row("Manifest", path_exists(forestFactoryPackage) ? "staged" : "missing", 104.0f);
+                gui::property_row("Profile", path_exists(forestFactoryProfile) ? "staged" : "missing", 104.0f);
+                gui::wrapped_label(
+                    "Plant Lab is the editor-facing Forest Factory workspace. Installing stages the project manifest/profile; generated project assets still require visible scene-use approval.",
+                    contentWidth - 20.0f);
+            }
+            else if (selectedPackage && selectedPackage->requiresExplicitNetworkApproval)
             {
                 gui::wrapped_label(
-                    "Choose one package. Details and install status return after the dropdown closes.",
-                    contentWidth);
+                    "This package can create a server, listener, or network control surface. It remains blocked until a human explicitly approves the run/build gate.",
+                    contentWidth - 20.0f);
             }
-            else
+            else if (selectedPackage && selectedPackage->kind == epoch::package_registry::PackageKind::ModelAsset)
             {
-                (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
-                    .id = "package-manager-detail-scroll",
-                    .size = { contentWidth, 224.0f },
-                    .content_height = 300.0f,
-                    .draw_background = true,
-                    .show_scrollbar = true
-                });
-                gui::property_row("Project", editor.projectName, 96.0f);
-                gui::property_row("Package", activePackageLabel, 96.0f);
-                gui::property_row("Type", selectedPackage ? std::string(epoch::package_registry::package_kind_name(selectedPackage->kind)) : std::string("(none)"), 96.0f);
-                gui::property_row("Activation", selectedPackage ? std::string(epoch::package_registry::activation_mode_name(selectedPackage->activation)) : std::string("(none)"), 96.0f);
-                gui::property_row("Source", selectedPackage && !selectedPackage->externalSourceRepo.empty()
-                    ? std::string(selectedPackage->externalSourceRepo)
-                    : std::string("engine builtin"), 96.0f);
-
-                if (selectedPackage && !selectedPackage->summary.empty())
-                    gui::wrapped_label(std::string(selectedPackage->summary), contentWidth);
-
-                if (selectedPackage && selectedPackage->id == epoch::package_registry::kEngineArcadePackageId)
-                {
-                    gui::property_row("Availability", engineArcadeEligible ? "available for this project" : "not applicable to this project", 96.0f);
-                    gui::property_row("Manifest", path_exists(engineArcadePackage) ? "installed" : "missing", 96.0f);
-                    gui::property_row("Script asset", path_exists(engineArcadeScript) ? "installed" : "missing", 96.0f);
-                }
-                else if (selectedPackage && selectedPackage->id == epoch::package_registry::kEngineForestFactoryPackageId)
-                {
-                    gui::property_row("Workspace", "Forest Factory", 96.0f);
-                    gui::property_row("Manifest", path_exists(forestFactoryPackage) ? "staged" : "missing", 96.0f);
-                    gui::property_row("Profile", path_exists(forestFactoryProfile) ? "staged" : "missing", 96.0f);
-                    gui::wrapped_label(
-                        "Forest Factory is a core editor feature. Installing stages the project manifest/profile; generated project assets still require visible scene-use approval.",
-                        contentWidth);
-                }
-                else if (selectedPackage && selectedPackage->requiresExplicitNetworkApproval)
-                {
-                    gui::wrapped_label(
-                        "This package can create a server, listener, or network control surface. It remains blocked until a human explicitly approves the run/build gate.",
-                        contentWidth);
-                }
-                else if (selectedPackage && selectedPackage->kind == epoch::package_registry::PackageKind::ModelAsset)
-                {
-                    const std::string safeId = safe_package_artifact_id(selectedPackage->id);
-                    const std::filesystem::path modelCacheDir =
-                        resolve_editor_path(std::filesystem::path{ epoch::ai::local_model_root() }) / safeId;
-                    gui::property_row("Model cache", epoch::ai::local_model_root(), 96.0f);
-                    gui::property_row("Package cache", display_project_path(modelCacheDir), 96.0f);
-                    gui::property_row("Download plan", display_project_path(modelCacheDir / "download.plan.json"), 96.0f);
-                    gui::wrapped_label(
-                        "OS model weights are not cloned with engine iterations. Install stages an on-demand download into cache/models; generated projects include the model only after an explicit package opt-in and license/notice review.",
-                        contentWidth);
-                }
-
-                gui::end_scroll_area();
+                const std::string safeId = safe_package_artifact_id(selectedPackage->id);
+                const std::filesystem::path modelCacheDir =
+                    resolve_editor_path(std::filesystem::path{ epoch::ai::local_model_root() }) / safeId;
+                gui::property_row("Model cache", epoch::ai::local_model_root(), 104.0f);
+                gui::property_row("Package cache", display_project_path(modelCacheDir), 104.0f);
+                gui::property_row("Download plan", display_project_path(modelCacheDir / "download.plan.json"), 104.0f);
+                gui::wrapped_label(
+                    "OS model weights are not cloned with engine iterations. Install stages an on-demand download into cache/models; generated projects include the model only after an explicit package opt-in and license/notice review.",
+                    contentWidth - 20.0f);
             }
+            gui::end_scroll_area();
 
-            if (!packageSelect.opened)
-            {
-                const float packageProgress = (std::max)(
-                    editor.packageInstallProgress,
-                    engineArcadeInstalled && editor.selectedPackageId == "engine_arcade"
-                        ? 1.0f
-                        : (forestFactoryStaged && editor.selectedPackageId == epoch::package_registry::kEngineForestFactoryPackageId ? 0.65f : 0.0f));
-                gui::progress_bar(gui::ProgressBarOptions{
-                    .label = "Install",
-                    .status = editor.packageInstallStatus,
-                    .value = packageProgress,
-                    .size = { contentWidth, 20.0f },
-                    .show_percent = true
-                });
-            }
+            const float packageProgress = (std::max)(
+                editor.packageInstallProgress,
+                engineArcadeInstalled && editor.selectedPackageId == "engine_arcade"
+                    ? 1.0f
+                    : (forestFactoryStaged && editor.selectedPackageId == epoch::package_registry::kEngineForestFactoryPackageId ? 0.65f : 0.0f));
+            gui::progress_bar(gui::ProgressBarOptions{
+                .label = "Install",
+                .status = editor.packageInstallStatus,
+                .value = packageProgress,
+                .size = { contentWidth, 20.0f },
+                .show_percent = true
+            });
 
             const gui::Vec2 buttonRow = gui::cursor_position();
-            if (!packageSelect.opened)
+            const bool selectedInstalled = selectedPackage && package_installed(*selectedPackage);
+            if (gui::button(selectedInstalled ? "Remove Selected Package" : "Install Selected Package", { 220.0f, 30.0f }))
             {
-                if (gui::button("Install Selected Package", { 220.0f, 30.0f }))
+                if (!selectedPackage)
                 {
-                    if (!selectedPackage)
-                    {
-                        editor.packageInstallStatus = "No package selected.";
-                        editor.packageInstallProgress = 0.0f;
-                    }
-                    else if (selectedPackage->id == epoch::package_registry::kEngineArcadePackageId)
-                    {
-                        if (engineArcadeEligible)
-                        {
-                            repair_active_project_evidence(editor);
-                            editor.packageInstallStatus = engineArcadeInstalled
-                                ? "Engine Arcade already installed."
-                                : "Engine Arcade staged into the active project.";
-                            editor.packageInstallProgress = 1.0f;
-                            push_editor_log(editor, "[package] Requested engine_arcade local runtime-mini package materialization.");
-                        }
-                        else
-                        {
-                            editor.packageInstallStatus = "Engine Arcade applies to game project shells, not sandbox/tool hubs.";
-                            editor.packageInstallProgress = 0.0f;
-                            push_editor_log(editor, "[package] engine_arcade applies to game project shells, not the self-iteration sandbox or tool hubs.");
-                        }
-                    }
-                    else if (selectedPackage->id == epoch::package_registry::kEngineForestFactoryPackageId)
-                    {
-                        (void)stage_forest_factory_package_opt_in(editor, *selectedPackage);
-                    }
-                    else if (selectedPackage->requiresExplicitNetworkApproval)
-                    {
-                        editor.packageInstallStatus = "Blocked: network/server packages require explicit human approval.";
-                        editor.packageInstallProgress = 0.0f;
-                        push_editor_log(editor, std::string("[package] Blocked ") + std::string(selectedPackage->id) + ": explicit network approval required.");
-                    }
-                    else if (selectedPackage->kind == epoch::package_registry::PackageKind::ModelAsset)
-                    {
-                        (void)stage_model_package_opt_in(editor, *selectedPackage);
-                    }
-                    else if (selectedPackage->kind == epoch::package_registry::PackageKind::DownloadableSource
-                        || selectedPackage->kind == epoch::package_registry::PackageKind::ResearchPrototype)
-                    {
-                        editor.packageInstallStatus = "Download/build gate staged; cache/packages fetch is not automatic.";
-                        editor.packageInstallProgress = 0.15f;
-                        push_editor_log(editor, std::string("[package] Staged download/build gate for ") + std::string(selectedPackage->id) + ".");
-                    }
-                    else
-                    {
-                        editor.packageInstallStatus = "Core opt-in package selected; activate it from the matching editor surface.";
-                        editor.packageInstallProgress = 0.35f;
-                        push_editor_log(editor, std::string("[package] Selected core opt-in package ") + std::string(selectedPackage->id) + ".");
-                    }
+                    editor.packageInstallStatus = "No package selected.";
+                    editor.packageInstallProgress = 0.0f;
                 }
-                gui::set_cursor({ buttonRow.x + 236.0f, buttonRow.y });
+                else if (selectedInstalled)
+                    remove_package(*selectedPackage);
+                else
+                    install_package(*selectedPackage);
             }
+            gui::set_cursor({ buttonRow.x + 236.0f, buttonRow.y });
             if (gui::button("Close", { 120.0f, 30.0f }))
                 editor.showPackageManagerModal = false;
             gui::end_modal_window();

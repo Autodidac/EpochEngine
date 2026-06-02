@@ -103,6 +103,11 @@ the same engine-owned path.
   scene ids, and seed entities
 - `editor.cpp` should act as the live shell over that scene/project data, not
   as a second hardcoded editor universe
+- default editor seed profiles should stay lean. Sandbox, Project Hub, and
+  software/tool startup should keep only the workspace/root, camera, and light
+  entities they need; starter cubes, grids, player starts, tray panels, fake
+  tool panels, and Forest Factory floor props must be created only by explicit
+  workspace/package actions or real scene data.
 - current `.epoch` scene/world files are metadata shells only. They must exist
   and be surfaced as evidence, but the live preview/runtime object list is still
   driven by `editor.scene.cpp` seed entities until scene-file loading,
@@ -179,8 +184,9 @@ the same engine-owned path.
   invokes engine-owned mini-runtime scenes such as Snake/Tetris/Pacman through
   the script host; it must not copy those implementations out of the kernel
   engine.
-- Forest Factory is a core editor/runtime descriptor lane, not a loose optional
-  dump. The top editor workspace row owns the `Forest Factory` surface, which
+- Plant Lab is the editor-facing core vegetation workspace backed by the
+  Forest Factory descriptor lane, not a loose optional dump. The top editor
+  workspace row owns the `Plant Lab` surface, which
   opens the current scene-backed deterministic temporal-graph preview instead of
   hiding plant work behind an Asset command-menu action. Package Manager
   activation stages
@@ -196,8 +202,10 @@ the same engine-owned path.
   path and must not auto-run servers, listeners, hidden model channels, or any
   service that bypasses operator approval.
 - Package Manager install attempts must show visible per-package state in the
-  modal using the shared GUI progress bar. Selecting a package should update the
-  selected package/status text immediately; pressing Install should either
+  modal using the shared GUI progress bar. Package selection should use a
+  scrollable list with per-package Install/Remove/Review Gate actions instead of
+  a combo-box-only selector. Selecting a package should update the selected
+  package/status text immediately; pressing Install should either
   materialize a local package, stage a human-approved download/build gate, or
   display the reason the package is blocked. The modal body is a clipped shared
   GUI scroll area; package rows and progress bars must not bleed into the scene
@@ -212,7 +220,7 @@ the same engine-owned path.
   included in generated projects only by explicit package opt-in with
   license/notice review. The current gate writes a project-local
   `*.model.package.json` opt-in manifest and a cache-local `download.plan.json`
-  before any future downloader is allowed to transfer weights. AI Sandbox now
+  before any future downloader is allowed to transfer weights. Intelligence now
   exposes direct model-package entry buttons for Nemotron 3 Nano 4B BF16, Qwen
   3.6 27B, and the image lanes. Bonsai Ternary 4B is the recommended local
   image default, Bonsai Binary 4B is the low-memory lane, and FLUX.2 Klein 4B is
@@ -303,11 +311,11 @@ the same engine-owned path.
 - hot reload remains a development feature and needs smoke coverage instead of
   trust
 
-## Game/2D editor surface
+## 2D Scene/UI editor surface
 
-- `Game/2D` is the same scene viewed through a dedicated Canvas2D camera, not a
+- `2D Scene/UI` is the same scene viewed through a dedicated Canvas2D camera, not a
   separate scene or project island.
-- entering `Game/2D` creates/selects an editor-only `Canvas2D` plane and switches
+- entering `2D Scene/UI` creates/selects an editor-only `Canvas2D` plane and switches
   the preview camera to the locked 2D Canvas rig
 - the `Canvas2D` plane is an upright XY-style editor canvas viewed by a
   front-facing orthographic camera. It should not be a floor-like XZ plane; the
@@ -321,30 +329,29 @@ the same engine-owned path.
 - future 2D work should add tile/layer/canvas tools on top of this same
   entity/project spine
 
-## Systems workspace direction
+## System Info workspace direction
 
-- `Systems` is now the active tooling surface for:
+- `System Info` is now the active tooling surface for:
   - frame graph / render graph
   - task graph / multithreading
-  - time-system diagnostics and controls
+  - time-system diagnostics that point to Video for controls
   - pacing / perf select
   - diagnostics
-- graph views render as engine-generated textures inside the central Systems
+- graph views render as engine-generated textures inside the central System Info
   surface only; the bottom Console Dock keeps compact text diagnostics and does
   not duplicate the graph UI
-- the central Systems surface gives the render/frame graph and task/thread graph
+- the central System Info surface gives the render/frame graph and task/thread graph
   full-width readable rows instead of tiny side-by-side thumbnails
 - graph views support pan/zoom and remain clipped when they are wider than the
   available panel
-- top-level editor mode buttons now route the central work area. Scene and
-  Game/2D keep the real 3D viewport; Project, Assets, AI Sandbox, and Systems
-  switch to GUI surfaces and clear the scene viewport so those workflows do not
-  have to be operated from the console dock.
+- top-level editor mode buttons now route the central work area. `3D Scene` and
+  `2D Scene/UI` keep the real scene viewport; `Assets`, `Plant Lab`, `Video`,
+  `Project`, `Intelligence`, and `System Info` own their dedicated surfaces so
+  those workflows do not have to be operated from the console dock.
 - the central work area now has a first-pass tabbed `Editor Workbench` strip for
-  Perspective, Game/2D, Assets, Project, and AI Sandbox. Systems opens as a
-  direct Systems-only surface so it does not show a redundant Perspective/Game
-  submenu inside the Systems view.
-- AI Sandbox activation is centralized: the toolbar, bottom AI dock tab, and
+  `3D Scene`, `2D Scene/UI`, `Assets`, `Plant Lab`, `Video`, `Project`,
+  `Intelligence`, and `System Info`.
+- Intelligence activation is centralized: the toolbar, bottom AI dock tab, and
   Window > Open AI Control Surface all reopen Inspector, AI Chat, and the
   Console Dock before selecting the self-iteration sandbox.
 - `EPOCH_EDITOR_START_WORKSPACE=AI`, `Systems`, or `Assets` selects the matching
@@ -359,12 +366,12 @@ the same engine-owned path.
 - Bottom Dock `Project`, `Assets`, `AI`, and `Systems` pages are compact
   selectable text status panels using the same visual path as `Output`. Their
   job is evidence/status only; controls for packages, script editing, model
-  selection, time controls, and graph surfaces belong in central workspaces or
-  the Inspector.
+  selection, time controls, and graph surfaces belong in central workspaces,
+  Video, or the Inspector.
 - Phase 5 self-iteration should have visible graph/flow feedback, not only text
   rows. The first-pass AI loop visualizer shows planner, builder, verifier,
   gate, and human-review readiness as an engine-generated surface in the central
-  AI Sandbox. Generated graph/runtime surfaces use the dedicated runtime-surface
+  Intelligence. Generated graph/runtime surfaces use the dedicated runtime-surface
   atlas, not the small built-in GUI skin atlas. Future work should promote that
   into a dedicated editor window with packet replay, scene-state diffs, and
   eventually 3D model/weight visualization
@@ -480,11 +487,17 @@ the same engine-owned path.
 - scene play, scripting, pacing, timeline, and replay behavior should route
   through that shared clock ownership instead of inventing parallel timing
   systems
-- Systems remains the diagnostics surface for live pacing and frame-step state
-- the Timeline Editor is the first dedicated 4D/time-based workspace. It reads
-  the shared `core.time` stats, exposes manual/interval/frame/timeline-key
-  checkpoint modes, and owns configurable streaming-save status beside the
-  editor scene flow.
+- `System Info` remains the diagnostics surface for renderer/backend/context
+  graphs, support policy, and live system lists. It no longer owns pacing
+  buttons or frame-step controls.
+- `Video` is the dedicated 4D/time-based workspace. It reads the
+  shared `core.time` stats, exposes manual/interval/frame/timeline-key
+  checkpoint modes, owns pacing/playhead controls, and presents configurable
+  streaming-save status beside the editor scene flow.
+- scene-backed editor workspaces reserve a bottom Video Timeline strip when
+  there is enough room. That strip shrinks the scene viewport instead of
+  letting 3D/2D rendering draw behind timeline controls or timeline graph
+  chrome.
 - Epoch's 4D direction means timing is not a side panel: timeline authoring,
   streaming-save cadence, checkpoint retention, replay keys, package preview
   playback, and future deterministic simulation review all route through the
@@ -520,11 +533,11 @@ the same engine-owned path.
   editor/runtime replay are claimed complete.
 - Checkpoint write plans are now explicit but non-writing. They stage the
   snapshot path, serialized scene payload path, manifest path, and manifest line
-  under the configured streaming-save root so the Timeline Editor can expose the
+  under the configured streaming-save root so Video can expose the
   future write layout before a human-approved disk writer/restore gate lands.
 - Streaming-save cadence plans make the next checkpoint decision visible: due
   now, waiting for a manual/timeline-key action, or scheduled by frame/seconds
-  from shared `core.time` stats. The Timeline Editor displays that next-capture
+  from shared `core.time` stats. Video displays that next-capture
   summary while disk writing remains gated.
 - Checkpoint restore plans mirror the staged write layout for the future replay
   gate. They name the checkpoint label, snapshot path, scene payload path, and
@@ -535,11 +548,11 @@ the same engine-owned path.
   gate and metadata payload without touching disk.
 - Checkpoint retention plans are non-destructive. They evaluate staged
   checkpoint records against the active rolling-retention cap and report retained
-  versus prune-candidate checkpoints for the Timeline Editor, but no cleanup or
+  versus prune-candidate checkpoints for Video, but no cleanup or
   delete operation is enabled until a separate human-approved disk gate exists.
-- Streaming-save profile-change plans are review-first. They let the Timeline
-  Editor show what an interval/frame/manual/keyed profile transition would change
-  before any dropdown mutates live save configuration.
+- Streaming-save profile-change plans are review-first. They let the Video
+  Editor show what an interval/frame/manual/keyed profile transition would
+  change before any dropdown mutates live save configuration.
 - `engine.input` is the shared input profile spine. The default editor profile
   now names camera reset-to-center, frame selection, clipboard copy/paste,
   right-click context menu, play-in-editor, timeline play/step, and package
@@ -578,7 +591,7 @@ features over forcing every integration on every machine.
 - keep heavier paths such as ray tracing, path tracing, mesh shaders, virtual
   shadowing, sparse-resource-heavy flows, and similar techniques behind
   Standard/Extended tiers or explicit project opt-in
-- keep backend convergence visible in the Systems workspace so OpenGL, Vulkan,
+- keep backend convergence visible in the System Info workspace so OpenGL, Vulkan,
   DirectX, the software fallback, SDL, SFML, Raylib, and future D3D12 do not drift
   without tooling feedback
 - OpenGL launcher/editor flicker has been manually reported resolved for the
@@ -608,7 +621,7 @@ features over forcing every integration on every machine.
 - `v0.84.25` restores scene-first / GUI-over composition for OpenGL: the
   scissored Perspective/Game preview renders first, then queued GUI commands
   draw AI Chat, Inspector, menu dropdowns, and scene viewport titles on top.
-  Systems graph surfaces now belong only to the central Systems workspace; the
+  System Info graph surfaces now belong only to the central System Info workspace; the
   bottom Console Dock stays a compact evidence/log strip.
 - `v0.84.26` keeps that composition order but makes the central workbench
   background transparent when a scene-backed surface is active, so the retained

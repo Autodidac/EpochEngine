@@ -87,8 +87,8 @@ When the pass is multicontext-specific, validate:
   and a maximize pass; the same hidden-wrapper contract must survive both
 - backend palette parity when clear colors should match
 - Systems workspace graph clipping and pan/zoom behavior
-- Systems time controls and pacing diagnostics when the pass touches the shared
-  time spine
+- Video Editor time controls, pacing diagnostics, and the bottom scene timeline
+  strip when the pass touches the shared time spine
 
 ## Engine-owned capture flow
 
