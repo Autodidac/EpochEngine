@@ -54,6 +54,11 @@
   creates `epoch_update_handoff.log` immediately, mirrors download/restore/build
   stage changes into it, reports errors through the same handoff path, and makes
   Cancel visible to the editor without waiting for the final runtime handoff.
+- Hardened Debug-launched source updates: the source fallback now always builds
+  the `Release|x64` runtime lane, disables MSBuild node reuse/build
+  parallelism, hides the detached worker console by default, and leaves
+  handoff-log evidence instead of duplicating console lines or hanging on a
+  second visible `MSBuild attempt started` message.
 - Fixed the managed-vcpkg source updater blockers where old-CMake `libogg` and
   `libvorbis` ports need generated overlay policy options under modern CMake,
   preventing the editor from parking near the source-worker progress ceiling

@@ -2542,6 +2542,13 @@ namespace epochnamespace::updater
             append_log_line(build_log, "[INFO] Manifest root: " + manifest_root.string());
             append_log_line(build_log, "[INFO] vcpkg root: " + vcpkg_root.string());
             append_log_line(build_log, "[INFO] MSBuild: " + msbuild.string());
+            append_log_line(
+                build_log,
+                "[INFO] Source updater build lane: "
+                + SOURCE_BUILD_CONFIGURATION()
+                + "|"
+                + SOURCE_BUILD_PLATFORM()
+                + " (runtime may currently be Debug).");
 
             if (!prepare_manifest_for_managed_vcpkg_registry(
                 manifest_root,
@@ -2601,7 +2608,9 @@ namespace epochnamespace::updater
                 "/p:VcpkgManifestInstall=false",
                 "/p:VcpkgTriplet=" + SOURCE_BUILD_PLATFORM() + "-windows",
                 "/p:UseMultiToolTask=false",
+                "/p:BuildInParallel=false",
                 "/m:1",
+                "/nr:false",
                 "/clp:ErrorsOnly"
             };
 
@@ -2987,7 +2996,6 @@ namespace epochnamespace::updater
             << "}\n"
             << "function Write-Handoff([string]$Level, [string]$Message) {\n"
             << "  $line = \"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Message\"\n"
-            << "  Write-Host $line\n"
             << "  Append-Text $handoffLog ($line + [Environment]::NewLine)\n"
             << "}\n"
             << "function Test-Cancel {\n"
@@ -3256,6 +3264,9 @@ namespace epochnamespace::updater
             << "Write-Step 'INFO' ('Source root: ' + $sourceRoot)\n"
             << "Write-Step 'INFO' ('Manifest root: ' + $manifestRoot)\n"
             << "Write-Step 'INFO' ('MSBuild: ' + $msbuildExe)\n"
+            << "Write-Step 'INFO' ('Source updater build lane: ' + $buildConfiguration + '|' + $buildPlatform + ' (runtime may currently be Debug).')\n"
+            << "Write-Handoff 'INFO' ('Source updater build lane: ' + $buildConfiguration + '|' + $buildPlatform + '. Debug launches are updated through the Release output lane.')\n"
+            << "$env:MSBUILDDISABLENODEREUSE = '1'\n"
             << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
@@ -3304,8 +3315,9 @@ namespace epochnamespace::updater
             << "  try {\n"
             << "    Test-Cancel\n"
             << "    Write-Step 'INFO' ('MSBuild attempt ' + $attempt + ' started.')\n"
-            << "    Write-Handoff 'INFO' ('MSBuild attempt ' + $attempt + ' started.')\n"
-            << "    Invoke-Tool $msbuildExe @($solution, ('/t:' + $buildTarget), ('/p:Configuration=' + $buildConfiguration), ('/p:Platform=' + $buildPlatform), ('/p:VcpkgRoot=' + $vcpkgRoot), ('/p:VcpkgManifestRoot=' + $manifestRoot), ('/p:VcpkgInstalledDir=' + $managedInstallRoot), '/p:VcpkgManifestInstall=false', ('/p:VcpkgTriplet=' + $triplet), '/p:UseMultiToolTask=false', '/m:1', '/clp:ErrorsOnly') $sourceRoot ('MSBuild attempt ' + $attempt)\n"
+            << "    Write-Handoff 'INFO' ('MSBuild Release attempt ' + $attempt + ' started; node reuse is disabled and long compiles may stay on this line for several minutes.')\n"
+            << "    Invoke-Tool $msbuildExe @($solution, ('/t:' + $buildTarget), ('/p:Configuration=' + $buildConfiguration), ('/p:Platform=' + $buildPlatform), ('/p:VcpkgRoot=' + $vcpkgRoot), ('/p:VcpkgManifestRoot=' + $manifestRoot), ('/p:VcpkgInstalledDir=' + $managedInstallRoot), '/p:VcpkgManifestInstall=false', ('/p:VcpkgTriplet=' + $triplet), '/p:UseMultiToolTask=false', '/p:BuildInParallel=false', '/m:1', '/nr:false', '/clp:ErrorsOnly') $sourceRoot ('MSBuild attempt ' + $attempt)\n"
+            << "    Write-Handoff 'INFO' ('MSBuild Release attempt ' + $attempt + ' completed successfully.')\n"
             << "    $buildSucceeded = $true\n"
             << "  }\n"
             << "  catch {\n"
@@ -4188,8 +4200,11 @@ namespace epochnamespace::updater
 
         const bool effective_silent_worker =
             silent_worker || system_detail::env_flag_enabled("EPOCH_UPDATER_SILENT");
+        const bool hide_worker_window =
+            effective_silent_worker
+            || !system_detail::env_flag_enabled("EPOCH_UPDATER_SHOW_WORKER_CONSOLE");
 
-        if (!launch_source_update_worker(channel, target_binary, effective_silent_worker))
+        if (!launch_source_update_worker(channel, target_binary, hide_worker_window))
             return false;
 
         if (effective_silent_worker)

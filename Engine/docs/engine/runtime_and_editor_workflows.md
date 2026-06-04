@@ -52,6 +52,14 @@ the same engine-owned path.
   start, mirror major download/dependency/build stages into it, and surface
   `[ERROR]` handoff lines as failed update evidence instead of parking the UI at
   a progress ceiling.
+- source rebuild workers always build the Windows `Release|x64` runtime lane,
+  even when the editor was launched from `Debug|x64`. Debug update tests should
+  keep Epoch open, watch the handoff/progress evidence, and only restart after
+  the Release replacement executable is proven ready.
+- source rebuild workers disable MSBuild node reuse and build parallelism for
+  the update lane. The worker console stays hidden by default; set
+  `EPOCH_UPDATER_SHOW_WORKER_CONSOLE=1` only when deliberately debugging the
+  detached update script.
 - managed-vcpkg source updates stage disposable overlay ports under
   `cache/updates/` when old dependency ports need modern CMake policy options;
   do not mutate the user's vcpkg checkout or mask restore failures.

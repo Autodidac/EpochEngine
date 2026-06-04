@@ -150,6 +150,11 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
   packaged runtime when one exists, then reports and uses source fallback only
   when no compatible newer package exists. `Advanced Source` remains an
   explicit source-test path, not the default update action.
+- Source-fallback updates build the platform release lane, not the currently
+  running debug lane. A Windows Debug editor may test the updater, but the
+  worker must build `Release|x64`, disable MSBuild node reuse/parallelism, keep
+  the editor open, and surface progress through `epoch_update_handoff.log`
+  until a replacement executable is proven ready.
 - Update cache entries use release/source asset names with version suffixes
   under `cache/packages/` instead of anonymous temp names. Cached packages are
   extraction-verified before reuse, broken packages are deleted and
