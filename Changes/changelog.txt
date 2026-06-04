@@ -1,7 +1,7 @@
 # Epoch Changelog
 
-## [v0.86.02]
-- Bumped the active source line to `v0.86.02` for the current feature-line
+## [v0.87.00]
+- Bumped the active source line to `v0.87.00` for the current feature-line
   refresh after the OS AI/model-package, timeline, package-manager, and
   editor-stability work crossed a larger integration boundary.
 - Promoted the old Timeline Editor surface into the `Video` workspace:
@@ -29,6 +29,46 @@
   requires the latest `windows-msvc` job to be green, Linux requires
   `linux-clang-engine`, and queued/running/failing/missing jobs withhold the
   update button instead of offering a potentially broken runtime.
+- Simplified the editor update confirmation flow: startup checks still happen
+  automatically, the modal appears only for a newer build-proven current
+  platform path, the normal smart-update action stays binary-first with visible
+  source fallback when no compatible package exists, and `Advanced Source` is
+  clearly marked as a source-test path.
+- Added visible updater progress/status while the background worker is running:
+  the toolbar, modal, and Output evidence now report checking, packaged install,
+  source rebuild, elapsed time, and failure/completion state instead of going
+  quiet after the user confirms an update.
+- Changed update caches to use release/source asset names with version suffixes
+  under `cache/packages/`, extraction-verify cached packages before reuse,
+  redownload broken package caches, and delete stale source snapshots before a
+  source rebuild fetch.
+- Tightened updater evidence messages so the editor reports the exact
+  binary-first result: platform package found/missing, source fallback
+  availability, source worker start/failure, packaged handoff start/failure,
+  and platform build-gate blocks instead of generic handoff text.
+- Fixed the confirmed source-fallback update path so binary-first installs keep
+  the editor open while the source rebuild worker runs, then surface a Restart
+  gate only after executable-local handoff evidence says the replacement build
+  is ready.
+- Hardened source-fallback progress evidence: the detached source worker now
+  creates `epoch_update_handoff.log` immediately, mirrors download/restore/build
+  stage changes into it, reports errors through the same handoff path, and makes
+  Cancel visible to the editor without waiting for the final runtime handoff.
+- Fixed the managed-vcpkg source updater blockers where old-CMake `libogg` and
+  `libvorbis` ports need generated overlay policy options under modern CMake,
+  preventing the editor from parking near the source-worker progress ceiling
+  during dependency restore.
+- Updated source-update evidence wording to point at executable-local
+  `epoch_source_update.log` / `epoch_update_handoff.log` instead of assuming an
+  `x64/Debug` runtime folder.
+- Hardened OS AI model activation so scan remains inventory-only, the stale
+  preferred-model fallback is gone, and the Intelligence workspace plus
+  Inspector model pickers no longer share one GUI dropdown state key.
+- Added an editor Settings theme selector with Follow System Dark Mode,
+  Professional Dark, and Classic Launcher options; theme labels, preference
+  resolution, and scoped application now live in `engine.gui` instead of
+  editor-local tables, with the system option resolving to the dark tool palette
+  until a platform light/dark bridge lands.
 - Removed the Linux Clang `gamecore.ixx` optimizer workaround by fixing the
   module shape directly: `gamecore` now owns only grid helpers and no longer
   imports atlas modules or exports an unused atlas pointer registry.
@@ -52,6 +92,14 @@
 - Refined Systems graph surfaces with clearer render/task lanes, stage details,
   evidence labels, and the OS AI evidence-loop title while keeping the protected
   renderer draw model untouched.
+- Clarified OS AI model selection in the editor: model discovery, selected
+  model, initialized client state, and manual evidence gates are now shown as
+  separate facts, while obsolete watcher/learner controls were removed from the
+  visible OS AI surfaces.
+- Hardened OS AI model discovery so in-editor model choices persist to
+  executable-local `cache/models/selected_os_model.txt`, override stale default
+  environment choices on later GUI launches, and stay selected until the
+  operator explicitly chooses a replacement model from the detected inventory.
 
 ## [v0.84.87]
 - Bumped the active source line to `v0.84.87` for the OS AI chat/model package

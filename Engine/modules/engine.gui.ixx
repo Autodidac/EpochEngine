@@ -70,6 +70,33 @@ namespace epochnamespace::gui
         ClassicLauncher
     };
 
+    export enum class ThemePreference : std::uint8_t
+    {
+        FollowSystemDark = 0,
+        ProfessionalDark,
+        ClassicLauncher
+    };
+
+    export struct ThemePreferenceChoice
+    {
+        std::string_view label{};
+        ThemePreference preference{ ThemePreference::FollowSystemDark };
+    };
+
+    export class ScopedTheme
+    {
+    public:
+        explicit ScopedTheme(ThemeVariant theme) noexcept;
+        explicit ScopedTheme(ThemePreference preference) noexcept;
+        ~ScopedTheme() noexcept;
+
+        ScopedTheme(const ScopedTheme&) = delete;
+        ScopedTheme& operator=(const ScopedTheme&) = delete;
+
+    private:
+        bool active_{ true };
+    };
+
     export enum class EventType : std::uint8_t
     {
         None = 0,
@@ -157,6 +184,7 @@ namespace epochnamespace::gui
         std::size_t max_line_chars{ 768 };
         bool selectable{ true };
         bool stick_to_bottom{ true };
+        bool wrap_lines{ true };
     };
 
     export struct ScrollTextPanelResult
@@ -190,6 +218,9 @@ namespace epochnamespace::gui
         Vec2 viewport_size{};
         bool dim_background{ true };
     };
+
+    export void begin_modal_input_capture(Vec2 position, Vec2 size) noexcept;
+    export void clear_modal_input_capture() noexcept;
 
     export struct SegmentedButtonSpec
     {
@@ -262,6 +293,9 @@ namespace epochnamespace::gui
     export void end_modal_window() noexcept;
     export WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active) noexcept;
+    export std::span<const ThemePreferenceChoice> theme_preference_choices() noexcept;
+    export std::string_view theme_preference_label(ThemePreference preference) noexcept;
+    export ThemeVariant resolve_theme_preference(ThemePreference preference) noexcept;
     export void push_theme(ThemeVariant theme) noexcept;
     export void pop_theme() noexcept;
 

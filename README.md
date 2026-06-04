@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.86.00-1F7A4C?style=for-the-badge" alt="Current development source v0.86.00" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.00-1F7A4C?style=for-the-badge" alt="Current development source v0.87.00" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.86.00`.
+- Source is currently the active development line at `v0.87.00`.
 - The latest published stable runtime release is `v0.84.38`.
 - Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -102,97 +102,42 @@ For engine/tooling developers:
 OS AI model, tooling, and evidence rules live with the AI assets in
 `Engine/ai/README.md` and the engine policy docs.
 
+## In Action
+
+Epoch's visual proof comes from asset-bearing editor outputs, not stripped
+bootstrap shells. The current public gallery is below; the top proof shows the
+Windows multicontext editor carrying every active backend lane.
+
+<p align="center">
+  <img src="Images/readme/windows-multicontext-editor-v08435.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
+</p>
+
 ## What Epoch Provides Right Now
 
-- A project-centric runtime shell that creates, selects, builds, and plays real
-  project shells instead of trapping the editor in fake sample flows.
-- Top-level editor modes now route the center area into separate Scene/Game,
-  Project, Assets, AI Sandbox, and Systems surfaces instead of forcing every
-  workflow through the Perspective 3D view or the bottom console dock.
-- The centered Run action now saves/builds normal generated projects before
-  launching the selected single-context child output, while the engine
-  self-iteration lane stays editor-shaped for visible manipulation/testing.
-- The bottom Console Dock is status-only again: Project, Assets, AI, and
-  Systems use the same compact selectable text-panel style as Output, while
-  controls stay in central workspaces or the Inspector.
-- Generated game and software/tool project shells with explicit build, script,
-  output, and manifest proof surfaced in the editor.
-- Non-GUI project-shell self-tests for Sandbox and ProjectLauncher, including
-  `--editor-project-self-test <id>` from the checked-in engine and
-  `--project-self-test` from generated child outputs.
-- A non-GUI harness split between `--engine-contract-self-test` for pure
-  Forest Factory/timeline/scene contracts and `--engine-validation-self-test`
-  for the heavier project-profile plus OS-AI gate path.
-- Engine-owned GUI/text rendering with reusable controls, workspace tabs,
-  open/close panel visibility, and first-pass draggable splitters instead of
-  middleware-owned editor UI.
-- A `Game/2D` editor lane that reuses the same scene through a locked
-  orthographic Canvas2D camera and upright editor-only canvas plane.
-- Engine-owned C++23 scripting with project-local source resolution, validation,
-  build actions, and runtime execution from the live shell.
-- Editor-visible script/file/asset surfaces so Sandbox and Project Hub work
-  can leave selectable paths, build/run notes, and first-pass asset cards.
-- A first Package Manager modal for local runtime-mini packages, with future
-  downloadable source/model packages constrained to explicit updater-style
-  build/download gates.
-- Multicontext renderer orchestration across Raylib, SDL3, SFML, Vulkan,
-  OpenGL, software, and headless/noop paths.
-- A Systems workspace with readable render/frame, task/thread, support-tier, and
-  AI-loop graph surfaces for renderer/runtime ownership diagnostics.
-- A 4D/time-based Timeline Editor surface backed by the shared `core.time`
-  spine, with checkpoint stream configuration, manual/interval key staging, and
-  deterministic scene snapshot serializer/parser contracts ready for the next
-  persistence gate.
-- A first `timeline.system` contract for editor tracks, keyed events, playhead
-  scrubbing, recording gates, and scene-key conversion so timeline UI can grow
-  from real 4D engine data instead of loose status buttons.
-- Timeline lane layout contracts that turn tracks and keyed events into row
-  geometry and marker positions before the editor promotes a full visual
-  timeline lane renderer.
-- Descriptor-backed streaming-save profiles and checkpoint records that make
-  profile IDs, human labels, retention, output paths, scene/timeline inclusion,
-  and manifest-line evidence visible before the full disk writer/restore loop
-  is promoted.
-- Deterministic checkpoint package contracts that bind a checkpoint record,
-  serialized scene payload, manifest line, and payload hash before runtime disk
-  writing is promoted.
-- Non-writing checkpoint write-plan contracts that stage snapshot, scene
-  payload, and manifest paths for the future human-approved streaming writer
-  gate without claiming live disk persistence yet.
-- Streaming-save cadence plans that tell the Timeline Editor whether the next
-  checkpoint is due now or scheduled by seconds/frames before any writer runs.
-- Non-reading checkpoint restore plans that mirror staged write paths for the
-  future human-approved replay/restore gate.
-- A guarded checkpoint writer function that can materialize scene payload,
-  snapshot metadata, and manifest entries only after an explicit human approval
-  object is supplied.
-- Non-destructive checkpoint retention plans that decide which old streaming
-  checkpoints would be pruned before any cleanup code is allowed to delete disk
-  evidence.
-- Streaming-save profile-change plans that preview mode, cadence, retention, and
-  included-data changes before Timeline Editor dropdowns mutate live save config.
-- A broader universal input profile contract with named camera, editor,
-  clipboard, context-menu, timeline, project, and package-install actions,
-  including the Home camera-center reset and right-click context-menu binding
-  needed by the editor GUI spine.
-- A build-safe `--engine-contract-self-test` lane that validates Forest Factory preview
-  descriptors, streaming-save checkpoint behavior, and deterministic scene
-  snapshot serialization plus parser round-trip before the heavier project/AI
-  validation lanes.
-- A staged AI workspace centered on an engine-owned OS-model harness around
-  operator-selected `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` and `Qwen/Qwen3.6-27B`
-  coding/review lanes plus future Bonsai Image 4B, `Wan2.1-VACE-1.3B`, and
-  `TRELLIS.2-4B` creative package lanes. Bonsai Ternary 4B is the preferred
-  local image-generation lane, Bonsai Binary 4B is the low-memory option, and
-  `FLUX.2-klein-4B` remains a higher-memory fallback. The self-iteration
-  sandbox stages visible evidence before any promotion, downloads model weights
-  only on demand into `cache/models/`, and includes model weights in generated
-  projects only after explicit package opt-in and license/notice review.
-- Executable-root asset, shader, script, font, log, and capture resolution so
-  local runs stop depending on whatever folder the process happened to launch
-  from.
+- Project-centric editor/runtime flow: launcher, generated project shells,
+  single-context project runs, and an engine-shaped self-iteration lane.
+- Workspaces: `3D Scene`, `2D Scene/UI`, `Assets`, `Plant Lab`, `Video`,
+  `Project`, `Intelligence`, and `System Info`, with Console Dock kept as
+  compact status evidence instead of a duplicate control surface.
+- Rendering spine: Raylib, SDL3, SFML, Vulkan, OpenGL, DirectX, software, and
+  headless/noop lanes are orchestrated by the same project/editor contracts.
+- GUI spine: shared C++23 controls for windows, tabs, select boxes, scroll
+  panels, progress bars, modals, text editing, theme preferences, and future
+  popout/docking work.
+- Time and input spine: core time, timeline/video sequencing, streaming-save
+  contracts, frame-limit presets, and universal input profiles are engine data,
+  not scattered per-backend behavior.
+- Package spine: local runtime minis, Forest Factory/voxel/ocean research
+  gates, model assets, and future downloadable source packages route through
+  executable-local `cache/packages/` and human-approved build/install gates.
+- OS AI spine: Qwen/Nemotron coding lanes plus Bonsai, Wan, TRELLIS, and FLUX
+  creative model lanes are on-demand external model assets under `cache/models/`
+  with license/notice and evidence gates.
+- Validation spine: headless contract tests, project-shell self-tests, CI lanes,
+  asset-bearing runtime proof, and visible editor notes keep promoted behavior
+  tied to evidence.
 
-## In Action
+## Visual Proof Gallery
 
 These proof images come from asset-bearing outputs, not stripped updater-shell
 builds.

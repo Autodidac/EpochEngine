@@ -38,6 +38,15 @@ it must not auto-name or activate one from discovery. The operator-selected
 model is the only active runtime/helper target for in-editor calls unless a
 phase explicitly allows extra helper lanes for drafting or review.
 
+The editor must show model inventory, selected model, and initialized client
+state as separate facts. Selecting a model should initialize the OS AI client or
+report that initialization failed; a selected name alone is not proof that chat
+or tool calls are ready. Visible AI surfaces should describe manual evidence
+gates, not obsolete watcher/learner controls or hidden internal-bot behavior.
+When the same model inventory appears in more than one visible pane, each
+selector must use its own stable GUI control ID while sharing only the explicit
+operator-selected model value.
+
 Apache-2.0 image-lane notices are tracked in `Engine/third_party/licenses/`.
 Package Manager and generated-project exports must preserve the shared
 Apache-2.0 license text, upstream NOTICE files when present, source URLs,

@@ -117,6 +117,8 @@ export namespace epoch::ai
     [[nodiscard]] ModelManifest active_model_manifest();
     [[nodiscard]] std::vector<std::string> detected_model_names();
     [[nodiscard]] std::string model_detection_status();
+    [[nodiscard]] std::string model_connection_status();
+    [[nodiscard]] bool is_engine_ai_initialized() noexcept;
     [[nodiscard]] std::vector<std::string> refresh_detected_models();
     [[nodiscard]] bool select_active_model(std::string_view model_id);
     [[nodiscard]] TrainingPaths default_training_paths();

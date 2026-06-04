@@ -65,6 +65,10 @@
   move that gate. Documentation-only passes are allowed only when explicitly
   requested, when preserving a new/completed system contract, or when a
   safety/build/release gate would be lost without the note.
+- Churn passes must use both this file and `Changes/roadmap.md`: this file owns
+  repository rules and guardrails, while the roadmap owns the active acceptance
+  gate. Do not spend a pass updating only one of them unless the user explicitly
+  asked for that exact doc-only task.
 - Use docs as checkpoints, not the main deliverable. Update docs after
   source/build evidence exists, and keep the update short: new systems,
   completed/promoted systems, changed public contracts, changed build/runtime
@@ -102,10 +106,11 @@
   AI behavior gaps, or workflow regressions, update `Changes/roadmap.md` and
   the relevant engine/AI docs with the observation, current evidence, and next
   acceptance gate before the detail is lost.
-- Current churn prompt for each pass: read `Changes/roadmap.md` only enough to
-  pick the next source acceptance gate, implement/refactor first, build/test what
-  changed, then record only new/completed systems and changed contracts. Do not
-  claim completion for unverified GUI, AI, project, or renderer behavior.
+- Current churn prompt for each pass: read these agent notes and
+  `Changes/roadmap.md` only enough to pick the next source acceptance gate,
+  implement/refactor first, build/test what changed, then record only
+  new/completed systems and changed contracts. Do not claim completion for
+  unverified GUI, AI, project, or renderer behavior.
 - OS AI and helper models may generate local games, tools, apps, or server
   project code only as reviewable artifacts. They must not create or run any
   app/service that gives the model a bypass channel, self-accessible server,

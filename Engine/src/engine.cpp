@@ -3244,6 +3244,8 @@ namespace epochnamespace::core
                 .binary_url = epochnamespace::updater::PROJECT_BINARY_URL(),
                 .source_url = epochnamespace::updater::PROJECT_SOURCE_URL(),
                 .source_version_url = epochnamespace::updater::PROJECT_SOURCE_VERSION_URL(),
+                .platform_build_status_url = epochnamespace::updater::PROJECT_ACTION_RUNS_API_URL(),
+                .platform_build_job_name = epochnamespace::updater::PROJECT_UPDATE_BUILD_JOB_NAME(),
             };
         }
 
@@ -3711,7 +3713,19 @@ namespace epochnamespace::core
                                 const auto result = epochnamespace::updater::run_update_command(
                                     default_update_channel(),
                                     true);
-                                if (!result.update_available)
+                                if (result.platform_build_checked && !result.platform_build_ok)
+                                {
+                                    const std::string reason = result.platform_build_reason.empty()
+                                        ? std::string{ "platform build status is not green." }
+                                        : result.platform_build_reason;
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::Error,
+                                        std::source_location::current(),
+                                        "Update withheld until {} is green: {}",
+                                        result.platform_build_job.empty() ? "platform build" : result.platform_build_job,
+                                        reason);
+                                }
+                                else if (!result.update_available)
                                 {
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
@@ -3998,7 +4012,19 @@ namespace epochnamespace::core
                     const auto result = epochnamespace::updater::run_update_command(
                         default_update_channel(),
                         true);
-                    if (!result.update_available)
+                    if (result.platform_build_checked && !result.platform_build_ok)
+                    {
+                        const std::string reason = result.platform_build_reason.empty()
+                            ? std::string{ "platform build status is not green." }
+                            : result.platform_build_reason;
+                        logger::get(kEditorLog).logf(
+                            logger::LogLevel::Error,
+                            std::source_location::current(),
+                            "Updater shell withheld update until {} is green: {}",
+                            result.platform_build_job.empty() ? "platform build" : result.platform_build_job,
+                            reason);
+                    }
+                    else if (!result.update_available)
                     {
                         if (result.source_update_available)
                         {

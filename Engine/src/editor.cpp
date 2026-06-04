@@ -122,6 +122,8 @@ namespace epochnamespace
             Checking,
             Available,
             RestartReady,
+            SourceWorkerRunning,
+            Canceled,
             Failed
         };
 
@@ -440,6 +442,7 @@ namespace epochnamespace
             double projectRunFrameLimitFps{ 60.0 };
             previewgrid::CameraMode projectCameraMode{ previewgrid::CameraMode::Editor };
             input::ProfilePreset inputProfilePreset{ input::ProfilePreset::EditorDefault };
+            gui::ThemePreference themePreference{ gui::ThemePreference::FollowSystemDark };
             double editorFrameLimitFps{ 120.0 };
             std::string selectedProjectFile{};
             std::string selectedAssetPath{};
@@ -492,6 +495,9 @@ namespace epochnamespace
             bool autoUpdateCheckQueued{ true };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
+            bool updateInstallPending{ false };
+            bool updateSourceInstallPending{ false };
+            std::chrono::steady_clock::time_point updateOperationStartedAt{};
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
             SystemsSurfaceState systems{};
@@ -500,7 +506,7 @@ namespace epochnamespace
             bool aiContinuousBuildStageOnNextFrame{ false };
             std::optional<std::future<EditorProjectBuildResult>> aiContinuousBuildPending{};
             std::string aiContinuousBuildFingerprint{};
-            std::string aiContinuousBuildStatus{ "Evidence watcher is off." };
+            std::string aiContinuousBuildStatus{ "Manual OS AI evidence gate is idle." };
             std::size_t aiContinuousBuildRunCount{ 0 };
             std::string aiToolHarnessStatus{ "AI tool harness has not run yet." };
             std::size_t aiToolHarnessRunCount{ 0 };
@@ -628,6 +634,9 @@ namespace epochnamespace
 
         [[nodiscard]] std::string describe_update_result(const updater::UpdateCommandResult& result)
         {
+            if (!result.status_message.empty())
+                return result.status_message;
+
             if (!result.platform_build_ok
                 && (!result.platform_build_reason.empty() || result.platform_build_checked))
             {
@@ -650,10 +659,15 @@ namespace epochnamespace
 
             if (result.source_update_available)
             {
+                if (result.packaged_release_missing && !result.packaged_release_reason.empty())
+                    return result.packaged_release_reason + " Source update is available.";
                 if (!result.source_remote_version.empty())
                     return std::string{ "Source update available: " } + result.source_remote_version;
                 return "Source update available.";
             }
+
+            if (!result.packaged_release_reason.empty())
+                return result.packaged_release_reason;
 
             return "Epoch is already current.";
         }
@@ -665,15 +679,102 @@ namespace epochnamespace
             case EditorUpdateState::Available:
                 return "Update Available";
             case EditorUpdateState::RestartReady:
-                return "Restart Program";
+                return "Restart";
             case EditorUpdateState::Checking:
                 return "Checking...";
+            case EditorUpdateState::SourceWorkerRunning:
+                return "Source Update Running";
+            case EditorUpdateState::Canceled:
+                return "Update Available";
             case EditorUpdateState::Failed:
                 return "Update Check Failed";
             case EditorUpdateState::Idle:
             default:
                 return "Update";
             }
+        }
+
+        [[nodiscard]] double editor_update_elapsed_seconds(const EditorState& editor)
+        {
+            if (editor.updateOperationStartedAt == std::chrono::steady_clock::time_point{})
+                return 0.0;
+
+            return std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - editor.updateOperationStartedAt).count();
+        }
+
+        [[nodiscard]] float editor_update_progress_value(const EditorState& editor)
+        {
+            if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
+            {
+                const double elapsed = editor_update_elapsed_seconds(editor);
+                return static_cast<float>(std::clamp(0.14 + elapsed * 0.004, 0.14, 0.98));
+            }
+
+            if (!editor.updateCheckPending)
+            {
+                return editor.updateState == EditorUpdateState::RestartReady ? 1.0f : 0.0f;
+            }
+
+            const double elapsed = editor_update_elapsed_seconds(editor);
+            if (!editor.updateInstallPending)
+                return static_cast<float>(std::clamp(0.10 + elapsed * 0.08, 0.10, 0.88));
+
+            if (editor.updateSourceInstallPending)
+                return static_cast<float>(std::clamp(0.12 + elapsed * 0.012, 0.12, 0.94));
+
+            return static_cast<float>(std::clamp(0.12 + elapsed * 0.025, 0.12, 0.94));
+        }
+
+        [[nodiscard]] std::string editor_update_running_status(const EditorState& editor)
+        {
+            const double elapsed = editor_update_elapsed_seconds(editor);
+            if (editor.updateSourceInstallPending)
+                return std::format("Source rebuild is running ({:.0f}s). Reading epoch_source_update.log and epoch_update_handoff.log for live evidence; Cancel asks the worker to stop at the next safe checkpoint.", elapsed);
+
+            if (editor.updateInstallPending)
+                return std::format("Installing update ({:.0f}s). Checking platform release, replacing stale cache, and staging handoff.", elapsed);
+
+            return std::format("Checking update availability ({:.0f}s). Epoch checks this platform's packaged release first.", elapsed);
+        }
+
+        [[nodiscard]] std::string read_update_log_tail(const std::filesystem::path& path, const std::uintmax_t maxBytes = 2400)
+        {
+            std::error_code sizeEc;
+            const auto size = std::filesystem::file_size(path, sizeEc);
+            if (sizeEc || size == 0)
+                return {};
+
+            std::ifstream stream(path, std::ios::binary);
+            if (!stream)
+                return {};
+
+            const std::uintmax_t readSize = (std::min)(size, maxBytes);
+            if (size > readSize)
+                stream.seekg(static_cast<std::streamoff>(size - readSize), std::ios::beg);
+
+            std::string text;
+            text.resize(static_cast<std::size_t>(readSize));
+            stream.read(text.data(), static_cast<std::streamsize>(text.size()));
+            text.resize(static_cast<std::size_t>((std::max)(std::streamsize{ 0 }, stream.gcount())));
+            return text;
+        }
+
+        [[nodiscard]] std::string last_nonempty_update_log_line(std::string_view text)
+        {
+            while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
+                text.remove_suffix(1);
+            if (text.empty())
+                return {};
+
+            const auto pos = text.find_last_of("\r\n");
+            const std::string_view line = pos == std::string_view::npos ? text : text.substr(pos + 1);
+            return std::string{ line };
+        }
+
+        [[nodiscard]] bool update_log_contains(std::string_view text, std::string_view needle) noexcept
+        {
+            return text.find(needle) != std::string_view::npos;
         }
 
         void start_editor_update_check(EditorState& editor)
@@ -686,6 +787,9 @@ namespace epochnamespace
 
             editor.updateState = EditorUpdateState::Checking;
             editor.updateStatus = "Checking for updates...";
+            editor.updateInstallPending = false;
+            editor.updateSourceInstallPending = false;
+            editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Checking for available Epoch updates.");
 
             editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
@@ -694,18 +798,129 @@ namespace epochnamespace
             }));
         }
 
+        void start_editor_update_install(EditorState& editor)
+        {
+            if (editor.updateCheckPending.has_value())
+            {
+                push_editor_log(editor, "[update] Update worker is already running.");
+                return;
+            }
+
+            editor.updateState = EditorUpdateState::Checking;
+            editor.updateStatus = "Installing the best available update. Epoch checks packaged releases first, then falls back to source only when no newer package exists.";
+            editor.updateInstallPending = true;
+            editor.updateSourceInstallPending = false;
+            editor.updateOperationStartedAt = std::chrono::steady_clock::now();
+            push_editor_log(editor, "[update] Installing through the binary-first update gate.");
+
+            editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
+                epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                return updater::run_update_command(editor_update_channel(), true);
+            }));
+        }
+
+        void start_editor_source_update_install(EditorState& editor)
+        {
+            if (editor.updateCheckPending.has_value())
+            {
+                push_editor_log(editor, "[update] Source update worker is already running.");
+                return;
+            }
+
+            editor.updateState = EditorUpdateState::Checking;
+            editor.updateStatus = "Launching the advanced source rebuild worker. Use this only when you intentionally want latest main source instead of the packaged platform release.";
+            editor.updateInstallPending = true;
+            editor.updateSourceInstallPending = true;
+            editor.updateOperationStartedAt = std::chrono::steady_clock::now();
+            push_editor_log(editor, "[update] Launching advanced source rebuild worker.");
+
+            editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
+                epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                updater::UpdateCommandResult result{};
+                result.update_available = true;
+                result.source_update_available = true;
+            result.source_fallback_attempted = true;
+            const bool workerLaunched = updater::run_source_update_command(editor_update_channel(), false);
+            result.update_performed = false;
+            result.source_update_performed = workerLaunched;
+            result.status_message = workerLaunched
+                ? "Source rebuild worker started. Epoch will restart automatically only after build and handoff evidence succeeds; watch epoch_source_update.log beside the executable."
+                : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
+            return result;
+        }));
+        }
+
         void pump_editor_update_check(EditorState& editor)
         {
             if (!editor.updateCheckPending.has_value())
                 return;
 
             if (editor.updateCheckPending->wait_for(0s) != std::future_status::ready)
+            {
+                editor.updateStatus = editor_update_running_status(editor);
                 return;
+            }
+
+            const bool installPending = editor.updateInstallPending;
+            const bool sourceInstallPending = editor.updateSourceInstallPending;
 
             try
             {
                 editor.lastUpdateCheck = editor.updateCheckPending->get();
                 editor.updateCheckPending.reset();
+                const bool sourceWorkerRunning =
+                    installPending
+                    && editor.lastUpdateCheck.source_fallback_attempted
+                    && editor.lastUpdateCheck.source_update_performed
+                    && !editor.lastUpdateCheck.packaged_update_performed;
+                editor.updateInstallPending = false;
+                editor.updateSourceInstallPending = false;
+                if (!sourceWorkerRunning)
+                    editor.updateOperationStartedAt = {};
+
+                if (installPending)
+                {
+                    if (sourceWorkerRunning)
+                    {
+                        editor.updateState = EditorUpdateState::SourceWorkerRunning;
+                        editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                        editor.showUpdateConfirmModal = true;
+                        push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                        return;
+                    }
+
+                    if (sourceInstallPending
+                        && editor.lastUpdateCheck.source_fallback_attempted
+                        && !editor.lastUpdateCheck.source_update_performed)
+                    {
+                        editor.updateState = EditorUpdateState::Failed;
+                        editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                        push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                        return;
+                    }
+
+                    if (editor.lastUpdateCheck.platform_build_checked
+                        && !editor.lastUpdateCheck.platform_build_ok)
+                    {
+                        editor.updateState = EditorUpdateState::Failed;
+                        editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                        push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                        return;
+                    }
+
+                    if (editor.lastUpdateCheck.update_performed)
+                    {
+                        editor.updateState = EditorUpdateState::RestartReady;
+                        editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                        push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                        return;
+                    }
+
+                    editor.updateState = EditorUpdateState::Failed;
+                    editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                    return;
+                }
 
                 if (editor.lastUpdateCheck.update_available || editor.lastUpdateCheck.force_required)
                 {
@@ -722,10 +937,72 @@ namespace epochnamespace
             catch (...)
             {
                 editor.updateCheckPending.reset();
+                editor.updateInstallPending = false;
+                editor.updateSourceInstallPending = false;
+                editor.updateOperationStartedAt = {};
                 editor.updateState = EditorUpdateState::Failed;
                 editor.updateStatus = "Update check failed; see updater logs for details.";
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
             }
+        }
+
+        void pump_editor_source_update_worker(EditorState& editor)
+        {
+            if (editor.updateState != EditorUpdateState::SourceWorkerRunning)
+                return;
+
+            const std::string handoffTail = read_update_log_tail(updater::update_handoff_log_path());
+            const std::string sourceTail = read_update_log_tail(updater::source_update_log_path());
+            const std::string_view evidence = !handoffTail.empty() ? std::string_view{ handoffTail } : std::string_view{ sourceTail };
+
+            if (update_log_contains(handoffTail, "Source update cancel")
+                || update_log_contains(sourceTail, "Source update cancel"))
+            {
+                editor.updateState = EditorUpdateState::Available;
+                editor.updateStatus = "Source update canceled. Update remains available if you want to retry.";
+                editor.showUpdateConfirmModal = false;
+                editor.updateOperationStartedAt = {};
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                return;
+            }
+
+            if (update_log_contains(handoffTail, "[ERROR]") || update_log_contains(sourceTail, "[ERROR]"))
+            {
+                const std::string lastLine = last_nonempty_update_log_line(!handoffTail.empty() ? handoffTail : sourceTail);
+                editor.updateState = EditorUpdateState::Failed;
+                editor.updateStatus = lastLine.empty()
+                    ? "Source update failed. Check epoch_source_update.log and epoch_update_handoff.log beside the executable."
+                    : std::string{ "Source update failed: " } + lastLine;
+                editor.updateOperationStartedAt = {};
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                return;
+            }
+
+            if (update_log_contains(handoffTail, "Waiting for runtime handoff")
+                || update_log_contains(sourceTail, "Built runtime ready at"))
+            {
+                editor.updateState = EditorUpdateState::RestartReady;
+                editor.updateStatus = "Source rebuild is ready for runtime handoff. Press Restart to close Epoch and let the worker replace the executable.";
+                editor.updateOperationStartedAt = {};
+                editor.showUpdateConfirmModal = true;
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                return;
+            }
+
+            if (update_log_contains(handoffTail, "Restarted updated runtime")
+                || update_log_contains(handoffTail, "Source runtime files copied successfully"))
+            {
+                editor.updateState = EditorUpdateState::RestartReady;
+                editor.updateStatus = "Source update handoff completed. Restart Epoch if this window did not close automatically.";
+                editor.updateOperationStartedAt = {};
+                editor.showUpdateConfirmModal = true;
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                return;
+            }
+
+            const std::string lastLine = last_nonempty_update_log_line(evidence);
+            if (!lastLine.empty())
+                editor.updateStatus = std::string{ "Source rebuild running. Latest evidence: " } + lastLine;
         }
 
         [[nodiscard]] static std::string format_ms(double seconds)
@@ -1281,7 +1558,7 @@ namespace epochnamespace
 
         [[nodiscard]] static SurfaceCanvas build_ai_loop_surface(
             const std::array<bool, 5>& readiness,
-            bool watcherEnabled,
+            bool gateReady,
             bool buildPending)
         {
             constexpr int kSurfaceWidth = 960;
@@ -1353,7 +1630,7 @@ namespace epochnamespace
             const int readyCount = static_cast<int>(std::count(readiness.begin(), readiness.end(), true));
             canvas.fill_rect(34, 104, (progressW * readyCount) / 5, 8, gui::Color{ 94, 201, 142, 255 });
 
-            if (watcherEnabled)
+            if (gateReady)
                 canvas.fill_rect(866, 20, 68, 16, gui::Color{ 80, 167, 115, 255 });
             else
                 canvas.fill_rect(866, 20, 68, 16, gui::Color{ 97, 80, 70, 255 });
@@ -1362,7 +1639,7 @@ namespace epochnamespace
                 canvas.fill_rect(866, 44, 68, 16, gui::Color{ 223, 174, 77, 255 });
             else
                 canvas.fill_rect(866, 44, 68, 16, gui::Color{ 58, 68, 84, 255 });
-            draw_tiny_text(canvas, watcherEnabled ? "WATCH ON" : "WATCH OFF", 764, 23, gui::Color{ 238, 242, 248, 255 }, 1);
+            draw_tiny_text(canvas, gateReady ? "GATE OK" : "GATE WAIT", 764, 23, gui::Color{ 238, 242, 248, 255 }, 1);
             draw_tiny_text(canvas, buildPending ? "BUILD RUN" : "BUILD IDLE", 764, 47, gui::Color{ 238, 242, 248, 255 }, 1);
 
             return canvas;
@@ -2962,7 +3239,7 @@ namespace epochnamespace
             const std::string fingerprint = ai_continuous_build_fingerprint(editor, activeScriptSource, pathsManifest);
             if (!force && fingerprint == editor.aiContinuousBuildFingerprint)
             {
-                editor.aiContinuousBuildStatus = "Watching for project/script changes.";
+                editor.aiContinuousBuildStatus = "Evidence is unchanged; manual build gate remains idle.";
                 return;
             }
 
@@ -4302,7 +4579,7 @@ namespace epochnamespace
             }
         }
 
-        void render_ai_model_picker(EditorState& editor, float width)
+        void render_ai_model_picker(EditorState& editor, float width, std::string_view selectBoxId)
         {
             const float contentWidth = (std::max)(180.0f, width);
             const auto manifest = epoch::ai::active_model_manifest();
@@ -4312,6 +4589,7 @@ namespace epochnamespace
             gui::property_row("[model] Selected model", manifest.display_name.empty() ? std::string("(none selected)") : manifest.display_name);
             gui::property_row("[model] Endpoint", manifest.endpoint);
             gui::property_row("[model] API route", "/v1/models + /v1/chat/completions");
+            gui::property_row("[model] Client state", epoch::ai::model_connection_status());
             gui::property_row("[ai] Model discovery", epoch::ai::model_detection_status());
 
             if (gui::button("Scan Local OpenAI Models", { 240.0f, 30.0f }))
@@ -4339,7 +4617,7 @@ namespace epochnamespace
 
             const std::string selectedModel = epoch::ai::active_model_name();
             const auto selectResult = gui::select_box(gui::SelectBoxOptions{
-                .id = "engine-ai-local-model-select",
+                .id = selectBoxId,
                 .placeholder = "Choose local chat model",
                 .selected = selectedModel.empty() ? std::string_view{} : std::string_view{ selectedModel },
                 .options = modelViews,
@@ -4351,7 +4629,10 @@ namespace epochnamespace
             {
                 const auto& modelId = detectedModels[*selectResult.selected_index];
                 if (epoch::ai::select_active_model(modelId))
-                    push_editor_log(editor, "[ai] Selected local model: " + modelId);
+                {
+                    push_editor_log(editor, "[ai] Selected local model: " + modelId + " (" + epoch::ai::model_connection_status() + ")");
+                    push_editor_log(editor, "[ai] OS AI chat will use " + modelId + " through the local OpenAI-compatible endpoint.");
+                }
                 else
                     push_editor_log(editor, "[ai] Could not select model: " + modelId);
             }
@@ -4384,7 +4665,7 @@ namespace epochnamespace
             gui::property_row("[self-iteration] Capture", ready(status.captureEvidenceReady));
             gui::property_row("[self-iteration] Chat pair", ready(status.chatPairReady));
             gui::property_row("[self-iteration] Gate", status.promotionSummary);
-            gui::property_row("[self-iteration] Build watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+            gui::property_row("[self-iteration] Build gate", editor.aiContinuousBuildPending ? "build running" : "manual approval");
             gui::property_row("[self-iteration] Build pending", editor.aiContinuousBuildPending.has_value() ? "true" : "false");
             gui::property_row("[self-iteration] Build runs", std::to_string(editor.aiContinuousBuildRunCount));
             gui::property_row("[self-iteration] Tool harness runs", std::to_string(editor.aiToolHarnessRunCount));
@@ -4609,6 +4890,7 @@ namespace epochnamespace
             return result;
 
         auto& editor = editor_state_for(ctx);
+        const gui::ScopedTheme editorThemeScope{ editor.themePreference };
         auto& chat = chat_state_for(ctx);
         chat.pump();
         if (editor.autoUpdateCheckQueued)
@@ -4617,6 +4899,7 @@ namespace epochnamespace
             start_editor_update_check(editor);
         }
         pump_editor_update_check(editor);
+        pump_editor_source_update_worker(editor);
         if (editor.workspaceTab == EditorWorkspaceTab::AI
             && editor.aiWorkspaceDomain == AiWorkspaceDomain::Control
             && editor.projectId != "sandbox")
@@ -4661,6 +4944,26 @@ namespace epochnamespace
         const gui::Vec2 layoutExtent = resolve_layout_extent();
         const float w = layoutExtent.x;
         const float h = layoutExtent.y;
+        const auto centered_modal_position = [&](const gui::Vec2 modalSize) noexcept -> gui::Vec2
+            {
+                return {
+                    (std::max)(0.0f, (w - modalSize.x) * 0.5f),
+                    (std::max)(0.0f, (h - modalSize.y) * 0.5f)
+                };
+            };
+
+        gui::clear_modal_input_capture();
+        if (editor.showUpdateConfirmModal)
+            gui::begin_modal_input_capture(centered_modal_position({ 600.0f, 292.0f }), { 600.0f, 292.0f });
+        else if (editor.showSourceUpdateConfirmModal)
+            gui::begin_modal_input_capture(centered_modal_position({ 620.0f, 292.0f }), { 620.0f, 292.0f });
+        else if (editor.showSettingsModal)
+            gui::begin_modal_input_capture(centered_modal_position({ 600.0f, 462.0f }), { 600.0f, 462.0f });
+        else if (editor.showPackageManagerModal)
+            gui::begin_modal_input_capture(centered_modal_position({ 820.0f, 560.0f }), { 820.0f, 560.0f });
+        else if (editor.showAboutModal)
+            gui::begin_modal_input_capture(centered_modal_position({ 456.0f, 222.0f }), { 456.0f, 222.0f });
+
         if (editor.lastLayoutExtent.x > 0.0f
             && editor.lastLayoutExtent.y > 0.0f
             && (std::abs(editor.lastLayoutExtent.x - layoutExtent.x) > 1.0f
@@ -4677,9 +4980,9 @@ namespace epochnamespace
             return std::clamp(value, lo, hi);
         };
 
-        editor.outlinerSplit = std::clamp(editor.outlinerSplit, 0.12f, 0.42f);
-        editor.inspectorSplit = std::clamp(editor.inspectorSplit, 0.14f, 0.45f);
-        editor.dockSplit = std::clamp(editor.dockSplit, 0.14f, 0.58f);
+        editor.outlinerSplit = std::clamp(editor.outlinerSplit, 0.06f, 0.70f);
+        editor.inspectorSplit = std::clamp(editor.inspectorSplit, 0.06f, 0.70f);
+        editor.dockSplit = std::clamp(editor.dockSplit, 0.08f, 0.80f);
 
         const bool center_uses_scene = main_surface_uses_scene(editor.mainSurface);
         const bool layout_outliner_visible = editor.showOutliner && center_uses_scene;
@@ -4691,14 +4994,14 @@ namespace epochnamespace
         const bool bottom_visible = editor.showConsoleDock || editor.showAiChat;
         const float raw_bottom_h = bottom_visible ? h * editor.dockSplit : 0.0f;
         const float bottom_h = bottom_visible
-            ? clamp_layout(raw_bottom_h, (std::min)(170.0f, h * 0.38f), (std::max)(170.0f, h * 0.58f))
+            ? clamp_layout(raw_bottom_h, (std::min)(96.0f, h * 0.22f), (std::max)(96.0f, h * 0.82f))
             : 0.0f;
         const float bottom_split_h = bottom_visible ? splitter_h : 0.0f;
 
-        const float left_min = (std::min)(220.0f, (std::max)(0.0f, w * 0.34f));
-        const float left_max = (std::max)(left_min, (std::min)(520.0f, w * 0.46f));
-        const float right_min = (std::min)(260.0f, (std::max)(0.0f, w * 0.38f));
-        const float right_max = (std::max)(right_min, (std::min)(560.0f, w * 0.48f));
+        const float left_min = (std::min)(140.0f, (std::max)(0.0f, w * 0.20f));
+        const float left_max = (std::max)(left_min, (std::min)(960.0f, w * 0.72f));
+        const float right_min = (std::min)(160.0f, (std::max)(0.0f, w * 0.22f));
+        const float right_max = (std::max)(right_min, (std::min)(960.0f, w * 0.72f));
         const float left_w = layout_outliner_visible ? clamp_layout(w * editor.outlinerSplit, left_min, left_max) : 0.0f;
         const float right_w = layout_inspector_visible ? clamp_layout(w * editor.inspectorSplit, right_min, right_max) : 0.0f;
         const float left_split_w = layout_outliner_visible ? splitter_w : 0.0f;
@@ -5090,12 +5393,15 @@ namespace epochnamespace
         gui::set_cursor({ 16.0f, toolbar_pos.y + 14.0f });
         gui::label("Epoch");
 
+        const gui::Vec2 toolbarMouse = gui::mouse_position();
         for (auto& item : topMenus)
         {
             item.x = toolbar_x;
             gui::set_cursor({ toolbar_x, toolbar_button_y });
+            if (editor_point_in_rect(toolbarMouse, { toolbar_x, toolbar_button_y }, { item.width, toolbar_button_h }))
+                editor.openMenu = item.menu;
             if (gui::button_selected(item.label, { item.width, toolbar_button_h }, editor.openMenu == item.menu))
-                editor.openMenu = editor.openMenu == item.menu ? TopMenu::None : item.menu;
+                editor.openMenu = item.menu;
             toolbar_x += item.width + 6.0f;
         }
 
@@ -5114,17 +5420,23 @@ namespace epochnamespace
         if (editor.updateState == EditorUpdateState::Available
             || editor.updateState == EditorUpdateState::RestartReady)
         {
-            constexpr float update_button_w = 154.0f;
+            constexpr float update_button_w = 178.0f;
             gui::set_cursor({ status_anchor_x, toolbar_button_y });
-            if (gui::button(update_toolbar_button_label(editor.updateState), { update_button_w, toolbar_button_h }))
+            const bool updateButtonActive = editor.showUpdateConfirmModal
+                || editor.showSourceUpdateConfirmModal
+                || editor.updateInstallPending;
+            if (gui::button_selected(update_toolbar_button_label(editor.updateState), { update_button_w, toolbar_button_h }, updateButtonActive))
             {
                 if (editor.updateState == EditorUpdateState::RestartReady)
                 {
-                    emit_command(EditorCommand::UpdateApplication);
-                    push_editor_log(editor, "[update] Restart/update handoff requested from toolbar.");
+                    editor.updateStatus = "Update handoff has already started. Restart Epoch to let the verified replacement finish.";
+                    editor.showUpdateConfirmModal = true;
+                    editor.showSourceUpdateConfirmModal = false;
+                    push_editor_log(editor, "[update] Restart is ready after verified update handoff.");
                 }
                 else
                 {
+                    editor.openMenu = TopMenu::None;
                     editor.showUpdateConfirmModal = true;
                     editor.showSourceUpdateConfirmModal = false;
                     push_editor_log(editor, "[update] Update available. Awaiting confirmation.");
@@ -5241,7 +5553,7 @@ namespace epochnamespace
 
             return {
                 button_width + kDropdownInnerLeft * 2.0f,
-                gui::titled_window_total_height(content_height)
+                content_height
             };
         };
 
@@ -5279,13 +5591,14 @@ namespace epochnamespace
                 return;
             const auto pos = dropdown_position_for(menu);
             gui::begin_top_layer();
-            gui::begin_window(title, pos, size);
+            (void)title;
+            gui::begin_window({}, pos, size);
             body(gui::cursor_position());
             gui::end_window();
             gui::end_top_layer();
         };
 
-        const gui::Vec2 mouse = gui::mouse_position();
+        const gui::Vec2 mouse = toolbarMouse;
         if (gui::was_mouse_pressed())
         {
             if (layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size))
@@ -5303,15 +5616,15 @@ namespace epochnamespace
             switch (editor.layoutDrag)
             {
             case EditorLayoutDrag::Outliner:
-                editor.outlinerSplit = std::clamp(mouse.x / (std::max)(1.0f, w), 0.12f, 0.42f);
+                editor.outlinerSplit = std::clamp(mouse.x / (std::max)(1.0f, w), 0.06f, 0.70f);
                 editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
                 break;
             case EditorLayoutDrag::Inspector:
-                editor.inspectorSplit = std::clamp((w - mouse.x) / (std::max)(1.0f, w), 0.14f, 0.45f);
+                editor.inspectorSplit = std::clamp((w - mouse.x) / (std::max)(1.0f, w), 0.06f, 0.70f);
                 editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
                 break;
             case EditorLayoutDrag::Dock:
-                editor.dockSplit = std::clamp((h - mouse.y) / (std::max)(1.0f, h), 0.14f, 0.58f);
+                editor.dockSplit = std::clamp((h - mouse.y) / (std::max)(1.0f, h), 0.08f, 0.80f);
                 editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
                 break;
             case EditorLayoutDrag::None:
@@ -5320,7 +5633,7 @@ namespace epochnamespace
             }
         }
 
-        if (editor.openMenu != TopMenu::None && (gui::was_mouse_pressed() || gui::was_mouse_right_pressed()))
+        if (editor.openMenu != TopMenu::None)
         {
             const auto buttonBounds = top_menu_button_bounds(editor.openMenu);
             const gui::Vec2 dropdownPos = dropdown_position_for(editor.openMenu);
@@ -5330,7 +5643,16 @@ namespace epochnamespace
             const bool inDropdown = dropdownSize.x > 0.0f
                 && dropdownSize.y > 0.0f
                 && editor_point_in_rect(mouse, dropdownPos, dropdownSize);
-            if (!inButton && !inDropdown)
+            const gui::Vec2 bridgePos{
+                buttonBounds ? buttonBounds->position.x : dropdownPos.x,
+                toolbar_button_y + toolbar_button_h
+            };
+            const gui::Vec2 bridgeSize{
+                (std::max)(dropdownSize.x, buttonBounds ? buttonBounds->size.x : 0.0f),
+                8.0f
+            };
+            const bool inBridge = editor_point_in_rect(mouse, bridgePos, bridgeSize);
+            if (!inButton && !inDropdown && !inBridge && !gui::is_mouse_down())
                 editor.openMenu = TopMenu::None;
         }
 
@@ -5541,15 +5863,15 @@ namespace epochnamespace
                 return packetDir;
             };
 
-            gui::label("AI Inspector Controls");
+            gui::label("OS AI Inspector Controls");
             gui::wrapped_label(
-                "AI actions live here in Inspector. Bottom Dock > AI is for status, model inventory, visual feedback, and logs until dedicated editor windows are promoted.",
+                "OS model selection, evidence packets, and manual build gates live here. Bottom Dock > AI is status-only.",
                 inspectorWidth);
-            render_ai_model_picker(editor, inspectorWidth);
+            render_ai_model_picker(editor, inspectorWidth, "engine-ai-local-model-select-inspector");
             gui::property_row("[ai] Active panel", ai_workspace_domain_name(editor.aiWorkspaceDomain));
             gui::property_row("[ai] Stage", inspectorStage);
             gui::property_row("[ai] Evidence", inspectorGate.packetEvidenceSummary);
-            gui::property_row("[ai] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused");
+            gui::property_row("[ai] Model client", epoch::ai::model_connection_status());
             gui::property_row("[ai] Pending build", editor.aiContinuousBuildPending ? "true" : "false");
             gui::property_row("[ai] Status", editor.aiContinuousBuildStatus);
             gui::property_row("[ai] Selected model", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name());
@@ -5579,26 +5901,6 @@ namespace epochnamespace
 
             if (inspectorSandboxControls)
             {
-                if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Evidence Watcher" : "Arm Evidence Watcher", { inspectorWidth, 30.0f }))
-                {
-                    if (!editor.aiContinuousBuildEnabled)
-                        repair_self_iteration_sandbox_evidence(editor);
-                    editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
-                    editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
-                        ? "Evidence watcher armed; queue build passes manually."
-                        : "Evidence watcher paused.";
-                    if (editor.aiContinuousBuildEnabled)
-                        editor.aiContinuousBuildFingerprint.clear();
-                    push_editor_log(editor, editor.aiContinuousBuildEnabled
-                        ? "[ai-build] Evidence watcher armed."
-                        : "[ai-build] Evidence watcher paused.");
-                    append_project_note(
-                        editor,
-                        editor.aiContinuousBuildEnabled ? "Evidence Watcher Armed" : "Evidence Watcher Paused",
-                        editor.aiContinuousBuildStatus,
-                        "The watcher observes evidence and never starts an automatic build; promotion remains human-gated.");
-                }
-
                 if (gui::button("Queue Sandbox Build Pass", { inspectorWidth, 30.0f }))
                 {
                     start_self_iteration_sandbox_build(editor, "manual self-iteration sandbox build request", true);
@@ -5632,7 +5934,7 @@ namespace epochnamespace
                             editor,
                             "Sandbox Scene Training Task Staged",
                             std::string("Packet staged at ") + packetDir,
-                            "Use this for watchable OS AI scene-edit/test learning; reject answers without evidence paths or visible state changes.");
+                            "Use this for visible OS AI scene-edit/test review; reject answers without evidence paths or visible state changes.");
                     }
                 }
             }
@@ -6587,7 +6889,7 @@ namespace epochnamespace
                 }};
                 const auto aiLoopCanvas = build_ai_loop_surface(
                     aiLoopReady,
-                    editor.aiContinuousBuildEnabled,
+                    aiLoopReady.back(),
                     editor.aiContinuousBuildPending.has_value());
                 editor.systems.aiLoopSurface = gui::register_runtime_surface(
                     "ai-loop-visualizer",
@@ -6595,11 +6897,11 @@ namespace epochnamespace
                     static_cast<std::uint32_t>(aiLoopCanvas.width),
                     static_cast<std::uint32_t>(aiLoopCanvas.height));
 
-                gui::label("Self-Iteration Sandbox");
+                gui::label("OS AI Self-Iteration");
                 gui::property_row("[ai] Project", editor.projectName);
                 gui::property_row("[ai] Root", display_project_path(editor.projectRoot), 108.0f);
                 gui::property_row("[ai] Selected model", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name(), 108.0f);
-                gui::property_row("[ai] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused", 108.0f);
+                gui::property_row("[ai] Model client", epoch::ai::model_connection_status(), 108.0f);
                 gui::property_row("[ai] Status", editor.aiContinuousBuildStatus, 108.0f);
                 gui::property_row("[ai] Captures", display_project_path(training.local_capture_jsonl), 108.0f);
                 gui::property_row("[ai] Loop stage", ai_control_loop_stage(gateStatus), 108.0f);
@@ -6618,9 +6920,9 @@ namespace epochnamespace
                 gui::property_row("[ai] Notes", display_project_path(sandboxNotesPath), 108.0f);
                 gui::property_row("[ai] Build log", display_project_path(sandboxBuildLog), 108.0f);
                 gui::property_row("[ai] Output", display_project_path(sandboxOutput), 108.0f);
-                gui::label("Latest Sandbox Notes");
+                gui::label("Latest Engine Iteration Notes");
                 gui::wrapped_label(tail_text(read_project_notes(editor.projectRoot), 1500), centerWidth);
-                render_ai_model_picker(editor, (std::min)(centerWidth, 460.0f));
+                render_ai_model_picker(editor, (std::min)(centerWidth, 460.0f), "engine-ai-local-model-select-workspace");
                 gui::wrapped_label(
                     "Model package lanes stage operator-approved download plans under executable-local cache/models; weights are never cloned into routine engine iterations.",
                     centerWidth);
@@ -6650,12 +6952,14 @@ namespace epochnamespace
                     .stick_to_bottom = true
                 });
                 const auto chatInput = gui::edit_box(chat.input, { centerWidth, 30.0f }, 4096, false);
+                bool chatActionClicked = false;
                 std::array<gui::InlineButtonSpec, 2> chatActions{ {
                     { "Send", 96.0f },
                     { "Evidence Plan", 150.0f }
                 } };
                 if (auto clicked = gui::inline_button_row(chatActions, 28.0f, 8.0f))
                 {
+                    chatActionClicked = true;
                     if (*clicked == 0)
                     {
                         chat.submit(std::move(chat.input));
@@ -6666,7 +6970,7 @@ namespace epochnamespace
                         chat.submit(build_ai_self_iteration_prompt(editor));
                     }
                 }
-                if (chatInput.submitted)
+                if (chatInput.submitted && !chatActionClicked)
                 {
                     chat.submit(std::move(chat.input));
                     chat.input.clear();
@@ -6674,20 +6978,6 @@ namespace epochnamespace
 
                 if (gui::button("Save Sandbox Evidence", { 240.0f, 30.0f }))
                     repair_self_iteration_sandbox_evidence(editor);
-                if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Evidence Watcher" : "Arm Evidence Watcher", { 260.0f, 30.0f }))
-                {
-                    if (!editor.aiContinuousBuildEnabled)
-                        repair_self_iteration_sandbox_evidence(editor);
-                    editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
-                    editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
-                        ? "Evidence watcher armed; queue build passes manually."
-                        : "Evidence watcher paused.";
-                    if (editor.aiContinuousBuildEnabled)
-                        editor.aiContinuousBuildFingerprint.clear();
-                    push_editor_log(editor, editor.aiContinuousBuildEnabled
-                        ? "[ai-build] Evidence watcher armed."
-                        : "[ai-build] Evidence watcher paused.");
-                }
                 if (gui::button("Queue Sandbox Build Pass", { 240.0f, 30.0f }))
                     start_self_iteration_sandbox_build(editor, "manual self-iteration sandbox build request", true);
                 break;
@@ -7226,19 +7516,15 @@ namespace epochnamespace
                 }
             }
 
-            if (editor.aiContinuousBuildEnabled && !editor.aiContinuousBuildPending)
-            {
-                editor.aiContinuousBuildStatus = "Evidence watcher armed; manual Queue Build Pass required.";
-            }
-
             const std::vector<std::string> dockLines{
                 "AI Diagnostics",
                 dockLine("[ai] Domain", ai_workspace_domain_name(editor.aiWorkspaceDomain)),
                 dockLine("[model] Provider", epoch::ai::active_provider_summary()),
                 dockLine("[model] Selected", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name()),
+                dockLine("[model] Client", epoch::ai::model_connection_status()),
                 dockLine("[ai] Loop stage", loopStage),
                 dockLine("[ai] Evidence", gateStatus.packetEvidenceSummary),
-                dockLine("[ai-build] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused"),
+                dockLine("[ai-build] Mode", "manual evidence gate"),
                 dockLine("[ai-build] Pending", editor.aiContinuousBuildPending ? "true" : "false"),
                 dockLine("[ai-build] Runs", std::to_string(editor.aiContinuousBuildRunCount)),
                 dockLine("[ai-build] Status", editor.aiContinuousBuildStatus),
@@ -7273,7 +7559,7 @@ namespace epochnamespace
                 dockLine("[systems] Support tier", supportTier),
                 dockLine("[build] Compiler", compiler_identity()),
                 dockLine("[build] Configuration", build_configuration_label()),
-                dockLine("[phase5] Watcher", editor.aiContinuousBuildEnabled ? "enabled" : "paused"),
+                dockLine("[phase5] Gate", "manual evidence gate"),
                 dockLine("[phase5] Build status", editor.aiContinuousBuildStatus),
                 dockLine("[phase5] Staged packets", staged_packet_count_summary(phase5PacketRoot)),
                 "[systems] Use the central System Info workspace for graph surfaces, backend details, and live system lists. Video owns time controls and timeline/video authoring."
@@ -7323,15 +7609,13 @@ namespace epochnamespace
         };
 
         gui::ConsoleWindowResult r = gui::console_window(opts);
-        if (r.input.submitted || r.send_clicked)
+        if ((r.input.submitted || r.send_clicked) && !chat.pending.has_value())
         {
             std::string text = std::move(chat.input);
             chat.input.clear();
             chat.submit(std::move(text));
         }
         }
-
-        render_inspector_window();
 
         const bool overlayPriority =
             editor.openMenu != TopMenu::None
@@ -7341,6 +7625,8 @@ namespace epochnamespace
             || editor.showUpdateConfirmModal
             || editor.showSourceUpdateConfirmModal;
         ctx->set_gui_overlay_priority(overlayPriority);
+
+        render_inspector_window();
 
         open_dropdown("File", TopMenu::File, dropdown_window_size(192.0f, 4), [&](gui::Vec2 pos)
         {
@@ -7353,6 +7639,7 @@ namespace epochnamespace
             });
             menu_item("Settings", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
                 emit_command(EditorCommand::Settings);
+                editor.openMenu = TopMenu::None;
                 editor.showSettingsModal = true;
                 push_editor_log(editor, "[file] Settings selected.");
             });
@@ -7382,6 +7669,7 @@ namespace epochnamespace
                 open_editor_surface(EditorMainSurface::Assets, "Asset menu");
             });
             menu_item("Package Manager...", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
+                editor.openMenu = TopMenu::None;
                 editor.showPackageManagerModal = true;
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
                 push_editor_log(editor, "[assets] Package Manager opened.");
@@ -7473,6 +7761,7 @@ namespace epochnamespace
         open_dropdown("Help", TopMenu::Help, dropdown_window_size(192.0f, 2), [&](gui::Vec2 pos)
         {
             menu_item("About Epoch", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
+                editor.openMenu = TopMenu::None;
                 editor.showAboutModal = true;
             });
             menu_item("Current Project Info", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
@@ -7482,12 +7771,26 @@ namespace epochnamespace
 
         if (editor.showUpdateConfirmModal)
         {
-            const gui::Vec2 modalSize{ 560.0f, 284.0f };
+            editor.openMenu = TopMenu::None;
+            const bool sourceOnlyUpdate =
+                editor.lastUpdateCheck.source_update_available
+                && !editor.lastUpdateCheck.packaged_update_available;
+            const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
+            const bool updateRunning = editor.updateCheckPending.has_value() || sourceWorkerRunning;
+            const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
+            const gui::Vec2 modalSize{ 580.0f, 286.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
             const float contentWidth = modalSize.x - 32.0f;
+            const std::string updateStatusLine = [&]() {
+                std::string text = editor.updateStatus;
+                constexpr std::size_t kMaxModalStatus = 132u;
+                if (text.size() <= kMaxModalStatus)
+                    return text;
+                return text.substr(0u, kMaxModalStatus - 3u) + "...";
+            }();
             gui::begin_modal_window(gui::ModalWindowOptions{
                 .title = "Update Epoch",
                 .position = modalPos,
@@ -7498,30 +7801,78 @@ namespace epochnamespace
             const gui::Vec2 contentPos = gui::cursor_position();
             const float contentY = contentPos.y;
             gui::set_cursor({ contentPos.x + 8.0f, contentY });
-            gui::wrapped_label("An Epoch update is available. Confirm to download the packaged release or fall back to source when needed.", contentWidth);
+            gui::wrapped_label(
+                sourceOnlyUpdate
+                ? "No packaged runtime was found for this platform; source rebuild is the available update lane."
+                : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and hand off the replacement.",
+                contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 36.0f });
-            gui::wrapped_label(editor.updateStatus, contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 84.0f });
-            gui::wrapped_label("The updater runs through the executable-local cache and restarts Epoch after the replacement handoff.", contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 132.0f });
-            gui::wrapped_label("Use Advanced Source only when you intentionally want to skip straight to a rebuild from main.", contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 180.0f });
-            if (gui::button("Cancel", { 120.0f, 30.0f }))
+            gui::wrapped_label(updateStatusLine, contentWidth);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 78.0f });
+            gui::progress_bar(gui::ProgressBarOptions{
+                .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
+                .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",
+                .value = editor_update_progress_value(editor),
+                .size = { contentWidth, 20.0f },
+                .show_percent = true
+            });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 112.0f });
+            gui::wrapped_label(
+                sourceOnlyUpdate
+                ? "Smart Update checks packaged releases first, then uses source only when no compatible package exists."
+                : "Cached packages are checked before use; stale or broken downloads are replaced.",
+                contentWidth);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 152.0f });
+            gui::wrapped_label(
+                restartReady
+                ? "The update is staged. Restart Epoch to complete the verified handoff."
+                : sourceWorkerRunning
+                    ? "Cancel asks the source worker to stop safely before runtime handoff."
+                    : "Advanced Source rebuilds latest main locally. Use it only when you intentionally want source instead of the packaged release.",
+                contentWidth);
+            gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 188.0f });
+            if (sourceWorkerRunning)
+            {
+                if (gui::button("Cancel Update", { 148.0f, 30.0f }))
+                {
+                    const bool cancelRequested = updater::request_source_update_cancel();
+                    editor.showUpdateConfirmModal = false;
+                    editor.updateState = cancelRequested ? EditorUpdateState::Available : EditorUpdateState::Failed;
+                    editor.updateInstallPending = false;
+                    editor.updateSourceInstallPending = false;
+                    editor.updateOperationStartedAt = {};
+                    editor.updateStatus = cancelRequested
+                        ? "Source update cancel requested. The worker will stop at its next safe checkpoint; Update remains available for retry."
+                        : "Source update modal closed, but the cancel marker could not be written; check updater logs.";
+                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                }
+            }
+            else if (!updateRunning && !restartReady && gui::button("Cancel", { 120.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
                 push_editor_log(editor, "[command] Update canceled.");
             }
-            gui::set_cursor({ contentPos.x + 148.0f, contentPos.y + 180.0f });
-            if (gui::button("Download Update", { 168.0f, 30.0f }))
+            gui::set_cursor({ contentPos.x + 148.0f, contentPos.y + 188.0f });
+            const std::string primaryUpdateLabel = restartReady
+                ? std::string{ "Restart" }
+                : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
+            if (!updateRunning && gui::button(primaryUpdateLabel, { 188.0f, 30.0f }))
             {
-                editor.showUpdateConfirmModal = false;
-                editor.updateState = EditorUpdateState::Checking;
-                editor.updateStatus = "Downloading and verifying update package. Epoch closes only after a verified replacement handoff starts.";
-                emit_command(EditorCommand::UpdateApplication);
-                push_editor_log(editor, "[command] Smart update confirmed.");
+                if (restartReady)
+                {
+                    editor.showUpdateConfirmModal = false;
+                    editor.updateStatus = "Restarting Epoch to finish the staged update handoff.";
+                    push_editor_log(editor, "[update] Restart requested after verified update handoff.");
+                    emit_command(EditorCommand::Exit);
+                }
+                else
+                {
+                    push_editor_log(editor, "[command] Smart update confirmed.");
+                    start_editor_update_install(editor);
+                }
             }
-            gui::set_cursor({ contentPos.x + 332.0f, contentPos.y + 180.0f });
-            if (gui::button("Advanced Source...", { 176.0f, 30.0f }))
+            gui::set_cursor({ contentPos.x + 356.0f, contentPos.y + 188.0f });
+            if (!updateRunning && !restartReady && gui::button("Advanced Source...", { 176.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
                 editor.showSourceUpdateConfirmModal = true;
@@ -7532,6 +7883,7 @@ namespace epochnamespace
 
         if (editor.showSourceUpdateConfirmModal)
         {
+            editor.openMenu = TopMenu::None;
             const gui::Vec2 modalSize{ 620.0f, 292.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
@@ -7548,13 +7900,13 @@ namespace epochnamespace
             const gui::Vec2 contentPos = gui::cursor_position();
             const float contentY = contentPos.y;
             gui::set_cursor({ contentPos.x + 8.0f, contentY });
-            gui::wrapped_label("This skips the packaged release check and goes straight to the latest main source.", contentWidth);
+            gui::wrapped_label("Advanced Source skips the packaged runtime and rebuilds the latest main source locally.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 36.0f });
-            gui::wrapped_label("Use it when you explicitly want to test current source before a release exists.", contentWidth);
+            gui::wrapped_label("This is slower and riskier than Install Release. It is for source testing, not the default update path.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 84.0f });
-            gui::wrapped_label("Epoch restores dependencies, rebuilds from source, and replaces this runtime.", contentWidth);
+            gui::wrapped_label("Epoch deletes stale source snapshots before downloading, restores dependencies, rebuilds, and records handoff evidence.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 132.0f });
-            gui::wrapped_label("For normal updates, let the startup update check expose the toolbar update button when a newer packaged/source path exists.", contentWidth);
+            gui::wrapped_label("For normal users, press Back and choose Install Release.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 184.0f });
             if (gui::button("Back", { 120.0f, 30.0f }))
             {
@@ -7568,11 +7920,12 @@ namespace epochnamespace
                 push_editor_log(editor, "[command] Advanced source rebuild canceled.");
             }
             gui::set_cursor({ contentPos.x + 284.0f, contentPos.y + 184.0f });
-            if (gui::button("Rebuild From Source", { 176.0f, 30.0f }))
+            if (gui::button("Start Source Rebuild", { 176.0f, 30.0f }))
             {
                 editor.showSourceUpdateConfirmModal = false;
-                emit_command(EditorCommand::UpdateApplicationFromSource);
+                editor.showUpdateConfirmModal = true;
                 push_editor_log(editor, "[command] Advanced source rebuild confirmed.");
+                start_editor_source_update_install(editor);
             }
             gui::end_modal_window();
         }
@@ -7594,7 +7947,7 @@ namespace epochnamespace
                 editor.automationConsumed = true;
                 push_editor_log(editor, "[command] Auto command triggered: smart update.");
                 append_editor_automation_trace("triggered smart-update");
-                emit_command(EditorCommand::UpdateApplication);
+                start_editor_update_install(editor);
                 break;
             case EditorAutomationCommand::SourceUpdate:
                 if (editor.automationConsumed)
@@ -7602,7 +7955,7 @@ namespace epochnamespace
                 editor.automationConsumed = true;
                 push_editor_log(editor, "[command] Auto command triggered: advanced source rebuild.");
                 append_editor_automation_trace("triggered source-update");
-                emit_command(EditorCommand::UpdateApplicationFromSource);
+                start_editor_source_update_install(editor);
                 break;
             case EditorAutomationCommand::None:
                 break;
@@ -7611,7 +7964,8 @@ namespace epochnamespace
 
         if (editor.showSettingsModal)
         {
-            const gui::Vec2 modalSize{ 600.0f, 408.0f };
+            editor.openMenu = TopMenu::None;
+            const gui::Vec2 modalSize{ 600.0f, 462.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
@@ -7641,6 +7995,28 @@ namespace epochnamespace
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 150.0f });
             gui::property_row("[settings] AI model", epoch::ai::active_model_name().empty() ? "(none selected)" : epoch::ai::active_model_name(), 148.0f);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 176.0f });
+            const auto settingsThemeChoices = gui::theme_preference_choices();
+            std::vector<std::string_view> settingsThemeLabels;
+            settingsThemeLabels.reserve(settingsThemeChoices.size());
+            for (const auto& choice : settingsThemeChoices)
+                settingsThemeLabels.emplace_back(choice.label);
+            const auto settingsThemeSelect = gui::select_box(gui::SelectBoxOptions{
+                .id = "editor-theme-select",
+                .placeholder = "Choose editor theme",
+                .selected = gui::theme_preference_label(editor.themePreference),
+                .options = std::span<const std::string_view>{ settingsThemeLabels.data(), settingsThemeLabels.size() },
+                .size = { 260.0f, 30.0f },
+                .row_height = 28.0f,
+                .max_visible_options = 3
+            });
+            if (settingsThemeSelect.changed && settingsThemeSelect.selected_index && *settingsThemeSelect.selected_index < settingsThemeChoices.size())
+            {
+                editor.themePreference = settingsThemeChoices[*settingsThemeSelect.selected_index].preference;
+                push_editor_log(editor, std::string("[settings] Theme set to ") + std::string(gui::theme_preference_label(editor.themePreference)) + ".");
+            }
+            gui::set_cursor({ contentPos.x + 286.0f, contentY + 180.0f });
+            gui::property_row("[settings] Theme", std::string(gui::theme_preference_label(editor.themePreference)), 108.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 222.0f });
             const auto settingsInputChoices = input_profile_choices();
             std::vector<std::string_view> settingsInputLabels;
             settingsInputLabels.reserve(settingsInputChoices.size());
@@ -7661,9 +8037,9 @@ namespace epochnamespace
                 input::set_active_profile(editor.inputProfilePreset);
                 push_editor_log(editor, std::string("[input] Shared profile set to ") + std::string(input_profile_label(editor.inputProfilePreset)) + ".");
             }
-            gui::set_cursor({ contentPos.x + 286.0f, contentY + 180.0f });
+            gui::set_cursor({ contentPos.x + 286.0f, contentY + 226.0f });
             gui::property_row("[settings] Input", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 218.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 264.0f });
             const auto settingsLimitChoices = frame_limit_choices();
             std::vector<std::string_view> settingsLimitLabels;
             settingsLimitLabels.reserve(settingsLimitChoices.size());
@@ -7685,34 +8061,21 @@ namespace epochnamespace
                 core::cli::frame_limit_fps = editor.editorFrameLimitFps;
                 push_editor_log(editor, std::string("[settings] Editor frame limit set to ") + std::string(settingsLimitChoices[*settingsLimitSelect.selected_index].label) + ".");
             }
-            gui::set_cursor({ contentPos.x + 286.0f, contentY + 222.0f });
+            gui::set_cursor({ contentPos.x + 286.0f, contentY + 268.0f });
             gui::property_row("[settings] Frame limit", std::string(frame_limit_label(editor.editorFrameLimitFps)), 148.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 270.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 332.0f });
             if (gui::button("Reset Layout", { 132.0f, 30.0f }))
             {
                 reset_editor_layout(editor);
                 push_editor_log(editor, "[settings] Editor layout reset.");
             }
-            gui::set_cursor({ contentPos.x + 150.0f, contentY + 270.0f });
+            gui::set_cursor({ contentPos.x + 150.0f, contentY + 332.0f });
             if (gui::button("Open OS AI", { 150.0f, 30.0f }))
             {
                 open_editor_surface(EditorMainSurface::AISandbox, "settings");
                 editor.showSettingsModal = false;
             }
-            gui::set_cursor({ contentPos.x + 308.0f, contentY + 270.0f });
-            if (gui::button(editor.aiContinuousBuildEnabled ? "Pause Watcher" : "Arm Watcher", { 132.0f, 30.0f }))
-            {
-                editor.aiContinuousBuildEnabled = !editor.aiContinuousBuildEnabled;
-                editor.aiContinuousBuildStatus = editor.aiContinuousBuildEnabled
-                    ? "Evidence watcher armed; queue build passes manually."
-                    : "Evidence watcher paused.";
-                if (editor.aiContinuousBuildEnabled)
-                    editor.aiContinuousBuildFingerprint.clear();
-                push_editor_log(editor, editor.aiContinuousBuildEnabled
-                    ? "[settings] Evidence watcher armed."
-                    : "[settings] Evidence watcher paused.");
-            }
-            gui::set_cursor({ contentPos.x + 448.0f, contentY + 270.0f });
+            gui::set_cursor({ contentPos.x + 308.0f, contentY + 332.0f });
             if (gui::button("Close", { 88.0f, 30.0f }))
                 editor.showSettingsModal = false;
             gui::end_modal_window();
@@ -8034,6 +8397,7 @@ namespace epochnamespace
 
         if (editor.showAboutModal)
         {
+            editor.openMenu = TopMenu::None;
             const gui::Vec2 modalSize{ 456.0f, 222.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),

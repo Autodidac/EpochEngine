@@ -140,6 +140,7 @@ namespace epoch::ai
 
         std::string g_selectedEndpoint{ configured_endpoint() };
         std::string g_selectedModel{ configured_model() };
+        bool g_selectedModelPreferenceLoaded = false;
         std::vector<std::string> g_detectedModels{};
         std::string g_modelDetectionStatus = g_selectedModel.empty()
             ? std::string{ "Not scanned." }
@@ -152,6 +153,11 @@ namespace epoch::ai
                 return (runtimeRoot / "cache" / std::string{ bucket }).generic_string();
 
             return std::string{ "cache/" } + std::string{ bucket };
+        }
+
+        static std::filesystem::path selected_model_preference_file()
+        {
+            return std::filesystem::path{ executable_cache_bucket("models") } / "selected_os_model.txt";
         }
 
         static bool ends_with(std::string_view s, std::string_view suf)
@@ -389,6 +395,60 @@ namespace epoch::ai
             const bool ok = std::fwrite(contents.data(), 1, contents.size(), handle) == contents.size();
             std::fclose(handle);
             return ok;
+        }
+
+        static std::string read_small_text_file(const std::filesystem::path& file, std::uintmax_t maxBytes = 4096)
+        {
+            std::error_code ec;
+            if (!std::filesystem::exists(file, ec))
+                return {};
+
+            const auto size = std::filesystem::file_size(file, ec);
+            if (ec || size == 0 || size > maxBytes)
+                return {};
+
+            FILE* handle = nullptr;
+#if defined(_WIN32)
+            if (0 != fopen_s(&handle, file.string().c_str(), "rb"))
+                return {};
+#else
+            handle = std::fopen(file.string().c_str(), "rb");
+            if (!handle)
+                return {};
+#endif
+
+            std::string contents(static_cast<std::size_t>(size), '\0');
+            const auto read = std::fread(contents.data(), 1, contents.size(), handle);
+            std::fclose(handle);
+            contents.resize(read);
+            return trim(contents);
+        }
+
+        static void restore_selected_model_preference_if_needed()
+        {
+            if (g_selectedModelPreferenceLoaded)
+                return;
+            g_selectedModelPreferenceLoaded = true;
+
+            const std::string restored = read_small_text_file(selected_model_preference_file());
+            if (restored.empty())
+                return;
+
+            if (g_selectedModel == restored)
+                return;
+
+            g_selectedModel = restored;
+            g_modelDetectionStatus = "Restored selected OS model preference: " + restored;
+        }
+
+        static void persist_selected_model_preference(std::string_view model_id)
+        {
+            const std::string selected = trim(model_id);
+            if (selected.empty())
+                return;
+
+            if (!write_text_file(selected_model_preference_file(), selected + "\n"))
+                core::log::error("ai", "Failed to persist selected OS model preference.");
         }
 
         static std::string utc_timestamp_slug()
@@ -1245,6 +1305,8 @@ namespace epoch::ai
     {
         if (g_engineAi) return;
 
+        restore_selected_model_preference_if_needed();
+
         if (g_detectedModels.empty() && g_modelDetectionStatus == "Not scanned.")
             (void)refresh_detected_models();
 
@@ -1363,11 +1425,13 @@ namespace epoch::ai
 
     std::string active_model_name()
     {
+        restore_selected_model_preference_if_needed();
         return g_selectedModel;
     }
 
     std::string active_provider_summary()
     {
+        restore_selected_model_preference_if_needed();
         std::string summary = std::string(provider_mode_name(g_providerMode));
         if (!g_selectedModel.empty())
         {
@@ -1384,11 +1448,34 @@ namespace epoch::ai
 
     std::string model_detection_status()
     {
+        restore_selected_model_preference_if_needed();
         return g_modelDetectionStatus;
+    }
+
+    bool is_engine_ai_initialized() noexcept
+    {
+        return g_engineAi != nullptr;
+    }
+
+    std::string model_connection_status()
+    {
+        restore_selected_model_preference_if_needed();
+        if (g_selectedModel.empty())
+            return "No local OS model selected.";
+
+        if (g_engineAi)
+            return "Selected model client is initialized.";
+
+        init_engine_ai();
+        if (g_engineAi)
+            return "Selected model client is initialized.";
+
+        return "Model selected, but client is not initialized; scan models or check the endpoint.";
     }
 
     std::vector<std::string> refresh_detected_models()
     {
+        restore_selected_model_preference_if_needed();
         g_detectedModels = fetch_detected_models(g_selectedEndpoint);
         if (g_detectedModels.empty())
         {
@@ -1402,13 +1489,28 @@ namespace epoch::ai
             {
                 const bool selectedAvailable =
                     std::find(g_detectedModels.begin(), g_detectedModels.end(), g_selectedModel) != g_detectedModels.end();
-                g_modelDetectionStatus = selectedAvailable
-                    ? "Selected model: " + g_selectedModel + " (" + std::to_string(g_detectedModels.size()) + " local model(s) detected)."
-                    : "Configured model '" + g_selectedModel + "' was not reported by the endpoint; verify the model name before trusting chat/tooling.";
+                if (selectedAvailable)
+                {
+                    if (!g_engineAi)
+                        init_engine_ai();
+
+                    g_modelDetectionStatus = g_engineAi
+                        ? "Selected and initialized model client: " + g_selectedModel
+                        : "Selected model: " + g_selectedModel + " (" + std::to_string(g_detectedModels.size()) + " local model(s) detected), but client init failed.";
+                    persist_selected_model_preference(g_selectedModel);
+                }
+                else
+                {
+                    const std::string staleModel = g_selectedModel;
+                    delete g_engineAi;
+                    g_engineAi = nullptr;
+                    g_modelDetectionStatus =
+                        "Selected model '" + staleModel + "' was not reported by the endpoint; keeping the operator preference. Choose another detected model to replace it.";
+                }
             }
             else
             {
-                g_modelDetectionStatus = "Detected " + std::to_string(g_detectedModels.size()) + " local model(s); select one to enable chat/tooling.";
+                g_modelDetectionStatus = "Detected " + std::to_string(g_detectedModels.size()) + " local model(s); choose the exact OS AI model to enable chat/tooling.";
             }
         }
 
@@ -1421,17 +1523,24 @@ namespace epoch::ai
         if (selected.empty())
             return false;
 
-        if (g_detectedModels.empty()
-            || std::find(g_detectedModels.begin(), g_detectedModels.end(), selected) == g_detectedModels.end())
+        restore_selected_model_preference_if_needed();
+        if (g_detectedModels.empty())
+            g_detectedModels = fetch_detected_models(g_selectedEndpoint);
+
+        if (std::find(g_detectedModels.begin(), g_detectedModels.end(), selected) == g_detectedModels.end())
         {
+            g_modelDetectionStatus = "Could not select OS model '" + selected + "' because the endpoint did not report it.";
             return false;
         }
 
         delete g_engineAi;
         g_engineAi = nullptr;
         g_selectedModel = selected;
-        g_modelDetectionStatus = "Selected model: " + selected;
+        persist_selected_model_preference(selected);
         init_engine_ai();
+        g_modelDetectionStatus = g_engineAi
+            ? "Selected and initialized model client: " + selected
+            : "Selected model '" + selected + "', but the OS AI client did not initialize.";
 
         std::string msg = "AI model selected: ";
         msg += selected;
@@ -1441,6 +1550,7 @@ namespace epoch::ai
 
     ModelManifest active_model_manifest()
     {
+        restore_selected_model_preference_if_needed();
         ModelManifest manifest{};
         manifest.id = g_selectedModel;
         manifest.provider = g_providerMode;

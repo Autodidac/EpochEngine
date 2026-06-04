@@ -263,6 +263,9 @@ namespace epochnamespace::gui
             std::size_t selectedLine = 0;
             bool hasSelection = false;
             std::size_t lastLineCount = 0;
+            float scrollY = 0.0f;
+            float lastContentPixelHeight = 0.0f;
+            float lastViewportHeight = 0.0f;
             bool draggingScrollbar = false;
             float dragGrabOffset = 0.0f;
         };
@@ -351,6 +354,9 @@ namespace epochnamespace::gui
             bool justPressed = false;
             bool rightJustPressed = false;
             int mouseWheelDelta = 0;
+            bool modalInputCapture = false;
+            Vec2 modalInputMin{};
+            Vec2 modalInputMax{};
 
             std::optional<WidgetBounds> lastButtonBounds{};
 
@@ -978,8 +984,24 @@ namespace epochnamespace::gui
             return (p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h);
         }
 
+        [[nodiscard]] static bool point_in_modal_input_capture(Vec2 p) noexcept
+        {
+            if (!g_frame.modalInputCapture)
+                return true;
+
+            return point_in_rect(
+                p,
+                g_frame.modalInputMin.x,
+                g_frame.modalInputMin.y,
+                (std::max)(0.0f, g_frame.modalInputMax.x - g_frame.modalInputMin.x),
+                (std::max)(0.0f, g_frame.modalInputMax.y - g_frame.modalInputMin.y));
+        }
+
         [[nodiscard]] static bool point_in_active_clip(Vec2 p) noexcept
         {
+            if (!point_in_modal_input_capture(p))
+                return false;
+
             return !has_content_clip()
                 || point_in_rect(
                     p,
@@ -1830,6 +1852,9 @@ namespace epochnamespace::gui
             g_frame.widgetSerial = 0;
             g_frame.insideWindow = false;
             g_frame.lastButtonBounds.reset();
+            g_frame.modalInputCapture = false;
+            g_frame.modalInputMin = {};
+            g_frame.modalInputMax = {};
             g_frame.activeTheme = ThemeVariant::DefaultDark;
             g_frame.themeStack.clear();
             g_scrollAreaStack.clear();
@@ -1982,6 +2007,12 @@ namespace epochnamespace::gui
 
     int consume_mouse_wheel_delta() noexcept
     {
+        if (!point_in_modal_input_capture(g_frame.mousePos))
+        {
+            g_frame.mouseWheelDelta = 0;
+            return 0;
+        }
+
         const int delta = g_frame.mouseWheelDelta;
         g_frame.mouseWheelDelta = 0;
         return delta;
@@ -2216,32 +2247,82 @@ namespace epochnamespace::gui
 
     bool is_mouse_down() noexcept
     {
-        return g_frame.mouseDown;
+        return g_frame.mouseDown && point_in_modal_input_capture(g_frame.mousePos);
     }
 
     bool was_mouse_pressed() noexcept
     {
-        return g_frame.justPressed;
+        return g_frame.justPressed && point_in_modal_input_capture(g_frame.mousePos);
     }
 
     bool was_mouse_released() noexcept
     {
-        return g_frame.justReleased;
+        return g_frame.justReleased && point_in_modal_input_capture(g_frame.mousePos);
     }
 
     bool is_mouse_right_down() noexcept
     {
-        return g_frame.mouseRightDown;
+        return g_frame.mouseRightDown && point_in_modal_input_capture(g_frame.mousePos);
     }
 
     bool was_mouse_right_pressed() noexcept
     {
-        return g_frame.rightJustPressed;
+        return g_frame.rightJustPressed && point_in_modal_input_capture(g_frame.mousePos);
     }
 
     bool was_mouse_right_released() noexcept
     {
-        return g_frame.rightJustReleased;
+        return g_frame.rightJustReleased && point_in_modal_input_capture(g_frame.mousePos);
+    }
+
+    void begin_modal_input_capture(Vec2 position, Vec2 size) noexcept
+    {
+        g_frame.modalInputCapture = size.x > 0.0f && size.y > 0.0f;
+        g_frame.modalInputMin = position;
+        g_frame.modalInputMax = {
+            position.x + (std::max)(0.0f, size.x),
+            position.y + (std::max)(0.0f, size.y)
+        };
+    }
+
+    void clear_modal_input_capture() noexcept
+    {
+        g_frame.modalInputCapture = false;
+        g_frame.modalInputMin = {};
+        g_frame.modalInputMax = {};
+    }
+
+    std::span<const ThemePreferenceChoice> theme_preference_choices() noexcept
+    {
+        static constexpr std::array<ThemePreferenceChoice, 3> kChoices{ {
+            { "Follow System Dark Mode", ThemePreference::FollowSystemDark },
+            { "Professional Dark", ThemePreference::ProfessionalDark },
+            { "Classic Launcher", ThemePreference::ClassicLauncher }
+        } };
+        return { kChoices.data(), kChoices.size() };
+    }
+
+    std::string_view theme_preference_label(ThemePreference preference) noexcept
+    {
+        for (const auto& choice : theme_preference_choices())
+        {
+            if (choice.preference == preference)
+                return choice.label;
+        }
+        return "Follow System Dark Mode";
+    }
+
+    ThemeVariant resolve_theme_preference(ThemePreference preference) noexcept
+    {
+        switch (preference)
+        {
+        case ThemePreference::ClassicLauncher:
+            return ThemeVariant::ClassicLauncher;
+        case ThemePreference::FollowSystemDark:
+        case ThemePreference::ProfessionalDark:
+        default:
+            return ThemeVariant::DefaultDark;
+        }
     }
 
     void push_theme(ThemeVariant theme) noexcept
@@ -2261,6 +2342,22 @@ namespace epochnamespace::gui
         {
             g_frame.activeTheme = ThemeVariant::DefaultDark;
         }
+    }
+
+    ScopedTheme::ScopedTheme(ThemeVariant theme) noexcept
+    {
+        push_theme(theme);
+    }
+
+    ScopedTheme::ScopedTheme(ThemePreference preference) noexcept
+        : ScopedTheme(resolve_theme_preference(preference))
+    {
+    }
+
+    ScopedTheme::~ScopedTheme() noexcept
+    {
+        if (active_)
+            pop_theme();
     }
 
     void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept
@@ -2350,6 +2447,7 @@ namespace epochnamespace::gui
         try { ensure_resources(); }
         catch (...) { return; }
 
+        begin_modal_input_capture(options.position, options.size);
         begin_top_layer();
 
         if (options.dim_background && options.viewport_size.x > 0.0f && options.viewport_size.y > 0.0f)
@@ -2621,7 +2719,8 @@ namespace epochnamespace::gui
             window_position.x + (std::max)(0.0f, window_size.x - width - kContentPadding),
             window_position.y + 5.0f
         };
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height);
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_modal_input_capture(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key("window-close", pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
         if (hovered && g_frame.justPressed)
@@ -4225,29 +4324,55 @@ namespace epochnamespace::gui
 
         draw_sprite(palette.consoleBackground, pos.x, pos.y, width, height);
 
-        const float scrollbarWidth = options.lines.size() > 1 ? 10.0f : 0.0f;
+        const float scrollbarWidth = options.lines.empty() ? 0.0f : 10.0f;
         const float contentX = pos.x + kBoxInnerPadding;
         const float contentY = pos.y + kBoxInnerPadding;
         const float contentWidth = (std::max)(1.0f, width - 2.0f * kBoxInnerPadding - scrollbarWidth);
         const float contentHeight = (std::max)(1.0f, height - 2.0f * kBoxInnerPadding);
         const float linePitch = line_advance_amount(kFontScale);
-        const std::size_t visibleLines = (std::max)(std::size_t{ 1 },
-            static_cast<std::size_t>(std::floor(contentHeight / (std::max)(1.0f, linePitch))));
+        const float rowGap = 2.0f;
+        const std::size_t lineCount = options.lines.size();
+
+        const auto line_view = [&](std::size_t lineIndex) noexcept -> std::string_view
+        {
+            std::string_view line{ options.lines[lineIndex] };
+            if (options.max_line_chars > 0 && line.size() > options.max_line_chars)
+                line = line.substr(0, options.max_line_chars);
+            return line;
+        };
+
+        std::vector<float> lineHeights{};
+        lineHeights.reserve(lineCount);
+
+        float totalTextHeight = 0.0f;
+        for (std::size_t lineIndex = 0; lineIndex < lineCount; ++lineIndex)
+        {
+            const std::string_view line = line_view(lineIndex);
+            const float textHeight = (options.wrap_lines && !line.empty())
+                ? measure_wrapped_text_height(line, contentWidth, kFontScale)
+                : linePitch;
+            const float rowHeight = (std::max)(linePitch, textHeight) + rowGap;
+            lineHeights.push_back(rowHeight);
+            totalTextHeight += rowHeight;
+        }
+
+        const float maxScrollY = (std::max)(0.0f, totalTextHeight - contentHeight);
 
         const std::string id = options.id.empty()
             ? std::to_string(reinterpret_cast<std::uintptr_t>(options.lines.data()))
             : std::string(options.id);
         auto& state = g_scrollTextStates[scroll_panel_key(id)];
 
-        const std::size_t lineCount = options.lines.size();
-        const std::size_t maxFirstLine = lineCount > visibleLines ? lineCount - visibleLines : 0;
+        const float previousMaxScrollY = (std::max)(0.0f, state.lastContentPixelHeight - state.lastViewportHeight);
         const bool wasAtBottom = state.lastLineCount == 0
-            || state.firstLine + visibleLines >= state.lastLineCount;
+            || state.scrollY >= previousMaxScrollY - linePitch;
         if (options.stick_to_bottom && lineCount != state.lastLineCount && wasAtBottom)
-            state.firstLine = maxFirstLine;
+            state.scrollY = maxScrollY;
         else
-            state.firstLine = (std::min)(state.firstLine, maxFirstLine);
+            state.scrollY = (std::clamp)(state.scrollY, 0.0f, maxScrollY);
         state.lastLineCount = lineCount;
+        state.lastContentPixelHeight = totalTextHeight;
+        state.lastViewportHeight = contentHeight;
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
             && point_in_active_clip(g_frame.mousePos);
@@ -4255,24 +4380,23 @@ namespace epochnamespace::gui
         {
             const int wheelSteps = (std::max)(1, std::abs(g_frame.mouseWheelDelta) / 120);
             if (g_frame.mouseWheelDelta > 0)
-                state.firstLine = state.firstLine > static_cast<std::size_t>(wheelSteps)
-                    ? state.firstLine - static_cast<std::size_t>(wheelSteps)
-                    : 0;
+                state.scrollY = (std::max)(0.0f, state.scrollY - static_cast<float>(wheelSteps) * linePitch * 3.0f);
             else
-                state.firstLine = (std::min)(maxFirstLine, state.firstLine + static_cast<std::size_t>(wheelSteps));
+                state.scrollY = (std::min)(maxScrollY, state.scrollY + static_cast<float>(wheelSteps) * linePitch * 3.0f);
 
             g_frame.mouseWheelDelta = 0;
             result.wheel_scrolled = true;
         }
 
-        if (scrollbarWidth > 0.0f && lineCount > visibleLines)
+        const bool canScroll = maxScrollY > 0.5f;
+        if (scrollbarWidth > 0.0f && canScroll)
         {
             const float trackX = pos.x + width - kBoxInnerPadding - scrollbarWidth;
             const float trackY = contentY;
-            const float visibleRatio = static_cast<float>(visibleLines) / static_cast<float>(lineCount);
+            const float visibleRatio = contentHeight / (std::max)(contentHeight, totalTextHeight);
             const float thumbHeight = (std::min)(contentHeight, (std::max)(18.0f, contentHeight * visibleRatio));
-            const float scrollRatio = maxFirstLine > 0
-                ? static_cast<float>(state.firstLine) / static_cast<float>(maxFirstLine)
+            const float scrollRatio = maxScrollY > 0.0f
+                ? state.scrollY / maxScrollY
                 : 0.0f;
             const float thumbY = trackY + (contentHeight - thumbHeight) * scrollRatio;
             const bool trackHovered = point_in_rect(g_frame.mousePos, trackX, trackY, scrollbarWidth, contentHeight)
@@ -4295,24 +4419,42 @@ namespace epochnamespace::gui
             {
                 const float travel = (std::max)(1.0f, contentHeight - thumbHeight);
                 const float requested = (g_frame.mousePos.y - trackY - state.dragGrabOffset) / travel;
-                state.firstLine = static_cast<std::size_t>(std::round((std::clamp)(requested, 0.0f, 1.0f) * static_cast<float>(maxFirstLine)));
-                state.firstLine = (std::min)(state.firstLine, maxFirstLine);
+                state.scrollY = (std::clamp)(requested, 0.0f, 1.0f) * maxScrollY;
                 result.first_visible_line = state.firstLine;
             }
         }
 
-        result.first_visible_line = state.firstLine;
+        result.first_visible_line = (std::min)(state.firstLine, lineCount);
         {
             ContentClipScope clip{
                 { contentX, contentY },
                 { contentX + contentWidth, contentY + contentHeight }
             };
 
-            const std::size_t endLine = (std::min)(lineCount, state.firstLine + visibleLines);
-            for (std::size_t lineIndex = state.firstLine; lineIndex < endLine; ++lineIndex)
+            bool foundFirstVisible = false;
+            float rowY = contentY - state.scrollY;
+            for (std::size_t lineIndex = 0; lineIndex < lineCount; ++lineIndex)
             {
-                const float rowY = contentY + static_cast<float>(lineIndex - state.firstLine) * linePitch;
-                const bool lineHovered = hovered && point_in_rect(g_frame.mousePos, contentX, rowY, contentWidth, linePitch);
+                const float rowHeight = lineHeights[lineIndex];
+                const float rowBottom = rowY + rowHeight;
+
+                if (rowBottom < contentY)
+                {
+                    rowY += rowHeight;
+                    continue;
+                }
+
+                if (rowY > contentY + contentHeight)
+                    break;
+
+                if (!foundFirstVisible)
+                {
+                    state.firstLine = lineIndex;
+                    result.first_visible_line = lineIndex;
+                    foundFirstVisible = true;
+                }
+
+                const bool lineHovered = hovered && point_in_rect(g_frame.mousePos, contentX, rowY, contentWidth, rowHeight);
 
                 if (options.selectable && g_frame.justPressed && lineHovered)
                 {
@@ -4322,16 +4464,20 @@ namespace epochnamespace::gui
                 }
 
                 if (options.selectable && state.hasSelection && state.selectedLine == lineIndex)
-                    draw_sprite(palette.buttonActive, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, linePitch + 2.0f);
+                    draw_sprite(palette.buttonActive, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, rowHeight);
                 else if (lineHovered)
-                    draw_sprite(palette.buttonHover, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, linePitch + 2.0f);
+                    draw_sprite(palette.buttonHover, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, rowHeight);
 
-                std::string_view line{ options.lines[lineIndex] };
-                if (options.max_line_chars > 0 && line.size() > options.max_line_chars)
-                    line = line.substr(0, options.max_line_chars);
+                const std::string_view line = line_view(lineIndex);
+                if (options.wrap_lines)
+                    draw_wrapped_text(line, contentX, rowY, contentWidth, kFontScale);
+                else
+                {
+                    const std::string fitted = fit_text_to_width(line, contentWidth, kFontScale);
+                    draw_text_line(fitted.empty() ? line : std::string_view{ fitted }, contentX, rowY, kFontScale);
+                }
 
-                const std::string fitted = fit_text_to_width(line, contentWidth, kFontScale);
-                draw_text_line(fitted.empty() ? line : std::string_view{ fitted }, contentX, rowY, kFontScale);
+                rowY += rowHeight;
             }
         }
 
@@ -4341,12 +4487,12 @@ namespace epochnamespace::gui
             const float trackY = contentY;
             draw_sprite(palette.textField, trackX, trackY, scrollbarWidth, contentHeight);
 
-            if (lineCount > visibleLines)
+            if (canScroll)
             {
-                const float visibleRatio = static_cast<float>(visibleLines) / static_cast<float>(lineCount);
+                const float visibleRatio = contentHeight / (std::max)(contentHeight, totalTextHeight);
                 const float thumbHeight = (std::max)(18.0f, contentHeight * visibleRatio);
-                const float scrollRatio = maxFirstLine > 0
-                    ? static_cast<float>(state.firstLine) / static_cast<float>(maxFirstLine)
+                const float scrollRatio = maxScrollY > 0.0f
+                    ? state.scrollY / maxScrollY
                     : 0.0f;
                 const float thumbY = trackY + (contentHeight - thumbHeight) * scrollRatio;
                 draw_sprite(palette.buttonActive, trackX, thumbY, scrollbarWidth, thumbHeight);

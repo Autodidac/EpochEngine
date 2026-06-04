@@ -88,7 +88,12 @@ replay pass.
   focus routing, z-order, modal scrims, context menus, and future popout hosts.
 - Theme and rendering: palette ownership, font/glyph metrics, clipping,
   runtime-surface atlas use, deferred GUI replay, and backend-safe present
-  ordering.
+  ordering. Theme preference labels, option data, preference resolution, and
+  scoped theme application belong to `engine.gui`; editor surfaces may store the
+  selected preference but must not recreate theme tables in domain code. Current
+  exposed choices are Follow System Dark Mode, Professional Dark, and Classic
+  Launcher; Follow System Dark Mode resolves to the dark tool palette until a
+  real platform light/dark palette bridge lands.
 - Editor composition: scene/game, assets, project/build, systems, AI sandbox,
   scripting, and package manager workspaces choose domain data and layout, but
   do not own generic widget behavior.
@@ -122,6 +127,11 @@ Before a control is considered ready, it needs:
   details panes, source editors, progress rows, graph canvases, and modal bodies
   should resize from viewport/content constraints through reusable primitives so
   editor workspaces do not keep reinventing brittle row math.
+- dynamic word wrap is the default for reusable text surfaces. Logs, chat
+  transcripts, inspector rows, package details, update modals, source previews,
+  and other scrollable panels should measure against their actual viewport width
+  and keep scrollbar extents in pixel space so resizing cannot smear stale glyph
+  columns or truncate important status text unless a control explicitly opts out.
 - source editors are shared GUI primitives. They process text input directly,
   render only visible source lines inside the scroll clip, and expose
   click-to-caret placement, drag ranged selection, focused navigation hotkeys,
@@ -167,6 +177,12 @@ Current bottom-dock non-output tabs should use compact status-only text inside
 property-row blocks, buttons, dropdowns, selection tables, or progress widgets
 into Project, Assets, AI, or Systems dock pages; those controls belong in
 central workspaces, modal windows, or Inspector-owned panels.
+
+Docking defaults to selected-backend multi-pane composition. A DirectX editor
+creates DirectX scene panes, an OpenGL editor creates OpenGL scene panes, and
+mixed-backend grids are reserved for explicit diagnostics or accurate-preview
+comparison. GUI primitives must therefore stay backend-neutral while the editor
+host owns which renderer family a pane belongs to.
 
 ## Artifact And Smear Guard
 

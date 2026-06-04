@@ -91,20 +91,18 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     runtime dependencies for that lane; static-vcpkg all-backend work remains a
     separate acceptance-gated track because Raylib/SFML/SDL/GLAD static libs can
     export overlapping STB, GLAD, and math symbols.
-19. Model package install UI must distinguish staged evidence from transfer
-    progress. `v0.84.87` fixes the misleading 35% model-package state by
-    reporting `cache/models/.../download.plan.json` staging as complete; the
-    actual model-weight downloader still needs its own approval, byte-count,
-    resume, license/notice, and cache verification gate before it can claim a
-    download is running.
-20. `v0.86.02` is the active feature-line consolidation point. The Linux Clang
-    full-engine optimizer crash in `gamecore.ixx` was reduced in source by
-    removing unused atlas imports/registry state from the grid-helper module;
-    the lane no longer carries a Clang-only `-O0` workaround. The automatic
-    editor update check is also guarded so a packaged update must contain a
-    verified replacement executable before Epoch launches a handoff script or
-    closes the running editor, and the current platform's CI lane must be green
-    before the editor advertises an update.
+19. Model/package installs must distinguish staged evidence from real transfer
+    progress. Weight/source downloads need approval, byte counts, resume/cache
+    checks, license/notice tracking, and visible failure state before any UI can
+    claim a download is running.
+20. `v0.87.00` is the active feature-line consolidation point. The editor
+    update path is binary-first and platform-gated, then source-fallback only
+    with visible worker evidence. The editor must never close itself unless a
+    verified replacement executable or successful source handoff exists.
+21. OS AI is selected external tooling, not an internal persona. Visible AI
+    surfaces must distinguish discovery, selected model, initialized client
+    state, staged evidence, and manual promotion gates; remove obsolete watcher,
+    learner, EpochBot, hidden-autonomy, or self-training language.
 
 ## Release And Source Policy
 
@@ -146,6 +144,17 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 - Update availability is also platform-build-gated: Windows checks the
   `windows-msvc` Actions job, Linux checks `linux-clang-engine`, and
   queued/running/failing/missing build evidence withholds update UI/actions.
+- The editor auto-checks updates after startup, but the visible modal appears
+  only when the current platform has newer, build-proven update evidence. The
+  normal smart-update path is binary-first: it downloads/verifies the matching
+  packaged runtime when one exists, then reports and uses source fallback only
+  when no compatible newer package exists. `Advanced Source` remains an
+  explicit source-test path, not the default update action.
+- Update cache entries use release/source asset names with version suffixes
+  under `cache/packages/` instead of anonymous temp names. Cached packages are
+  extraction-verified before reuse, broken packages are deleted and
+  redownloaded, and source rebuilds delete stale source snapshots before a fresh
+  download.
 - GitHub source archives stay full source snapshots. Do not slim them down to
   imitate runtime/bootstrap packages.
 - Commit titles stay descriptive and versionless. Version numbers belong in:
@@ -179,6 +188,10 @@ These are already established and must stay intact while new work lands:
 - launcher/editor separation and the current project-centric runtime shell
 - current multicontext baseline:
   real backend panes, real detach/redock flow, and no fake demo-launch path
+- normal editor docking is selected-backend multi-pane: a DirectX editor should
+  create DirectX dockable scene/context panes, an OpenGL editor should create
+  OpenGL panes, and so on. Mixed-backend grids remain explicit diagnostic or
+  accurate-preview proof surfaces, not the default editor/project runtime shape
 - current project scene/world files are metadata shells; live editor preview is
   still seeded from engine-owned project profiles until scene parsing and
   serialization own runtime loading
@@ -242,6 +255,10 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   stable.
 - Raylib, SDL, and SFML remain context/backend compatibility and validation
   lanes, especially for docking, popout, and backend ownership checks.
+- Mixed backend grids are a diagnostic/accurate-preview feature only. Normal
+  docked editor windows clone the selected backend so pane docking, input,
+  resizing, and scene composition are stable before intentionally crossing
+  renderer families.
 
 ### Long-Horizon World And Renderer Architecture
 
@@ -894,16 +911,12 @@ engine shape and should be treated as starting truth for the next passes:
   focus keys, selected OS models initialize immediately, leaked
   reasoning/debug-only helper text is rejected from visible chat, and model
   package staging no longer looks like a frozen 35% download.
-- `v0.86.02` is the feature-line refresh checkpoint. It keeps the `v0.84.87`
-  OS AI/model-package repairs, records the current roadmap/log archive state,
-  and resolves the Linux Clang full-engine optimizer crash in `gamecore.ixx`
-  by keeping `gamecore` focused on grid helpers instead of importing atlas
-  modules or exporting unused atlas state. The same checkpoint trims default
-  editor seed clutter, moves Package Manager toward a list/action/detail modal,
-  removes the fake Forest Factory floor/stage object, refines Systems graph,
-  and hardens automatic updater handoff so a missing packaged runtime payload
-  logs a failure instead of shutting down without updating.
-  labels without changing renderer order or the protected GUI draw model.
+- `v0.87.00` is the feature-line refresh checkpoint. It preserves the OS
+  AI/model-package repairs, Linux Clang full-engine optimizer fix, cleaner
+  default editor seed set, Package Manager list/action/detail direction,
+  Forest Factory workspace direction, Systems graph refinement, binary-first
+  updater handoff, modal progress/cancel evidence, and GUI text wrapping work
+  without changing renderer order or the protected GUI draw model.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,

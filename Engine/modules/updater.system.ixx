@@ -1674,23 +1674,77 @@ namespace epochnamespace::updater
             return true;
         }
 
+        [[nodiscard]] inline bool patch_cmake_policy_overlay_portfile(
+            const std::filesystem::path& portfile,
+            const std::filesystem::path& log_path,
+            std::string_view port_name)
+        {
+            auto portfile_text = read_text_file(portfile);
+            if (portfile_text.empty())
+            {
+                append_log_line(log_path, std::string{ "[WARN] Failed to read the staged " }
+                    + std::string{ port_name } + " portfile.");
+                return false;
+            }
+
+            portfile_text = std::regex_replace(portfile_text, std::regex{ "\r\n?" }, "\n");
+            if (portfile_text.find("CMAKE_POLICY_VERSION_MINIMUM=3.5") != std::string::npos)
+            {
+                append_log_line(log_path, std::string{ "[INFO] Managed vcpkg " }
+                    + std::string{ port_name } + " port already carries modern CMake policy handling.");
+                return true;
+            }
+
+            const std::string option_line = "        -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n";
+            const auto options_pos = portfile_text.find("\n    OPTIONS\n");
+            if (options_pos != std::string::npos)
+            {
+                portfile_text.insert(options_pos + std::string{ "\n    OPTIONS\n" }.size(), option_line);
+            }
+            else
+            {
+                const auto configure_pos = portfile_text.find("vcpkg_cmake_configure(");
+                if (configure_pos == std::string::npos)
+                {
+                    append_log_line(log_path, std::string{ "[WARN] Could not patch the staged " }
+                        + std::string{ port_name } + " portfile.");
+                    return false;
+                }
+
+                const auto line_break = portfile_text.find('\n', configure_pos);
+                if (line_break == std::string::npos)
+                {
+                    append_log_line(log_path, std::string{ "[WARN] Could not patch the staged " }
+                        + std::string{ port_name } + " portfile.");
+                    return false;
+                }
+
+                portfile_text.insert(
+                    line_break + 1,
+                    "    OPTIONS\n"
+                    "        -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n");
+            }
+
+            std::ofstream out(portfile, std::ios::binary | std::ios::trunc);
+            if (!out)
+            {
+                append_log_line(log_path, std::string{ "[WARN] Failed to write the staged " }
+                    + std::string{ port_name } + " overlay port.");
+                return false;
+            }
+
+            out << portfile_text;
+            append_log_line(log_path, std::string{ "[INFO] Prepared a " }
+                + std::string{ port_name } + " overlay port for modern CMake policy handling.");
+            return true;
+        }
+
         [[nodiscard]] inline std::filesystem::path prepare_vcpkg_overlay_ports(
             const std::filesystem::path& vcpkg_root,
             const std::filesystem::path& log_path)
         {
-            const auto source_glad_dir = vcpkg_root / "ports" / "glad";
-            if (!std::filesystem::exists(source_glad_dir))
-            {
-                append_log_line(log_path, "[WARN] Managed vcpkg glad port was not found; skipping overlay patch.");
-                return {};
-            }
-
             const auto overlay_root = managed_tools_root() / "ov";
-            const auto glad_overlay_dir = overlay_root / "glad";
             std::error_code ec;
-
-            std::filesystem::remove_all(glad_overlay_dir, ec);
-            ec.clear();
             std::filesystem::create_directories(overlay_root, ec);
             if (ec)
             {
@@ -1698,68 +1752,51 @@ namespace epochnamespace::updater
                 return {};
             }
 
-            std::filesystem::copy(
-                source_glad_dir,
-                glad_overlay_dir,
-                std::filesystem::copy_options::recursive
-                | std::filesystem::copy_options::overwrite_existing,
-                ec);
-            if (ec)
+            bool staged_any = false;
+            constexpr std::array<std::string_view, 3> k_policy_ports{
+                "glad",
+                "libogg",
+                "libvorbis"
+            };
+
+            for (const auto port_name : k_policy_ports)
             {
-                append_log_line(log_path, "[WARN] Failed to stage the glad overlay port.");
+                const auto source_port_dir = vcpkg_root / "ports" / std::string{ port_name };
+                if (!std::filesystem::exists(source_port_dir))
+                {
+                    append_log_line(log_path, std::string{ "[WARN] Managed vcpkg " }
+                        + std::string{ port_name } + " port was not found; skipping overlay patch.");
+                    continue;
+                }
+
+                const auto overlay_port_dir = overlay_root / std::string{ port_name };
+                ec.clear();
+                std::filesystem::remove_all(overlay_port_dir, ec);
+                ec.clear();
+                std::filesystem::copy(
+                    source_port_dir,
+                    overlay_port_dir,
+                    std::filesystem::copy_options::recursive
+                    | std::filesystem::copy_options::overwrite_existing,
+                    ec);
+                if (ec)
+                {
+                    append_log_line(log_path, std::string{ "[WARN] Failed to stage the " }
+                        + std::string{ port_name } + " overlay port.");
+                    continue;
+                }
+
+                staged_any = patch_cmake_policy_overlay_portfile(
+                    overlay_port_dir / "portfile.cmake",
+                    log_path,
+                    port_name)
+                    || staged_any;
+            }
+
+            if (!staged_any)
                 return {};
-            }
 
-            const auto portfile = glad_overlay_dir / "portfile.cmake";
-            auto portfile_text = read_text_file(portfile);
-            if (portfile_text.empty())
-            {
-                append_log_line(log_path, "[WARN] Failed to read the staged glad portfile.");
-                return {};
-            }
-
-            if (portfile_text.find("CMAKE_POLICY_VERSION_MINIMUM=3.5") == std::string::npos)
-            {
-                const std::string option_line =
-                    "        -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n";
-                const auto options_pos = portfile_text.find("\n    OPTIONS\n");
-                if (options_pos != std::string::npos)
-                {
-                    portfile_text.insert(options_pos + std::string{ "\n    OPTIONS\n" }.size(), option_line);
-                }
-                else
-                {
-                    const auto configure_pos = portfile_text.find("vcpkg_cmake_configure(");
-                    if (configure_pos == std::string::npos)
-                    {
-                        append_log_line(log_path, "[WARN] Could not patch the staged glad portfile.");
-                        return {};
-                    }
-
-                    const auto line_break = portfile_text.find('\n', configure_pos);
-                    if (line_break == std::string::npos)
-                    {
-                        append_log_line(log_path, "[WARN] Could not patch the staged glad portfile.");
-                        return {};
-                    }
-
-                    portfile_text.insert(
-                        line_break + 1,
-                        "    OPTIONS\n"
-                        "        -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n");
-                }
-
-                std::ofstream out(portfile, std::ios::binary | std::ios::trunc);
-                if (!out)
-                {
-                    append_log_line(log_path, "[WARN] Failed to write the staged glad overlay port.");
-                    return {};
-                }
-
-                out << portfile_text;
-            }
-
-            append_log_line(log_path, "[INFO] Prepared a glad overlay port for modern CMake policy handling.");
+            append_log_line(log_path, "[INFO] Prepared updater overlay ports for modern CMake policy handling.");
             return overlay_root;
         }
 
@@ -2102,6 +2139,62 @@ namespace epochnamespace::updater
             return ensure_directory(package_cache_root() / install_token) / "main.update.pkg";
         }
 
+        [[nodiscard]] inline std::string sanitize_cache_file_name(std::string text)
+        {
+            for (char& ch : text)
+            {
+                const auto uch = static_cast<unsigned char>(ch);
+                if (!std::isalnum(uch) && ch != '-' && ch != '_' && ch != '.')
+                    ch = '_';
+            }
+
+            while (!text.empty() && (text.back() == '_' || text.back() == '.'))
+                text.pop_back();
+
+            if (text.empty() || text == "." || text == "..")
+                text = "epoch-update-" + std::string{ PROJECT_PACKAGED_VERSION };
+
+            return text;
+        }
+
+        [[nodiscard]] inline std::string update_package_cache_file_name(
+            const std::string_view url,
+            const std::string_view archive_extension)
+        {
+            const std::string stripped_url = strip_url_query_and_fragment(std::string{ url });
+            const auto last_separator = stripped_url.find_last_of("/\\");
+            std::string file_name = last_separator == std::string::npos
+                ? stripped_url
+                : stripped_url.substr(last_separator + 1);
+
+            file_name = sanitize_cache_file_name(file_name);
+
+            if (!archive_extension.empty())
+            {
+                const std::string lower_name = lower_ascii(file_name);
+                const std::string lower_extension = lower_ascii(std::string{ archive_extension });
+                if (!lower_name.ends_with(lower_extension))
+                    file_name += archive_extension;
+            }
+
+            return file_name;
+        }
+
+        [[nodiscard]] inline std::filesystem::path replacement_package_path(
+            const std::filesystem::path& target_binary,
+            const std::string_view url,
+            const std::string_view archive_extension)
+        {
+            const auto install_token =
+                shorten_token(
+                    target_binary.parent_path().filename().string()
+                    + "_" + target_binary.stem().string(),
+                    24);
+
+            return ensure_directory(package_cache_root() / install_token)
+                / update_package_cache_file_name(url, archive_extension);
+        }
+
         [[nodiscard]] inline std::filesystem::path replacement_extract_dir(const std::filesystem::path& target_binary)
         {
             const auto install_root =
@@ -2172,6 +2265,11 @@ namespace epochnamespace::updater
                     + "_" + target_binary.stem().string(),
                     24))
                 / "src";
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_cancel_path(const std::filesystem::path& target_binary)
+        {
+            return target_binary.parent_path() / "epoch_source_update.cancel";
         }
 
         [[nodiscard]] inline std::filesystem::path make_temp_download_path(const std::string_view stem)
@@ -2689,6 +2787,12 @@ namespace epochnamespace::updater
         bool packaged_update_available{ false };
         bool force_required{ false };
         bool update_performed{ false };
+        bool packaged_update_performed{ false };
+        bool source_update_performed{ false };
+        bool packaged_release_checked{ false };
+        bool packaged_release_found{ false };
+        bool packaged_release_missing{ false };
+        bool source_fallback_attempted{ false };
         std::string local_version;
         std::string remote_version;
         std::string source_local_version;
@@ -2702,6 +2806,8 @@ namespace epochnamespace::updater
         std::string platform_build_conclusion;
         std::string platform_build_url;
         std::string platform_build_reason;
+        std::string packaged_release_reason;
+        std::string status_message;
     };
 
     export struct UpdateChannel
@@ -2739,6 +2845,7 @@ namespace epochnamespace::updater
         const auto target_dir = target_binary.parent_path();
         const auto build_log = target_dir / "epoch_source_update.log";
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
+        const auto cancel_path = system_detail::source_cancel_path(target_binary);
         const auto worker_script = system_detail::make_temp_powershell_script_path("source_update_worker");
         const auto built_runtime_dir = system_detail::source_runtime_output_dir(final_dir);
         const auto built_binary = system_detail::source_runtime_binary_path(final_dir, target_binary);
@@ -2773,6 +2880,7 @@ namespace epochnamespace::updater
             << "$solution = '" << esc(solution.string()) << "'\n"
             << "$buildLog = '" << esc(build_log.string()) << "'\n"
             << "$handoffLog = '" << esc(handoff_log.string()) << "'\n"
+            << "$cancelPath = '" << esc(cancel_path.string()) << "'\n"
             << "$targetExe = '" << esc(target_binary.string()) << "'\n"
             << "$targetDir = '" << esc(target_dir.string()) << "'\n"
             << "$targetAssetsDir = '" << esc(target_assets_dir.string()) << "'\n"
@@ -2881,6 +2989,28 @@ namespace epochnamespace::updater
             << "  $line = \"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Message\"\n"
             << "  Write-Host $line\n"
             << "  Append-Text $handoffLog ($line + [Environment]::NewLine)\n"
+            << "}\n"
+            << "function Test-Cancel {\n"
+            << "  if (Test-Path -LiteralPath $cancelPath) {\n"
+            << "    Write-Step 'WARN' 'Source update canceled by operator.'\n"
+            << "    Write-Handoff 'WARN' 'Source update canceled by operator before runtime handoff.'\n"
+            << "    Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
+            << "    Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "    Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "    Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue\n"
+            << "    Remove-Item -LiteralPath $workerPath -Force -ErrorAction SilentlyContinue\n"
+            << "    exit 130\n"
+            << "  }\n"
+            << "}\n"
+            << "trap {\n"
+            << "  $message = $_.Exception.Message\n"
+            << "  if ([string]::IsNullOrWhiteSpace($message)) {\n"
+            << "    $message = $_.ToString()\n"
+            << "  }\n"
+            << "  Write-Step 'ERROR' $message\n"
+            << "  Write-Handoff 'ERROR' $message\n"
+            << "  Remove-Item -LiteralPath $workerPath -Force -ErrorAction SilentlyContinue\n"
+            << "  exit 1\n"
             << "}\n"
             << "function Invoke-Tool([string]$FilePath, [string[]]$Arguments, [string]$WorkingDir, [string]$StepName) {\n"
             << "  $toolLog = [System.IO.Path]::GetTempFileName()\n"
@@ -3061,38 +3191,68 @@ namespace epochnamespace::updater
             << "  [System.IO.File]::WriteAllText($manifestFile, $manifestText, $utf8NoBom)\n"
             << "  Write-Step 'INFO' 'Reconfigured the source snapshot to use the managed vcpkg git registry.'\n"
             << "}\n"
-            << "function Prepare-GladOverlay([string]$VcpkgRoot) {\n"
-            << "  $sourceGladDir = Join-Path $VcpkgRoot 'ports\\glad'\n"
-            << "  if (-not (Test-Path -LiteralPath $sourceGladDir)) {\n"
-            << "    return ''\n"
+            << "function Stage-CMakePolicyOverlayPort([string]$VcpkgRoot, [string]$OverlayRoot, [string]$PortName) {\n"
+            << "  $sourcePortDir = Join-Path $VcpkgRoot ('ports\\' + $PortName)\n"
+            << "  if (-not (Test-Path -LiteralPath $sourcePortDir)) {\n"
+            << "    Write-Step 'WARN' ('Managed vcpkg ' + $PortName + ' port was not found; skipping overlay patch.')\n"
+            << "    return $false\n"
             << "  }\n"
-            << "  $overlayRoot = Join-Path $managedToolsRoot 'ov'\n"
-            << "  $gladOverlayDir = Join-Path $overlayRoot 'glad'\n"
-            << "  Remove-Item -LiteralPath $gladOverlayDir -Recurse -Force -ErrorAction SilentlyContinue\n"
-            << "  New-Item -ItemType Directory -Path $overlayRoot -Force | Out-Null\n"
-            << "  Copy-Item -LiteralPath $sourceGladDir -Destination $gladOverlayDir -Recurse -Force\n"
-            << "  $portfile = Join-Path $gladOverlayDir 'portfile.cmake'\n"
+            << "  $overlayPortDir = Join-Path $OverlayRoot $PortName\n"
+            << "  Remove-Item -LiteralPath $overlayPortDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  Copy-Item -LiteralPath $sourcePortDir -Destination $overlayPortDir -Recurse -Force\n"
+            << "  $portfile = Join-Path $overlayPortDir 'portfile.cmake'\n"
+            << "  if (-not (Test-Path -LiteralPath $portfile)) {\n"
+            << "    Write-Step 'WARN' ('Staged ' + $PortName + ' overlay port has no portfile.cmake.')\n"
+            << "    return $false\n"
+            << "  }\n"
             << "  $portfileText = Get-Content -LiteralPath $portfile -Raw -ErrorAction Stop\n"
+            << "  $portfileText = $portfileText.Replace(\"`r`n\", \"`n\").Replace(\"`r\", \"`n\")\n"
             << "  if (-not $portfileText.Contains('CMAKE_POLICY_VERSION_MINIMUM=3.5')) {\n"
-            << "    $optionsMarker = [Environment]::NewLine + '    OPTIONS' + [Environment]::NewLine\n"
+            << "    $optionsMarker = \"`n    OPTIONS`n\"\n"
             << "    if ($portfileText.Contains($optionsMarker)) {\n"
-            << "      $portfileText = $portfileText.Replace($optionsMarker, $optionsMarker + '        -DCMAKE_POLICY_VERSION_MINIMUM=3.5' + [Environment]::NewLine)\n"
+            << "      $portfileText = $portfileText.Replace($optionsMarker, $optionsMarker + \"        -DCMAKE_POLICY_VERSION_MINIMUM=3.5`n\")\n"
             << "    }\n"
             << "    else {\n"
-            << "      $configureMarker = 'vcpkg_cmake_configure(' + [Environment]::NewLine\n"
-            << "      if (-not $portfileText.Contains($configureMarker)) {\n"
-            << "        throw 'Could not patch the glad overlay port.'\n"
+            << "      $configureMarker = 'vcpkg_cmake_configure('\n"
+            << "      $configureIndex = $portfileText.IndexOf($configureMarker, [System.StringComparison]::Ordinal)\n"
+            << "      if ($configureIndex -lt 0) {\n"
+            << "        Write-Step 'WARN' ('Could not patch the ' + $PortName + ' overlay port; continuing without that policy overlay.')\n"
+            << "        return $false\n"
             << "      }\n"
-            << "      $portfileText = $portfileText.Replace($configureMarker, $configureMarker + '    OPTIONS' + [Environment]::NewLine + '        -DCMAKE_POLICY_VERSION_MINIMUM=3.5' + [Environment]::NewLine)\n"
+            << "      $lineBreak = $portfileText.IndexOf(\"`n\", $configureIndex)\n"
+            << "      if ($lineBreak -lt 0) {\n"
+            << "        Write-Step 'WARN' ('Could not patch the ' + $PortName + ' overlay port; continuing without that policy overlay.')\n"
+            << "        return $false\n"
+            << "      }\n"
+            << "      $portfileText = $portfileText.Insert($lineBreak + 1, \"    OPTIONS`n        -DCMAKE_POLICY_VERSION_MINIMUM=3.5`n\")\n"
             << "    }\n"
-            << "    [System.IO.File]::WriteAllText($portfile, $portfileText, $utf8NoBom)\n"
+            << "    [System.IO.File]::WriteAllText($portfile, $portfileText.Replace(\"`n\", [Environment]::NewLine), $utf8NoBom)\n"
             << "  }\n"
-            << "  Write-Step 'INFO' 'Prepared a glad overlay port for modern CMake policy handling.'\n"
+            << "  Write-Step 'INFO' ('Prepared a ' + $PortName + ' overlay port for modern CMake policy handling.')\n"
+            << "  return $true\n"
+            << "}\n"
+            << "function Prepare-GladOverlay([string]$VcpkgRoot) {\n"
+            << "  $overlayRoot = Join-Path $managedToolsRoot 'ov'\n"
+            << "  New-Item -ItemType Directory -Path $overlayRoot -Force | Out-Null\n"
+            << "  $stagedAny = $false\n"
+            << "  foreach ($portName in @('glad', 'libogg', 'libvorbis')) {\n"
+            << "    $stagedPort = Stage-CMakePolicyOverlayPort $VcpkgRoot $overlayRoot $portName\n"
+            << "    if ($stagedPort -eq $true) {\n"
+            << "      $stagedAny = $true\n"
+            << "    }\n"
+            << "  }\n"
+            << "  if (-not $stagedAny) {\n"
+            << "    return ''\n"
+            << "  }\n"
+            << "  Write-Step 'INFO' 'Prepared updater overlay ports for modern CMake policy handling.'\n"
             << "  return $overlayRoot\n"
             << "}\n"
+            << "Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $buildLog -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $handoffLog -Force -ErrorAction SilentlyContinue\n"
             << "Write-Step 'INFO' 'Source update worker started.'\n"
+            << "Write-Handoff 'INFO' 'Source update worker started.'\n"
+            << "Write-Handoff 'INFO' ('Build log: ' + $buildLog)\n"
             << "Write-Step 'INFO' ('Source root: ' + $sourceRoot)\n"
             << "Write-Step 'INFO' ('Manifest root: ' + $manifestRoot)\n"
             << "Write-Step 'INFO' ('MSBuild: ' + $msbuildExe)\n"
@@ -3102,8 +3262,11 @@ namespace epochnamespace::updater
             << "New-Item -ItemType Directory -Path (Split-Path -Parent $sourceArchive) -Force | Out-Null\n"
             << "Write-Step 'INFO' 'Downloading latest " << PROJECT_SOURCE_ARCHIVE_LABEL() << ".'\n"
             << "$headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
+            << "Test-Cancel\n"
             << "Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $sourceUrl -OutFile $sourceArchive\n"
+            << "Test-Cancel\n"
             << "Expand-Archive -LiteralPath $sourceArchive -DestinationPath $stagingDir -Force\n"
+            << "Test-Cancel\n"
             << "$extractedRoot = Get-ChildItem -LiteralPath $stagingDir -Directory | Select-Object -First 1\n"
             << "if ($null -ne $extractedRoot) {\n"
             << "  Move-Item -LiteralPath $extractedRoot.FullName -Destination $sourceRoot -Force\n"
@@ -3113,6 +3276,8 @@ namespace epochnamespace::updater
             << "}\n"
             << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Write-Step 'INFO' ('Source snapshot ready at: ' + $sourceRoot)\n"
+            << "Write-Handoff 'INFO' 'Source snapshot downloaded and extracted.'\n"
+            << "Test-Cancel\n"
             << "if (-not [string]::IsNullOrWhiteSpace($env:VCPKG_ROOT)) {\n"
             << "  Write-Step 'INFO' ('Ignoring inherited VCPKG_ROOT: ' + $env:VCPKG_ROOT)\n"
             << "}\n"
@@ -3123,25 +3288,33 @@ namespace epochnamespace::updater
             << "$env:VCPKG_ROOT = $vcpkgRoot\n"
             << "Write-Step 'INFO' ('Pinned worker-local VCPKG_ROOT to managed toolchain: ' + $vcpkgRoot)\n"
             << "Prepare-ManifestForManagedVcpkg $manifestRoot $vcpkgRoot\n"
+            << "Test-Cancel\n"
             << "$overlayRoot = Prepare-GladOverlay $vcpkgRoot\n"
             << "Write-Step 'INFO' 'Restoring source dependencies with vcpkg.'\n"
+            << "Write-Handoff 'INFO' 'Restoring source dependencies with vcpkg.'\n"
             << "$vcpkgArgs = @('install', '--triplet', $triplet, ('--x-manifest-root=' + $manifestRoot), ('--x-builtin-ports-root=' + (Join-Path $vcpkgRoot 'ports')), ('--x-builtin-registry-versions-dir=' + (Join-Path $vcpkgRoot 'versions')))\n"
             << "if (-not [string]::IsNullOrWhiteSpace($overlayRoot)) {\n"
             << "  $vcpkgArgs += ('--overlay-ports=' + $overlayRoot)\n"
             << "}\n"
             << "Invoke-Tool $vcpkgExe $vcpkgArgs $manifestRoot 'vcpkg restore'\n"
+            << "Write-Handoff 'INFO' 'Source dependencies restored.'\n"
+            << "Test-Cancel\n"
             << "$buildSucceeded = $false\n"
             << "for ($attempt = 1; $attempt -le 3 -and -not $buildSucceeded; ++$attempt) {\n"
             << "  try {\n"
+            << "    Test-Cancel\n"
             << "    Write-Step 'INFO' ('MSBuild attempt ' + $attempt + ' started.')\n"
+            << "    Write-Handoff 'INFO' ('MSBuild attempt ' + $attempt + ' started.')\n"
             << "    Invoke-Tool $msbuildExe @($solution, ('/t:' + $buildTarget), ('/p:Configuration=' + $buildConfiguration), ('/p:Platform=' + $buildPlatform), ('/p:VcpkgRoot=' + $vcpkgRoot), ('/p:VcpkgManifestRoot=' + $manifestRoot), ('/p:VcpkgInstalledDir=' + $managedInstallRoot), '/p:VcpkgManifestInstall=false', ('/p:VcpkgTriplet=' + $triplet), '/p:UseMultiToolTask=false', '/m:1', '/clp:ErrorsOnly') $sourceRoot ('MSBuild attempt ' + $attempt)\n"
             << "    $buildSucceeded = $true\n"
             << "  }\n"
             << "  catch {\n"
             << "    Write-Step 'WARN' $_.Exception.Message\n"
+            << "    Write-Handoff 'WARN' $_.Exception.Message\n"
             << "    if ($attempt -lt 3) {\n"
             << "      Write-Step 'INFO' 'Retrying the source build after restore.'\n"
             << "      Start-Sleep -Seconds 5\n"
+            << "      Test-Cancel\n"
             << "    }\n"
             << "  }\n"
             << "}\n"
@@ -3152,8 +3325,10 @@ namespace epochnamespace::updater
             << "  throw 'Built runtime output is missing after source update.'\n"
             << "}\n"
             << "Write-Step 'INFO' ('Built runtime ready at: ' + $builtExe)\n"
+            << "Write-Handoff 'INFO' ('Built runtime ready at: ' + $builtExe)\n"
             << "Write-Handoff 'INFO' 'Waiting for runtime handoff.'\n"
             << "for ($attempt = 1; $attempt -le 600; ++$attempt) {\n"
+            << "  Test-Cancel\n"
             << "  try {\n"
             << "    if (Test-Path -LiteralPath $targetExe) {\n"
             << "      Remove-Item -LiteralPath $targetExe -Force -ErrorAction Stop\n"
@@ -3172,6 +3347,7 @@ namespace epochnamespace::updater
             << "if (Test-Path -LiteralPath $targetExe) {\n"
             << "  throw 'Timed out waiting for target runtime executable to unlock.'\n"
             << "}\n"
+            << "Test-Cancel\n"
             << "Copy-Item -LiteralPath $builtExe -Destination $targetExe -Force\n"
             << "Get-ChildItem -LiteralPath $builtDir -File | Where-Object { $_.Extension -in '.dll', '.manifest' } | ForEach-Object {\n"
             << "  Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $targetDir $_.Name) -Force\n"
@@ -3187,6 +3363,7 @@ namespace epochnamespace::updater
             << "Write-Handoff 'INFO' 'Source runtime files copied successfully.'\n"
             << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue\n"
             << "$env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS = '3000'\n"
             << "Start-Process -FilePath $targetExe -WorkingDirectory $targetDir\n"
             << "Remove-Item Env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS -Force -ErrorAction SilentlyContinue\n"
@@ -3781,6 +3958,111 @@ namespace epochnamespace::updater
         return result;
     }
 
+    [[nodiscard]] bool move_download_into_place(
+        const std::filesystem::path& downloaded_path,
+        const std::filesystem::path& final_path)
+    {
+        std::error_code ec;
+        std::filesystem::create_directories(final_path.parent_path(), ec);
+        if (ec)
+        {
+            system_detail::log_error("Failed to create update cache directory: " + final_path.parent_path().string());
+            return false;
+        }
+
+        std::filesystem::remove(final_path, ec);
+        ec.clear();
+        std::filesystem::rename(downloaded_path, final_path, ec);
+        if (!ec)
+            return true;
+
+        ec.clear();
+        std::filesystem::copy_file(
+            downloaded_path,
+            final_path,
+            std::filesystem::copy_options::overwrite_existing,
+            ec);
+        if (ec)
+        {
+            system_detail::log_error("Failed to move downloaded update into cache: " + final_path.string());
+            return false;
+        }
+
+        std::filesystem::remove(downloaded_path, ec);
+        return true;
+    }
+
+    [[nodiscard]] bool download_update_file_atomic(
+        const std::string& url,
+        const std::filesystem::path& final_path)
+    {
+        std::error_code ec;
+        auto temporary_path = final_path;
+        temporary_path += ".download";
+        std::filesystem::remove(temporary_path, ec);
+
+        if (!download_file(url, temporary_path.string()))
+            return false;
+
+        if (!move_download_into_place(temporary_path, final_path))
+        {
+            std::filesystem::remove(temporary_path, ec);
+            return false;
+        }
+
+        return true;
+    }
+
+    [[nodiscard]] bool prepare_cached_update_archive(
+        const std::string& url,
+        const std::filesystem::path& archive_path,
+        const std::filesystem::path& extract_dir)
+    {
+        namespace fs = std::filesystem;
+
+        std::error_code ec;
+        fs::remove_all(extract_dir, ec);
+        ec.clear();
+
+        if (fs::exists(archive_path, ec) && !ec)
+        {
+            const auto cached_size = fs::file_size(archive_path, ec);
+            if (!ec && cached_size > 0)
+            {
+                system_detail::log_info("Checking cached update package: " + archive_path.string());
+                if (extract_archive(archive_path.string(), extract_dir.string()))
+                {
+                    system_detail::log_info("Using verified cached update package.");
+                    return true;
+                }
+
+                system_detail::log_error("Cached update package failed validation; redownloading.");
+            }
+
+            ec.clear();
+            fs::remove_all(extract_dir, ec);
+            ec.clear();
+            fs::remove(archive_path, ec);
+        }
+
+        system_detail::log_info("Downloading update package into cache: " + archive_path.string());
+        if (!download_update_file_atomic(url, archive_path))
+            return false;
+
+        fs::remove_all(extract_dir, ec);
+        ec.clear();
+        if (!extract_archive(archive_path.string(), extract_dir.string()))
+        {
+            system_detail::log_error("Downloaded update package failed extraction; removing cached package.");
+            fs::remove_all(extract_dir, ec);
+            ec.clear();
+            fs::remove(archive_path, ec);
+            return false;
+        }
+
+        return true;
+    }
+
     bool install_from_binary(
         const std::string& url,
         const std::string_view restart_auto_command = {})
@@ -3802,22 +4084,15 @@ namespace epochnamespace::updater
 
         if (!archive_extension.empty())
         {
-            auto archive_path = system_detail::replacement_package_path(target_binary);
-            archive_path.replace_extension();
-            archive_path += archive_extension;
+            const auto archive_path =
+                system_detail::replacement_package_path(target_binary, url, archive_extension);
             const auto extract_dir = system_detail::replacement_extract_dir(target_binary);
 
             std::error_code ec;
             std::filesystem::remove_all(extract_dir, ec);
 
-            if (!download_file(url, archive_path.string()))
+            if (!prepare_cached_update_archive(url, archive_path, extract_dir))
                 return false;
-
-            if (!extract_archive(archive_path.string(), extract_dir.string()))
-            {
-                system_detail::log_error("Failed to extract update package.");
-                return false;
-            }
 
             return replace_runtime_from_script(
                 target_binary,
@@ -3828,10 +4103,62 @@ namespace epochnamespace::updater
 
         const auto new_binary = system_detail::replacement_binary_path(target_binary);
 
-        if (!download_file(url, new_binary.string()))
+        if (!download_update_file_atomic(url, new_binary))
             return false;
 
         return replace_binary(target_binary, new_binary);
+    }
+
+    export std::filesystem::path source_update_log_path()
+    {
+        return system_detail::current_binary_path().parent_path() / "epoch_source_update.log";
+    }
+
+    export std::filesystem::path update_handoff_log_path()
+    {
+        return system_detail::current_binary_path().parent_path() / "epoch_update_handoff.log";
+    }
+
+    export bool request_source_update_cancel()
+    {
+#if defined(_WIN32)
+        try
+        {
+            const auto target_binary = system_detail::current_binary_path();
+            const auto cancel_path = system_detail::source_cancel_path(target_binary);
+
+            std::error_code ec;
+            std::filesystem::create_directories(cancel_path.parent_path(), ec);
+
+            std::ofstream cancel(cancel_path, std::ios::binary | std::ios::trunc);
+            if (!cancel)
+            {
+                system_detail::log_error("Failed to write source update cancel marker.");
+                return false;
+            }
+
+            cancel << "cancel requested by editor\n";
+            cancel.close();
+            system_detail::append_log_line(
+                update_handoff_log_path(),
+                "[WARN] Source update cancel requested by operator.");
+            system_detail::log_info("Source update cancel requested.");
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            system_detail::log_error(std::string{ "Source update cancel failed: " } + e.what());
+            return false;
+        }
+        catch (...)
+        {
+            system_detail::log_error("Source update cancel failed with an unknown exception.");
+            return false;
+        }
+#else
+        system_detail::log_info("Source update cancel is only available for the detached Windows source worker.");
+        return false;
+#endif
     }
 
     export bool run_source_update_command(
@@ -3865,8 +4192,13 @@ namespace epochnamespace::updater
         if (!launch_source_update_worker(channel, target_binary, effective_silent_worker))
             return false;
 
-        system_detail::log_info("Closing the current runtime so the source update worker can finish the replacement.");
-        std::exit(0);
+        if (effective_silent_worker)
+        {
+            system_detail::log_info("Closing the current runtime so the silent source update worker can finish the replacement.");
+            std::exit(0);
+        }
+
+        system_detail::log_info("Source update worker launched. Keep using Epoch while it builds; close and restart after the worker reports replacement evidence.");
         return true;
 #else
         const auto archive_path = system_detail::source_archive_path(target_binary, channel.source_url);
@@ -3889,13 +4221,17 @@ namespace epochnamespace::updater
 
         std::error_code ec;
         std::filesystem::remove_all(staging_dir, ec);
+        ec.clear();
         std::filesystem::remove_all(final_dir, ec);
+        ec.clear();
+        std::filesystem::remove(archive_path, ec);
+        ec.clear();
 
         system_detail::log_info(
             "Downloading latest "
             + system_detail::describe_source_archive(channel.source_url)
             + ".");
-        if (!download_file(channel.source_url, archive_path.string()))
+        if (!download_update_file_atomic(channel.source_url, archive_path))
             return false;
 
         if (!extract_archive(archive_path.string(), staging_dir.string()))
@@ -3970,14 +4306,17 @@ namespace epochnamespace::updater
             system_detail::extract_version_string(PROJECT_PACKAGED_VERSION);
         const std::string local_source_version =
             system_detail::extract_version_string(PROJECT_SOURCE_VERSION);
+        const std::string platform_key{ platform::current_platform_key() };
 
         auto packaged_release = system_detail::resolve_packaged_release();
         system_detail::VersionCheckResult packaged_status{};
         packaged_status.local = local_packaged_version;
         result.local_version = local_packaged_version;
+        result.packaged_release_checked = true;
 
         if (packaged_release.found && !packaged_release.remote_version.empty())
         {
+            result.packaged_release_found = true;
             packaged_status.ok = true;
             packaged_status.local = local_packaged_version;
             packaged_status.remote = packaged_release.remote_version;
@@ -3997,6 +4336,9 @@ namespace epochnamespace::updater
 
                 if (current_source_is_newer && packaged_status.update_available)
                 {
+                    result.packaged_release_reason =
+                        "Current source build is newer than the latest packaged runtime "
+                        + packaged_status.remote + ".";
                     system_detail::log_info(
                         "Ignoring packaged release because the current source build is already newer.");
                     packaged_status.update_available = false;
@@ -4008,9 +4350,10 @@ namespace epochnamespace::updater
         }
         else
         {
-            system_detail::log_info(
-                "No packaged release asset was found for platform '"
-                + std::string{ platform::current_platform_key() } + "'.");
+            result.packaged_release_missing = true;
+            result.packaged_release_reason =
+                "No " + platform_key + " packaged runtime asset was found in the latest release.";
+            system_detail::log_info(result.packaged_release_reason);
         }
 
         system_detail::VersionCheckResult source_status{};
@@ -4060,6 +4403,7 @@ namespace epochnamespace::updater
                     build_status.job_name.empty() ? std::string{ "platform build" } : build_status.job_name;
                 const std::string reason =
                     build_status.reason.empty() ? std::string{ "build status could not be proven." } : build_status.reason;
+                result.status_message = "Update withheld until " + job + " is green: " + reason;
                 system_detail::log_info("Update withheld until " + job + " is green: " + reason);
                 return result;
             }
@@ -4076,6 +4420,9 @@ namespace epochnamespace::updater
             if (!force)
             {
                 result.force_required = true;
+                result.status_message = packaged_status.remote.empty()
+                    ? "Packaged runtime update available."
+                    : "Packaged runtime update available: " + packaged_status.remote + ".";
                 return result;
             }
 
@@ -4088,6 +4435,10 @@ namespace epochnamespace::updater
             }
 
             result.update_performed = install_from_binary(packaged_release.binary_url);
+            result.packaged_update_performed = result.update_performed;
+            result.status_message = result.update_performed
+                ? "Packaged update handoff started. Restart Epoch if this window remains open."
+                : "Packaged update failed before handoff. The cached package or replacement executable was not verified.";
             return result;
         }
 
@@ -4098,12 +4449,48 @@ namespace epochnamespace::updater
             if (!force)
             {
                 result.force_required = true;
+                if (result.packaged_release_missing)
+                {
+                    result.status_message =
+                        "No " + platform_key + " packaged runtime asset was found. Source update is available: "
+                        + source_status.remote + ".";
+                }
+                else
+                {
+                    result.status_message = source_status.remote.empty()
+                        ? "Source update is available."
+                        : "Source update is available: " + source_status.remote + ".";
+                }
                 return result;
             }
 
-            system_detail::log_info("No newer packaged runtime is available. Falling back to source update from main.");
-            result.update_performed = run_source_update_command(channel, false);
+            result.source_fallback_attempted = true;
+            const std::string fallback_message = result.packaged_release_missing
+                ? "No " + platform_key + " packaged runtime asset was found. Starting source update from main."
+                : "No newer packaged runtime is available. Starting source update from main.";
+            system_detail::log_info(fallback_message);
+            const bool worker_launched = run_source_update_command(channel, false, false);
+            result.update_performed = false;
+            result.source_update_performed = worker_launched;
+            result.status_message = worker_launched
+                ? "Source rebuild worker started. Keep Epoch open until the worker reports handoff-ready evidence, then restart from the update modal."
+                : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
             return result;
+        }
+
+        if (!result.packaged_release_reason.empty() && !source_status.ok)
+        {
+            result.status_message =
+                result.packaged_release_reason
+                + " Source update availability could not be proven.";
+        }
+        else if (!result.packaged_release_reason.empty())
+        {
+            result.status_message = result.packaged_release_reason;
+        }
+        else
+        {
+            result.status_message = "Epoch is already current.";
         }
 
         return result;

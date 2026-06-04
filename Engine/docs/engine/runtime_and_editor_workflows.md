@@ -38,12 +38,33 @@ the same engine-owned path.
   surfacing an update: Windows waits for `windows-msvc`, Linux waits for
   `linux-clang-engine`, and pending/failing/missing job evidence withholds the
   update affordance
+- editor update checks are automatic after the editor has loaded. The modal is
+  shown only for a newer current-platform update path. The smart/default path is
+  binary-first: it downloads and verifies the packaged runtime when one exists,
+  otherwise it reports the absence of a compatible package and uses the source
+  update lane. `Advanced Source` remains a clearly marked source rebuild path
+  for deliberate source testing.
+- update work must stay visible while it runs. During checking, packaged
+  install, and source rebuild, the toolbar/modal/output evidence should report
+  elapsed time, current lane, and completion/failure state instead of leaving a
+  silent background worker.
+- source rebuild workers must create `epoch_update_handoff.log` as soon as they
+  start, mirror major download/dependency/build stages into it, and surface
+  `[ERROR]` handoff lines as failed update evidence instead of parking the UI at
+  a progress ceiling.
+- managed-vcpkg source updates stage disposable overlay ports under
+  `cache/updates/` when old dependency ports need modern CMake policy options;
+  do not mutate the user's vcpkg checkout or mask restore failures.
 - runtime-created update/package/cache data is app-local: updater work,
   temporary probes, extraction folders, and helper tools live under
   `cache/updates/`; downloaded release/source packages live under
   `cache/packages/`; generated/runtime atlases live under `cache/atlases/`.
   These folders are disposable runtime state, not public release payload and not
   tracked source.
+- downloaded update packages use the release/source asset name with its version
+  suffix inside `cache/packages/`. Cached packages are extraction-verified
+  before reuse, invalid package caches are deleted and redownloaded, and source
+  rebuilds delete stale source snapshots before fetching new source.
 - OpenGL editor composition is queue-explicit: build the normal GUI/backend
   batch before the scene, render the scene preview once, drain follow-up work,
   then replay only the explicit GUI top-layer batch for command menus and modal
@@ -246,6 +267,10 @@ the same engine-owned path.
   any of those inputs are newer or the output is missing, the normal serialized
   project build path still runs before launch. Scene and manifest writes are
   runtime inputs and should not force a relink by themselves.
+- Docked editor panes use selected-backend multi-pane ownership by default.
+  Switching the 3D rendering window to a different backend is an explicit
+  diagnostic/accurate-preview action; normal docking should not mix unrelated
+  renderer families unless the operator requested that proof grid.
 - The centered Run button follows the same split: normal generated projects
   save project evidence and launch through the selected single-context child
   backend, rebuilding only when the freshness gate says the executable is stale;
