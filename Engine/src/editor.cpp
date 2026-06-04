@@ -498,6 +498,7 @@ namespace epochnamespace
             bool updateInstallPending{ false };
             bool updateSourceInstallPending{ false };
             std::chrono::steady_clock::time_point updateOperationStartedAt{};
+            std::chrono::steady_clock::time_point updateRestartReadyAt{};
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
             SystemsSurfaceState systems{};
@@ -703,6 +704,39 @@ namespace epochnamespace
                 std::chrono::steady_clock::now() - editor.updateOperationStartedAt).count();
         }
 
+        constexpr auto kEditorUpdateRestartDelay = std::chrono::seconds{ 10 };
+
+        void clear_editor_update_restart_countdown(EditorState& editor) noexcept
+        {
+            editor.updateRestartReadyAt = {};
+        }
+
+        void arm_editor_update_restart_countdown(EditorState& editor)
+        {
+            if (editor.updateRestartReadyAt == std::chrono::steady_clock::time_point{})
+                editor.updateRestartReadyAt = std::chrono::steady_clock::now();
+        }
+
+        [[nodiscard]] int editor_update_restart_countdown_seconds(const EditorState& editor)
+        {
+            if (editor.updateRestartReadyAt == std::chrono::steady_clock::time_point{})
+                return static_cast<int>(kEditorUpdateRestartDelay.count());
+
+            const auto elapsed = std::chrono::steady_clock::now() - editor.updateRestartReadyAt;
+            if (elapsed >= kEditorUpdateRestartDelay)
+                return 0;
+
+            const auto remaining = kEditorUpdateRestartDelay - elapsed;
+            const auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(remaining).count();
+            return static_cast<int>((remainingMs + 999) / 1000);
+        }
+
+        [[nodiscard]] bool editor_update_restart_countdown_elapsed(const EditorState& editor)
+        {
+            return editor.updateRestartReadyAt != std::chrono::steady_clock::time_point{}
+                && std::chrono::steady_clock::now() - editor.updateRestartReadyAt >= kEditorUpdateRestartDelay;
+        }
+
         [[nodiscard]] float editor_update_progress_value(const EditorState& editor)
         {
             if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
@@ -789,6 +823,7 @@ namespace epochnamespace
             editor.updateStatus = "Checking for updates...";
             editor.updateInstallPending = false;
             editor.updateSourceInstallPending = false;
+            clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Checking for available Epoch updates.");
 
@@ -810,6 +845,7 @@ namespace epochnamespace
             editor.updateStatus = "Installing the best available update. Epoch checks packaged releases first, then falls back to source only when no newer package exists.";
             editor.updateInstallPending = true;
             editor.updateSourceInstallPending = false;
+            clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Installing through the binary-first update gate.");
 
@@ -831,6 +867,7 @@ namespace epochnamespace
             editor.updateStatus = "Launching the advanced source rebuild worker. Use this only when you intentionally want latest main source instead of the packaged platform release.";
             editor.updateInstallPending = true;
             editor.updateSourceInstallPending = true;
+            clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Launching advanced source rebuild worker.");
 
@@ -912,6 +949,7 @@ namespace epochnamespace
                     {
                         editor.updateState = EditorUpdateState::RestartReady;
                         editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                        arm_editor_update_restart_countdown(editor);
                         push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                         return;
                     }
@@ -962,6 +1000,7 @@ namespace epochnamespace
                 editor.updateStatus = "Source update canceled. Update remains available if you want to retry.";
                 editor.showUpdateConfirmModal = false;
                 editor.updateOperationStartedAt = {};
+                clear_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
@@ -974,6 +1013,7 @@ namespace epochnamespace
                     ? "Source update failed. Check epoch_source_update.log and epoch_update_handoff.log beside the executable."
                     : std::string{ "Source update failed: " } + lastLine;
                 editor.updateOperationStartedAt = {};
+                clear_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
@@ -985,6 +1025,7 @@ namespace epochnamespace
                 editor.updateStatus = "Source rebuild is ready for runtime handoff. Press Restart to close Epoch and let the worker replace the executable.";
                 editor.updateOperationStartedAt = {};
                 editor.showUpdateConfirmModal = true;
+                arm_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
@@ -996,6 +1037,7 @@ namespace epochnamespace
                 editor.updateStatus = "Source update handoff completed. Restart Epoch if this window did not close automatically.";
                 editor.updateOperationStartedAt = {};
                 editor.showUpdateConfirmModal = true;
+                arm_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
@@ -7778,19 +7820,32 @@ namespace epochnamespace
             const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
             const bool updateRunning = editor.updateCheckPending.has_value() || sourceWorkerRunning;
             const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
-            const gui::Vec2 modalSize{ 580.0f, 286.0f };
+            if (restartReady)
+                arm_editor_update_restart_countdown(editor);
+            const int restartSeconds = restartReady ? editor_update_restart_countdown_seconds(editor) : 0;
+            const gui::Vec2 modalSize{ 620.0f, 322.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
-            const float contentWidth = modalSize.x - 32.0f;
+            constexpr float modalContentInset = 24.0f;
+            const float contentWidth = modalSize.x - 2.0f * modalContentInset;
             const std::string updateStatusLine = [&]() {
                 std::string text = editor.updateStatus;
-                constexpr std::size_t kMaxModalStatus = 132u;
+                constexpr std::size_t kMaxModalStatus = 176u;
                 if (text.size() <= kMaxModalStatus)
                     return text;
                 return text.substr(0u, kMaxModalStatus - 3u) + "...";
             }();
+            const auto requestUpdateRestart = [&]() {
+                editor.showUpdateConfirmModal = false;
+                editor.updateStatus = "Restarting Epoch to finish the staged update handoff.";
+                clear_editor_update_restart_countdown(editor);
+                push_editor_log(editor, "[update] Restart requested after verified update handoff.");
+                emit_command(EditorCommand::Exit);
+            };
+            if (restartReady && editor_update_restart_countdown_elapsed(editor))
+                requestUpdateRestart();
             gui::begin_modal_window(gui::ModalWindowOptions{
                 .title = "Update Epoch",
                 .position = modalPos,
@@ -7803,7 +7858,7 @@ namespace epochnamespace
             gui::set_cursor({ contentPos.x + 8.0f, contentY });
             gui::wrapped_label(
                 sourceOnlyUpdate
-                ? "No packaged runtime was found for this platform; source rebuild is the available update lane."
+                ? "No packaged runtime was found for this platform, so Epoch is using the source rebuild lane."
                 : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and hand off the replacement.",
                 contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 36.0f });
@@ -7819,18 +7874,21 @@ namespace epochnamespace
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 112.0f });
             gui::wrapped_label(
                 sourceOnlyUpdate
-                ? "Smart Update checks packaged releases first, then uses source only when no compatible package exists."
+                ? "Smart Update always checks platform release packages first. Source rebuild is used only when no compatible package exists."
                 : "Cached packages are checked before use; stale or broken downloads are replaced.",
                 contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 152.0f });
             gui::wrapped_label(
                 restartReady
-                ? "The update is staged. Restart Epoch to complete the verified handoff."
+                ? std::format(
+                    "The update is staged. Epoch will restart automatically in {} second{}; press Restart now to finish immediately.",
+                    restartSeconds,
+                    restartSeconds == 1 ? "" : "s")
                 : sourceWorkerRunning
                     ? "Cancel asks the source worker to stop safely before runtime handoff."
                     : "Advanced Source rebuilds latest main locally. Use it only when you intentionally want source instead of the packaged release.",
                 contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 188.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 210.0f });
             if (sourceWorkerRunning)
             {
                 if (gui::button("Cancel Update", { 148.0f, 30.0f }))
@@ -7852,18 +7910,15 @@ namespace epochnamespace
                 editor.showUpdateConfirmModal = false;
                 push_editor_log(editor, "[command] Update canceled.");
             }
-            gui::set_cursor({ contentPos.x + 148.0f, contentPos.y + 188.0f });
+            gui::set_cursor({ contentPos.x + 168.0f, contentPos.y + 210.0f });
             const std::string primaryUpdateLabel = restartReady
-                ? std::string{ "Restart" }
+                ? std::format("Restart Now ({})", restartSeconds)
                 : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
-            if (!updateRunning && gui::button(primaryUpdateLabel, { 188.0f, 30.0f }))
+            if (!updateRunning && gui::button(primaryUpdateLabel, { 204.0f, 30.0f }))
             {
                 if (restartReady)
                 {
-                    editor.showUpdateConfirmModal = false;
-                    editor.updateStatus = "Restarting Epoch to finish the staged update handoff.";
-                    push_editor_log(editor, "[update] Restart requested after verified update handoff.");
-                    emit_command(EditorCommand::Exit);
+                    requestUpdateRestart();
                 }
                 else
                 {
@@ -7871,7 +7926,7 @@ namespace epochnamespace
                     start_editor_update_install(editor);
                 }
             }
-            gui::set_cursor({ contentPos.x + 356.0f, contentPos.y + 188.0f });
+            gui::set_cursor({ contentPos.x + 392.0f, contentPos.y + 210.0f });
             if (!updateRunning && !restartReady && gui::button("Advanced Source...", { 176.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
@@ -7889,7 +7944,8 @@ namespace epochnamespace
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
-            const float contentWidth = modalSize.x - 32.0f;
+            constexpr float modalContentInset = 24.0f;
+            const float contentWidth = modalSize.x - 2.0f * modalContentInset;
             gui::begin_modal_window(gui::ModalWindowOptions{
                 .title = "Rebuild From Main Source",
                 .position = modalPos,

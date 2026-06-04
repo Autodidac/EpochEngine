@@ -24,6 +24,11 @@
   task is explicitly about those artifacts. Common generated/local paths include
   `build/`, `x64/`, `Engine/Bin/`, `Engine/build/`, `Engine/built/`, and
   runtime logs/captures.
+- Screenshot and capture proof must be versioned, additive, and reproducible.
+  When refreshing README proof, add new files under `Images/readme/` and leave
+  old screenshots intact. Commit the final proof images and docs that reference
+  them; do not commit transient capture JSON/startup probes unless the task asks
+  for harness evidence artifacts.
 - Runtime-created cache buckets are executable-local: updater work, temporary
   probes, extraction state, and managed helper tools belong in `cache/updates/`;
   downloaded package archives belong in `cache/packages/`; on-demand OS model
@@ -95,6 +100,11 @@
 - Prefer short, reviewable batches: implement a focused set of changes, build
   and test them, document what changed, then commit only after the batch is
   stable.
+- When the operator asks for a push at a known-good point, stop risky edits and
+  preserve that checkpoint first: inspect status, stage the focused batch,
+  commit, push `main`, and update the stable branch only when explicitly asked.
+  Do not continue experimenting before preserving an operator-confirmed stable
+  renderer/editor state.
 - Avoid speculative rewrites. If a roadmap item is too large for the current
   pass, add precise follow-up notes instead of pretending the phase is done.
 - Do not introduce placeholders, fake UI, fake AI autonomy, or dead-end
@@ -134,6 +144,11 @@
   the local checkout, confirm the tree is clean first, push the test commit, then
   rewind only the local checkout to the pre-test commit so the editor can detect
   the newer remote without losing operator work.
+- Update UI must stay understandable and evidence-backed. The automatic startup
+  check may log quietly, but the modal appears only for a real available update,
+  remains visible while work is running, offers Cancel for source rebuilds, and
+  shows Restart only after verified handoff evidence. The editor must not close
+  itself, hide the modal, or claim success because a worker merely started.
 - Server-capable work is package-gated. Authoritative dedicated headless server
   support is optional, not the default networking model; client
   listen/nondedicated and future client-predicted competitive paths remain
@@ -213,6 +228,9 @@
 - WSL runtime proof is single-context OpenGL. Do not default WSL to the Windows
   parented multicontext shell or auto-fall back to Vulkan; Vulkan on WSL is an
   explicit validation task until local proof says otherwise.
+- README Linux proof must come from the WSL/OpenGL single-context path. If WSL
+  configure/build/capture fails, report the exact failure and keep the last
+  verified Linux screenshot instead of inventing or reusing Windows proof.
 - The module-aware CMake path requires CMake 3.28 or newer. If the available
   CMake is older, prefer the checked-in Visual Studio/MSBuild solution.
 
@@ -233,12 +251,12 @@
 
   ```powershell
   Set-Location x64/Debug
-  .\ConsoleApplication1.exe
+  .\EpochEditor.exe
   ```
 
   ```powershell
   Set-Location x64/Release
-  .\ConsoleApplication1.exe
+  .\EpochEditor.exe
   ```
 
 - Do not treat a source-root GUI launch as runtime proof unless the task is
@@ -248,6 +266,10 @@
   `Debug|x64` and `Release|x64`, launch from the matching `x64/...` folder,
   verify the intended panes/contexts render and respond, then close live
   windows before finishing.
+- If a runtime/capture/build command is aborted, crashes, or appears to trigger
+  GPU/driver instability, stop runtime probing immediately. Check for leftover
+  Epoch/build/update processes, preserve logs, and continue with source review or
+  build-only validation until the operator explicitly asks for another run.
 - Hosted GitHub workflows should stay build-only/headless. Do not add GUI
   launches, desktop focus assumptions, or screenshot capture to CI without a
   runtime-safe automation path.
@@ -265,6 +287,11 @@
   panes, scrollable/selectable text views, context menus, modals, optional
   popouts, and separate editor workspaces for scene/game, assets, projects,
   systems, and AI sandbox operations.
+- GUI text surfaces must behave like real controls. Source editors, chat boxes,
+  console output, inspectors, package details, and modal text need selection,
+  copy/paste, word wrap, scroll bounds, right-click/context menu behavior, and
+  predictable focus/deselection. Do not present static label dumps as editable
+  text boxes.
 - Treat `engine.gui` as an engine-internal GUI library. Reusable primitives
   such as tabs, dropdown/select boxes, scroll areas, text inputs, window chrome,
   modal layers, splitters, and future context menus belong there first; editor
@@ -286,10 +313,19 @@
   prompt. Keep the architecture documented around working memory, long-term
   memory, retrieval, goals, planner, executor, verifier, scoring, self-state,
   attention, and a real-time observe/act/verify/learn loop.
+- OS AI is not EpochBot and not an internal persona. The visible product model
+  is operator-selected open/source-available external models such as Qwen,
+  Nemotron, Bonsai, Wan, TRELLIS, and FLUX fallback, staged through model assets
+  and license/notice gates. Remove or avoid new `EpochBot`, learner, hidden
+  self-training, or watcher language unless it describes archived history.
 - OS AI chat must never surface hidden model reasoning. If a local
   OpenAI-compatible model returns blank assistant `content` with only
   `reasoning_content`, reject the pass as a model/API configuration issue and do
   not promote that reasoning into curated training data.
+- Model scan must be inventory-only. Choosing a model must initialize exactly
+  that selected local OpenAI-compatible model, persist the selection under
+  executable-local cache state, and never silently fall back to a stale Qwen,
+  Nemotron, or environment default.
 
 ## Linux Helper Scripts
 

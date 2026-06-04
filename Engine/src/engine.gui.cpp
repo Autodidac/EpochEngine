@@ -4042,12 +4042,11 @@ namespace epochnamespace::gui
         ensure_resources();
 
         const Vec2 pos = g_frame.cursor;
-        const float availableWidth = content_available_width(pos.x);
+        const float availableWidth = (std::max)(1.0f, content_available_width(pos.x));
         const float requestedWidth = options.size.x > 0.0f ? options.size.x : availableWidth;
-        const float width = std::clamp(
-            requestedWidth,
-            1.0f,
-            (std::max)(1.0f, availableWidth));
+        const float width = options.size.x > 0.0f
+            ? (std::max)(1.0f, (std::min)(requestedWidth, availableWidth))
+            : availableWidth;
         const float height = (std::max)(14.0f, options.size.y > 0.0f ? options.size.y : 18.0f);
         const float value = std::clamp(options.value, 0.0f, 1.0f);
         const auto& palette = active_palette();

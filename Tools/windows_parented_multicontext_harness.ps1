@@ -815,9 +815,15 @@ function Get-ContentSampleProbe([string]$ImagePath, $ParentRect, $WindowRecord) 
 }
 
 $root = (Resolve-Path '.').Path
-$exe = Join-Path $root ("x64\{0}\ConsoleApplication1.exe" -f $Configuration)
+$runtimeDir = Join-Path $root ("x64\{0}" -f $Configuration)
+$exe = Join-Path $runtimeDir 'EpochEditor.exe'
 if (-not (Test-Path $exe)) {
-    throw "Missing runtime at $exe"
+    $legacyExe = Join-Path $runtimeDir 'ConsoleApplication1.exe'
+    if (Test-Path $legacyExe) {
+        $exe = $legacyExe
+    } else {
+        throw "Missing runtime at $exe"
+    }
 }
 
 $args = @('--editor')
