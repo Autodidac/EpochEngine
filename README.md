@@ -109,7 +109,7 @@ bootstrap shells. The current public gallery is below; the top proof shows the
 Windows multicontext editor carrying every active backend lane.
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08435.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
+  <img src="Images/readme/windows-multicontext-editor-v08700.png" alt="Epoch Windows multicontext editor proof" />
 </p>
 
 ## What Epoch Provides Right Now
@@ -149,22 +149,16 @@ builds.
 - The Linux proof comes from an asset-bearing WSL build output, not a source
   tree launched without runtime assets.
 
-Windows fullscreen six-context multicontext proof, latest stable visual proof
-from `v0.84.35`:
+Current Windows per-backend startup proofs from the same `v0.87.00` capture
+round:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08435.png" alt="Epoch Windows fullscreen six-context multicontext proof" />
-</p>
-
-Current Windows per-backend startup proofs:
-
-<p align="center">
-  <a href="Images/readme/windows-raylib-v08435.png"><img src="Images/readme/windows-raylib-v08435.png" alt="Epoch Windows Raylib editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-sdl-v08435.png"><img src="Images/readme/windows-sdl-v08435.png" alt="Epoch Windows SDL editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-sfml-v08435.png"><img src="Images/readme/windows-sfml-v08435.png" alt="Epoch Windows SFML editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-vulkan-v08435.png"><img src="Images/readme/windows-vulkan-v08435.png" alt="Epoch Windows Vulkan editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-opengl-v08435.png"><img src="Images/readme/windows-opengl-v08435.png" alt="Epoch Windows OpenGL editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-directx-v08435.png"><img src="Images/readme/windows-directx-v08435.png" alt="Epoch Windows DirectX editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-raylib-v08700.png"><img src="Images/readme/windows-raylib-v08700.png" alt="Epoch Windows Raylib editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-sdl-v08700.png"><img src="Images/readme/windows-sdl-v08700.png" alt="Epoch Windows SDL editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-sfml-v08700.png"><img src="Images/readme/windows-sfml-v08700.png" alt="Epoch Windows SFML editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-vulkan-v08700.png"><img src="Images/readme/windows-vulkan-v08700.png" alt="Epoch Windows Vulkan editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-opengl-v08700.png"><img src="Images/readme/windows-opengl-v08700.png" alt="Epoch Windows OpenGL editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-directx-v08700.png"><img src="Images/readme/windows-directx-v08700.png" alt="Epoch Windows DirectX editor proof" width="15.6%" /></a>
 </p>
 
 Windows promoted-window and floating-context proof, live validation:

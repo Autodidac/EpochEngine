@@ -4993,12 +4993,14 @@ namespace epochnamespace
                     (std::max)(0.0f, (h - modalSize.y) * 0.5f)
                 };
             };
+        const gui::Vec2 updateConfirmModalSize{ 620.0f, 352.0f };
+        const gui::Vec2 sourceUpdateConfirmModalSize{ 620.0f, 292.0f };
 
         gui::clear_modal_input_capture();
         if (editor.showUpdateConfirmModal)
-            gui::begin_modal_input_capture(centered_modal_position({ 600.0f, 292.0f }), { 600.0f, 292.0f });
+            gui::begin_modal_input_capture(centered_modal_position(updateConfirmModalSize), updateConfirmModalSize);
         else if (editor.showSourceUpdateConfirmModal)
-            gui::begin_modal_input_capture(centered_modal_position({ 620.0f, 292.0f }), { 620.0f, 292.0f });
+            gui::begin_modal_input_capture(centered_modal_position(sourceUpdateConfirmModalSize), sourceUpdateConfirmModalSize);
         else if (editor.showSettingsModal)
             gui::begin_modal_input_capture(centered_modal_position({ 600.0f, 462.0f }), { 600.0f, 462.0f });
         else if (editor.showPackageManagerModal)
@@ -7823,13 +7825,13 @@ namespace epochnamespace
             if (restartReady)
                 arm_editor_update_restart_countdown(editor);
             const int restartSeconds = restartReady ? editor_update_restart_countdown_seconds(editor) : 0;
-            const gui::Vec2 modalSize{ 620.0f, 322.0f };
+            const gui::Vec2 modalSize = updateConfirmModalSize;
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
-            constexpr float modalContentInset = 24.0f;
-            const float contentWidth = modalSize.x - 2.0f * modalContentInset;
+            constexpr float modalContentInset = 36.0f;
+            const float contentWidth = (std::max)(1.0f, modalSize.x - 2.0f * modalContentInset);
             const std::string updateStatusLine = [&]() {
                 std::string text = editor.updateStatus;
                 constexpr std::size_t kMaxModalStatus = 176u;
@@ -7854,41 +7856,42 @@ namespace epochnamespace
                 .dim_background = true
             });
             const gui::Vec2 contentPos = gui::cursor_position();
-            const float contentY = contentPos.y;
-            gui::set_cursor({ contentPos.x + 8.0f, contentY });
-            gui::wrapped_label(
-                sourceOnlyUpdate
+            const float contentX = contentPos.x + 8.0f;
+            float cursorY = contentPos.y;
+            const auto emitWrapped = [&](const std::string_view text, const float gap) {
+                gui::set_cursor({ contentX, cursorY });
+                gui::wrapped_label(text, contentWidth);
+                cursorY += gui::wrapped_text_height(text, contentWidth) + gap;
+            };
+            const std::string introText = sourceOnlyUpdate
                 ? "No packaged runtime was found for this platform, so Epoch is using the source rebuild lane."
-                : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and hand off the replacement.",
-                contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 36.0f });
-            gui::wrapped_label(updateStatusLine, contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 78.0f });
+                : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and hand off the replacement.";
+            emitWrapped(introText, 8.0f);
+            emitWrapped(updateStatusLine, 10.0f);
+            gui::set_cursor({ contentX, cursorY });
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
                 .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",
                 .value = editor_update_progress_value(editor),
-                .size = { contentWidth, 20.0f },
+                .size = { contentWidth, 22.0f },
                 .show_percent = true
             });
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 112.0f });
-            gui::wrapped_label(
-                sourceOnlyUpdate
+            cursorY += 36.0f;
+            const std::string cacheText = sourceOnlyUpdate
                 ? "Smart Update always checks platform release packages first. Source rebuild is used only when no compatible package exists."
-                : "Cached packages are checked before use; stale or broken downloads are replaced.",
-                contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 152.0f });
-            gui::wrapped_label(
-                restartReady
+                : "Cached packages are checked before use; stale or broken downloads are replaced.";
+            emitWrapped(cacheText, 8.0f);
+            const std::string actionText = restartReady
                 ? std::format(
                     "The update is staged. Epoch will restart automatically in {} second{}; press Restart now to finish immediately.",
                     restartSeconds,
                     restartSeconds == 1 ? "" : "s")
                 : sourceWorkerRunning
                     ? "Cancel asks the source worker to stop safely before runtime handoff."
-                    : "Advanced Source rebuilds latest main locally. Use it only when you intentionally want source instead of the packaged release.",
-                contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 210.0f });
+                    : "Advanced Source rebuilds latest main locally. Use it only when you intentionally want source instead of the packaged release.";
+            emitWrapped(actionText, 8.0f);
+            const float buttonY = modalPos.y + modalSize.y - 54.0f;
+            gui::set_cursor({ contentX, buttonY });
             if (sourceWorkerRunning)
             {
                 if (gui::button("Cancel Update", { 148.0f, 30.0f }))
@@ -7910,7 +7913,7 @@ namespace epochnamespace
                 editor.showUpdateConfirmModal = false;
                 push_editor_log(editor, "[command] Update canceled.");
             }
-            gui::set_cursor({ contentPos.x + 168.0f, contentPos.y + 210.0f });
+            gui::set_cursor({ contentX + 160.0f, buttonY });
             const std::string primaryUpdateLabel = restartReady
                 ? std::format("Restart Now ({})", restartSeconds)
                 : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
@@ -7926,7 +7929,7 @@ namespace epochnamespace
                     start_editor_update_install(editor);
                 }
             }
-            gui::set_cursor({ contentPos.x + 392.0f, contentPos.y + 210.0f });
+            gui::set_cursor({ contentX + 384.0f, buttonY });
             if (!updateRunning && !restartReady && gui::button("Advanced Source...", { 176.0f, 30.0f }))
             {
                 editor.showUpdateConfirmModal = false;
