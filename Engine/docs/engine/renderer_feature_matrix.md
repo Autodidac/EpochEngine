@@ -51,9 +51,9 @@ coverage, or cross-backend parity.
 | Materials / basic lighting | Partial | Ambient-solid primitives and basic light entities exist. Full material resources, specular paths, and multiple light types remain backlog. |
 | Debugging support | Partial | Logging, Systems diagnostics, Vulkan validation messaging, host FPS title diagnostics, screenshots, and smoke docs exist. GPU debug markers/query plumbing remain backlog. |
 | 3D picking | Partial | Editor object selection exists, but full ID-target/depth/ray picking is not complete. |
-| Framebuffers / render targets / capture | Partial | OpenGL/Vulkan/DirectX swapchain or framebuffer paths, capture bridges, and runtime surfaces exist. General render-to-texture assets need a proper engine-facing API. |
-| Renderer resource spine | First contract slice present | `render.device` now owns formal handles/descriptors for buffers, textures, samplers, shaders, pipelines, materials, render targets, command lists, and render-pass/FrameGraph-ready targets. System Info reports the active backend capability slice. Backend-native allocation behind every handle remains the next acceptance gate. |
-| Runtime-mini render assets | Contract-backed package path started | Engine Arcade now records its default mini-runtime scene, scene inventory, render-to-texture asset role, and renderer-resource requirements through `package.registry`; actual arcade-cabinet render targets depend on the backend-native resource work below. |
+| Framebuffers / render targets / capture | Partial | OpenGL/Vulkan/DirectX swapchain or framebuffer paths, capture bridges, and runtime surfaces exist. The shared renderer API now describes sampled render-target assets; backend-native allocation and presentation remain the next gate. |
+| Renderer resource spine | First contract slice present | `render.device` now owns formal handles/descriptors for buffers, textures, samplers, shaders, pipelines, materials, render targets, command lists, render-pass/FrameGraph-ready targets, and sampled render-texture asset plans. System Info reports the active backend capability slice. Backend-native allocation behind every handle remains the next acceptance gate. |
+| Runtime-mini render assets | Contract-backed package path started | Engine Arcade now records its default mini-runtime scene, scene inventory, render-to-texture asset role, renderer-resource requirements, and `engine_arcade.screen` 512x512 sampled target through `package.registry`; actual arcade-cabinet presentation depends on backend-native resource work below. |
 | Text and UI rendering | Present/partial | Engine-owned GUI, font atlas, scroll views, tab bars, splitters, and runtime-surface textures exist. Professional dock/window polish remains active GUI work. |
 | Platform window layer | Present | Win32 and Linux/X11 host paths exist with backend-specific context ownership. |
 
@@ -79,8 +79,8 @@ work should be grouped this way instead of tackled as an unstructured checklist.
 - Billboarding for sprites, icons, particles, and debug helpers.
 - Instanced rendering.
 - OpenGL Direct State Access style cleanup where available.
-- Render-to-texture assets for in-game surfaces such as arcade cabinets and
-  editor previews.
+- Backend-native render-to-texture allocation and presentation for in-game
+  surfaces such as arcade cabinets and editor previews.
 
 ### Shadows And Lighting
 

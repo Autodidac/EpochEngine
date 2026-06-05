@@ -58,6 +58,13 @@ export namespace epoch
 
     struct ResourceDecl { ResourceKind kind{}; epoch::string name{}; u32 index = 0; };
 
+    struct GraphRenderTextureAsset
+    {
+        GraphResource color_texture{};
+        GraphResource render_target{};
+        RenderTextureAssetPlan plan{};
+    };
+
     struct PassDecl
     {
         epoch::string name{};
@@ -75,6 +82,9 @@ export namespace epoch
         [[nodiscard]] GraphResource create_buffer(epoch::string_view name, const BufferDesc& desc);
         [[nodiscard]] GraphResource create_texture(epoch::string_view name, const TextureDesc& desc);
         [[nodiscard]] GraphResource create_render_target(epoch::string_view name, const RenderTargetDesc& desc);
+        [[nodiscard]] GraphRenderTextureAsset create_render_texture_asset(
+            epoch::string_view name,
+            const RenderTextureAssetDesc& desc);
         [[nodiscard]] GraphPass add_pass(epoch::string_view name,
                                          epoch::array_view<const GraphResource> reads,
                                          epoch::array_view<const GraphResource> writes,

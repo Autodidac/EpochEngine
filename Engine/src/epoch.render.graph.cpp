@@ -68,6 +68,17 @@ namespace epoch
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
+    GraphRenderTextureAsset GraphBuilder::create_render_texture_asset(
+        epoch::string_view name,
+        const RenderTextureAssetDesc& desc)
+    {
+        GraphRenderTextureAsset asset{};
+        asset.plan = make_render_texture_asset_plan(desc);
+        asset.color_texture = create_texture(name, asset.plan.color_texture);
+        asset.render_target = create_render_target(name, asset.plan.render_target);
+        return asset;
+    }
+
     GraphPass GraphBuilder::add_pass(epoch::string_view name,
                                      epoch::array_view<const GraphResource> reads,
                                      epoch::array_view<const GraphResource> writes,

@@ -1927,6 +1927,11 @@ namespace
         const std::string defaultScene{ epoch::package_registry::engine_arcade_default_scene_id() };
         const std::string renderAssetRole{ epoch::package_registry::engine_arcade_render_asset_role() };
         const std::string rendererRequirements{ epoch::package_registry::engine_arcade_renderer_requirements() };
+        const std::string renderTextureName{ epoch::package_registry::engine_arcade_render_texture_name() };
+        const std::string renderTextureWidth =
+            std::to_string(epoch::package_registry::engine_arcade_render_texture_width());
+        const std::string renderTextureHeight =
+            std::to_string(epoch::package_registry::engine_arcade_render_texture_height());
         return std::string{
             "{\n"
             "  \"package_id\": \"engine_arcade\",\n"
@@ -1938,6 +1943,9 @@ namespace
             "  \"runtime_role\": \"built-in scenes for render-to-texture arcade cabinets and in-game terminals\",\n"
             "  \"render_asset_role\": \"" + json_escape(renderAssetRole) + "\",\n"
             "  \"renderer_requirements\": \"" + json_escape(rendererRequirements) + "\",\n"
+            "  \"render_texture_name\": \"" + json_escape(renderTextureName) + "\",\n"
+            "  \"render_texture_width\": " + renderTextureWidth + ",\n"
+            "  \"render_texture_height\": " + renderTextureHeight + ",\n"
             "  \"scenes\": " + sceneArray + ",\n"
             "  \"source_policy\": \"do not copy game implementations into generated projects; invoke engine kernel modules through script host callbacks\"\n"
             "}\n"
@@ -2150,12 +2158,15 @@ namespace
                 + "  \"engine_arcade_scenes\": " + json_array_from_csv(epoch::package_registry::engine_arcade_scene_ids()) + ",\n"
                 + "  \"engine_arcade_render_asset_role\": \"" + json_escape(epoch::package_registry::engine_arcade_render_asset_role()) + "\",\n"
                 + "  \"engine_arcade_renderer_requirements\": \"" + json_escape(epoch::package_registry::engine_arcade_renderer_requirements()) + "\",\n"
+                + "  \"engine_arcade_render_texture_name\": \"" + json_escape(epoch::package_registry::engine_arcade_render_texture_name()) + "\",\n"
+                + "  \"engine_arcade_render_texture_width\": " + std::to_string(epoch::package_registry::engine_arcade_render_texture_width()) + ",\n"
+                + "  \"engine_arcade_render_texture_height\": " + std::to_string(epoch::package_registry::engine_arcade_render_texture_height()) + ",\n"
             : std::string{};
         const std::string readmeDemoLine = spec.demo_model_asset.empty()
             ? std::string{}
             : "- Demo model asset: " + spec.demo_model_asset + "\n";
         const std::string readmePackageLine = includeEngineArcadePackage
-            ? "- Engine asset package: engine_arcade (kernel-owned mini-runtime scenes for render-to-texture arcade assets)\n"
+            ? "- Engine asset package: engine_arcade (kernel-owned mini-runtime scenes for 512x512 render-to-texture arcade assets)\n"
             : std::string{};
         const std::string pathsDemoLine = spec.demo_model_asset.empty()
             ? std::string{}
@@ -2166,6 +2177,9 @@ namespace
               "engine_arcade_scenes=" + std::string(engine_arcade_scene_ids()) + "\n"
               "engine_arcade_render_asset_role=" + std::string(epoch::package_registry::engine_arcade_render_asset_role()) + "\n"
               "engine_arcade_renderer_requirements=" + std::string(epoch::package_registry::engine_arcade_renderer_requirements()) + "\n"
+              "engine_arcade_render_texture_name=" + std::string(epoch::package_registry::engine_arcade_render_texture_name()) + "\n"
+              "engine_arcade_render_texture_width=" + std::to_string(epoch::package_registry::engine_arcade_render_texture_width()) + "\n"
+              "engine_arcade_render_texture_height=" + std::to_string(epoch::package_registry::engine_arcade_render_texture_height()) + "\n"
             : std::string{};
 
         const std::string manifestText =

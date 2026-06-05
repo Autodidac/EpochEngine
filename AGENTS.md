@@ -56,6 +56,10 @@
   game-specific world stacks are package candidates first and should flow
   through `cache/packages/`, review branches, or separate repos before any
   source promotion.
+- External renderer study material may inform private implementation planning,
+  but Epoch source, docs, comments, manifests, and release notes must not carry
+  named tutorial references, mirrored snippets, or copied lesson structure.
+  Promote only engine-owned abstractions, tests, and backend code.
 - Forest Factory gets its own editor 3D scene/window as a core feature, but
   generated projects include Forest Factory assets/scripts only after a visible
   package activation or main-scene use gate.

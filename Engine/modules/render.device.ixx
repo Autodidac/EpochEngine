@@ -176,6 +176,67 @@ export namespace epoch
         const char* debug_name = nullptr;
     };
 
+    enum class RenderTextureUsage : u8
+    {
+        scene_preview,
+        arcade_cabinet,
+        ui_surface,
+        capture,
+        package_preview
+    };
+
+    struct RenderTextureAssetDesc
+    {
+        u32 width = 512;
+        u32 height = 512;
+        TextureFormat color_format = TextureFormat::rgba8_unorm;
+        TextureFormat depth_format = TextureFormat::depth24_stencil8;
+        bool has_depth = true;
+        bool sampled_after_render = true;
+        RenderTextureUsage usage = RenderTextureUsage::scene_preview;
+        const char* debug_name = nullptr;
+    };
+
+    struct RenderTextureAssetPlan
+    {
+        TextureDesc color_texture{};
+        SamplerDesc sampler{};
+        RenderTargetDesc render_target{};
+        RenderPassDesc render_pass{};
+    };
+
+    [[nodiscard]] constexpr RenderTextureAssetPlan make_render_texture_asset_plan(const RenderTextureAssetDesc& desc) noexcept
+    {
+        RenderTextureAssetPlan plan{};
+        plan.color_texture.width = desc.width;
+        plan.color_texture.height = desc.height;
+        plan.color_texture.format = desc.color_format;
+        plan.color_texture.sampled = desc.sampled_after_render;
+        plan.color_texture.render_target = true;
+        plan.color_texture.debug_name = desc.debug_name;
+
+        plan.sampler.min_filter = FilterMode::linear;
+        plan.sampler.mag_filter = FilterMode::linear;
+        plan.sampler.address_u = AddressMode::clamp_to_edge;
+        plan.sampler.address_v = AddressMode::clamp_to_edge;
+        plan.sampler.address_w = AddressMode::clamp_to_edge;
+        plan.sampler.debug_name = desc.debug_name;
+
+        plan.render_target.width = desc.width;
+        plan.render_target.height = desc.height;
+        plan.render_target.color_format = desc.color_format;
+        plan.render_target.depth_format = desc.depth_format;
+        plan.render_target.has_depth = desc.has_depth;
+        plan.render_target.sampled_after_render = desc.sampled_after_render;
+        plan.render_target.debug_name = desc.debug_name;
+
+        plan.render_pass.clear_color = true;
+        plan.render_pass.clear_depth = desc.has_depth;
+        plan.render_pass.debug_name = desc.debug_name;
+
+        return plan;
+    }
+
     struct BackendBufferTag {};
     struct BackendTextureTag {};
     struct BackendSamplerTag {};

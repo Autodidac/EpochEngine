@@ -72,6 +72,9 @@ export namespace epoch::package_registry
     inline constexpr std::string_view kEngineArcadeRenderAssetRole = "render_to_texture_arcade_cabinet";
     inline constexpr std::string_view kEngineArcadeRendererRequirements =
         "render_targets,render_to_texture,materials,command_lists";
+    inline constexpr std::string_view kEngineArcadeRenderTextureName = "engine_arcade.screen";
+    inline constexpr std::uint32_t kEngineArcadeRenderTextureWidth = 512;
+    inline constexpr std::uint32_t kEngineArcadeRenderTextureHeight = 512;
     inline constexpr std::string_view kEngineForestFactoryPackageId = epoch::forest::kForestFactoryPackageId;
     inline constexpr std::string_view kEngineNetworkRuntimePackageId = "engine_network_runtime";
     inline constexpr std::string_view kEngineAuthoritativeServerPackageId = "engine_authoritative_dedicated_server";
@@ -350,6 +353,21 @@ export namespace epoch::package_registry
     [[nodiscard]] constexpr std::string_view engine_arcade_renderer_requirements() noexcept
     {
         return kEngineArcadeRendererRequirements;
+    }
+
+    [[nodiscard]] constexpr std::string_view engine_arcade_render_texture_name() noexcept
+    {
+        return kEngineArcadeRenderTextureName;
+    }
+
+    [[nodiscard]] constexpr std::uint32_t engine_arcade_render_texture_width() noexcept
+    {
+        return kEngineArcadeRenderTextureWidth;
+    }
+
+    [[nodiscard]] constexpr std::uint32_t engine_arcade_render_texture_height() noexcept
+    {
+        return kEngineArcadeRenderTextureHeight;
     }
 
     [[nodiscard]] constexpr bool validate_descriptor(const PackageDescriptor& package) noexcept

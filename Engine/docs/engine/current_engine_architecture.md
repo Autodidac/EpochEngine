@@ -143,7 +143,9 @@ Current source version: `v0.84.58`
 - Game project shells can now expose an `engine_arcade` local runtime-mini
   package as project assets and a script bridge while the actual mini-runtime
   implementations remain kernel-engine modules. The Package Manager modal is
-  the first command-menu surface for these local packages; future downloadable
+  the first command-menu surface for these local packages. Engine Arcade also
+  carries a shared 512x512 sampled render-target contract for future
+  render-to-texture arcade cabinets and in-game terminals; future downloadable
   source packages must stay human-gated through updater-style build paths.
 - Server-capable runtime work follows the same package boundary. Shared
   network/runtime contracts may exist as inert engine capabilities, but

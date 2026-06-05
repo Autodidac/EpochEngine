@@ -8511,6 +8511,12 @@ namespace epochnamespace
                 gui::property_row("Runtime scenes", std::string(epoch::package_registry::engine_arcade_scene_ids()), 104.0f);
                 gui::property_row("Render asset", std::string(epoch::package_registry::engine_arcade_render_asset_role()), 104.0f);
                 gui::property_row("Renderer gate", std::string(epoch::package_registry::engine_arcade_renderer_requirements()), 104.0f);
+                gui::property_row("Target", std::string(epoch::package_registry::engine_arcade_render_texture_name()), 104.0f);
+                gui::property_row(
+                    "RT size",
+                    std::to_string(epoch::package_registry::engine_arcade_render_texture_width()) + " x " +
+                        std::to_string(epoch::package_registry::engine_arcade_render_texture_height()),
+                    104.0f);
             }
             else if (selectedPackage && selectedPackage->id == epoch::package_registry::kEngineForestFactoryPackageId)
             {

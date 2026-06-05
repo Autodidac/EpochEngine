@@ -7,6 +7,11 @@
   render-to-texture arcade assets, while generated manifests record the default
   mini-runtime scene, scene inventory, render-asset role, and renderer-resource
   requirements from one source of truth.
+- Added a backend-neutral render-texture asset plan to the renderer spine.
+  `render.device` now describes sampled render-target assets, `render.graph`
+  can create the paired texture/render-target resource declaration, and Engine
+  Arcade records its `engine_arcade.screen` 512x512 target in package/project
+  manifests plus Package Manager evidence rows.
 - Added the first central renderer-resource spine: `render.device` now defines
   formal handles/descriptors for buffers, textures, samplers, shaders,
   pipelines, materials, render targets, command lists, and render-pass/

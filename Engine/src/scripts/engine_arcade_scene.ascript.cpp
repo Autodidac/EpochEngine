@@ -16,6 +16,7 @@ EPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost* host)
 
     host_log(host, "engine_arcade_scene: package exposes kernel-owned mini-runtime scenes.");
     host_log(host, "engine_arcade_scene: available scenes: snake,tetris,pacman,frogger,sokoban,match3,sliding,minesweeper,2048,sandsim,cellular.");
+    host_log(host, "engine_arcade_scene: render target asset engine_arcade.screen is staged as a 512x512 sampled arcade surface.");
 
     if (!host->request_engine_scene)
     {
