@@ -50,7 +50,7 @@ export namespace epoch
     using GraphResource = Handle<GraphResourceTag, u32>;
     using GraphPass     = Handle<GraphPassTag, u32>;
 
-    enum class ResourceKind : u8 { buffer, texture, render_target };
+    enum class ResourceKind : u8 { buffer, texture, material, render_target };
 
     struct GraphBuffer { BufferDesc desc{}; BufferHandle backend{}; };
     struct GraphTexture
@@ -59,6 +59,19 @@ export namespace epoch
         TextureHandle backend{};
         SamplerHandle sampled_sampler{};
         bool owned_by_render_texture_asset{ false };
+    };
+
+    struct GraphMaterialTextureSlot
+    {
+        MaterialTextureSlot slot = MaterialTextureSlot::base_color;
+        GraphResource texture{};
+    };
+
+    struct GraphMaterial
+    {
+        MaterialDesc desc{};
+        epoch::small_vector<GraphMaterialTextureSlot> texture_slots{};
+        MaterialHandle backend{};
     };
 
     struct GraphRenderTarget
@@ -97,6 +110,9 @@ export namespace epoch
     public:
         [[nodiscard]] GraphResource create_buffer(epoch::string_view name, const BufferDesc& desc);
         [[nodiscard]] GraphResource create_texture(epoch::string_view name, const TextureDesc& desc);
+        [[nodiscard]] GraphResource create_material(epoch::string_view name,
+                                                    const MaterialDesc& desc,
+                                                    epoch::array_view<const GraphMaterialTextureSlot> texture_slots = {});
         [[nodiscard]] GraphResource create_render_target(epoch::string_view name, const RenderTargetDesc& desc);
         [[nodiscard]] GraphRenderTextureAsset create_render_texture_asset(
             epoch::string_view name,
@@ -118,6 +134,7 @@ export namespace epoch
         epoch::small_vector<ResourceDecl> m_resources{};
         epoch::small_vector<GraphBuffer>  m_buffers{};
         epoch::small_vector<GraphTexture> m_textures{};
+        epoch::small_vector<GraphMaterial> m_materials{};
         epoch::small_vector<GraphRenderTarget> m_render_targets{};
         epoch::small_vector<GraphRenderTextureAsset> m_render_texture_assets{};
         epoch::small_vector<PassDecl>     m_passes{};
@@ -128,6 +145,7 @@ export namespace epoch
         epoch::small_vector<ResourceDecl> resources{};
         epoch::small_vector<GraphBuffer>  buffers{};
         epoch::small_vector<GraphTexture> textures{};
+        epoch::small_vector<GraphMaterial> materials{};
         epoch::small_vector<GraphRenderTarget> render_targets{};
         epoch::small_vector<GraphRenderTextureAsset> render_texture_assets{};
         epoch::small_vector<PassDecl>     passes{};

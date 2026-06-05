@@ -95,7 +95,7 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     progress. Weight/source downloads need approval, byte counts, resume/cache
     checks, license/notice tracking, and visible failure state before any UI can
     claim a download is running.
-20. `v0.87.00` is the active feature-line consolidation point. The editor
+20. `v0.87.07` is the active feature-line consolidation point. The editor
     update path is binary-first and platform-gated, then source-fallback only
     with visible worker evidence. The editor must never close itself unless a
     verified replacement executable or successful source handoff exists.
@@ -658,16 +658,18 @@ engine shape and should be treated as starting truth for the next passes:
   render-to-texture asset role, and renderer-resource requirements; generated
   project manifests/scripts consume that contract; and installing Engine Arcade
   from Project Hub creates a game shell instead of dead-ending on a tool profile.
-- The renderer spine now has a backend-neutral sampled render-texture asset
-  plan: `render.device` describes the texture/sampler/render-target/pass shape,
-  `IRenderDevice` owns default handle allocation/destruction helpers,
-  `render.graph` declares and compiles sampled render-texture assets as one
-  owner of the color texture, sampler, and render target, compiled passes expose
-  resolved read/write backend-handle bindings including the sampler needed when
-  a pass reads a sampled render texture, and Engine Arcade records
-  `engine_arcade.screen` as a 512x512 target in generated package and project
-  evidence. The next acceptance gate is backend-native binding and
-  arcade-cabinet presentation across the production contexts.
+- The renderer spine now has backend-neutral sampled render-texture and material
+  texture-binding contracts: `render.device` describes the texture/sampler/
+  material/render-target/pass shape, `IRenderDevice` owns default handle
+  allocation/destruction helpers, `render.graph` declares and compiles sampled
+  render-texture assets as one owner of the color texture, sampler, and render
+  target, and `v0.87.07` adds graph material resources with named texture slots.
+  Compiled passes expose resolved read/write backend-handle bindings including
+  the sampler needed when a pass reads a sampled render texture or material
+  texture, and Engine Arcade records `engine_arcade.screen` as a 512x512 target
+  in generated package and project evidence. The next acceptance gate is
+  backend-native binding and arcade-cabinet presentation across the production
+  contexts.
 - Package Manager now needs visible per-package state instead of silent buttons
   or a single cramped combo box: selection uses a shared scrollable package list,
   each row exposes its own Install/Remove/Review Gate action, Install updates a
@@ -941,7 +943,7 @@ engine shape and should be treated as starting truth for the next passes:
   focus keys, selected OS models initialize immediately, leaked
   reasoning/debug-only helper text is rejected from visible chat, and model
   package staging no longer looks like a frozen 35% download.
-- `v0.87.00` is the feature-line refresh checkpoint. It preserves the OS
+- `v0.87.07` is the feature-line refresh checkpoint. It preserves the OS
   AI/model-package repairs, Linux Clang full-engine optimizer fix, cleaner
   default editor seed set, Package Manager list/action/detail direction,
   Forest Factory workspace direction, Systems graph refinement, binary-first

@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.87.07]
+- Added the next renderer-resource spine slice for material texture bindings.
+  `render.device` now names material texture slots and command bindings can
+  carry material handles plus texture/sampler pairs; `render.graph` can declare
+  material resources, bind sampled render-texture slots into passes, and destroy
+  compiled material handles through the same device contract.
+- Bumped the pushed source line to `v0.87.07` for the eye-tested update/editor
+  checkpoint while keeping local updater-test rollbacks out of the committed
+  source state.
+
 ## [v0.87.00]
 - Promoted Engine Arcade from duplicated editor strings into the shared package
   registry contract. The Package Manager can now create a game project shell

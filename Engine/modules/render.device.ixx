@@ -151,9 +151,32 @@ export namespace epoch
         const char* debug_name = nullptr;
     };
 
+    enum class MaterialTextureSlot : u8
+    {
+        base_color,
+        normal,
+        roughness,
+        metallic,
+        emissive,
+        opacity,
+        render_surface
+    };
+
+    struct MaterialTextureSlotDesc
+    {
+        MaterialTextureSlot slot = MaterialTextureSlot::base_color;
+        const char* name = nullptr;
+        TextureFormat expected_format = TextureFormat::rgba8_unorm;
+        bool required = false;
+    };
+
     struct MaterialDesc
     {
         const char* name = nullptr;
+        float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        bool unlit = false;
+        bool alpha_blend = false;
+        epoch::small_vector<MaterialTextureSlotDesc> texture_slots{};
         const char* debug_name = nullptr;
     };
 
@@ -267,14 +290,24 @@ export namespace epoch
         }
     };
 
+    struct MaterialTextureBinding
+    {
+        MaterialTextureSlot slot = MaterialTextureSlot::base_color;
+        TextureHandle texture{};
+        SamplerHandle sampler{};
+    };
+
     struct CommandResourceBindings
     {
         epoch::small_vector<BufferHandle> read_buffers{};
         epoch::small_vector<TextureHandle> read_textures{};
         epoch::small_vector<SamplerHandle> read_samplers{};
+        epoch::small_vector<MaterialHandle> read_materials{};
+        epoch::small_vector<MaterialTextureBinding> read_material_textures{};
         epoch::small_vector<RenderTargetHandle> read_render_targets{};
         epoch::small_vector<BufferHandle> write_buffers{};
         epoch::small_vector<TextureHandle> write_textures{};
+        epoch::small_vector<MaterialHandle> write_materials{};
         epoch::small_vector<RenderTargetHandle> write_render_targets{};
     };
 

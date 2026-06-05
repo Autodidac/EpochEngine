@@ -60,6 +60,19 @@ namespace epoch
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
+    GraphResource GraphBuilder::create_material(epoch::string_view name,
+                                                const MaterialDesc& desc,
+                                                epoch::array_view<const GraphMaterialTextureSlot> texture_slots)
+    {
+        const u32 idx = static_cast<u32>(m_materials.size());
+        GraphMaterial material{};
+        material.desc = desc;
+        material.texture_slots.assign(texture_slots.begin(), texture_slots.end());
+        m_materials.push_back(std::move(material));
+        m_resources.push_back(ResourceDecl{ ResourceKind::material, epoch::string(name), idx });
+        return GraphResource{ static_cast<u32>(m_resources.size()) };
+    }
+
     GraphResource GraphBuilder::create_render_target(epoch::string_view name, const RenderTargetDesc& desc)
     {
         const u32 idx = static_cast<u32>(m_render_targets.size());
@@ -121,6 +134,7 @@ namespace epoch
         g.resources = m_resources;
         g.buffers   = m_buffers;
         g.textures  = m_textures;
+        g.materials = m_materials;
         g.render_targets = m_render_targets;
         g.render_texture_assets = m_render_texture_assets;
         g.passes    = m_passes;
@@ -151,7 +165,7 @@ namespace epoch
             return &g.render_targets[resource.index];
         };
 
-        auto append_binding = [&g](CommandResourceBindings& bindings, GraphResource handle, bool write)
+        auto append_binding = [&g, &resolve_texture](CommandResourceBindings& bindings, GraphResource handle, bool write)
         {
             const u32 resourceIndex = handle.value;
             if (resourceIndex == 0 || resourceIndex > g.resources.size())
@@ -181,6 +195,34 @@ namespace epoch
                         bindings.read_textures.push_back(g.textures[resource.index].backend);
                         if (g.textures[resource.index].sampled_sampler)
                             bindings.read_samplers.push_back(g.textures[resource.index].sampled_sampler);
+                    }
+                }
+                break;
+            case ResourceKind::material:
+                if (resource.index < g.materials.size() && g.materials[resource.index].backend)
+                {
+                    GraphMaterial& material = g.materials[resource.index];
+                    if (write)
+                    {
+                        bindings.write_materials.push_back(material.backend);
+                    }
+                    else
+                    {
+                        bindings.read_materials.push_back(material.backend);
+                        for (const GraphMaterialTextureSlot& slot : material.texture_slots)
+                        {
+                            const GraphTexture* texture = resolve_texture(slot.texture);
+                            if (texture && texture->backend)
+                            {
+                                bindings.read_material_textures.push_back(MaterialTextureBinding{
+                                    .slot = slot.slot,
+                                    .texture = texture->backend,
+                                    .sampler = texture->sampled_sampler
+                                });
+                                if (texture->sampled_sampler)
+                                    bindings.read_samplers.push_back(texture->sampled_sampler);
+                            }
+                        }
                     }
                 }
                 break;
@@ -230,6 +272,11 @@ namespace epoch
         {
             if (!rt.backend)
                 rt.backend = dev.create_render_target(rt.desc);
+        }
+        for (auto& material : g.materials)
+        {
+            if (!material.backend)
+                material.backend = dev.create_material(material.desc);
         }
 
         for (auto& pass : g.passes)
@@ -308,6 +355,11 @@ namespace epoch
         {
             if (t.backend && !t.owned_by_render_texture_asset)
                 dev.destroy(t.backend);
+        }
+        for (auto& material : materials)
+        {
+            if (material.backend)
+                dev.destroy(material.backend);
         }
         for (auto& rt : render_targets)
         {

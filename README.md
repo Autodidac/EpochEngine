@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.00-1F7A4C?style=for-the-badge" alt="Current development source v0.87.00" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.07-1F7A4C?style=for-the-badge" alt="Current development source v0.87.07" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.87.00`.
+- Source is currently the active development line at `v0.87.07`.
 - The latest published stable runtime release is `v0.84.38`.
 - Windows and Linux `v0.84.38` runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -120,7 +120,9 @@ Windows multicontext editor carrying every active backend lane.
   `Project`, `Intelligence`, and `System Info`, with Console Dock kept as
   compact status evidence instead of a duplicate control surface.
 - Rendering spine: Raylib, SDL3, SFML, Vulkan, OpenGL, DirectX, software, and
-  headless/noop lanes are orchestrated by the same project/editor contracts.
+  headless/noop lanes are orchestrated by the same project/editor contracts,
+  with render-graph material texture bindings now flowing through the shared
+  device contract.
 - GUI spine: shared C++23 controls for windows, tabs, select boxes, scroll
   panels, progress bars, modals, text editing, theme preferences, and future
   popout/docking work.
