@@ -1,6 +1,12 @@
 # Epoch Changelog
 
 ## [v0.87.00]
+- Added the first central renderer-resource spine: `render.device` now defines
+  formal handles/descriptors for buffers, textures, samplers, shaders,
+  pipelines, materials, render targets, command lists, and render-pass/
+  FrameGraph-ready targets, while System Info reports the active backend
+  capability slice for the six production contexts instead of treating OpenGL
+  plumbing as the only renderer truth.
 - Bumped the active source line to `v0.87.00` for the current feature-line
   refresh after the OS AI/model-package, timeline, package-manager, and
   editor-stability work crossed a larger integration boundary.

@@ -4043,13 +4043,17 @@ namespace epochnamespace::gui
 
         const Vec2 pos = g_frame.cursor;
         const float availableWidth = (std::max)(1.0f, content_available_width(pos.x));
-        const float requestedWidth = options.size.x > 0.0f ? options.size.x : availableWidth;
-        const float width = options.size.x > 0.0f
-            ? (std::max)(1.0f, (std::min)(requestedWidth, availableWidth))
+        float width = options.size.x > 0.0f
+            ? (std::max)(1.0f, options.size.x)
             : availableWidth;
+        if (has_content_clip())
+            width = (std::min)(width, (std::max)(1.0f, content_right() - pos.x));
         const float height = (std::max)(14.0f, options.size.y > 0.0f ? options.size.y : 18.0f);
         const float value = std::clamp(options.value, 0.0f, 1.0f);
         const auto& palette = active_palette();
+        ContentClipScope localClip(
+            { pos.x, pos.y },
+            { pos.x + width, pos.y + height });
 
         draw_sprite(palette.panelBackground, pos.x, pos.y, width, height);
         draw_sprite(palette.consoleBackground, pos.x + 2.0f, pos.y + 2.0f, (std::max)(1.0f, width - 4.0f), (std::max)(1.0f, height - 4.0f));

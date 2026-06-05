@@ -52,6 +52,7 @@ coverage, or cross-backend parity.
 | Debugging support | Partial | Logging, Systems diagnostics, Vulkan validation messaging, host FPS title diagnostics, screenshots, and smoke docs exist. GPU debug markers/query plumbing remain backlog. |
 | 3D picking | Partial | Editor object selection exists, but full ID-target/depth/ray picking is not complete. |
 | Framebuffers / render targets / capture | Partial | OpenGL/Vulkan/DirectX swapchain or framebuffer paths, capture bridges, and runtime surfaces exist. General render-to-texture assets need a proper engine-facing API. |
+| Renderer resource spine | First contract slice present | `render.device` now owns formal handles/descriptors for buffers, textures, samplers, shaders, pipelines, materials, render targets, command lists, and render-pass/FrameGraph-ready targets. System Info reports the active backend capability slice. Backend-native allocation behind every handle remains the next acceptance gate. |
 | Text and UI rendering | Present/partial | Engine-owned GUI, font atlas, scroll views, tab bars, splitters, and runtime-surface textures exist. Professional dock/window polish remains active GUI work. |
 | Platform window layer | Present | Win32 and Linux/X11 host paths exist with backend-specific context ownership. |
 
@@ -63,8 +64,11 @@ work should be grouped this way instead of tackled as an unstructured checklist.
 
 ### Baseline Renderer Completion
 
-- Formal renderer resource model: buffer, texture, sampler, material, pipeline,
-  binding set, render target, pass, command list, and synchronization handles.
+- Backend-native implementations behind the formal renderer resource model:
+  buffer, texture, sampler, shader, material, pipeline, binding set, render
+  target, pass, command list, and synchronization handles. The engine-facing
+  handle/descriptors exist first; backend allocation and feature parity are the
+  active gate.
 - Formal material system with diffuse/specular parameters and texture slots.
 - Multiple point lights and spot lights.
 - Model import through an explicit chosen importer path, such as Assimp or a

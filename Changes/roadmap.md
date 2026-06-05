@@ -342,6 +342,13 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   abstraction is shaped around the explicit Vulkan/D3D resource model:
   buffers, textures, samplers, pipelines, binding sets, render targets, command
   submission, synchronization, and debug/profiling hooks.
+- The first central renderer-resource spine is now source-owned: formal
+  `render.device` handles/descriptors cover buffers, textures, samplers,
+  shaders, pipelines, materials, render targets, command lists, and
+  render-pass/FrameGraph-ready targets. System Info must report the active
+  backend capability slice, while the next gate is backend-native allocation
+  behind those handles across OpenGL, SDL3, SFML3, Raylib3, Vulkan, and DirectX;
+  software remains debug/safe-launch fallback rather than a parity target.
 - DirectX/D3D11 now has a first-pass Windows smoke lane and support claim for
   context/swapchain/preview/GUI proof. D3D12 equivalents stay in the design
   matrix until that backend is deliberately promoted.

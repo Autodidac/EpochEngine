@@ -50,10 +50,11 @@ export namespace epoch
     using GraphResource = Handle<GraphResourceTag, u32>;
     using GraphPass     = Handle<GraphPassTag, u32>;
 
-    enum class ResourceKind : u8 { buffer, texture };
+    enum class ResourceKind : u8 { buffer, texture, render_target };
 
     struct GraphBuffer { BufferDesc desc{}; BufferHandle backend{}; };
     struct GraphTexture{ TextureDesc desc{}; TextureHandle backend{}; };
+    struct GraphRenderTarget { RenderTargetDesc desc{}; RenderTargetHandle backend{}; };
 
     struct ResourceDecl { ResourceKind kind{}; epoch::string name{}; u32 index = 0; };
 
@@ -62,6 +63,9 @@ export namespace epoch
         epoch::string name{};
         epoch::small_vector<GraphResource> reads{};
         epoch::small_vector<GraphResource> writes{};
+        GraphResource render_target_resource{};
+        RenderTargetHandle render_target{};
+        RenderPassDesc render_pass{};
         epoch::function_ref<void(ICommandContext&)> execute{};
     };
 
@@ -70,10 +74,17 @@ export namespace epoch
     public:
         [[nodiscard]] GraphResource create_buffer(epoch::string_view name, const BufferDesc& desc);
         [[nodiscard]] GraphResource create_texture(epoch::string_view name, const TextureDesc& desc);
+        [[nodiscard]] GraphResource create_render_target(epoch::string_view name, const RenderTargetDesc& desc);
         [[nodiscard]] GraphPass add_pass(epoch::string_view name,
                                          epoch::array_view<const GraphResource> reads,
                                          epoch::array_view<const GraphResource> writes,
                                          epoch::function_ref<void(ICommandContext&)> fn);
+        [[nodiscard]] GraphPass add_render_pass(epoch::string_view name,
+                                                GraphResource target,
+                                                epoch::array_view<const GraphResource> reads,
+                                                epoch::array_view<const GraphResource> writes,
+                                                const RenderPassDesc& pass,
+                                                epoch::function_ref<void(ICommandContext&)> fn);
 
         struct CompiledGraph compile(IRenderDevice& dev) const;
 
@@ -81,6 +92,7 @@ export namespace epoch
         epoch::small_vector<ResourceDecl> m_resources{};
         epoch::small_vector<GraphBuffer>  m_buffers{};
         epoch::small_vector<GraphTexture> m_textures{};
+        epoch::small_vector<GraphRenderTarget> m_render_targets{};
         epoch::small_vector<PassDecl>     m_passes{};
     };
 
@@ -89,6 +101,7 @@ export namespace epoch
         epoch::small_vector<ResourceDecl> resources{};
         epoch::small_vector<GraphBuffer>  buffers{};
         epoch::small_vector<GraphTexture> textures{};
+        epoch::small_vector<GraphRenderTarget> render_targets{};
         epoch::small_vector<PassDecl>     passes{};
 
         void execute(IRenderDevice& dev);

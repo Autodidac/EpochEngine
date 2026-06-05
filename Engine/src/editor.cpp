@@ -86,6 +86,7 @@ import voxel.field;
 import forest.factory;
 import package.registry;
 import perf.tier;
+import render.device;
 import render.preview_grid;
 import saveload.system;
 import timeline.system;
@@ -2784,6 +2785,71 @@ namespace epochnamespace
             }
         }
 
+        [[nodiscard]] epoch::RendererBackendKind renderer_backend_kind(const std::shared_ptr<core::Context>& ctx) noexcept
+        {
+            if (!ctx)
+                return epoch::RendererBackendKind::null;
+
+            switch (ctx->type)
+            {
+            case core::ContextType::OpenGL: return epoch::RendererBackendKind::opengl;
+            case core::ContextType::SDL: return epoch::RendererBackendKind::sdl3;
+            case core::ContextType::SFML: return epoch::RendererBackendKind::sfml3;
+            case core::ContextType::RayLib: return epoch::RendererBackendKind::raylib3;
+            case core::ContextType::Vulkan: return epoch::RendererBackendKind::vulkan;
+            case core::ContextType::DirectX: return epoch::RendererBackendKind::directx;
+            case core::ContextType::Software: return epoch::RendererBackendKind::software;
+            default: return epoch::RendererBackendKind::null;
+            }
+        }
+
+        [[nodiscard]] std::string renderer_resource_spine_summary(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto kind = renderer_backend_kind(ctx);
+            const auto caps = epoch::renderer_capabilities_for(kind);
+
+            if (kind == epoch::RendererBackendKind::software)
+                return "Software remains debug/safe-launch fallback; production renderer parity excludes it.";
+
+            std::string summary;
+            const auto append = [&summary](bool enabled, std::string_view name)
+            {
+                if (!enabled)
+                    return;
+
+                if (!summary.empty())
+                    summary += " | ";
+                summary += name;
+            };
+
+            append(caps.buffers, "buffers");
+            append(caps.textures, "textures");
+            append(caps.samplers, "samplers");
+            append(caps.shaders, "shaders");
+            append(caps.pipelines, "pipelines");
+            append(caps.materials, "materials");
+            append(caps.render_targets, "targets");
+            append(caps.command_lists, "commands");
+            append(caps.frame_graph, "graph");
+            append(caps.render_to_texture, "RTT");
+
+            if (summary.empty())
+                return "No renderer-resource spine is active for this backend yet.";
+
+            return summary;
+        }
+
+        [[nodiscard]] std::string renderer_next_feature_gate(const std::shared_ptr<core::Context>& ctx)
+        {
+            if (!ctx)
+                return "Select a renderer before promoting backend features.";
+
+            if (renderer_backend_kind(ctx) == epoch::RendererBackendKind::software)
+                return "Keep software as fallback; prove the six production contexts through the shared spine.";
+
+            return "Backend-native allocation behind handles, then materials, model import, normal maps, skybox, instancing, shadows, RTT, G-buffer, SSAO.";
+        }
+
         struct ProjectRunBackendChoice
         {
             std::string_view label{};
@@ -2983,6 +3049,7 @@ namespace epochnamespace
                 return "Real child pane with a parked helper host; the child surface is the visible docked backend.";
             case core::ContextType::OpenGL:
             case core::ContextType::Vulkan:
+            case core::ContextType::DirectX:
             case core::ContextType::Software:
                 return "Direct child/editor-owned pane with no proxy-shell handoff in normal docked use.";
             default:
@@ -4993,8 +5060,35 @@ namespace epochnamespace
                     (std::max)(0.0f, (h - modalSize.y) * 0.5f)
                 };
             };
-        const gui::Vec2 updateConfirmModalSize{ 620.0f, 352.0f };
+        const auto update_confirm_modal_size = [&]() noexcept -> gui::Vec2
+            {
+                const bool sourceOnlyUpdate =
+                    editor.lastUpdateCheck.source_update_available
+                    && !editor.lastUpdateCheck.packaged_update_available;
+
+                if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
+                    return { 700.0f, 360.0f };
+                if (editor.updateState == EditorUpdateState::RestartReady)
+                    return { 700.0f, 326.0f };
+                if (sourceOnlyUpdate)
+                    return { 700.0f, 340.0f };
+                return { 700.0f, 326.0f };
+            };
+        const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
         const gui::Vec2 sourceUpdateConfirmModalSize{ 620.0f, 292.0f };
+        const bool modalVisible =
+            editor.showAboutModal
+            || editor.showSettingsModal
+            || editor.showPackageManagerModal
+            || editor.showUpdateConfirmModal
+            || editor.showSourceUpdateConfirmModal;
+        if (modalVisible)
+            editor.openMenu = TopMenu::None;
+
+        const bool overlayPriorityActive =
+            editor.openMenu != TopMenu::None
+            || modalVisible;
+        ctx->set_gui_overlay_priority(overlayPriorityActive);
 
         gui::clear_modal_input_capture();
         if (editor.showUpdateConfirmModal)
@@ -7078,6 +7172,8 @@ namespace epochnamespace
                 gui::property_row("[system] Live threads", std::to_string(liveThreadCount), 112.0f);
                 gui::property_row("[system] CPU threads", std::to_string(hardwareThreadCount), 112.0f);
                 gui::property_row("[system] Panel host", editor.detachedPanelHostStatus, 112.0f);
+                gui::property_row("[renderer] Resource spine", renderer_resource_spine_summary(ctx), 132.0f);
+                gui::property_row("[renderer] Next gate", renderer_next_feature_gate(ctx), 132.0f);
                 gui::wrapped_label(
                     "System Info is reserved for render/backend/context routing and diagnostics. Video owns time controls, timeline graphing, streaming-save cadence, and video-authoring surfaces.",
                     centerWidth);
@@ -7601,6 +7697,8 @@ namespace epochnamespace
                 dockLine("[systems] Live threads", std::to_string(liveThreadCount)),
                 dockLine("[systems] CPU threads", std::to_string(hardwareThreadCount)),
                 dockLine("[systems] Support tier", supportTier),
+                dockLine("[renderer] Resource spine", renderer_resource_spine_summary(ctx)),
+                dockLine("[renderer] Next gate", renderer_next_feature_gate(ctx)),
                 dockLine("[build] Compiler", compiler_identity()),
                 dockLine("[build] Configuration", build_configuration_label()),
                 dockLine("[phase5] Gate", "manual evidence gate"),
@@ -7660,15 +7758,6 @@ namespace epochnamespace
             chat.submit(std::move(text));
         }
         }
-
-        const bool overlayPriority =
-            editor.openMenu != TopMenu::None
-            || editor.showAboutModal
-            || editor.showSettingsModal
-            || editor.showPackageManagerModal
-            || editor.showUpdateConfirmModal
-            || editor.showSourceUpdateConfirmModal;
-        ctx->set_gui_overlay_priority(overlayPriority);
 
         render_inspector_window();
 
@@ -7830,8 +7919,12 @@ namespace epochnamespace
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
-            constexpr float modalContentInset = 36.0f;
-            const float contentWidth = (std::max)(1.0f, modalSize.x - 2.0f * modalContentInset);
+            constexpr float modalContentInset = 28.0f;
+            constexpr float buttonHeight = 30.0f;
+            constexpr float buttonBottomPad = 24.0f;
+            const float contentX = modalPos.x + modalContentInset;
+            const float contentRight = modalPos.x + modalSize.x - modalContentInset;
+            const float contentWidth = (std::max)(1.0f, contentRight - contentX);
             const std::string updateStatusLine = [&]() {
                 std::string text = editor.updateStatus;
                 constexpr std::size_t kMaxModalStatus = 176u;
@@ -7856,7 +7949,6 @@ namespace epochnamespace
                 .dim_background = true
             });
             const gui::Vec2 contentPos = gui::cursor_position();
-            const float contentX = contentPos.x + 8.0f;
             float cursorY = contentPos.y;
             const auto emitWrapped = [&](const std::string_view text, const float gap) {
                 gui::set_cursor({ contentX, cursorY });
@@ -7869,16 +7961,17 @@ namespace epochnamespace
             emitWrapped(introText, 8.0f);
             emitWrapped(updateStatusLine, 10.0f);
             gui::set_cursor({ contentX, cursorY });
+            const float progressWidth = (std::min)(contentWidth, 560.0f);
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
                 .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",
                 .value = editor_update_progress_value(editor),
-                .size = { contentWidth, 22.0f },
+                .size = { progressWidth, 22.0f },
                 .show_percent = true
             });
             cursorY += 36.0f;
             const std::string cacheText = sourceOnlyUpdate
-                ? "Smart Update always checks platform release packages first. Source rebuild is used only when no compatible package exists."
+                ? "Smart Update checked packaged releases first; source rebuild is the available lane for this platform."
                 : "Cached packages are checked before use; stale or broken downloads are replaced.";
             emitWrapped(cacheText, 8.0f);
             const std::string actionText = restartReady
@@ -7887,10 +7980,12 @@ namespace epochnamespace
                     restartSeconds,
                     restartSeconds == 1 ? "" : "s")
                 : sourceWorkerRunning
-                    ? "Cancel asks the source worker to stop safely before runtime handoff."
-                    : "Advanced Source rebuilds latest main locally. Use it only when you intentionally want source instead of the packaged release.";
+                    ? "Keep Epoch open while the source worker runs. Cancel stops at the next safe checkpoint."
+                    : sourceOnlyUpdate
+                        ? "Use Update From Source to build the newer source locally, or Cancel to stay on this build."
+                        : "Install Release is recommended. Advanced Source is only for intentionally building latest main locally.";
             emitWrapped(actionText, 8.0f);
-            const float buttonY = modalPos.y + modalSize.y - 54.0f;
+            const float buttonY = modalPos.y + modalSize.y - buttonHeight - buttonBottomPad;
             gui::set_cursor({ contentX, buttonY });
             if (sourceWorkerRunning)
             {
@@ -7913,11 +8008,13 @@ namespace epochnamespace
                 editor.showUpdateConfirmModal = false;
                 push_editor_log(editor, "[command] Update canceled.");
             }
+            constexpr float primaryButtonWidth = 204.0f;
+            constexpr float advancedButtonWidth = 176.0f;
             gui::set_cursor({ contentX + 160.0f, buttonY });
             const std::string primaryUpdateLabel = restartReady
                 ? std::format("Restart Now ({})", restartSeconds)
                 : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
-            if (!updateRunning && gui::button(primaryUpdateLabel, { 204.0f, 30.0f }))
+            if (!updateRunning && gui::button(primaryUpdateLabel, { primaryButtonWidth, buttonHeight }))
             {
                 if (restartReady)
                 {
@@ -7929,8 +8026,9 @@ namespace epochnamespace
                     start_editor_update_install(editor);
                 }
             }
-            gui::set_cursor({ contentX + 384.0f, buttonY });
-            if (!updateRunning && !restartReady && gui::button("Advanced Source...", { 176.0f, 30.0f }))
+            const bool showAdvancedSourceButton = !updateRunning && !restartReady;
+            gui::set_cursor({ (std::min)(contentRight - advancedButtonWidth, contentX + 384.0f), buttonY });
+            if (showAdvancedSourceButton && gui::button("Advanced Source...", { advancedButtonWidth, buttonHeight }))
             {
                 editor.showUpdateConfirmModal = false;
                 editor.showSourceUpdateConfirmModal = true;

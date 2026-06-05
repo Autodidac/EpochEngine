@@ -42,6 +42,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -95,6 +96,7 @@ namespace
         bool legacy_only = false;
         bool show_help = false;
         int timeout_seconds = 45;
+        int inter_scenario_delay_ms = 750;
         std::filesystem::path output_root = "Logs/smoke";
     };
 
@@ -233,6 +235,12 @@ namespace
                 if (!value.empty())
                     options.timeout_seconds = (std::max)(5, std::stoi(value));
             }
+            else if (arg == "--delay-ms")
+            {
+                const auto value = read_value(arg);
+                if (!value.empty())
+                    options.inter_scenario_delay_ms = std::clamp(std::stoi(value), 0, 10000);
+            }
             else if (arg == "--out")
             {
                 const auto value = read_value(arg);
@@ -250,6 +258,7 @@ namespace
                     "  --capture            Forward capture hint to runtime\n"
                     "  --legacy-only        Skip epoch-native mirror runs\n"
                     "  --timeout <seconds>  Per-scenario timeout (default 45)\n"
+                    "  --delay-ms <ms>      Delay between scenarios (default 750)\n"
                     "  --out <path>         Output root for logs/manifests");
             }
         }
@@ -489,6 +498,12 @@ int main(int argc, char** argv)
             scenario.mode);
 
         results.push_back(run_scenario(options, scenario, stamp, index));
+
+        if (options.inter_scenario_delay_ms > 0 && index < static_cast<int>(scenarios.size()))
+        {
+            LogInfo("Waiting {} ms before the next renderer scenario.", options.inter_scenario_delay_ms);
+            std::this_thread::sleep_for(std::chrono::milliseconds(options.inter_scenario_delay_ms));
+        }
     }
 
     int failures = 0;
@@ -516,6 +531,5 @@ int main(int argc, char** argv)
     LogInfo("All scenarios passed.");
     return 0;
 }
-
 
 
