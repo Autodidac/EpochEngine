@@ -87,6 +87,7 @@ export namespace epoch
         GraphResource render_target_resource{};
         RenderTargetHandle render_target{};
         RenderPassDesc render_pass{};
+        CommandResourceBindings bindings{};
         epoch::function_ref<void(ICommandContext&)> execute{};
     };
 

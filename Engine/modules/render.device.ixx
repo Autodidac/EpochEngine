@@ -267,6 +267,16 @@ export namespace epoch
         }
     };
 
+    struct CommandResourceBindings
+    {
+        epoch::small_vector<BufferHandle> read_buffers{};
+        epoch::small_vector<TextureHandle> read_textures{};
+        epoch::small_vector<RenderTargetHandle> read_render_targets{};
+        epoch::small_vector<BufferHandle> write_buffers{};
+        epoch::small_vector<TextureHandle> write_textures{};
+        epoch::small_vector<RenderTargetHandle> write_render_targets{};
+    };
+
     struct RendererCapabilities
     {
         RendererBackendKind backend = RendererBackendKind::null;
@@ -367,6 +377,7 @@ export namespace epoch
         virtual void begin(const char* label) = 0;
         virtual void end() = 0;
         virtual void debug_marker(const char* label) = 0;
+        virtual void bind_resources(const CommandResourceBindings&) {}
         virtual void barrier() = 0;
         virtual void begin_render_pass(RenderTargetHandle, const RenderPassDesc&) {}
         virtual void end_render_pass() {}

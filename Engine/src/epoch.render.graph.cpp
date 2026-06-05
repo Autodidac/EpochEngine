@@ -151,6 +151,45 @@ namespace epoch
             return &g.render_targets[resource.index];
         };
 
+        auto append_binding = [&g](CommandResourceBindings& bindings, GraphResource handle, bool write)
+        {
+            const u32 resourceIndex = handle.value;
+            if (resourceIndex == 0 || resourceIndex > g.resources.size())
+                return;
+
+            const ResourceDecl& resource = g.resources[resourceIndex - 1u];
+            switch (resource.kind)
+            {
+            case ResourceKind::buffer:
+                if (resource.index < g.buffers.size() && g.buffers[resource.index].backend)
+                {
+                    if (write)
+                        bindings.write_buffers.push_back(g.buffers[resource.index].backend);
+                    else
+                        bindings.read_buffers.push_back(g.buffers[resource.index].backend);
+                }
+                break;
+            case ResourceKind::texture:
+                if (resource.index < g.textures.size() && g.textures[resource.index].backend)
+                {
+                    if (write)
+                        bindings.write_textures.push_back(g.textures[resource.index].backend);
+                    else
+                        bindings.read_textures.push_back(g.textures[resource.index].backend);
+                }
+                break;
+            case ResourceKind::render_target:
+                if (resource.index < g.render_targets.size() && g.render_targets[resource.index].backend)
+                {
+                    if (write)
+                        bindings.write_render_targets.push_back(g.render_targets[resource.index].backend);
+                    else
+                        bindings.read_render_targets.push_back(g.render_targets[resource.index].backend);
+                }
+                break;
+            }
+        };
+
         for (auto& asset : g.render_texture_assets)
         {
             asset.backend = dev.create_render_texture_asset(asset.desc);
@@ -184,6 +223,17 @@ namespace epoch
         {
             if (!rt.backend)
                 rt.backend = dev.create_render_target(rt.desc);
+        }
+
+        for (auto& pass : g.passes)
+        {
+            pass.bindings = {};
+            for (const GraphResource resourceHandle : pass.reads)
+                append_binding(pass.bindings, resourceHandle, false);
+            if (pass.render_target_resource)
+                append_binding(pass.bindings, pass.render_target_resource, true);
+            for (const GraphResource resourceHandle : pass.writes)
+                append_binding(pass.bindings, resourceHandle, true);
         }
 
         for (auto& pass : g.passes)
@@ -227,6 +277,7 @@ namespace epoch
         for (auto& p : passes)
         {
             ctx.debug_marker(p.name.c_str());
+            ctx.bind_resources(p.bindings);
             if (p.render_target)
                 ctx.begin_render_pass(p.render_target, p.render_pass);
             if (p.execute) p.execute(ctx);

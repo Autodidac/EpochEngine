@@ -345,10 +345,13 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 - The first central renderer-resource spine is now source-owned: formal
   `render.device` handles/descriptors cover buffers, textures, samplers,
   shaders, pipelines, materials, render targets, command lists, and
-  render-pass/FrameGraph-ready targets. System Info must report the active
-  backend capability slice, while the next gate is backend-native allocation
-  behind those handles across OpenGL, SDL3, SFML3, Raylib3, Vulkan, and DirectX;
-  software remains debug/safe-launch fallback rather than a parity target.
+  render-pass/FrameGraph-ready targets. Compiled graph passes now carry resolved
+  buffer/texture/render-target read/write bindings, so sampled render targets
+  can feed later material/model/arcade passes through one backend-neutral shape.
+  System Info must report the active backend capability slice, while the next
+  gate is backend-native allocation and binding behind those handles across
+  OpenGL, SDL3, SFML3, Raylib3, Vulkan, and DirectX; software remains
+  debug/safe-launch fallback rather than a parity target.
 - DirectX/D3D11 now has a first-pass Windows smoke lane and support claim for
   context/swapchain/preview/GUI proof. D3D12 equivalents stay in the design
   matrix until that backend is deliberately promoted.
@@ -659,9 +662,10 @@ engine shape and should be treated as starting truth for the next passes:
   plan: `render.device` describes the texture/sampler/render-target/pass shape,
   `IRenderDevice` owns default handle allocation/destruction helpers,
   `render.graph` declares and compiles sampled render-texture assets as one
-  owner of the color texture, sampler, and render target, and Engine Arcade
-  records `engine_arcade.screen` as a 512x512 target in generated package and
-  project evidence. The next acceptance gate is backend-native binding and
+  owner of the color texture, sampler, and render target, compiled passes expose
+  resolved read/write backend-handle bindings, and Engine Arcade records
+  `engine_arcade.screen` as a 512x512 target in generated package and project
+  evidence. The next acceptance gate is backend-native binding and
   arcade-cabinet presentation across the production contexts.
 - Package Manager now needs visible per-package state instead of silent buttons
   or a single cramped combo box: selection uses a shared scrollable package list,
