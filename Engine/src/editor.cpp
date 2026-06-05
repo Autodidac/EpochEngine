@@ -8332,9 +8332,27 @@ namespace epochnamespace
                     }
                     else
                     {
-                        editor.packageInstallStatus = "Engine Arcade applies to game project shells, not sandbox/tool hubs.";
-                        editor.packageInstallProgress = 0.0f;
-                        push_editor_log(editor, "[package] engine_arcade applies to game project shells, not the self-iteration sandbox or tool hubs.");
+                        const auto created = editor_create_project_shell(EditorProjectKind::Game);
+                        if (created.succeeded)
+                        {
+                            set_project(editor, created.project_id, true);
+                            editor.selectedPackageId = std::string(epoch::package_registry::kEngineArcadePackageId);
+                            editor.packageInstallStatus =
+                                "Created game project with Engine Arcade staged for render-to-texture arcade assets.";
+                            editor.packageInstallProgress = 1.0f;
+                            push_editor_log(
+                                editor,
+                                "[package] Created game project shell with engine_arcade runtime-mini package staged.");
+                        }
+                        else
+                        {
+                            editor.packageInstallStatus =
+                                "Engine Arcade needs a game project shell; auto-create failed. Inspect project status.";
+                            editor.packageInstallProgress = 0.0f;
+                            push_editor_log(
+                                editor,
+                                "[package] engine_arcade game-shell creation failed: " + created.summary);
+                        }
                     }
                     return;
                 }
@@ -8486,9 +8504,13 @@ namespace epochnamespace
 
             if (selectedPackage && selectedPackage->id == epoch::package_registry::kEngineArcadePackageId)
             {
-                gui::property_row("Availability", engineArcadeEligible ? "available for this project" : "not applicable to this project", 104.0f);
+                gui::property_row("Availability", engineArcadeEligible ? "available for this project" : "install creates a game shell", 104.0f);
                 gui::property_row("Manifest", path_exists(engineArcadePackage) ? "installed" : "missing", 104.0f);
                 gui::property_row("Script asset", path_exists(engineArcadeScript) ? "installed" : "missing", 104.0f);
+                gui::property_row("Default scene", std::string(epoch::package_registry::engine_arcade_default_scene_id()), 104.0f);
+                gui::property_row("Runtime scenes", std::string(epoch::package_registry::engine_arcade_scene_ids()), 104.0f);
+                gui::property_row("Render asset", std::string(epoch::package_registry::engine_arcade_render_asset_role()), 104.0f);
+                gui::property_row("Renderer gate", std::string(epoch::package_registry::engine_arcade_renderer_requirements()), 104.0f);
             }
             else if (selectedPackage && selectedPackage->id == epoch::package_registry::kEngineForestFactoryPackageId)
             {

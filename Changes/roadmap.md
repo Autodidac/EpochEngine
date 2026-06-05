@@ -650,6 +650,11 @@ engine shape and should be treated as starting truth for the next passes:
   game modules. The command-menu Package Manager modal is the intended GUI
   surface for local packages first; future downloadable source packages must
   route through an updater-style build/approval gate.
+- `v0.87.00` tightens that Engine Arcade path into a shared package contract:
+  `package.registry` owns the arcade default scene, scene inventory,
+  render-to-texture asset role, and renderer-resource requirements; generated
+  project manifests/scripts consume that contract; and installing Engine Arcade
+  from Project Hub creates a game shell instead of dead-ending on a tool profile.
 - Package Manager now needs visible per-package state instead of silent buttons
   or a single cramped combo box: selection uses a shared scrollable package list,
   each row exposes its own Install/Remove/Review Gate action, Install updates a

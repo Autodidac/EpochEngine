@@ -66,6 +66,12 @@ export namespace epoch::package_registry
     inline constexpr std::string_view kForestFactoryPackageSourceRepo = kEpochEngineExtensionsRepo;
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
     inline constexpr std::string_view kEngineArcadeSceneId = "engine_arcade_scene";
+    inline constexpr std::string_view kEngineArcadeDefaultSceneId = "snake";
+    inline constexpr std::string_view kEngineArcadeSceneIds =
+        "snake,tetris,pacman,frogger,sokoban,match3,sliding,minesweeper,2048,sandsim,cellular";
+    inline constexpr std::string_view kEngineArcadeRenderAssetRole = "render_to_texture_arcade_cabinet";
+    inline constexpr std::string_view kEngineArcadeRendererRequirements =
+        "render_targets,render_to_texture,materials,command_lists";
     inline constexpr std::string_view kEngineForestFactoryPackageId = epoch::forest::kForestFactoryPackageId;
     inline constexpr std::string_view kEngineNetworkRuntimePackageId = "engine_network_runtime";
     inline constexpr std::string_view kEngineAuthoritativeServerPackageId = "engine_authoritative_dedicated_server";
@@ -80,7 +86,7 @@ export namespace epoch::package_registry
         {
             .id = kEngineArcadePackageId,
             .displayName = "Engine Arcade",
-            .summary = "Kernel mini-runtime scenes exposed as opt-in project package/script assets.",
+            .summary = "Kernel mini-runtime scenes exposed as opt-in project package/script assets for render-to-texture arcade cabinets and in-game terminals.",
             .kind = PackageKind::RuntimeMini,
             .activation = ActivationMode::ProjectOptIn,
             .shipsInCore = true,
@@ -324,6 +330,26 @@ export namespace epoch::package_registry
     [[nodiscard]] constexpr std::string_view recommended_local_image_model_id() noexcept
     {
         return kBonsaiImageTernaryPackageId;
+    }
+
+    [[nodiscard]] constexpr std::string_view engine_arcade_default_scene_id() noexcept
+    {
+        return kEngineArcadeDefaultSceneId;
+    }
+
+    [[nodiscard]] constexpr std::string_view engine_arcade_scene_ids() noexcept
+    {
+        return kEngineArcadeSceneIds;
+    }
+
+    [[nodiscard]] constexpr std::string_view engine_arcade_render_asset_role() noexcept
+    {
+        return kEngineArcadeRenderAssetRole;
+    }
+
+    [[nodiscard]] constexpr std::string_view engine_arcade_renderer_requirements() noexcept
+    {
+        return kEngineArcadeRendererRequirements;
     }
 
     [[nodiscard]] constexpr bool validate_descriptor(const PackageDescriptor& package) noexcept

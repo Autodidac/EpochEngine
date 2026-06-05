@@ -1,6 +1,12 @@
 # Epoch Changelog
 
 ## [v0.87.00]
+- Promoted Engine Arcade from duplicated editor strings into the shared package
+  registry contract. The Package Manager can now create a game project shell
+  from a tool hub and stage the engine-owned `engine_arcade` manifest/script for
+  render-to-texture arcade assets, while generated manifests record the default
+  mini-runtime scene, scene inventory, render-asset role, and renderer-resource
+  requirements from one source of truth.
 - Added the first central renderer-resource spine: `render.device` now defines
   formal handles/descriptors for buffers, textures, samplers, shaders,
   pipelines, materials, render targets, command lists, and render-pass/

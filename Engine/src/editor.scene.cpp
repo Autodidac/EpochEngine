@@ -76,6 +76,7 @@ module editor;
 
 import core.logger;
 import core.path;
+import package.registry;
 
 namespace
 {
@@ -1861,11 +1862,38 @@ namespace
 
     [[nodiscard]] static constexpr std::string_view engine_arcade_scene_ids() noexcept
     {
-        return "snake,tetris,pacman,frogger,sokoban,match3,sliding,minesweeper,2048,sandsim,cellular";
+        return epoch::package_registry::engine_arcade_scene_ids();
+    }
+
+    [[nodiscard]] static std::string json_array_from_csv(std::string_view csv)
+    {
+        std::string result{ "[" };
+        std::size_t start = 0;
+        bool first = true;
+        while (start < csv.size())
+        {
+            const std::size_t comma = csv.find(',', start);
+            const std::size_t end = comma == std::string_view::npos ? csv.size() : comma;
+            const std::string_view token = csv.substr(start, end - start);
+            if (!token.empty())
+            {
+                if (!first)
+                    result += ", ";
+                result += "\"" + json_escape(token) + "\"";
+                first = false;
+            }
+            if (comma == std::string_view::npos)
+                break;
+            start = comma + 1;
+        }
+        result += "]";
+        return result;
     }
 
     [[nodiscard]] static std::string make_engine_arcade_script_text(std::string_view script_api_include)
     {
+        const std::string sceneIds{ epoch::package_registry::engine_arcade_scene_ids() };
+        const std::string defaultScene{ epoch::package_registry::engine_arcade_default_scene_id() };
         return std::string(script_api_include)
             + "namespace\n"
             + "{\n"
@@ -1880,21 +1908,25 @@ namespace
             + "    if (!host)\n"
             + "        return;\n\n"
             + "    host_log(host, \"engine_arcade_scene: package exposes kernel-owned mini-runtime scenes.\");\n"
-            + "    host_log(host, \"engine_arcade_scene: available scenes: snake,tetris,pacman,frogger,sokoban,match3,sliding,minesweeper,2048,sandsim,cellular.\");\n\n"
+            + "    host_log(host, \"engine_arcade_scene: available scenes: " + sceneIds + ".\");\n\n"
             + "    if (!host->request_engine_scene)\n"
             + "    {\n"
             + "        host_log(host, \"engine_arcade_scene: engine scene callback unavailable.\");\n"
             + "        return;\n"
             + "    }\n\n"
-            + "    const int result = host->request_engine_scene(host->user_data, \"snake\");\n"
+            + "    const int result = host->request_engine_scene(host->user_data, \"" + defaultScene + "\");\n"
             + "    host_log(host, result >= 0\n"
-            + "        ? \"engine_arcade_scene: selected 'snake'; use Run to launch the engine-owned scene.\"\n"
+            + "        ? \"engine_arcade_scene: selected '" + defaultScene + "'; use Run to launch the engine-owned scene.\"\n"
             + "        : \"engine_arcade_scene: engine rejected built-in scene request.\");\n"
             + "}\n";
     }
 
     [[nodiscard]] static std::string make_engine_arcade_package_manifest_text()
     {
+        const std::string sceneArray = json_array_from_csv(epoch::package_registry::engine_arcade_scene_ids());
+        const std::string defaultScene{ epoch::package_registry::engine_arcade_default_scene_id() };
+        const std::string renderAssetRole{ epoch::package_registry::engine_arcade_render_asset_role() };
+        const std::string rendererRequirements{ epoch::package_registry::engine_arcade_renderer_requirements() };
         return std::string{
             "{\n"
             "  \"package_id\": \"engine_arcade\",\n"
@@ -1902,8 +1934,11 @@ namespace
             "  \"kind\": \"kernel-engine-asset-script-package\",\n"
             "  \"ownership\": \"engine-owned; project-selectable\",\n"
             "  \"default_script\": \"engine_arcade_scene\",\n"
+            "  \"default_scene\": \"" + json_escape(defaultScene) + "\",\n"
             "  \"runtime_role\": \"built-in scenes for render-to-texture arcade cabinets and in-game terminals\",\n"
-            "  \"scenes\": [\"snake\", \"tetris\", \"pacman\", \"frogger\", \"sokoban\", \"match3\", \"sliding\", \"minesweeper\", \"2048\", \"sandsim\", \"cellular\"],\n"
+            "  \"render_asset_role\": \"" + json_escape(renderAssetRole) + "\",\n"
+            "  \"renderer_requirements\": \"" + json_escape(rendererRequirements) + "\",\n"
+            "  \"scenes\": " + sceneArray + ",\n"
             "  \"source_policy\": \"do not copy game implementations into generated projects; invoke engine kernel modules through script host callbacks\"\n"
             "}\n"
         };
@@ -2110,7 +2145,11 @@ namespace
             : "  \"demo_model_asset\": \"" + json_escape(spec.demo_model_asset) + "\",\n";
         const std::string packageManifestLine = includeEngineArcadePackage
             ? std::string{ "  \"engine_asset_packages\": [\"engine_arcade\"],\n"
-                "  \"engine_arcade_scenes\": [\"snake\", \"tetris\", \"pacman\", \"frogger\", \"sokoban\", \"match3\", \"sliding\", \"minesweeper\", \"2048\", \"sandsim\", \"cellular\"],\n" }
+                "  \"engine_arcade_default_scene\": \"" }
+                + json_escape(epoch::package_registry::engine_arcade_default_scene_id()) + "\",\n"
+                + "  \"engine_arcade_scenes\": " + json_array_from_csv(epoch::package_registry::engine_arcade_scene_ids()) + ",\n"
+                + "  \"engine_arcade_render_asset_role\": \"" + json_escape(epoch::package_registry::engine_arcade_render_asset_role()) + "\",\n"
+                + "  \"engine_arcade_renderer_requirements\": \"" + json_escape(epoch::package_registry::engine_arcade_renderer_requirements()) + "\",\n"
             : std::string{};
         const std::string readmeDemoLine = spec.demo_model_asset.empty()
             ? std::string{}
@@ -2125,6 +2164,8 @@ namespace
             ? "engine_arcade_package=" + engineArcadePackageFile.generic_string() + "\n"
               "engine_arcade_script=" + engineArcadeScriptFile.generic_string() + "\n"
               "engine_arcade_scenes=" + std::string(engine_arcade_scene_ids()) + "\n"
+              "engine_arcade_render_asset_role=" + std::string(epoch::package_registry::engine_arcade_render_asset_role()) + "\n"
+              "engine_arcade_renderer_requirements=" + std::string(epoch::package_registry::engine_arcade_renderer_requirements()) + "\n"
             : std::string{};
 
         const std::string manifestText =

@@ -53,6 +53,7 @@ coverage, or cross-backend parity.
 | 3D picking | Partial | Editor object selection exists, but full ID-target/depth/ray picking is not complete. |
 | Framebuffers / render targets / capture | Partial | OpenGL/Vulkan/DirectX swapchain or framebuffer paths, capture bridges, and runtime surfaces exist. General render-to-texture assets need a proper engine-facing API. |
 | Renderer resource spine | First contract slice present | `render.device` now owns formal handles/descriptors for buffers, textures, samplers, shaders, pipelines, materials, render targets, command lists, and render-pass/FrameGraph-ready targets. System Info reports the active backend capability slice. Backend-native allocation behind every handle remains the next acceptance gate. |
+| Runtime-mini render assets | Contract-backed package path started | Engine Arcade now records its default mini-runtime scene, scene inventory, render-to-texture asset role, and renderer-resource requirements through `package.registry`; actual arcade-cabinet render targets depend on the backend-native resource work below. |
 | Text and UI rendering | Present/partial | Engine-owned GUI, font atlas, scroll views, tab bars, splitters, and runtime-surface textures exist. Professional dock/window polish remains active GUI work. |
 | Platform window layer | Present | Win32 and Linux/X11 host paths exist with backend-specific context ownership. |
 
