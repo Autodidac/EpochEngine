@@ -17,6 +17,10 @@
   `sampled_render_targets` capability bit. Engine Arcade's renderer gate now
   requires that capability so future OpenGL-derived, Vulkan, and DirectX
   implementations converge on the same arcade-screen resource shape.
+- Promoted sampled render-texture assets into compiled render-graph ownership.
+  Graph compilation now allocates the color texture, sampler, and render target
+  as one device-owned asset, maps the texture/target handles back into graph
+  resources, and skips duplicate destruction for resources owned by that asset.
 - Added the first central renderer-resource spine: `render.device` now defines
   formal handles/descriptors for buffers, textures, samplers, shaders,
   pipelines, materials, render targets, command lists, and render-pass/

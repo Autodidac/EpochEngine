@@ -53,16 +53,30 @@ export namespace epoch
     enum class ResourceKind : u8 { buffer, texture, render_target };
 
     struct GraphBuffer { BufferDesc desc{}; BufferHandle backend{}; };
-    struct GraphTexture{ TextureDesc desc{}; TextureHandle backend{}; };
-    struct GraphRenderTarget { RenderTargetDesc desc{}; RenderTargetHandle backend{}; };
+    struct GraphTexture
+    {
+        TextureDesc desc{};
+        TextureHandle backend{};
+        bool owned_by_render_texture_asset{ false };
+    };
+
+    struct GraphRenderTarget
+    {
+        RenderTargetDesc desc{};
+        RenderTargetHandle backend{};
+        bool owned_by_render_texture_asset{ false };
+    };
 
     struct ResourceDecl { ResourceKind kind{}; epoch::string name{}; u32 index = 0; };
 
     struct GraphRenderTextureAsset
     {
+        epoch::string name{};
+        RenderTextureAssetDesc desc{};
         GraphResource color_texture{};
         GraphResource render_target{};
         RenderTextureAssetPlan plan{};
+        RenderTextureAssetHandles backend{};
     };
 
     struct PassDecl
@@ -103,6 +117,7 @@ export namespace epoch
         epoch::small_vector<GraphBuffer>  m_buffers{};
         epoch::small_vector<GraphTexture> m_textures{};
         epoch::small_vector<GraphRenderTarget> m_render_targets{};
+        epoch::small_vector<GraphRenderTextureAsset> m_render_texture_assets{};
         epoch::small_vector<PassDecl>     m_passes{};
     };
 
@@ -112,6 +127,7 @@ export namespace epoch
         epoch::small_vector<GraphBuffer>  buffers{};
         epoch::small_vector<GraphTexture> textures{};
         epoch::small_vector<GraphRenderTarget> render_targets{};
+        epoch::small_vector<GraphRenderTextureAsset> render_texture_assets{};
         epoch::small_vector<PassDecl>     passes{};
 
         void execute(IRenderDevice& dev);

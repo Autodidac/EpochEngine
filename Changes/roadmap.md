@@ -658,10 +658,11 @@ engine shape and should be treated as starting truth for the next passes:
 - The renderer spine now has a backend-neutral sampled render-texture asset
   plan: `render.device` describes the texture/sampler/render-target/pass shape,
   `IRenderDevice` owns default handle allocation/destruction helpers,
-  `render.graph` can declare the paired graph resources, and Engine Arcade
+  `render.graph` declares and compiles sampled render-texture assets as one
+  owner of the color texture, sampler, and render target, and Engine Arcade
   records `engine_arcade.screen` as a 512x512 target in generated package and
-  project evidence. The next acceptance gate is backend-native allocation,
-  binding, and arcade-cabinet presentation across the production contexts.
+  project evidence. The next acceptance gate is backend-native binding and
+  arcade-cabinet presentation across the production contexts.
 - Package Manager now needs visible per-package state instead of silent buttons
   or a single cramped combo box: selection uses a shared scrollable package list,
   each row exposes its own Install/Remove/Review Gate action, Install updates a

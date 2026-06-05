@@ -73,9 +73,12 @@ namespace epoch
         const RenderTextureAssetDesc& desc)
     {
         GraphRenderTextureAsset asset{};
+        asset.name = epoch::string(name);
+        asset.desc = desc;
         asset.plan = make_render_texture_asset_plan(desc);
         asset.color_texture = create_texture(name, asset.plan.color_texture);
         asset.render_target = create_render_target(name, asset.plan.render_target);
+        m_render_texture_assets.push_back(asset);
         return asset;
     }
 
@@ -119,11 +122,69 @@ namespace epoch
         g.buffers   = m_buffers;
         g.textures  = m_textures;
         g.render_targets = m_render_targets;
+        g.render_texture_assets = m_render_texture_assets;
         g.passes    = m_passes;
 
+        auto resolve_texture = [&g](GraphResource handle) -> GraphTexture*
+        {
+            const u32 resourceIndex = handle.value;
+            if (resourceIndex == 0 || resourceIndex > g.resources.size())
+                return nullptr;
+
+            const ResourceDecl& resource = g.resources[resourceIndex - 1u];
+            if (resource.kind != ResourceKind::texture || resource.index >= g.textures.size())
+                return nullptr;
+
+            return &g.textures[resource.index];
+        };
+
+        auto resolve_render_target = [&g](GraphResource handle) -> GraphRenderTarget*
+        {
+            const u32 resourceIndex = handle.value;
+            if (resourceIndex == 0 || resourceIndex > g.resources.size())
+                return nullptr;
+
+            const ResourceDecl& resource = g.resources[resourceIndex - 1u];
+            if (resource.kind != ResourceKind::render_target || resource.index >= g.render_targets.size())
+                return nullptr;
+
+            return &g.render_targets[resource.index];
+        };
+
+        for (auto& asset : g.render_texture_assets)
+        {
+            asset.backend = dev.create_render_texture_asset(asset.desc);
+
+            if (GraphTexture* texture = resolve_texture(asset.color_texture))
+            {
+                if (asset.backend.color_texture)
+                {
+                    texture->backend = asset.backend.color_texture;
+                    texture->owned_by_render_texture_asset = true;
+                }
+            }
+
+            if (GraphRenderTarget* renderTarget = resolve_render_target(asset.render_target))
+            {
+                if (asset.backend.render_target)
+                {
+                    renderTarget->backend = asset.backend.render_target;
+                    renderTarget->owned_by_render_texture_asset = true;
+                }
+            }
+        }
+
         for (auto& b : g.buffers)  b.backend = dev.create_buffer(b.desc);
-        for (auto& t : g.textures) t.backend = dev.create_texture(t.desc);
-        for (auto& rt : g.render_targets) rt.backend = dev.create_render_target(rt.desc);
+        for (auto& t : g.textures)
+        {
+            if (!t.backend)
+                t.backend = dev.create_texture(t.desc);
+        }
+        for (auto& rt : g.render_targets)
+        {
+            if (!rt.backend)
+                rt.backend = dev.create_render_target(rt.desc);
+        }
 
         for (auto& pass : g.passes)
         {
@@ -178,8 +239,22 @@ namespace epoch
 
     void CompiledGraph::destroy(IRenderDevice& dev) noexcept
     {
+        for (auto& asset : render_texture_assets)
+        {
+            if (asset.backend.color_texture || asset.backend.sampler || asset.backend.render_target)
+                dev.destroy(asset.backend);
+        }
+
         for (auto& b : buffers)  if (b.backend) dev.destroy(b.backend);
-        for (auto& t : textures) if (t.backend) dev.destroy(t.backend);
-        for (auto& rt : render_targets) if (rt.backend) dev.destroy(rt.backend);
+        for (auto& t : textures)
+        {
+            if (t.backend && !t.owned_by_render_texture_asset)
+                dev.destroy(t.backend);
+        }
+        for (auto& rt : render_targets)
+        {
+            if (rt.backend && !rt.owned_by_render_texture_asset)
+                dev.destroy(rt.backend);
+        }
     }
 } // namespace epoch
