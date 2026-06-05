@@ -22,10 +22,11 @@
   as one device-owned asset, maps the texture/target handles back into graph
   resources, and skips duplicate destruction for resources owned by that asset.
 - Added compiled pass resource bindings to the renderer spine. `render.graph`
-  now resolves each pass's buffer, texture, and render-target reads/writes into
-  backend handles during compile, and `ICommandContext` exposes a no-op binding
-  hook so concrete backends can promote sampled render targets into material,
-  model, and arcade-screen passes without changing the graph API again.
+  now resolves each pass's buffer, texture, sampler, and render-target
+  reads/writes into backend handles during compile, and `ICommandContext`
+  exposes a no-op binding hook so concrete backends can promote sampled render
+  targets into material, model, and arcade-screen passes without changing the
+  graph API again.
 - Added the first central renderer-resource spine: `render.device` now defines
   formal handles/descriptors for buffers, textures, samplers, shaders,
   pipelines, materials, render targets, command lists, and render-pass/

@@ -173,9 +173,15 @@ namespace epoch
                 if (resource.index < g.textures.size() && g.textures[resource.index].backend)
                 {
                     if (write)
+                    {
                         bindings.write_textures.push_back(g.textures[resource.index].backend);
+                    }
                     else
+                    {
                         bindings.read_textures.push_back(g.textures[resource.index].backend);
+                        if (g.textures[resource.index].sampled_sampler)
+                            bindings.read_samplers.push_back(g.textures[resource.index].sampled_sampler);
+                    }
                 }
                 break;
             case ResourceKind::render_target:
@@ -199,6 +205,7 @@ namespace epoch
                 if (asset.backend.color_texture)
                 {
                     texture->backend = asset.backend.color_texture;
+                    texture->sampled_sampler = asset.backend.sampler;
                     texture->owned_by_render_texture_asset = true;
                 }
             }

@@ -663,7 +663,8 @@ engine shape and should be treated as starting truth for the next passes:
   `IRenderDevice` owns default handle allocation/destruction helpers,
   `render.graph` declares and compiles sampled render-texture assets as one
   owner of the color texture, sampler, and render target, compiled passes expose
-  resolved read/write backend-handle bindings, and Engine Arcade records
+  resolved read/write backend-handle bindings including the sampler needed when
+  a pass reads a sampled render texture, and Engine Arcade records
   `engine_arcade.screen` as a 512x512 target in generated package and project
   evidence. The next acceptance gate is backend-native binding and
   arcade-cabinet presentation across the production contexts.

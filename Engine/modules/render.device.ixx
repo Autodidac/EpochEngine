@@ -271,6 +271,7 @@ export namespace epoch
     {
         epoch::small_vector<BufferHandle> read_buffers{};
         epoch::small_vector<TextureHandle> read_textures{};
+        epoch::small_vector<SamplerHandle> read_samplers{};
         epoch::small_vector<RenderTargetHandle> read_render_targets{};
         epoch::small_vector<BufferHandle> write_buffers{};
         epoch::small_vector<TextureHandle> write_textures{};

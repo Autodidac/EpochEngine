@@ -57,6 +57,7 @@ export namespace epoch
     {
         TextureDesc desc{};
         TextureHandle backend{};
+        SamplerHandle sampled_sampler{};
         bool owned_by_render_texture_asset{ false };
     };
 
