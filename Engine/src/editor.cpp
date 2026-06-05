@@ -2832,6 +2832,7 @@ namespace epochnamespace
             append(caps.command_lists, "commands");
             append(caps.frame_graph, "graph");
             append(caps.render_to_texture, "RTT");
+            append(caps.sampled_render_targets, "sampled targets");
 
             if (summary.empty())
                 return "No renderer-resource spine is active for this backend yet.";

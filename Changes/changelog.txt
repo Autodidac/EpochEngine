@@ -12,6 +12,11 @@
   can create the paired texture/render-target resource declaration, and Engine
   Arcade records its `engine_arcade.screen` 512x512 target in package/project
   manifests plus Package Manager evidence rows.
+- Added device-level sampled render-target handles and default allocation/
+  destruction helpers to `IRenderDevice`, plus an explicit
+  `sampled_render_targets` capability bit. Engine Arcade's renderer gate now
+  requires that capability so future OpenGL-derived, Vulkan, and DirectX
+  implementations converge on the same arcade-screen resource shape.
 - Added the first central renderer-resource spine: `render.device` now defines
   formal handles/descriptors for buffers, textures, samplers, shaders,
   pipelines, materials, render targets, command lists, and render-pass/

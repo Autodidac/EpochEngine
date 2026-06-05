@@ -71,7 +71,7 @@ export namespace epoch::package_registry
         "snake,tetris,pacman,frogger,sokoban,match3,sliding,minesweeper,2048,sandsim,cellular";
     inline constexpr std::string_view kEngineArcadeRenderAssetRole = "render_to_texture_arcade_cabinet";
     inline constexpr std::string_view kEngineArcadeRendererRequirements =
-        "render_targets,render_to_texture,materials,command_lists";
+        "render_targets,sampled_render_targets,render_to_texture,materials,command_lists";
     inline constexpr std::string_view kEngineArcadeRenderTextureName = "engine_arcade.screen";
     inline constexpr std::uint32_t kEngineArcadeRenderTextureWidth = 512;
     inline constexpr std::uint32_t kEngineArcadeRenderTextureHeight = 512;

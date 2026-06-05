@@ -255,6 +255,18 @@ export namespace epoch
     using RenderTargetHandle = Handle<BackendRenderTargetTag, u32>;
     using CommandListHandle = Handle<BackendCommandListTag, u32>;
 
+    struct RenderTextureAssetHandles
+    {
+        TextureHandle color_texture{};
+        SamplerHandle sampler{};
+        RenderTargetHandle render_target{};
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept
+        {
+            return static_cast<bool>(color_texture) && static_cast<bool>(render_target);
+        }
+    };
+
     struct RendererCapabilities
     {
         RendererBackendKind backend = RendererBackendKind::null;
@@ -268,6 +280,7 @@ export namespace epoch
         bool command_lists = false;
         bool frame_graph = false;
         bool render_to_texture = false;
+        bool sampled_render_targets = false;
         bool model_import_ready = false;
         bool normal_mapping_ready = false;
         bool skybox_ready = false;
@@ -294,6 +307,7 @@ export namespace epoch
             caps.command_lists = true;
             caps.frame_graph = true;
             caps.render_to_texture = true;
+            caps.sampled_render_targets = true;
             break;
         case RendererBackendKind::raylib3:
             caps.buffers = true;
@@ -305,6 +319,7 @@ export namespace epoch
             caps.render_targets = true;
             caps.command_lists = true;
             caps.render_to_texture = true;
+            caps.sampled_render_targets = true;
             break;
         case RendererBackendKind::sdl3:
         case RendererBackendKind::sfml3:
@@ -314,6 +329,7 @@ export namespace epoch
             caps.render_targets = true;
             caps.command_lists = true;
             caps.render_to_texture = true;
+            caps.sampled_render_targets = true;
             break;
         case RendererBackendKind::vulkan:
         case RendererBackendKind::directx:
@@ -327,12 +343,22 @@ export namespace epoch
             caps.command_lists = true;
             caps.frame_graph = true;
             caps.render_to_texture = true;
+            caps.sampled_render_targets = true;
             break;
         default:
             break;
         }
 
         return caps;
+    }
+
+    [[nodiscard]] constexpr bool renderer_supports_sampled_render_targets(const RendererCapabilities& caps) noexcept
+    {
+        return caps.textures &&
+               caps.samplers &&
+               caps.render_targets &&
+               caps.render_to_texture &&
+               caps.sampled_render_targets;
     }
 
     struct ICommandContext
@@ -366,6 +392,15 @@ export namespace epoch
         virtual PipelineHandle create_pipeline(const PipelineDesc&) { return {}; }
         virtual MaterialHandle create_material(const MaterialDesc&) { return {}; }
         virtual RenderTargetHandle create_render_target(const RenderTargetDesc&) { return {}; }
+        virtual RenderTextureAssetHandles create_render_texture_asset(const RenderTextureAssetDesc& desc)
+        {
+            const RenderTextureAssetPlan plan = make_render_texture_asset_plan(desc);
+            RenderTextureAssetHandles handles{};
+            handles.color_texture = create_texture(plan.color_texture);
+            handles.sampler = create_sampler(plan.sampler);
+            handles.render_target = create_render_target(plan.render_target);
+            return handles;
+        }
 
         virtual void destroy(BufferHandle) noexcept = 0;
         virtual void destroy(TextureHandle) noexcept = 0;
@@ -374,6 +409,15 @@ export namespace epoch
         virtual void destroy(PipelineHandle) noexcept {}
         virtual void destroy(MaterialHandle) noexcept {}
         virtual void destroy(RenderTargetHandle) noexcept {}
+        virtual void destroy(RenderTextureAssetHandles handles) noexcept
+        {
+            if (handles.render_target)
+                destroy(handles.render_target);
+            if (handles.sampler)
+                destroy(handles.sampler);
+            if (handles.color_texture)
+                destroy(handles.color_texture);
+        }
 
         virtual ICommandContext& acquire_graphics_context() = 0;
         virtual CommandListHandle begin_command_list(const char*) { return {}; }

@@ -657,6 +657,7 @@ engine shape and should be treated as starting truth for the next passes:
   from Project Hub creates a game shell instead of dead-ending on a tool profile.
 - The renderer spine now has a backend-neutral sampled render-texture asset
   plan: `render.device` describes the texture/sampler/render-target/pass shape,
+  `IRenderDevice` owns default handle allocation/destruction helpers,
   `render.graph` can declare the paired graph resources, and Engine Arcade
   records `engine_arcade.screen` as a 512x512 target in generated package and
   project evidence. The next acceptance gate is backend-native allocation,
