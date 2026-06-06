@@ -992,6 +992,11 @@ engine shape and should be treated as starting truth for the next passes:
   OpenGL-family command context. Native FBO/texture allocation, presentation,
   and backend-owned draw submission remain the next context-owned acceptance
   gate.
+- OpenGL-family native RTT promotion now has an injection seam instead of a
+  runtime shortcut. `render.device_opengl_family` can accept backend-owned
+  allocate/begin/end/destroy hooks for sampled render textures, and the contract
+  harness proves that path with a fake native allocator for OpenGL, SDL3-over-GL,
+  and SFML-over-GL before any real FBO code touches the live editor frame path.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,

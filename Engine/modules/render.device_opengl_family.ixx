@@ -45,6 +45,49 @@ export namespace epoch
         }
     };
 
+    struct OpenGLFamilyNativeRenderTextureAllocation
+    {
+        u32 framebuffer_object = 0;
+        u32 color_object = 0;
+        u32 depth_object = 0;
+        u32 sampler_object = 0;
+        bool ready = false;
+    };
+
+    struct OpenGLFamilyNativeRenderTextureHooks
+    {
+        using AllocateFn = OpenGLFamilyNativeRenderTextureAllocation (*)(
+            void* user,
+            RendererBackendKind backend,
+            const RenderTextureAssetDesc& desc,
+            const RenderTextureBackendRequirements& requirements,
+            u32 slot);
+        using DestroyFn = void (*)(
+            void* user,
+            RendererBackendKind backend,
+            const OpenGLFamilyRenderTextureRecord& record);
+        using BeginPassFn = bool (*)(
+            void* user,
+            RendererBackendKind backend,
+            const OpenGLFamilyRenderTextureRecord& record,
+            const RenderPassDesc& pass);
+        using EndPassFn = void (*)(
+            void* user,
+            RendererBackendKind backend,
+            const OpenGLFamilyRenderTextureRecord& record);
+
+        void* user = nullptr;
+        AllocateFn allocate = nullptr;
+        DestroyFn destroy = nullptr;
+        BeginPassFn begin_pass = nullptr;
+        EndPassFn end_pass = nullptr;
+
+        [[nodiscard]] bool ready() const noexcept
+        {
+            return allocate != nullptr && destroy != nullptr && begin_pass != nullptr && end_pass != nullptr;
+        }
+    };
+
     struct OpenGLFamilyBindingSetRecord
     {
         CommandResourceBindings bindings{};
@@ -76,6 +119,14 @@ export namespace epoch
         void set_render_textures(std::vector<OpenGLFamilyRenderTextureRecord>* records) noexcept
         {
             m_render_textures = records;
+        }
+
+        void set_native_render_texture_hooks(
+            RendererBackendKind backend,
+            const OpenGLFamilyNativeRenderTextureHooks* hooks) noexcept
+        {
+            m_backend = backend;
+            m_native_hooks = hooks;
         }
 
         void begin(const char*) override
@@ -115,10 +166,19 @@ export namespace epoch
             m_render_pass.open = true;
             m_last_width = record->width;
             m_last_height = record->height;
+            m_native_pass_bound = false;
+
+            if (record->native_allocation_ready && m_native_hooks && m_native_hooks->begin_pass)
+                m_native_pass_bound = m_native_hooks->begin_pass(m_native_hooks->user, m_backend, *record, pass);
         }
 
         void end_render_pass() override
         {
+            OpenGLFamilyRenderTextureRecord* record = resolve(m_render_pass.render_target);
+            if (record && m_native_pass_bound && m_native_hooks && m_native_hooks->end_pass)
+                m_native_hooks->end_pass(m_native_hooks->user, m_backend, *record);
+
+            m_native_pass_bound = false;
             m_render_pass.open = false;
         }
 
@@ -127,6 +187,7 @@ export namespace epoch
         [[nodiscard]] BindingSetHandle bound_binding_set() const noexcept { return m_binding_set; }
         [[nodiscard]] RenderTargetHandle last_render_target() const noexcept { return m_render_pass.render_target; }
         [[nodiscard]] const CommandResourceBindings& bound_resources() const noexcept { return m_bindings; }
+        [[nodiscard]] bool native_pass_bound() const noexcept { return m_native_pass_bound; }
         [[nodiscard]] u32 last_width() const noexcept { return m_last_width; }
         [[nodiscard]] u32 last_height() const noexcept { return m_last_height; }
         [[nodiscard]] MeshHandle last_mesh() const noexcept { return m_last_mesh; }
@@ -148,6 +209,7 @@ export namespace epoch
         }
 
         std::vector<OpenGLFamilyRenderTextureRecord>* m_render_textures = nullptr;
+        const OpenGLFamilyNativeRenderTextureHooks* m_native_hooks = nullptr;
         CommandResourceBindings m_bindings{};
         BindingSetHandle m_binding_set{};
         OpenGLFamilyRenderPassRecord m_render_pass{};
@@ -156,6 +218,8 @@ export namespace epoch
         ModelHandle m_last_model{};
         u32 m_last_width = 0;
         u32 m_last_height = 0;
+        RendererBackendKind m_backend = RendererBackendKind::opengl;
+        bool m_native_pass_bound = false;
         bool m_open = false;
     };
 
@@ -166,6 +230,7 @@ export namespace epoch
             : m_backend(normalize_backend(backend))
         {
             m_context.set_render_textures(&m_render_textures);
+            m_context.set_native_render_texture_hooks(m_backend, &m_native_hooks);
         }
 
         std::string backend_name() const override
@@ -195,6 +260,7 @@ export namespace epoch
             caps.frame_graph = true;
             caps.render_to_texture = true;
             caps.sampled_render_targets = true;
+            caps.native_sampled_render_targets = m_native_hooks.ready();
             caps.binding_sets = true;
             caps.mesh_resources = true;
             caps.model_resources = true;
@@ -252,6 +318,25 @@ export namespace epoch
             record.native_allocation_ready = false;
             record.active = true;
 
+            if (m_native_hooks.allocate)
+            {
+                const OpenGLFamilyNativeRenderTextureAllocation allocation =
+                    m_native_hooks.allocate(
+                        m_native_hooks.user,
+                        m_backend,
+                        desc,
+                        record.backend_requirements,
+                        slot + 1u);
+                if (allocation.ready)
+                {
+                    record.color_object = allocation.color_object;
+                    record.depth_object = allocation.depth_object;
+                    record.framebuffer_object = allocation.framebuffer_object;
+                    record.sampler_object = allocation.sampler_object;
+                    record.native_allocation_ready = record.native_work_order_ready();
+                }
+            }
+
             const u32 handle_value = slot + 1u;
             return RenderTextureAssetHandles{
                 TextureHandle{ handle_value },
@@ -303,7 +388,13 @@ export namespace epoch
 
             const u32 index = handles.render_target.value - 1u;
             if (index < m_render_textures.size())
+            {
+                const OpenGLFamilyRenderTextureRecord& record = m_render_textures[index];
+                if (record.active && record.native_allocation_ready && m_native_hooks.destroy)
+                    m_native_hooks.destroy(m_native_hooks.user, m_backend, record);
+
                 m_render_textures[index] = {};
+            }
         }
 
         ICommandContext& acquire_graphics_context() override { return m_context; }
@@ -316,6 +407,11 @@ export namespace epoch
         [[nodiscard]] std::size_t model_count() const noexcept { return m_models.size(); }
         [[nodiscard]] RendererBackendKind backend() const noexcept { return m_backend; }
         [[nodiscard]] const OpenGLFamilyCommandContext& graphics_context() const noexcept { return m_context; }
+        void set_native_render_texture_hooks(OpenGLFamilyNativeRenderTextureHooks hooks) noexcept
+        {
+            m_native_hooks = hooks;
+            m_context.set_native_render_texture_hooks(m_backend, &m_native_hooks);
+        }
         [[nodiscard]] const OpenGLFamilyRenderTextureRecord* resolve_render_texture(RenderTargetHandle handle) const noexcept
         {
             if (!handle)
@@ -416,6 +512,7 @@ export namespace epoch
         }
 
         RendererBackendKind m_backend = RendererBackendKind::opengl;
+        OpenGLFamilyNativeRenderTextureHooks m_native_hooks{};
         OpenGLFamilyCommandContext m_context{};
         std::vector<OpenGLFamilyRenderTextureRecord> m_render_textures{};
         std::vector<OpenGLFamilyBindingSetRecord> m_binding_sets{};

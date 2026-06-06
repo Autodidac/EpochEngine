@@ -54,6 +54,11 @@
   objects beside framebuffer/color/depth objects, and the build-only cabinet
   gate verifies the executed command context binds the RTT material, model,
   sampled texture, sampler, and render-pass dimensions.
+- Added the first injectable native RTT allocation seam for OpenGL-family
+  contexts. OpenGL, SDL3-over-GL, and SFML-over-GL devices can now accept a
+  backend-owned sampled-RTT hook table for allocation, pass begin/end, and
+  teardown; the engine contract harness proves that flow with a fake native
+  allocator before real GL FBO code is promoted.
 - Added a Forest Factory preview-spine pass: deterministic Forest entities now
   map to backend-shared trunk, branch, and foliage preview primitives instead of
   generic cubes, and the Plant Lab workspace reports a voxel occupancy estimate

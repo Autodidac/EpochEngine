@@ -807,6 +807,80 @@ namespace epochnamespace::core
         return materialReady && modelReady && bindingReady;
     }
 
+    struct OpenGLFamilyFakeNativeRttState
+    {
+        int allocate_count = 0;
+        int begin_count = 0;
+        int end_count = 0;
+        int destroy_count = 0;
+        epoch::RendererBackendKind last_backend = epoch::RendererBackendKind::null;
+        epoch::u32 last_width = 0;
+        epoch::u32 last_height = 0;
+        bool saw_depth = false;
+        bool saw_sampled = false;
+    };
+
+    [[nodiscard]] inline epoch::OpenGLFamilyNativeRenderTextureAllocation fake_opengl_family_allocate_rtt(
+        void* user,
+        epoch::RendererBackendKind backend,
+        const epoch::RenderTextureAssetDesc& desc,
+        const epoch::RenderTextureBackendRequirements& requirements,
+        epoch::u32 slot)
+    {
+        auto* const state = static_cast<OpenGLFamilyFakeNativeRttState*>(user);
+        if (state)
+        {
+            ++state->allocate_count;
+            state->last_backend = backend;
+            state->last_width = desc.width;
+            state->last_height = desc.height;
+            state->saw_depth = requirements.depth_attachment;
+            state->saw_sampled = requirements.sampled_color && requirements.sampler;
+        }
+
+        return epoch::OpenGLFamilyNativeRenderTextureAllocation{
+            .framebuffer_object = 1000u + slot,
+            .color_object = 2000u + slot,
+            .depth_object = requirements.depth_attachment ? 3000u + slot : 0u,
+            .sampler_object = 4000u + slot,
+            .ready = true
+        };
+    }
+
+    inline void fake_opengl_family_destroy_rtt(
+        void* user,
+        epoch::RendererBackendKind backend,
+        const epoch::OpenGLFamilyRenderTextureRecord& record)
+    {
+        auto* const state = static_cast<OpenGLFamilyFakeNativeRttState*>(user);
+        if (state && backend == state->last_backend && record.native_allocation_ready)
+            ++state->destroy_count;
+    }
+
+    [[nodiscard]] inline bool fake_opengl_family_begin_rtt_pass(
+        void* user,
+        epoch::RendererBackendKind backend,
+        const epoch::OpenGLFamilyRenderTextureRecord& record,
+        const epoch::RenderPassDesc&)
+    {
+        auto* const state = static_cast<OpenGLFamilyFakeNativeRttState*>(user);
+        if (!state || backend != state->last_backend || !record.native_allocation_ready)
+            return false;
+
+        ++state->begin_count;
+        return true;
+    }
+
+    inline void fake_opengl_family_end_rtt_pass(
+        void* user,
+        epoch::RendererBackendKind backend,
+        const epoch::OpenGLFamilyRenderTextureRecord& record)
+    {
+        auto* const state = static_cast<OpenGLFamilyFakeNativeRttState*>(user);
+        if (state && backend == state->last_backend && record.native_allocation_ready)
+            ++state->end_count;
+    }
+
     [[nodiscard]] inline bool opengl_family_arcade_screen_graph_contract_ready()
     {
         const epoch::RendererBackendKind backends[] = {
@@ -862,6 +936,54 @@ namespace epochnamespace::core
                 && boundResources.read_material_textures.front().sampler == boundResources.read_samplers.front();
 
             if (!cabinetBindingEvidence)
+                return false;
+        }
+
+        return true;
+    }
+
+    [[nodiscard]] inline bool opengl_family_arcade_fake_native_rtt_contract_ready()
+    {
+        const epoch::RendererBackendKind backends[] = {
+            epoch::RendererBackendKind::opengl,
+            epoch::RendererBackendKind::sdl3,
+            epoch::RendererBackendKind::sfml3
+        };
+
+        for (const epoch::RendererBackendKind backend : backends)
+        {
+            OpenGLFamilyFakeNativeRttState state{};
+            epoch::OpenGLFamilyRenderDevice device{ backend };
+            device.set_native_render_texture_hooks(epoch::OpenGLFamilyNativeRenderTextureHooks{
+                .user = &state,
+                .allocate = fake_opengl_family_allocate_rtt,
+                .destroy = fake_opengl_family_destroy_rtt,
+                .begin_pass = fake_opengl_family_begin_rtt_pass,
+                .end_pass = fake_opengl_family_end_rtt_pass
+            });
+
+            const epoch::RendererCapabilities caps = device.capabilities();
+            if (!epoch::renderer_supports_native_sampled_render_targets(caps)
+                || !engine_arcade_cabinet_graph_contract_ready(device))
+            {
+                return false;
+            }
+
+            const epoch::OpenGLFamilyCommandContext& context = device.graphics_context();
+            const bool ready =
+                state.allocate_count == 1
+                && state.begin_count == 1
+                && state.end_count == 1
+                && state.destroy_count == 1
+                && state.last_backend == backend
+                && state.last_width == epoch::package_registry::engine_arcade_render_texture_width()
+                && state.last_height == epoch::package_registry::engine_arcade_render_texture_height()
+                && state.saw_depth
+                && state.saw_sampled
+                && context.last_render_target()
+                && !context.native_pass_bound();
+
+            if (!ready)
                 return false;
         }
 
@@ -992,6 +1114,7 @@ namespace epochnamespace::core
         check("render.opengl_family_arcade_screen_graph", opengl_family_arcade_screen_graph_contract_ready());
         check("render.opengl_family_arcade_cabinet_graph", opengl_family_arcade_cabinet_graph_contract_ready());
         check("render.opengl_family_arcade_native_requirements", opengl_family_arcade_native_requirements_contract_ready());
+        check("render.opengl_family_arcade_fake_native_rtt", opengl_family_arcade_fake_native_rtt_contract_ready());
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;
