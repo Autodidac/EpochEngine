@@ -2873,6 +2873,20 @@ namespace epochnamespace
             return "descriptors compile through graph; backend-native allocation pending";
         }
 
+        [[nodiscard]] std::string renderer_native_sampled_rtt_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto kind = renderer_backend_kind(ctx);
+            if (kind == epoch::RendererBackendKind::software)
+                return "debug fallback; production sampled RTT allocation is out of scope";
+
+            const auto caps = epoch::renderer_capabilities_for(kind);
+            if (epoch::renderer_supports_native_sampled_render_targets(caps))
+                return "native sampled RTT allocation active";
+            if (epoch::renderer_supports_sampled_render_targets(caps))
+                return "sampled RTT graph declared; backend-native allocation pending";
+            return "sampled RTT unavailable";
+        }
+
         [[nodiscard]] std::string renderer_next_feature_gate(const std::shared_ptr<core::Context>& ctx)
         {
             if (!ctx)
@@ -7236,6 +7250,7 @@ namespace epochnamespace
                 gui::property_row("[renderer] Resource spine", renderer_resource_spine_summary(ctx), 132.0f);
                 gui::property_row("[renderer] Declared desc", renderer_declared_descriptor_status(), 132.0f);
                 gui::property_row("[renderer] Mesh/model", renderer_native_mesh_model_status(ctx), 132.0f);
+                gui::property_row("[renderer] Sampled RTT", renderer_native_sampled_rtt_status(ctx), 132.0f);
                 gui::property_row("[renderer] Next gate", renderer_next_feature_gate(ctx), 132.0f);
                 gui::wrapped_label(
                     "System Info is reserved for render/backend/context routing and diagnostics. Video owns time controls, timeline graphing, streaming-save cadence, and video-authoring surfaces.",
@@ -7763,6 +7778,7 @@ namespace epochnamespace
                 dockLine("[visual] Profile", std::string(epochnamespace::visuals::active_profile_name())),
                 dockLine("[visual] Parity gate", std::string(epochnamespace::visuals::parity_gate())),
                 dockLine("[renderer] Resource spine", renderer_resource_spine_summary(ctx)),
+                dockLine("[renderer] Sampled RTT", renderer_native_sampled_rtt_status(ctx)),
                 dockLine("[renderer] Next gate", renderer_next_feature_gate(ctx)),
                 dockLine("[build] Compiler", compiler_identity()),
                 dockLine("[build] Configuration", build_configuration_label()),

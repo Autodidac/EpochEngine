@@ -44,6 +44,11 @@
   device stores that plan per RTT so OpenGL, SDL3-over-GL, and SFML-over-GL have
   one build-proven FBO/texture/sampler work order before native allocation is
   promoted.
+- Surfaced sampled render-texture allocation honesty in System Info and the
+  compact Systems dock. Raylib is now marked as the active native sampled-RTT
+  lane, while OpenGL, SDL3-over-GL, SFML-over-GL, Vulkan, and DirectX stay
+  visible as graph-declared/native-allocation-pending until their backend-owned
+  texture/FBO/sampler paths are promoted.
 - Added a Forest Factory preview-spine pass: deterministic Forest entities now
   map to backend-shared trunk, branch, and foliage preview primitives instead of
   generic cubes, and the Plant Lab workspace reports a voxel occupancy estimate

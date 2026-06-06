@@ -128,6 +128,7 @@ export namespace epoch
         RendererCapabilities capabilities() const noexcept override
         {
             RendererCapabilities caps = renderer_capabilities_for(RendererBackendKind::raylib3);
+            caps.native_sampled_render_targets = true;
             caps.model_resources = true;
             caps.model_import_ready = true;
             return caps;

@@ -961,7 +961,9 @@ engine shape and should be treated as starting truth for the next passes:
   without changing renderer order or the protected GUI draw model.
 - System Info now distinguishes declared renderer graph descriptors from
   backend-native allocation. Mesh/model and sampled render-texture descriptors
-  can compile through the graph today, but backend-native mesh/material/model
+  can compile through the graph today, and the visible status rows now separate
+  Raylib's native sampled-RTT allocation from OpenGL/SDL3/SFML3/Vulkan/DirectX
+  graph-declared-but-native-pending lanes. Backend-native mesh/material/model
   draw/binding behavior remains the next renderer-spine acceptance gate.
 - Raylib is now the first backend-native model-handle and sampled-RTT bridge:
   model descriptors map through `render.device_raylib` into the existing Raylib

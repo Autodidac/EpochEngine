@@ -444,6 +444,7 @@ export namespace epoch
         bool frame_graph = false;
         bool render_to_texture = false;
         bool sampled_render_targets = false;
+        bool native_sampled_render_targets = false;
         bool binding_sets = false;
         bool mesh_resources = false;
         bool model_resources = false;
@@ -487,6 +488,7 @@ export namespace epoch
             caps.command_lists = true;
             caps.render_to_texture = true;
             caps.sampled_render_targets = true;
+            caps.native_sampled_render_targets = true;
             caps.binding_sets = true;
             break;
         case RendererBackendKind::sdl3:
@@ -529,6 +531,11 @@ export namespace epoch
                caps.render_targets &&
                caps.render_to_texture &&
                caps.sampled_render_targets;
+    }
+
+    [[nodiscard]] constexpr bool renderer_supports_native_sampled_render_targets(const RendererCapabilities& caps) noexcept
+    {
+        return renderer_supports_sampled_render_targets(caps) && caps.native_sampled_render_targets;
     }
 
     [[nodiscard]] constexpr bool renderer_supports_mesh_resources(const RendererCapabilities& caps) noexcept
