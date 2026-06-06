@@ -971,6 +971,10 @@ engine shape and should be treated as starting truth for the next passes:
   OpenGL-derived parity for sampled render-target presentation, material
   bindings, and model/mesh allocation without changing the protected
   GUI-over-scene draw order.
+- The engine contract self-test now compiles the Engine Arcade
+  `engine_arcade.screen` sampled render texture through the shared render graph
+  with the null device. This is the build-only acceptance gate for the
+  mini-runtime RTT spine before backend-native arcade-cabinet presentation.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,

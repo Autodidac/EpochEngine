@@ -120,6 +120,9 @@ import engine.gui;
 import gui.menu;
 import editor;
 import epoch.ai;
+import render.device;
+import render.device_null;
+import render.graph;
 import render.preview_grid;
 
 import scene;
@@ -525,6 +528,97 @@ namespace epochnamespace::core
             std::source_location::current());
     }
 
+    [[nodiscard]] inline bool engine_arcade_screen_graph_contract_ready()
+    {
+        epoch::GraphBuilder builder{};
+
+        epoch::RenderTextureAssetDesc screenDesc{};
+        screenDesc.width = epoch::package_registry::engine_arcade_render_texture_width();
+        screenDesc.height = epoch::package_registry::engine_arcade_render_texture_height();
+        screenDesc.color_format = epoch::TextureFormat::rgba8_unorm;
+        screenDesc.depth_format = epoch::TextureFormat::depth24_stencil8;
+        screenDesc.has_depth = true;
+        screenDesc.sampled_after_render = true;
+        screenDesc.usage = epoch::RenderTextureUsage::arcade_cabinet;
+        screenDesc.debug_name = "engine_arcade.screen";
+
+        const std::string_view screenNameStd = epoch::package_registry::engine_arcade_render_texture_name();
+        const epoch::string_view screenName{ screenNameStd.data(), screenNameStd.size() };
+        const epoch::GraphRenderTextureAsset screen = builder.create_render_texture_asset(
+            screenName,
+            screenDesc);
+
+        const std::array<epoch::GraphResource, 1> reads{ screen.color_texture };
+        builder.add_render_pass(
+            "engine_arcade.screen.populate",
+            screen.render_target,
+            epoch::span<const epoch::GraphResource>{ reads.data(), reads.size() },
+            {},
+            screen.plan.render_pass,
+            [](epoch::ICommandContext& ctx)
+            {
+                ctx.debug_marker("engine_arcade.screen.sampled_surface");
+            });
+
+        epoch::NullRenderDevice nullDevice{};
+        epoch::CompiledGraph graph = builder.compile(nullDevice);
+
+        const bool resourceShape =
+            graph.render_texture_assets.size() == 1u
+            && graph.textures.size() == 1u
+            && graph.render_targets.size() == 1u
+            && graph.passes.size() == 1u;
+        if (!resourceShape)
+        {
+            graph.destroy(nullDevice);
+            return false;
+        }
+
+        const epoch::GraphRenderTextureAsset& compiledScreen = graph.render_texture_assets.front();
+        const epoch::GraphTexture& compiledTexture = graph.textures.front();
+        const epoch::GraphRenderTarget& compiledTarget = graph.render_targets.front();
+        const epoch::PassDecl& pass = graph.passes.front();
+        const auto same_text = [](epoch::string_view left, epoch::string_view right) noexcept
+        {
+            if (left.size != right.size)
+                return false;
+            for (std::size_t i = 0; i < left.size; ++i)
+            {
+                if (left.data[i] != right.data[i])
+                    return false;
+            }
+            return true;
+        };
+
+        const bool renderTextureReady =
+            same_text(compiledScreen.name.view(), screenName)
+            && compiledScreen.desc.width == epoch::package_registry::engine_arcade_render_texture_width()
+            && compiledScreen.desc.height == epoch::package_registry::engine_arcade_render_texture_height()
+            && compiledScreen.desc.usage == epoch::RenderTextureUsage::arcade_cabinet
+            && compiledScreen.backend.color_texture
+            && compiledScreen.backend.sampler
+            && compiledScreen.backend.render_target
+            && compiledTexture.backend == compiledScreen.backend.color_texture
+            && compiledTexture.sampled_sampler == compiledScreen.backend.sampler
+            && compiledTexture.owned_by_render_texture_asset
+            && compiledTarget.backend == compiledScreen.backend.render_target
+            && compiledTarget.owned_by_render_texture_asset;
+
+        const bool passReady =
+            pass.render_target == compiledScreen.backend.render_target
+            && pass.binding_set
+            && pass.bindings.read_textures.size() == 1u
+            && pass.bindings.read_textures.front() == compiledScreen.backend.color_texture
+            && pass.bindings.read_samplers.size() == 1u
+            && pass.bindings.read_samplers.front() == compiledScreen.backend.sampler
+            && pass.bindings.write_render_targets.size() == 1u
+            && pass.bindings.write_render_targets.front() == compiledScreen.backend.render_target;
+
+        graph.execute(nullDevice);
+        graph.destroy(nullDevice);
+        return renderTextureReady && passReady;
+    }
+
     [[nodiscard]] inline int run_engine_contract_self_test()
     {
         bool failed = false;
@@ -596,6 +690,7 @@ namespace epochnamespace::core
             epoch::package_registry::requires_explicit_network_approval(epoch::package_registry::kEngineAuthoritativeServerPackageId)
             && epoch::package_registry::can_create_server_or_listener_after_approval(epoch::package_registry::kEngineListenServerPackageId)
             && epoch::package_registry::must_use_human_build_gate("missing_package"));
+        check("render.engine_arcade_screen_graph", engine_arcade_screen_graph_contract_ready());
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;

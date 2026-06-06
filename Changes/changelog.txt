@@ -24,6 +24,11 @@
   render-graph assets, maps the paired color texture, sampler, and render
   target handles back into the shared graph shape, tracks binding-set handles,
   and owns pass begin/end cleanup for future Engine Arcade RTT presentation.
+- Added a build-only Engine Arcade render-to-texture contract self-test. The
+  engine contract harness now compiles `engine_arcade.screen` through
+  `render.graph` with the null device and verifies sampled texture, sampler,
+  render-target, binding-set, and pass-binding ownership without opening any
+  renderer context.
 - Added a Forest Factory preview-spine pass: deterministic Forest entities now
   map to backend-shared trunk, branch, and foliage preview primitives instead of
   generic cubes, and the Plant Lab workspace reports a voxel occupancy estimate
