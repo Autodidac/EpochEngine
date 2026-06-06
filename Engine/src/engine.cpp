@@ -974,6 +974,134 @@ namespace epochnamespace::core
 #endif
     }
 
+    [[nodiscard]] inline bool sdl_arcade_cabinet_graph_contract_ready()
+    {
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+        epoch::SdlRenderDevice device{};
+        const epoch::RendererCapabilities caps = device.capabilities();
+        if (device.backend_name() != "sdl3"
+            || !epoch::renderer_supports_sampled_render_targets(caps)
+            || !epoch::renderer_supports_model_resources(caps))
+        {
+            return false;
+        }
+
+        epoch::GraphBuilder builder{};
+        const epoch::render_arcade::ArcadeCabinetGraphBuild cabinet = epoch::render_arcade::add_cabinet_graph(builder);
+        epoch::CompiledGraph graph = builder.compile(device);
+
+        const bool resourceShape =
+            graph.buffers.size() == 2u
+            && graph.materials.size() == 1u
+            && graph.meshes.size() == 1u
+            && graph.models.size() == 1u
+            && graph.passes.size() == 2u;
+        if (!resourceShape)
+        {
+            graph.destroy(device);
+            return false;
+        }
+
+        const epoch::GraphMesh& compiledMesh = graph.meshes.front();
+        const epoch::GraphModel& compiledModel = graph.models.front();
+        const epoch::PassDecl& cabinetPass = graph.passes[1u];
+
+        const bool graphReady =
+            compiledMesh.backend
+            && compiledModel.backend
+            && compiledModel.mesh_slots.size() == 1u
+            && compiledModel.mesh_slots.front().mesh == cabinet.mesh
+            && cabinetPass.binding_set
+            && cabinetPass.bindings.read_materials.size() == 1u
+            && cabinetPass.bindings.read_models.size() == 1u
+            && cabinetPass.bindings.read_models.front() == compiledModel.backend
+            && cabinetPass.draw_models.size() == 1u
+            && cabinetPass.draw_models.front().model == cabinet.model
+            && cabinetPass.draw_models.front().backend == compiledModel.backend;
+
+        epoch::SdlCommandContext& context = static_cast<epoch::SdlCommandContext&>(device.acquire_graphics_context());
+        graph.execute(device);
+        const epoch::ModelHandle submitted = context.last_model();
+        const bool submitReady =
+            graphReady
+            && submitted
+            && submitted == compiledModel.backend
+            && context.bound_binding_set() == cabinetPass.binding_set
+            && context.bound_resources().read_models.size() == 1u
+            && context.bound_resources().read_models.front() == submitted
+            && device.resolve_model(submitted) != nullptr;
+
+        graph.destroy(device);
+        return submitReady && device.resolve_model(submitted) == nullptr;
+#else
+        return true;
+#endif
+    }
+
+    [[nodiscard]] inline bool sfml_arcade_cabinet_graph_contract_ready()
+    {
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
+        epoch::SfmlRenderDevice device{};
+        const epoch::RendererCapabilities caps = device.capabilities();
+        if (device.backend_name() != "sfml3"
+            || !epoch::renderer_supports_sampled_render_targets(caps)
+            || !epoch::renderer_supports_model_resources(caps))
+        {
+            return false;
+        }
+
+        epoch::GraphBuilder builder{};
+        const epoch::render_arcade::ArcadeCabinetGraphBuild cabinet = epoch::render_arcade::add_cabinet_graph(builder);
+        epoch::CompiledGraph graph = builder.compile(device);
+
+        const bool resourceShape =
+            graph.buffers.size() == 2u
+            && graph.materials.size() == 1u
+            && graph.meshes.size() == 1u
+            && graph.models.size() == 1u
+            && graph.passes.size() == 2u;
+        if (!resourceShape)
+        {
+            graph.destroy(device);
+            return false;
+        }
+
+        const epoch::GraphMesh& compiledMesh = graph.meshes.front();
+        const epoch::GraphModel& compiledModel = graph.models.front();
+        const epoch::PassDecl& cabinetPass = graph.passes[1u];
+
+        const bool graphReady =
+            compiledMesh.backend
+            && compiledModel.backend
+            && compiledModel.mesh_slots.size() == 1u
+            && compiledModel.mesh_slots.front().mesh == cabinet.mesh
+            && cabinetPass.binding_set
+            && cabinetPass.bindings.read_materials.size() == 1u
+            && cabinetPass.bindings.read_models.size() == 1u
+            && cabinetPass.bindings.read_models.front() == compiledModel.backend
+            && cabinetPass.draw_models.size() == 1u
+            && cabinetPass.draw_models.front().model == cabinet.model
+            && cabinetPass.draw_models.front().backend == compiledModel.backend;
+
+        epoch::SfmlCommandContext& context = static_cast<epoch::SfmlCommandContext&>(device.acquire_graphics_context());
+        graph.execute(device);
+        const epoch::ModelHandle submitted = context.last_model();
+        const bool submitReady =
+            graphReady
+            && submitted
+            && submitted == compiledModel.backend
+            && context.bound_binding_set() == cabinetPass.binding_set
+            && context.bound_resources().read_models.size() == 1u
+            && context.bound_resources().read_models.front() == submitted
+            && device.resolve_model(submitted) != nullptr;
+
+        graph.destroy(device);
+        return submitReady && device.resolve_model(submitted) == nullptr;
+#else
+        return true;
+#endif
+    }
+
     [[nodiscard]] inline int run_engine_contract_self_test()
     {
         bool failed = false;
@@ -1052,6 +1180,8 @@ namespace epochnamespace::core
         check("render.opengl_family_arcade_fake_native_rtt", opengl_family_arcade_fake_native_rtt_contract_ready());
         check("render.sdl_native_render_texture_device", sdl_native_render_texture_device_contract_ready());
         check("render.sfml_native_render_texture_device", sfml_native_render_texture_device_contract_ready());
+        check("render.sdl_arcade_cabinet_graph", sdl_arcade_cabinet_graph_contract_ready());
+        check("render.sfml_arcade_cabinet_graph", sfml_arcade_cabinet_graph_contract_ready());
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;

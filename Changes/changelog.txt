@@ -16,6 +16,11 @@
   contract self-test now verifies both devices build safely without launching
   renderer windows, and MSVC Debug x64 `ConsoleApplication1` builds with the
   new modules.
+- Extended SDL3 and SFML3 through the same mini-arcade cabinet graph contract.
+  Both device modules now own build-safe buffer/material/render-target slots
+  plus mesh/model records, so the compiled `render.arcade` cabinet pass can
+  resolve model handles, bind the sampled-screen model, submit `draw_model`,
+  and release the records without launching renderer windows.
 - Promoted the first backend-owned OpenGL sampled render-texture hook. The
   `opengl.textures` module now owns native FBO/color texture/depth
   renderbuffer/sampler allocation, pass bind/clear, pass unbind, and teardown

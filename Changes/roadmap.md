@@ -1013,15 +1013,18 @@ engine shape and should be treated as starting truth for the next passes:
   shared OpenGL-family logical contract. `render.device_sdl` owns SDL
   target-texture allocation/bind/clear/restore/teardown, while
   `render.device_sfml` owns SFML render-texture allocation/bind/clear/display
-  and window reactivation. The current proof is build-only and no-runtime-safe;
-  live arcade-cabinet presentation and editor preview hookup are still separate
-  runtime gates.
+  and window reactivation. Both devices also own graph-native buffer/material/
+  render-target slots plus mesh/model records for the mini-arcade cabinet graph,
+  so build-only contracts prove model binding, `draw_model` submission, and
+  release without launching renderer windows. Live arcade-cabinet presentation
+  and editor preview hookup are still separate runtime gates.
 - Engine Arcade RTT construction is now source-owned by `render.arcade`.
   The screen sampled target, render-surface material binding, screen mesh/model
   descriptors, cabinet pass, and model draw intent are reusable graph builders
   instead of inline self-test scaffolding. The current proof is MSVC Debug x64
-  `ConsoleApplication1`; native OpenGL-family FBO allocation and live cabinet
-  presentation remain the next renderer-spine gate.
+  `ConsoleApplication1`; Raylib's no-runtime-safe RTT contract, backend-native
+  OpenGL-family FBO allocation, and live cabinet presentation remain the next
+  renderer-spine gates.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,
@@ -1615,7 +1618,7 @@ engine shape and should be treated as starting truth for the next passes:
 4. Strengthen the System Info workspace with deeper pacing diagnostics and
    backend convergence guidance, including present/partial/missing renderer
    feature status from the feature matrix, backend-native mesh/model allocation
-   proof, and sampled-RTT native allocation readiness.
+   proof, sampled-RTT native allocation readiness, and mini-arcade graph parity.
 5. Carry the time spine deeper into runtime and scene ownership.
 6. Keep UI/editor maturity moving forward, especially text/input reliability,
    shell polish, drag/drop, and backend-window stability.

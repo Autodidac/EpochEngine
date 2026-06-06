@@ -43,6 +43,23 @@ export namespace epoch
         bool active = false;
     };
 
+    struct SfmlSlotRecord
+    {
+        bool active = false;
+    };
+
+    struct SfmlMeshRecord
+    {
+        MeshDesc desc{};
+        bool active = false;
+    };
+
+    struct SfmlModelRecord
+    {
+        ModelDesc desc{};
+        bool active = false;
+    };
+
     class SfmlCommandContext final : public ICommandContext
     {
     public:
@@ -176,18 +193,20 @@ export namespace epoch
         RendererCapabilities capabilities() const noexcept override
         {
             RendererCapabilities caps = renderer_capabilities_for(RendererBackendKind::sfml3);
+            caps.buffers = true;
             caps.native_sampled_render_targets = true;
+            caps.mesh_resources = true;
             caps.model_resources = true;
             return caps;
         }
 
-        BufferHandle create_buffer(const BufferDesc&) override { return {}; }
-        TextureHandle create_texture(const TextureDesc&) override { return {}; }
-        SamplerHandle create_sampler(const SamplerDesc&) override { return {}; }
-        ShaderHandle create_shader(const ShaderDesc&) override { return {}; }
-        PipelineHandle create_pipeline(const PipelineDesc&) override { return {}; }
-        MaterialHandle create_material(const MaterialDesc&) override { return {}; }
-        RenderTargetHandle create_render_target(const RenderTargetDesc&) override { return {}; }
+        BufferHandle create_buffer(const BufferDesc&) override { return BufferHandle{ allocate_slot(m_buffers) }; }
+        TextureHandle create_texture(const TextureDesc&) override { return TextureHandle{ allocate_slot(m_textures) }; }
+        SamplerHandle create_sampler(const SamplerDesc&) override { return SamplerHandle{ allocate_slot(m_samplers) }; }
+        ShaderHandle create_shader(const ShaderDesc&) override { return ShaderHandle{ allocate_slot(m_shaders) }; }
+        PipelineHandle create_pipeline(const PipelineDesc&) override { return PipelineHandle{ allocate_slot(m_pipelines) }; }
+        MaterialHandle create_material(const MaterialDesc&) override { return MaterialHandle{ allocate_slot(m_materials) }; }
+        RenderTargetHandle create_render_target(const RenderTargetDesc&) override { return RenderTargetHandle{ allocate_slot(m_render_targets) }; }
 
         BindingSetHandle create_binding_set(const CommandResourceBindings& bindings) override
         {
@@ -198,8 +217,23 @@ export namespace epoch
             return BindingSetHandle{ slot + 1u };
         }
 
-        MeshHandle create_mesh(const MeshDesc&) override { return {}; }
-        ModelHandle create_model(const ModelDesc&) override { return {}; }
+        MeshHandle create_mesh(const MeshDesc& desc) override
+        {
+            const u32 slot = allocate_mesh_slot();
+            SfmlMeshRecord& record = m_meshes[slot];
+            record.desc = desc;
+            record.active = true;
+            return MeshHandle{ slot + 1u };
+        }
+
+        ModelHandle create_model(const ModelDesc& desc) override
+        {
+            const u32 slot = allocate_model_slot();
+            SfmlModelRecord& record = m_models[slot];
+            record.desc = desc;
+            record.active = true;
+            return ModelHandle{ slot + 1u };
+        }
 
         RenderTextureAssetHandles create_render_texture_asset(const RenderTextureAssetDesc& desc) override
         {
@@ -228,15 +262,32 @@ export namespace epoch
                 RenderTargetHandle{ handle_value } };
         }
 
-        void destroy(BufferHandle) noexcept override {}
-        void destroy(TextureHandle) noexcept override {}
-        void destroy(SamplerHandle) noexcept override {}
-        void destroy(ShaderHandle) noexcept override {}
-        void destroy(PipelineHandle) noexcept override {}
-        void destroy(MaterialHandle) noexcept override {}
-        void destroy(RenderTargetHandle) noexcept override {}
-        void destroy(MeshHandle) noexcept override {}
-        void destroy(ModelHandle) noexcept override {}
+        void destroy(BufferHandle handle) noexcept override { release_slot(m_buffers, handle.value); }
+        void destroy(TextureHandle handle) noexcept override { release_slot(m_textures, handle.value); }
+        void destroy(SamplerHandle handle) noexcept override { release_slot(m_samplers, handle.value); }
+        void destroy(ShaderHandle handle) noexcept override { release_slot(m_shaders, handle.value); }
+        void destroy(PipelineHandle handle) noexcept override { release_slot(m_pipelines, handle.value); }
+        void destroy(MaterialHandle handle) noexcept override { release_slot(m_materials, handle.value); }
+        void destroy(RenderTargetHandle handle) noexcept override { release_slot(m_render_targets, handle.value); }
+        void destroy(MeshHandle mesh) noexcept override
+        {
+            if (!mesh)
+                return;
+
+            const u32 index = mesh.value - 1u;
+            if (index < m_meshes.size())
+                m_meshes[index] = {};
+        }
+
+        void destroy(ModelHandle model) noexcept override
+        {
+            if (!model)
+                return;
+
+            const u32 index = model.value - 1u;
+            if (index < m_models.size())
+                m_models[index] = {};
+        }
 
         void destroy(BindingSetHandle binding_set) noexcept override
         {
@@ -298,7 +349,45 @@ export namespace epoch
             return count;
         }
 
+        [[nodiscard]] const SfmlModelRecord* resolve_model(ModelHandle model) const noexcept
+        {
+            if (!model)
+                return nullptr;
+
+            const u32 index = model.value - 1u;
+            if (index >= m_models.size())
+                return nullptr;
+
+            const SfmlModelRecord& record = m_models[index];
+            return record.active ? &record : nullptr;
+        }
+
     private:
+        [[nodiscard]] static u32 allocate_slot(std::vector<SfmlSlotRecord>& records)
+        {
+            for (u32 i = 0; i < static_cast<u32>(records.size()); ++i)
+            {
+                if (!records[i].active)
+                {
+                    records[i].active = true;
+                    return i + 1u;
+                }
+            }
+
+            records.push_back(SfmlSlotRecord{ true });
+            return static_cast<u32>(records.size());
+        }
+
+        static void release_slot(std::vector<SfmlSlotRecord>& records, u32 handle_value) noexcept
+        {
+            if (handle_value == 0u)
+                return;
+
+            const u32 index = handle_value - 1u;
+            if (index < records.size())
+                records[index] = {};
+        }
+
         [[nodiscard]] u32 allocate_render_texture_slot()
         {
             for (u32 i = 0; i < static_cast<u32>(m_render_textures.size()); ++i)
@@ -323,9 +412,42 @@ export namespace epoch
             return static_cast<u32>(m_binding_sets.size() - 1u);
         }
 
+        [[nodiscard]] u32 allocate_mesh_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_meshes.size()); ++i)
+            {
+                if (!m_meshes[i].active)
+                    return i;
+            }
+
+            m_meshes.push_back({});
+            return static_cast<u32>(m_meshes.size() - 1u);
+        }
+
+        [[nodiscard]] u32 allocate_model_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_models.size()); ++i)
+            {
+                if (!m_models[i].active)
+                    return i;
+            }
+
+            m_models.push_back({});
+            return static_cast<u32>(m_models.size() - 1u);
+        }
+
         SfmlCommandContext m_context{};
         std::vector<SfmlRenderTextureRecord> m_render_textures{};
         std::vector<SfmlBindingSetRecord> m_binding_sets{};
+        std::vector<SfmlMeshRecord> m_meshes{};
+        std::vector<SfmlModelRecord> m_models{};
+        std::vector<SfmlSlotRecord> m_buffers{};
+        std::vector<SfmlSlotRecord> m_textures{};
+        std::vector<SfmlSlotRecord> m_samplers{};
+        std::vector<SfmlSlotRecord> m_shaders{};
+        std::vector<SfmlSlotRecord> m_pipelines{};
+        std::vector<SfmlSlotRecord> m_materials{};
+        std::vector<SfmlSlotRecord> m_render_targets{};
     };
 #endif
 }
