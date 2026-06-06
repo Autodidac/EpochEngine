@@ -15,6 +15,15 @@
   separates declared graph descriptors from backend-native mesh/model allocation
   so OpenGL, SDL, SFML, Raylib, Vulkan, and DirectX do not overclaim resource
   parity before their concrete allocation/draw paths are promoted.
+- Promoted Raylib as the first backend-native model-handle lane. The Raylib
+  bridge now exposes stable per-model draw/unload slots, and
+  `render.device_raylib` maps `ModelDesc.source_path` into a real backend model
+  handle without changing the existing Raylib preview draw path.
+- Promoted Raylib as the first backend-native sampled render-texture lane.
+  `render.device_raylib` now allocates Raylib render textures for compiled
+  render-graph assets, maps the paired color texture, sampler, and render
+  target handles back into the shared graph shape, tracks binding-set handles,
+  and owns pass begin/end cleanup for future Engine Arcade RTT presentation.
 - Added a Forest Factory preview-spine pass: deterministic Forest entities now
   map to backend-shared trunk, branch, and foliage preview primitives instead of
   generic cubes, and the Plant Lab workspace reports a voxel occupancy estimate

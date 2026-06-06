@@ -960,9 +960,17 @@ engine shape and should be treated as starting truth for the next passes:
   updater handoff, modal progress/cancel evidence, and GUI text wrapping work
   without changing renderer order or the protected GUI draw model.
 - System Info now distinguishes declared renderer graph descriptors from
-  backend-native allocation. Mesh/model descriptors can compile through the
-  graph today, but backend-native mesh/model allocation and draw/binding
-  behavior remain the next renderer-spine acceptance gate.
+  backend-native allocation. Mesh/model and sampled render-texture descriptors
+  can compile through the graph today, but backend-native mesh/material/model
+  draw/binding behavior remains the next renderer-spine acceptance gate.
+- Raylib is now the first backend-native model-handle and sampled-RTT bridge:
+  model descriptors map through `render.device_raylib` into the existing Raylib
+  loaded-model registry with per-handle draw/unload calls, and compiled
+  render-texture assets map to real Raylib render targets with paired color
+  texture/sampler/render-target handles. The next renderer-spine gate is
+  OpenGL-derived parity for sampled render-target presentation, material
+  bindings, and model/mesh allocation without changing the protected
+  GUI-over-scene draw order.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,

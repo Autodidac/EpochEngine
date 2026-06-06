@@ -230,6 +230,9 @@ export namespace epochnamespace::raylib_api
         Color tint);
 
     int load_model(const char* path);
+    bool has_model(int model_id);
+    void draw_model(int model_id);
+    void unload_model(int model_id);
     bool has_loaded_models();
     void draw_loaded_models();
     void unload_all_models();

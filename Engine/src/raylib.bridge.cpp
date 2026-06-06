@@ -59,6 +59,7 @@ namespace epochnamespace::raylib_api
         {
             std::string path{};
             ::Model model{};
+            bool loaded = false;
         };
 
         std::vector<LoadedModelEntry>& loaded_models()
@@ -307,27 +308,73 @@ namespace epochnamespace::raylib_api
 
         entries.push_back(LoadedModelEntry{
             .path = path,
-            .model = model
+            .model = model,
+            .loaded = true
         });
         return static_cast<int>(entries.size() - 1);
     }
 
+    bool has_model(int model_id)
+    {
+        const auto& entries = loaded_models();
+        return model_id >= 0 &&
+            static_cast<std::size_t>(model_id) < entries.size() &&
+            entries[static_cast<std::size_t>(model_id)].loaded;
+    }
+
+    void draw_model(int model_id)
+    {
+        auto& entries = loaded_models();
+        if (model_id < 0 || static_cast<std::size_t>(model_id) >= entries.size())
+            return;
+
+        const auto& entry = entries[static_cast<std::size_t>(model_id)];
+        if (entry.loaded)
+            ::DrawModel(entry.model, ::Vector3{ 0.0f, 0.0f, 0.0f }, 1.0f, ::WHITE);
+    }
+
+    void unload_model(int model_id)
+    {
+        auto& entries = loaded_models();
+        if (model_id < 0 || static_cast<std::size_t>(model_id) >= entries.size())
+            return;
+
+        auto& entry = entries[static_cast<std::size_t>(model_id)];
+        if (!entry.loaded)
+            return;
+
+        ::UnloadModel(entry.model);
+        entry.loaded = false;
+        entry.path.clear();
+    }
+
     bool has_loaded_models()
     {
-        return !loaded_models().empty();
+        for (const auto& entry : loaded_models())
+        {
+            if (entry.loaded)
+                return true;
+        }
+        return false;
     }
 
     void draw_loaded_models()
     {
         for (const auto& entry : loaded_models())
-            ::DrawModel(entry.model, ::Vector3{ 0.0f, 0.0f, 0.0f }, 1.0f, ::WHITE);
+        {
+            if (entry.loaded)
+                ::DrawModel(entry.model, ::Vector3{ 0.0f, 0.0f, 0.0f }, 1.0f, ::WHITE);
+        }
     }
 
     void unload_all_models()
     {
         auto& entries = loaded_models();
         for (auto& entry : entries)
-            ::UnloadModel(entry.model);
+        {
+            if (entry.loaded)
+                ::UnloadModel(entry.model);
+        }
         entries.clear();
     }
 }
