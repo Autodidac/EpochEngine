@@ -959,6 +959,10 @@ engine shape and should be treated as starting truth for the next passes:
   Forest Factory workspace direction, Systems graph refinement, binary-first
   updater handoff, modal progress/cancel evidence, and GUI text wrapping work
   without changing renderer order or the protected GUI draw model.
+- System Info now distinguishes declared renderer graph descriptors from
+  backend-native allocation. Mesh/model descriptors can compile through the
+  graph today, but backend-native mesh/model allocation and draw/binding
+  behavior remain the next renderer-spine acceptance gate.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,
@@ -1549,9 +1553,10 @@ engine shape and should be treated as starting truth for the next passes:
    control slice using the current sandbox/evidence paths. Required parts are
    working memory, staged goal packet, visible executor action, verifier
    evidence, score/gate result, notes update, and no hidden autonomy.
-4. Strengthen the Systems workspace with deeper pacing diagnostics and backend
-   convergence guidance, including present/partial/missing renderer feature
-   status from the feature matrix.
+4. Strengthen the System Info workspace with deeper pacing diagnostics and
+   backend convergence guidance, including present/partial/missing renderer
+   feature status from the feature matrix and backend-native mesh/model
+   allocation proof.
 5. Carry the time spine deeper into runtime and scene ownership.
 6. Keep UI/editor maturity moving forward, especially text/input reliability,
    shell polish, drag/drop, and backend-window stability.

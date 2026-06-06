@@ -2841,11 +2841,36 @@ namespace epochnamespace
             append(caps.render_to_texture, "RTT");
             append(caps.sampled_render_targets, "sampled targets");
             append(caps.binding_sets, "binding sets");
+            append(caps.mesh_resources, "meshes");
+            append(caps.model_resources, "models");
 
             if (summary.empty())
                 return "No renderer-resource spine is active for this backend yet.";
 
             return summary;
+        }
+
+        [[nodiscard]] std::string renderer_declared_descriptor_status()
+        {
+            return "buffers | textures | materials | targets | command lists | mesh descriptors | model descriptors";
+        }
+
+        [[nodiscard]] std::string renderer_native_mesh_model_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto kind = renderer_backend_kind(ctx);
+            if (kind == epoch::RendererBackendKind::software)
+                return "debug fallback; production native mesh/model allocation is out of scope";
+
+            const auto caps = epoch::renderer_capabilities_for(kind);
+            const bool meshNative = epoch::renderer_supports_mesh_resources(caps);
+            const bool modelNative = epoch::renderer_supports_model_resources(caps);
+            if (meshNative && modelNative)
+                return "mesh/model native allocation active";
+            if (meshNative)
+                return "mesh native, model allocation pending";
+            if (modelNative)
+                return "model native, mesh allocation pending";
+            return "descriptors compile through graph; backend-native allocation pending";
         }
 
         [[nodiscard]] std::string renderer_next_feature_gate(const std::shared_ptr<core::Context>& ctx)
@@ -7209,6 +7234,8 @@ namespace epochnamespace
                 gui::property_row("[visual] Profile", std::string(epochnamespace::visuals::active_profile_name()), 112.0f);
                 gui::property_row("[visual] Parity gate", std::string(epochnamespace::visuals::parity_gate()), 132.0f);
                 gui::property_row("[renderer] Resource spine", renderer_resource_spine_summary(ctx), 132.0f);
+                gui::property_row("[renderer] Declared desc", renderer_declared_descriptor_status(), 132.0f);
+                gui::property_row("[renderer] Mesh/model", renderer_native_mesh_model_status(ctx), 132.0f);
                 gui::property_row("[renderer] Next gate", renderer_next_feature_gate(ctx), 132.0f);
                 gui::wrapped_label(
                     "System Info is reserved for render/backend/context routing and diagnostics. Video owns time controls, timeline graphing, streaming-save cadence, and video-authoring surfaces.",

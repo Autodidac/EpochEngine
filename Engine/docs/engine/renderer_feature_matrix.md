@@ -52,7 +52,7 @@ coverage, or cross-backend parity.
 | Debugging support | Partial | Logging, Systems diagnostics, Vulkan validation messaging, host FPS title diagnostics, screenshots, and smoke docs exist. GPU debug markers/query plumbing remain backlog. |
 | 3D picking | Partial | Editor object selection exists, but full ID-target/depth/ray picking is not complete. |
 | Framebuffers / render targets / capture | Partial | OpenGL/Vulkan/DirectX swapchain or framebuffer paths, capture bridges, and runtime surfaces exist. The shared renderer API now describes sampled render-target assets; backend-native binding and presentation remain the next gate. |
-| Renderer resource spine | First contract slice present | `render.device` now owns formal handles/descriptors for buffers, textures, samplers, shaders, pipelines, materials, render targets, binding sets, command lists, render-pass/FrameGraph-ready targets, sampled render-texture asset plans, default sampled-target handle allocation helpers, material texture slot descriptors, and command resource bindings. `render.graph` compiles sampled render-texture assets as one owner of color texture, sampler, and render target handles, declares material resources with named texture slots, resolves pass read/write bindings into backend handles including the sampler required for sampled render-texture/material reads, then asks the device for backend binding-set handles per pass. System Info reports the active backend capability slice. Backend-native allocation and binding behind every handle remains the next acceptance gate. |
+| Renderer resource spine | First contract slice present | `render.device` now owns formal handles/descriptors for buffers, textures, samplers, shaders, pipelines, materials, render targets, binding sets, command lists, mesh/model resources, render-pass/FrameGraph-ready targets, sampled render-texture asset plans, default sampled-target handle allocation helpers, material texture slot descriptors, and command resource bindings. `render.graph` compiles sampled render-texture assets as one owner of color texture, sampler, and render target handles, declares material and mesh/model descriptor resources, resolves pass read/write bindings into backend handles including the sampler required for sampled render-texture/material reads, then asks the device for backend binding-set handles per pass. System Info reports declared descriptors separately from backend-native mesh/model allocation so the UI does not overclaim renderer parity. Backend-native allocation and binding behind every handle remains the next acceptance gate. |
 | Runtime-mini render assets | Contract-backed package path started | Render-to-texture remains a core engine renderer primitive. Engine Arcade is a separate runtime-mini/game package consumer that records its default mini-runtime scene, scene inventory, render-to-texture asset role, renderer-resource requirements, and `engine_arcade.screen` 512x512 sampled target through `package.registry`; the package gate now asks for sampled render targets and binding sets explicitly. Actual arcade-cabinet presentation depends on backend-native resource work below. |
 | Text and UI rendering | Present/partial | Engine-owned GUI, font atlas, scroll views, tab bars, splitters, and runtime-surface textures exist. Professional dock/window polish remains active GUI work. |
 | Platform window layer | Present | Win32 and Linux/X11 host paths exist with backend-specific context ownership. |
@@ -66,10 +66,10 @@ work should be grouped this way instead of tackled as an unstructured checklist.
 ### Baseline Renderer Completion
 
 - Backend-native implementations behind the formal renderer resource model:
-  buffer, texture, sampler, shader, material, pipeline, binding set, render
-  target, pass, command list, and synchronization handles. The engine-facing
-  handle/descriptors exist first; backend allocation and feature parity are the
-  active gate.
+  buffer, texture, sampler, shader, material, mesh, model, pipeline, binding
+  set, render target, pass, command list, and synchronization handles. The
+  engine-facing handles/descriptors exist first; backend allocation and feature
+  parity are the active gate.
 - Formal material system with diffuse/specular parameters and texture slots.
 - Multiple point lights and spot lights.
 - Model import through an explicit chosen importer path, such as Assimp or a
