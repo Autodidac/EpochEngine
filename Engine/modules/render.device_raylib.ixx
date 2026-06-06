@@ -17,6 +17,7 @@ import render.device;
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 import raylib.api;
+import raylib.state;
 #endif
 
 export namespace epoch
@@ -165,6 +166,9 @@ export namespace epoch
 
         RenderTextureAssetHandles create_render_texture_asset(const RenderTextureAssetDesc& desc) override
         {
+            if (!runtime_renderer_available())
+                return {};
+
             const u32 width = desc.width == 0 ? 1u : desc.width;
             const u32 height = desc.height == 0 ? 1u : desc.height;
             const epochnamespace::raylib_api::RenderTexture2D target =
@@ -226,8 +230,34 @@ export namespace epoch
             if (!record.active)
                 return;
 
-            epochnamespace::raylib_api::unload_render_texture(record.target);
+            if (runtime_renderer_available())
+                epochnamespace::raylib_api::unload_render_texture(record.target);
+
             record = {};
+        }
+
+        [[nodiscard]] const RaylibRenderTextureRecord* resolve_render_texture(RenderTargetHandle handle) const noexcept
+        {
+            if (!handle)
+                return nullptr;
+
+            const u32 index = handle.value - 1u;
+            if (index >= m_render_textures.size())
+                return nullptr;
+
+            const RaylibRenderTextureRecord& record = m_render_textures[index];
+            return record.active ? &record : nullptr;
+        }
+
+        [[nodiscard]] u32 render_texture_count() const noexcept
+        {
+            u32 count = 0;
+            for (const RaylibRenderTextureRecord& record : m_render_textures)
+            {
+                if (record.active)
+                    ++count;
+            }
+            return count;
         }
 
         ICommandContext& acquire_graphics_context() override { return m_context; }
@@ -236,6 +266,12 @@ export namespace epoch
         void present(ISwapchain&) override {}
 
     private:
+        [[nodiscard]] bool runtime_renderer_available() const noexcept
+        {
+            const auto& state = epochnamespace::raylibstate::s_raylibstate;
+            return state.running && state.renderingActive;
+        }
+
         [[nodiscard]] u32 allocate_render_texture_slot()
         {
             for (u32 i = 0; i < static_cast<u32>(m_render_textures.size()); ++i)

@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.87.08]
+- Fixed the Linux/Clang full-engine build by making `engine.cpp` explicitly
+  include the public Epoch API type definitions before importing module-backed
+  renderer contracts. Validation: `cmake --build --preset ninja-clang-debug
+  --target epoch -j 1` completed successfully under WSL/Clang.
+- Hardened the Raylib native sampled render-texture device lane for build-only
+  and no-runtime validation. `render.device_raylib` now checks the live Raylib
+  renderer state before allocating or unloading render textures, exposes
+  resolve/count probes for contract tests, and the engine self-test verifies
+  the lane fails closed without launching a renderer window.
+- MSVC Debug `StaticLib1` builds with the new Raylib RTT guard. The full
+  Debug app relink was not rerun because a live `EpochEditor.exe` instance held
+  the output executable open; the source change itself is covered by the static
+  library and Linux/Clang engine build gates.
+
 ## [v0.87.07]
 - Promoted graph-level model draw intents into the renderer spine. `render.graph`
   can now attach model draw submissions to compiled passes, resolve those graph

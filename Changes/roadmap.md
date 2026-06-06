@@ -95,7 +95,7 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     progress. Weight/source downloads need approval, byte counts, resume/cache
     checks, license/notice tracking, and visible failure state before any UI can
     claim a download is running.
-20. `v0.87.07` is the active feature-line consolidation point. The editor
+20. `v0.87.08` is the active feature-line consolidation point. The editor
     update path is binary-first and platform-gated, then source-fallback only
     with visible worker evidence. The editor must never close itself unless a
     verified replacement executable or successful source handoff exists.
@@ -113,9 +113,10 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     `render.arcade` may consume RTT for runtime-mini/game packages, but backend
     modules own native allocation. OpenGL now has an FBO/color/depth/sampler
     hook factory; Raylib, SDL3, and SFML3 now have concrete native
-    render-texture device lanes with safe build-only no-runtime gates, and
-    Vulkan/DirectX must implement the same engine contract through their own
-    resource models.
+    render-texture device lanes with safe build-only no-runtime gates. Raylib's
+    gate now explicitly refuses GPU allocation when no live Raylib renderer is
+    active. Vulkan/DirectX must implement the same engine contract through
+    their own resource models.
 
 ## Release And Source Policy
 
@@ -1603,7 +1604,7 @@ engine shape and should be treated as starting truth for the next passes:
 
 ## Current Push Order
 
-1. Preserve the `v0.87.07` editor/resource checkpoint: Raylib, SDL, SFML,
+1. Preserve the `v0.87.08` editor/resource checkpoint: Raylib, SDL, SFML,
    Vulkan, OpenGL, and DirectX must keep real panes, visible scene previews,
    Inspector, AI Chat, stable GUI-over-scene composition, curated command menus,
    and modal top-layer behavior. Any remaining mismatched clear/color/depth,
@@ -1618,7 +1619,8 @@ engine shape and should be treated as starting truth for the next passes:
 4. Strengthen the System Info workspace with deeper pacing diagnostics and
    backend convergence guidance, including present/partial/missing renderer
    feature status from the feature matrix, backend-native mesh/model allocation
-   proof, sampled-RTT native allocation readiness, and mini-arcade graph parity.
+   proof, sampled-RTT native allocation readiness, Raylib no-runtime allocation
+   safety, OpenGL-family native RTT hookup, and mini-arcade graph parity.
 5. Carry the time spine deeper into runtime and scene ownership.
 6. Keep UI/editor maturity moving forward, especially text/input reliability,
    shell polish, drag/drop, and backend-window stability.

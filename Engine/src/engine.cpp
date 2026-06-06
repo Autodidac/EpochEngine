@@ -40,6 +40,7 @@
 //#include "pch.h"
 
 #include "../include/engine.config.hpp"
+#include "../include/epoch.api_types.hpp"
 #include "../include/engine.hpp"
 #include "../include/epoch.runtime_bridge.hpp"
 
@@ -128,6 +129,9 @@ import render.device_sdl;
 #endif
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 import render.device_sfml;
+#endif
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+import render.device_raylib;
 #endif
 import render.arcade;
 import render.graph;
@@ -974,6 +978,29 @@ namespace epochnamespace::core
 #endif
     }
 
+    [[nodiscard]] inline bool raylib_native_render_texture_device_contract_ready()
+    {
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+        epoch::RaylibRenderDevice device{};
+        const epoch::RendererCapabilities caps = device.capabilities();
+        if (device.backend_name() != "raylib" || !epoch::renderer_supports_native_sampled_render_targets(caps))
+            return false;
+
+        const epoch::RenderTextureAssetDesc desc = epoch::render_arcade::make_screen_render_texture_desc();
+        const epoch::RenderTextureAssetHandles handles = device.create_render_texture_asset(desc);
+        const epoch::RaylibRenderTextureRecord* const record = device.resolve_render_texture(handles.render_target);
+
+        const bool ready = !static_cast<bool>(handles)
+            && record == nullptr
+            && device.render_texture_count() == 0u;
+
+        device.destroy(handles);
+        return ready && device.resolve_render_texture(handles.render_target) == nullptr;
+#else
+        return true;
+#endif
+    }
+
     [[nodiscard]] inline bool sdl_arcade_cabinet_graph_contract_ready()
     {
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
@@ -1180,6 +1207,7 @@ namespace epochnamespace::core
         check("render.opengl_family_arcade_fake_native_rtt", opengl_family_arcade_fake_native_rtt_contract_ready());
         check("render.sdl_native_render_texture_device", sdl_native_render_texture_device_contract_ready());
         check("render.sfml_native_render_texture_device", sfml_native_render_texture_device_contract_ready());
+        check("render.raylib_native_render_texture_device", raylib_native_render_texture_device_contract_ready());
         check("render.sdl_arcade_cabinet_graph", sdl_arcade_cabinet_graph_contract_ready());
         check("render.sfml_arcade_cabinet_graph", sfml_arcade_cabinet_graph_contract_ready());
 
