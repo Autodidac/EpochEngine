@@ -34,6 +34,10 @@
   for sampled render textures, binding sets, render-pass ownership, and Engine
   Arcade screen-graph compilation before backend-owned native FBO/texture
   allocation is promoted.
+- Extended that OpenGL-family gate into the first mini-arcade cabinet graph.
+  The build-only contract now routes `engine_arcade.screen` into a sampled
+  material slot, screen mesh, and cabinet model pass for OpenGL, SDL3-over-GL,
+  and SFML-over-GL logical devices without opening renderer contexts.
 - Added a Forest Factory preview-spine pass: deterministic Forest entities now
   map to backend-shared trunk, branch, and foliage preview primitives instead of
   generic cubes, and the Plant Lab workspace reports a voxel occupancy estimate

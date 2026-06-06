@@ -41,6 +41,18 @@ export namespace epoch
         bool open = false;
     };
 
+    struct OpenGLFamilyMeshRecord
+    {
+        MeshDesc desc{};
+        bool active = false;
+    };
+
+    struct OpenGLFamilyModelRecord
+    {
+        ModelDesc desc{};
+        bool active = false;
+    };
+
     class OpenGLFamilyCommandContext final : public ICommandContext
     {
     public:
@@ -64,6 +76,16 @@ export namespace epoch
         void bind_binding_set(BindingSetHandle binding_set) override { m_binding_set = binding_set; }
         void bind_resources(const CommandResourceBindings& bindings) override { m_bindings = bindings; }
         void barrier() override {}
+        void draw_mesh(MeshHandle mesh, MaterialHandle material = {}) override
+        {
+            m_last_mesh = mesh;
+            m_last_material = material;
+        }
+
+        void draw_model(ModelHandle model) override
+        {
+            m_last_model = model;
+        }
 
         void begin_render_pass(RenderTargetHandle render_target, const RenderPassDesc& pass) override
         {
@@ -88,6 +110,9 @@ export namespace epoch
         [[nodiscard]] BindingSetHandle bound_binding_set() const noexcept { return m_binding_set; }
         [[nodiscard]] u32 last_width() const noexcept { return m_last_width; }
         [[nodiscard]] u32 last_height() const noexcept { return m_last_height; }
+        [[nodiscard]] MeshHandle last_mesh() const noexcept { return m_last_mesh; }
+        [[nodiscard]] MaterialHandle last_material() const noexcept { return m_last_material; }
+        [[nodiscard]] ModelHandle last_model() const noexcept { return m_last_model; }
 
     private:
         [[nodiscard]] OpenGLFamilyRenderTextureRecord* resolve(RenderTargetHandle render_target) noexcept
@@ -107,6 +132,9 @@ export namespace epoch
         CommandResourceBindings m_bindings{};
         BindingSetHandle m_binding_set{};
         OpenGLFamilyRenderPassRecord m_render_pass{};
+        MeshHandle m_last_mesh{};
+        MaterialHandle m_last_material{};
+        ModelHandle m_last_model{};
         u32 m_last_width = 0;
         u32 m_last_height = 0;
         bool m_open = false;
@@ -149,6 +177,8 @@ export namespace epoch
             caps.render_to_texture = true;
             caps.sampled_render_targets = true;
             caps.binding_sets = true;
+            caps.mesh_resources = true;
+            caps.model_resources = true;
             return caps;
         }
 
@@ -167,6 +197,24 @@ export namespace epoch
             record.bindings = bindings;
             record.active = true;
             return BindingSetHandle{ slot + 1u };
+        }
+
+        MeshHandle create_mesh(const MeshDesc& desc) override
+        {
+            const u32 slot = allocate_mesh_slot();
+            OpenGLFamilyMeshRecord& record = m_meshes[slot];
+            record.desc = desc;
+            record.active = true;
+            return MeshHandle{ slot + 1u };
+        }
+
+        ModelHandle create_model(const ModelDesc& desc) override
+        {
+            const u32 slot = allocate_model_slot();
+            OpenGLFamilyModelRecord& record = m_models[slot];
+            record.desc = desc;
+            record.active = true;
+            return ModelHandle{ slot + 1u };
         }
 
         RenderTextureAssetHandles create_render_texture_asset(const RenderTextureAssetDesc& desc) override
@@ -195,6 +243,25 @@ export namespace epoch
         void destroy(PipelineHandle handle) noexcept override { release_slot(m_pipelines, handle.value); }
         void destroy(MaterialHandle handle) noexcept override { release_slot(m_materials, handle.value); }
         void destroy(RenderTargetHandle handle) noexcept override { release_slot(m_render_targets, handle.value); }
+        void destroy(MeshHandle handle) noexcept override
+        {
+            if (!handle)
+                return;
+
+            const u32 index = handle.value - 1u;
+            if (index < m_meshes.size())
+                m_meshes[index] = {};
+        }
+
+        void destroy(ModelHandle handle) noexcept override
+        {
+            if (!handle)
+                return;
+
+            const u32 index = handle.value - 1u;
+            if (index < m_models.size())
+                m_models[index] = {};
+        }
 
         void destroy(BindingSetHandle binding_set) noexcept override
         {
@@ -222,6 +289,8 @@ export namespace epoch
         void present(ISwapchain&) override {}
 
         [[nodiscard]] std::size_t render_texture_count() const noexcept { return m_render_textures.size(); }
+        [[nodiscard]] std::size_t mesh_count() const noexcept { return m_meshes.size(); }
+        [[nodiscard]] std::size_t model_count() const noexcept { return m_models.size(); }
         [[nodiscard]] RendererBackendKind backend() const noexcept { return m_backend; }
 
     private:
@@ -286,10 +355,36 @@ export namespace epoch
             return static_cast<u32>(m_binding_sets.size() - 1u);
         }
 
+        [[nodiscard]] u32 allocate_mesh_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_meshes.size()); ++i)
+            {
+                if (!m_meshes[i].active)
+                    return i;
+            }
+
+            m_meshes.push_back({});
+            return static_cast<u32>(m_meshes.size() - 1u);
+        }
+
+        [[nodiscard]] u32 allocate_model_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_models.size()); ++i)
+            {
+                if (!m_models[i].active)
+                    return i;
+            }
+
+            m_models.push_back({});
+            return static_cast<u32>(m_models.size() - 1u);
+        }
+
         RendererBackendKind m_backend = RendererBackendKind::opengl;
         OpenGLFamilyCommandContext m_context{};
         std::vector<OpenGLFamilyRenderTextureRecord> m_render_textures{};
         std::vector<OpenGLFamilyBindingSetRecord> m_binding_sets{};
+        std::vector<OpenGLFamilyMeshRecord> m_meshes{};
+        std::vector<OpenGLFamilyModelRecord> m_models{};
         std::vector<SlotRecord> m_buffers{};
         std::vector<SlotRecord> m_textures{};
         std::vector<SlotRecord> m_samplers{};

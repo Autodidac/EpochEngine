@@ -978,9 +978,11 @@ engine shape and should be treated as starting truth for the next passes:
 - OpenGL-derived renderer work now has a shared first-pass RTT contract:
   `render.device_opengl_family` compiles the same `engine_arcade.screen` graph
   through OpenGL, SDL3-over-GL, and SFML-over-GL logical devices with shared
-  sampled texture, sampler, render-target, binding-set, and render-pass records.
-  This intentionally stops at the build-proven resource spine; native FBO/texture
-  allocation and scene presentation remain the next context-owned acceptance
+  sampled texture, sampler, render-target, binding-set, render-pass, material,
+  mesh, and model records. The current build-only gate proves the mini-arcade
+  cabinet shape: RTT screen output feeds a material texture slot and a logical
+  cabinet screen mesh/model pass. Native FBO/texture allocation, presentation,
+  and backend-owned draw submission remain the next context-owned acceptance
   gate.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
