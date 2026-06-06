@@ -6,6 +6,12 @@
   carry material handles plus texture/sampler pairs; `render.graph` can declare
   material resources, bind sampled render-texture slots into passes, and destroy
   compiled material handles through the same device contract.
+- Added formal renderer binding-set handles on top of graph resource bindings.
+  Compiled graph passes now request backend binding-set handles from
+  `IRenderDevice`, bind them through `ICommandContext`, destroy them before
+  resource teardown, and surface the core capability in System Info. Engine
+  Arcade now declares `binding_sets` and `render_to_texture` only as package
+  requirements; RTT remains an engine-owned renderer primitive.
 - Bumped the pushed source line to `v0.87.07` for the eye-tested update/editor
   checkpoint while keeping local updater-test rollbacks out of the committed
   source state.

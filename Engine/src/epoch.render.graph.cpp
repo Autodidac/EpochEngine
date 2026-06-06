@@ -288,6 +288,8 @@ namespace epoch
                 append_binding(pass.bindings, pass.render_target_resource, true);
             for (const GraphResource resourceHandle : pass.writes)
                 append_binding(pass.bindings, resourceHandle, true);
+            if (!pass.bindings.empty())
+                pass.binding_set = dev.create_binding_set(pass.bindings);
         }
 
         for (auto& pass : g.passes)
@@ -331,6 +333,8 @@ namespace epoch
         for (auto& p : passes)
         {
             ctx.debug_marker(p.name.c_str());
+            if (p.binding_set)
+                ctx.bind_binding_set(p.binding_set);
             ctx.bind_resources(p.bindings);
             if (p.render_target)
                 ctx.begin_render_pass(p.render_target, p.render_pass);
@@ -344,6 +348,12 @@ namespace epoch
 
     void CompiledGraph::destroy(IRenderDevice& dev) noexcept
     {
+        for (auto& pass : passes)
+        {
+            if (pass.binding_set)
+                dev.destroy(pass.binding_set);
+        }
+
         for (auto& asset : render_texture_assets)
         {
             if (asset.backend.color_texture || asset.backend.sampler || asset.backend.render_target)

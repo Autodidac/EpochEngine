@@ -267,6 +267,7 @@ export namespace epoch
     struct BackendPipelineTag {};
     struct BackendMaterialTag {};
     struct BackendRenderTargetTag {};
+    struct BackendBindingSetTag {};
     struct BackendCommandListTag {};
 
     using BufferHandle  = Handle<BackendBufferTag, u32>;
@@ -276,6 +277,7 @@ export namespace epoch
     using PipelineHandle = Handle<BackendPipelineTag, u32>;
     using MaterialHandle = Handle<BackendMaterialTag, u32>;
     using RenderTargetHandle = Handle<BackendRenderTargetTag, u32>;
+    using BindingSetHandle = Handle<BackendBindingSetTag, u32>;
     using CommandListHandle = Handle<BackendCommandListTag, u32>;
 
     struct RenderTextureAssetHandles
@@ -309,6 +311,20 @@ export namespace epoch
         epoch::small_vector<TextureHandle> write_textures{};
         epoch::small_vector<MaterialHandle> write_materials{};
         epoch::small_vector<RenderTargetHandle> write_render_targets{};
+
+        [[nodiscard]] bool empty() const noexcept
+        {
+            return read_buffers.empty() &&
+                   read_textures.empty() &&
+                   read_samplers.empty() &&
+                   read_materials.empty() &&
+                   read_material_textures.empty() &&
+                   read_render_targets.empty() &&
+                   write_buffers.empty() &&
+                   write_textures.empty() &&
+                   write_materials.empty() &&
+                   write_render_targets.empty();
+        }
     };
 
     struct RendererCapabilities
@@ -325,6 +341,7 @@ export namespace epoch
         bool frame_graph = false;
         bool render_to_texture = false;
         bool sampled_render_targets = false;
+        bool binding_sets = false;
         bool model_import_ready = false;
         bool normal_mapping_ready = false;
         bool skybox_ready = false;
@@ -352,6 +369,7 @@ export namespace epoch
             caps.frame_graph = true;
             caps.render_to_texture = true;
             caps.sampled_render_targets = true;
+            caps.binding_sets = true;
             break;
         case RendererBackendKind::raylib3:
             caps.buffers = true;
@@ -364,6 +382,7 @@ export namespace epoch
             caps.command_lists = true;
             caps.render_to_texture = true;
             caps.sampled_render_targets = true;
+            caps.binding_sets = true;
             break;
         case RendererBackendKind::sdl3:
         case RendererBackendKind::sfml3:
@@ -374,6 +393,7 @@ export namespace epoch
             caps.command_lists = true;
             caps.render_to_texture = true;
             caps.sampled_render_targets = true;
+            caps.binding_sets = true;
             break;
         case RendererBackendKind::vulkan:
         case RendererBackendKind::directx:
@@ -388,6 +408,7 @@ export namespace epoch
             caps.frame_graph = true;
             caps.render_to_texture = true;
             caps.sampled_render_targets = true;
+            caps.binding_sets = true;
             break;
         default:
             break;
@@ -411,6 +432,7 @@ export namespace epoch
         virtual void begin(const char* label) = 0;
         virtual void end() = 0;
         virtual void debug_marker(const char* label) = 0;
+        virtual void bind_binding_set(BindingSetHandle) {}
         virtual void bind_resources(const CommandResourceBindings&) {}
         virtual void barrier() = 0;
         virtual void begin_render_pass(RenderTargetHandle, const RenderPassDesc&) {}
@@ -437,6 +459,7 @@ export namespace epoch
         virtual PipelineHandle create_pipeline(const PipelineDesc&) { return {}; }
         virtual MaterialHandle create_material(const MaterialDesc&) { return {}; }
         virtual RenderTargetHandle create_render_target(const RenderTargetDesc&) { return {}; }
+        virtual BindingSetHandle create_binding_set(const CommandResourceBindings&) { return {}; }
         virtual RenderTextureAssetHandles create_render_texture_asset(const RenderTextureAssetDesc& desc)
         {
             const RenderTextureAssetPlan plan = make_render_texture_asset_plan(desc);
@@ -454,6 +477,7 @@ export namespace epoch
         virtual void destroy(PipelineHandle) noexcept {}
         virtual void destroy(MaterialHandle) noexcept {}
         virtual void destroy(RenderTargetHandle) noexcept {}
+        virtual void destroy(BindingSetHandle) noexcept {}
         virtual void destroy(RenderTextureAssetHandles handles) noexcept
         {
             if (handles.render_target)

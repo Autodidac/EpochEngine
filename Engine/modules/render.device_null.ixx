@@ -68,6 +68,7 @@ export namespace epoch
         PipelineHandle create_pipeline(const PipelineDesc&) override { return PipelineHandle{ ++m_pipeline }; }
         MaterialHandle create_material(const MaterialDesc&) override { return MaterialHandle{ ++m_material }; }
         RenderTargetHandle create_render_target(const RenderTargetDesc&) override { return RenderTargetHandle{ ++m_render_target }; }
+        BindingSetHandle create_binding_set(const CommandResourceBindings&) override { return BindingSetHandle{ ++m_binding_set }; }
 
         void destroy(BufferHandle) noexcept override {}
         void destroy(TextureHandle) noexcept override {}
@@ -76,6 +77,7 @@ export namespace epoch
         void destroy(PipelineHandle) noexcept override {}
         void destroy(MaterialHandle) noexcept override {}
         void destroy(RenderTargetHandle) noexcept override {}
+        void destroy(BindingSetHandle) noexcept override {}
 
         ICommandContext& acquire_graphics_context() override { return m_ctx; }
         CommandListHandle begin_command_list(const char*) override { return CommandListHandle{ ++m_command_list }; }
@@ -91,6 +93,7 @@ export namespace epoch
         std::atomic<u32> m_pipeline{0};
         std::atomic<u32> m_material{0};
         std::atomic<u32> m_render_target{0};
+        std::atomic<u32> m_binding_set{0};
         std::atomic<u32> m_command_list{0};
     };
 } // namespace epoch

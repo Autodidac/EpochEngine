@@ -100,6 +100,7 @@ export namespace epoch
         epoch::small_vector<GraphResource> writes{};
         GraphResource render_target_resource{};
         RenderTargetHandle render_target{};
+        BindingSetHandle binding_set{};
         RenderPassDesc render_pass{};
         CommandResourceBindings bindings{};
         epoch::function_ref<void(ICommandContext&)> execute{};

@@ -666,10 +666,13 @@ engine shape and should be treated as starting truth for the next passes:
   target, and `v0.87.07` adds graph material resources with named texture slots.
   Compiled passes expose resolved read/write backend-handle bindings including
   the sampler needed when a pass reads a sampled render texture or material
-  texture, and Engine Arcade records `engine_arcade.screen` as a 512x512 target
-  in generated package and project evidence. The next acceptance gate is
-  backend-native binding and arcade-cabinet presentation across the production
-  contexts.
+  texture, then request backend binding-set handles so OpenGL-derived contexts,
+  Vulkan, and DirectX can adopt native binding work behind the same pass shape.
+  RTT/render-target allocation remains core engine ownership; Engine Arcade is
+  a separate runtime-mini/game package that consumes `engine_arcade.screen` as
+  a 512x512 package dependency and proof target. The next acceptance gate is
+  backend-native binding plus arcade-cabinet presentation across the production
+  contexts without moving game implementations into the engine runtime spine.
 - Package Manager now needs visible per-package state instead of silent buttons
   or a single cramped combo box: selection uses a shared scrollable package list,
   each row exposes its own Install/Remove/Review Gate action, Install updates a
