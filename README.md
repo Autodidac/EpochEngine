@@ -146,8 +146,9 @@ builds.
 
 - A valid Windows six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
   `Vulkan`, `OpenGL`, and `DirectX`.
-- The floating-window proofs must show real promoted context windows outside
-  the parent instead of fake launcher wrappers.
+- Floating-window proof is archived in `Images/readme/`; the active README
+  gallery now favors the current `v0.87.00` multicontext editor capture so old
+  promoted-window screenshots do not look like current UI proof.
 - The Linux proof comes from an asset-bearing WSL build output, not a source
   tree launched without runtime assets.
 
@@ -163,11 +164,10 @@ round:
   <a href="Images/readme/windows-directx-v08700.png"><img src="Images/readme/windows-directx-v08700.png" alt="Epoch Windows DirectX editor proof" width="15.6%" /></a>
 </p>
 
-Windows promoted-window and floating-context proof, live validation:
+Windows multicontext editor proof from the same current capture round:
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-directx-floating-v08435.png" alt="Epoch Windows DirectX floating-context proof" width="49%" />
-  <img src="Images/readme/windows-multicontext-floating-layout-v08435.png" alt="Epoch Windows multicontext floating layout proof" width="49%" />
+  <a href="Images/readme/windows-multicontext-editor-v08700.png"><img src="Images/readme/windows-multicontext-editor-v08700.png" alt="Epoch Windows multicontext editor proof" width="960" /></a>
 </p>
 
 WSL/Linux editor proof, latest asset-bearing visual capture:
