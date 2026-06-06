@@ -277,6 +277,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_null.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_opengl_family.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_raylib.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_sdl.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_sfml.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.graph.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.streaming_feedback.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.visibility.ixx" />

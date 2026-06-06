@@ -123,6 +123,12 @@ import epoch.ai;
 import render.device;
 import render.device_null;
 import render.device_opengl_family;
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+import render.device_sdl;
+#endif
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
+import render.device_sfml;
+#endif
 import render.arcade;
 import render.graph;
 import render.preview_grid;
@@ -898,6 +904,68 @@ namespace epochnamespace::core
         return true;
     }
 
+    [[nodiscard]] inline bool sdl_native_render_texture_device_contract_ready()
+    {
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+        epoch::SdlRenderDevice device{};
+        const epoch::RendererCapabilities caps = device.capabilities();
+        if (device.backend_name() != "sdl3" || !epoch::renderer_supports_native_sampled_render_targets(caps))
+            return false;
+
+        const epoch::RenderTextureAssetDesc desc = epoch::render_arcade::make_screen_render_texture_desc();
+        const bool runtimeAvailable = device.runtime_renderer_available();
+        const epoch::RenderTextureAssetHandles handles = device.create_render_texture_asset(desc);
+        const epoch::SdlRenderTextureRecord* const record = device.resolve_render_texture(handles.render_target);
+
+        const bool ready = runtimeAvailable
+            ? static_cast<bool>(handles)
+                && record != nullptr
+                && record->active
+                && record->texture != nullptr
+                && record->width == desc.width
+                && record->height == desc.height
+            : !static_cast<bool>(handles)
+                && record == nullptr
+                && device.render_texture_count() == 0u;
+
+        device.destroy(handles);
+        return ready && device.resolve_render_texture(handles.render_target) == nullptr;
+#else
+        return true;
+#endif
+    }
+
+    [[nodiscard]] inline bool sfml_native_render_texture_device_contract_ready()
+    {
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
+        epoch::SfmlRenderDevice device{};
+        const epoch::RendererCapabilities caps = device.capabilities();
+        if (device.backend_name() != "sfml3" || !epoch::renderer_supports_native_sampled_render_targets(caps))
+            return false;
+
+        const epoch::RenderTextureAssetDesc desc = epoch::render_arcade::make_screen_render_texture_desc();
+        const bool runtimeAvailable = device.runtime_renderer_available();
+        const epoch::RenderTextureAssetHandles handles = device.create_render_texture_asset(desc);
+        const epoch::SfmlRenderTextureRecord* const record = device.resolve_render_texture(handles.render_target);
+
+        const bool ready = runtimeAvailable
+            ? static_cast<bool>(handles)
+                && record != nullptr
+                && record->active
+                && record->target != nullptr
+                && record->width == desc.width
+                && record->height == desc.height
+            : !static_cast<bool>(handles)
+                && record == nullptr
+                && device.render_texture_count() == 0u;
+
+        device.destroy(handles);
+        return ready && device.resolve_render_texture(handles.render_target) == nullptr;
+#else
+        return true;
+#endif
+    }
+
     [[nodiscard]] inline int run_engine_contract_self_test()
     {
         bool failed = false;
@@ -974,6 +1042,8 @@ namespace epochnamespace::core
         check("render.opengl_family_arcade_cabinet_graph", opengl_family_arcade_cabinet_graph_contract_ready());
         check("render.opengl_family_arcade_native_requirements", opengl_family_arcade_native_requirements_contract_ready());
         check("render.opengl_family_arcade_fake_native_rtt", opengl_family_arcade_fake_native_rtt_contract_ready());
+        check("render.sdl_native_render_texture_device", sdl_native_render_texture_device_contract_ready());
+        check("render.sfml_native_render_texture_device", sfml_native_render_texture_device_contract_ready());
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;

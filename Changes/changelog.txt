@@ -1,6 +1,14 @@
 # Epoch Changelog
 
 ## [v0.87.07]
+- Promoted SDL3 and SFML3 into concrete backend-native sampled
+  render-texture device lanes. `render.device_sdl` now owns SDL target-texture
+  allocation, bind/clear, restore, and teardown when a live SDL renderer exists;
+  `render.device_sfml` owns SFML render-texture allocation, bind/clear/display,
+  window reactivation, and teardown when a live SFML window exists. The engine
+  contract self-test now verifies both devices build safely without launching
+  renderer windows, and MSVC Debug x64 `ConsoleApplication1` builds with the
+  new modules.
 - Promoted the first backend-owned OpenGL sampled render-texture hook. The
   `opengl.textures` module now owns native FBO/color texture/depth
   renderbuffer/sampler allocation, pass bind/clear, pass unbind, and teardown

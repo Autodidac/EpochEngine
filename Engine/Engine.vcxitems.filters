@@ -857,6 +857,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_raylib.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_sdl.ixx">
+      <Filter>Module Files\ixx\epoch</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_sfml.ixx">
+      <Filter>Module Files\ixx\epoch</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.graph.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>

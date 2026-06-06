@@ -112,9 +112,10 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
 23. Render-to-texture is core engine spine, not an arcade-package feature.
     `render.arcade` may consume RTT for runtime-mini/game packages, but backend
     modules own native allocation. OpenGL now has an FBO/color/depth/sampler
-    hook factory; SDL3/SFML3 need their own target-texture/render-texture hooks,
-    Raylib already has its native render-texture device lane, and Vulkan/DirectX
-    must implement the same engine contract through their own resource models.
+    hook factory; Raylib, SDL3, and SFML3 now have concrete native
+    render-texture device lanes with safe build-only no-runtime gates, and
+    Vulkan/DirectX must implement the same engine contract through their own
+    resource models.
 
 ## Release And Source Policy
 
@@ -968,9 +969,11 @@ engine shape and should be treated as starting truth for the next passes:
 - System Info now distinguishes declared renderer graph descriptors from
   backend-native allocation. Mesh/model and sampled render-texture descriptors
   can compile through the graph today, and the visible status rows now separate
-  Raylib's native sampled-RTT allocation from OpenGL/SDL3/SFML3/Vulkan/DirectX
-  graph-declared-but-native-pending lanes. Backend-native mesh/material/model
-  draw/binding behavior remains the next renderer-spine acceptance gate.
+  backend-native sampled-RTT allocation from graph-declared/native-pending
+  lanes. Raylib, OpenGL, SDL3, and SFML3 now have concrete sampled-RTT device
+  paths at different proof levels; Vulkan/DirectX remain resource-model
+  implementation gates. Backend-native mesh/material/model draw/binding
+  behavior remains the next renderer-spine acceptance gate.
 - Raylib is now the first backend-native model-handle and sampled-RTT bridge:
   model descriptors map through `render.device_raylib` into the existing Raylib
   loaded-model registry with per-handle draw/unload calls, and compiled
@@ -1003,6 +1006,13 @@ engine shape and should be treated as starting truth for the next passes:
   allocate/begin/end/destroy hooks for sampled render textures, and the contract
   harness proves that path with a fake native allocator for OpenGL, SDL3-over-GL,
   and SFML-over-GL before any real FBO code touches the live editor frame path.
+- SDL3 and SFML3 now have backend-native sampled RTT device modules beside the
+  shared OpenGL-family logical contract. `render.device_sdl` owns SDL
+  target-texture allocation/bind/clear/restore/teardown, while
+  `render.device_sfml` owns SFML render-texture allocation/bind/clear/display
+  and window reactivation. The current proof is build-only and no-runtime-safe;
+  live arcade-cabinet presentation and editor preview hookup are still separate
+  runtime gates.
 - Engine Arcade RTT construction is now source-owned by `render.arcade`.
   The screen sampled target, render-surface material binding, screen mesh/model
   descriptors, and cabinet pass are reusable graph builders instead of inline
