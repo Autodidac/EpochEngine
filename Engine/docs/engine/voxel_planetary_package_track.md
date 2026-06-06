@@ -114,6 +114,10 @@ Before any voxel package becomes tracked engine code:
 - Keep the first-pass `voxel.field`, `voxel.trace`, `forest.factory`, and
   `package.registry` contracts small, build-tested, and renderer-agnostic before
   wiring them into editor workspaces or runtime packages.
+- Forest Factory now has a build-tested occupancy estimate that can describe
+  trunk, branch, and foliage cells without binding to one renderer; the next
+  gate is making that occupancy consumable by real LOD/hit/path/lighting systems
+  rather than only displaying editor evidence rows.
 - Add package-manager support for local research packages with provenance and
   build/test evidence.
 - Add the full Forest Factory 3D editor workspace and a voxel terrain preview

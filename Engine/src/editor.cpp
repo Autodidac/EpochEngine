@@ -2148,6 +2148,12 @@ namespace epochnamespace
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
             if (entity.type == "Canvas2D")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Canvas2D;
+            if (entity.type == "ForestTrunk")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::ForestTrunk;
+            if (entity.type == "ForestBranchJoint")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::ForestBranch;
+            if (entity.type == "ForestFoliageCluster")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::ForestLeafCluster;
             if (entity.category == "World" || entity.type == "Level")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
             return epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube;
@@ -6663,6 +6669,7 @@ namespace epochnamespace
                 const auto profile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
                 const auto geometry = epoch::forest::build_preview_geometry(profile);
                 const auto stats = geometry.stats;
+                const auto voxelSummary = epoch::forest::estimate_voxel_occupancy(profile, geometry, 0.20F);
                 const std::filesystem::path manifestPath =
                     resolve_editor_path(std::filesystem::path{ editor.projectRoot })
                     / "assets" / "packages" / "engine_forest_factory.package.json";
@@ -6695,8 +6702,25 @@ namespace epochnamespace
                 gui::property_row("[forest] Preview segments", std::to_string(geometry.segmentCount), 148.0f);
                 gui::property_row("[forest] Verts", std::to_string(stats.vertices), 148.0f);
                 gui::property_row("[forest] Tris", std::to_string(stats.triangles), 148.0f);
+                gui::property_row("[forest] Voxel chunk",
+                    std::format(
+                        "{}x{}x{} @ {:.2f}m",
+                        voxelSummary.chunk.cellsX,
+                        voxelSummary.chunk.cellsY,
+                        voxelSummary.chunk.cellsZ,
+                        voxelSummary.chunk.cellSizeMeters),
+                    148.0f);
+                gui::property_row("[forest] Active voxels", std::to_string(voxelSummary.activeCells), 148.0f);
+                gui::property_row("[forest] Dense bytes", std::to_string(voxelSummary.denseBytes), 148.0f);
+                gui::property_row("[forest] Voxel split",
+                    std::format(
+                        "trunk {} | branch {} | foliage {}",
+                        voxelSummary.trunkCells,
+                        voxelSummary.branchCells,
+                        voxelSummary.foliageCells),
+                    148.0f);
                 gui::wrapped_label(
-                    "Scene preview: Plant Lab now emits deterministic temporal graph nodes and leaves into its editor-only scene. Package activation emits reusable project assets only after an explicit install/stage gate.",
+                    "Scene preview: Plant Lab now emits deterministic temporal graph segments, foliage clusters, and a voxel occupancy summary for future LOD, hit detection, navigation, lighting, and path-trace queries. Package activation emits reusable project assets only after an explicit install/stage gate.",
                     centerWidth);
                 std::array<gui::InlineButtonSpec, 3> forestActions{ {
                     { "Regenerate Temporal Graph", 228.0f },

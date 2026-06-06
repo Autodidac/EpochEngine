@@ -47,7 +47,10 @@ namespace epochnamespace::previewgrid
         Spawn,
         Camera,
         Level,
-        Canvas2D
+        Canvas2D,
+        ForestTrunk,
+        ForestBranch,
+        ForestLeafCluster
     };
 
     export struct Camera
@@ -898,6 +901,29 @@ namespace epochnamespace::previewgrid
             push_line(c101, c111, sideColor);
             push_line(c001, c011, sideColor);
         };
+        auto push_leaf_diamond_edges = [&](Vec3 center, Vec3 half, Vec3 color)
+        {
+            const Vec3 top{ center.x, center.y + half.y, center.z };
+            const Vec3 bottom{ center.x, center.y - half.y * 0.45f, center.z };
+            const Vec3 left{ center.x - half.x, center.y, center.z };
+            const Vec3 right{ center.x + half.x, center.y, center.z };
+            const Vec3 front{ center.x, center.y, center.z + half.z };
+            const Vec3 back{ center.x, center.y, center.z - half.z };
+            const Vec3 edgeColor = lit(color, 1.10f);
+
+            push_line(top, left, edgeColor);
+            push_line(top, right, edgeColor);
+            push_line(top, front, edgeColor);
+            push_line(top, back, edgeColor);
+            push_line(bottom, left, color);
+            push_line(bottom, right, color);
+            push_line(bottom, front, color);
+            push_line(bottom, back, color);
+            push_line(left, front, lit(color, 0.90f));
+            push_line(front, right, lit(color, 0.90f));
+            push_line(right, back, lit(color, 0.90f));
+            push_line(back, left, lit(color, 0.90f));
+        };
 
         for (const auto& marker : markers)
         {
@@ -947,6 +973,51 @@ namespace epochnamespace::previewgrid
                 half.z = (std::max)(0.025f, radius * 0.04f);
                 push_box_edges(center, half, color);
                 break;
+            case ObjectPreviewPrimitive::ForestTrunk:
+            {
+                const Vec3 baseHalf{
+                    (std::max)(0.035f, half.x * 0.48f),
+                    (std::max)(0.10f, half.y * 0.52f),
+                    (std::max)(0.035f, half.z * 0.48f)
+                };
+                const Vec3 upperHalf{
+                    (std::max)(0.025f, baseHalf.x * 0.68f),
+                    (std::max)(0.08f, half.y * 0.48f),
+                    (std::max)(0.025f, baseHalf.z * 0.68f)
+                };
+                push_box_edges({ center.x, center.y - baseHalf.y * 0.38f, center.z }, baseHalf, color);
+                push_box_edges({ center.x, center.y + upperHalf.y * 0.52f, center.z }, upperHalf, lit(color, 1.06f));
+                push_line(
+                    { center.x, center.y - half.y, center.z },
+                    { center.x, center.y + half.y * 1.08f, center.z },
+                    lit(color, 1.22f));
+                break;
+            }
+            case ObjectPreviewPrimitive::ForestBranch:
+            {
+                const Vec3 jointHalf{
+                    (std::max)(0.028f, radius * 0.22f),
+                    (std::max)(0.028f, radius * 0.22f),
+                    (std::max)(0.028f, radius * 0.22f)
+                };
+                push_box_edges(center, jointHalf, color);
+                push_line(center, { center.x + radius * 0.82f, center.y + radius * 0.36f, center.z }, lit(color, 1.10f));
+                push_line(center, { center.x - radius * 0.58f, center.y + radius * 0.28f, center.z + radius * 0.52f }, lit(color, 1.02f));
+                push_line(center, { center.x, center.y + radius * 0.66f, center.z - radius * 0.50f }, lit(color, 0.96f));
+                break;
+            }
+            case ObjectPreviewPrimitive::ForestLeafCluster:
+            {
+                const Vec3 leafHalf{
+                    (std::max)(0.055f, half.x * 0.86f),
+                    (std::max)(0.035f, half.y * 0.72f),
+                    (std::max)(0.055f, half.z * 0.86f)
+                };
+                push_leaf_diamond_edges(center, leafHalf, color);
+                push_leaf_diamond_edges({ center.x + leafHalf.x * 0.58f, center.y + leafHalf.y * 0.28f, center.z - leafHalf.z * 0.18f }, scale(leafHalf, 0.62f), lit(color, 1.04f));
+                push_leaf_diamond_edges({ center.x - leafHalf.x * 0.52f, center.y + leafHalf.y * 0.18f, center.z + leafHalf.z * 0.22f }, scale(leafHalf, 0.58f), lit(color, 0.94f));
+                break;
+            }
             case ObjectPreviewPrimitive::Cube:
             default:
                 push_box_edges(center, half, color);
@@ -1030,6 +1101,18 @@ namespace epochnamespace::previewgrid
             push_face(c000, c010, c011, c001, lit(color, 0.70f));
             push_face(c101, c111, c110, c100, lit(color, 0.96f));
         };
+        auto push_leaf_cluster = [&](Vec3 center, Vec3 half, Vec3 color)
+        {
+            const Vec3 mainHalf{
+                (std::max)(0.04f, half.x * 0.72f),
+                (std::max)(0.02f, half.y * 0.38f),
+                (std::max)(0.04f, half.z * 0.72f)
+            };
+            push_box(center, mainHalf, color);
+            push_box({ center.x + mainHalf.x * 0.68f, center.y + mainHalf.y * 0.58f, center.z - mainHalf.z * 0.18f }, scale(mainHalf, 0.58f), lit(color, 1.04f));
+            push_box({ center.x - mainHalf.x * 0.62f, center.y + mainHalf.y * 0.38f, center.z + mainHalf.z * 0.22f }, scale(mainHalf, 0.54f), lit(color, 0.94f));
+            push_box({ center.x, center.y + mainHalf.y * 0.74f, center.z + mainHalf.z * 0.62f }, scale(mainHalf, 0.45f), lit(color, 1.10f));
+        };
 
         for (const auto& marker : markers)
         {
@@ -1066,6 +1149,35 @@ namespace epochnamespace::previewgrid
             case ObjectPreviewPrimitive::Canvas2D:
                 half.z = (std::max)(0.025f, radius * 0.04f);
                 push_box(center, half, color);
+                break;
+            case ObjectPreviewPrimitive::ForestTrunk:
+            {
+                const Vec3 baseHalf{
+                    (std::max)(0.035f, half.x * 0.48f),
+                    (std::max)(0.10f, half.y * 0.52f),
+                    (std::max)(0.035f, half.z * 0.48f)
+                };
+                const Vec3 upperHalf{
+                    (std::max)(0.025f, baseHalf.x * 0.68f),
+                    (std::max)(0.08f, half.y * 0.48f),
+                    (std::max)(0.025f, baseHalf.z * 0.68f)
+                };
+                push_box({ center.x, center.y - baseHalf.y * 0.38f, center.z }, baseHalf, color);
+                push_box({ center.x, center.y + upperHalf.y * 0.52f, center.z }, upperHalf, lit(color, 1.04f));
+                break;
+            }
+            case ObjectPreviewPrimitive::ForestBranch:
+            {
+                const Vec3 jointHalf{
+                    (std::max)(0.025f, radius * 0.18f),
+                    (std::max)(0.025f, radius * 0.18f),
+                    (std::max)(0.025f, radius * 0.18f)
+                };
+                push_box(center, jointHalf, color);
+                break;
+            }
+            case ObjectPreviewPrimitive::ForestLeafCluster:
+                push_leaf_cluster(center, half, color);
                 break;
             case ObjectPreviewPrimitive::Cube:
             default:

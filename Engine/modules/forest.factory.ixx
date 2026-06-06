@@ -163,6 +163,24 @@ export namespace epoch::forest
         ForestPreviewStats stats{};
     };
 
+    struct ForestVoxelOccupancySummary
+    {
+        epoch::voxel::ChunkDesc chunk{};
+        epoch::voxel::CellSemantic semantics{
+            epoch::voxel::CellSemantic::Geometry |
+            epoch::voxel::CellSemantic::Lighting |
+            epoch::voxel::CellSemantic::Navigation |
+            epoch::voxel::CellSemantic::Visibility |
+            epoch::voxel::CellSemantic::ProceduralVegetation};
+        std::array<float, 3> boundsMinMeters{};
+        std::array<float, 3> boundsMaxMeters{};
+        std::uint64_t trunkCells{};
+        std::uint64_t branchCells{};
+        std::uint64_t foliageCells{};
+        std::uint64_t activeCells{};
+        std::uint64_t denseBytes{};
+    };
+
     struct ForestLodRequest
     {
         ForestOutputKind output{ForestOutputKind::PreviewSkeleton};
@@ -447,6 +465,81 @@ export namespace epoch::forest
             .triangles = static_cast<std::uint32_t>(geometry.segmentCount * 8u + geometry.leafCount * 2u)
         };
         return geometry;
+    }
+
+    [[nodiscard]] inline ForestVoxelOccupancySummary estimate_voxel_occupancy(
+        const ForestFactoryProfile& profile,
+        const ForestPreviewGeometry& geometry,
+        float requestedCellSizeMeters = 0.20F) noexcept
+    {
+        const float cellSizeMeters = (std::clamp)(requestedCellSizeMeters, 0.05F, 2.0F);
+        const float margin = (std::max)(profile.config.trunkRadiusMeters * 4.0F, cellSizeMeters * 2.0F);
+        epoch::voxel::Float3 minPoint{ -margin, 0.0F, -margin };
+        epoch::voxel::Float3 maxPoint{ margin, margin, margin };
+
+        auto include_point = [&](epoch::voxel::Float3 point, float radius) noexcept
+        {
+            const float padded = (std::max)(radius, cellSizeMeters);
+            minPoint.x = (std::min)(minPoint.x, point.x - padded);
+            minPoint.y = (std::min)(minPoint.y, point.y - padded);
+            minPoint.z = (std::min)(minPoint.z, point.z - padded);
+            maxPoint.x = (std::max)(maxPoint.x, point.x + padded);
+            maxPoint.y = (std::max)(maxPoint.y, point.y + padded);
+            maxPoint.z = (std::max)(maxPoint.z, point.z + padded);
+        };
+
+        std::uint64_t trunkCells = 0u;
+        std::uint64_t branchCells = 0u;
+        for (std::size_t i = 0u; i < geometry.segmentCount; ++i)
+        {
+            const auto& segment = geometry.segments[i];
+            include_point(segment.start, segment.radius);
+            include_point(segment.end, segment.radius);
+
+            const float dx = segment.end.x - segment.start.x;
+            const float dy = segment.end.y - segment.start.y;
+            const float dz = segment.end.z - segment.start.z;
+            const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
+            const auto lengthCells = static_cast<std::uint64_t>((std::max)(1.0F, std::ceil(length / cellSizeMeters)));
+            const auto radiusCells = static_cast<std::uint64_t>((std::max)(1.0F, std::ceil(segment.radius / cellSizeMeters)));
+            const std::uint64_t estimatedCells = lengthCells * radiusCells * radiusCells;
+            if (i == 0u)
+                trunkCells += estimatedCells;
+            else
+                branchCells += estimatedCells;
+        }
+
+        std::uint64_t foliageCells = 0u;
+        for (std::size_t i = 0u; i < geometry.leafCount; ++i)
+        {
+            const auto& leaf = geometry.leaves[i];
+            include_point(leaf.position, leaf.size);
+            const auto leafCells = static_cast<std::uint64_t>((std::max)(1.0F, std::ceil(leaf.size / cellSizeMeters)));
+            foliageCells += leafCells * leafCells;
+        }
+
+        auto cells_for_extent = [&](float extent) noexcept -> std::uint32_t
+        {
+            const auto cells = static_cast<std::uint32_t>((std::max)(4.0F, std::ceil(extent / cellSizeMeters)));
+            return (std::clamp)(cells, 4u, 128u);
+        };
+
+        ForestVoxelOccupancySummary summary{};
+        summary.chunk.cellSizeMeters = cellSizeMeters;
+        summary.chunk.cellsX = cells_for_extent(maxPoint.x - minPoint.x);
+        summary.chunk.cellsY = cells_for_extent(maxPoint.y - minPoint.y);
+        summary.chunk.cellsZ = cells_for_extent(maxPoint.z - minPoint.z);
+        summary.chunk.lodLevel = 0u;
+        summary.boundsMinMeters = { minPoint.x, minPoint.y, minPoint.z };
+        summary.boundsMaxMeters = { maxPoint.x, maxPoint.y, maxPoint.z };
+        summary.trunkCells = trunkCells;
+        summary.branchCells = branchCells;
+        summary.foliageCells = foliageCells;
+        summary.activeCells = (std::min)(
+            trunkCells + branchCells + foliageCells,
+            epoch::voxel::dense_cell_count(summary.chunk));
+        summary.denseBytes = epoch::voxel::dense_cell_bytes(summary.chunk);
+        return summary;
     }
 
     [[nodiscard]] constexpr bool requires_project_activation(ForestOutputKind output) noexcept

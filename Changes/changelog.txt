@@ -1,6 +1,10 @@
 # Epoch Changelog
 
 ## [v0.87.07]
+- Added a Forest Factory preview-spine pass: deterministic Forest entities now
+  map to backend-shared trunk, branch, and foliage preview primitives instead of
+  generic cubes, and the Plant Lab workspace reports a voxel occupancy estimate
+  for future LOD, hit detection, navigation, lighting, and path-trace consumers.
 - Added `engine.visuals` as the first central visual-style spine. Frame clears,
   scene clears, object/selection colors, look markers, and editor-only opacity
   factors now route through one module so backend parity can be tightened from

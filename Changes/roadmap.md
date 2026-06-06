@@ -977,6 +977,11 @@ engine shape and should be treated as starting truth for the next passes:
   Lab-grade Forest Factory scene with temporal graph controls, atlas/export
   tools, package activation, and project payload emission backed by runtime
   proof.
+- The latest accepted source gate moves Forest Factory beyond cube placeholders:
+  deterministic trunk, branch, and foliage entities now resolve through shared
+  preview primitives, while `forest.factory` estimates voxel occupancy for the
+  future LOD/hit-detection/navigation/lighting/path-trace spine. This is still a
+  preview and evidence contract, not the final Plant Lab asset-grade renderer.
 - workspace launches and toolbar surface switches should eventually use the
   shared progress primitive for short transition feedback. The acceptance gate is
   that loading feedback appears without moving the scene viewport or reviving

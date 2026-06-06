@@ -53,6 +53,9 @@ The first production contract exposes:
 - output categories: preview skeleton, mesh LOD, impostor, voxel occupancy, and
   seed asset
 - estimated preview stats for nodes, branches, leaves, vertices, and triangles
+- estimated voxel occupancy for trunk, branch, and foliage cells so future LOD,
+  hit detection, navigation, lighting, and path-trace consumers can share the
+  same deterministic vegetation descriptor
 - a scene-backed editor prototype made from deterministic preview primitives so
   Forest Factory is visible in the same central 3D editor path as other
   workspaces before the production mesh/voxel renderer lands
@@ -90,5 +93,8 @@ Before Forest Factory graduates beyond this contract:
 - Generated outputs can feed mesh LOD, impostor, and voxel occupancy consumers.
 - The voxel/pathing/tracing spine can consume Forest Factory occupancy without a
   renderer-specific dependency.
+- The preview graduates from primitive occupancy evidence to asset-grade branch,
+  foliage, atlas, and growth playback rendering that visibly matches the Plant
+  Lab direction.
 - Prototype code from the Plant Lab repo is reviewed through package provenance,
   build, test, and license evidence before any source promotion.
