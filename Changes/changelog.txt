@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.87.07]
+- Promoted the first backend-owned OpenGL sampled render-texture hook. The
+  `opengl.textures` module now owns native FBO/color texture/depth
+  renderbuffer/sampler allocation, pass bind/clear, pass unbind, and teardown
+  for the shared OpenGL-family RTT contract; MSVC Debug x64
+  `ConsoleApplication1` builds with the new hook factory. SDL3/SFML3 still need
+  backend-native target-texture/render-texture hooks instead of pretending they
+  are raw OpenGL FBO owners.
 - Stabilized the editor command-menu path without changing the protected
   scene/GUI draw model. Legacy launcher/editor loops now use the same OpenGL
   skip-clear policy as the main editor loop, command menus no longer reopen

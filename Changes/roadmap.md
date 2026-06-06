@@ -109,6 +109,12 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     presenters consume them. The first accepted gate is `engine.visuals`; the
     next gates are GUI theme-table consumption, graph palette routing, and
     six-context screenshot proof with Software excluded from production parity.
+23. Render-to-texture is core engine spine, not an arcade-package feature.
+    `render.arcade` may consume RTT for runtime-mini/game packages, but backend
+    modules own native allocation. OpenGL now has an FBO/color/depth/sampler
+    hook factory; SDL3/SFML3 need their own target-texture/render-texture hooks,
+    Raylib already has its native render-texture device lane, and Vulkan/DirectX
+    must implement the same engine contract through their own resource models.
 
 ## Release And Source Policy
 

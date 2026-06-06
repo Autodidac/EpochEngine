@@ -95,6 +95,8 @@ import texture;
 import image.loader;
 import spritehandle;
 import core.logger;
+import render.device;
+import render.device_opengl_family;
 
 // If u32/u64 are yours and not from <cstdint>, you must import the module that
 // defines them. Uncomment the correct one in your project.
@@ -145,6 +147,18 @@ export namespace epochnamespace::opengltextures
         u32 height = 0;
     };
 
+    struct NativeRenderTextureGPU
+    {
+        GLuint framebuffer = 0;
+        GLuint color = 0;
+        GLuint depth = 0;
+        GLuint sampler = 0;
+        u32 width = 0;
+        u32 height = 0;
+        bool has_depth = false;
+        bool active = false;
+    };
+
     struct TextureAtlasPtrHash {
         size_t operator()(const TextureAtlas* atlas) const noexcept {
             return std::hash<const TextureAtlas*>{}(atlas);
@@ -162,6 +176,7 @@ export namespace epochnamespace::opengltextures
     struct BackendData {
         std::unordered_map<const TextureAtlas*, AtlasGPU,
             TextureAtlasPtrHash, TextureAtlasPtrEqual> gpu_atlases;
+        std::unordered_map<u32, NativeRenderTextureGPU> native_render_textures;
         std::mutex gpuMutex;
         epochnamespace::openglstate::OpenGL4State glState{};
     };
@@ -180,6 +195,241 @@ export namespace epochnamespace::opengltextures
             data = static_cast<BackendData*>(backend.data.get());
         }
         return *data;
+    }
+
+    [[nodiscard]] inline BackendData& resolve_backend_data(void* user) noexcept
+    {
+        if (user)
+            return *static_cast<BackendData*>(user);
+
+        return get_opengl_backend();
+    }
+
+    [[nodiscard]] inline bool activate_backend_context(
+        BackendData& backend,
+        epochnamespace::openglcontext::PlatformGL::ScopedContext& contextGuard,
+        std::string_view tag) noexcept
+    {
+        const auto platformCtx = detail::to_platform_context(backend.glState);
+        if (!platformCtx.valid())
+        {
+            logger::warnf_loc("OpenGL.RTT", std::source_location::current(), "{} skipped: no native GL context is registered.", tag);
+            return false;
+        }
+
+        if (!contextGuard.set(platformCtx))
+        {
+            logger::warnf_loc("OpenGL.RTT", std::source_location::current(), "{} skipped: failed to activate GL context.", tag);
+            return false;
+        }
+
+        return true;
+    }
+
+    inline void delete_native_render_texture_objects(NativeRenderTextureGPU& gpu) noexcept
+    {
+        if (gpu.framebuffer)
+        {
+            glDeleteFramebuffers(1, &gpu.framebuffer);
+            gpu.framebuffer = 0;
+        }
+
+        if (gpu.color)
+        {
+            glDeleteTextures(1, &gpu.color);
+            gpu.color = 0;
+        }
+
+        if (gpu.depth)
+        {
+            glDeleteRenderbuffers(1, &gpu.depth);
+            gpu.depth = 0;
+        }
+
+        if (gpu.sampler)
+        {
+            glDeleteSamplers(1, &gpu.sampler);
+            gpu.sampler = 0;
+        }
+
+        gpu.active = false;
+    }
+
+    [[nodiscard]] inline epoch::OpenGLFamilyNativeRenderTextureAllocation allocate_native_render_texture(
+        void* user,
+        epoch::RendererBackendKind,
+        const epoch::RenderTextureAssetDesc& desc,
+        const epoch::RenderTextureBackendRequirements& requirements,
+        u32 slot)
+    {
+        epoch::OpenGLFamilyNativeRenderTextureAllocation allocation{};
+        BackendData& backend = resolve_backend_data(user);
+        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        if (!activate_backend_context(backend, contextGuard, "allocate render texture"))
+            return allocation;
+
+        NativeRenderTextureGPU gpu{};
+        gpu.width = (std::max)(desc.width, 1u);
+        gpu.height = (std::max)(desc.height, 1u);
+        gpu.has_depth = requirements.depth_attachment;
+
+        glGenFramebuffers(1, &gpu.framebuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, gpu.framebuffer);
+
+        glGenTextures(1, &gpu.color);
+        glBindTexture(GL_TEXTURE_2D, gpu.color);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA8,
+            static_cast<GLsizei>(gpu.width),
+            static_cast<GLsizei>(gpu.height),
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gpu.color, 0);
+
+        if (gpu.has_depth)
+        {
+            glGenRenderbuffers(1, &gpu.depth);
+            glBindRenderbuffer(GL_RENDERBUFFER, gpu.depth);
+            glRenderbufferStorage(
+                GL_RENDERBUFFER,
+                GL_DEPTH24_STENCIL8,
+                static_cast<GLsizei>(gpu.width),
+                static_cast<GLsizei>(gpu.height));
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gpu.depth);
+        }
+
+        if (requirements.sampler)
+        {
+            glGenSamplers(1, &gpu.sampler);
+            glSamplerParameteri(gpu.sampler, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glSamplerParameteri(gpu.sampler, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glSamplerParameteri(gpu.sampler, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glSamplerParameteri(gpu.sampler, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+
+        const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+        {
+            logger::warnf_loc(
+                "OpenGL.RTT",
+                std::source_location::current(),
+                "Framebuffer setup failed for render texture slot {}: status 0x{:x}.",
+                slot,
+                static_cast<unsigned int>(status));
+            delete_native_render_texture_objects(gpu);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glBindRenderbuffer(GL_RENDERBUFFER, 0);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            return allocation;
+        }
+
+        gpu.active = true;
+        allocation.framebuffer_object = gpu.framebuffer;
+        allocation.color_object = gpu.color;
+        allocation.depth_object = gpu.depth;
+        allocation.sampler_object = gpu.sampler ? gpu.sampler : gpu.color;
+        allocation.ready = true;
+
+        {
+            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
+            auto& stored = backend.native_render_textures[slot];
+            if (stored.active)
+                delete_native_render_texture_objects(stored);
+            stored = gpu;
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        return allocation;
+    }
+
+    inline void destroy_native_render_texture(
+        void* user,
+        epoch::RendererBackendKind,
+        const epoch::OpenGLFamilyRenderTextureRecord& record)
+    {
+        BackendData& backend = resolve_backend_data(user);
+        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        if (!activate_backend_context(backend, contextGuard, "destroy render texture"))
+            return;
+
+        std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
+        for (auto it = backend.native_render_textures.begin(); it != backend.native_render_textures.end(); ++it)
+        {
+            NativeRenderTextureGPU& gpu = it->second;
+            if (gpu.framebuffer == record.framebuffer_object || gpu.color == record.color_object)
+            {
+                delete_native_render_texture_objects(gpu);
+                backend.native_render_textures.erase(it);
+                return;
+            }
+        }
+    }
+
+    [[nodiscard]] inline bool begin_native_render_texture_pass(
+        void* user,
+        epoch::RendererBackendKind,
+        const epoch::OpenGLFamilyRenderTextureRecord& record,
+        const epoch::RenderPassDesc& pass)
+    {
+        BackendData& backend = resolve_backend_data(user);
+        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        if (!activate_backend_context(backend, contextGuard, "begin render texture pass"))
+            return false;
+
+        glBindFramebuffer(GL_FRAMEBUFFER, record.framebuffer_object);
+        glViewport(0, 0, static_cast<GLsizei>(record.width), static_cast<GLsizei>(record.height));
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
+        GLbitfield clearMask = 0;
+        if (pass.clear_color)
+        {
+            glClearColor(pass.clear[0], pass.clear[1], pass.clear[2], pass.clear[3]);
+            clearMask |= GL_COLOR_BUFFER_BIT;
+        }
+        if (pass.clear_depth && record.depth_object)
+        {
+            glClearDepth(1.0);
+            clearMask |= GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+        }
+        if (clearMask != 0)
+            glClear(clearMask);
+
+        return true;
+    }
+
+    inline void end_native_render_texture_pass(
+        void* user,
+        epoch::RendererBackendKind,
+        const epoch::OpenGLFamilyRenderTextureRecord&)
+    {
+        BackendData& backend = resolve_backend_data(user);
+        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        if (!activate_backend_context(backend, contextGuard, "end render texture pass"))
+            return;
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    [[nodiscard]] inline epoch::OpenGLFamilyNativeRenderTextureHooks make_native_render_texture_hooks() noexcept
+    {
+        epoch::OpenGLFamilyNativeRenderTextureHooks hooks{};
+        hooks.user = &get_opengl_backend();
+        hooks.allocate = &allocate_native_render_texture;
+        hooks.destroy = &destroy_native_render_texture;
+        hooks.begin_pass = &begin_native_render_texture_pass;
+        hooks.end_pass = &end_native_render_texture_pass;
+        return hooks;
     }
 
     using Handle = uint32_t;
