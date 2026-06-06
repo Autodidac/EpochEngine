@@ -26,8 +26,23 @@ export namespace epoch
         u32 color_object = 0;
         u32 depth_object = 0;
         u32 framebuffer_object = 0;
+        u32 sampler_object = 0;
         bool native_allocation_ready = false;
         bool active = false;
+
+        [[nodiscard]] bool native_work_order_ready() const noexcept
+        {
+            return active
+                && backend_requirements.color_attachment
+                && backend_requirements.sampled_color
+                && backend_requirements.sampler
+                && backend_requirements.offscreen_target
+                && backend_requirements.presentable_surface
+                && color_object != 0u
+                && sampler_object != 0u
+                && framebuffer_object != 0u
+                && (!backend_requirements.depth_attachment || depth_object != 0u);
+        }
     };
 
     struct OpenGLFamilyBindingSetRecord
@@ -110,6 +125,8 @@ export namespace epoch
         [[nodiscard]] bool active() const noexcept { return m_open; }
         [[nodiscard]] bool render_pass_open() const noexcept { return m_render_pass.open; }
         [[nodiscard]] BindingSetHandle bound_binding_set() const noexcept { return m_binding_set; }
+        [[nodiscard]] RenderTargetHandle last_render_target() const noexcept { return m_render_pass.render_target; }
+        [[nodiscard]] const CommandResourceBindings& bound_resources() const noexcept { return m_bindings; }
         [[nodiscard]] u32 last_width() const noexcept { return m_last_width; }
         [[nodiscard]] u32 last_height() const noexcept { return m_last_height; }
         [[nodiscard]] MeshHandle last_mesh() const noexcept { return m_last_mesh; }
@@ -231,6 +248,7 @@ export namespace epoch
             record.color_object = slot + 1u;
             record.depth_object = desc.has_depth ? slot + 1u : 0u;
             record.framebuffer_object = slot + 1u;
+            record.sampler_object = slot + 1u;
             record.native_allocation_ready = false;
             record.active = true;
 
@@ -297,6 +315,7 @@ export namespace epoch
         [[nodiscard]] std::size_t mesh_count() const noexcept { return m_meshes.size(); }
         [[nodiscard]] std::size_t model_count() const noexcept { return m_models.size(); }
         [[nodiscard]] RendererBackendKind backend() const noexcept { return m_backend; }
+        [[nodiscard]] const OpenGLFamilyCommandContext& graphics_context() const noexcept { return m_context; }
         [[nodiscard]] const OpenGLFamilyRenderTextureRecord* resolve_render_texture(RenderTargetHandle handle) const noexcept
         {
             if (!handle)

@@ -844,6 +844,25 @@ namespace epochnamespace::core
             {
                 return false;
             }
+
+            const epoch::OpenGLFamilyCommandContext& context = device.graphics_context();
+            const epoch::CommandResourceBindings& boundResources = context.bound_resources();
+            const bool cabinetBindingEvidence =
+                context.last_width() == epoch::package_registry::engine_arcade_render_texture_width()
+                && context.last_height() == epoch::package_registry::engine_arcade_render_texture_height()
+                && context.last_render_target()
+                && context.bound_binding_set()
+                && boundResources.read_materials.size() == 1u
+                && boundResources.read_models.size() == 1u
+                && boundResources.read_material_textures.size() == 1u
+                && boundResources.read_samplers.size() == 1u
+                && boundResources.read_material_textures.front().slot == epoch::MaterialTextureSlot::render_surface
+                && boundResources.read_material_textures.front().texture
+                && boundResources.read_material_textures.front().sampler
+                && boundResources.read_material_textures.front().sampler == boundResources.read_samplers.front();
+
+            if (!cabinetBindingEvidence)
+                return false;
         }
 
         return true;
@@ -883,10 +902,12 @@ namespace epochnamespace::core
                 && record->backend_requirements.sampler
                 && record->backend_requirements.offscreen_target
                 && record->backend_requirements.presentable_surface
+                && record->native_work_order_ready()
                 && !record->native_allocation_ready
                 && record->color_object != 0u
                 && record->depth_object != 0u
-                && record->framebuffer_object != 0u;
+                && record->framebuffer_object != 0u
+                && record->sampler_object != 0u;
             device.destroy(handles);
 
             if (!ready || device.resolve_render_texture(handles.render_target) != nullptr)

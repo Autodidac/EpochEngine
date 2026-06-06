@@ -986,9 +986,12 @@ engine shape and should be treated as starting truth for the next passes:
   cabinet screen mesh/model pass. The shared render-texture plan now also
   records backend requirements for color/depth attachments, sampler, offscreen
   target, and presentable-surface behavior, and OpenGL-family records keep that
-  native work order without claiming allocation is complete. Native FBO/texture
-  allocation, presentation, and backend-owned draw submission remain the next
-  context-owned acceptance gate.
+  native work order without claiming allocation is complete. The build-only
+  gate also checks that graph execution binds the cabinet material/model,
+  sampled texture, sampler, render target, and RTT dimensions through the
+  OpenGL-family command context. Native FBO/texture allocation, presentation,
+  and backend-owned draw submission remain the next context-owned acceptance
+  gate.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,
