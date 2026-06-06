@@ -122,6 +122,7 @@ import editor;
 import epoch.ai;
 import render.device;
 import render.device_null;
+import render.device_opengl_family;
 import render.graph;
 import render.preview_grid;
 
@@ -528,7 +529,7 @@ namespace epochnamespace::core
             std::source_location::current());
     }
 
-    [[nodiscard]] inline bool engine_arcade_screen_graph_contract_ready()
+    [[nodiscard]] inline bool engine_arcade_screen_graph_contract_ready(epoch::IRenderDevice& device)
     {
         epoch::GraphBuilder builder{};
 
@@ -560,8 +561,7 @@ namespace epochnamespace::core
                 ctx.debug_marker("engine_arcade.screen.sampled_surface");
             });
 
-        epoch::NullRenderDevice nullDevice{};
-        epoch::CompiledGraph graph = builder.compile(nullDevice);
+        epoch::CompiledGraph graph = builder.compile(device);
 
         const bool resourceShape =
             graph.render_texture_assets.size() == 1u
@@ -570,7 +570,7 @@ namespace epochnamespace::core
             && graph.passes.size() == 1u;
         if (!resourceShape)
         {
-            graph.destroy(nullDevice);
+            graph.destroy(device);
             return false;
         }
 
@@ -614,9 +614,37 @@ namespace epochnamespace::core
             && pass.bindings.write_render_targets.size() == 1u
             && pass.bindings.write_render_targets.front() == compiledScreen.backend.render_target;
 
-        graph.execute(nullDevice);
-        graph.destroy(nullDevice);
+        graph.execute(device);
+        graph.destroy(device);
         return renderTextureReady && passReady;
+    }
+
+    [[nodiscard]] inline bool engine_arcade_screen_graph_contract_ready()
+    {
+        epoch::NullRenderDevice nullDevice{};
+        return engine_arcade_screen_graph_contract_ready(nullDevice);
+    }
+
+    [[nodiscard]] inline bool opengl_family_arcade_screen_graph_contract_ready()
+    {
+        const epoch::RendererBackendKind backends[] = {
+            epoch::RendererBackendKind::opengl,
+            epoch::RendererBackendKind::sdl3,
+            epoch::RendererBackendKind::sfml3
+        };
+
+        for (const epoch::RendererBackendKind backend : backends)
+        {
+            epoch::OpenGLFamilyRenderDevice device{ backend };
+            const epoch::RendererCapabilities caps = device.capabilities();
+            if (!epoch::renderer_supports_sampled_render_targets(caps)
+                || !engine_arcade_screen_graph_contract_ready(device))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     [[nodiscard]] inline int run_engine_contract_self_test()
@@ -691,6 +719,7 @@ namespace epochnamespace::core
             && epoch::package_registry::can_create_server_or_listener_after_approval(epoch::package_registry::kEngineListenServerPackageId)
             && epoch::package_registry::must_use_human_build_gate("missing_package"));
         check("render.engine_arcade_screen_graph", engine_arcade_screen_graph_contract_ready());
+        check("render.opengl_family_arcade_screen_graph", opengl_family_arcade_screen_graph_contract_ready());
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;

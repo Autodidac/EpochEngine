@@ -975,6 +975,13 @@ engine shape and should be treated as starting truth for the next passes:
   `engine_arcade.screen` sampled render texture through the shared render graph
   with the null device. This is the build-only acceptance gate for the
   mini-runtime RTT spine before backend-native arcade-cabinet presentation.
+- OpenGL-derived renderer work now has a shared first-pass RTT contract:
+  `render.device_opengl_family` compiles the same `engine_arcade.screen` graph
+  through OpenGL, SDL3-over-GL, and SFML-over-GL logical devices with shared
+  sampled texture, sampler, render-target, binding-set, and render-pass records.
+  This intentionally stops at the build-proven resource spine; native FBO/texture
+  allocation and scene presentation remain the next context-owned acceptance
+  gate.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,

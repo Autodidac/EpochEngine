@@ -1,0 +1,302 @@
+/************************************************
+ *  Epoch Engine - OpenGL-Family Renderer Device Module
+ *
+ *  SPDX-License-Identifier: LicenseRef-MIT-NoSell
+ ***********************************************/
+module;
+
+#include "../include/engine.config.hpp"
+#include "../include/epoch.config.hpp"
+#include "../include/epoch.common.hpp"
+#include <string>
+#include <vector>
+
+export module render.device_opengl_family;
+
+import render.device;
+
+export namespace epoch
+{
+    struct OpenGLFamilyRenderTextureRecord
+    {
+        RenderTextureAssetDesc desc{};
+        u32 width = 0;
+        u32 height = 0;
+        u32 color_object = 0;
+        u32 depth_object = 0;
+        u32 framebuffer_object = 0;
+        bool active = false;
+    };
+
+    struct OpenGLFamilyBindingSetRecord
+    {
+        CommandResourceBindings bindings{};
+        bool active = false;
+    };
+
+    struct OpenGLFamilyRenderPassRecord
+    {
+        RenderTargetHandle render_target{};
+        RenderPassDesc desc{};
+        bool open = false;
+    };
+
+    class OpenGLFamilyCommandContext final : public ICommandContext
+    {
+    public:
+        void set_render_textures(std::vector<OpenGLFamilyRenderTextureRecord>* records) noexcept
+        {
+            m_render_textures = records;
+        }
+
+        void begin(const char*) override
+        {
+            m_open = true;
+        }
+
+        void end() override
+        {
+            m_render_pass = {};
+            m_open = false;
+        }
+
+        void debug_marker(const char*) override {}
+        void bind_binding_set(BindingSetHandle binding_set) override { m_binding_set = binding_set; }
+        void bind_resources(const CommandResourceBindings& bindings) override { m_bindings = bindings; }
+        void barrier() override {}
+
+        void begin_render_pass(RenderTargetHandle render_target, const RenderPassDesc& pass) override
+        {
+            OpenGLFamilyRenderTextureRecord* record = resolve(render_target);
+            if (!record)
+                return;
+
+            m_render_pass.render_target = render_target;
+            m_render_pass.desc = pass;
+            m_render_pass.open = true;
+            m_last_width = record->width;
+            m_last_height = record->height;
+        }
+
+        void end_render_pass() override
+        {
+            m_render_pass.open = false;
+        }
+
+        [[nodiscard]] bool active() const noexcept { return m_open; }
+        [[nodiscard]] bool render_pass_open() const noexcept { return m_render_pass.open; }
+        [[nodiscard]] BindingSetHandle bound_binding_set() const noexcept { return m_binding_set; }
+        [[nodiscard]] u32 last_width() const noexcept { return m_last_width; }
+        [[nodiscard]] u32 last_height() const noexcept { return m_last_height; }
+
+    private:
+        [[nodiscard]] OpenGLFamilyRenderTextureRecord* resolve(RenderTargetHandle render_target) noexcept
+        {
+            if (!m_render_textures || !render_target)
+                return nullptr;
+
+            const u32 index = render_target.value - 1u;
+            if (index >= m_render_textures->size())
+                return nullptr;
+
+            OpenGLFamilyRenderTextureRecord& record = (*m_render_textures)[index];
+            return record.active ? &record : nullptr;
+        }
+
+        std::vector<OpenGLFamilyRenderTextureRecord>* m_render_textures = nullptr;
+        CommandResourceBindings m_bindings{};
+        BindingSetHandle m_binding_set{};
+        OpenGLFamilyRenderPassRecord m_render_pass{};
+        u32 m_last_width = 0;
+        u32 m_last_height = 0;
+        bool m_open = false;
+    };
+
+    class OpenGLFamilyRenderDevice final : public IRenderDevice
+    {
+    public:
+        explicit OpenGLFamilyRenderDevice(RendererBackendKind backend = RendererBackendKind::opengl) noexcept
+            : m_backend(normalize_backend(backend))
+        {
+            m_context.set_render_textures(&m_render_textures);
+        }
+
+        std::string backend_name() const override
+        {
+            switch (m_backend)
+            {
+            case RendererBackendKind::sdl3:
+                return "sdl3-opengl";
+            case RendererBackendKind::sfml3:
+                return "sfml3-opengl";
+            default:
+                return "opengl";
+            }
+        }
+
+        RendererCapabilities capabilities() const noexcept override
+        {
+            RendererCapabilities caps = renderer_capabilities_for(m_backend);
+            caps.buffers = true;
+            caps.textures = true;
+            caps.samplers = true;
+            caps.shaders = true;
+            caps.pipelines = true;
+            caps.materials = true;
+            caps.render_targets = true;
+            caps.command_lists = true;
+            caps.frame_graph = true;
+            caps.render_to_texture = true;
+            caps.sampled_render_targets = true;
+            caps.binding_sets = true;
+            return caps;
+        }
+
+        BufferHandle create_buffer(const BufferDesc&) override { return BufferHandle{ allocate_slot(m_buffers) }; }
+        TextureHandle create_texture(const TextureDesc&) override { return TextureHandle{ allocate_slot(m_textures) }; }
+        SamplerHandle create_sampler(const SamplerDesc&) override { return SamplerHandle{ allocate_slot(m_samplers) }; }
+        ShaderHandle create_shader(const ShaderDesc&) override { return ShaderHandle{ allocate_slot(m_shaders) }; }
+        PipelineHandle create_pipeline(const PipelineDesc&) override { return PipelineHandle{ allocate_slot(m_pipelines) }; }
+        MaterialHandle create_material(const MaterialDesc&) override { return MaterialHandle{ allocate_slot(m_materials) }; }
+        RenderTargetHandle create_render_target(const RenderTargetDesc&) override { return RenderTargetHandle{ allocate_slot(m_render_targets) }; }
+
+        BindingSetHandle create_binding_set(const CommandResourceBindings& bindings) override
+        {
+            const u32 slot = allocate_binding_set_slot();
+            OpenGLFamilyBindingSetRecord& record = m_binding_sets[slot];
+            record.bindings = bindings;
+            record.active = true;
+            return BindingSetHandle{ slot + 1u };
+        }
+
+        RenderTextureAssetHandles create_render_texture_asset(const RenderTextureAssetDesc& desc) override
+        {
+            const u32 slot = allocate_render_texture_slot();
+            OpenGLFamilyRenderTextureRecord& record = m_render_textures[slot];
+            record.desc = desc;
+            record.width = desc.width == 0u ? 1u : desc.width;
+            record.height = desc.height == 0u ? 1u : desc.height;
+            record.color_object = slot + 1u;
+            record.depth_object = desc.has_depth ? slot + 1u : 0u;
+            record.framebuffer_object = slot + 1u;
+            record.active = true;
+
+            const u32 handle_value = slot + 1u;
+            return RenderTextureAssetHandles{
+                TextureHandle{ handle_value },
+                SamplerHandle{ handle_value },
+                RenderTargetHandle{ handle_value } };
+        }
+
+        void destroy(BufferHandle handle) noexcept override { release_slot(m_buffers, handle.value); }
+        void destroy(TextureHandle handle) noexcept override { release_slot(m_textures, handle.value); }
+        void destroy(SamplerHandle handle) noexcept override { release_slot(m_samplers, handle.value); }
+        void destroy(ShaderHandle handle) noexcept override { release_slot(m_shaders, handle.value); }
+        void destroy(PipelineHandle handle) noexcept override { release_slot(m_pipelines, handle.value); }
+        void destroy(MaterialHandle handle) noexcept override { release_slot(m_materials, handle.value); }
+        void destroy(RenderTargetHandle handle) noexcept override { release_slot(m_render_targets, handle.value); }
+
+        void destroy(BindingSetHandle binding_set) noexcept override
+        {
+            if (!binding_set)
+                return;
+
+            const u32 index = binding_set.value - 1u;
+            if (index < m_binding_sets.size())
+                m_binding_sets[index] = {};
+        }
+
+        void destroy(RenderTextureAssetHandles handles) noexcept override
+        {
+            if (!handles.render_target)
+                return;
+
+            const u32 index = handles.render_target.value - 1u;
+            if (index < m_render_textures.size())
+                m_render_textures[index] = {};
+        }
+
+        ICommandContext& acquire_graphics_context() override { return m_context; }
+        CommandListHandle begin_command_list(const char*) override { return CommandListHandle{ allocate_slot(m_command_lists) }; }
+        void end_command_list(CommandListHandle) override {}
+        void present(ISwapchain&) override {}
+
+        [[nodiscard]] std::size_t render_texture_count() const noexcept { return m_render_textures.size(); }
+        [[nodiscard]] RendererBackendKind backend() const noexcept { return m_backend; }
+
+    private:
+        struct SlotRecord
+        {
+            bool active = false;
+        };
+
+        [[nodiscard]] static constexpr RendererBackendKind normalize_backend(RendererBackendKind backend) noexcept
+        {
+            return (backend == RendererBackendKind::sdl3 || backend == RendererBackendKind::sfml3)
+                ? backend
+                : RendererBackendKind::opengl;
+        }
+
+        [[nodiscard]] static u32 allocate_slot(std::vector<SlotRecord>& records)
+        {
+            for (u32 i = 0; i < static_cast<u32>(records.size()); ++i)
+            {
+                if (!records[i].active)
+                {
+                    records[i].active = true;
+                    return i + 1u;
+                }
+            }
+
+            records.push_back(SlotRecord{ true });
+            return static_cast<u32>(records.size());
+        }
+
+        static void release_slot(std::vector<SlotRecord>& records, u32 handle_value) noexcept
+        {
+            if (handle_value == 0u)
+                return;
+
+            const u32 index = handle_value - 1u;
+            if (index < records.size())
+                records[index] = {};
+        }
+
+        [[nodiscard]] u32 allocate_render_texture_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_render_textures.size()); ++i)
+            {
+                if (!m_render_textures[i].active)
+                    return i;
+            }
+
+            m_render_textures.push_back({});
+            return static_cast<u32>(m_render_textures.size() - 1u);
+        }
+
+        [[nodiscard]] u32 allocate_binding_set_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_binding_sets.size()); ++i)
+            {
+                if (!m_binding_sets[i].active)
+                    return i;
+            }
+
+            m_binding_sets.push_back({});
+            return static_cast<u32>(m_binding_sets.size() - 1u);
+        }
+
+        RendererBackendKind m_backend = RendererBackendKind::opengl;
+        OpenGLFamilyCommandContext m_context{};
+        std::vector<OpenGLFamilyRenderTextureRecord> m_render_textures{};
+        std::vector<OpenGLFamilyBindingSetRecord> m_binding_sets{};
+        std::vector<SlotRecord> m_buffers{};
+        std::vector<SlotRecord> m_textures{};
+        std::vector<SlotRecord> m_samplers{};
+        std::vector<SlotRecord> m_shaders{};
+        std::vector<SlotRecord> m_pipelines{};
+        std::vector<SlotRecord> m_materials{};
+        std::vector<SlotRecord> m_render_targets{};
+        std::vector<SlotRecord> m_command_lists{};
+    };
+}

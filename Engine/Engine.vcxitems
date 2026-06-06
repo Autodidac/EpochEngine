@@ -274,6 +274,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.bindings.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_null.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_opengl_family.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_raylib.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.graph.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.streaming_feedback.ixx" />

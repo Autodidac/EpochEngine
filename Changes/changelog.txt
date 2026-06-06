@@ -29,6 +29,11 @@
   `render.graph` with the null device and verifies sampled texture, sampler,
   render-target, binding-set, and pass-binding ownership without opening any
   renderer context.
+- Added the first OpenGL-family RTT spine contract. `render.device_opengl_family`
+  now gives OpenGL, SDL3-over-GL, and SFML-over-GL one shared logical device path
+  for sampled render textures, binding sets, render-pass ownership, and Engine
+  Arcade screen-graph compilation before backend-owned native FBO/texture
+  allocation is promoted.
 - Added a Forest Factory preview-spine pass: deterministic Forest entities now
   map to backend-shared trunk, branch, and foliage preview primitives instead of
   generic cubes, and the Plant Lab workspace reports a voxel occupancy estimate
