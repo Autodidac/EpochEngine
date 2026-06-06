@@ -271,6 +271,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.arcade.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.bindings.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_null.ixx" />

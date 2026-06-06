@@ -839,6 +839,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.arcade.ixx">
+      <Filter>Module Files\ixx\epoch</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.bindings.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>

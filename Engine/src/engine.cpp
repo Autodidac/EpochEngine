@@ -123,6 +123,7 @@ import epoch.ai;
 import render.device;
 import render.device_null;
 import render.device_opengl_family;
+import render.arcade;
 import render.graph;
 import render.preview_grid;
 
@@ -532,34 +533,9 @@ namespace epochnamespace::core
     [[nodiscard]] inline bool engine_arcade_screen_graph_contract_ready(epoch::IRenderDevice& device)
     {
         epoch::GraphBuilder builder{};
-
-        epoch::RenderTextureAssetDesc screenDesc{};
-        screenDesc.width = epoch::package_registry::engine_arcade_render_texture_width();
-        screenDesc.height = epoch::package_registry::engine_arcade_render_texture_height();
-        screenDesc.color_format = epoch::TextureFormat::rgba8_unorm;
-        screenDesc.depth_format = epoch::TextureFormat::depth24_stencil8;
-        screenDesc.has_depth = true;
-        screenDesc.sampled_after_render = true;
-        screenDesc.usage = epoch::RenderTextureUsage::arcade_cabinet;
-        screenDesc.debug_name = "engine_arcade.screen";
-
         const std::string_view screenNameStd = epoch::package_registry::engine_arcade_render_texture_name();
         const epoch::string_view screenName{ screenNameStd.data(), screenNameStd.size() };
-        const epoch::GraphRenderTextureAsset screen = builder.create_render_texture_asset(
-            screenName,
-            screenDesc);
-
-        const std::array<epoch::GraphResource, 1> reads{ screen.color_texture };
-        builder.add_render_pass(
-            "engine_arcade.screen.populate",
-            screen.render_target,
-            epoch::span<const epoch::GraphResource>{ reads.data(), reads.size() },
-            {},
-            screen.plan.render_pass,
-            [](epoch::ICommandContext& ctx)
-            {
-                ctx.debug_marker("engine_arcade.screen.sampled_surface");
-            });
+        const epoch::render_arcade::ArcadeScreenGraphBuild screen = epoch::render_arcade::add_screen_graph(builder);
 
         epoch::CompiledGraph graph = builder.compile(device);
 
@@ -635,124 +611,7 @@ namespace epochnamespace::core
         }
 
         epoch::GraphBuilder builder{};
-
-        epoch::RenderTextureAssetDesc screenDesc{};
-        screenDesc.width = epoch::package_registry::engine_arcade_render_texture_width();
-        screenDesc.height = epoch::package_registry::engine_arcade_render_texture_height();
-        screenDesc.color_format = epoch::TextureFormat::rgba8_unorm;
-        screenDesc.depth_format = epoch::TextureFormat::depth24_stencil8;
-        screenDesc.has_depth = true;
-        screenDesc.sampled_after_render = true;
-        screenDesc.usage = epoch::RenderTextureUsage::arcade_cabinet;
-        screenDesc.debug_name = "engine_arcade.screen";
-
-        const std::string_view screenNameStd = epoch::package_registry::engine_arcade_render_texture_name();
-        const epoch::string_view screenName{ screenNameStd.data(), screenNameStd.size() };
-        const epoch::GraphRenderTextureAsset screen = builder.create_render_texture_asset(screenName, screenDesc);
-
-        const std::array<epoch::GraphResource, 1> screenReads{ screen.color_texture };
-        builder.add_render_pass(
-            "engine_arcade.screen.populate",
-            screen.render_target,
-            epoch::span<const epoch::GraphResource>{ screenReads.data(), screenReads.size() },
-            {},
-            screen.plan.render_pass,
-            [](epoch::ICommandContext& ctx)
-            {
-                ctx.debug_marker("engine_arcade.screen.sampled_surface");
-            });
-
-        epoch::MaterialDesc materialDesc{};
-        materialDesc.name = "engine_arcade.cabinet_material";
-        materialDesc.unlit = true;
-        materialDesc.debug_name = "engine_arcade.cabinet_material";
-        materialDesc.texture_slots.push_back(epoch::MaterialTextureSlotDesc{
-            .slot = epoch::MaterialTextureSlot::render_surface,
-            .name = "screen",
-            .expected_format = epoch::TextureFormat::rgba8_unorm,
-            .required = true
-        });
-
-        const std::array<epoch::GraphMaterialTextureSlot, 1> materialSlots{ epoch::GraphMaterialTextureSlot{
-            .slot = epoch::MaterialTextureSlot::render_surface,
-            .texture = screen.color_texture
-        } };
-        const epoch::GraphResource cabinetMaterial = builder.create_material(
-            "engine_arcade.cabinet.material",
-            materialDesc,
-            epoch::span<const epoch::GraphMaterialTextureSlot>{ materialSlots.data(), materialSlots.size() });
-
-        epoch::BufferDesc vertexBufferDesc{};
-        vertexBufferDesc.size_bytes = 4u * 5u * sizeof(float);
-        vertexBufferDesc.gpu_only = true;
-        vertexBufferDesc.debug_name = "engine_arcade.cabinet.screen_vertices";
-        const epoch::GraphResource vertexBuffer = builder.create_buffer(
-            "engine_arcade.cabinet.screen_vertices",
-            vertexBufferDesc);
-
-        epoch::BufferDesc indexBufferDesc{};
-        indexBufferDesc.size_bytes = 6u * sizeof(std::uint16_t);
-        indexBufferDesc.gpu_only = true;
-        indexBufferDesc.debug_name = "engine_arcade.cabinet.screen_indices";
-        const epoch::GraphResource indexBuffer = builder.create_buffer(
-            "engine_arcade.cabinet.screen_indices",
-            indexBufferDesc);
-
-        epoch::MeshDesc meshDesc{};
-        meshDesc.vertex_count = 4;
-        meshDesc.index_count = 6;
-        meshDesc.index_format = epoch::IndexFormat::uint16;
-        meshDesc.topology = epoch::PrimitiveTopology::triangles;
-        meshDesc.debug_name = "engine_arcade.cabinet.screen_mesh";
-        meshDesc.vertex_layout.stride_bytes = 5u * sizeof(float);
-        meshDesc.vertex_layout.attributes.push_back(epoch::VertexAttributeDesc{
-            .semantic = epoch::VertexSemantic::position,
-            .location = 0,
-            .offset_bytes = 0,
-            .component_count = 3,
-            .component_format = epoch::TextureFormat::rgba32_float,
-            .normalized = false
-        });
-        meshDesc.vertex_layout.attributes.push_back(epoch::VertexAttributeDesc{
-            .semantic = epoch::VertexSemantic::texcoord0,
-            .location = 1,
-            .offset_bytes = 3u * sizeof(float),
-            .component_count = 2,
-            .component_format = epoch::TextureFormat::rgba32_float,
-            .normalized = false
-        });
-
-        const epoch::GraphResource cabinetMesh = builder.create_mesh(
-            "engine_arcade.cabinet.screen_mesh",
-            meshDesc,
-            vertexBuffer,
-            indexBuffer,
-            cabinetMaterial);
-
-        epoch::GraphModelMeshSlot modelSlot{};
-        modelSlot.mesh = cabinetMesh;
-        modelSlot.material = cabinetMaterial;
-        modelSlot.node_name = "arcade_screen_panel";
-        const std::array<epoch::GraphModelMeshSlot, 1> modelSlots{ modelSlot };
-
-        epoch::ModelDesc modelDesc{};
-        modelDesc.name = "engine_arcade.cabinet";
-        modelDesc.static_mesh = true;
-        modelDesc.debug_name = "engine_arcade.cabinet";
-        const epoch::GraphResource cabinetModel = builder.create_model(
-            "engine_arcade.cabinet.model",
-            modelDesc,
-            epoch::span<const epoch::GraphModelMeshSlot>{ modelSlots.data(), modelSlots.size() });
-
-        const std::array<epoch::GraphResource, 2> cabinetReads{ cabinetMaterial, cabinetModel };
-        builder.add_pass(
-            "engine_arcade.cabinet.sampled_surface",
-            epoch::span<const epoch::GraphResource>{ cabinetReads.data(), cabinetReads.size() },
-            {},
-            [](epoch::ICommandContext& ctx)
-            {
-                ctx.debug_marker("engine_arcade.cabinet.rtt_material");
-            });
+        const epoch::render_arcade::ArcadeCabinetGraphBuild cabinet = epoch::render_arcade::add_cabinet_graph(builder);
 
         epoch::CompiledGraph graph = builder.compile(device);
         const bool resourceShape =
@@ -780,14 +639,14 @@ namespace epochnamespace::core
             compiledMaterial.backend
             && compiledMaterial.texture_slots.size() == 1u
             && compiledMaterial.texture_slots.front().slot == epoch::MaterialTextureSlot::render_surface
-            && compiledMaterial.texture_slots.front().texture == screen.color_texture;
+            && compiledMaterial.texture_slots.front().texture == cabinet.screen.color_texture;
 
         const bool modelReady =
             compiledMesh.backend
             && compiledModel.backend
             && compiledModel.mesh_slots.size() == 1u
-            && compiledModel.mesh_slots.front().mesh == cabinetMesh
-            && compiledModel.mesh_slots.front().material == cabinetMaterial;
+            && compiledModel.mesh_slots.front().mesh == cabinet.mesh
+            && compiledModel.mesh_slots.front().material == cabinet.material;
 
         const bool bindingReady =
             cabinetPass.binding_set

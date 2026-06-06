@@ -59,6 +59,11 @@
   backend-owned sampled-RTT hook table for allocation, pass begin/end, and
   teardown; the engine contract harness proves that flow with a fake native
   allocator before real GL FBO code is promoted.
+- Promoted the mini-arcade RTT graph shape into the reusable `render.arcade`
+  module. Engine Arcade screen/cabinet descriptors, material texture-slot
+  wiring, screen mesh/model declarations, and graph-pass construction now live
+  in one engine-owned module instead of duplicated contract-harness code; MSVC
+  Debug x64 `ConsoleApplication1` builds with the new module.
 - Added a Forest Factory preview-spine pass: deterministic Forest entities now
   map to backend-shared trunk, branch, and foliage preview primitives instead of
   generic cubes, and the Plant Lab workspace reports a voxel occupancy estimate

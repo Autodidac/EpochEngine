@@ -997,6 +997,12 @@ engine shape and should be treated as starting truth for the next passes:
   allocate/begin/end/destroy hooks for sampled render textures, and the contract
   harness proves that path with a fake native allocator for OpenGL, SDL3-over-GL,
   and SFML-over-GL before any real FBO code touches the live editor frame path.
+- Engine Arcade RTT construction is now source-owned by `render.arcade`.
+  The screen sampled target, render-surface material binding, screen mesh/model
+  descriptors, and cabinet pass are reusable graph builders instead of inline
+  self-test scaffolding. The current proof is MSVC Debug x64
+  `ConsoleApplication1`; native OpenGL-family FBO allocation and live cabinet
+  presentation remain the next renderer-spine gate.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,
