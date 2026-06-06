@@ -255,12 +255,23 @@ export namespace epoch
         const char* debug_name = nullptr;
     };
 
+    struct RenderTextureBackendRequirements
+    {
+        bool color_attachment = true;
+        bool depth_attachment = true;
+        bool sampled_color = true;
+        bool sampler = true;
+        bool offscreen_target = true;
+        bool presentable_surface = false;
+    };
+
     struct RenderTextureAssetPlan
     {
         TextureDesc color_texture{};
         SamplerDesc sampler{};
         RenderTargetDesc render_target{};
         RenderPassDesc render_pass{};
+        RenderTextureBackendRequirements backend_requirements{};
     };
 
     [[nodiscard]] constexpr RenderTextureAssetPlan make_render_texture_asset_plan(const RenderTextureAssetDesc& desc) noexcept
@@ -291,6 +302,16 @@ export namespace epoch
         plan.render_pass.clear_color = true;
         plan.render_pass.clear_depth = desc.has_depth;
         plan.render_pass.debug_name = desc.debug_name;
+
+        plan.backend_requirements.color_attachment = true;
+        plan.backend_requirements.depth_attachment = desc.has_depth;
+        plan.backend_requirements.sampled_color = desc.sampled_after_render;
+        plan.backend_requirements.sampler = desc.sampled_after_render;
+        plan.backend_requirements.offscreen_target = true;
+        plan.backend_requirements.presentable_surface =
+            desc.usage == RenderTextureUsage::arcade_cabinet
+            || desc.usage == RenderTextureUsage::ui_surface
+            || desc.usage == RenderTextureUsage::package_preview;
 
         return plan;
     }

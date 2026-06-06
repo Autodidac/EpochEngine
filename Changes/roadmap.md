@@ -981,9 +981,12 @@ engine shape and should be treated as starting truth for the next passes:
   sampled texture, sampler, render-target, binding-set, render-pass, material,
   mesh, and model records. The current build-only gate proves the mini-arcade
   cabinet shape: RTT screen output feeds a material texture slot and a logical
-  cabinet screen mesh/model pass. Native FBO/texture allocation, presentation,
-  and backend-owned draw submission remain the next context-owned acceptance
-  gate.
+  cabinet screen mesh/model pass. The shared render-texture plan now also
+  records backend requirements for color/depth attachments, sampler, offscreen
+  target, and presentable-surface behavior, and OpenGL-family records keep that
+  native work order without claiming allocation is complete. Native FBO/texture
+  allocation, presentation, and backend-owned draw submission remain the next
+  context-owned acceptance gate.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,
   `Assets`, `Plant Lab`, `Video`, `Project`, `Intelligence`, and
   `System Info`. Old labels such as Perspective, Game/2D, Forest Factory,
@@ -1576,8 +1579,8 @@ engine shape and should be treated as starting truth for the next passes:
    evidence, score/gate result, notes update, and no hidden autonomy.
 4. Strengthen the System Info workspace with deeper pacing diagnostics and
    backend convergence guidance, including present/partial/missing renderer
-   feature status from the feature matrix and backend-native mesh/model
-   allocation proof.
+   feature status from the feature matrix, backend-native mesh/model allocation
+   proof, and sampled-RTT native allocation readiness.
 5. Carry the time spine deeper into runtime and scene ownership.
 6. Keep UI/editor maturity moving forward, especially text/input reliability,
    shell polish, drag/drop, and backend-window stability.

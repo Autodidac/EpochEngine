@@ -20,11 +20,13 @@ export namespace epoch
     struct OpenGLFamilyRenderTextureRecord
     {
         RenderTextureAssetDesc desc{};
+        RenderTextureBackendRequirements backend_requirements{};
         u32 width = 0;
         u32 height = 0;
         u32 color_object = 0;
         u32 depth_object = 0;
         u32 framebuffer_object = 0;
+        bool native_allocation_ready = false;
         bool active = false;
     };
 
@@ -221,12 +223,15 @@ export namespace epoch
         {
             const u32 slot = allocate_render_texture_slot();
             OpenGLFamilyRenderTextureRecord& record = m_render_textures[slot];
+            const RenderTextureAssetPlan plan = make_render_texture_asset_plan(desc);
             record.desc = desc;
+            record.backend_requirements = plan.backend_requirements;
             record.width = desc.width == 0u ? 1u : desc.width;
             record.height = desc.height == 0u ? 1u : desc.height;
             record.color_object = slot + 1u;
             record.depth_object = desc.has_depth ? slot + 1u : 0u;
             record.framebuffer_object = slot + 1u;
+            record.native_allocation_ready = false;
             record.active = true;
 
             const u32 handle_value = slot + 1u;
@@ -292,6 +297,18 @@ export namespace epoch
         [[nodiscard]] std::size_t mesh_count() const noexcept { return m_meshes.size(); }
         [[nodiscard]] std::size_t model_count() const noexcept { return m_models.size(); }
         [[nodiscard]] RendererBackendKind backend() const noexcept { return m_backend; }
+        [[nodiscard]] const OpenGLFamilyRenderTextureRecord* resolve_render_texture(RenderTargetHandle handle) const noexcept
+        {
+            if (!handle)
+                return nullptr;
+
+            const u32 index = handle.value - 1u;
+            if (index >= m_render_textures.size())
+                return nullptr;
+
+            const OpenGLFamilyRenderTextureRecord& record = m_render_textures[index];
+            return record.active ? &record : nullptr;
+        }
 
     private:
         struct SlotRecord

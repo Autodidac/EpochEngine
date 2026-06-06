@@ -849,6 +849,53 @@ namespace epochnamespace::core
         return true;
     }
 
+    [[nodiscard]] inline bool opengl_family_arcade_native_requirements_contract_ready()
+    {
+        const epoch::RendererBackendKind backends[] = {
+            epoch::RendererBackendKind::opengl,
+            epoch::RendererBackendKind::sdl3,
+            epoch::RendererBackendKind::sfml3
+        };
+
+        epoch::RenderTextureAssetDesc screenDesc{};
+        screenDesc.width = epoch::package_registry::engine_arcade_render_texture_width();
+        screenDesc.height = epoch::package_registry::engine_arcade_render_texture_height();
+        screenDesc.color_format = epoch::TextureFormat::rgba8_unorm;
+        screenDesc.depth_format = epoch::TextureFormat::depth24_stencil8;
+        screenDesc.has_depth = true;
+        screenDesc.sampled_after_render = true;
+        screenDesc.usage = epoch::RenderTextureUsage::arcade_cabinet;
+        screenDesc.debug_name = "engine_arcade.screen";
+
+        for (const epoch::RendererBackendKind backend : backends)
+        {
+            epoch::OpenGLFamilyRenderDevice device{ backend };
+            const epoch::RenderTextureAssetHandles handles = device.create_render_texture_asset(screenDesc);
+            const epoch::OpenGLFamilyRenderTextureRecord* const record =
+                device.resolve_render_texture(handles.render_target);
+            const bool ready =
+                static_cast<bool>(handles)
+                && record != nullptr
+                && record->active
+                && record->backend_requirements.color_attachment
+                && record->backend_requirements.depth_attachment
+                && record->backend_requirements.sampled_color
+                && record->backend_requirements.sampler
+                && record->backend_requirements.offscreen_target
+                && record->backend_requirements.presentable_surface
+                && !record->native_allocation_ready
+                && record->color_object != 0u
+                && record->depth_object != 0u
+                && record->framebuffer_object != 0u;
+            device.destroy(handles);
+
+            if (!ready || device.resolve_render_texture(handles.render_target) != nullptr)
+                return false;
+        }
+
+        return true;
+    }
+
     [[nodiscard]] inline int run_engine_contract_self_test()
     {
         bool failed = false;
@@ -923,6 +970,7 @@ namespace epochnamespace::core
         check("render.engine_arcade_screen_graph", engine_arcade_screen_graph_contract_ready());
         check("render.opengl_family_arcade_screen_graph", opengl_family_arcade_screen_graph_contract_ready());
         check("render.opengl_family_arcade_cabinet_graph", opengl_family_arcade_cabinet_graph_contract_ready());
+        check("render.opengl_family_arcade_native_requirements", opengl_family_arcade_native_requirements_contract_ready());
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;
