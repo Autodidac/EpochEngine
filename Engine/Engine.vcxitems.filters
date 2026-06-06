@@ -302,6 +302,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.version.ixx">
       <Filter>Module Files\ixx\core</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.visuals.ixx">
+      <Filter>Module Files\ixx\core</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\a2048like.ixx">
       <Filter>Module Files\ixx\games</Filter>
     </ClCompile>

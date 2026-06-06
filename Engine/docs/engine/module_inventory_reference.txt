@@ -9,7 +9,10 @@ Public headers
 
 Primary module families
 - `core.*`, `context.*`, `platform.*`, `render.*`, `perf.*`, `updater.*` spine/runtime ownership
-- `ai.*` tiny-model runtime, dataset, training, eval, and MCP-adapter planning surfaces
+- `engine.visuals` central visual profile for frame clears, scene clears,
+  object/selection colors, look markers, and editor opacity parity
+- `ai.*` OS-model selection, model-asset metadata, evidence packets, eval gates,
+  and MCP/tool-harness planning surfaces
 - `voxel.*` core multi-informational voxel field and trace/query contracts
 - `forest.factory` deterministic built-in Forest Factory contracts; project assets
   remain opt-in through package activation

@@ -123,6 +123,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\cellularsim.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.codeinspector.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.commandline.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.visuals.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.diagnostics.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.components.ixx" />

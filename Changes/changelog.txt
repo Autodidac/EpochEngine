@@ -1,6 +1,11 @@
 # Epoch Changelog
 
 ## [v0.87.07]
+- Added `engine.visuals` as the first central visual-style spine. Frame clears,
+  scene clears, object/selection colors, look markers, and editor-only opacity
+  factors now route through one module so backend parity can be tightened from
+  source instead of per-context color drift. System Info and Console Dock now
+  expose the active visual profile and parity gate.
 - Added the next renderer-resource spine slice for material texture bindings.
   `render.device` now names material texture slots and command bindings can
   carry material handles plus texture/sampler pairs; `render.graph` can declare

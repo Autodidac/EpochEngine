@@ -70,6 +70,7 @@ module;
 module editor;
 
 import engine.gui;
+import engine.visuals;
 import engine.version;
 import spritehandle;
 import core.context;
@@ -2077,12 +2078,12 @@ namespace epochnamespace
             const EditorEntity& entity) noexcept
         {
             if (entity.type == "ForestTrunk")
-                return { 0.58f, 0.36f, 0.20f };
+                return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::forest_trunk());
             if (entity.type == "ForestBranchJoint")
-                return { 0.42f, 0.70f, 0.32f };
+                return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::forest_branch_joint());
             if (entity.type == "ForestFoliageCluster")
-                return { 0.22f, 0.86f, 0.38f };
-            return { 0.30f, 0.82f, 0.36f };
+                return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::forest_foliage_cluster());
+            return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::forest_default());
         }
 
         [[nodiscard]] float forest_factory_radius_for_entity(const EditorEntity& entity) noexcept
@@ -2104,20 +2105,20 @@ namespace epochnamespace
             if (is_selected_forest_factory_entity(entity, selected))
                 return forest_factory_color_for_entity(entity);
             if (selected)
-                return { 1.0f, 0.93f, 0.32f };
+                return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::object_selected());
             if (entity.type == "Light")
-                return { 1.0f, 0.82f, 0.25f };
+                return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::object_light());
             if (entity.type == "Spawn")
-                return { 0.28f, 0.94f, 0.48f };
+                return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::object_spawn());
             if (entity.type == "Camera")
-                return { 0.42f, 0.80f, 1.0f };
+                return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::object_camera());
             if (entity.category == "ForestFactory")
                 return forest_factory_color_for_entity(entity);
             if (entity.category == "World" || entity.type == "Level")
-                return { 0.62f, 0.78f, 0.98f };
+                return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::object_world());
             if (entity.editorOnly || entity.category == "Editor")
-                return { 0.72f, 0.72f, 0.78f };
-            return { 0.95f, 0.62f, 0.28f };
+                return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::object_editor_helper());
+            return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::object_default());
         }
 
         [[nodiscard]] float marker_radius_for_entity(const EditorEntity& entity) noexcept
@@ -7174,6 +7175,8 @@ namespace epochnamespace
                 gui::property_row("[system] Live threads", std::to_string(liveThreadCount), 112.0f);
                 gui::property_row("[system] CPU threads", std::to_string(hardwareThreadCount), 112.0f);
                 gui::property_row("[system] Panel host", editor.detachedPanelHostStatus, 112.0f);
+                gui::property_row("[visual] Profile", std::string(epochnamespace::visuals::active_profile_name()), 112.0f);
+                gui::property_row("[visual] Parity gate", std::string(epochnamespace::visuals::parity_gate()), 132.0f);
                 gui::property_row("[renderer] Resource spine", renderer_resource_spine_summary(ctx), 132.0f);
                 gui::property_row("[renderer] Next gate", renderer_next_feature_gate(ctx), 132.0f);
                 gui::wrapped_label(
@@ -7699,6 +7702,8 @@ namespace epochnamespace
                 dockLine("[systems] Live threads", std::to_string(liveThreadCount)),
                 dockLine("[systems] CPU threads", std::to_string(hardwareThreadCount)),
                 dockLine("[systems] Support tier", supportTier),
+                dockLine("[visual] Profile", std::string(epochnamespace::visuals::active_profile_name())),
+                dockLine("[visual] Parity gate", std::string(epochnamespace::visuals::parity_gate())),
                 dockLine("[renderer] Resource spine", renderer_resource_spine_summary(ctx)),
                 dockLine("[renderer] Next gate", renderer_next_feature_gate(ctx)),
                 dockLine("[build] Compiler", compiler_identity()),

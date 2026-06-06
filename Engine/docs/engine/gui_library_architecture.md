@@ -94,6 +94,11 @@ replay pass.
   exposed choices are Follow System Dark Mode, Professional Dark, and Classic
   Launcher; Follow System Dark Mode resolves to the dark tool palette until a
   real platform light/dark palette bridge lands.
+- Cross-backend visual parity starts in `engine.visuals`. Frame clears, scene
+  clears, object colors, selection colors, look markers, and editor-only opacity
+  factors are shared there so OpenGL, Vulkan, DirectX, Raylib, SDL, and SFML can
+  converge on one visual profile. Future GUI theme tables and graph palettes
+  should read from that same spine instead of duplicating constants per context.
 - Editor composition: scene/game, assets, project/build, systems, AI sandbox,
   scripting, and package manager workspaces choose domain data and layout, but
   do not own generic widget behavior.

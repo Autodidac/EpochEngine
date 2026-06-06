@@ -103,6 +103,12 @@ Build Epoch into one professional, engine-owned runtime and editor shell for:
     surfaces must distinguish discovery, selected model, initialized client
     state, staged evidence, and manual promotion gates; remove obsolete watcher,
     learner, EpochBot, hidden-autonomy, or self-training language.
+22. Visual parity is engine-spine owned. GUI palette, scene clear colors,
+    selection/marker colors, editor-only opacity, and future graph/material
+    palettes must flow through shared modules before backend-specific shaders or
+    presenters consume them. The first accepted gate is `engine.visuals`; the
+    next gates are GUI theme-table consumption, graph palette routing, and
+    six-context screenshot proof with Software excluded from production parity.
 
 ## Release And Source Policy
 

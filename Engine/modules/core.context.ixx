@@ -74,6 +74,7 @@ export module core.context;
 // Std
 
 // Project
+import engine.visuals;
 import context.type;
 import context.commandqueue;
 import context.window;
@@ -145,7 +146,7 @@ namespace epochnamespace::core
         case ContextType::SDL:
         case ContextType::SFML:
         case ContextType::Software:
-            return { 0.06f, 0.08f, 0.11f, 1.0f };
+            return epochnamespace::visuals::frame_background();
         default:
             return { 0.0f, 0.0f, 0.0f, 1.0f };
         }
