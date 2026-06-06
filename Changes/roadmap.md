@@ -348,16 +348,17 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
   abstraction is shaped around the explicit Vulkan/D3D resource model:
   buffers, textures, samplers, pipelines, binding sets, render targets, command
   submission, synchronization, and debug/profiling hooks.
-- The first central renderer-resource spine is now source-owned: formal
+- The central renderer-resource spine is now source-owned: formal
   `render.device` handles/descriptors cover buffers, textures, samplers,
-  shaders, pipelines, materials, render targets, command lists, and
-  render-pass/FrameGraph-ready targets. Compiled graph passes now carry resolved
-  buffer/texture/render-target read/write bindings, so sampled render targets
-  can feed later material/model/arcade passes through one backend-neutral shape.
-  System Info must report the active backend capability slice, while the next
-  gate is backend-native allocation and binding behind those handles across
-  OpenGL, SDL3, SFML3, Raylib3, Vulkan, and DirectX; software remains
-  debug/safe-launch fallback rather than a parity target.
+  shaders, pipelines, materials, render targets, command lists, mesh/model
+  resources, and render-pass/FrameGraph-ready targets. Compiled graph passes now
+  carry resolved buffer/texture/material/render-target/mesh/model bindings, so
+  sampled render targets, model import, Engine Arcade RTT, and future instancing
+  can flow through one backend-neutral shape. System Info must report the active
+  backend capability slice, while the next gate is backend-native allocation and
+  draw/binding behavior behind those handles across OpenGL, SDL3, SFML3,
+  Raylib3, Vulkan, and DirectX; software remains debug/safe-launch fallback
+  rather than a parity target.
 - DirectX/D3D11 now has a first-pass Windows smoke lane and support claim for
   context/swapchain/preview/GUI proof. D3D12 equivalents stay in the design
   matrix until that backend is deliberately promoted.
@@ -1536,13 +1537,12 @@ engine shape and should be treated as starting truth for the next passes:
 
 ## Current Push Order
 
-1. Preserve the `v0.84.35` multicontext checkpoint: Raylib, SDL, SFML, Vulkan,
-   OpenGL, and DirectX must keep real panes, visible scene previews, Inspector,
-   AI Chat, and stable GUI-over-scene composition. DirectX launcher bleed-through
-   is guarded by the scene-preview gate, and angle-dependent DirectX primitive
-   pairing artifacts are guarded by whole-primitive clipping. Any remaining
-   mismatched clear/color/depth behavior must be captured and fixed or
-   explicitly deferred with proof.
+1. Preserve the `v0.87.07` editor/resource checkpoint: Raylib, SDL, SFML,
+   Vulkan, OpenGL, and DirectX must keep real panes, visible scene previews,
+   Inspector, AI Chat, stable GUI-over-scene composition, curated command menus,
+   and modal top-layer behavior. Any remaining mismatched clear/color/depth,
+   graph, or context-opacity behavior must be captured and fixed or explicitly
+   deferred with proof.
 2. Keep GitHub/workflow reliability and local/hosted build truth aligned after
    the headless plus Linux Clang engine split.
 3. Move Phase 5 to the front: implement the smallest real OS AI closed-loop
@@ -1557,14 +1557,14 @@ engine shape and should be treated as starting truth for the next passes:
    shell polish, drag/drop, and backend-window stability.
 7. Complete the primitive/object system and keep it aligned with the project
    runtime shell.
-7. Replace metadata-only `.epoch` scene shells with real project-owned
+8. Replace metadata-only `.epoch` scene shells with real project-owned
    scene loading, editing, saving, and play/runtime handoff.
-8. Start Android with an honest single-context bring-up, touch/input
+9. Start Android with an honest single-context bring-up, touch/input
    integration, packaging/install path, and asset-resolution discipline.
-9. Promote the first-pass file browser, script starter creator, and asset cards
+10. Promote the first-pass file browser, script starter creator, and asset cards
    into professional bounded editor controls with decoded thumbnails and
    editable script/source panes.
-10. Promote the Package Manager modal from local `engine_arcade` runtime-minis
+11. Promote the Package Manager modal from local `engine_arcade` runtime-minis
     into a reviewable package workflow for local and downloadable source
     packages, with explicit human approval before build/run and no auto-created
     servers or hidden model-accessible channels.
@@ -1583,7 +1583,7 @@ engine shape and should be treated as starting truth for the next passes:
     keeps descriptors, security gates, updater/cache paths, and stable API
     contracts while downloaded/generated payloads land under
     executable-local `cache/packages/`.
-11. Continue safe include/src restructuring and MSVC/CMake synchronization
+12. Continue safe include/src restructuring and MSVC/CMake synchronization
    whenever touched areas can be normalized without collateral damage.
 
 ## Acceptance Gates

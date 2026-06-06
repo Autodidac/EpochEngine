@@ -69,6 +69,8 @@ export namespace epoch
         MaterialHandle create_material(const MaterialDesc&) override { return MaterialHandle{ ++m_material }; }
         RenderTargetHandle create_render_target(const RenderTargetDesc&) override { return RenderTargetHandle{ ++m_render_target }; }
         BindingSetHandle create_binding_set(const CommandResourceBindings&) override { return BindingSetHandle{ ++m_binding_set }; }
+        MeshHandle create_mesh(const MeshDesc&) override { return MeshHandle{ ++m_mesh }; }
+        ModelHandle create_model(const ModelDesc&) override { return ModelHandle{ ++m_model }; }
 
         void destroy(BufferHandle) noexcept override {}
         void destroy(TextureHandle) noexcept override {}
@@ -78,6 +80,8 @@ export namespace epoch
         void destroy(MaterialHandle) noexcept override {}
         void destroy(RenderTargetHandle) noexcept override {}
         void destroy(BindingSetHandle) noexcept override {}
+        void destroy(MeshHandle) noexcept override {}
+        void destroy(ModelHandle) noexcept override {}
 
         ICommandContext& acquire_graphics_context() override { return m_ctx; }
         CommandListHandle begin_command_list(const char*) override { return CommandListHandle{ ++m_command_list }; }
@@ -95,5 +99,7 @@ export namespace epoch
         std::atomic<u32> m_render_target{0};
         std::atomic<u32> m_binding_set{0};
         std::atomic<u32> m_command_list{0};
+        std::atomic<u32> m_mesh{0};
+        std::atomic<u32> m_model{0};
     };
 } // namespace epoch

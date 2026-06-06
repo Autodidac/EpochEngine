@@ -164,6 +164,20 @@ namespace epochnamespace::core
     void RunEngine();
     void StartEngine();
     void RunEditorInterface();
+
+    void clear_before_ui_frame(const std::shared_ptr<Context>& frameCtx)
+    {
+        if (!frameCtx)
+            return;
+
+        // OpenGL owns its clear in opengl_process before scene preview + GUI queue drain.
+        // Enqueuing a second clear here can run after the scene pass and cause flicker.
+        if (frameCtx->type == core::ContextType::OpenGL)
+            return;
+
+        frameCtx->clear_safe();
+    }
+
     struct LegacyLaunchConfig
     {
         int raylib_count = 1;
@@ -1971,7 +1985,7 @@ namespace epochnamespace::core
                                     epochnamespace::input::keyPressed.test(epochnamespace::input::Key::Enter);
 
                                 ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
-                                ctx->clear_safe();
+                                clear_before_ui_frame(ctx);
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                                 const auto editor_frame = epochnamespace::editor_run(ctx);
 
@@ -2322,7 +2336,7 @@ namespace epochnamespace::core
 
                                 ctx->clear_scene_viewport();
                                 ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
-                                ctx->clear_safe();
+                                clear_before_ui_frame(ctx);
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                                 auto choice = menu.update_and_draw(ctx, win, dt, up_pressed, down_pressed, left_pressed, right_pressed, enter_pressed);
                                 gui::end_frame();
@@ -3510,19 +3524,6 @@ namespace epochnamespace::core
                             });
                         };
 
-                        auto clear_before_ui_frame = [](const std::shared_ptr<core::Context>& frameCtx)
-                        {
-                            if (!frameCtx)
-                                return;
-
-                            // OpenGL owns its clear in opengl_process before scene preview + GUI queue drain.
-                            // Enqueuing a second clear here can run after the scene pass and cause flicker.
-                            if (frameCtx->type == core::ContextType::OpenGL)
-                                return;
-
-                            frameCtx->clear_safe();
-                        };
-
                         tick_time_spine();
 
                         auto begin_scene = [&](std::string_view scene_id, SessionMode return_mode)
@@ -3874,7 +3875,7 @@ namespace epochnamespace::core
                                 }
                             }
                             if (suppress_menu_present)
-                                ctx->clear_safe();
+                                clear_before_ui_frame(ctx);
                             else if (ctx_running)
                                 ctx->present_safe();
                             break;

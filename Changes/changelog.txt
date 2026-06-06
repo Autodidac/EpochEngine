@@ -1,6 +1,16 @@
 # Epoch Changelog
 
 ## [v0.87.07]
+- Stabilized the editor command-menu path without changing the protected
+  scene/GUI draw model. Legacy launcher/editor loops now use the same OpenGL
+  skip-clear policy as the main editor loop, command menus no longer reopen
+  behind active modals, and the Window menu is curated back to pane/layout
+  actions instead of scene-tool duplicates.
+- Extended the renderer-resource spine with mesh/model resource contracts.
+  `render.device` now names vertex layouts, index formats, mesh/model handles,
+  and mesh/model command bindings; `render.graph` can declare mesh/model
+  resources, resolve graph buffer/material inputs into compiled mesh/model
+  handles, and tear them down in dependency-safe order.
 - Added a Forest Factory preview-spine pass: deterministic Forest entities now
   map to backend-shared trunk, branch, and foliage preview primitives instead of
   generic cubes, and the Plant Lab workspace reports a voxel occupancy estimate

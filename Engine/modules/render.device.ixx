@@ -98,6 +98,25 @@ export namespace epoch
         points
     };
 
+    enum class IndexFormat : u8
+    {
+        none,
+        uint16,
+        uint32
+    };
+
+    enum class VertexSemantic : u8
+    {
+        position,
+        normal,
+        tangent,
+        texcoord0,
+        texcoord1,
+        color0,
+        joints0,
+        weights0
+    };
+
     struct BufferDesc
     {
         u64 size_bytes = 0;
@@ -149,6 +168,22 @@ export namespace epoch
         bool alpha_blend = false;
         u32 color_attachment_count = 1;
         const char* debug_name = nullptr;
+    };
+
+    struct VertexAttributeDesc
+    {
+        VertexSemantic semantic = VertexSemantic::position;
+        u32 location = 0;
+        u32 offset_bytes = 0;
+        u32 component_count = 3;
+        TextureFormat component_format = TextureFormat::rgba32_float;
+        bool normalized = false;
+    };
+
+    struct VertexLayoutDesc
+    {
+        u32 stride_bytes = 0;
+        epoch::small_vector<VertexAttributeDesc> attributes{};
     };
 
     enum class MaterialTextureSlot : u8
@@ -269,6 +304,8 @@ export namespace epoch
     struct BackendRenderTargetTag {};
     struct BackendBindingSetTag {};
     struct BackendCommandListTag {};
+    struct BackendMeshTag {};
+    struct BackendModelTag {};
 
     using BufferHandle  = Handle<BackendBufferTag, u32>;
     using TextureHandle = Handle<BackendTextureTag, u32>;
@@ -279,6 +316,43 @@ export namespace epoch
     using RenderTargetHandle = Handle<BackendRenderTargetTag, u32>;
     using BindingSetHandle = Handle<BackendBindingSetTag, u32>;
     using CommandListHandle = Handle<BackendCommandListTag, u32>;
+    using MeshHandle = Handle<BackendMeshTag, u32>;
+    using ModelHandle = Handle<BackendModelTag, u32>;
+
+    struct MeshDesc
+    {
+        BufferHandle vertex_buffer{};
+        BufferHandle index_buffer{};
+        MaterialHandle material{};
+        VertexLayoutDesc vertex_layout{};
+        u32 vertex_count = 0;
+        u32 index_count = 0;
+        IndexFormat index_format = IndexFormat::none;
+        PrimitiveTopology topology = PrimitiveTopology::triangles;
+        const char* debug_name = nullptr;
+    };
+
+    struct ModelMeshDesc
+    {
+        MeshHandle mesh{};
+        MaterialHandle material{};
+        const char* node_name = nullptr;
+        float transform[16] = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
+    };
+
+    struct ModelDesc
+    {
+        const char* name = nullptr;
+        const char* source_path = nullptr;
+        bool static_mesh = true;
+        epoch::small_vector<ModelMeshDesc> meshes{};
+        const char* debug_name = nullptr;
+    };
 
     struct RenderTextureAssetHandles
     {
@@ -307,10 +381,14 @@ export namespace epoch
         epoch::small_vector<MaterialHandle> read_materials{};
         epoch::small_vector<MaterialTextureBinding> read_material_textures{};
         epoch::small_vector<RenderTargetHandle> read_render_targets{};
+        epoch::small_vector<MeshHandle> read_meshes{};
+        epoch::small_vector<ModelHandle> read_models{};
         epoch::small_vector<BufferHandle> write_buffers{};
         epoch::small_vector<TextureHandle> write_textures{};
         epoch::small_vector<MaterialHandle> write_materials{};
         epoch::small_vector<RenderTargetHandle> write_render_targets{};
+        epoch::small_vector<MeshHandle> write_meshes{};
+        epoch::small_vector<ModelHandle> write_models{};
 
         [[nodiscard]] bool empty() const noexcept
         {
@@ -320,10 +398,14 @@ export namespace epoch
                    read_materials.empty() &&
                    read_material_textures.empty() &&
                    read_render_targets.empty() &&
+                   read_meshes.empty() &&
+                   read_models.empty() &&
                    write_buffers.empty() &&
                    write_textures.empty() &&
                    write_materials.empty() &&
-                   write_render_targets.empty();
+                   write_render_targets.empty() &&
+                   write_meshes.empty() &&
+                   write_models.empty();
         }
     };
 
@@ -342,6 +424,8 @@ export namespace epoch
         bool render_to_texture = false;
         bool sampled_render_targets = false;
         bool binding_sets = false;
+        bool mesh_resources = false;
+        bool model_resources = false;
         bool model_import_ready = false;
         bool normal_mapping_ready = false;
         bool skybox_ready = false;
@@ -426,6 +510,16 @@ export namespace epoch
                caps.sampled_render_targets;
     }
 
+    [[nodiscard]] constexpr bool renderer_supports_mesh_resources(const RendererCapabilities& caps) noexcept
+    {
+        return caps.buffers && caps.materials && caps.mesh_resources;
+    }
+
+    [[nodiscard]] constexpr bool renderer_supports_model_resources(const RendererCapabilities& caps) noexcept
+    {
+        return renderer_supports_mesh_resources(caps) && caps.model_resources;
+    }
+
     struct ICommandContext
     {
         virtual ~ICommandContext() = default;
@@ -437,6 +531,8 @@ export namespace epoch
         virtual void barrier() = 0;
         virtual void begin_render_pass(RenderTargetHandle, const RenderPassDesc&) {}
         virtual void end_render_pass() {}
+        virtual void draw_mesh(MeshHandle, MaterialHandle = {}) {}
+        virtual void draw_model(ModelHandle) {}
     };
 
     struct ISwapchain
@@ -460,6 +556,8 @@ export namespace epoch
         virtual MaterialHandle create_material(const MaterialDesc&) { return {}; }
         virtual RenderTargetHandle create_render_target(const RenderTargetDesc&) { return {}; }
         virtual BindingSetHandle create_binding_set(const CommandResourceBindings&) { return {}; }
+        virtual MeshHandle create_mesh(const MeshDesc&) { return {}; }
+        virtual ModelHandle create_model(const ModelDesc&) { return {}; }
         virtual RenderTextureAssetHandles create_render_texture_asset(const RenderTextureAssetDesc& desc)
         {
             const RenderTextureAssetPlan plan = make_render_texture_asset_plan(desc);
@@ -478,6 +576,8 @@ export namespace epoch
         virtual void destroy(MaterialHandle) noexcept {}
         virtual void destroy(RenderTargetHandle) noexcept {}
         virtual void destroy(BindingSetHandle) noexcept {}
+        virtual void destroy(MeshHandle) noexcept {}
+        virtual void destroy(ModelHandle) noexcept {}
         virtual void destroy(RenderTextureAssetHandles handles) noexcept
         {
             if (handles.render_target)

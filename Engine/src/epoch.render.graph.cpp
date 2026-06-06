@@ -81,6 +81,36 @@ namespace epoch
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
+    GraphResource GraphBuilder::create_mesh(epoch::string_view name,
+                                            const MeshDesc& desc,
+                                            GraphResource vertex_buffer,
+                                            GraphResource index_buffer,
+                                            GraphResource material)
+    {
+        const u32 idx = static_cast<u32>(m_meshes.size());
+        GraphMesh mesh{};
+        mesh.desc = desc;
+        mesh.vertex_buffer = vertex_buffer;
+        mesh.index_buffer = index_buffer;
+        mesh.material = material;
+        m_meshes.push_back(std::move(mesh));
+        m_resources.push_back(ResourceDecl{ ResourceKind::mesh, epoch::string(name), idx });
+        return GraphResource{ static_cast<u32>(m_resources.size()) };
+    }
+
+    GraphResource GraphBuilder::create_model(epoch::string_view name,
+                                             const ModelDesc& desc,
+                                             epoch::array_view<const GraphModelMeshSlot> mesh_slots)
+    {
+        const u32 idx = static_cast<u32>(m_models.size());
+        GraphModel model{};
+        model.desc = desc;
+        model.mesh_slots.assign(mesh_slots.begin(), mesh_slots.end());
+        m_models.push_back(std::move(model));
+        m_resources.push_back(ResourceDecl{ ResourceKind::model, epoch::string(name), idx });
+        return GraphResource{ static_cast<u32>(m_resources.size()) };
+    }
+
     GraphRenderTextureAsset GraphBuilder::create_render_texture_asset(
         epoch::string_view name,
         const RenderTextureAssetDesc& desc)
@@ -136,8 +166,23 @@ namespace epoch
         g.textures  = m_textures;
         g.materials = m_materials;
         g.render_targets = m_render_targets;
+        g.meshes = m_meshes;
+        g.models = m_models;
         g.render_texture_assets = m_render_texture_assets;
         g.passes    = m_passes;
+
+        auto resolve_buffer = [&g](GraphResource handle) -> GraphBuffer*
+        {
+            const u32 resourceIndex = handle.value;
+            if (resourceIndex == 0 || resourceIndex > g.resources.size())
+                return nullptr;
+
+            const ResourceDecl& resource = g.resources[resourceIndex - 1u];
+            if (resource.kind != ResourceKind::buffer || resource.index >= g.buffers.size())
+                return nullptr;
+
+            return &g.buffers[resource.index];
+        };
 
         auto resolve_texture = [&g](GraphResource handle) -> GraphTexture*
         {
@@ -163,6 +208,32 @@ namespace epoch
                 return nullptr;
 
             return &g.render_targets[resource.index];
+        };
+
+        auto resolve_material = [&g](GraphResource handle) -> GraphMaterial*
+        {
+            const u32 resourceIndex = handle.value;
+            if (resourceIndex == 0 || resourceIndex > g.resources.size())
+                return nullptr;
+
+            const ResourceDecl& resource = g.resources[resourceIndex - 1u];
+            if (resource.kind != ResourceKind::material || resource.index >= g.materials.size())
+                return nullptr;
+
+            return &g.materials[resource.index];
+        };
+
+        auto resolve_mesh = [&g](GraphResource handle) -> GraphMesh*
+        {
+            const u32 resourceIndex = handle.value;
+            if (resourceIndex == 0 || resourceIndex > g.resources.size())
+                return nullptr;
+
+            const ResourceDecl& resource = g.resources[resourceIndex - 1u];
+            if (resource.kind != ResourceKind::mesh || resource.index >= g.meshes.size())
+                return nullptr;
+
+            return &g.meshes[resource.index];
         };
 
         auto append_binding = [&g, &resolve_texture](CommandResourceBindings& bindings, GraphResource handle, bool write)
@@ -235,6 +306,24 @@ namespace epoch
                         bindings.read_render_targets.push_back(g.render_targets[resource.index].backend);
                 }
                 break;
+            case ResourceKind::mesh:
+                if (resource.index < g.meshes.size() && g.meshes[resource.index].backend)
+                {
+                    if (write)
+                        bindings.write_meshes.push_back(g.meshes[resource.index].backend);
+                    else
+                        bindings.read_meshes.push_back(g.meshes[resource.index].backend);
+                }
+                break;
+            case ResourceKind::model:
+                if (resource.index < g.models.size() && g.models[resource.index].backend)
+                {
+                    if (write)
+                        bindings.write_models.push_back(g.models[resource.index].backend);
+                    else
+                        bindings.read_models.push_back(g.models[resource.index].backend);
+                }
+                break;
             }
         };
 
@@ -277,6 +366,48 @@ namespace epoch
         {
             if (!material.backend)
                 material.backend = dev.create_material(material.desc);
+        }
+        for (auto& mesh : g.meshes)
+        {
+            MeshDesc resolvedDesc = mesh.desc;
+            if (GraphBuffer* vertexBuffer = resolve_buffer(mesh.vertex_buffer))
+            {
+                if (vertexBuffer->backend)
+                    resolvedDesc.vertex_buffer = vertexBuffer->backend;
+            }
+            if (GraphBuffer* indexBuffer = resolve_buffer(mesh.index_buffer))
+            {
+                if (indexBuffer->backend)
+                    resolvedDesc.index_buffer = indexBuffer->backend;
+            }
+            if (GraphMaterial* material = resolve_material(mesh.material))
+            {
+                if (material->backend)
+                    resolvedDesc.material = material->backend;
+            }
+            if (!mesh.backend)
+                mesh.backend = dev.create_mesh(resolvedDesc);
+        }
+        for (auto& model : g.models)
+        {
+            ModelDesc resolvedDesc = model.desc;
+            for (const GraphModelMeshSlot& slot : model.mesh_slots)
+            {
+                GraphMesh* mesh = resolve_mesh(slot.mesh);
+                if (!mesh || !mesh->backend)
+                    continue;
+
+                ModelMeshDesc meshDesc{};
+                meshDesc.mesh = mesh->backend;
+                if (GraphMaterial* material = resolve_material(slot.material))
+                    meshDesc.material = material->backend;
+                meshDesc.node_name = slot.node_name.empty() ? nullptr : slot.node_name.c_str();
+                for (u32 i = 0; i < 16; ++i)
+                    meshDesc.transform[i] = slot.transform[i];
+                resolvedDesc.meshes.push_back(meshDesc);
+            }
+            if (!model.backend)
+                model.backend = dev.create_model(resolvedDesc);
         }
 
         for (auto& pass : g.passes)
@@ -360,16 +491,26 @@ namespace epoch
                 dev.destroy(asset.backend);
         }
 
-        for (auto& b : buffers)  if (b.backend) dev.destroy(b.backend);
-        for (auto& t : textures)
+        for (auto& model : models)
         {
-            if (t.backend && !t.owned_by_render_texture_asset)
-                dev.destroy(t.backend);
+            if (model.backend)
+                dev.destroy(model.backend);
+        }
+        for (auto& mesh : meshes)
+        {
+            if (mesh.backend)
+                dev.destroy(mesh.backend);
         }
         for (auto& material : materials)
         {
             if (material.backend)
                 dev.destroy(material.backend);
+        }
+        for (auto& b : buffers)  if (b.backend) dev.destroy(b.backend);
+        for (auto& t : textures)
+        {
+            if (t.backend && !t.owned_by_render_texture_asset)
+                dev.destroy(t.backend);
         }
         for (auto& rt : render_targets)
         {

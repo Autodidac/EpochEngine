@@ -50,7 +50,7 @@ export namespace epoch
     using GraphResource = Handle<GraphResourceTag, u32>;
     using GraphPass     = Handle<GraphPassTag, u32>;
 
-    enum class ResourceKind : u8 { buffer, texture, material, render_target };
+    enum class ResourceKind : u8 { buffer, texture, material, render_target, mesh, model };
 
     struct GraphBuffer { BufferDesc desc{}; BufferHandle backend{}; };
     struct GraphTexture
@@ -79,6 +79,35 @@ export namespace epoch
         RenderTargetDesc desc{};
         RenderTargetHandle backend{};
         bool owned_by_render_texture_asset{ false };
+    };
+
+    struct GraphMesh
+    {
+        MeshDesc desc{};
+        GraphResource vertex_buffer{};
+        GraphResource index_buffer{};
+        GraphResource material{};
+        MeshHandle backend{};
+    };
+
+    struct GraphModelMeshSlot
+    {
+        GraphResource mesh{};
+        GraphResource material{};
+        epoch::string node_name{};
+        float transform[16] = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
+    };
+
+    struct GraphModel
+    {
+        ModelDesc desc{};
+        epoch::small_vector<GraphModelMeshSlot> mesh_slots{};
+        ModelHandle backend{};
     };
 
     struct ResourceDecl { ResourceKind kind{}; epoch::string name{}; u32 index = 0; };
@@ -115,6 +144,14 @@ export namespace epoch
                                                     const MaterialDesc& desc,
                                                     epoch::array_view<const GraphMaterialTextureSlot> texture_slots = {});
         [[nodiscard]] GraphResource create_render_target(epoch::string_view name, const RenderTargetDesc& desc);
+        [[nodiscard]] GraphResource create_mesh(epoch::string_view name,
+                                                const MeshDesc& desc,
+                                                GraphResource vertex_buffer = {},
+                                                GraphResource index_buffer = {},
+                                                GraphResource material = {});
+        [[nodiscard]] GraphResource create_model(epoch::string_view name,
+                                                 const ModelDesc& desc,
+                                                 epoch::array_view<const GraphModelMeshSlot> mesh_slots = {});
         [[nodiscard]] GraphRenderTextureAsset create_render_texture_asset(
             epoch::string_view name,
             const RenderTextureAssetDesc& desc);
@@ -137,6 +174,8 @@ export namespace epoch
         epoch::small_vector<GraphTexture> m_textures{};
         epoch::small_vector<GraphMaterial> m_materials{};
         epoch::small_vector<GraphRenderTarget> m_render_targets{};
+        epoch::small_vector<GraphMesh> m_meshes{};
+        epoch::small_vector<GraphModel> m_models{};
         epoch::small_vector<GraphRenderTextureAsset> m_render_texture_assets{};
         epoch::small_vector<PassDecl>     m_passes{};
     };
@@ -148,6 +187,8 @@ export namespace epoch
         epoch::small_vector<GraphTexture> textures{};
         epoch::small_vector<GraphMaterial> materials{};
         epoch::small_vector<GraphRenderTarget> render_targets{};
+        epoch::small_vector<GraphMesh> meshes{};
+        epoch::small_vector<GraphModel> models{};
         epoch::small_vector<GraphRenderTextureAsset> render_texture_assets{};
         epoch::small_vector<PassDecl>     passes{};
 

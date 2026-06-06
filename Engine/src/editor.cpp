@@ -5085,12 +5085,16 @@ namespace epochnamespace
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
         const gui::Vec2 sourceUpdateConfirmModalSize{ 620.0f, 292.0f };
-        const bool modalVisible =
-            editor.showAboutModal
-            || editor.showSettingsModal
-            || editor.showPackageManagerModal
-            || editor.showUpdateConfirmModal
-            || editor.showSourceUpdateConfirmModal;
+        auto modal_visible_now = [&editor]() noexcept -> bool
+        {
+            return editor.showAboutModal
+                || editor.showSettingsModal
+                || editor.showPackageManagerModal
+                || editor.showUpdateConfirmModal
+                || editor.showSourceUpdateConfirmModal;
+        };
+
+        const bool modalVisible = modal_visible_now();
         if (modalVisible)
             editor.openMenu = TopMenu::None;
 
@@ -5541,13 +5545,16 @@ namespace epochnamespace
         gui::label("Epoch");
 
         const gui::Vec2 toolbarMouse = gui::mouse_position();
+        const bool menusBlockedByModal = modal_visible_now();
         for (auto& item : topMenus)
         {
             item.x = toolbar_x;
             gui::set_cursor({ toolbar_x, toolbar_button_y });
-            if (editor_point_in_rect(toolbarMouse, { toolbar_x, toolbar_button_y }, { item.width, toolbar_button_h }))
+            if (!menusBlockedByModal
+                && editor_point_in_rect(toolbarMouse, { toolbar_x, toolbar_button_y }, { item.width, toolbar_button_h }))
                 editor.openMenu = item.menu;
-            if (gui::button_selected(item.label, { item.width, toolbar_button_h }, editor.openMenu == item.menu))
+            if (!menusBlockedByModal
+                && gui::button_selected(item.label, { item.width, toolbar_button_h }, editor.openMenu == item.menu))
                 editor.openMenu = item.menu;
             toolbar_x += item.width + 6.0f;
         }
@@ -5676,8 +5683,8 @@ namespace epochnamespace
             gui::set_cursor(pos);
             if (gui::button(title, { width, 28.0f }))
             {
-                on_click();
                 editor.openMenu = TopMenu::None;
+                on_click();
             }
         };
 
@@ -5724,7 +5731,7 @@ namespace epochnamespace
             case TopMenu::File: return dropdown_window_size(192.0f, 4);
             case TopMenu::Edit: return dropdown_window_size(192.0f, 3);
             case TopMenu::Asset: return dropdown_window_size(220.0f, 7);
-            case TopMenu::Window: return dropdown_window_size(248.0f, 10);
+            case TopMenu::Window: return dropdown_window_size(248.0f, 5);
             case TopMenu::Tools: return dropdown_window_size(228.0f, 5);
             case TopMenu::Help: return dropdown_window_size(192.0f, 2);
             case TopMenu::None:
@@ -7855,7 +7862,7 @@ namespace epochnamespace
             });
         });
 
-        open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, 10), [&](gui::Vec2 pos)
+        open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, 5), [&](gui::Vec2 pos)
         {
             menu_item(editor.showOutliner ? "Hide Outliner" : "Show Outliner", { pos.x + 12.0f, pos.y + 14.0f }, 248.0f, [&]() {
                 editor.showOutliner = !editor.showOutliner;
@@ -7873,26 +7880,9 @@ namespace epochnamespace
                 editor.showAiChat = !editor.showAiChat;
                 push_editor_log(editor, editor.showAiChat ? "[window] AI Chat shown." : "[window] AI Chat hidden.");
             });
-            menu_item("Open AI Control Surface", { pos.x + 12.0f, pos.y + 150.0f }, 248.0f, [&]() {
-                open_editor_surface(EditorMainSurface::AISandbox, "Window menu");
-            });
-            menu_item("Reset Editor Layout", { pos.x + 12.0f, pos.y + 184.0f }, 248.0f, [&]() {
+            menu_item("Reset Editor Layout", { pos.x + 12.0f, pos.y + 150.0f }, 248.0f, [&]() {
                 reset_editor_layout(editor);
                 push_editor_log(editor, "[window] Editor layout reset.");
-            });
-            menu_item("Preview: Editor", { pos.x + 12.0f, pos.y + 218.0f }, 248.0f, [&]() {
-                editor.previewMode = core::ScenePreviewMode::Editor;
-                push_editor_log(editor, "[window] Preview mode set to Editor.");
-            });
-            menu_item("Preview: None", { pos.x + 12.0f, pos.y + 252.0f }, 248.0f, [&]() {
-                editor.previewMode = core::ScenePreviewMode::None;
-                push_editor_log(editor, "[window] Preview mode set to None.");
-            });
-            menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 286.0f }, 248.0f, [&]() {
-                handle_scene_tool(editor, "focus_selection");
-            });
-            menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 320.0f }, 248.0f, [&]() {
-                handle_scene_tool(editor, "toggle_helpers");
             });
         });
 
@@ -8644,6 +8634,8 @@ namespace epochnamespace
                 editor.showAboutModal = false;
             gui::end_modal_window();
         }
+
+        ctx->set_gui_overlay_priority(editor.openMenu != TopMenu::None || modal_visible_now());
 
         return result;
     }

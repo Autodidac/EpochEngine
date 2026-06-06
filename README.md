@@ -121,8 +121,8 @@ Windows multicontext editor carrying every active backend lane.
   compact status evidence instead of a duplicate control surface.
 - Rendering spine: Raylib, SDL3, SFML, Vulkan, OpenGL, DirectX, software, and
   headless/noop lanes are orchestrated by the same project/editor contracts,
-  with render-graph material texture bindings now flowing through the shared
-  device contract.
+  with render-graph material, mesh, model, and render-target bindings now
+  flowing through the shared device contract.
 - GUI spine: shared C++23 controls for windows, tabs, select boxes, scroll
   panels, progress bars, modals, text editing, theme preferences, and future
   popout/docking work.
@@ -297,9 +297,10 @@ Project planning and release history:
 
 The current roadmap is focused on:
 
-1. Growing the Systems workspace into a stronger renderer/runtime ownership and
-   pacing surface.
-2. Carrying the time-system spine deeper into runtime and scene ownership.
+1. Tightening the 3D Scene, 2D Scene/UI, Plant Lab, Video, Intelligence, and
+   System Info workspaces into professional docked editor surfaces.
+2. Carrying the renderer-resource spine into backend-native mesh/model,
+   render-to-texture, material, and import paths.
 3. Tightening the OS-model capture, review, and promotion loop with a
    separate self-iteration sandbox and watchable scene/tool evidence tasks.
 4. Improving UI/editor maturity without regressing the honest project-centric
