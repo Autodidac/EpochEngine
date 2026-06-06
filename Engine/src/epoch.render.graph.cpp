@@ -158,6 +158,21 @@ namespace epoch
         return GraphPass{ static_cast<u32>(m_passes.size()) };
     }
 
+    void GraphBuilder::add_model_draw(GraphPass pass, GraphResource model)
+    {
+        if (!pass || !model)
+            return;
+
+        const u32 passIndex = pass.value - 1u;
+        if (passIndex >= m_passes.size())
+            return;
+
+        m_passes[passIndex].draw_models.push_back(GraphModelDraw{
+            .model = model,
+            .backend = {}
+        });
+    }
+
     CompiledGraph GraphBuilder::compile(IRenderDevice& dev) const
     {
         CompiledGraph g{};
@@ -234,6 +249,19 @@ namespace epoch
                 return nullptr;
 
             return &g.meshes[resource.index];
+        };
+
+        auto resolve_model = [&g](GraphResource handle) -> GraphModel*
+        {
+            const u32 resourceIndex = handle.value;
+            if (resourceIndex == 0 || resourceIndex > g.resources.size())
+                return nullptr;
+
+            const ResourceDecl& resource = g.resources[resourceIndex - 1u];
+            if (resource.kind != ResourceKind::model || resource.index >= g.models.size())
+                return nullptr;
+
+            return &g.models[resource.index];
         };
 
         auto append_binding = [&g, &resolve_texture](CommandResourceBindings& bindings, GraphResource handle, bool write)
@@ -419,6 +447,11 @@ namespace epoch
                 append_binding(pass.bindings, pass.render_target_resource, true);
             for (const GraphResource resourceHandle : pass.writes)
                 append_binding(pass.bindings, resourceHandle, true);
+            for (GraphModelDraw& draw : pass.draw_models)
+            {
+                if (GraphModel* model = resolve_model(draw.model))
+                    draw.backend = model->backend;
+            }
             if (!pass.bindings.empty())
                 pass.binding_set = dev.create_binding_set(pass.bindings);
         }
@@ -470,6 +503,11 @@ namespace epoch
             if (p.render_target)
                 ctx.begin_render_pass(p.render_target, p.render_pass);
             if (p.execute) p.execute(ctx);
+            for (const GraphModelDraw& draw : p.draw_models)
+            {
+                if (draw.backend)
+                    ctx.draw_model(draw.backend);
+            }
             if (p.render_target)
                 ctx.end_render_pass();
             ctx.barrier();

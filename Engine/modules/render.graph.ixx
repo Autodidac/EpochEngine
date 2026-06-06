@@ -110,6 +110,12 @@ export namespace epoch
         ModelHandle backend{};
     };
 
+    struct GraphModelDraw
+    {
+        GraphResource model{};
+        ModelHandle backend{};
+    };
+
     struct ResourceDecl { ResourceKind kind{}; epoch::string name{}; u32 index = 0; };
 
     struct GraphRenderTextureAsset
@@ -132,6 +138,7 @@ export namespace epoch
         BindingSetHandle binding_set{};
         RenderPassDesc render_pass{};
         CommandResourceBindings bindings{};
+        epoch::small_vector<GraphModelDraw> draw_models{};
         epoch::function_ref<void(ICommandContext&)> execute{};
     };
 
@@ -165,6 +172,7 @@ export namespace epoch
                                                 epoch::array_view<const GraphResource> writes,
                                                 const RenderPassDesc& pass,
                                                 epoch::function_ref<void(ICommandContext&)> fn);
+        void add_model_draw(GraphPass pass, GraphResource model);
 
         struct CompiledGraph compile(IRenderDevice& dev) const;
 

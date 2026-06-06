@@ -682,11 +682,14 @@ engine shape and should be treated as starting truth for the next passes:
   the sampler needed when a pass reads a sampled render texture or material
   texture, then request backend binding-set handles so OpenGL-derived contexts,
   Vulkan, and DirectX can adopt native binding work behind the same pass shape.
+  Graph passes can now carry resolved model draw intents, so a compiled
+  mini-arcade cabinet pass can submit its sampled-screen model through the
+  command context in the same backend-neutral shape.
   RTT/render-target allocation remains core engine ownership; Engine Arcade is
   a separate runtime-mini/game package that consumes `engine_arcade.screen` as
   a 512x512 package dependency and proof target. The next acceptance gate is
-  backend-native binding plus arcade-cabinet presentation across the production
-  contexts without moving game implementations into the engine runtime spine.
+  backend-native arcade-cabinet presentation across the production contexts
+  without moving game implementations into the engine runtime spine.
 - Package Manager now needs visible per-package state instead of silent buttons
   or a single cramped combo box: selection uses a shared scrollable package list,
   each row exposes its own Install/Remove/Review Gate action, Install updates a
@@ -972,8 +975,8 @@ engine shape and should be treated as starting truth for the next passes:
   backend-native sampled-RTT allocation from graph-declared/native-pending
   lanes. Raylib, OpenGL, SDL3, and SFML3 now have concrete sampled-RTT device
   paths at different proof levels; Vulkan/DirectX remain resource-model
-  implementation gates. Backend-native mesh/material/model draw/binding
-  behavior remains the next renderer-spine acceptance gate.
+  implementation gates. Backend-native mesh/material/model presentation remains
+  the next renderer-spine acceptance gate.
 - Raylib is now the first backend-native model-handle and sampled-RTT bridge:
   model descriptors map through `render.device_raylib` into the existing Raylib
   loaded-model registry with per-handle draw/unload calls, and compiled
@@ -997,9 +1000,9 @@ engine shape and should be treated as starting truth for the next passes:
   target, and presentable-surface behavior, and OpenGL-family records keep that
   native work order without claiming allocation is complete. The build-only
   gate also checks that graph execution binds the cabinet material/model,
-  sampled texture, sampler, render target, and RTT dimensions through the
-  OpenGL-family command context. Native FBO/texture allocation, presentation,
-  and backend-owned draw submission remain the next context-owned acceptance
+  sampled texture, sampler, render target, RTT dimensions, and model draw
+  submission through the OpenGL-family command context. Native FBO/texture
+  allocation and live presentation remain the next context-owned acceptance
   gate.
 - OpenGL-family native RTT promotion now has an injection seam instead of a
   runtime shortcut. `render.device_opengl_family` can accept backend-owned
@@ -1015,8 +1018,8 @@ engine shape and should be treated as starting truth for the next passes:
   runtime gates.
 - Engine Arcade RTT construction is now source-owned by `render.arcade`.
   The screen sampled target, render-surface material binding, screen mesh/model
-  descriptors, and cabinet pass are reusable graph builders instead of inline
-  self-test scaffolding. The current proof is MSVC Debug x64
+  descriptors, cabinet pass, and model draw intent are reusable graph builders
+  instead of inline self-test scaffolding. The current proof is MSVC Debug x64
   `ConsoleApplication1`; native OpenGL-family FBO allocation and live cabinet
   presentation remain the next renderer-spine gate.
 - The visible editor workspace contract is now `3D Scene`, `2D Scene/UI`,

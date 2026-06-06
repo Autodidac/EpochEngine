@@ -194,6 +194,7 @@ export namespace epoch::render_arcade
             {
                 ctx.debug_marker("engine_arcade.cabinet.rtt_material");
             });
+        builder.add_model_draw(build.cabinet_pass, build.model);
 
         return build;
     }

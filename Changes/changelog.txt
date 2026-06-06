@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.87.07]
+- Promoted graph-level model draw intents into the renderer spine. `render.graph`
+  can now attach model draw submissions to compiled passes, resolve those graph
+  resources to backend `ModelHandle`s, and submit them through the existing
+  command context during graph execution. `render.arcade` uses that path for
+  the mini-arcade cabinet pass, and the build-only OpenGL-family contract now
+  proves the cabinet material/model binding also reaches `draw_model` without
+  launching renderer windows.
 - Promoted SDL3 and SFML3 into concrete backend-native sampled
   render-texture device lanes. `render.device_sdl` now owns SDL target-texture
   allocation, bind/clear, restore, and teardown when a live SDL renderer exists;

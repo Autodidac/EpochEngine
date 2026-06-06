@@ -667,9 +667,14 @@ namespace epochnamespace::core
             && cabinetPass.bindings.read_samplers.size() == 1u
             && cabinetPass.bindings.read_samplers.front() == compiledScreen.backend.sampler;
 
+        const bool drawReady =
+            cabinetPass.draw_models.size() == 1u
+            && cabinetPass.draw_models.front().model == cabinet.model
+            && cabinetPass.draw_models.front().backend == compiledModel.backend;
+
         graph.execute(device);
         graph.destroy(device);
-        return materialReady && modelReady && bindingReady;
+        return materialReady && modelReady && bindingReady && drawReady;
     }
 
     struct OpenGLFamilyFakeNativeRttState
@@ -798,7 +803,9 @@ namespace epochnamespace::core
                 && boundResources.read_material_textures.front().slot == epoch::MaterialTextureSlot::render_surface
                 && boundResources.read_material_textures.front().texture
                 && boundResources.read_material_textures.front().sampler
-                && boundResources.read_material_textures.front().sampler == boundResources.read_samplers.front();
+                && boundResources.read_material_textures.front().sampler == boundResources.read_samplers.front()
+                && context.last_model()
+                && context.last_model() == boundResources.read_models.front();
 
             if (!cabinetBindingEvidence)
                 return false;
@@ -846,6 +853,7 @@ namespace epochnamespace::core
                 && state.saw_depth
                 && state.saw_sampled
                 && context.last_render_target()
+                && context.last_model()
                 && !context.native_pass_bound();
 
             if (!ready)
