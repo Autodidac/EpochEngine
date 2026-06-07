@@ -813,11 +813,61 @@ namespace epochnamespace
             return text.find(needle) != std::string_view::npos;
         }
 
+        [[nodiscard]] std::atomic<bool>& editor_startup_update_check_claimed() noexcept
+        {
+            static std::atomic<bool> claimed{ false };
+            return claimed;
+        }
+
+        [[nodiscard]] bool try_claim_editor_startup_update_check() noexcept
+        {
+            bool expected = false;
+            return editor_startup_update_check_claimed().compare_exchange_strong(
+                expected,
+                true,
+                std::memory_order_acq_rel);
+        }
+
+        [[nodiscard]] std::atomic<bool>& editor_update_operation_running() noexcept
+        {
+            static std::atomic<bool> running{ false };
+            return running;
+        }
+
+        [[nodiscard]] bool try_claim_editor_update_operation() noexcept
+        {
+            bool expected = false;
+            return editor_update_operation_running().compare_exchange_strong(
+                expected,
+                true,
+                std::memory_order_acq_rel);
+        }
+
+        void release_editor_update_operation() noexcept
+        {
+            editor_update_operation_running().store(false, std::memory_order_release);
+        }
+
+        struct ScopedEditorUpdateOperation final
+        {
+            ~ScopedEditorUpdateOperation()
+            {
+                release_editor_update_operation();
+            }
+        };
+
         void start_editor_update_check(EditorState& editor)
         {
             if (editor.updateCheckPending.has_value())
             {
                 push_editor_log(editor, "[update] Update check is already running.");
+                return;
+            }
+
+            if (!try_claim_editor_update_operation())
+            {
+                editor.updateStatus = "Another editor pane is already checking or installing updates.";
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
 
@@ -829,10 +879,19 @@ namespace epochnamespace
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Checking for available Epoch updates.");
 
-            editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
-                epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                return updater::run_update_command(editor_update_channel(), false);
-            }));
+            try
+            {
+                editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
+                    ScopedEditorUpdateOperation updateOperation{};
+                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    return updater::run_update_command(editor_update_channel(), false);
+                }));
+            }
+            catch (...)
+            {
+                release_editor_update_operation();
+                throw;
+            }
         }
 
         void start_editor_update_install(EditorState& editor)
@@ -840,6 +899,13 @@ namespace epochnamespace
             if (editor.updateCheckPending.has_value())
             {
                 push_editor_log(editor, "[update] Update worker is already running.");
+                return;
+            }
+
+            if (!try_claim_editor_update_operation())
+            {
+                editor.updateStatus = "Another editor pane is already checking or installing updates.";
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
 
@@ -851,10 +917,19 @@ namespace epochnamespace
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Installing through the binary-first update gate.");
 
-            editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
-                epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                return updater::run_update_command(editor_update_channel(), true);
-            }));
+            try
+            {
+                editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
+                    ScopedEditorUpdateOperation updateOperation{};
+                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    return updater::run_update_command(editor_update_channel(), true);
+                }));
+            }
+            catch (...)
+            {
+                release_editor_update_operation();
+                throw;
+            }
         }
 
         void start_editor_source_update_install(EditorState& editor)
@@ -862,6 +937,13 @@ namespace epochnamespace
             if (editor.updateCheckPending.has_value())
             {
                 push_editor_log(editor, "[update] Source update worker is already running.");
+                return;
+            }
+
+            if (!try_claim_editor_update_operation())
+            {
+                editor.updateStatus = "Another editor pane is already checking or installing updates.";
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
 
@@ -873,20 +955,29 @@ namespace epochnamespace
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Launching advanced source rebuild worker.");
 
-            editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
-                epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                updater::UpdateCommandResult result{};
-                result.update_available = true;
-                result.source_update_available = true;
-            result.source_fallback_attempted = true;
-            const bool workerLaunched = updater::run_source_update_command(editor_update_channel(), false);
-            result.update_performed = false;
-            result.source_update_performed = workerLaunched;
-            result.status_message = workerLaunched
-                ? "Source rebuild worker started. Epoch will restart automatically only after build and handoff evidence succeeds; watch epoch_source_update.log beside the executable."
-                : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
-            return result;
-        }));
+            try
+            {
+                editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
+                    ScopedEditorUpdateOperation updateOperation{};
+                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    updater::UpdateCommandResult result{};
+                    result.update_available = true;
+                    result.source_update_available = true;
+                    result.source_fallback_attempted = true;
+                    const bool workerLaunched = updater::run_source_update_command(editor_update_channel(), false);
+                    result.update_performed = false;
+                    result.source_update_performed = workerLaunched;
+                    result.status_message = workerLaunched
+                        ? "Source rebuild worker started. Epoch will restart automatically only after build and handoff evidence succeeds; watch epoch_source_update.log beside the executable."
+                        : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
+                    return result;
+                }));
+            }
+            catch (...)
+            {
+                release_editor_update_operation();
+                throw;
+            }
         }
 
         void pump_editor_update_check(EditorState& editor)
@@ -5053,7 +5144,8 @@ namespace epochnamespace
         if (editor.autoUpdateCheckQueued)
         {
             editor.autoUpdateCheckQueued = false;
-            start_editor_update_check(editor);
+            if (try_claim_editor_startup_update_check())
+                start_editor_update_check(editor);
         }
         pump_editor_update_check(editor);
         pump_editor_source_update_worker(editor);

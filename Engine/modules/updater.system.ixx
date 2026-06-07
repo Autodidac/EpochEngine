@@ -1901,6 +1901,8 @@ namespace epochnamespace::updater
                 }
             }
 
+            HANDLE input_handle = INVALID_HANDLE_VALUE;
+            bool close_input_handle = false;
             STARTUPINFOW si{};
             si.cb = sizeof(si);
             si.dwFlags = STARTF_USESHOWWINDOW;
@@ -1908,10 +1910,20 @@ namespace epochnamespace::updater
 
             if (log_handle != INVALID_HANDLE_VALUE)
             {
+                input_handle = CreateFileW(
+                    L"NUL",
+                    GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    &sa,
+                    OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL,
+                    nullptr);
+                close_input_handle = input_handle != INVALID_HANDLE_VALUE;
+
                 si.dwFlags |= STARTF_USESTDHANDLES;
                 si.hStdOutput = log_handle;
                 si.hStdError = log_handle;
-                si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+                si.hStdInput = close_input_handle ? input_handle : nullptr;
             }
 
             PROCESS_INFORMATION pi{};
@@ -1935,6 +1947,8 @@ namespace epochnamespace::updater
 
             if (log_handle != INVALID_HANDLE_VALUE)
                 CloseHandle(log_handle);
+            if (close_input_handle)
+                CloseHandle(input_handle);
 
             if (!created)
             {
