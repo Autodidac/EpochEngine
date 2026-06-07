@@ -1276,12 +1276,14 @@ namespace epochnamespace
             case 'G': return { " ### ", "#   #", "#    ", "#  ##", "#   #", "#   #", " ### " };
             case 'H': return { "#   #", "#   #", "#   #", "#####", "#   #", "#   #", "#   #" };
             case 'I': return { "#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "#####" };
+            case 'J': return { "#####", "    #", "    #", "    #", "#   #", "#   #", " ### " };
             case 'K': return { "#   #", "#  # ", "# #  ", "##   ", "# #  ", "#  # ", "#   #" };
             case 'L': return { "#    ", "#    ", "#    ", "#    ", "#    ", "#    ", "#####" };
             case 'M': return { "#   #", "## ##", "# # #", "#   #", "#   #", "#   #", "#   #" };
             case 'N': return { "#   #", "##  #", "# # #", "#  ##", "#   #", "#   #", "#   #" };
             case 'O': return { " ### ", "#   #", "#   #", "#   #", "#   #", "#   #", " ### " };
             case 'P': return { "#### ", "#   #", "#   #", "#### ", "#    ", "#    ", "#    " };
+            case 'Q': return { " ### ", "#   #", "#   #", "#   #", "# # #", "#  # ", " ## #" };
             case 'R': return { "#### ", "#   #", "#   #", "#### ", "# #  ", "#  # ", "#   #" };
             case 'S': return { " ####", "#    ", "#    ", " ### ", "    #", "    #", "#### " };
             case 'T': return { "#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "  #  " };
@@ -1290,9 +1292,13 @@ namespace epochnamespace
             case 'W': return { "#   #", "#   #", "#   #", "# # #", "# # #", "## ##", "#   #" };
             case 'X': return { "#   #", "#   #", " # # ", "  #  ", " # # ", "#   #", "#   #" };
             case 'Y': return { "#   #", "#   #", " # # ", "  #  ", "  #  ", "  #  ", "  #  " };
+            case 'Z': return { "#####", "    #", "   # ", "  #  ", " #   ", "#    ", "#####" };
+            case '+': return { "     ", "  #  ", "  #  ", "#####", "  #  ", "  #  ", "     " };
             case '-': return { "     ", "     ", "     ", "#####", "     ", "     ", "     " };
+            case '.': return { "     ", "     ", "     ", "     ", "     ", "     ", "  #  " };
             case '/': return { "    #", "    #", "   # ", "  #  ", " #   ", "#    ", "#    " };
             case ':': return { "     ", "  #  ", "     ", "     ", "  #  ", "     ", "     " };
+            case '>': return { "#    ", " #   ", "  #  ", "   # ", "  #  ", " #   ", "#    " };
             default: return { "     ", "     ", "     ", "     ", "     ", "     ", "     " };
             }
         }
@@ -1325,6 +1331,43 @@ namespace epochnamespace
                     }
                 }
                 penX += 6 * safeScale;
+            }
+        }
+
+        static void draw_tiny_text_clipped(
+            SurfaceCanvas& canvas,
+            std::string_view text,
+            int x,
+            int y,
+            int maxWidth,
+            gui::Color color,
+            int scale = 2) noexcept
+        {
+            int penX = x;
+            const int safeScale = (std::max)(1, scale);
+            const int endX = x + (std::max)(0, maxWidth);
+            for (const char ch : text)
+            {
+                const int advance = (ch == ' ') ? (4 * safeScale) : (6 * safeScale);
+                if (penX + advance > endX)
+                    break;
+
+                if (ch == ' ')
+                {
+                    penX += advance;
+                    continue;
+                }
+
+                const auto glyph = tiny_glyph(ch);
+                for (int row = 0; row < 7; ++row)
+                {
+                    for (int col = 0; col < 5; ++col)
+                    {
+                        if (glyph[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)] != ' ')
+                            canvas.fill_rect(penX + col * safeScale, y + row * safeScale, safeScale, safeScale, color);
+                    }
+                }
+                penX += advance;
             }
         }
 
@@ -1486,7 +1529,7 @@ namespace epochnamespace
             bool expose_ai_inputs)
         {
             constexpr int kSurfaceWidth = 1280;
-            constexpr int kSurfaceHeight = 220;
+            constexpr int kSurfaceHeight = 252;
             SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 14, 18, 24, 255 });
 
             for (int x = 0; x < kSurfaceWidth; x += 40)
@@ -1505,38 +1548,40 @@ namespace epochnamespace
             };
 
             const std::array<Stage, 8> stages{{
-                { "CAPTURE", "backend frame", 0, { 64, 86, 135, 255 }, { 154, 190, 255, 255 } },
-                { "CULL", "visible set", 0, { 54, 92, 148, 255 }, { 135, 188, 255, 255 } },
-                { "SURFACE", "scene texture", 1, { 53, 117, 142, 255 }, { 102, 216, 255, 255 } },
-                { "LIGHT", "helpers + scene", 1, { 70, 132, 96, 255 }, { 124, 244, 159, 255 } },
-                { "TEMPORAL", "timing spine", 2, { 146, 123, 57, 255 }, { 255, 219, 112, 255 } },
-                { "PRESENT", "single swap", 2, { 109, 84, 145, 255 }, { 203, 164, 255, 255 } },
-                { "GUI TOP", "modal/chrome", 3, { 112, 96, 152, 255 }, { 222, 192, 255, 255 } },
-                { "OS AI", "evidence gated", 3,
+                { "CAPTURE", "FRAME", 0, { 64, 86, 135, 255 }, { 154, 190, 255, 255 } },
+                { "CULL", "VISIBLE SET", 0, { 54, 92, 148, 255 }, { 135, 188, 255, 255 } },
+                { "SURFACE", "SCENE TEX", 1, { 53, 117, 142, 255 }, { 102, 216, 255, 255 } },
+                { "LIGHT", "HELPERS", 1, { 70, 132, 96, 255 }, { 124, 244, 159, 255 } },
+                { "TEMPORAL", "TIME SPINE", 2, { 146, 123, 57, 255 }, { 255, 219, 112, 255 } },
+                { "PRESENT", "ONE SWAP", 2, { 109, 84, 145, 255 }, { 203, 164, 255, 255 } },
+                { "GUI TOP", "MODAL UI", 3, { 112, 96, 152, 255 }, { 222, 192, 255, 255 } },
+                { "OS AI", "GATED", 3,
                   expose_ai_inputs ? gui::Color{ 157, 88, 112, 255 } : gui::Color{ 118, 86, 123, 255 },
                   expose_ai_inputs ? gui::Color{ 255, 171, 193, 255 } : gui::Color{ 205, 170, 216, 255 } }
             }};
 
-            const int stageWidth = (std::max)(104, static_cast<int>(118.0f * systems.renderZoom));
-            const int stageHeight = 46;
-            const int gap = (std::max)(18, static_cast<int>(34.0f * systems.renderZoom));
-            const int baseX = 146 - systems.renderPan;
-            constexpr std::array<int, 4> laneY{ 48, 86, 124, 162 };
+            const int stageWidth = (std::max)(126, static_cast<int>(144.0f * systems.renderZoom));
+            const int stageHeight = 54;
+            const int gap = (std::max)(22, static_cast<int>(34.0f * systems.renderZoom));
+            const int baseX = 150 - systems.renderPan;
+            constexpr std::array<int, 4> laneY{ 58, 104, 150, 196 };
             constexpr std::array<std::string_view, 4> laneNames{ "GPU", "SCENE", "TIME", "UI/AI" };
 
             canvas.fill_rect(18, 14, kSurfaceWidth - 36, 24, gui::Color{ 30, 38, 48, 255 });
-            draw_tiny_text(canvas, "RENDER FRAME GRAPH - scene once, GUI top layer after scene, one present", 30, 20, gui::Color{ 210, 224, 242, 255 }, 1);
+            draw_tiny_text_clipped(canvas, "RENDER FRAME GRAPH - SCENE ONCE - GUI TOP AFTER SCENE - ONE PRESENT", 30, 20, kSurfaceWidth - 70, gui::Color{ 210, 224, 242, 255 }, 1);
             canvas.fill_rect(18, kSurfaceHeight - 28, kSurfaceWidth - 36, 14, gui::Color{ 28, 33, 41, 255 });
-            canvas.fill_rect(18, kSurfaceHeight - 28, 180, 14, gui::Color{ 89, 110, 138, 255 });
-            canvas.fill_rect(210, kSurfaceHeight - 28, 210, 14, gui::Color{ 98, 152, 116, 255 });
-            canvas.fill_rect(432, kSurfaceHeight - 28, 236, 14, gui::Color{ 149, 122, 60, 255 });
+            canvas.fill_rect(18, kSurfaceHeight - 28, 150, 14, gui::Color{ 89, 110, 138, 255 });
+            canvas.fill_rect(180, kSurfaceHeight - 28, 150, 14, gui::Color{ 98, 152, 116, 255 });
+            canvas.fill_rect(342, kSurfaceHeight - 28, 138, 14, gui::Color{ 149, 122, 60, 255 });
+            canvas.fill_rect(492, kSurfaceHeight - 28, 160, 14, gui::Color{ 127, 97, 155, 255 });
+            canvas.fill_rect(664, kSurfaceHeight - 28, 128, 14, gui::Color{ 157, 88, 112, 255 });
 
             for (std::size_t lane = 0; lane < laneY.size(); ++lane)
             {
                 const int y = laneY[lane];
                 canvas.fill_rect(20, y + 15, kSurfaceWidth - 40, 2, gui::Color{ 37, 43, 55, 255 });
-                canvas.fill_rect(26, y, 94, 30, gui::Color{ 26, 32, 42, 255 });
-                canvas.stroke_rect(26, y, 94, 30, gui::Color{ 255, 255, 255, 24 });
+                canvas.fill_rect(26, y, 96, 34, gui::Color{ 26, 32, 42, 255 });
+                canvas.stroke_rect(26, y, 96, 34, gui::Color{ 255, 255, 255, 24 });
                 draw_tiny_text(canvas, laneNames[lane], 42, y + 9, gui::Color{ 196, 208, 224, 255 }, 1);
             }
 
@@ -1556,11 +1601,11 @@ namespace epochnamespace
                 canvas.stroke_rect(x, y, stageWidth, stageHeight, stage.accent);
                 canvas.fill_rect(x + 8, y + 8, 18, stageHeight - 16, gui::Color{ 255, 255, 255, 32 });
                 canvas.fill_rect(x + stageWidth - 12, y + 10, 5, stageHeight - 20, stage.accent);
-                draw_tiny_text(canvas, stage.name, x + 34, y + 10, gui::Color{ 232, 238, 248, 255 }, 1);
-                draw_tiny_text(canvas, stage.detail, x + 34, y + 27, gui::Color{ 190, 202, 218, 255 }, 1);
+                draw_tiny_text_clipped(canvas, stage.name, x + 34, y + 11, stageWidth - 48, gui::Color{ 232, 238, 248, 255 }, 1);
+                draw_tiny_text_clipped(canvas, stage.detail, x + 34, y + 30, stageWidth - 48, gui::Color{ 190, 202, 218, 255 }, 1);
             }
 
-            draw_tiny_text(canvas, "BLUE backend   GREEN scene/cpu   GOLD timing   PURPLE present/ui   PINK gated OS AI", 30, kSurfaceHeight - 24, gui::Color{ 220, 226, 236, 255 }, 1);
+            draw_tiny_text_clipped(canvas, "BLUE BACKEND   GREEN SCENE   GOLD TIME   PURPLE UI   PINK OS AI", 30, kSurfaceHeight - 24, kSurfaceWidth - 60, gui::Color{ 220, 226, 236, 255 }, 1);
 
             return canvas;
         }
@@ -1571,21 +1616,26 @@ namespace epochnamespace
             std::size_t systemCount)
         {
             constexpr int kSurfaceWidth = 1280;
-            constexpr int kSurfaceHeight = 220;
+            constexpr int kSurfaceHeight = 260;
             SurfaceCanvas canvas(kSurfaceWidth, kSurfaceHeight, gui::Color{ 15, 18, 24, 255 });
 
-            const int laneCount = (std::clamp)(static_cast<int>(liveThreadCount == 0 ? 1 : liveThreadCount), 2, 8);
-            const int laneGap = 6;
-            const int laneHeight = (kSurfaceHeight - 58 - laneGap * (laneCount - 1)) / laneCount;
-            const int baseX = 142 - systems.taskPan;
-            const int taskWidth = (std::max)(46, static_cast<int>(70.0f * systems.taskZoom));
-            const int taskGap = (std::max)(12, static_cast<int>(20.0f * systems.taskZoom));
+            const int visibleLaneCount = (std::clamp)(
+                liveThreadCount == 0 ? 2 : static_cast<int>((std::min)(liveThreadCount, std::size_t{ 3 })),
+                2,
+                3);
+            const int laneGap = 8;
+            const int laneHeight = (kSurfaceHeight - 68 - laneGap * (visibleLaneCount - 1)) / visibleLaneCount;
+            const int baseX = 150 - systems.taskPan;
+            const int taskWidth = (std::max)(96, static_cast<int>(128.0f * systems.taskZoom));
+            const int taskGap = (std::max)(18, static_cast<int>(28.0f * systems.taskZoom));
             const std::string taskHeader = std::string("TASK THREAD GRAPH  LIVE THREADS ")
                 + std::to_string(liveThreadCount)
+                + "  SHOWN LANES "
+                + std::to_string(visibleLaneCount)
                 + "  SYSTEMS "
                 + std::to_string(systemCount);
             canvas.fill_rect(18, 14, kSurfaceWidth - 36, 24, gui::Color{ 30, 38, 48, 255 });
-            draw_tiny_text(canvas, taskHeader, 30, 20, gui::Color{ 214, 224, 238, 255 }, 1);
+            draw_tiny_text_clipped(canvas, taskHeader, 30, 20, kSurfaceWidth - 70, gui::Color{ 214, 224, 238, 255 }, 1);
 
             const std::array<gui::Color, 5> taskColors{{
                 { 86, 142, 255, 255 },
@@ -1603,9 +1653,9 @@ namespace epochnamespace
             };
 
             for (int x = baseX; x < kSurfaceWidth; x += taskWidth + taskGap)
-                canvas.vline(x, 44, kSurfaceHeight - 58, gui::Color{ 28, 32, 42, 255 });
+                canvas.vline(x, 44, kSurfaceHeight - 62, gui::Color{ 28, 32, 42, 255 });
 
-            for (int lane = 0; lane < laneCount; ++lane)
+            for (int lane = 0; lane < visibleLaneCount; ++lane)
             {
                 const int y = 48 + lane * (laneHeight + laneGap);
                 canvas.fill_rect(24, y, kSurfaceWidth - 48, laneHeight, gui::Color{ 20, 25, 34, 255 });
@@ -1613,20 +1663,21 @@ namespace epochnamespace
                 canvas.fill_rect(32, y + 4, 82, laneHeight - 8, gui::Color{ 31, 38, 50, 255 });
                 draw_tiny_text(canvas, std::string("LANE ") + std::to_string(lane + 1), 46, y + (std::max)(4, laneHeight / 2 - 5), gui::Color{ 198, 210, 226, 255 }, 1);
 
-                const int blocks = 5 + static_cast<int>((systemCount + static_cast<std::size_t>(lane)) % 4u);
+                const int blocks = 4 + static_cast<int>((systemCount + static_cast<std::size_t>(lane)) % 3u);
                 for (int block = 0; block < blocks; ++block)
                 {
-                    const int x = baseX + block * (taskWidth + taskGap) + lane * 18;
+                    const int x = baseX + block * (taskWidth + taskGap) + lane * 22;
                     const gui::Color fill = taskColors[(static_cast<std::size_t>(block) + static_cast<std::size_t>(lane)) % taskColors.size()];
                     const int taskHeight = (std::max)(12, laneHeight - 8 - (block % 3) * 3);
                     const int taskY = y + (laneHeight - taskHeight) / 2;
                     canvas.fill_rect(x, taskY, taskWidth, taskHeight, fill);
                     canvas.stroke_rect(x, taskY, taskWidth, taskHeight, gui::Color{ 255, 255, 255, 46 });
-                    draw_tiny_text(
+                    draw_tiny_text_clipped(
                         canvas,
                         taskNames[(static_cast<std::size_t>(block) + static_cast<std::size_t>(lane)) % taskNames.size()],
                         x + 6,
                         taskY + (std::max)(3, taskHeight / 2 - 4),
+                        taskWidth - 12,
                         gui::Color{ 238, 242, 248, 255 },
                         1);
                     if (block != 0)
@@ -1636,7 +1687,7 @@ namespace epochnamespace
 
             canvas.fill_rect(18, kSurfaceHeight - 28, kSurfaceWidth - 36, 14, gui::Color{ 28, 33, 41, 255 });
             canvas.fill_rect(18, kSurfaceHeight - 28, (std::min)(kSurfaceWidth - 36, static_cast<int>(liveThreadCount) * 16 + 80), 14, gui::Color{ 89, 132, 184, 255 });
-            draw_tiny_text(canvas, "INPUT -> SYSTEMS -> SCRIPTS -> OS AI -> OUTPUT   live lanes are capped visually, not logically", 30, kSurfaceHeight - 24, gui::Color{ 220, 226, 236, 255 }, 1);
+            draw_tiny_text_clipped(canvas, "INPUT > SYSTEM > SCRIPT > OS AI > OUTPUT   LIVE LANES SHOWN WITHOUT SQUASHING", 30, kSurfaceHeight - 24, kSurfaceWidth - 60, gui::Color{ 220, 226, 236, 255 }, 1);
 
             return canvas;
         }
@@ -7298,7 +7349,7 @@ namespace epochnamespace
                 const std::string convergenceFocus = backend_convergence_focus(ctx);
                 const float graphGap = 14.0f;
                 const float graphWidth = (std::max)(260.0f, centerWidth);
-                const float graphHeight = 248.0f;
+                const float graphHeight = 264.0f;
                 const float supportHeight = 118.0f;
                 constexpr int kGraphInputCooldownFrames = 6;
                 if (editor.systems.graphInputCooldownFrames > 0)
@@ -7360,12 +7411,13 @@ namespace epochnamespace
                 gui::label("Render / Frame Graph");
                 gui::set_cursor({ systemsOrigin.x, controlsY });
                 const std::array renderButtons{
-                    gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
-                    gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
-                    gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
-                    gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
+                    gui::InlineButtonSpec{ .label = "Pan <", .width = 58.0f },
+                    gui::InlineButtonSpec{ .label = "Zoom -", .width = 66.0f },
+                    gui::InlineButtonSpec{ .label = "Zoom +", .width = 66.0f },
+                    gui::InlineButtonSpec{ .label = "Pan >", .width = 58.0f },
+                    gui::InlineButtonSpec{ .label = "Reset", .width = 58.0f }
                 };
-                if (const auto action = gui::inline_button_row(renderButtons, 24.0f, 6.0f);
+                if (const auto action = gui::inline_button_row(renderButtons, 28.0f, 6.0f);
                     action && editor.systems.graphInputCooldownFrames == 0)
                 {
                     switch (*action)
@@ -7374,6 +7426,10 @@ namespace epochnamespace
                     case 1: editor.systems.renderZoom = (std::max)(0.85f, editor.systems.renderZoom - 0.25f); break;
                     case 2: editor.systems.renderZoom = (std::min)(3.0f, editor.systems.renderZoom + 0.25f); break;
                     case 3: editor.systems.renderPan += 64; break;
+                    case 4:
+                        editor.systems.renderPan = 0;
+                        editor.systems.renderZoom = 1.0f;
+                        break;
                     default: break;
                     }
                     editor.systems.graphInputCooldownFrames = kGraphInputCooldownFrames;
@@ -7392,12 +7448,13 @@ namespace epochnamespace
                 gui::label("Task / Thread Graph");
                 gui::set_cursor({ systemsOrigin.x, taskControlsY });
                 const std::array taskButtons{
-                    gui::InlineButtonSpec{ .label = "<", .width = 28.0f },
-                    gui::InlineButtonSpec{ .label = "-", .width = 28.0f },
-                    gui::InlineButtonSpec{ .label = "+", .width = 28.0f },
-                    gui::InlineButtonSpec{ .label = ">", .width = 28.0f }
+                    gui::InlineButtonSpec{ .label = "Pan <", .width = 58.0f },
+                    gui::InlineButtonSpec{ .label = "Zoom -", .width = 66.0f },
+                    gui::InlineButtonSpec{ .label = "Zoom +", .width = 66.0f },
+                    gui::InlineButtonSpec{ .label = "Pan >", .width = 58.0f },
+                    gui::InlineButtonSpec{ .label = "Reset", .width = 58.0f }
                 };
-                if (const auto action = gui::inline_button_row(taskButtons, 24.0f, 6.0f);
+                if (const auto action = gui::inline_button_row(taskButtons, 28.0f, 6.0f);
                     action && editor.systems.graphInputCooldownFrames == 0)
                 {
                     switch (*action)
@@ -7406,6 +7463,10 @@ namespace epochnamespace
                     case 1: editor.systems.taskZoom = (std::max)(0.85f, editor.systems.taskZoom - 0.25f); break;
                     case 2: editor.systems.taskZoom = (std::min)(3.0f, editor.systems.taskZoom + 0.25f); break;
                     case 3: editor.systems.taskPan += 64; break;
+                    case 4:
+                        editor.systems.taskPan = 0;
+                        editor.systems.taskZoom = 1.0f;
+                        break;
                     default: break;
                     }
                     editor.systems.graphInputCooldownFrames = kGraphInputCooldownFrames;

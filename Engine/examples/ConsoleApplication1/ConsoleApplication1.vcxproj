@@ -110,6 +110,7 @@
     <VcpkgManifestInstall>true</VcpkgManifestInstall>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')">true</VcpkgUseStatic>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
+    <VcpkgApplocalDeps Condition="'$(VcpkgUseStatic)'=='true'">false</VcpkgApplocalDeps>
     <EpochRaylibDllDefine Condition="'$(VcpkgUseStatic)'!='true'">RAYLIB_DLL;</EpochRaylibDllDefine>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -189,10 +190,6 @@
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
       <NoEntryPoint>false</NoEntryPoint>
     </Link>
-    <PostBuildEvent>
-      <Message>Copy vcpkg debug runtime DLLs</Message>
-      <Command>if "$(VcpkgUseStatic)" NEQ "true" if exist "$(EpochVcpkgInstallRoot)debug\bin\*.dll" xcopy /Y /D "$(EpochVcpkgInstallRoot)debug\bin\*.dll" "$(OutDir)" &gt;nul</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -223,10 +220,6 @@
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
       <NoEntryPoint>false</NoEntryPoint>
     </Link>
-    <PostBuildEvent>
-      <Message>Copy vcpkg release runtime DLLs</Message>
-      <Command>if "$(VcpkgUseStatic)" NEQ "true" if exist "$(EpochVcpkgInstallRoot)bin\*.dll" xcopy /Y /D "$(EpochVcpkgInstallRoot)bin\*.dll" "$(OutDir)" &gt;nul</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="EpochCopyDebugVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Debug|x64' And '$(VcpkgUseStatic)'!='true'">
