@@ -1,6 +1,10 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Tightened graph-level render-surface honesty. `render.graph` now refuses to
+  bind `MaterialTextureSlot::render_surface` from a plain texture handle; the
+  slot only resolves when the texture is owned by a sampled render-texture asset
+  with a sampler, and the engine contract harness now proves the negative case.
 - Wired the real OpenGL sampled render-texture hook factory into the engine
   contract harness. The self-test path now imports `opengl.textures`, installs
   its native FBO/color texture/depth renderbuffer/sampler hooks on the

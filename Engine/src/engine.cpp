@@ -684,6 +684,73 @@ namespace epochnamespace::core
         return materialReady && modelReady && bindingReady && drawReady;
     }
 
+    [[nodiscard]] inline bool render_surface_requires_render_texture_asset_contract_ready()
+    {
+        epoch::NullRenderDevice device{};
+        epoch::GraphBuilder builder{};
+
+        epoch::TextureDesc plainTextureDesc{};
+        plainTextureDesc.width = 64u;
+        plainTextureDesc.height = 64u;
+        plainTextureDesc.format = epoch::TextureFormat::rgba8_unorm;
+        plainTextureDesc.sampled = true;
+        plainTextureDesc.debug_name = "plain.render_surface.reject";
+        const epoch::GraphResource plainTexture =
+            builder.create_texture("plain.render_surface.reject", plainTextureDesc);
+
+        epoch::MaterialDesc materialDesc{};
+        materialDesc.name = "plain.render_surface.reject.material";
+        materialDesc.unlit = true;
+        materialDesc.debug_name = "plain.render_surface.reject.material";
+        materialDesc.texture_slots.push_back(epoch::MaterialTextureSlotDesc{
+            .slot = epoch::MaterialTextureSlot::render_surface,
+            .name = "screen",
+            .expected_format = epoch::TextureFormat::rgba8_unorm,
+            .required = true
+        });
+
+        const epoch::GraphMaterialTextureSlot materialSlots[] = {
+            epoch::GraphMaterialTextureSlot{
+                .slot = epoch::MaterialTextureSlot::render_surface,
+                .texture = plainTexture
+            }
+        };
+        const epoch::GraphResource material = builder.create_material(
+            "plain.render_surface.reject.material",
+            materialDesc,
+            epoch::array_view<const epoch::GraphMaterialTextureSlot>{ materialSlots, 1u });
+
+        const epoch::GraphResource reads[] = { material };
+        builder.add_pass(
+            "plain.render_surface.reject.pass",
+            epoch::array_view<const epoch::GraphResource>{ reads, 1u },
+            {},
+            [](epoch::ICommandContext& ctx)
+            {
+                ctx.debug_marker("plain.render_surface.reject.pass");
+            });
+
+        epoch::CompiledGraph graph = builder.compile(device);
+        const bool ready =
+            graph.textures.size() == 1u
+            && graph.materials.size() == 1u
+            && graph.passes.size() == 1u
+            && graph.textures.front().backend
+            && !graph.textures.front().sampled_sampler
+            && !graph.textures.front().owned_by_render_texture_asset
+            && graph.materials.front().backend
+            && graph.passes.front().binding_set
+            && graph.passes.front().bindings.read_materials.size() == 1u
+            && graph.passes.front().bindings.read_materials.front() == graph.materials.front().backend
+            && graph.passes.front().bindings.read_material_textures.empty()
+            && graph.passes.front().bindings.read_samplers.empty()
+            && graph.passes.front().bindings.read_textures.empty();
+
+        graph.execute(device);
+        graph.destroy(device);
+        return ready;
+    }
+
     struct OpenGLFamilyFakeNativeRttState
     {
         int allocate_count = 0;
@@ -1251,6 +1318,7 @@ namespace epochnamespace::core
             && epoch::package_registry::can_create_server_or_listener_after_approval(epoch::package_registry::kEngineListenServerPackageId)
             && epoch::package_registry::must_use_human_build_gate("missing_package"));
         check("render.engine_arcade_screen_graph", engine_arcade_screen_graph_contract_ready());
+        check("render.render_surface_requires_rtt_asset", render_surface_requires_render_texture_asset_contract_ready());
         check("render.opengl_family_arcade_screen_graph", opengl_family_arcade_screen_graph_contract_ready());
         check("render.opengl_family_arcade_cabinet_graph", opengl_family_arcade_cabinet_graph_contract_ready());
         check("render.opengl_family_arcade_native_requirements", opengl_family_arcade_native_requirements_contract_ready());

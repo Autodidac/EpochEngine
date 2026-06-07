@@ -311,16 +311,22 @@ namespace epoch
                         for (const GraphMaterialTextureSlot& slot : material.texture_slots)
                         {
                             const GraphTexture* texture = resolve_texture(slot.texture);
-                            if (texture && texture->backend)
+                            if (!texture || !texture->backend)
+                                continue;
+
+                            if (slot.slot == MaterialTextureSlot::render_surface
+                                && (!texture->owned_by_render_texture_asset || !texture->sampled_sampler))
                             {
-                                bindings.read_material_textures.push_back(MaterialTextureBinding{
-                                    .slot = slot.slot,
-                                    .texture = texture->backend,
-                                    .sampler = texture->sampled_sampler
-                                });
-                                if (texture->sampled_sampler)
-                                    bindings.read_samplers.push_back(texture->sampled_sampler);
+                                continue;
                             }
+
+                            bindings.read_material_textures.push_back(MaterialTextureBinding{
+                                .slot = slot.slot,
+                                .texture = texture->backend,
+                                .sampler = texture->sampled_sampler
+                            });
+                            if (texture->sampled_sampler)
+                                bindings.read_samplers.push_back(texture->sampled_sampler);
                         }
                     }
                 }

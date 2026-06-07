@@ -41,8 +41,10 @@ reports real per-backend capability states.
 
 Current evidence: OpenGL's real native sampled-RTT hook factory is now wired
 into the engine contract harness, SDL3/SFML3/Raylib sampled-RTT capability
-reporting is runtime-availability-gated instead of always-on, and
-`ConsoleApplication1|Debug|x64` builds with MSVC after the harness update.
+reporting is runtime-availability-gated instead of always-on, and the render
+graph now refuses `render_surface` material bindings unless they reference a
+sampled render-texture asset. `ConsoleApplication1|Debug|x64` builds with MSVC
+after the harness update.
 
 ## Acceptance Gates
 

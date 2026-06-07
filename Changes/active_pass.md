@@ -26,6 +26,10 @@ contracts instead of drift.
   on the OpenGL-family device, and verifies the shared `engine_arcade.screen`
   descriptor/handle/work-order path can allocate and destroy records without
   claiming live GPU allocation when no GL context is registered.
+- `render.graph` now rejects `MaterialTextureSlot::render_surface` bindings
+  unless the referenced texture is owned by a sampled render-texture asset with
+  a sampler. Plain texture handles no longer count as arcade/runtime screen
+  surfaces.
 - SDL3, SFML3, and Raylib sampled-RTT capability reporting remains
   runtime-availability-gated; contract-only paths are still `Partial`.
 - Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the real
