@@ -43,8 +43,10 @@ Current evidence: OpenGL's real native sampled-RTT hook factory is now wired
 into the engine contract harness, SDL3/SFML3/Raylib sampled-RTT capability
 reporting is runtime-availability-gated instead of always-on, and the render
 graph now refuses `render_surface` material bindings unless they reference a
-sampled render-texture asset. `ConsoleApplication1|Debug|x64` builds with MSVC
-after the harness update.
+sampled render-texture asset. Engine Arcade now uses a two-pass proof shape:
+one pass renders a small scene model into `engine_arcade.screen`, and the next
+pass samples that surface onto the cabinet material. `ConsoleApplication1|Debug|x64`
+builds with MSVC after the harness update.
 
 ## Acceptance Gates
 
@@ -56,7 +58,8 @@ after the harness update.
 
 ## Deferred / Archive Links
 
-- Full mission cache: `Changes/active_pass.md`.
+- Active pass: `Changes/active_pass.md`.
+- Full mission cache: `Changes/mission_cache.md`.
 - Renderer status truth table: `Engine/docs/engine/renderer_feature_matrix.md`.
 - Runtime/editor behavior: `Engine/docs/engine/runtime_and_editor_workflows.md`.
 - GUI library direction: `Engine/docs/engine/gui_library_architecture.md`.

@@ -1,6 +1,17 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Promoted Engine Arcade's sampled render target into a true two-pass graph
+  proof. `render.arcade` now builds a tiny offscreen scene model into
+  `engine_arcade.screen`, then samples that surface through the cabinet
+  material/model pass so the RTT gate proves both render-target writes and later
+  material consumption instead of only descriptor shape. Validation: MSVC Debug
+  x64 `ConsoleApplication1` passed.
+- Moved broad cross-pass mission memory out of the hot active-pass file and into
+  `Changes/mission_cache.md`. `Changes/active_pass.md` now stays focused on the
+  current renderer gate, while the roadmap points agents to the mission cache
+  for deferred GUI, package, Forest Factory, OS AI, updater, Linux, input, and
+  source-shape work.
 - Tightened graph-level render-surface honesty. `render.graph` now refuses to
   bind `MaterialTextureSlot::render_surface` from a plain texture handle; the
   slot only resolves when the texture is owned by a sampled render-texture asset

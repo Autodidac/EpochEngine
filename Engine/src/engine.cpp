@@ -556,6 +556,10 @@ namespace epochnamespace::core
             graph.render_texture_assets.size() == 1u
             && graph.textures.size() == 1u
             && graph.render_targets.size() == 1u
+            && graph.buffers.size() == 2u
+            && graph.materials.size() == 1u
+            && graph.meshes.size() == 1u
+            && graph.models.size() == 1u
             && graph.passes.size() == 1u;
         if (!resourceShape)
         {
@@ -566,6 +570,8 @@ namespace epochnamespace::core
         const epoch::GraphRenderTextureAsset& compiledScreen = graph.render_texture_assets.front();
         const epoch::GraphTexture& compiledTexture = graph.textures.front();
         const epoch::GraphRenderTarget& compiledTarget = graph.render_targets.front();
+        const epoch::GraphMaterial& compiledMaterial = graph.materials.front();
+        const epoch::GraphModel& compiledModel = graph.models.front();
         const epoch::PassDecl& pass = graph.passes.front();
         const auto same_text = [](epoch::string_view left, epoch::string_view right) noexcept
         {
@@ -596,12 +602,18 @@ namespace epochnamespace::core
         const bool passReady =
             pass.render_target == compiledScreen.backend.render_target
             && pass.binding_set
-            && pass.bindings.read_textures.size() == 1u
-            && pass.bindings.read_textures.front() == compiledScreen.backend.color_texture
-            && pass.bindings.read_samplers.size() == 1u
-            && pass.bindings.read_samplers.front() == compiledScreen.backend.sampler
+            && pass.bindings.read_materials.size() == 1u
+            && pass.bindings.read_materials.front() == compiledMaterial.backend
+            && pass.bindings.read_models.size() == 1u
+            && pass.bindings.read_models.front() == compiledModel.backend
+            && pass.bindings.read_material_textures.empty()
+            && pass.bindings.read_textures.empty()
+            && pass.bindings.read_samplers.empty()
             && pass.bindings.write_render_targets.size() == 1u
-            && pass.bindings.write_render_targets.front() == compiledScreen.backend.render_target;
+            && pass.bindings.write_render_targets.front() == compiledScreen.backend.render_target
+            && pass.draw_models.size() == 1u
+            && pass.draw_models.front().model == screen.model
+            && pass.draw_models.front().backend == compiledModel.backend;
 
         graph.execute(device);
         graph.destroy(device);
@@ -631,10 +643,10 @@ namespace epochnamespace::core
             graph.render_texture_assets.size() == 1u
             && graph.textures.size() == 1u
             && graph.render_targets.size() == 1u
-            && graph.buffers.size() == 2u
-            && graph.materials.size() == 1u
-            && graph.meshes.size() == 1u
-            && graph.models.size() == 1u
+            && graph.buffers.size() == 4u
+            && graph.materials.size() == 2u
+            && graph.meshes.size() == 2u
+            && graph.models.size() == 2u
             && graph.passes.size() == 2u;
         if (!resourceShape)
         {
@@ -643,10 +655,29 @@ namespace epochnamespace::core
         }
 
         const epoch::GraphRenderTextureAsset& compiledScreen = graph.render_texture_assets.front();
-        const epoch::GraphMaterial& compiledMaterial = graph.materials.front();
-        const epoch::GraphMesh& compiledMesh = graph.meshes.front();
-        const epoch::GraphModel& compiledModel = graph.models.front();
+        const epoch::GraphMaterial& compiledScreenMaterial = graph.materials.front();
+        const epoch::GraphModel& compiledScreenModel = graph.models.front();
+        const epoch::GraphMaterial& compiledMaterial = graph.materials.back();
+        const epoch::GraphMesh& compiledMesh = graph.meshes.back();
+        const epoch::GraphModel& compiledModel = graph.models.back();
+        const epoch::PassDecl& populatePass = graph.passes.front();
         const epoch::PassDecl& cabinetPass = graph.passes[1u];
+
+        const bool populateReady =
+            populatePass.render_target == compiledScreen.backend.render_target
+            && populatePass.binding_set
+            && populatePass.bindings.read_materials.size() == 1u
+            && populatePass.bindings.read_materials.front() == compiledScreenMaterial.backend
+            && populatePass.bindings.read_models.size() == 1u
+            && populatePass.bindings.read_models.front() == compiledScreenModel.backend
+            && populatePass.bindings.read_material_textures.empty()
+            && populatePass.bindings.read_textures.empty()
+            && populatePass.bindings.read_samplers.empty()
+            && populatePass.bindings.write_render_targets.size() == 1u
+            && populatePass.bindings.write_render_targets.front() == compiledScreen.backend.render_target
+            && populatePass.draw_models.size() == 1u
+            && populatePass.draw_models.front().model == cabinet.screen_scene_model
+            && populatePass.draw_models.front().backend == compiledScreenModel.backend;
 
         const bool materialReady =
             compiledMaterial.backend
@@ -681,7 +712,7 @@ namespace epochnamespace::core
 
         graph.execute(device);
         graph.destroy(device);
-        return materialReady && modelReady && bindingReady && drawReady;
+        return populateReady && materialReady && modelReady && bindingReady && drawReady;
     }
 
     [[nodiscard]] inline bool render_surface_requires_render_texture_asset_contract_ready()
@@ -1135,10 +1166,10 @@ namespace epochnamespace::core
         epoch::CompiledGraph graph = builder.compile(device);
 
         const bool resourceShape =
-            graph.buffers.size() == 2u
-            && graph.materials.size() == 1u
-            && graph.meshes.size() == 1u
-            && graph.models.size() == 1u
+            graph.buffers.size() == 4u
+            && graph.materials.size() == 2u
+            && graph.meshes.size() == 2u
+            && graph.models.size() == 2u
             && graph.passes.size() == 2u;
         if (!resourceShape)
         {
@@ -1146,8 +1177,8 @@ namespace epochnamespace::core
             return false;
         }
 
-        const epoch::GraphMesh& compiledMesh = graph.meshes.front();
-        const epoch::GraphModel& compiledModel = graph.models.front();
+        const epoch::GraphMesh& compiledMesh = graph.meshes.back();
+        const epoch::GraphModel& compiledModel = graph.models.back();
         const epoch::PassDecl& cabinetPass = graph.passes[1u];
 
         const bool graphReady =
@@ -1199,10 +1230,10 @@ namespace epochnamespace::core
         epoch::CompiledGraph graph = builder.compile(device);
 
         const bool resourceShape =
-            graph.buffers.size() == 2u
-            && graph.materials.size() == 1u
-            && graph.meshes.size() == 1u
-            && graph.models.size() == 1u
+            graph.buffers.size() == 4u
+            && graph.materials.size() == 2u
+            && graph.meshes.size() == 2u
+            && graph.models.size() == 2u
             && graph.passes.size() == 2u;
         if (!resourceShape)
         {
@@ -1210,8 +1241,8 @@ namespace epochnamespace::core
             return false;
         }
 
-        const epoch::GraphMesh& compiledMesh = graph.meshes.front();
-        const epoch::GraphModel& compiledModel = graph.models.front();
+        const epoch::GraphMesh& compiledMesh = graph.meshes.back();
+        const epoch::GraphModel& compiledModel = graph.models.back();
         const epoch::PassDecl& cabinetPass = graph.passes[1u];
 
         const bool graphReady =

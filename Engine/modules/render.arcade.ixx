@@ -19,6 +19,11 @@ export namespace epoch::render_arcade
     struct ArcadeScreenGraphBuild
     {
         GraphRenderTextureAsset screen{};
+        GraphResource material{};
+        GraphResource vertex_buffer{};
+        GraphResource index_buffer{};
+        GraphResource mesh{};
+        GraphResource model{};
         GraphPass populate_pass{};
     };
 
@@ -26,6 +31,11 @@ export namespace epoch::render_arcade
     {
         GraphRenderTextureAsset screen{};
         GraphPass populate_pass{};
+        GraphResource screen_scene_material{};
+        GraphResource screen_scene_vertex_buffer{};
+        GraphResource screen_scene_index_buffer{};
+        GraphResource screen_scene_mesh{};
+        GraphResource screen_scene_model{};
         GraphResource material{};
         GraphResource vertex_buffer{};
         GraphResource index_buffer{};
@@ -69,6 +79,66 @@ export namespace epoch::render_arcade
         desc.size_bytes = 4u * 5u * sizeof(float);
         desc.gpu_only = true;
         desc.debug_name = "engine_arcade.cabinet.screen_vertices";
+        return desc;
+    }
+
+    [[nodiscard]] inline MaterialDesc make_screen_scene_material_desc() noexcept
+    {
+        MaterialDesc desc{};
+        desc.name = "engine_arcade.screen_scene.material";
+        desc.base_color[0] = 0.10f;
+        desc.base_color[1] = 0.85f;
+        desc.base_color[2] = 0.55f;
+        desc.base_color[3] = 1.0f;
+        desc.unlit = true;
+        desc.debug_name = "engine_arcade.screen_scene.material";
+        return desc;
+    }
+
+    [[nodiscard]] inline BufferDesc make_screen_scene_vertex_buffer_desc() noexcept
+    {
+        BufferDesc desc{};
+        desc.size_bytes = 3u * 3u * sizeof(float);
+        desc.gpu_only = true;
+        desc.debug_name = "engine_arcade.screen_scene.vertices";
+        return desc;
+    }
+
+    [[nodiscard]] inline BufferDesc make_screen_scene_index_buffer_desc() noexcept
+    {
+        BufferDesc desc{};
+        desc.size_bytes = 3u * sizeof(std::uint16_t);
+        desc.gpu_only = true;
+        desc.debug_name = "engine_arcade.screen_scene.indices";
+        return desc;
+    }
+
+    [[nodiscard]] inline MeshDesc make_screen_scene_mesh_desc()
+    {
+        MeshDesc desc{};
+        desc.vertex_count = 3;
+        desc.index_count = 3;
+        desc.index_format = IndexFormat::uint16;
+        desc.topology = PrimitiveTopology::triangles;
+        desc.debug_name = "engine_arcade.screen_scene.mesh";
+        desc.vertex_layout.stride_bytes = 3u * sizeof(float);
+        desc.vertex_layout.attributes.push_back(VertexAttributeDesc{
+            .semantic = VertexSemantic::position,
+            .location = 0,
+            .offset_bytes = 0,
+            .component_count = 3,
+            .component_format = TextureFormat::rgba32_float,
+            .normalized = false
+        });
+        return desc;
+    }
+
+    [[nodiscard]] inline ModelDesc make_screen_scene_model_desc() noexcept
+    {
+        ModelDesc desc{};
+        desc.name = "engine_arcade.screen_scene";
+        desc.static_mesh = true;
+        desc.debug_name = "engine_arcade.screen_scene";
         return desc;
     }
 
@@ -128,7 +198,33 @@ export namespace epoch::render_arcade
             screenName,
             make_screen_render_texture_desc());
 
-        const std::array<GraphResource, 1> reads{ build.screen.color_texture };
+        build.material = builder.create_material(
+            "engine_arcade.screen_scene.material",
+            make_screen_scene_material_desc());
+        build.vertex_buffer = builder.create_buffer(
+            "engine_arcade.screen_scene.vertices",
+            make_screen_scene_vertex_buffer_desc());
+        build.index_buffer = builder.create_buffer(
+            "engine_arcade.screen_scene.indices",
+            make_screen_scene_index_buffer_desc());
+        build.mesh = builder.create_mesh(
+            "engine_arcade.screen_scene.mesh",
+            make_screen_scene_mesh_desc(),
+            build.vertex_buffer,
+            build.index_buffer,
+            build.material);
+
+        GraphModelMeshSlot modelSlot{};
+        modelSlot.mesh = build.mesh;
+        modelSlot.material = build.material;
+        modelSlot.node_name = "arcade_screen_scene_triangle";
+        const std::array<GraphModelMeshSlot, 1> modelSlots{ modelSlot };
+        build.model = builder.create_model(
+            "engine_arcade.screen_scene.model",
+            make_screen_scene_model_desc(),
+            epoch::span<const GraphModelMeshSlot>{ modelSlots.data(), modelSlots.size() });
+
+        const std::array<GraphResource, 2> reads{ build.material, build.model };
         build.populate_pass = builder.add_render_pass(
             "engine_arcade.screen.populate",
             build.screen.render_target,
@@ -139,6 +235,7 @@ export namespace epoch::render_arcade
             {
                 ctx.debug_marker("engine_arcade.screen.sampled_surface");
             });
+        builder.add_model_draw(build.populate_pass, build.model);
 
         return build;
     }
@@ -150,6 +247,11 @@ export namespace epoch::render_arcade
         ArcadeCabinetGraphBuild build{};
         build.screen = screen.screen;
         build.populate_pass = screen.populate_pass;
+        build.screen_scene_material = screen.material;
+        build.screen_scene_vertex_buffer = screen.vertex_buffer;
+        build.screen_scene_index_buffer = screen.index_buffer;
+        build.screen_scene_mesh = screen.mesh;
+        build.screen_scene_model = screen.model;
 
         const std::array<GraphMaterialTextureSlot, 1> materialSlots{ GraphMaterialTextureSlot{
             .slot = MaterialTextureSlot::render_surface,

@@ -30,6 +30,9 @@ contracts instead of drift.
   unless the referenced texture is owned by a sampled render-texture asset with
   a sampler. Plain texture handles no longer count as arcade/runtime screen
   surfaces.
+- `render.arcade` now makes `engine_arcade.screen` a real two-pass proof shape:
+  the populate pass targets the sampled render texture with a tiny scene model,
+  and the cabinet pass samples that render surface through a material slot.
 - SDL3, SFML3, and Raylib sampled-RTT capability reporting remains
   runtime-availability-gated; contract-only paths are still `Partial`.
 - Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the real
@@ -39,6 +42,7 @@ contracts instead of drift.
 
 - `Engine/modules/render.device.ixx`
 - `Engine/modules/render.graph.ixx`
+- `Engine/modules/render.arcade.ixx`
 - `Engine/src/epoch.render.graph.cpp`
 - OpenGL backend resource/context/render files
 - SDL3 OpenGL-backed context/resource files
@@ -90,61 +94,8 @@ Stop and report partial progress if:
 
 Do not broaden scope to compensate.
 
-## Mission Cache
+## Mission Cache Pointer
 
-Use this cache to avoid losing operator-confirmed work while keeping each pass
-focused on the active gate.
-
-- Renderer spine: formal modules for handles/descriptors/resource ownership,
-  backend-native maps, material/model binding, render-to-texture, then model
-  import, normal mapping, skybox, instancing, shadows, deferred/G-buffer, and
-  SSAO in that order.
-- OpenGL-derived parity: OpenGL, SDL3, SFML3, and Raylib3 should share one
-  renderer-resource contract while keeping backend-specific context nuances.
-  Software is a debug/safe-launch fallback, not production parity.
-- Context flesh: all six production contexts need shared visual palette,
-  object colors, opacity, helper colors, and GUI theme inputs from the central
-  spine. DirectX and Vulkan implement equivalent contracts in their own models.
-- Floating GUI windows: editor GUI panes should become dockable/undockable
-  tool windows that clone the selected context family by default. Mixed grids
-  are diagnostic/preview mode, not the normal editor workflow.
-- GUI primitives: selectable/editable text, right-click context menus,
-  copy/paste, word wrap, scroll bounds, modal focus, progress bars, list rows,
-  tabs, docking chrome, and theme tables belong in `engine.gui` first.
-- Command menus and modals: preserve the proven draw model, keep command menus
-  above the scene, close/deselect predictably, and do not reintroduce OpenGL
-  flicker while changing UI.
-- Package Manager: use a real list with per-row status/action controls, visible
-  transfer/build progress, license evidence, source gates, cache validation,
-  cancel behavior, and no fake-progress claims.
-- Engine Arcade: render-to-texture belongs in the engine. Arcade/game packages
-  consume RTT later for in-game cabinets and runtime-minis.
-- Forest Factory: core editor workspace with a real 3D scene/window, temporal
-  graph growth, repo-derived asset lineage, voxel-node LOD/hit-detection
-  descriptors, and timeline integration. Heavy terrain/ocean stacks remain
-  packages.
-- Video/timeline: Epoch is time-based. The Video workspace owns the visible
-  timeline graph, playhead, cadence, streaming-save hooks, and project/video
-  timing controls near the scene rather than buried in System Info.
-- Input: add universal configurable input profiles, freecam/FPS-style 3D
-  controls, center/reset hotkeys, package-exportable input contracts, and
-  project camera style selection.
-- Project run/build: Play In Editor runs the saved scene inside the editor;
-  external project launch is separate, chooses one backend, does not reset scene
-  edits, and avoids spawning multicontext clones unless requested.
-- Scene persistence: remove unwanted starter junk, keep camera/light/default
-  essentials, and make scene parser/serializer own preview/runtime loading.
-- OS AI: no EpochBot persona. Operator-selected external models only. Qwen and
-  Nemotron handle coding/review; Bonsai, Wan, TRELLIS, and FLUX fallback are
-  package-managed creative lanes with license/notice gates.
-- Updater: binary-first, platform-build-gated, source fallback only when no
-  compatible package exists, visible modal/progress/cancel/restart evidence,
-  executable-local cache, no self-close before verified handoff.
-- Linux/WSL: default to single-context OpenGL proof. DirectX disabled. Vulkan
-  explicit validation only. Software remains debug fallback.
-- Source shape: continue small build-proven file moves into owned folders;
-  move public headers to `include`, internal headers near owners, and backend
-  files into backend folders without broad aesthetic churn.
-- Documentation rule: after source proof, update roadmap/matrix/changelog/docs
-  only for changed contracts, completed systems, safety gates, and durable
-  operator observations.
+Durable cross-pass mission memory lives in `Changes/mission_cache.md`. Keep this
+file focused on the current gate; do not widen a source pass because the cache
+contains broader roadmap work.
