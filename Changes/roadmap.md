@@ -2,121 +2,60 @@
 
 ## Mission
 
-Build Epoch into one professional, engine-owned runtime and editor shell for:
+Build Epoch into one professional C++23 engine/editor where projects,
+renderers, GUI, scripting, packages, updates, OS AI tooling, timing, input, and
+voxel/world systems travel through one engine-owned spine instead of becoming
+disconnected experiments.
 
-- project creation, editing, play, scripting, tooling, and updates
-- renderer and systems tooling that stay honest across backends
-- engine-owned GUI/text/input instead of middleware-owned editor behavior
-- a long-horizon voxel/planetary renderer spine where multi-informational
-  voxel LOD, procedural vegetation/world generation, voxel ray/path tracing,
-  and classic terrain/model output converge instead of becoming disconnected
-  renderer experiments
-- a staged OS-model/self-iteration loop that stays reviewable and evidence-gated
-- packaging and runtime rules that hold across desktop first, then Android
+## Non-Negotiables
 
-## Non-Negotiable Rules
+- Source first, docs after proof. No placeholder systems, fake UI, fake AI, or
+  completion claims without build/runtime evidence.
+- Preserve stable renderer/editor checkpoints when the operator asks for a
+  push. Do not experiment past a confirmed good state before committing it.
+- GPU/runtime launches are approval-only; default validation is source review
+  plus build-only checks.
+- GUI/scene composition order is protected. Command menus and modals must be
+  top-layer GUI work, not frame-order guesses that reintroduce flicker.
+- Capability truth matters. A backend feature is `Present` only when native
+  implementation exists and build verification proves it.
+- OS AI means operator-selected external models and evidence gates, not
+  EpochBot, hidden autonomy, learner/watcher language, or silent fallback.
+- Packages, servers, model weights, and generated projects are opt-in,
+  reviewable, license-aware, cache-local, and never hidden bypass channels.
 
-1. The engine owns the workflow. Projects, scripts, systems, AI, updates, and
-   runtime all travel through one spine.
-2. Commit only stable, verified changes. Do not move the branch forward with
-   speculative or half-validated runtime/build states.
-3. Validation must come from asset-bearing outputs and clean up after itself.
-4. Every pass must be production-minded even when the scope is small. First-pass
-   work must be real, owned, buildable, documented, and acceptance-gated; it must
-   not land as placeholder behavior, fake UI, fake AI autonomy, or throwaway
-   scaffolding.
-5. Packaged/runtime path logic must resolve from the executable path first, not
-   the working directory.
-6. Multicontext UI must converge toward first-class individual context panes,
-   like an IDE/MSVC-style tool shell where each visible surface has one clear
-   owner. Nested backend child windows remain backend-specific implementation
-   detail, not the user-facing model.
-7. Broad hardware support stays the default. Heavy features remain tiered or
-   opt-in.
-8. Research imports are staged first, reviewed second, and promoted only when
-   they materially improve repo truth.
-9. Build/tooling floors must stay honest. Preserve baseline compatibility where
-   possible, and document the real split when newer CMake/module support is
-   required.
-10. External local LLM endpoints are explicitly selected tooling providers, not
-    hidden authority and not an auto-selected default.
-11. The OS AI architecture keeps three distinct pieces:
-    - an engine-owned OS-model harness for memory, retrieval, tool use,
-      planning, verification, evidence metrics, and dataset/eval gates
-    - local MCP/control/tool harnesses that operate the editor and collect proof
-    - operator-selected OS model lanes: `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` and
-      `Qwen/Qwen3.6-27B` for coding/review, plus
-      `prism-ml/bonsai-image-ternary-4B-mlx-2bit`,
-      `prism-ml/bonsai-image-binary-4B-mlx-1bit`,
-      `Wan-AI/Wan2.1-VACE-1.3B`, and `microsoft/TRELLIS.2-4B` as
-      package-managed creative lanes. Bonsai Ternary 4B is the recommended local
-      image default, Bonsai Binary 4B is the low-memory option, and
-      `black-forest-labs/FLUX.2-klein-4B` remains a higher-memory fallback.
-    - on-demand model asset gates: Qwen/Nemotron/Bonsai/FLUX/Wan/TRELLIS weights
-      live under executable-local `cache/models/` only after operator action,
-      are not cloned for engine self-iteration, and enter generated projects
-      only after explicit package opt-in plus license/notice review
-12. AI may generate local game, tool, app, and server project artifacts only
-    through visible, reviewable requests. It must not create or run apps/services
-    that provide model bypass channels, self-accessible servers, hidden control
-    surfaces, listener creation, port binding, or network-serving mode
-    activation without an explicit human enable/run action.
-13. Local game/tool tests through approved editor/MCP/harness controls are
-    allowed when visible, evidence-captured, and not exposing a new
-    model-accessible network/control surface.
-14. `addons/` is local/offline by default. Treat it as staged source material
-    for future review, not as online repo content.
-15. C++23 output policy: engine, editor, runtime, backend, AI, capture, updater,
-    and project-generation code paths use `core.logger` or visible editor
-    evidence surfaces. New C++ code must not add `std::cout`, `std::cerr`,
-    `printf`, or `fprintf`; Epoch-branded smoke/validation tools use
-    `core_log_write` or `core.log` rather than direct console output. Direct
-    C++23 `<print>` is reserved for non-engine helper utilities that are
-    intentionally outside Epoch runtime/tooling ownership.
-16. The working GUI/scene draw model is protected. Do not alter queue-drain
-    order, backend frame order, or ad hoc overlay replay behavior to chase a GUI
-    symptom unless the mission is explicitly a draw-model improvement with build
-    proof and manual flicker/z-order eye-test evidence. OpenGL's editor baseline
-    remains: build the normal GUI/backend batch before the scene, render the
-    scene preview once, drain follow-up work, replay only the explicit GUI
-    top-layer batch for command menus/modal chrome, then capture/present.
-17. GPU/runtime launches are approval-only. Do not run `EpochEditor.exe`, GUI
-    runtime probes, project self-tests, Sandbox self-tests, multicontext
-    launches, or commands that instantiate renderer contexts unless the operator
-    explicitly asks for that exact run. Static/source review and build-only
-    checks are the default validation path because the project self-test runtime
-    lane has been reported to crash/reset the GPU or machine.
-18. MSVC x64 multicontext editor builds currently use the dynamic-vcpkg app lane
-    (`x64-windows`, `/MD`, `RAYLIB_DLL`). DLLs in the output folder are expected
-    runtime dependencies for that lane; static-vcpkg all-backend work remains a
-    separate acceptance-gated track because Raylib/SFML/SDL/GLAD static libs can
-    export overlapping STB, GLAD, and math symbols.
-19. Model/package installs must distinguish staged evidence from real transfer
-    progress. Weight/source downloads need approval, byte counts, resume/cache
-    checks, license/notice tracking, and visible failure state before any UI can
-    claim a download is running.
-20. `v0.87.08` is the active feature-line consolidation point. The editor
-    update path is binary-first and platform-gated, then source-fallback only
-    with visible worker evidence. The editor must never close itself unless a
-    verified replacement executable or successful source handoff exists.
-21. OS AI is selected external tooling, not an internal persona. Visible AI
-    surfaces must distinguish discovery, selected model, initialized client
-    state, staged evidence, and manual promotion gates; remove obsolete watcher,
-    learner, EpochBot, hidden-autonomy, or self-training language.
-22. Visual parity is engine-spine owned. GUI palette, scene clear colors,
-    selection/marker colors, editor-only opacity, and future graph/material
-    palettes must flow through shared modules before backend-specific shaders or
-    presenters consume them. The first accepted gate is `engine.visuals`; the
-    next gates are GUI theme-table consumption, graph palette routing, and
-    six-context screenshot proof with Software excluded from production parity.
-23. Render-to-texture is core engine spine, not an arcade-package feature.
-    `render.arcade` may consume RTT for runtime-mini/game packages, but backend
-    modules own native allocation. OpenGL now has an FBO/color/depth/sampler
-    hook factory; Raylib, SDL3, and SFML3 now have concrete native
-    render-texture device lanes with safe build-only no-runtime gates. Raylib's
-    gate now explicitly refuses GPU allocation when no live Raylib renderer is
-    active. Vulkan/DirectX must implement the same engine contract through
-    their own resource models.
+## Current Spine Goal
+
+Build a truthful renderer-resource spine where OpenGL proves each reusable
+feature first, OpenGL-derived contexts share the same contract without fake
+parallel paths, Vulkan/DirectX keep clean equivalent contracts, and System Info
+reports real per-backend capability states.
+
+## Current Push Order
+
+1. Finish backend-native sampled render-to-texture for OpenGL-derived contexts.
+2. Tighten capability reporting so contract-only work is `Partial`, not
+   `Present`.
+3. Keep GUI/modal/command-menu flicker protected while renderer work lands.
+4. Preserve stable push points before broad context, GUI, package, or AI churn.
+
+## Acceptance Gates
+
+- `Changes/active_pass.md` names one source gate and its allowed source areas.
+- `Engine/docs/engine/renderer_feature_matrix.md` uses:
+  `Present`, `Partial`, `Missing`, and `Deferred` with strict definitions.
+- Builds/checks use the safest command allowed by `AGENTS.md`.
+- New systems update only the relevant docs/changelog after source proof exists.
+
+## Deferred / Archive Links
+
+- Full mission cache: `Changes/active_pass.md`.
+- Renderer status truth table: `Engine/docs/engine/renderer_feature_matrix.md`.
+- Runtime/editor behavior: `Engine/docs/engine/runtime_and_editor_workflows.md`.
+- GUI library direction: `Engine/docs/engine/gui_library_architecture.md`.
+- OS AI policy: `Engine/docs/engine/os_ai_tooling_and_evidence_policy.md`.
+- Historical release/version detail remains in `Changes/changelog.txt` and
+  older roadmap sections below, not in the hot agent path.
 
 ## Release And Source Policy
 
