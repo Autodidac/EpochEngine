@@ -1,6 +1,12 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Made Engine Arcade package installation visibly activate the editor instead of
+  only staging package evidence. Installing or reinstalling `engine_arcade` now
+  selects the default arcade scene, stages an editor-visible RTT screen/cabinet
+  proof in `3D Scene`, closes the Package Manager so the change can be seen, and
+  lets recognized arcade scenes route through the Run target before project-id
+  fallback. Validation: MSVC Debug x64 `ConsoleApplication1` passed.
 - Promoted Engine Arcade's sampled render target into a true two-pass graph
   proof. `render.arcade` now builds a tiny offscreen scene model into
   `engine_arcade.screen`, then samples that surface through the cabinet

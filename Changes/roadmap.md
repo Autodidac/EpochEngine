@@ -625,6 +625,11 @@ engine shape and should be treated as starting truth for the next passes:
   render-to-texture asset role, and renderer-resource requirements; generated
   project manifests/scripts consume that contract; and installing Engine Arcade
   from Project Hub creates a game shell instead of dead-ending on a tool profile.
+- Engine Arcade install/reinstall now has a visible editor activation path:
+  the default arcade scene is selected, a 3D Scene RTT screen/cabinet proof is
+  staged, the Package Manager closes to reveal it, and recognized arcade scene
+  ids route through the Run target before project-id fallback. The next package
+  UX gate is still richer per-package progress/actions, not silent staging.
 - The renderer spine now has backend-neutral sampled render-texture and material
   texture-binding contracts: `render.device` describes the texture/sampler/
   material/render-target/pass shape, `IRenderDevice` owns default handle

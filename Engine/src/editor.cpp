@@ -2060,6 +2060,74 @@ namespace epochnamespace
             push_editor_log(state, "[2d] Added editor-only Canvas2D editing plane.");
         }
 
+        void ensure_engine_arcade_preview_entities(EditorState& state)
+        {
+            auto upsert = [&](std::string_view name, std::string_view type, std::array<float, 3> position, std::array<float, 3> scale)
+            {
+                auto existing = std::find_if(
+                    state.entities.begin(),
+                    state.entities.end(),
+                    [&](const EditorEntity& entity)
+                    {
+                        return entity.name == name;
+                    });
+
+                if (existing != state.entities.end())
+                {
+                    existing->type = std::string(type);
+                    existing->category = "EngineArcade";
+                    existing->position = position;
+                    existing->rotation = { 0.0f, 0.0f, 0.0f };
+                    existing->scale = scale;
+                    existing->editorOnly = true;
+                    existing->visible = true;
+                    return static_cast<std::size_t>(std::distance(state.entities.begin(), existing));
+                }
+
+                EditorEntity entity{};
+                entity.name = std::string(name);
+                entity.type = std::string(type);
+                entity.category = "EngineArcade";
+                entity.position = position;
+                entity.rotation = { 0.0f, 0.0f, 0.0f };
+                entity.scale = scale;
+                entity.editorOnly = true;
+                entity.visible = true;
+                state.entities.push_back(std::move(entity));
+                return state.entities.size() - 1u;
+            };
+
+            const auto cabinetIndex = upsert(
+                "EngineArcadeCabinet",
+                "StaticMesh",
+                { 0.0f, 0.55f, 0.34f },
+                { 1.25f, 1.10f, 0.42f });
+            const auto screenIndex = upsert(
+                "EngineArcadeScreen",
+                "Canvas2D",
+                { 0.0f, 1.75f, 0.0f },
+                { 4.80f, 2.70f, 0.06f });
+
+            state.selectedEntity = screenIndex < state.entities.size() ? screenIndex : cabinetIndex;
+        }
+
+        void activate_engine_arcade_preview(EditorState& state)
+        {
+            state.activeRuntimeScene = std::string(epoch::package_registry::engine_arcade_default_scene_id());
+            state.projectStatus =
+                "Engine Arcade active: default scene selected and render-to-texture screen staged in 3D Scene.";
+            state.projectCameraMode = previewgrid::CameraMode::Editor;
+            state.previewMode = core::ScenePreviewMode::Editor;
+            state.mainSurface = EditorMainSurface::Scene;
+            state.surfaceSettleFrames = (std::max)(state.surfaceSettleFrames, 2);
+            ensure_engine_arcade_preview_entities(state);
+            push_editor_log(
+                state,
+                "[package] Engine Arcade activated: default scene "
+                    + state.activeRuntimeScene
+                    + " selected and visible RTT preview staged.");
+        }
+
         void ensure_forest_factory_preview_entities(EditorState& state)
         {
             const std::size_t beforeCount = state.entities.size();
@@ -4603,6 +4671,8 @@ namespace epochnamespace
 
         [[nodiscard]] std::string project_runtime_scene_id(const EditorState& editor)
         {
+            if (!editor.activeRuntimeScene.empty() && is_engine_arcade_scene_id(editor.activeRuntimeScene))
+                return editor.activeRuntimeScene;
             if (!editor.projectId.empty())
                 return std::string("project:") + editor.projectId;
             return editor.activeRuntimeScene.empty() ? std::string("project:projectlauncher") : editor.activeRuntimeScene;
@@ -8562,10 +8632,12 @@ namespace epochnamespace
                     if (engineArcadeEligible)
                     {
                         repair_active_project_evidence(editor);
+                        activate_engine_arcade_preview(editor);
                         editor.packageInstallStatus = engineArcadeInstalled
-                            ? "Engine Arcade already installed."
-                            : "Engine Arcade staged into the active project.";
+                            ? "Engine Arcade already installed; preview activated in 3D Scene."
+                            : "Engine Arcade staged and activated in 3D Scene.";
                         editor.packageInstallProgress = 1.0f;
+                        editor.showPackageManagerModal = false;
                         push_editor_log(editor, "[package] Requested engine_arcade local runtime-mini package materialization.");
                     }
                     else
@@ -8575,9 +8647,11 @@ namespace epochnamespace
                         {
                             set_project(editor, created.project_id, true);
                             editor.selectedPackageId = std::string(epoch::package_registry::kEngineArcadePackageId);
+                            activate_engine_arcade_preview(editor);
                             editor.packageInstallStatus =
-                                "Created game project with Engine Arcade staged for render-to-texture arcade assets.";
+                                "Created game project with Engine Arcade staged and visible in 3D Scene.";
                             editor.packageInstallProgress = 1.0f;
+                            editor.showPackageManagerModal = false;
                             push_editor_log(
                                 editor,
                                 "[package] Created game project shell with engine_arcade runtime-mini package staged.");

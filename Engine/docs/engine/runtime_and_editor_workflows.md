@@ -219,7 +219,10 @@ the same engine-owned path.
   engine. The package also records the shared `engine_arcade.screen` 512x512
   sampled render target so future arcade cabinets and in-game terminals can
   bind the same renderer-owned surface instead of relying on project-local
-  ad hoc textures.
+  ad hoc textures. Installing or reinstalling Engine Arcade activates visible
+  editor state immediately: the default arcade scene is selected, the `3D Scene`
+  workspace receives a render-to-texture screen/cabinet proof, and the Run target
+  honors recognized arcade scene ids before falling back to `project:<id>`.
 - Plant Lab is the editor-facing core vegetation workspace backed by the
   Forest Factory descriptor lane, not a loose optional dump. The top editor
   workspace row owns the `Plant Lab` surface, which
