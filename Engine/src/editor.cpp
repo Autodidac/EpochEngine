@@ -5445,7 +5445,7 @@ namespace epochnamespace
                 const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
                 const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
 
-                const float modalWidth = fit_modal_size({ 700.0f, 1.0f }, { 620.0f, 1.0f }).x;
+                const float modalWidth = fit_modal_size({ 760.0f, 1.0f }, { 660.0f, 1.0f }).x;
                 const float contentWidth = (std::max)(1.0f, modalWidth - 56.0f);
                 const auto trimmed_status = [&]() {
                     std::string text = editor.updateStatus;
@@ -5469,16 +5469,16 @@ namespace epochnamespace
                             ? "Use Update From Source to build the newer source locally, or Cancel to stay on this build."
                             : "Install Release is recommended. Advanced Source is only for intentionally building latest main locally.";
 
-                float desiredHeight = 64.0f;
+                float desiredHeight = 58.0f;
                 desiredHeight += gui::wrapped_text_height(introText, contentWidth) + 8.0f;
                 desiredHeight += gui::wrapped_text_height(trimmed_status, contentWidth) + 10.0f;
-                desiredHeight += 22.0f + 28.0f;
+                desiredHeight += 22.0f + 20.0f;
                 desiredHeight += gui::wrapped_text_height(cacheText, contentWidth) + 8.0f;
-                desiredHeight += gui::wrapped_text_height(actionText, contentWidth) + 14.0f;
+                desiredHeight += gui::wrapped_text_height(actionText, contentWidth) + 18.0f;
                 desiredHeight += 30.0f + 22.0f;
 
-                const float minHeight = sourceWorkerRunning ? 302.0f : restartReady ? 286.0f : 292.0f;
-                return fit_modal_size({ modalWidth, desiredHeight }, { 620.0f, minHeight });
+                const float minHeight = sourceWorkerRunning ? 286.0f : restartReady ? 278.0f : 282.0f;
+                return fit_modal_size({ modalWidth, desiredHeight }, { 660.0f, minHeight });
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
         const gui::Vec2 sourceUpdateConfirmModalSize = fit_modal_size({ 620.0f, 316.0f }, { 500.0f, 292.0f });
@@ -8412,7 +8412,7 @@ namespace epochnamespace
             emitWrapped(introText, 8.0f);
             emitWrapped(updateStatusLine, 10.0f);
             gui::set_cursor({ contentX, cursorY });
-            const float progressWidth = (std::min)((std::max)(1.0f, contentWidth - 8.0f), 460.0f);
+            const float progressWidth = (std::max)(1.0f, contentWidth);
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
                 .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",
@@ -8420,7 +8420,7 @@ namespace epochnamespace
                 .size = { progressWidth, 22.0f },
                 .show_percent = true
             });
-            cursorY += 36.0f;
+            cursorY += 30.0f;
             const std::string cacheText = sourceOnlyUpdate
                 ? "Smart Update checked packaged releases first; source rebuild is the available lane for this platform."
                 : "Cached packages are checked before use; stale or broken downloads are replaced.";
@@ -8438,8 +8438,8 @@ namespace epochnamespace
             emitWrapped(actionText, 8.0f);
             const float buttonY = modalPos.y + modalSize.y - buttonHeight - buttonBottomPad;
             const float cancelButtonWidth = sourceWorkerRunning ? 148.0f : 120.0f;
-            const float primaryButtonWidth = 204.0f;
-            const float advancedButtonWidth = 176.0f;
+            const float primaryButtonWidth = (std::min)(220.0f, (std::max)(160.0f, contentWidth * 0.34f));
+            const float advancedButtonWidth = (std::min)(190.0f, (std::max)(156.0f, contentWidth * 0.28f));
             const float buttonGap = 16.0f;
             const float primaryButtonX = sourceWorkerRunning
                 ? contentX

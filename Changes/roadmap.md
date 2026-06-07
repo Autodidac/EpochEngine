@@ -56,7 +56,8 @@ Latest stabilization: Video is treated as a scene-backed workspace again so the
 timeline strip remains visible, update/package modals use matched body and input
 capture geometry to protect top-layer z-order, shared GUI progress bars clamp to
 their owning content lane, the update modal now sizes itself from wrapped live
-status/action text instead of reserving a stale empty lower body, and
+status/action text with a full-width in-modal progress lane instead of reserving
+a stale empty lower body or detached action row, and
 single-context Run resolves existing generated child executables before rejecting
 launch.
 
