@@ -223,6 +223,8 @@ the same engine-owned path.
   editor state immediately: the default arcade scene is selected, the `3D Scene`
   workspace receives a render-to-texture screen/cabinet proof, and the Run target
   honors recognized arcade scene ids before falling back to `project:<id>`.
+  Removing the package clears the arcade preview entities and active arcade
+  runtime scene so other package workspaces can take over cleanly.
 - Plant Lab is the editor-facing core vegetation workspace backed by the
   Forest Factory descriptor lane, not a loose optional dump. The top editor
   workspace row owns the `Plant Lab` surface, which

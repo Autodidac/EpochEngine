@@ -628,8 +628,10 @@ engine shape and should be treated as starting truth for the next passes:
 - Engine Arcade install/reinstall now has a visible editor activation path:
   the default arcade scene is selected, a 3D Scene RTT screen/cabinet proof is
   staged, the Package Manager closes to reveal it, and recognized arcade scene
-  ids route through the Run target before project-id fallback. The next package
-  UX gate is still richer per-package progress/actions, not silent staging.
+  ids route through the Run target before project-id fallback. Removing the
+  package clears its preview/runtime selection so later Plant Lab or extension
+  package activations do not inherit stale arcade state. The next package UX
+  gate is still richer per-package progress/actions, not silent staging.
 - The renderer spine now has backend-neutral sampled render-texture and material
   texture-binding contracts: `render.device` describes the texture/sampler/
   material/render-target/pass shape, `IRenderDevice` owns default handle

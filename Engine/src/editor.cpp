@@ -2128,6 +2128,40 @@ namespace epochnamespace
                     + " selected and visible RTT preview staged.");
         }
 
+        void deactivate_engine_arcade_preview(EditorState& state)
+        {
+            std::erase_if(
+                state.entities,
+                [](const EditorEntity& entity)
+                {
+                    return entity.category == "EngineArcade";
+                });
+            const auto sceneIds = epoch::package_registry::engine_arcade_scene_ids();
+            const std::string_view activeScene{ state.activeRuntimeScene };
+            bool activeSceneIsArcade = false;
+            std::string_view remaining = sceneIds;
+            while (!activeScene.empty() && !remaining.empty())
+            {
+                const auto comma = remaining.find(',');
+                const auto scene = comma == std::string_view::npos ? remaining : remaining.substr(0u, comma);
+                if (scene == activeScene)
+                {
+                    activeSceneIsArcade = true;
+                    break;
+                }
+                if (comma == std::string_view::npos)
+                    break;
+                remaining.remove_prefix(comma + 1u);
+            }
+            if (activeSceneIsArcade)
+                state.activeRuntimeScene.clear();
+            if (state.selectedEntity >= state.entities.size())
+                state.selectedEntity = state.entities.empty() ? 0u : (state.entities.size() - 1u);
+            state.projectStatus = "Engine Arcade removed from the active project preview.";
+            state.surfaceSettleFrames = (std::max)(state.surfaceSettleFrames, 2);
+            push_editor_log(state, "[package] Engine Arcade preview state removed.");
+        }
+
         void ensure_forest_factory_preview_entities(EditorState& state)
         {
             const std::size_t beforeCount = state.entities.size();
@@ -8712,7 +8746,8 @@ namespace epochnamespace
                     (void)std::filesystem::remove(engineArcadePackage, ec);
                     ec.clear();
                     (void)std::filesystem::remove(engineArcadeScript, ec);
-                    editor.packageInstallStatus = "Engine Arcade project-local manifest/script removed.";
+                    deactivate_engine_arcade_preview(editor);
+                    editor.packageInstallStatus = "Engine Arcade project-local manifest/script and preview state removed.";
                     editor.packageInstallProgress = 0.0f;
                     push_editor_log(editor, "[package] Removed engine_arcade project-local package files.");
                     return;
