@@ -1710,6 +1710,44 @@ namespace
         return root / "bin" / "windows" / "Debug" / "x64" / (generated_project_artifact_stem(root) + ".exe");
     }
 
+    [[nodiscard]] static std::vector<fs::path> generated_project_output_candidates(const fs::path& root)
+    {
+        const fs::path outputDir = root / "bin" / "windows" / "Debug" / "x64";
+        std::vector<fs::path> candidates;
+        const auto add_candidate = [&](std::string name) {
+            if (name.empty())
+                return;
+            if (!name.ends_with(".exe"))
+                name += ".exe";
+            const fs::path path = outputDir / name;
+            for (const auto& candidate : candidates)
+            {
+                if (candidate == path)
+                    return;
+            }
+            candidates.push_back(path);
+        };
+
+        add_candidate(generated_project_artifact_stem(root));
+        add_candidate(root.filename().string());
+        add_candidate("EpochEngine");
+        add_candidate("EpochEditor");
+        add_candidate("ConsoleApplication1");
+        return candidates;
+    }
+
+    [[nodiscard]] static fs::path generated_project_existing_output_path(const fs::path& root)
+    {
+        std::error_code ec;
+        for (const auto& candidate : generated_project_output_candidates(root))
+        {
+            if (fs::exists(candidate, ec) && !ec)
+                return candidate;
+            ec.clear();
+        }
+        return generated_project_output_path(root);
+    }
+
     [[nodiscard]] static std::string next_generated_project_name(EditorProjectKind kind)
     {
         const std::string prefix = kind == EditorProjectKind::Tool ? "ToolProject" : "GameProject";
@@ -3020,16 +3058,17 @@ namespace epochnamespace
 #endif
 
         const int exitCode = std::system(command.c_str());
+        const fs::path resolvedOutputPath = generated_project_existing_output_path(root);
         const bool succeeded = (exitCode == 0)
-            && fs::exists(outputPath, ec)
+            && fs::exists(resolvedOutputPath, ec)
             && !ec;
 
         return {
             succeeded,
             succeeded
-                ? "Built generated child project to " + outputPath.generic_string() + "."
+                ? "Built generated child project to " + resolvedOutputPath.generic_string() + "."
                 : "Project build failed. See " + logPath.generic_string() + " for details.",
-            outputPath.generic_string(),
+            (succeeded ? resolvedOutputPath : outputPath).generic_string(),
             logPath.generic_string()
         };
     }

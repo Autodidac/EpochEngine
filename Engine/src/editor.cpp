@@ -538,7 +538,8 @@ namespace epochnamespace
         {
             return surface == EditorMainSurface::Scene
                 || surface == EditorMainSurface::Game2D
-                || surface == EditorMainSurface::ForestFactory;
+                || surface == EditorMainSurface::ForestFactory
+                || surface == EditorMainSurface::Timeline;
         }
 
         [[nodiscard]] static std::string_view main_surface_title(EditorMainSurface surface) noexcept
@@ -3503,6 +3504,45 @@ namespace epochnamespace
             return root / "bin" / "windows" / "Debug" / "x64" / (project_artifact_stem(projectRoot) + ".exe");
         }
 
+        [[nodiscard]] std::vector<std::filesystem::path> project_output_exe_candidates(std::string_view projectRoot)
+        {
+            const std::filesystem::path root = resolve_editor_path(std::filesystem::path{ projectRoot });
+            const std::filesystem::path outputDir = root / "bin" / "windows" / "Debug" / "x64";
+            std::vector<std::filesystem::path> candidates;
+            const auto add_candidate = [&](std::string name) {
+                if (name.empty())
+                    return;
+                if (!name.ends_with(".exe"))
+                    name += ".exe";
+                const auto path = outputDir / name;
+                for (const auto& candidate : candidates)
+                {
+                    if (candidate == path)
+                        return;
+                }
+                candidates.push_back(path);
+            };
+
+            add_candidate(project_artifact_stem(projectRoot));
+            add_candidate(root.filename().string());
+            add_candidate("EpochEngine");
+            add_candidate("EpochEditor");
+            add_candidate("ConsoleApplication1");
+            return candidates;
+        }
+
+        [[nodiscard]] std::filesystem::path project_existing_output_exe_path(std::string_view projectRoot)
+        {
+            std::error_code ec;
+            for (const auto& candidate : project_output_exe_candidates(projectRoot))
+            {
+                if (std::filesystem::exists(candidate, ec) && !ec)
+                    return candidate;
+                ec.clear();
+            }
+            return project_output_exe_path(projectRoot);
+        }
+
         [[nodiscard]] std::filesystem::path project_build_log_path(std::string_view projectRoot)
         {
             return resolve_editor_path(std::filesystem::path{ projectRoot }) / "build" / "logs" / "build-debug-x64.log";
@@ -4746,7 +4786,7 @@ namespace epochnamespace
             if (editor.projectRoot.empty())
                 return { true, "no active project root" };
 
-            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+            const std::filesystem::path outputExe = project_existing_output_exe_path(editor.projectRoot);
             std::error_code ec;
             if (!std::filesystem::exists(outputExe, ec) || ec)
                 return { true, "child executable missing" };
@@ -4821,7 +4861,7 @@ namespace epochnamespace
 
             repair_active_project_evidence(editor);
 
-            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+            const std::filesystem::path outputExe = project_existing_output_exe_path(editor.projectRoot);
             editor.projectBuildRunAfterBuild = runAfterBuild;
             editor.projectBuildRunScene = project_runtime_scene_id(editor);
             editor.projectBuildOutputPath = display_project_path(outputExe);
@@ -5378,15 +5418,23 @@ namespace epochnamespace
                     && !editor.lastUpdateCheck.packaged_update_available;
 
                 if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
-                    return { 700.0f, 360.0f };
+                    return { 700.0f, 396.0f };
                 if (editor.updateState == EditorUpdateState::RestartReady)
-                    return { 700.0f, 326.0f };
+                    return { 700.0f, 356.0f };
                 if (sourceOnlyUpdate)
-                    return { 700.0f, 340.0f };
-                return { 700.0f, 326.0f };
+                    return { 700.0f, 372.0f };
+                return { 700.0f, 356.0f };
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
         const gui::Vec2 sourceUpdateConfirmModalSize{ 620.0f, 292.0f };
+        const auto package_manager_modal_size = [&]() noexcept -> gui::Vec2
+            {
+                return {
+                    std::clamp(w - 96.0f, 720.0f, 920.0f),
+                    std::clamp(h - 96.0f, 600.0f, 720.0f)
+                };
+            };
+        const gui::Vec2 packageManagerModalSize = package_manager_modal_size();
         auto modal_visible_now = [&editor]() noexcept -> bool
         {
             return editor.showAboutModal
@@ -5413,7 +5461,7 @@ namespace epochnamespace
         else if (editor.showSettingsModal)
             gui::begin_modal_input_capture(centered_modal_position({ 600.0f, 462.0f }), { 600.0f, 462.0f });
         else if (editor.showPackageManagerModal)
-            gui::begin_modal_input_capture(centered_modal_position({ 820.0f, 560.0f }), { 820.0f, 560.0f });
+            gui::begin_modal_input_capture(centered_modal_position(packageManagerModalSize), packageManagerModalSize);
         else if (editor.showAboutModal)
             gui::begin_modal_input_capture(centered_modal_position({ 456.0f, 222.0f }), { 456.0f, 222.0f });
 
@@ -5554,7 +5602,7 @@ namespace epochnamespace
                 return;
             }
 
-            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
+            const std::filesystem::path outputExe = project_existing_output_exe_path(editor.projectRoot);
             if (!path_exists(outputExe))
             {
                 editor.projectBuildStatus = "Launch blocked: child executable disappeared before launch.";
@@ -5617,6 +5665,12 @@ namespace epochnamespace
 
                 const bool shouldRun = editor.projectBuildRunAfterBuild;
                 const std::string outputPath = build.output_path.empty() ? editor.projectBuildOutputPath : build.output_path;
+                std::filesystem::path resolvedOutputPath = outputPath.empty()
+                    ? project_existing_output_exe_path(editor.projectRoot)
+                    : resolve_editor_path(std::filesystem::path{ outputPath });
+                if (!path_exists(resolvedOutputPath))
+                    resolvedOutputPath = project_existing_output_exe_path(editor.projectRoot);
+                const std::string launchOutputPath = display_project_path(resolvedOutputPath);
                 const std::string sceneId = editor.projectBuildRunScene.empty() ? project_runtime_scene_id(editor) : editor.projectBuildRunScene;
                 const std::string runBackend = editor.projectBuildRunBackend.empty() ? std::string("opengl") : editor.projectBuildRunBackend;
                 const double runFrameLimit = editor.projectBuildRunFrameLimitFps;
@@ -5640,7 +5694,7 @@ namespace epochnamespace
                     return;
                 }
 
-                const bool hasBuiltOutput = path_exists(outputPath);
+                const bool hasBuiltOutput = path_exists(resolvedOutputPath);
                 if (!hasBuiltOutput)
                 {
                     editor.projectBuildStatus = "Launch blocked: built child executable is missing after build.";
@@ -5651,12 +5705,12 @@ namespace epochnamespace
                         editor,
                         "Launch Single Context Blocked",
                         "The built child executable was missing after build; parent multicontext fallback was refused.",
-                        outputPath.empty() ? std::string("(missing output path)") : outputPath);
+                        launchOutputPath.empty() ? std::string("(missing output path)") : launchOutputPath);
                     return;
                 }
 
                 const std::string playTarget =
-                    std::string("project-exe:") + display_project_path(outputPath)
+                    std::string("project-exe:") + launchOutputPath
                     + "|scene=" + sceneId
                     + "|backend=" + runBackend
                     + "|fps=" + std::string(frame_limit_argument(runFrameLimit))
@@ -8303,7 +8357,7 @@ namespace epochnamespace
             emitWrapped(introText, 8.0f);
             emitWrapped(updateStatusLine, 10.0f);
             gui::set_cursor({ contentX, cursorY });
-            const float progressWidth = (std::min)(contentWidth, 560.0f);
+            const float progressWidth = (std::min)((std::max)(1.0f, contentWidth - 8.0f), 520.0f);
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
                 .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",
@@ -8583,12 +8637,14 @@ namespace epochnamespace
         if (editor.showPackageManagerModal)
         {
             editor.openMenu = TopMenu::None;
-            const gui::Vec2 modalSize{ 820.0f, 560.0f };
+            const gui::Vec2 modalSize = packageManagerModalSize;
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
-            const float contentWidth = modalSize.x - 32.0f;
+            const float contentWidth = modalSize.x - 48.0f;
+            const float packageListHeight = std::clamp(modalSize.y * 0.36f, 190.0f, 260.0f);
+            const float packageDetailHeight = std::clamp(modalSize.y - packageListHeight - 252.0f, 128.0f, 220.0f);
             const auto* activeProfile = editor_find_project_profile(editor.projectId);
             const bool engineArcadeEligible =
                 activeProfile
@@ -8789,8 +8845,8 @@ namespace epochnamespace
             gui::label("Available Packages");
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "package-manager-package-list",
-                .size = { contentWidth, 222.0f },
-                .content_height = (std::max)(222.0f, static_cast<float>(knownPackages.size()) * 68.0f + 12.0f),
+                .size = { contentWidth, packageListHeight },
+                .content_height = (std::max)(packageListHeight, static_cast<float>(knownPackages.size()) * 68.0f + 12.0f),
                 .draw_background = true,
                 .show_scrollbar = true
             });
@@ -8832,8 +8888,8 @@ namespace epochnamespace
             gui::label("Selected Package");
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "package-manager-detail-scroll",
-                .size = { contentWidth, 150.0f },
-                .content_height = 248.0f,
+                .size = { contentWidth, packageDetailHeight },
+                .content_height = (std::max)(packageDetailHeight, 248.0f),
                 .draw_background = true,
                 .show_scrollbar = true
             });
@@ -8903,7 +8959,7 @@ namespace epochnamespace
                 .label = "Install",
                 .status = editor.packageInstallStatus,
                 .value = packageProgress,
-                .size = { contentWidth, 20.0f },
+                .size = { (std::max)(1.0f, contentWidth - 8.0f), 20.0f },
                 .show_percent = true
             });
 

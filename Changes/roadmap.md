@@ -48,6 +48,11 @@ one pass renders a small scene model into `engine_arcade.screen`, and the next
 pass samples that surface onto the cabinet material. `ConsoleApplication1|Debug|x64`
 builds with MSVC after the harness update.
 
+Latest stabilization: Video is treated as a scene-backed workspace again so the
+timeline strip remains visible, update/package modals use matched body and input
+capture geometry to protect top-layer z-order, and single-context Run resolves
+existing generated child executables before rejecting launch.
+
 ## Acceptance Gates
 
 - `Changes/active_pass.md` names one source gate and its allowed source areas.

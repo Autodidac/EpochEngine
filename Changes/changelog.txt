@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Restored the editor stabilization paths that regressed around update/package
+  modals, the Video workspace, and single-context project launch. Video now
+  stays on the scene-backed surface so the timeline strip is visible, update and
+  Package Manager modals share their input-capture/body geometry with larger
+  bounded content regions, and Run resolves the generated child executable that
+  actually exists in the project output folder before refusing fallback.
+  Validation: MSVC Debug x64 `ConsoleApplication1` passed.
 - Made Engine Arcade package installation visibly activate the editor instead of
   only staging package evidence. Installing or reinstalling `engine_arcade` now
   selects the default arcade scene, stages an editor-visible RTT screen/cabinet
