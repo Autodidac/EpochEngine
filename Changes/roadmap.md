@@ -52,8 +52,10 @@ harness update.
 
 Latest stabilization: Video is treated as a scene-backed workspace again so the
 timeline strip remains visible, update/package modals use matched body and input
-capture geometry to protect top-layer z-order, and single-context Run resolves
-existing generated child executables before rejecting launch.
+capture geometry to protect top-layer z-order, shared GUI progress bars clamp to
+their owning content lane, update/source-rebuild modals fit the live viewport,
+and single-context Run resolves existing generated child executables before
+rejecting launch.
 
 ## Acceptance Gates
 

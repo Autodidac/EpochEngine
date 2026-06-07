@@ -4152,6 +4152,7 @@ namespace epochnamespace::gui
         float width = options.size.x > 0.0f
             ? (std::max)(1.0f, options.size.x)
             : availableWidth;
+        width = (std::min)(width, availableWidth);
         if (has_content_clip())
             width = (std::min)(width, (std::max)(1.0f, content_right() - pos.x));
         const float height = (std::max)(14.0f, options.size.y > 0.0f ? options.size.y : 18.0f);

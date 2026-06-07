@@ -5426,6 +5426,17 @@ namespace epochnamespace
                     (std::max)(0.0f, (h - modalSize.y) * 0.5f)
                 };
             };
+        const auto fit_modal_size = [&](const gui::Vec2 desired, const gui::Vec2 minimum) noexcept -> gui::Vec2
+            {
+                const float maxWidth = (std::max)(1.0f, w - 64.0f);
+                const float maxHeight = (std::max)(1.0f, h - 64.0f);
+                const float minWidth = (std::min)(minimum.x, maxWidth);
+                const float minHeight = (std::min)(minimum.y, maxHeight);
+                return {
+                    std::clamp(desired.x, minWidth, maxWidth),
+                    std::clamp(desired.y, minHeight, maxHeight)
+                };
+            };
         const auto update_confirm_modal_size = [&]() noexcept -> gui::Vec2
             {
                 const bool sourceOnlyUpdate =
@@ -5433,15 +5444,15 @@ namespace epochnamespace
                     && !editor.lastUpdateCheck.packaged_update_available;
 
                 if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
-                    return { 700.0f, 396.0f };
+                    return fit_modal_size({ 700.0f, 416.0f }, { 520.0f, 336.0f });
                 if (editor.updateState == EditorUpdateState::RestartReady)
-                    return { 700.0f, 356.0f };
+                    return fit_modal_size({ 700.0f, 368.0f }, { 520.0f, 316.0f });
                 if (sourceOnlyUpdate)
-                    return { 700.0f, 372.0f };
-                return { 700.0f, 356.0f };
+                    return fit_modal_size({ 700.0f, 388.0f }, { 520.0f, 328.0f });
+                return fit_modal_size({ 700.0f, 368.0f }, { 520.0f, 316.0f });
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
-        const gui::Vec2 sourceUpdateConfirmModalSize{ 620.0f, 292.0f };
+        const gui::Vec2 sourceUpdateConfirmModalSize = fit_modal_size({ 620.0f, 316.0f }, { 500.0f, 292.0f });
         const auto package_manager_modal_size = [&]() noexcept -> gui::Vec2
             {
                 return {
@@ -8451,7 +8462,7 @@ namespace epochnamespace
         if (editor.showSourceUpdateConfirmModal)
         {
             editor.openMenu = TopMenu::None;
-            const gui::Vec2 modalSize{ 620.0f, 292.0f };
+            const gui::Vec2 modalSize = sourceUpdateConfirmModalSize;
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)

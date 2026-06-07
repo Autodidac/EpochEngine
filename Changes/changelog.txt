@@ -1,6 +1,11 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Clamped shared GUI progress bars to their owning content lane and made the
+  update/source-rebuild modals fit the live viewport with matching draw and
+  input-capture sizes. This keeps update/package progress bars from bleeding
+  outside modal bounds and avoids stale advanced-source capture geometry.
+  Validation: MSVC Debug x64 `ConsoleApplication1` passed.
 - Expanded the Engine Arcade visual proof beyond the placeholder box. Generated
   game-shell scenes that opt into `engine_arcade` now write explicit
   `epoch_editor_entities` for a cabinet base/body/control deck, sampled screen,
