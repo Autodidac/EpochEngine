@@ -211,6 +211,9 @@ These are already established and must stay intact while new work lands:
   create DirectX dockable scene/context panes, an OpenGL editor should create
   OpenGL panes, and so on. Mixed-backend grids remain explicit diagnostic or
   accurate-preview proof surfaces, not the default editor/project runtime shape
+- floating GUI/tool windows follow the same rule: undocking clones an
+  editor-owned GUI pane from the currently selected backend/context family
+  unless the operator explicitly opens a mixed-backend diagnostic grid
 - current project scene/world files are metadata shells; live editor preview is
   still seeded from engine-owned project profiles until scene parsing and
   serialization own runtime loading

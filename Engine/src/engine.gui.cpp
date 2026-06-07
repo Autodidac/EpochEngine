@@ -261,13 +261,17 @@ namespace epochnamespace::gui
         {
             std::size_t firstLine = 0;
             std::size_t selectedLine = 0;
+            std::size_t selectionAnchorLine = 0;
             bool hasSelection = false;
             std::size_t lastLineCount = 0;
             float scrollY = 0.0f;
             float lastContentPixelHeight = 0.0f;
             float lastViewportHeight = 0.0f;
             bool draggingScrollbar = false;
+            bool draggingSelection = false;
             float dragGrabOffset = 0.0f;
+            bool contextMenuOpen = false;
+            Vec2 contextMenuPos{};
         };
 
         struct ScrollAreaState
@@ -294,6 +298,12 @@ namespace epochnamespace::gui
             bool draggingSelection = false;
         };
 
+        struct EditBoxMenuState
+        {
+            bool open = false;
+            Vec2 pos{};
+        };
+
         struct ScrollAreaFrame
         {
             std::string key{};
@@ -312,6 +322,7 @@ namespace epochnamespace::gui
         static thread_local std::unordered_map<std::string, ScrollAreaState> g_scrollAreaStates{};
         static thread_local std::unordered_map<std::string, SelectBoxState> g_selectBoxStates{};
         static thread_local std::unordered_map<std::string, SourceEditorState> g_sourceEditorStates{};
+        static thread_local std::unordered_map<const void*, EditBoxMenuState, PtrHash> g_editBoxMenuStates{};
         static thread_local std::vector<ScrollAreaFrame> g_scrollAreaStack{};
 
         [[nodiscard]] static bool any_select_box_open() noexcept
@@ -2999,6 +3010,7 @@ namespace epochnamespace::gui
         const void* ctxKey = static_cast<const void*>(g_frame.ctx);
         const void* activeWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
         bool& wholeFieldSelected = g_textFieldSelectAllStates[id];
+        auto& menuState = g_editBoxMenuStates[id];
         const auto& palette = active_palette();
 
         if (g_frame.justPressed || g_frame.rightJustPressed)
@@ -3129,6 +3141,14 @@ namespace epochnamespace::gui
             }
         }
 
+        bool openedContextMenuThisFrame = false;
+        if (g_frame.rightJustPressed && hovered)
+        {
+            menuState.open = true;
+            menuState.pos = g_frame.mousePos;
+            openedContextMenuThisFrame = true;
+        }
+
         // Create view after edits.
         const std::string_view sv{ text };
 
@@ -3158,6 +3178,92 @@ namespace epochnamespace::gui
                 textY + (std::max)(0.0f, contentHeight - caretHeight));
 
             draw_caret(caretX, caretY, caretHeight);
+        }
+
+        if (menuState.open)
+        {
+            const float rowHeight = 28.0f;
+            const float menuPadding = 4.0f;
+            const float menuWidth = 172.0f;
+            const float menuHeight = menuPadding * 2.0f + rowHeight * 4.0f + kContentPadding * 3.0f;
+            Vec2 menuPos = menuState.pos;
+            menuPos.x = (std::min)(menuPos.x, (std::max)(0.0f, g_frame.origin.x + g_frame.windowSize.x - menuWidth - kContentPadding));
+            menuPos.y = (std::min)(menuPos.y, (std::max)(0.0f, g_frame.origin.y + g_frame.windowSize.y - menuHeight - kContentPadding));
+
+            const bool hoveredMenu = point_in_rect(g_frame.mousePos, menuPos.x, menuPos.y, menuWidth, menuHeight);
+            if (!openedContextMenuThisFrame && (g_frame.justPressed || g_frame.rightJustPressed) && !hoveredMenu)
+                menuState.open = false;
+
+            if (menuState.open)
+            {
+                const Vec2 savedCursor = g_frame.cursor;
+                const Vec2 savedOrigin = g_frame.origin;
+                const Vec2 savedWindowSize = g_frame.windowSize;
+                const Vec2 savedContentMin = g_frame.contentMin;
+                const Vec2 savedContentMax = g_frame.contentMax;
+                const bool savedInsideWindow = g_frame.insideWindow;
+                const std::string savedWindowKey = g_frame.windowKey;
+                const std::uint64_t savedWidgetSerial = g_frame.widgetSerial;
+
+                begin_top_layer();
+                const auto& menuPalette = active_palette();
+                draw_sprite(menuPalette.windowBackground, menuPos.x, menuPos.y, menuWidth, menuHeight);
+                draw_sprite(menuPalette.titleBar, menuPos.x, menuPos.y, menuWidth, 2.0f);
+                draw_sprite(menuPalette.titleBar, menuPos.x, menuPos.y, 2.0f, menuHeight);
+                draw_sprite(menuPalette.panelBackground, menuPos.x + menuWidth - 2.0f, menuPos.y, 2.0f, menuHeight);
+                draw_sprite(menuPalette.panelBackground, menuPos.x, menuPos.y + menuHeight - 2.0f, menuWidth, 2.0f);
+
+                g_frame.insideWindow = true;
+                g_frame.windowKey = std::string("edit-box-context-menu-") + std::to_string(reinterpret_cast<std::uintptr_t>(id));
+                g_frame.widgetSerial = 0;
+                g_frame.origin = menuPos;
+                g_frame.windowSize = { menuWidth, menuHeight };
+                g_frame.contentMin = { menuPos.x + menuPadding, menuPos.y + menuPadding };
+                g_frame.contentMax = { menuPos.x + menuWidth - menuPadding, menuPos.y + menuHeight - menuPadding };
+                set_cursor(g_frame.contentMin);
+
+                if (button("Select All", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    wholeFieldSelected = !text.empty();
+                    menuState.open = false;
+                }
+                if (button("Copy", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    (void)clipboard_write_text(text);
+                    menuState.open = false;
+                }
+                if (button("Cut", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    (void)clipboard_write_text(text);
+                    if (!text.empty())
+                    {
+                        text.clear();
+                        result.changed = true;
+                    }
+                    wholeFieldSelected = false;
+                    menuState.open = false;
+                }
+                if (button("Paste", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    if (wholeFieldSelected)
+                    {
+                        text.clear();
+                        wholeFieldSelected = false;
+                    }
+                    append_text_limited(text, clipboard_read_text(), limit, multiline, result.changed);
+                    menuState.open = false;
+                }
+
+                g_frame.cursor = savedCursor;
+                g_frame.origin = savedOrigin;
+                g_frame.windowSize = savedWindowSize;
+                g_frame.contentMin = savedContentMin;
+                g_frame.contentMax = savedContentMax;
+                g_frame.insideWindow = savedInsideWindow;
+                g_frame.windowKey = savedWindowKey;
+                g_frame.widgetSerial = savedWidgetSerial;
+                end_top_layer();
+            }
         }
 
         advance_cursor({ 0.0f, height + kContentPadding });
@@ -4365,6 +4471,35 @@ namespace epochnamespace::gui
             ? std::to_string(reinterpret_cast<std::uintptr_t>(options.lines.data()))
             : std::string(options.id);
         auto& state = g_scrollTextStates[scroll_panel_key(id)];
+        const auto selected_line_range = [&]() noexcept -> std::pair<std::size_t, std::size_t>
+        {
+            if (!state.hasSelection || lineCount == 0u)
+                return { 0u, 0u };
+
+            const std::size_t lastLine = lineCount - 1u;
+            const std::size_t first = (std::min)(state.selectionAnchorLine, state.selectedLine);
+            const std::size_t last = (std::max)(state.selectionAnchorLine, state.selectedLine);
+            return {
+                (std::min)(first, lastLine),
+                (std::min)(last, lastLine)
+            };
+        };
+
+        const auto selected_lines_text = [&]() -> std::string
+        {
+            if (!state.hasSelection || lineCount == 0u)
+                return {};
+
+            const auto [first, last] = selected_line_range();
+            std::string text{};
+            for (std::size_t lineIndex = first; lineIndex <= last && lineIndex < lineCount; ++lineIndex)
+            {
+                if (!text.empty())
+                    text.push_back('\n');
+                text.append(line_view(lineIndex));
+            }
+            return text;
+        };
 
         const float previousMaxScrollY = (std::max)(0.0f, state.lastContentPixelHeight - state.lastViewportHeight);
         const bool wasAtBottom = state.lastLineCount == 0
@@ -4428,6 +4563,7 @@ namespace epochnamespace::gui
         }
 
         result.first_visible_line = (std::min)(state.firstLine, lineCount);
+        bool openedContextMenuThisFrame = false;
         {
             ContentClipScope clip{
                 { contentX, contentY },
@@ -4461,12 +4597,36 @@ namespace epochnamespace::gui
 
                 if (options.selectable && g_frame.justPressed && lineHovered)
                 {
+                    state.selectionAnchorLine = lineIndex;
+                    state.selectedLine = lineIndex;
+                    state.hasSelection = true;
+                    state.draggingSelection = true;
+                    result.selected_line = lineIndex;
+                }
+                else if (options.selectable && state.draggingSelection && g_frame.mouseDown && lineHovered)
+                {
                     state.selectedLine = lineIndex;
                     state.hasSelection = true;
                     result.selected_line = lineIndex;
                 }
 
-                if (options.selectable && state.hasSelection && state.selectedLine == lineIndex)
+                if (options.selectable && g_frame.rightJustPressed && lineHovered)
+                {
+                    const auto [firstSelected, lastSelected] = selected_line_range();
+                    if (!state.hasSelection || lineIndex < firstSelected || lineIndex > lastSelected)
+                    {
+                        state.selectionAnchorLine = lineIndex;
+                        state.selectedLine = lineIndex;
+                        state.hasSelection = true;
+                        result.selected_line = lineIndex;
+                    }
+                    state.contextMenuOpen = true;
+                    state.contextMenuPos = g_frame.mousePos;
+                    openedContextMenuThisFrame = true;
+                }
+
+                const auto [firstSelected, lastSelected] = selected_line_range();
+                if (options.selectable && state.hasSelection && lineIndex >= firstSelected && lineIndex <= lastSelected)
                     draw_sprite(palette.buttonActive, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, rowHeight);
                 else if (lineHovered)
                     draw_sprite(palette.buttonHover, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, rowHeight);
@@ -4483,6 +4643,9 @@ namespace epochnamespace::gui
                 rowY += rowHeight;
             }
         }
+
+        if (!g_frame.mouseDown)
+            state.draggingSelection = false;
 
         if (scrollbarWidth > 0.0f)
         {
@@ -4504,6 +4667,78 @@ namespace epochnamespace::gui
 
         if (state.hasSelection && state.selectedLine < lineCount)
             result.selected_line = state.selectedLine;
+
+        if (state.contextMenuOpen)
+        {
+            const float rowHeight = 28.0f;
+            const float menuPadding = 4.0f;
+            const float menuWidth = 188.0f;
+            const float menuHeight = menuPadding * 2.0f + rowHeight * 3.0f + kContentPadding * 2.0f;
+            Vec2 menuPos = state.contextMenuPos;
+            menuPos.x = (std::min)(menuPos.x, (std::max)(0.0f, g_frame.origin.x + g_frame.windowSize.x - menuWidth - kContentPadding));
+            menuPos.y = (std::min)(menuPos.y, (std::max)(0.0f, g_frame.origin.y + g_frame.windowSize.y - menuHeight - kContentPadding));
+
+            const bool hoveredMenu = point_in_rect(g_frame.mousePos, menuPos.x, menuPos.y, menuWidth, menuHeight);
+            if (!openedContextMenuThisFrame && (g_frame.justPressed || g_frame.rightJustPressed) && !hoveredMenu)
+                state.contextMenuOpen = false;
+
+            if (state.contextMenuOpen)
+            {
+                const Vec2 savedCursor = g_frame.cursor;
+                const Vec2 savedOrigin = g_frame.origin;
+                const Vec2 savedWindowSize = g_frame.windowSize;
+                const Vec2 savedContentMin = g_frame.contentMin;
+                const Vec2 savedContentMax = g_frame.contentMax;
+                const bool savedInsideWindow = g_frame.insideWindow;
+                const std::string savedWindowKey = g_frame.windowKey;
+                const std::uint64_t savedWidgetSerial = g_frame.widgetSerial;
+
+                begin_top_layer();
+                const auto& menuPalette = active_palette();
+                draw_sprite(menuPalette.windowBackground, menuPos.x, menuPos.y, menuWidth, menuHeight);
+                draw_sprite(menuPalette.titleBar, menuPos.x, menuPos.y, menuWidth, 2.0f);
+                draw_sprite(menuPalette.titleBar, menuPos.x, menuPos.y, 2.0f, menuHeight);
+                draw_sprite(menuPalette.panelBackground, menuPos.x + menuWidth - 2.0f, menuPos.y, 2.0f, menuHeight);
+                draw_sprite(menuPalette.panelBackground, menuPos.x, menuPos.y + menuHeight - 2.0f, menuWidth, 2.0f);
+
+                g_frame.insideWindow = true;
+                g_frame.windowKey = id + "-text-context-menu";
+                g_frame.widgetSerial = 0;
+                g_frame.origin = menuPos;
+                g_frame.windowSize = { menuWidth, menuHeight };
+                g_frame.contentMin = { menuPos.x + menuPadding, menuPos.y + menuPadding };
+                g_frame.contentMax = { menuPos.x + menuWidth - menuPadding, menuPos.y + menuHeight - menuPadding };
+                set_cursor(g_frame.contentMin);
+
+                if (button("Select All", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    state.selectionAnchorLine = 0u;
+                    state.selectedLine = lineCount > 0u ? lineCount - 1u : 0u;
+                    state.hasSelection = lineCount > 0u;
+                    state.contextMenuOpen = false;
+                }
+                if (button("Copy Selection", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    (void)clipboard_write_text(selected_lines_text());
+                    state.contextMenuOpen = false;
+                }
+                if (button("Clear Selection", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    state.hasSelection = false;
+                    state.contextMenuOpen = false;
+                }
+
+                g_frame.cursor = savedCursor;
+                g_frame.origin = savedOrigin;
+                g_frame.windowSize = savedWindowSize;
+                g_frame.contentMin = savedContentMin;
+                g_frame.contentMax = savedContentMax;
+                g_frame.insideWindow = savedInsideWindow;
+                g_frame.windowKey = savedWindowKey;
+                g_frame.widgetSerial = savedWidgetSerial;
+                end_top_layer();
+            }
+        }
 
         advance_cursor({ 0.0f, height + kContentPadding });
         return result;

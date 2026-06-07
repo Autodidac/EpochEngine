@@ -4678,6 +4678,22 @@ namespace epochnamespace
 
         void start_project_build(EditorState& editor, bool runAfterBuild, std::string_view reason)
         {
+            if (editor.projectBuildPending
+                && editor.projectBuildPending->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+            {
+                try
+                {
+                    (void)editor.projectBuildPending->get();
+                }
+                catch (...)
+                {
+                    push_editor_log(editor, "[project] Cleared completed build handle before queuing the next run request.");
+                }
+
+                editor.projectBuildPending.reset();
+                editor.projectBuildRunAfterBuild = false;
+            }
+
             if (editor.projectBuildPending)
             {
                 editor.projectBuildStatus = "Project build already running; wait for the current build before pressing Run again.";
@@ -5589,9 +5605,14 @@ namespace epochnamespace
                 editor.showConsoleDock = true;
                 editor.showAiChat = true;
                 editor.previewMode = core::ScenePreviewMode::Editor;
-                editor.projectCameraMode = previewgrid::CameraMode::Editor;
-                if (ctx && epochnamespace::previewgrid::camera_mode_for(ctx.get()) == epochnamespace::previewgrid::CameraMode::Canvas2D)
-                    epochnamespace::previewgrid::set_camera_mode(ctx.get(), epochnamespace::previewgrid::CameraMode::Editor);
+                if (editor.projectCameraMode == previewgrid::CameraMode::Canvas2D)
+                    editor.projectCameraMode = previewgrid::CameraMode::Editor;
+                if (ctx)
+                {
+                    const auto currentCameraMode = epochnamespace::previewgrid::camera_mode_for(ctx.get());
+                    if (currentCameraMode == epochnamespace::previewgrid::CameraMode::Canvas2D)
+                        epochnamespace::previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
+                }
                 push_editor_log(editor, std::string("[editor] Scene workbench opened from ") + std::string(source) + ".");
                 break;
             case EditorMainSurface::Game2D:
