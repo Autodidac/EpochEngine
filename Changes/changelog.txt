@@ -1,6 +1,11 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Promoted sampled render-texture samplers into first-class graph resources.
+  `render.graph` now records the `engine_arcade.screen` sampler beside its color
+  texture and render target, resolves the sampler into material read bindings,
+  and skips ordinary sampler teardown because RTT asset destruction owns that
+  native object. Validation: MSVC Debug x64 `ConsoleApplication1` passed.
 - Clamped shared GUI progress bars to their owning content lane and made the
   update/source-rebuild modals fit the live viewport with matching draw and
   input-capture sizes. This keeps update/package progress bars from bleeding

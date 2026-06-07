@@ -60,6 +60,14 @@ namespace epoch
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
+    GraphResource GraphBuilder::create_sampler(epoch::string_view name, const SamplerDesc& desc)
+    {
+        const u32 idx = static_cast<u32>(m_samplers.size());
+        m_samplers.push_back(GraphSampler{ desc, {} });
+        m_resources.push_back(ResourceDecl{ ResourceKind::sampler, epoch::string(name), idx });
+        return GraphResource{ static_cast<u32>(m_resources.size()) };
+    }
+
     GraphResource GraphBuilder::create_material(epoch::string_view name,
                                                 const MaterialDesc& desc,
                                                 epoch::array_view<const GraphMaterialTextureSlot> texture_slots)
@@ -120,6 +128,7 @@ namespace epoch
         asset.desc = desc;
         asset.plan = make_render_texture_asset_plan(desc);
         asset.color_texture = create_texture(name, asset.plan.color_texture);
+        asset.sampler = create_sampler(name, asset.plan.sampler);
         asset.render_target = create_render_target(name, asset.plan.render_target);
         m_render_texture_assets.push_back(asset);
         return asset;
@@ -179,6 +188,7 @@ namespace epoch
         g.resources = m_resources;
         g.buffers   = m_buffers;
         g.textures  = m_textures;
+        g.samplers = m_samplers;
         g.materials = m_materials;
         g.render_targets = m_render_targets;
         g.meshes = m_meshes;
@@ -210,6 +220,19 @@ namespace epoch
                 return nullptr;
 
             return &g.textures[resource.index];
+        };
+
+        auto resolve_sampler = [&g](GraphResource handle) -> GraphSampler*
+        {
+            const u32 resourceIndex = handle.value;
+            if (resourceIndex == 0 || resourceIndex > g.resources.size())
+                return nullptr;
+
+            const ResourceDecl& resource = g.resources[resourceIndex - 1u];
+            if (resource.kind != ResourceKind::sampler || resource.index >= g.samplers.size())
+                return nullptr;
+
+            return &g.samplers[resource.index];
         };
 
         auto resolve_render_target = [&g](GraphResource handle) -> GraphRenderTarget*
@@ -297,6 +320,10 @@ namespace epoch
                     }
                 }
                 break;
+            case ResourceKind::sampler:
+                if (!write && resource.index < g.samplers.size() && g.samplers[resource.index].backend)
+                    bindings.read_samplers.push_back(g.samplers[resource.index].backend);
+                break;
             case ResourceKind::material:
                 if (resource.index < g.materials.size() && g.materials[resource.index].backend)
                 {
@@ -375,6 +402,15 @@ namespace epoch
                 }
             }
 
+            if (GraphSampler* sampler = resolve_sampler(asset.sampler))
+            {
+                if (asset.backend.sampler)
+                {
+                    sampler->backend = asset.backend.sampler;
+                    sampler->owned_by_render_texture_asset = true;
+                }
+            }
+
             if (GraphRenderTarget* renderTarget = resolve_render_target(asset.render_target))
             {
                 if (asset.backend.render_target)
@@ -390,6 +426,11 @@ namespace epoch
         {
             if (!t.backend)
                 t.backend = dev.create_texture(t.desc);
+        }
+        for (auto& sampler : g.samplers)
+        {
+            if (!sampler.backend)
+                sampler.backend = dev.create_sampler(sampler.desc);
         }
         for (auto& rt : g.render_targets)
         {
@@ -555,6 +596,11 @@ namespace epoch
         {
             if (t.backend && !t.owned_by_render_texture_asset)
                 dev.destroy(t.backend);
+        }
+        for (auto& sampler : samplers)
+        {
+            if (sampler.backend && !sampler.owned_by_render_texture_asset)
+                dev.destroy(sampler.backend);
         }
         for (auto& rt : render_targets)
         {

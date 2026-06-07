@@ -555,6 +555,7 @@ namespace epochnamespace::core
         const bool resourceShape =
             graph.render_texture_assets.size() == 1u
             && graph.textures.size() == 1u
+            && graph.samplers.size() == 1u
             && graph.render_targets.size() == 1u
             && graph.buffers.size() == 2u
             && graph.materials.size() == 1u
@@ -569,6 +570,7 @@ namespace epochnamespace::core
 
         const epoch::GraphRenderTextureAsset& compiledScreen = graph.render_texture_assets.front();
         const epoch::GraphTexture& compiledTexture = graph.textures.front();
+        const epoch::GraphSampler& compiledSampler = graph.samplers.front();
         const epoch::GraphRenderTarget& compiledTarget = graph.render_targets.front();
         const epoch::GraphMaterial& compiledMaterial = graph.materials.front();
         const epoch::GraphModel& compiledModel = graph.models.front();
@@ -593,9 +595,14 @@ namespace epochnamespace::core
             && compiledScreen.backend.color_texture
             && compiledScreen.backend.sampler
             && compiledScreen.backend.render_target
+            && compiledScreen.color_texture == screen.screen.color_texture
+            && compiledScreen.sampler == screen.screen.sampler
+            && compiledScreen.render_target == screen.screen.render_target
             && compiledTexture.backend == compiledScreen.backend.color_texture
             && compiledTexture.sampled_sampler == compiledScreen.backend.sampler
             && compiledTexture.owned_by_render_texture_asset
+            && compiledSampler.backend == compiledScreen.backend.sampler
+            && compiledSampler.owned_by_render_texture_asset
             && compiledTarget.backend == compiledScreen.backend.render_target
             && compiledTarget.owned_by_render_texture_asset;
 
@@ -642,6 +649,7 @@ namespace epochnamespace::core
         const bool resourceShape =
             graph.render_texture_assets.size() == 1u
             && graph.textures.size() == 1u
+            && graph.samplers.size() == 1u
             && graph.render_targets.size() == 1u
             && graph.buffers.size() == 6u
             && graph.materials.size() == 3u
@@ -655,6 +663,7 @@ namespace epochnamespace::core
         }
 
         const epoch::GraphRenderTextureAsset& compiledScreen = graph.render_texture_assets.front();
+        const epoch::GraphSampler& compiledSampler = graph.samplers.front();
         const epoch::GraphMaterial& compiledScreenMaterial = graph.materials.front();
         const epoch::GraphModel& compiledScreenModel = graph.models.front();
         const epoch::GraphMaterial& compiledMaterial = graph.materials[1u];
@@ -701,6 +710,9 @@ namespace epochnamespace::core
 
         const bool bindingReady =
             cabinetPass.binding_set
+            && compiledScreen.sampler == cabinet.screen.sampler
+            && compiledSampler.backend == compiledScreen.backend.sampler
+            && compiledSampler.owned_by_render_texture_asset
             && cabinetPass.bindings.read_materials.size() == 2u
             && cabinetPass.bindings.read_materials.front() == compiledMaterial.backend
             && cabinetPass.bindings.read_materials[1u] == compiledBodyMaterial.backend
@@ -772,6 +784,7 @@ namespace epochnamespace::core
         epoch::CompiledGraph graph = builder.compile(device);
         const bool ready =
             graph.textures.size() == 1u
+            && graph.samplers.empty()
             && graph.materials.size() == 1u
             && graph.passes.size() == 1u
             && graph.textures.front().backend
@@ -1175,6 +1188,7 @@ namespace epochnamespace::core
 
         const bool resourceShape =
             graph.buffers.size() == 6u
+            && graph.samplers.size() == 1u
             && graph.materials.size() == 3u
             && graph.meshes.size() == 3u
             && graph.models.size() == 2u
@@ -1252,6 +1266,7 @@ namespace epochnamespace::core
 
         const bool resourceShape =
             graph.buffers.size() == 6u
+            && graph.samplers.size() == 1u
             && graph.materials.size() == 3u
             && graph.meshes.size() == 3u
             && graph.models.size() == 2u

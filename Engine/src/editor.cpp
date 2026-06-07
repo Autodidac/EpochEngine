@@ -5444,12 +5444,12 @@ namespace epochnamespace
                     && !editor.lastUpdateCheck.packaged_update_available;
 
                 if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
-                    return fit_modal_size({ 700.0f, 416.0f }, { 520.0f, 336.0f });
+                    return fit_modal_size({ 700.0f, 360.0f }, { 520.0f, 332.0f });
                 if (editor.updateState == EditorUpdateState::RestartReady)
-                    return fit_modal_size({ 700.0f, 368.0f }, { 520.0f, 316.0f });
+                    return fit_modal_size({ 700.0f, 324.0f }, { 520.0f, 308.0f });
                 if (sourceOnlyUpdate)
-                    return fit_modal_size({ 700.0f, 388.0f }, { 520.0f, 328.0f });
-                return fit_modal_size({ 700.0f, 368.0f }, { 520.0f, 316.0f });
+                    return fit_modal_size({ 700.0f, 336.0f }, { 520.0f, 316.0f });
+                return fit_modal_size({ 700.0f, 324.0f }, { 520.0f, 308.0f });
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
         const gui::Vec2 sourceUpdateConfirmModalSize = fit_modal_size({ 620.0f, 316.0f }, { 500.0f, 292.0f });
@@ -8383,7 +8383,7 @@ namespace epochnamespace
             emitWrapped(introText, 8.0f);
             emitWrapped(updateStatusLine, 10.0f);
             gui::set_cursor({ contentX, cursorY });
-            const float progressWidth = (std::min)((std::max)(1.0f, contentWidth - 8.0f), 520.0f);
+            const float progressWidth = (std::min)((std::max)(1.0f, contentWidth - 8.0f), 460.0f);
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
                 .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",

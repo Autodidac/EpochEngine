@@ -30,6 +30,10 @@ contracts instead of drift.
   unless the referenced texture is owned by a sampled render-texture asset with
   a sampler. Plain texture handles no longer count as arcade/runtime screen
   surfaces.
+- Sampled render-texture samplers are now first-class graph resources. The graph
+  maps `engine_arcade.screen` color texture, sampler, and render target handles
+  together, and skips ordinary sampler teardown because the RTT asset owns native
+  destruction.
 - `render.arcade` now makes `engine_arcade.screen` a real two-pass proof shape:
   the populate pass targets the sampled render texture with a tiny scene model,
   and the cabinet pass samples that render surface through a material slot.
@@ -38,8 +42,8 @@ contracts instead of drift.
   single placeholder box: base/body/control deck plus screen/marquee entities.
 - SDL3, SFML3, and Raylib sampled-RTT capability reporting remains
   runtime-availability-gated; contract-only paths are still `Partial`.
-- Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the real
-  OpenGL hook contract wiring.
+- Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the graph
+  sampler ownership patch and update-modal layout clamp.
 
 ## Allowed Source Areas
 

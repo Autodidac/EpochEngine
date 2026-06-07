@@ -47,13 +47,16 @@ sampled render-texture asset. Engine Arcade now uses a two-pass proof shape:
 one pass renders a small scene model into `engine_arcade.screen`, and the next
 pass samples that surface onto the cabinet material. Generated game shells that
 include Engine Arcade now seed a cabinet assembly instead of a single
-placeholder box. `ConsoleApplication1|Debug|x64` builds with MSVC after the
-harness update.
+placeholder box. The graph now also records the sampled RTT sampler as a
+first-class resource and ties its lifetime to the owning RTT asset instead of
+ordinary sampler teardown. `ConsoleApplication1|Debug|x64` builds with MSVC after
+the harness update.
 
 Latest stabilization: Video is treated as a scene-backed workspace again so the
 timeline strip remains visible, update/package modals use matched body and input
 capture geometry to protect top-layer z-order, shared GUI progress bars clamp to
-their owning content lane, update/source-rebuild modals fit the live viewport,
+their owning content lane, update/source-rebuild modals use tighter
+state-specific heights and fit the live viewport,
 and single-context Run resolves existing generated child executables before
 rejecting launch.
 
