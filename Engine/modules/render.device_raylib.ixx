@@ -129,7 +129,7 @@ export namespace epoch
         RendererCapabilities capabilities() const noexcept override
         {
             RendererCapabilities caps = renderer_capabilities_for(RendererBackendKind::raylib3);
-            caps.native_sampled_render_targets = true;
+            caps.native_sampled_render_targets = runtime_renderer_available();
             caps.model_resources = true;
             caps.model_import_ready = true;
             return caps;
@@ -265,13 +265,13 @@ export namespace epoch
         void end_command_list(CommandListHandle) override {}
         void present(ISwapchain&) override {}
 
-    private:
         [[nodiscard]] bool runtime_renderer_available() const noexcept
         {
             const auto& state = epochnamespace::raylibstate::s_raylibstate;
             return state.running && state.renderingActive;
         }
 
+    private:
         [[nodiscard]] u32 allocate_render_texture_slot()
         {
             for (u32 i = 0; i < static_cast<u32>(m_render_textures.size()); ++i)

@@ -39,6 +39,10 @@ reports real per-backend capability states.
 3. Keep GUI/modal/command-menu flicker protected while renderer work lands.
 4. Preserve stable push points before broad context, GUI, package, or AI churn.
 
+Current evidence: SDL3, SFML3, and Raylib sampled-RTT capability reporting is
+now runtime-availability-gated instead of always-on, and
+`ConsoleApplication1|Debug|x64` builds with MSVC after the harness update.
+
 ## Acceptance Gates
 
 - `Changes/active_pass.md` names one source gate and its allowed source areas.

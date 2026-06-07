@@ -214,7 +214,7 @@ export namespace epoch
         {
             RendererCapabilities caps = renderer_capabilities_for(RendererBackendKind::sdl3);
             caps.buffers = true;
-            caps.native_sampled_render_targets = true;
+            caps.native_sampled_render_targets = runtime_renderer_available();
             caps.mesh_resources = true;
             caps.model_resources = true;
             return caps;

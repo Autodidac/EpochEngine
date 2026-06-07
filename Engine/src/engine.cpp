@@ -921,11 +921,12 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         epoch::SdlRenderDevice device{};
         const epoch::RendererCapabilities caps = device.capabilities();
-        if (device.backend_name() != "sdl3" || !epoch::renderer_supports_native_sampled_render_targets(caps))
+        const bool runtimeAvailable = device.runtime_renderer_available();
+        if (device.backend_name() != "sdl3"
+            || epoch::renderer_supports_native_sampled_render_targets(caps) != runtimeAvailable)
             return false;
 
         const epoch::RenderTextureAssetDesc desc = epoch::render_arcade::make_screen_render_texture_desc();
-        const bool runtimeAvailable = device.runtime_renderer_available();
         const epoch::RenderTextureAssetHandles handles = device.create_render_texture_asset(desc);
         const epoch::SdlRenderTextureRecord* const record = device.resolve_render_texture(handles.render_target);
 
@@ -952,11 +953,12 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
         epoch::SfmlRenderDevice device{};
         const epoch::RendererCapabilities caps = device.capabilities();
-        if (device.backend_name() != "sfml3" || !epoch::renderer_supports_native_sampled_render_targets(caps))
+        const bool runtimeAvailable = device.runtime_renderer_available();
+        if (device.backend_name() != "sfml3"
+            || epoch::renderer_supports_native_sampled_render_targets(caps) != runtimeAvailable)
             return false;
 
         const epoch::RenderTextureAssetDesc desc = epoch::render_arcade::make_screen_render_texture_desc();
-        const bool runtimeAvailable = device.runtime_renderer_available();
         const epoch::RenderTextureAssetHandles handles = device.create_render_texture_asset(desc);
         const epoch::SfmlRenderTextureRecord* const record = device.resolve_render_texture(handles.render_target);
 
@@ -983,16 +985,24 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         epoch::RaylibRenderDevice device{};
         const epoch::RendererCapabilities caps = device.capabilities();
-        if (device.backend_name() != "raylib" || !epoch::renderer_supports_native_sampled_render_targets(caps))
+        const bool runtimeAvailable = device.runtime_renderer_available();
+        if (device.backend_name() != "raylib"
+            || epoch::renderer_supports_native_sampled_render_targets(caps) != runtimeAvailable)
             return false;
 
         const epoch::RenderTextureAssetDesc desc = epoch::render_arcade::make_screen_render_texture_desc();
         const epoch::RenderTextureAssetHandles handles = device.create_render_texture_asset(desc);
         const epoch::RaylibRenderTextureRecord* const record = device.resolve_render_texture(handles.render_target);
 
-        const bool ready = !static_cast<bool>(handles)
-            && record == nullptr
-            && device.render_texture_count() == 0u;
+        const bool ready = runtimeAvailable
+            ? static_cast<bool>(handles)
+                && record != nullptr
+                && record->active
+                && record->width == desc.width
+                && record->height == desc.height
+            : !static_cast<bool>(handles)
+                && record == nullptr
+                && device.render_texture_count() == 0u;
 
         device.destroy(handles);
         return ready && device.resolve_render_texture(handles.render_target) == nullptr;
