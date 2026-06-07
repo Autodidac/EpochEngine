@@ -694,7 +694,8 @@ namespace epochnamespace::core
             compiledMaterial.backend
             && compiledMaterial.texture_slots.size() == 1u
             && compiledMaterial.texture_slots.front().slot == epoch::MaterialTextureSlot::render_surface
-            && compiledMaterial.texture_slots.front().texture == cabinet.screen.color_texture;
+            && compiledMaterial.texture_slots.front().texture == cabinet.screen.color_texture
+            && compiledMaterial.texture_slots.front().sampler == cabinet.screen.sampler;
 
         const bool bodyMaterialReady = compiledBodyMaterial.backend && compiledBodyMaterial.texture_slots.empty();
 
@@ -791,6 +792,80 @@ namespace epochnamespace::core
             && !graph.textures.front().sampled_sampler
             && !graph.textures.front().owned_by_render_texture_asset
             && graph.materials.front().backend
+            && graph.passes.front().binding_set
+            && graph.passes.front().bindings.read_materials.size() == 1u
+            && graph.passes.front().bindings.read_materials.front() == graph.materials.front().backend
+            && graph.passes.front().bindings.read_material_textures.empty()
+            && graph.passes.front().bindings.read_samplers.empty()
+            && graph.passes.front().bindings.read_textures.empty();
+
+        graph.execute(device);
+        graph.destroy(device);
+        return ready;
+    }
+
+    [[nodiscard]] inline bool render_surface_rejects_mismatched_sampler_contract_ready()
+    {
+        epoch::NullRenderDevice device{};
+        epoch::GraphBuilder builder{};
+
+        epoch::RenderTextureAssetDesc screenDesc = epoch::render_arcade::make_screen_render_texture_desc();
+        screenDesc.debug_name = "render_surface.mismatched_sampler.screen";
+        const epoch::GraphRenderTextureAsset screen =
+            builder.create_render_texture_asset("render_surface.mismatched_sampler.screen", screenDesc);
+
+        epoch::SamplerDesc mismatchSamplerDesc{};
+        mismatchSamplerDesc.debug_name = "render_surface.mismatched_sampler.extra";
+        const epoch::GraphResource mismatchSampler =
+            builder.create_sampler("render_surface.mismatched_sampler.extra", mismatchSamplerDesc);
+
+        epoch::MaterialDesc materialDesc{};
+        materialDesc.name = "render_surface.mismatched_sampler.material";
+        materialDesc.unlit = true;
+        materialDesc.debug_name = "render_surface.mismatched_sampler.material";
+        materialDesc.texture_slots.push_back(epoch::MaterialTextureSlotDesc{
+            .slot = epoch::MaterialTextureSlot::render_surface,
+            .name = "screen",
+            .expected_format = epoch::TextureFormat::rgba8_unorm,
+            .required = true
+        });
+
+        const epoch::GraphMaterialTextureSlot materialSlots[] = {
+            epoch::GraphMaterialTextureSlot{
+                .slot = epoch::MaterialTextureSlot::render_surface,
+                .texture = screen.color_texture,
+                .sampler = mismatchSampler
+            }
+        };
+        const epoch::GraphResource material = builder.create_material(
+            "render_surface.mismatched_sampler.material",
+            materialDesc,
+            epoch::array_view<const epoch::GraphMaterialTextureSlot>{ materialSlots, 1u });
+
+        const epoch::GraphResource reads[] = { material };
+        builder.add_pass(
+            "render_surface.mismatched_sampler.pass",
+            epoch::array_view<const epoch::GraphResource>{ reads, 1u },
+            {},
+            [](epoch::ICommandContext& ctx)
+            {
+                ctx.debug_marker("render_surface.mismatched_sampler.pass");
+            });
+
+        epoch::CompiledGraph graph = builder.compile(device);
+        const bool ready =
+            graph.render_texture_assets.size() == 1u
+            && graph.textures.size() == 1u
+            && graph.samplers.size() == 2u
+            && graph.materials.size() == 1u
+            && graph.passes.size() == 1u
+            && graph.render_texture_assets.front().sampler == screen.sampler
+            && graph.samplers.front().backend == graph.textures.front().sampled_sampler
+            && graph.samplers[1u].backend
+            && graph.samplers[1u].backend != graph.textures.front().sampled_sampler
+            && graph.materials.front().texture_slots.size() == 1u
+            && graph.materials.front().texture_slots.front().texture == screen.color_texture
+            && graph.materials.front().texture_slots.front().sampler == mismatchSampler
             && graph.passes.front().binding_set
             && graph.passes.front().bindings.read_materials.size() == 1u
             && graph.passes.front().bindings.read_materials.front() == graph.materials.front().backend
@@ -1399,6 +1474,7 @@ namespace epochnamespace::core
             && epoch::package_registry::must_use_human_build_gate("missing_package"));
         check("render.engine_arcade_screen_graph", engine_arcade_screen_graph_contract_ready());
         check("render.render_surface_requires_rtt_asset", render_surface_requires_render_texture_asset_contract_ready());
+        check("render.render_surface_rejects_mismatched_sampler", render_surface_rejects_mismatched_sampler_contract_ready());
         check("render.opengl_family_arcade_screen_graph", opengl_family_arcade_screen_graph_contract_ready());
         check("render.opengl_family_arcade_cabinet_graph", opengl_family_arcade_cabinet_graph_contract_ready());
         check("render.opengl_family_arcade_native_requirements", opengl_family_arcade_native_requirements_contract_ready());

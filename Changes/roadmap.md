@@ -50,14 +50,16 @@ include Engine Arcade now seed a cabinet assembly instead of a single
 placeholder box. The graph now also records the sampled RTT sampler as a
 first-class resource and ties its lifetime to the owning RTT asset instead of
 ordinary sampler teardown. `ConsoleApplication1|Debug|x64` builds with MSVC after
-the harness update.
+the harness update. The graph-level proof now also requires an explicit
+`engine_arcade.screen` sampler in the cabinet material slot and rejects
+mismatched render-surface sampler resources.
 
 Latest stabilization: Video is treated as a scene-backed workspace again so the
 timeline strip remains visible, update/package modals use matched body and input
 capture geometry to protect top-layer z-order, shared GUI progress bars clamp to
 their owning content lane, the update modal now sizes itself from wrapped live
-status/action text with a full-width in-modal progress lane instead of reserving
-a stale empty lower body or detached action row, and
+status/action text with a bounded height and full-width in-modal progress lane
+instead of reserving a stale empty lower body or detached action row, and
 single-context Run resolves existing generated child executables before rejecting
 launch.
 

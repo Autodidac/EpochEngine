@@ -5477,7 +5477,9 @@ namespace epochnamespace
                 desiredHeight += gui::wrapped_text_height(actionText, contentWidth) + 18.0f;
                 desiredHeight += 30.0f + 22.0f;
 
-                const float minHeight = sourceWorkerRunning ? 286.0f : restartReady ? 278.0f : 282.0f;
+                const float minHeight = sourceWorkerRunning ? 338.0f : restartReady ? 326.0f : 334.0f;
+                const float maxDesiredHeight = sourceWorkerRunning ? 392.0f : restartReady ? 368.0f : 376.0f;
+                desiredHeight = std::clamp(desiredHeight, minHeight, maxDesiredHeight);
                 return fit_modal_size({ modalWidth, desiredHeight }, { 660.0f, minHeight });
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();

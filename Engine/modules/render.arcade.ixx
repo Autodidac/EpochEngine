@@ -310,7 +310,8 @@ export namespace epoch::render_arcade
 
         const std::array<GraphMaterialTextureSlot, 1> materialSlots{ GraphMaterialTextureSlot{
             .slot = MaterialTextureSlot::render_surface,
-            .texture = build.screen.color_texture
+            .texture = build.screen.color_texture,
+            .sampler = build.screen.sampler
         } };
         build.material = builder.create_material(
             "engine_arcade.cabinet.material",

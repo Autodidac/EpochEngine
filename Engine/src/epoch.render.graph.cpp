@@ -287,7 +287,7 @@ namespace epoch
             return &g.models[resource.index];
         };
 
-        auto append_binding = [&g, &resolve_texture](CommandResourceBindings& bindings, GraphResource handle, bool write)
+        auto append_binding = [&g, &resolve_texture, &resolve_sampler](CommandResourceBindings& bindings, GraphResource handle, bool write)
         {
             const u32 resourceIndex = handle.value;
             if (resourceIndex == 0 || resourceIndex > g.resources.size())
@@ -341,8 +341,16 @@ namespace epoch
                             if (!texture || !texture->backend)
                                 continue;
 
+                            const GraphSampler* explicitSampler = resolve_sampler(slot.sampler);
+                            const SamplerHandle sampler = explicitSampler && explicitSampler->backend
+                                ? explicitSampler->backend
+                                : texture->sampled_sampler;
+
                             if (slot.slot == MaterialTextureSlot::render_surface
-                                && (!texture->owned_by_render_texture_asset || !texture->sampled_sampler))
+                                && (!texture->owned_by_render_texture_asset
+                                    || !texture->sampled_sampler
+                                    || !sampler
+                                    || (explicitSampler && explicitSampler->backend != texture->sampled_sampler)))
                             {
                                 continue;
                             }
@@ -350,10 +358,10 @@ namespace epoch
                             bindings.read_material_textures.push_back(MaterialTextureBinding{
                                 .slot = slot.slot,
                                 .texture = texture->backend,
-                                .sampler = texture->sampled_sampler
+                                .sampler = sampler
                             });
-                            if (texture->sampled_sampler)
-                                bindings.read_samplers.push_back(texture->sampled_sampler);
+                            if (sampler)
+                                bindings.read_samplers.push_back(sampler);
                         }
                     }
                 }

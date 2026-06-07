@@ -72,6 +72,7 @@ export namespace epoch
     {
         MaterialTextureSlot slot = MaterialTextureSlot::base_color;
         GraphResource texture{};
+        GraphResource sampler{};
     };
 
     struct GraphMaterial

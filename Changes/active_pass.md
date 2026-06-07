@@ -34,6 +34,10 @@ contracts instead of drift.
   maps `engine_arcade.screen` color texture, sampler, and render target handles
   together, and skips ordinary sampler teardown because the RTT asset owns native
   destruction.
+- `render_surface` material slots now carry an explicit sampler resource. The
+  graph binds the sampled RTT only when that sampler matches the owning
+  render-texture asset sampler, and the harness proves mismatched samplers are
+  rejected instead of silently sampling the wrong surface state.
 - `render.arcade` now makes `engine_arcade.screen` a real two-pass proof shape:
   the populate pass targets the sampled render texture with a tiny scene model,
   and the cabinet pass samples that render surface through a material slot.
@@ -42,8 +46,8 @@ contracts instead of drift.
   single placeholder box: base/body/control deck plus screen/marquee entities.
 - SDL3, SFML3, and Raylib sampled-RTT capability reporting remains
   runtime-availability-gated; contract-only paths are still `Partial`.
-- Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the graph
-  sampler ownership patch and update-modal layout clamp.
+- Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the explicit
+  render-surface sampler proof and update-modal height clamp.
 
 ## Allowed Source Areas
 

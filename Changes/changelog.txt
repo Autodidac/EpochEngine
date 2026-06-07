@@ -1,6 +1,15 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Bound the update modal's dynamic height so changing source-update status text
+  no longer stretches or undercuts the dialog body, while preserving the
+  binary-first/source-lane wording and Cancel/Update/Advanced action row.
+  Validation: MSVC Debug x64 `ConsoleApplication1` passed.
+- Made render-surface material sampling explicit and stricter. Engine Arcade now
+  declares the `engine_arcade.screen` sampler in the cabinet material slot, and
+  the graph harness rejects a `render_surface` slot whose explicit sampler does
+  not match the owning render-texture asset sampler. Validation: MSVC Debug x64
+  `ConsoleApplication1` passed.
 - Tightened the update modal's live layout after operator screenshots showed a
   too-large empty body, awkward action row, and progress lane that could read
   as visually detached from the modal. The modal now computes height from the
