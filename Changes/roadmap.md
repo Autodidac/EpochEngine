@@ -45,8 +45,10 @@ reporting is runtime-availability-gated instead of always-on, and the render
 graph now refuses `render_surface` material bindings unless they reference a
 sampled render-texture asset. Engine Arcade now uses a two-pass proof shape:
 one pass renders a small scene model into `engine_arcade.screen`, and the next
-pass samples that surface onto the cabinet material. `ConsoleApplication1|Debug|x64`
-builds with MSVC after the harness update.
+pass samples that surface onto the cabinet material. Generated game shells that
+include Engine Arcade now seed a cabinet assembly instead of a single
+placeholder box. `ConsoleApplication1|Debug|x64` builds with MSVC after the
+harness update.
 
 Latest stabilization: Video is treated as a scene-backed workspace again so the
 timeline strip remains visible, update/package modals use matched body and input

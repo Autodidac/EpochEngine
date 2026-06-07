@@ -33,6 +33,9 @@ contracts instead of drift.
 - `render.arcade` now makes `engine_arcade.screen` a real two-pass proof shape:
   the populate pass targets the sampled render texture with a tiny scene model,
   and the cabinet pass samples that render surface through a material slot.
+- Engine Arcade now stages an actual cabinet preview assembly in both the
+  editor package preview and generated game-shell scene files instead of a
+  single placeholder box: base/body/control deck plus screen/marquee entities.
 - SDL3, SFML3, and Raylib sampled-RTT capability reporting remains
   runtime-availability-gated; contract-only paths are still `Partial`.
 - Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the real

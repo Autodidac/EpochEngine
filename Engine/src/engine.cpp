@@ -643,9 +643,9 @@ namespace epochnamespace::core
             graph.render_texture_assets.size() == 1u
             && graph.textures.size() == 1u
             && graph.render_targets.size() == 1u
-            && graph.buffers.size() == 4u
-            && graph.materials.size() == 2u
-            && graph.meshes.size() == 2u
+            && graph.buffers.size() == 6u
+            && graph.materials.size() == 3u
+            && graph.meshes.size() == 3u
             && graph.models.size() == 2u
             && graph.passes.size() == 2u;
         if (!resourceShape)
@@ -657,8 +657,10 @@ namespace epochnamespace::core
         const epoch::GraphRenderTextureAsset& compiledScreen = graph.render_texture_assets.front();
         const epoch::GraphMaterial& compiledScreenMaterial = graph.materials.front();
         const epoch::GraphModel& compiledScreenModel = graph.models.front();
-        const epoch::GraphMaterial& compiledMaterial = graph.materials.back();
-        const epoch::GraphMesh& compiledMesh = graph.meshes.back();
+        const epoch::GraphMaterial& compiledMaterial = graph.materials[1u];
+        const epoch::GraphMaterial& compiledBodyMaterial = graph.materials[2u];
+        const epoch::GraphMesh& compiledScreenMesh = graph.meshes[1u];
+        const epoch::GraphMesh& compiledBodyMesh = graph.meshes[2u];
         const epoch::GraphModel& compiledModel = graph.models.back();
         const epoch::PassDecl& populatePass = graph.passes.front();
         const epoch::PassDecl& cabinetPass = graph.passes[1u];
@@ -685,17 +687,23 @@ namespace epochnamespace::core
             && compiledMaterial.texture_slots.front().slot == epoch::MaterialTextureSlot::render_surface
             && compiledMaterial.texture_slots.front().texture == cabinet.screen.color_texture;
 
+        const bool bodyMaterialReady = compiledBodyMaterial.backend && compiledBodyMaterial.texture_slots.empty();
+
         const bool modelReady =
-            compiledMesh.backend
+            compiledScreenMesh.backend
+            && compiledBodyMesh.backend
             && compiledModel.backend
-            && compiledModel.mesh_slots.size() == 1u
-            && compiledModel.mesh_slots.front().mesh == cabinet.mesh
-            && compiledModel.mesh_slots.front().material == cabinet.material;
+            && compiledModel.mesh_slots.size() == 2u
+            && compiledModel.mesh_slots[0u].mesh == cabinet.body_mesh
+            && compiledModel.mesh_slots[0u].material == cabinet.body_material
+            && compiledModel.mesh_slots[1u].mesh == cabinet.mesh
+            && compiledModel.mesh_slots[1u].material == cabinet.material;
 
         const bool bindingReady =
             cabinetPass.binding_set
-            && cabinetPass.bindings.read_materials.size() == 1u
+            && cabinetPass.bindings.read_materials.size() == 2u
             && cabinetPass.bindings.read_materials.front() == compiledMaterial.backend
+            && cabinetPass.bindings.read_materials[1u] == compiledBodyMaterial.backend
             && cabinetPass.bindings.read_models.size() == 1u
             && cabinetPass.bindings.read_models.front() == compiledModel.backend
             && cabinetPass.bindings.read_material_textures.size() == 1u
@@ -712,7 +720,7 @@ namespace epochnamespace::core
 
         graph.execute(device);
         graph.destroy(device);
-        return populateReady && materialReady && modelReady && bindingReady && drawReady;
+        return populateReady && materialReady && bodyMaterialReady && modelReady && bindingReady && drawReady;
     }
 
     [[nodiscard]] inline bool render_surface_requires_render_texture_asset_contract_ready()
@@ -1166,9 +1174,9 @@ namespace epochnamespace::core
         epoch::CompiledGraph graph = builder.compile(device);
 
         const bool resourceShape =
-            graph.buffers.size() == 4u
-            && graph.materials.size() == 2u
-            && graph.meshes.size() == 2u
+            graph.buffers.size() == 6u
+            && graph.materials.size() == 3u
+            && graph.meshes.size() == 3u
             && graph.models.size() == 2u
             && graph.passes.size() == 2u;
         if (!resourceShape)
@@ -1177,19 +1185,32 @@ namespace epochnamespace::core
             return false;
         }
 
-        const epoch::GraphMesh& compiledMesh = graph.meshes.back();
+        const epoch::GraphMaterial& compiledScreenMaterial = graph.materials[1u];
+        const epoch::GraphMaterial& compiledBodyMaterial = graph.materials[2u];
+        const epoch::GraphMesh& compiledScreenMesh = graph.meshes[1u];
+        const epoch::GraphMesh& compiledBodyMesh = graph.meshes[2u];
         const epoch::GraphModel& compiledModel = graph.models.back();
         const epoch::PassDecl& cabinetPass = graph.passes[1u];
 
         const bool graphReady =
-            compiledMesh.backend
+            compiledScreenMaterial.backend
+            && compiledBodyMaterial.backend
+            && compiledScreenMesh.backend
+            && compiledBodyMesh.backend
             && compiledModel.backend
-            && compiledModel.mesh_slots.size() == 1u
-            && compiledModel.mesh_slots.front().mesh == cabinet.mesh
+            && compiledModel.mesh_slots.size() == 2u
+            && compiledModel.mesh_slots[0u].mesh == cabinet.body_mesh
+            && compiledModel.mesh_slots[0u].material == cabinet.body_material
+            && compiledModel.mesh_slots[1u].mesh == cabinet.mesh
+            && compiledModel.mesh_slots[1u].material == cabinet.material
             && cabinetPass.binding_set
-            && cabinetPass.bindings.read_materials.size() == 1u
+            && cabinetPass.bindings.read_materials.size() == 2u
+            && cabinetPass.bindings.read_materials[0u] == compiledScreenMaterial.backend
+            && cabinetPass.bindings.read_materials[1u] == compiledBodyMaterial.backend
             && cabinetPass.bindings.read_models.size() == 1u
             && cabinetPass.bindings.read_models.front() == compiledModel.backend
+            && cabinetPass.bindings.read_material_textures.size() == 1u
+            && cabinetPass.bindings.read_material_textures.front().slot == epoch::MaterialTextureSlot::render_surface
             && cabinetPass.draw_models.size() == 1u
             && cabinetPass.draw_models.front().model == cabinet.model
             && cabinetPass.draw_models.front().backend == compiledModel.backend;
@@ -1230,9 +1251,9 @@ namespace epochnamespace::core
         epoch::CompiledGraph graph = builder.compile(device);
 
         const bool resourceShape =
-            graph.buffers.size() == 4u
-            && graph.materials.size() == 2u
-            && graph.meshes.size() == 2u
+            graph.buffers.size() == 6u
+            && graph.materials.size() == 3u
+            && graph.meshes.size() == 3u
             && graph.models.size() == 2u
             && graph.passes.size() == 2u;
         if (!resourceShape)
@@ -1241,19 +1262,32 @@ namespace epochnamespace::core
             return false;
         }
 
-        const epoch::GraphMesh& compiledMesh = graph.meshes.back();
+        const epoch::GraphMaterial& compiledScreenMaterial = graph.materials[1u];
+        const epoch::GraphMaterial& compiledBodyMaterial = graph.materials[2u];
+        const epoch::GraphMesh& compiledScreenMesh = graph.meshes[1u];
+        const epoch::GraphMesh& compiledBodyMesh = graph.meshes[2u];
         const epoch::GraphModel& compiledModel = graph.models.back();
         const epoch::PassDecl& cabinetPass = graph.passes[1u];
 
         const bool graphReady =
-            compiledMesh.backend
+            compiledScreenMaterial.backend
+            && compiledBodyMaterial.backend
+            && compiledScreenMesh.backend
+            && compiledBodyMesh.backend
             && compiledModel.backend
-            && compiledModel.mesh_slots.size() == 1u
-            && compiledModel.mesh_slots.front().mesh == cabinet.mesh
+            && compiledModel.mesh_slots.size() == 2u
+            && compiledModel.mesh_slots[0u].mesh == cabinet.body_mesh
+            && compiledModel.mesh_slots[0u].material == cabinet.body_material
+            && compiledModel.mesh_slots[1u].mesh == cabinet.mesh
+            && compiledModel.mesh_slots[1u].material == cabinet.material
             && cabinetPass.binding_set
-            && cabinetPass.bindings.read_materials.size() == 1u
+            && cabinetPass.bindings.read_materials.size() == 2u
+            && cabinetPass.bindings.read_materials[0u] == compiledScreenMaterial.backend
+            && cabinetPass.bindings.read_materials[1u] == compiledBodyMaterial.backend
             && cabinetPass.bindings.read_models.size() == 1u
             && cabinetPass.bindings.read_models.front() == compiledModel.backend
+            && cabinetPass.bindings.read_material_textures.size() == 1u
+            && cabinetPass.bindings.read_material_textures.front().slot == epoch::MaterialTextureSlot::render_surface
             && cabinetPass.draw_models.size() == 1u
             && cabinetPass.draw_models.front().model == cabinet.model
             && cabinetPass.draw_models.front().backend == compiledModel.backend;
@@ -3665,6 +3699,10 @@ namespace epochnamespace::core
                 return { 1.00f, 0.82f, 0.30f };
             if (entity.type == "Spawn")
                 return { 0.34f, 0.94f, 0.62f };
+            if (entity.category == "EngineArcade" && entity.type == "Canvas2D")
+                return { 0.18f, 0.82f, 0.92f };
+            if (entity.category == "EngineArcade")
+                return { 0.36f, 0.56f, 0.92f };
             if (entity.category == "World" || entity.type == "Level")
                 return { 0.70f, 0.78f, 0.90f };
             return { 0.95f, 0.62f, 0.28f };
@@ -3693,6 +3731,8 @@ namespace epochnamespace::core
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Spawn;
             if (entity.type == "Camera")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
+            if (entity.type == "Canvas2D")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::Canvas2D;
             if (entity.category == "World" || entity.type == "Level")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Level;
             return epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube;

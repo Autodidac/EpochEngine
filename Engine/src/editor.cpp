@@ -2098,18 +2098,33 @@ namespace epochnamespace
                 return state.entities.size() - 1u;
             };
 
-            const auto cabinetIndex = upsert(
-                "EngineArcadeCabinet",
+            const auto baseIndex = upsert(
+                "EngineArcadeCabinetBase",
                 "StaticMesh",
-                { 0.0f, 0.55f, 0.34f },
-                { 1.25f, 1.10f, 0.42f });
+                { 0.0f, 0.22f, 0.36f },
+                { 1.70f, 0.44f, 0.82f });
+            upsert(
+                "EngineArcadeCabinetBody",
+                "StaticMesh",
+                { 0.0f, 0.92f, 0.24f },
+                { 1.38f, 1.30f, 0.54f });
+            upsert(
+                "EngineArcadeControlDeck",
+                "StaticMesh",
+                { 0.0f, 1.18f, -0.30f },
+                { 1.56f, 0.20f, 0.70f });
             const auto screenIndex = upsert(
                 "EngineArcadeScreen",
                 "Canvas2D",
-                { 0.0f, 1.75f, 0.0f },
-                { 4.80f, 2.70f, 0.06f });
+                { 0.0f, 1.78f, -0.42f },
+                { 2.22f, 1.22f, 0.06f });
+            upsert(
+                "EngineArcadeMarquee",
+                "Canvas2D",
+                { 0.0f, 2.46f, -0.34f },
+                { 2.10f, 0.42f, 0.05f });
 
-            state.selectedEntity = screenIndex < state.entities.size() ? screenIndex : cabinetIndex;
+            state.selectedEntity = screenIndex < state.entities.size() ? screenIndex : baseIndex;
         }
 
         void activate_engine_arcade_preview(EditorState& state)

@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Expanded the Engine Arcade visual proof beyond the placeholder box. Generated
+  game-shell scenes that opt into `engine_arcade` now write explicit
+  `epoch_editor_entities` for a cabinet base/body/control deck, sampled screen,
+  marquee, camera, light, and player start, while the editor package preview
+  stages the same cabinet assembly. SDL3/SFML3 graph contract checks now match
+  the two-slot body-plus-screen cabinet model instead of accepting the old
+  one-mesh proof. Validation: MSVC Debug x64 `ConsoleApplication1` passed.
 - Restored the editor stabilization paths that regressed around update/package
   modals, the Video workspace, and single-context project launch. Video now
   stays on the scene-backed surface so the timeline strip is visible, update and

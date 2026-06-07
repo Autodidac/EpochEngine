@@ -39,12 +39,14 @@ module;
 #include <filesystem>
 #include <functional>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <cstring>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -1631,6 +1633,21 @@ namespace
         };
     }
 
+    [[nodiscard]] std::vector<EditorSceneSeedEntity> engine_arcade_seed_entities()
+    {
+        return {
+            { "PersistentLevel", "Level", "World" },
+            { "OverviewCamera", "Camera", "Editor", { 0.0f, 4.2f, 7.2f }, { -28.0f, 0.0f, 0.0f } },
+            { "KeyLight", "Light", "Lighting", { 0.0f, 5.2f, -1.2f }, { -42.0f, 0.0f, 0.0f } },
+            { "EngineArcadeCabinetBase", "StaticMesh", "EngineArcade", { 0.0f, 0.22f, 0.36f }, { 0.0f, 0.0f, 0.0f }, { 1.70f, 0.44f, 0.82f } },
+            { "EngineArcadeCabinetBody", "StaticMesh", "EngineArcade", { 0.0f, 0.92f, 0.24f }, { 0.0f, 0.0f, 0.0f }, { 1.38f, 1.30f, 0.54f } },
+            { "EngineArcadeControlDeck", "StaticMesh", "EngineArcade", { 0.0f, 1.18f, -0.30f }, { -8.0f, 0.0f, 0.0f }, { 1.56f, 0.20f, 0.70f } },
+            { "EngineArcadeScreen", "Canvas2D", "EngineArcade", { 0.0f, 1.78f, -0.42f }, { 0.0f, 0.0f, 0.0f }, { 2.22f, 1.22f, 0.06f } },
+            { "EngineArcadeMarquee", "Canvas2D", "EngineArcade", { 0.0f, 2.46f, -0.34f }, { 0.0f, 0.0f, 0.0f }, { 2.10f, 0.42f, 0.05f } },
+            { "PlayerStart", "Spawn", "Gameplay", { 0.0f, 0.0f, -2.4f } }
+        };
+    }
+
     [[nodiscard]] std::vector<EditorSceneSeedEntity> software_seed_entities()
     {
         return {
@@ -1897,6 +1914,49 @@ namespace
         bool include_engine_arcade_package{ false };
         bool overwrite_existing{ true };
     };
+
+    static void append_scene_entity_rows(std::ostringstream& out, std::span<const EditorSceneSeedEntity> entities)
+    {
+        for (const auto& entity : entities)
+        {
+            out << "entity "
+                << std::quoted(std::string(entity.name)) << ' '
+                << std::quoted(std::string(entity.type)) << ' '
+                << std::quoted(std::string(entity.category)) << ' '
+                << "pos " << entity.position[0] << ' ' << entity.position[1] << ' ' << entity.position[2] << ' '
+                << "rot " << entity.rotation[0] << ' ' << entity.rotation[1] << ' ' << entity.rotation[2] << ' '
+                << "scale " << entity.scale[0] << ' ' << entity.scale[1] << ' ' << entity.scale[2] << ' '
+                << "visible " << (entity.visible ? 1 : 0) << ' '
+                << "editor_only " << (entity.editor_only ? 1 : 0)
+                << '\n';
+        }
+    }
+
+    [[nodiscard]] static std::string make_project_world_scene_text(
+        const ProjectShellSpec& spec,
+        std::string_view kind_text,
+        bool include_engine_arcade_package)
+    {
+        std::ostringstream out{};
+        out << std::setprecision(6);
+        out << "scene " << std::quoted(spec.world_name) << '\n';
+        out << "project " << std::quoted(spec.project_id) << '\n';
+        out << "{\n";
+        out << "    kind " << std::quoted(std::string(kind_text)) << '\n';
+        out << "    support_tier \"baseline\"\n";
+        if (include_engine_arcade_package)
+            out << "    engine_asset_package \"engine_arcade\"\n";
+        out << "}\n";
+
+        if (include_engine_arcade_package)
+        {
+            const auto entities = engine_arcade_seed_entities();
+            out << "epoch_editor_entities 1\n";
+            append_scene_entity_rows(out, std::span<const EditorSceneSeedEntity>{ entities.data(), entities.size() });
+        }
+
+        return out.str();
+    }
 
     [[nodiscard]] static constexpr std::string_view engine_arcade_scene_ids() noexcept
     {
@@ -2282,12 +2342,7 @@ namespace
             + "build_log=" + generated_project_build_log_path(root).generic_string() + "\n"
             + "debug_output=" + generated_project_output_path(root).generic_string() + "\n";
 
-        const std::string worldText =
-            "scene \"" + spec.world_name + "\"\n"
-            "{\n"
-            "    kind \"" + kindText + "\"\n"
-            "    support_tier \"baseline\"\n"
-            "}\n";
+        const std::string worldText = make_project_world_scene_text(spec, kindText, includeEngineArcadePackage);
 
         const std::string scriptText = make_project_bootstrap_script_text(spec, scriptApiInclude);
         const std::string engineArcadeScriptText = make_engine_arcade_script_text(scriptApiInclude);
