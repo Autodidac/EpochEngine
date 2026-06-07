@@ -10,7 +10,8 @@
   source inspection, implementation, and validation. Build and runtime details
   live in `Engine/docs/build/` and `Engine/docs/engine/`.
 - Use the documentation map, not random README guesses:
-  `Changes/roadmap.md` is the active planning contract, `Changes/changelog.txt`
+  `Changes/active_pass.md` is the current hot acceptance gate,
+  `Changes/roadmap.md` is the broader planning contract, `Changes/changelog.txt`
   records current version work, `Engine/docs/README.md` is the docs index,
   `Engine/docs/engine/runtime_and_editor_workflows.md` owns launcher/editor
   behavior, `Engine/docs/engine/gui_library_architecture.md` owns the shared
@@ -74,10 +75,12 @@
   move that gate. Documentation-only passes are allowed only when explicitly
   requested, when preserving a new/completed system contract, or when a
   safety/build/release gate would be lost without the note.
-- Churn passes must use both this file and `Changes/roadmap.md`: this file owns
-  repository rules and guardrails, while the roadmap owns the active acceptance
-  gate. Do not spend a pass updating only one of them unless the user explicitly
-  asked for that exact doc-only task.
+- Churn passes must use this file plus `Changes/active_pass.md` first, then
+  consult `Changes/roadmap.md` only for broader context or durable follow-up
+  placement. This file owns repository rules and guardrails, the active-pass
+  file owns the immediate source gate, and the roadmap owns long-range planning.
+  Do not spend a pass updating only one of them unless the user explicitly asked
+  for that exact doc-only task.
 - Use docs as checkpoints, not the main deliverable. Update docs after
   source/build evidence exists, and keep the update short: new systems,
   completed/promoted systems, changed public contracts, changed build/runtime
