@@ -5437,19 +5437,48 @@ namespace epochnamespace
                     std::clamp(desired.y, minHeight, maxHeight)
                 };
             };
-        const auto update_confirm_modal_size = [&]() noexcept -> gui::Vec2
+        const auto update_confirm_modal_size = [&]() -> gui::Vec2
             {
                 const bool sourceOnlyUpdate =
                     editor.lastUpdateCheck.source_update_available
                     && !editor.lastUpdateCheck.packaged_update_available;
+                const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
+                const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
 
-                if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
-                    return fit_modal_size({ 700.0f, 360.0f }, { 520.0f, 332.0f });
-                if (editor.updateState == EditorUpdateState::RestartReady)
-                    return fit_modal_size({ 700.0f, 324.0f }, { 520.0f, 308.0f });
-                if (sourceOnlyUpdate)
-                    return fit_modal_size({ 700.0f, 336.0f }, { 520.0f, 316.0f });
-                return fit_modal_size({ 700.0f, 324.0f }, { 520.0f, 308.0f });
+                const float modalWidth = fit_modal_size({ 700.0f, 1.0f }, { 620.0f, 1.0f }).x;
+                const float contentWidth = (std::max)(1.0f, modalWidth - 56.0f);
+                const auto trimmed_status = [&]() {
+                    std::string text = editor.updateStatus;
+                    constexpr std::size_t kMaxModalStatus = 176u;
+                    if (text.size() <= kMaxModalStatus)
+                        return text;
+                    return text.substr(0u, kMaxModalStatus - 3u) + "...";
+                    }();
+
+                const std::string_view introText = sourceOnlyUpdate
+                    ? "No packaged runtime was found for this platform, so Epoch is using the source rebuild lane."
+                    : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and hand off the replacement.";
+                const std::string_view cacheText = sourceOnlyUpdate
+                    ? "Smart Update checked packaged releases first; source rebuild is the available lane for this platform."
+                    : "Cached packages are checked before use; stale or broken downloads are replaced.";
+                const std::string_view actionText = restartReady
+                    ? "The update is staged. Epoch will restart automatically unless Restart Now is pressed first."
+                    : sourceWorkerRunning
+                        ? "Keep Epoch open while the source worker runs. Cancel stops at the next safe checkpoint."
+                        : sourceOnlyUpdate
+                            ? "Use Update From Source to build the newer source locally, or Cancel to stay on this build."
+                            : "Install Release is recommended. Advanced Source is only for intentionally building latest main locally.";
+
+                float desiredHeight = 64.0f;
+                desiredHeight += gui::wrapped_text_height(introText, contentWidth) + 8.0f;
+                desiredHeight += gui::wrapped_text_height(trimmed_status, contentWidth) + 10.0f;
+                desiredHeight += 22.0f + 28.0f;
+                desiredHeight += gui::wrapped_text_height(cacheText, contentWidth) + 8.0f;
+                desiredHeight += gui::wrapped_text_height(actionText, contentWidth) + 14.0f;
+                desiredHeight += 30.0f + 22.0f;
+
+                const float minHeight = sourceWorkerRunning ? 302.0f : restartReady ? 286.0f : 292.0f;
+                return fit_modal_size({ modalWidth, desiredHeight }, { 620.0f, minHeight });
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
         const gui::Vec2 sourceUpdateConfirmModalSize = fit_modal_size({ 620.0f, 316.0f }, { 500.0f, 292.0f });
@@ -8343,7 +8372,7 @@ namespace epochnamespace
             };
             constexpr float modalContentInset = 28.0f;
             constexpr float buttonHeight = 30.0f;
-            constexpr float buttonBottomPad = 24.0f;
+            constexpr float buttonBottomPad = 22.0f;
             const float contentX = modalPos.x + modalContentInset;
             const float contentRight = modalPos.x + modalSize.x - modalContentInset;
             const float contentWidth = (std::max)(1.0f, contentRight - contentX);
@@ -8408,10 +8437,18 @@ namespace epochnamespace
                         : "Install Release is recommended. Advanced Source is only for intentionally building latest main locally.";
             emitWrapped(actionText, 8.0f);
             const float buttonY = modalPos.y + modalSize.y - buttonHeight - buttonBottomPad;
+            const float cancelButtonWidth = sourceWorkerRunning ? 148.0f : 120.0f;
+            const float primaryButtonWidth = 204.0f;
+            const float advancedButtonWidth = 176.0f;
+            const float buttonGap = 16.0f;
+            const float primaryButtonX = sourceWorkerRunning
+                ? contentX
+                : (std::min)(contentRight - primaryButtonWidth, contentX + cancelButtonWidth + buttonGap);
+            const float advancedButtonX = (std::max)(contentX, contentRight - advancedButtonWidth);
             gui::set_cursor({ contentX, buttonY });
             if (sourceWorkerRunning)
             {
-                if (gui::button("Cancel Update", { 148.0f, 30.0f }))
+                if (gui::button("Cancel Update", { cancelButtonWidth, buttonHeight }))
                 {
                     const bool cancelRequested = updater::request_source_update_cancel();
                     editor.showUpdateConfirmModal = false;
@@ -8430,9 +8467,7 @@ namespace epochnamespace
                 editor.showUpdateConfirmModal = false;
                 push_editor_log(editor, "[command] Update canceled.");
             }
-            constexpr float primaryButtonWidth = 204.0f;
-            constexpr float advancedButtonWidth = 176.0f;
-            gui::set_cursor({ contentX + 160.0f, buttonY });
+            gui::set_cursor({ primaryButtonX, buttonY });
             const std::string primaryUpdateLabel = restartReady
                 ? std::format("Restart Now ({})", restartSeconds)
                 : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
@@ -8449,7 +8484,7 @@ namespace epochnamespace
                 }
             }
             const bool showAdvancedSourceButton = !updateRunning && !restartReady;
-            gui::set_cursor({ (std::min)(contentRight - advancedButtonWidth, contentX + 384.0f), buttonY });
+            gui::set_cursor({ advancedButtonX, buttonY });
             if (showAdvancedSourceButton && gui::button("Advanced Source...", { advancedButtonWidth, buttonHeight }))
             {
                 editor.showUpdateConfirmModal = false;

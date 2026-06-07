@@ -1,6 +1,11 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Tightened the update modal's live layout after operator screenshots showed a
+  too-large empty body and awkward action row. The modal now computes height
+  from wrapped content, keeps a wider minimum lane for Cancel/Update/Advanced
+  actions, and clamps button placement against the modal content edge.
+  Validation: MSVC Debug x64 `ConsoleApplication1` passed.
 - Promoted sampled render-texture samplers into first-class graph resources.
   `render.graph` now records the `engine_arcade.screen` sampler beside its color
   texture and render target, resolves the sampler into material read bindings,
