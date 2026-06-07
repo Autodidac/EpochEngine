@@ -124,6 +124,9 @@ import epoch.ai;
 import render.device;
 import render.device_null;
 import render.device_opengl_family;
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+import opengl.textures;
+#endif
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import render.device_sdl;
 #endif
@@ -867,6 +870,43 @@ namespace epochnamespace::core
         return true;
     }
 
+    [[nodiscard]] inline bool opengl_real_native_rtt_hook_contract_ready()
+    {
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        epoch::OpenGLFamilyRenderDevice device{ epoch::RendererBackendKind::opengl };
+        device.set_native_render_texture_hooks(
+            epochnamespace::opengltextures::make_native_render_texture_hooks());
+
+        const epoch::RendererCapabilities caps = device.capabilities();
+        if (!epoch::renderer_supports_native_sampled_render_targets(caps))
+            return false;
+
+        const epoch::RenderTextureAssetDesc desc = epoch::render_arcade::make_screen_render_texture_desc();
+        const epoch::RenderTextureAssetHandles handles = device.create_render_texture_asset(desc);
+        const epoch::OpenGLFamilyRenderTextureRecord* const record =
+            device.resolve_render_texture(handles.render_target);
+        const bool ready =
+            static_cast<bool>(handles)
+            && record != nullptr
+            && record->active
+            && record->width == desc.width
+            && record->height == desc.height
+            && record->backend_requirements.color_attachment
+            && record->backend_requirements.depth_attachment
+            && record->backend_requirements.sampled_color
+            && record->backend_requirements.sampler
+            && record->backend_requirements.offscreen_target
+            && record->backend_requirements.presentable_surface
+            && !record->native_allocation_ready
+            && record->native_work_order_ready();
+        device.destroy(handles);
+
+        return ready && device.resolve_render_texture(handles.render_target) == nullptr;
+#else
+        return true;
+#endif
+    }
+
     [[nodiscard]] inline bool opengl_family_arcade_native_requirements_contract_ready()
     {
         const epoch::RendererBackendKind backends[] = {
@@ -1215,6 +1255,7 @@ namespace epochnamespace::core
         check("render.opengl_family_arcade_cabinet_graph", opengl_family_arcade_cabinet_graph_contract_ready());
         check("render.opengl_family_arcade_native_requirements", opengl_family_arcade_native_requirements_contract_ready());
         check("render.opengl_family_arcade_fake_native_rtt", opengl_family_arcade_fake_native_rtt_contract_ready());
+        check("render.opengl_real_native_rtt_hook", opengl_real_native_rtt_hook_contract_ready());
         check("render.sdl_native_render_texture_device", sdl_native_render_texture_device_contract_ready());
         check("render.sfml_native_render_texture_device", sfml_native_render_texture_device_contract_ready());
         check("render.raylib_native_render_texture_device", raylib_native_render_texture_device_contract_ready());

@@ -39,8 +39,9 @@ reports real per-backend capability states.
 3. Keep GUI/modal/command-menu flicker protected while renderer work lands.
 4. Preserve stable push points before broad context, GUI, package, or AI churn.
 
-Current evidence: SDL3, SFML3, and Raylib sampled-RTT capability reporting is
-now runtime-availability-gated instead of always-on, and
+Current evidence: OpenGL's real native sampled-RTT hook factory is now wired
+into the engine contract harness, SDL3/SFML3/Raylib sampled-RTT capability
+reporting is runtime-availability-gated instead of always-on, and
 `ConsoleApplication1|Debug|x64` builds with MSVC after the harness update.
 
 ## Acceptance Gates

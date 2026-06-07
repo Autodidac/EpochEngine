@@ -18,6 +18,19 @@ reusable engine feature family, proves itself in OpenGL first, reports
 capability truth per backend, and leaves Vulkan/DirectX with clean equivalent
 contracts instead of drift.
 
+## Current Evidence
+
+- OpenGL owns the first real native sampled-RTT hook factory for FBO/color
+  texture/depth renderbuffer/sampler allocation.
+- The engine contract harness now imports that real hook factory, installs it
+  on the OpenGL-family device, and verifies the shared `engine_arcade.screen`
+  descriptor/handle/work-order path can allocate and destroy records without
+  claiming live GPU allocation when no GL context is registered.
+- SDL3, SFML3, and Raylib sampled-RTT capability reporting remains
+  runtime-availability-gated; contract-only paths are still `Partial`.
+- Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the real
+  OpenGL hook contract wiring.
+
 ## Allowed Source Areas
 
 - `Engine/modules/render.device.ixx`

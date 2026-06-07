@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Wired the real OpenGL sampled render-texture hook factory into the engine
+  contract harness. The self-test path now imports `opengl.textures`, installs
+  its native FBO/color texture/depth renderbuffer/sampler hooks on the
+  OpenGL-family render device, and verifies the shared `engine_arcade.screen`
+  descriptor/handle/work-order path without claiming live GPU allocation when
+  no OpenGL context is registered. Validation: MSVC Debug x64
+  `ConsoleApplication1` passed.
 - Fixed the Linux/Clang full-engine build by making `engine.cpp` explicitly
   include the public Epoch API type definitions before importing module-backed
   renderer contracts. Validation: `cmake --build --preset ninja-clang-debug
