@@ -5469,7 +5469,7 @@ namespace epochnamespace
                             ? "Use Update From Source to build the newer source locally, or Cancel to stay on this build."
                             : "Install Release is recommended. Advanced Source is only for intentionally building latest main locally.";
 
-                float desiredHeight = 58.0f;
+                float desiredHeight = 54.0f;
                 desiredHeight += gui::wrapped_text_height(introText, contentWidth) + 8.0f;
                 desiredHeight += gui::wrapped_text_height(trimmed_status, contentWidth) + 10.0f;
                 desiredHeight += 22.0f + 20.0f;
@@ -5477,8 +5477,8 @@ namespace epochnamespace
                 desiredHeight += gui::wrapped_text_height(actionText, contentWidth) + 18.0f;
                 desiredHeight += 30.0f + 22.0f;
 
-                const float minHeight = sourceWorkerRunning ? 338.0f : restartReady ? 326.0f : 334.0f;
-                const float maxDesiredHeight = sourceWorkerRunning ? 392.0f : restartReady ? 368.0f : 376.0f;
+                const float minHeight = sourceWorkerRunning ? 314.0f : restartReady ? 306.0f : 316.0f;
+                const float maxDesiredHeight = sourceWorkerRunning ? 352.0f : restartReady ? 342.0f : 352.0f;
                 desiredHeight = std::clamp(desiredHeight, minHeight, maxDesiredHeight);
                 return fit_modal_size({ modalWidth, desiredHeight }, { 660.0f, minHeight });
             };
@@ -8374,10 +8374,13 @@ namespace epochnamespace
             };
             constexpr float modalContentInset = 28.0f;
             constexpr float buttonHeight = 30.0f;
-            constexpr float buttonBottomPad = 22.0f;
+            constexpr float buttonBottomPad = 18.0f;
+            constexpr float buttonTopPad = 12.0f;
             const float contentX = modalPos.x + modalContentInset;
             const float contentRight = modalPos.x + modalSize.x - modalContentInset;
             const float contentWidth = (std::max)(1.0f, contentRight - contentX);
+            const float buttonY = modalPos.y + modalSize.y - buttonHeight - buttonBottomPad;
+            const float contentBottom = (std::max)(modalPos.y + 64.0f, buttonY - buttonTopPad);
             const std::string updateStatusLine = [&]() {
                 std::string text = editor.updateStatus;
                 constexpr std::size_t kMaxModalStatus = 176u;
@@ -8404,25 +8407,33 @@ namespace epochnamespace
             const gui::Vec2 contentPos = gui::cursor_position();
             float cursorY = contentPos.y;
             const auto emitWrapped = [&](const std::string_view text, const float gap) {
+                if (cursorY >= contentBottom)
+                    return;
+                const float textHeight = gui::wrapped_text_height(text, contentWidth);
+                if (cursorY + textHeight > contentBottom)
+                    return;
                 gui::set_cursor({ contentX, cursorY });
                 gui::wrapped_label(text, contentWidth);
-                cursorY += gui::wrapped_text_height(text, contentWidth) + gap;
+                cursorY += textHeight + gap;
             };
             const std::string introText = sourceOnlyUpdate
                 ? "No packaged runtime was found for this platform, so Epoch is using the source rebuild lane."
                 : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and hand off the replacement.";
             emitWrapped(introText, 8.0f);
             emitWrapped(updateStatusLine, 10.0f);
-            gui::set_cursor({ contentX, cursorY });
-            const float progressWidth = (std::max)(1.0f, contentWidth);
-            gui::progress_bar(gui::ProgressBarOptions{
-                .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
-                .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",
-                .value = editor_update_progress_value(editor),
-                .size = { progressWidth, 22.0f },
-                .show_percent = true
-            });
-            cursorY += 30.0f;
+            if (cursorY + 22.0f <= contentBottom)
+            {
+                gui::set_cursor({ contentX, cursorY });
+                const float progressWidth = std::clamp(contentWidth, 1.0f, modalSize.x - 2.0f * modalContentInset);
+                gui::progress_bar(gui::ProgressBarOptions{
+                    .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
+                    .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",
+                    .value = editor_update_progress_value(editor),
+                    .size = { progressWidth, 22.0f },
+                    .show_percent = true
+                });
+                cursorY += 30.0f;
+            }
             const std::string cacheText = sourceOnlyUpdate
                 ? "Smart Update checked packaged releases first; source rebuild is the available lane for this platform."
                 : "Cached packages are checked before use; stale or broken downloads are replaced.";
@@ -8438,7 +8449,6 @@ namespace epochnamespace
                         ? "Use Update From Source to build the newer source locally, or Cancel to stay on this build."
                         : "Install Release is recommended. Advanced Source is only for intentionally building latest main locally.";
             emitWrapped(actionText, 8.0f);
-            const float buttonY = modalPos.y + modalSize.y - buttonHeight - buttonBottomPad;
             const float cancelButtonWidth = sourceWorkerRunning ? 148.0f : 120.0f;
             const float primaryButtonWidth = (std::min)(220.0f, (std::max)(160.0f, contentWidth * 0.34f));
             const float advancedButtonWidth = (std::min)(190.0f, (std::max)(156.0f, contentWidth * 0.28f));

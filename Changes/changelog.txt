@@ -1,6 +1,11 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Contained the update modal body and action strip after follow-up operator
+  feedback showed the dialog could still look broken. Wrapped status text,
+  progress, and Cancel/Update/Advanced controls now reserve separate vertical
+  regions so the progress lane and button row cannot bleed into each other.
+  Validation: MSVC Debug x64 `ConsoleApplication1` passed.
 - Bound the update modal's dynamic height so changing source-update status text
   no longer stretches or undercuts the dialog body, while preserving the
   binary-first/source-lane wording and Cancel/Update/Advanced action row.
