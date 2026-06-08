@@ -957,12 +957,16 @@ namespace epochnamespace::core
         const epoch::RendererBackendKind backends[] = {
             epoch::RendererBackendKind::opengl,
             epoch::RendererBackendKind::sdl3,
-            epoch::RendererBackendKind::sfml3
+            epoch::RendererBackendKind::sfml3,
+            epoch::RendererBackendKind::raylib3
         };
 
         for (const epoch::RendererBackendKind backend : backends)
         {
             epoch::OpenGLFamilyRenderDevice device{ backend };
+            if (device.backend() != backend)
+                return false;
+
             const epoch::RendererCapabilities caps = device.capabilities();
             if (!epoch::renderer_supports_sampled_render_targets(caps)
                 || !engine_arcade_screen_graph_contract_ready(device))
@@ -979,12 +983,16 @@ namespace epochnamespace::core
         const epoch::RendererBackendKind backends[] = {
             epoch::RendererBackendKind::opengl,
             epoch::RendererBackendKind::sdl3,
-            epoch::RendererBackendKind::sfml3
+            epoch::RendererBackendKind::sfml3,
+            epoch::RendererBackendKind::raylib3
         };
 
         for (const epoch::RendererBackendKind backend : backends)
         {
             epoch::OpenGLFamilyRenderDevice device{ backend };
+            if (device.backend() != backend)
+                return false;
+
             if (!engine_arcade_cabinet_graph_contract_ready(device))
             {
                 return false;
@@ -1020,13 +1028,17 @@ namespace epochnamespace::core
         const epoch::RendererBackendKind backends[] = {
             epoch::RendererBackendKind::opengl,
             epoch::RendererBackendKind::sdl3,
-            epoch::RendererBackendKind::sfml3
+            epoch::RendererBackendKind::sfml3,
+            epoch::RendererBackendKind::raylib3
         };
 
         for (const epoch::RendererBackendKind backend : backends)
         {
             OpenGLFamilyFakeNativeRttState state{};
             epoch::OpenGLFamilyRenderDevice device{ backend };
+            if (device.backend() != backend)
+                return false;
+
             device.set_native_render_texture_hooks(epoch::OpenGLFamilyNativeRenderTextureHooks{
                 .user = &state,
                 .allocate = fake_opengl_family_allocate_rtt,
@@ -1106,7 +1118,8 @@ namespace epochnamespace::core
         const epoch::RendererBackendKind backends[] = {
             epoch::RendererBackendKind::opengl,
             epoch::RendererBackendKind::sdl3,
-            epoch::RendererBackendKind::sfml3
+            epoch::RendererBackendKind::sfml3,
+            epoch::RendererBackendKind::raylib3
         };
 
         epoch::RenderTextureAssetDesc screenDesc{};
@@ -1122,6 +1135,9 @@ namespace epochnamespace::core
         for (const epoch::RendererBackendKind backend : backends)
         {
             epoch::OpenGLFamilyRenderDevice device{ backend };
+            if (device.backend() != backend)
+                return false;
+
             const epoch::RenderTextureAssetHandles handles = device.create_render_texture_asset(screenDesc);
             const epoch::OpenGLFamilyRenderTextureRecord* const record =
                 device.resolve_render_texture(handles.render_target);

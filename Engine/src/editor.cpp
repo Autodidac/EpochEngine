@@ -5506,21 +5506,13 @@ namespace epochnamespace
                 desiredHeight += estimated_wrapped_height(actionText, contentWidth) + 14.0f;
                 desiredHeight += 30.0f + 18.0f;
 
-                const float minHeight = sourceWorkerRunning ? 318.0f : restartReady ? 306.0f : 318.0f;
+                const float minHeight = sourceWorkerRunning ? 278.0f : restartReady ? 258.0f : 286.0f;
                 const float maxDesiredHeight = sourceWorkerRunning ? 372.0f : restartReady ? 348.0f : 372.0f;
                 desiredHeight = std::clamp(desiredHeight, minHeight, maxDesiredHeight);
                 return fit_modal_size({ modalWidth, desiredHeight }, { 660.0f, minHeight });
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
-        const gui::Vec2 sourceUpdateConfirmModalSize = fit_modal_size({ 620.0f, 316.0f }, { 500.0f, 292.0f });
-        const auto package_manager_modal_size = [&]() noexcept -> gui::Vec2
-            {
-                return {
-                    std::clamp(w - 96.0f, 720.0f, 920.0f),
-                    std::clamp(h - 96.0f, 600.0f, 720.0f)
-                };
-            };
-        const gui::Vec2 packageManagerModalSize = package_manager_modal_size();
+        const gui::Vec2 sourceUpdateConfirmModalSize{ 620.0f, 292.0f };
         auto modal_visible_now = [&editor]() noexcept -> bool
         {
             return editor.showAboutModal
@@ -5547,7 +5539,7 @@ namespace epochnamespace
         else if (editor.showSettingsModal)
             gui::begin_modal_input_capture(centered_modal_position({ 600.0f, 462.0f }), { 600.0f, 462.0f });
         else if (editor.showPackageManagerModal)
-            gui::begin_modal_input_capture(centered_modal_position(packageManagerModalSize), packageManagerModalSize);
+            gui::begin_modal_input_capture(centered_modal_position({ 820.0f, 560.0f }), { 820.0f, 560.0f });
         else if (editor.showAboutModal)
             gui::begin_modal_input_capture(centered_modal_position({ 456.0f, 222.0f }), { 456.0f, 222.0f });
 
@@ -6188,6 +6180,8 @@ namespace epochnamespace
 
         auto open_dropdown = [&](std::string_view title, TopMenu menu, gui::Vec2 size, auto&& body)
         {
+            if (modal_visible_now())
+                return;
             if (editor.openMenu != menu)
                 return;
             const auto pos = dropdown_position_for(menu);
@@ -8455,7 +8449,7 @@ namespace epochnamespace
             emitWrapped(updateStatusLine, 10.0f);
             if (cursorY + 22.0f <= contentBottom)
             {
-                const float progressWidth = contentWidth;
+                const float progressWidth = (std::max)(1.0f, (std::min)(contentWidth, 560.0f));
                 gui::set_cursor({ contentX, cursorY });
                 gui::progress_bar(gui::ProgressBarOptions{
                     .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
@@ -8464,7 +8458,7 @@ namespace epochnamespace
                     .size = { progressWidth, 22.0f },
                     .show_percent = true
                 });
-                cursorY += 28.0f;
+                cursorY += 36.0f;
             }
             const std::string cacheText = sourceOnlyUpdate
                 ? "Smart Update checked packaged releases first; source rebuild is the available lane for this platform."
@@ -8742,14 +8736,12 @@ namespace epochnamespace
         if (editor.showPackageManagerModal)
         {
             editor.openMenu = TopMenu::None;
-            const gui::Vec2 modalSize = packageManagerModalSize;
+            const gui::Vec2 modalSize{ 820.0f, 560.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
-            const float contentWidth = modalSize.x - 48.0f;
-            const float packageListHeight = std::clamp(modalSize.y * 0.36f, 190.0f, 260.0f);
-            const float packageDetailHeight = std::clamp(modalSize.y - packageListHeight - 252.0f, 128.0f, 220.0f);
+            const float contentWidth = modalSize.x - 32.0f;
             const auto* activeProfile = editor_find_project_profile(editor.projectId);
             const bool engineArcadeEligible =
                 activeProfile
@@ -8950,8 +8942,8 @@ namespace epochnamespace
             gui::label("Available Packages");
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "package-manager-package-list",
-                .size = { contentWidth, packageListHeight },
-                .content_height = (std::max)(packageListHeight, static_cast<float>(knownPackages.size()) * 68.0f + 12.0f),
+                .size = { contentWidth, 222.0f },
+                .content_height = (std::max)(222.0f, static_cast<float>(knownPackages.size()) * 68.0f + 12.0f),
                 .draw_background = true,
                 .show_scrollbar = true
             });
@@ -8993,8 +8985,8 @@ namespace epochnamespace
             gui::label("Selected Package");
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "package-manager-detail-scroll",
-                .size = { contentWidth, packageDetailHeight },
-                .content_height = (std::max)(packageDetailHeight, 248.0f),
+                .size = { contentWidth, 150.0f },
+                .content_height = 248.0f,
                 .draw_background = true,
                 .show_scrollbar = true
             });
@@ -9064,7 +9056,7 @@ namespace epochnamespace
                 .label = "Install",
                 .status = editor.packageInstallStatus,
                 .value = packageProgress,
-                .size = { (std::max)(1.0f, contentWidth - 8.0f), 20.0f },
+                .size = { contentWidth, 20.0f },
                 .show_percent = true
             });
 

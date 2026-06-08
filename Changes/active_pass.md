@@ -46,8 +46,13 @@ contracts instead of drift.
   single placeholder box: base/body/control deck plus screen/marquee entities.
 - SDL3, SFML3, and Raylib sampled-RTT capability reporting remains
   runtime-availability-gated; contract-only paths are still `Partial`.
-- Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the explicit
-  render-surface sampler proof and update-modal height clamp.
+- Raylib3 now keeps its logical backend identity inside the shared
+  OpenGL-family device, so the build-only `engine_arcade.screen` graph,
+  cabinet material/model, fake-native hook, and descriptor/work-order contracts
+  cover OpenGL, SDL3-over-GL, SFML-over-GL, and Raylib-over-GL without claiming
+  live native allocation.
+- Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the Raylib3
+  OpenGL-family contract extension and update-modal top-layer cleanup.
 
 ## Allowed Source Areas
 

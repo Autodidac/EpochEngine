@@ -1,6 +1,35 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Restored the stable modal draw contract in `engine.gui`: modal input capture
+  is armed before top-layer replay again, and the experimental global
+  top-layer sprite clamp was removed so command menus, modal chrome, progress
+  bars, and scene/timeline composition return to the known-good draw order.
+  Validation: MSVC Debug x64 `ConsoleApplication1` passed.
+- Restored the stable modal/timeline composition path after the Package Manager
+  and update-modal regression: active modals now close command menus without
+  clearing/rebuilding top-layer batches, Package Manager returns to the
+  known-good fixed 820x560 sheet/input-capture layout, and the live scene plus
+  Video Timeline remain on the scene-first/GUI-top-layer flow instead of being
+  suspended behind dialogs. Validation: MSVC Debug x64
+  `ConsoleApplication1` passed.
+- Stopped the static Raylib3 capability helper from claiming native sampled
+  render-target support without a live/runtime-backed device. Runtime Raylib
+  devices can still promote the capability when their renderer is actually
+  available, keeping the renderer matrix honest for build-only validation.
+  Validation: MSVC Debug x64 `ConsoleApplication1` passed.
+- Preserved Raylib3 as a first-class OpenGL-derived backend in the shared
+  OpenGL-family render device instead of collapsing it to generic OpenGL. The
+  build-only Engine Arcade sampled-RTT graph, cabinet, fake-native, and
+  requirements harnesses now cover OpenGL, SDL3-over-GL, SFML-over-GL, and
+  Raylib-over-GL while still leaving live native allocation capability
+  runtime-gated. Validation: MSVC Debug x64
+  `ConsoleApplication1` passed.
+- Reverted the Package Manager modal back to the stable fixed sheet contract
+  instead of the viewport-stretched/clipped variant. Package rows, details,
+  progress, and action buttons now stay in the known-good modal geometry while
+  the scene/timeline continue rendering through the normal composition path.
+  Validation: MSVC Debug x64 `ConsoleApplication1` passed.
 - Fixed the update modal sizing root cause: it no longer asks the GUI runtime
   for wrapped text height before a window exists, closes command menus before
   modal dropdown draw, and keeps the progress lane full-width inside modal

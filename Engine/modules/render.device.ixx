@@ -488,7 +488,6 @@ export namespace epoch
             caps.command_lists = true;
             caps.render_to_texture = true;
             caps.sampled_render_targets = true;
-            caps.native_sampled_render_targets = true;
             caps.binding_sets = true;
             break;
         case RendererBackendKind::sdl3:

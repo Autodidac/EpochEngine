@@ -52,7 +52,10 @@ first-class resource and ties its lifetime to the owning RTT asset instead of
 ordinary sampler teardown. `ConsoleApplication1|Debug|x64` builds with MSVC after
 the harness update. The graph-level proof now also requires an explicit
 `engine_arcade.screen` sampler in the cabinet material slot and rejects
-mismatched render-surface sampler resources.
+mismatched render-surface sampler resources. Raylib3 now keeps its logical
+OpenGL-derived identity in the OpenGL-family render device, and the build-only
+graph/cabinet/fake-native/requirements harnesses cover OpenGL, SDL3-over-GL,
+SFML-over-GL, and Raylib-over-GL without claiming live native allocation.
 
 Latest stabilization: Video is treated as a scene-backed workspace again so the
 timeline strip remains visible, update/package modals use matched body and input

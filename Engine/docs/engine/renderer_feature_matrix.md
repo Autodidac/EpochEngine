@@ -78,8 +78,8 @@ work should be grouped this way instead of tackled as an unstructured checklist.
   buffer, texture, sampler, shader, material, mesh, model, pipeline, binding
   set, render target, pass, command list, and synchronization handles. The
   engine-facing handles/descriptors exist first; Raylib has the first native
-  model-handle and runtime-guarded sampled-RTT lane, OpenGL/SDL3/SFML3 share the first logical
-  sampled-RTT plus arcade-cabinet material/model draw contract, OpenGL has the
+  model-handle and runtime-guarded sampled-RTT lane, OpenGL/SDL3/SFML3/Raylib3
+  share the first logical sampled-RTT plus arcade-cabinet material/model draw contract, OpenGL has the
   first FBO-backed hook factory, SDL3/SFML3 now own native target-texture/
   render-texture device modules, and broader backend allocation/feature parity
   is the active gate.

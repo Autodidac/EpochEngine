@@ -241,6 +241,8 @@ export namespace epoch
                 return "sdl3-opengl";
             case RendererBackendKind::sfml3:
                 return "sfml3-opengl";
+            case RendererBackendKind::raylib3:
+                return "raylib3-opengl";
             default:
                 return "opengl";
             }
@@ -433,7 +435,9 @@ export namespace epoch
 
         [[nodiscard]] static constexpr RendererBackendKind normalize_backend(RendererBackendKind backend) noexcept
         {
-            return (backend == RendererBackendKind::sdl3 || backend == RendererBackendKind::sfml3)
+            return (backend == RendererBackendKind::sdl3
+                || backend == RendererBackendKind::sfml3
+                || backend == RendererBackendKind::raylib3)
                 ? backend
                 : RendererBackendKind::opengl;
         }
