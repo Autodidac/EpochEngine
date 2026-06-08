@@ -1,6 +1,12 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Re-tightened the update modal after the latest operator screenshot showed the
+  progress lane could still read as detached and the lower body could look too
+  tall. The dialog now uses a smaller dynamic height envelope, centers the
+  progress lane inside a capped modal-local width, and shortens the restart
+  prompt without changing update behavior. Validation: MSVC Debug x64
+  `ConsoleApplication1` passed.
 - Contained the update modal body and action strip after follow-up operator
   feedback showed the dialog could still look broken. Wrapped status text,
   progress, and Cancel/Update/Advanced controls now reserve separate vertical

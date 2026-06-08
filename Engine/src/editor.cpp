@@ -5472,13 +5472,13 @@ namespace epochnamespace
                 float desiredHeight = 54.0f;
                 desiredHeight += gui::wrapped_text_height(introText, contentWidth) + 8.0f;
                 desiredHeight += gui::wrapped_text_height(trimmed_status, contentWidth) + 10.0f;
-                desiredHeight += 22.0f + 20.0f;
+                desiredHeight += 22.0f + 14.0f;
                 desiredHeight += gui::wrapped_text_height(cacheText, contentWidth) + 8.0f;
-                desiredHeight += gui::wrapped_text_height(actionText, contentWidth) + 18.0f;
-                desiredHeight += 30.0f + 22.0f;
+                desiredHeight += gui::wrapped_text_height(actionText, contentWidth) + 14.0f;
+                desiredHeight += 30.0f + 18.0f;
 
-                const float minHeight = sourceWorkerRunning ? 314.0f : restartReady ? 306.0f : 316.0f;
-                const float maxDesiredHeight = sourceWorkerRunning ? 352.0f : restartReady ? 342.0f : 352.0f;
+                const float minHeight = sourceWorkerRunning ? 292.0f : restartReady ? 286.0f : 292.0f;
+                const float maxDesiredHeight = sourceWorkerRunning ? 324.0f : restartReady ? 316.0f : 324.0f;
                 desiredHeight = std::clamp(desiredHeight, minHeight, maxDesiredHeight);
                 return fit_modal_size({ modalWidth, desiredHeight }, { 660.0f, minHeight });
             };
@@ -8423,8 +8423,9 @@ namespace epochnamespace
             emitWrapped(updateStatusLine, 10.0f);
             if (cursorY + 22.0f <= contentBottom)
             {
-                gui::set_cursor({ contentX, cursorY });
-                const float progressWidth = std::clamp(contentWidth, 1.0f, modalSize.x - 2.0f * modalContentInset);
+                const float progressWidth = std::clamp(contentWidth * 0.92f, 1.0f, (std::min)(contentWidth, 640.0f));
+                const float progressX = contentX + (std::max)(0.0f, (contentWidth - progressWidth) * 0.5f);
+                gui::set_cursor({ progressX, cursorY });
                 gui::progress_bar(gui::ProgressBarOptions{
                     .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
                     .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",
@@ -8432,7 +8433,7 @@ namespace epochnamespace
                     .size = { progressWidth, 22.0f },
                     .show_percent = true
                 });
-                cursorY += 30.0f;
+                cursorY += 28.0f;
             }
             const std::string cacheText = sourceOnlyUpdate
                 ? "Smart Update checked packaged releases first; source rebuild is the available lane for this platform."
@@ -8440,7 +8441,7 @@ namespace epochnamespace
             emitWrapped(cacheText, 8.0f);
             const std::string actionText = restartReady
                 ? std::format(
-                    "The update is staged. Epoch will restart automatically in {} second{}; press Restart now to finish immediately.",
+                    "The update is staged. Epoch will restart automatically in {} second{}; press Restart to finish now.",
                     restartSeconds,
                     restartSeconds == 1 ? "" : "s")
                 : sourceWorkerRunning
