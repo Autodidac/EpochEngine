@@ -5447,6 +5447,35 @@ namespace epochnamespace
 
                 const float modalWidth = fit_modal_size({ 760.0f, 1.0f }, { 660.0f, 1.0f }).x;
                 const float contentWidth = (std::max)(1.0f, modalWidth - 56.0f);
+                const auto estimated_wrapped_height = [](const std::string_view text, const float width) noexcept -> float
+                    {
+                        const std::size_t charsPerLine = (std::max)(
+                            std::size_t{ 28 },
+                            static_cast<std::size_t>((std::max)(1.0f, width) / 7.5f));
+                        std::size_t lines = 1u;
+                        std::size_t column = 0u;
+                        for (const char c : text)
+                        {
+                            if (c == '\n')
+                            {
+                                ++lines;
+                                column = 0u;
+                                continue;
+                            }
+                            ++column;
+                            if (column >= charsPerLine && (c == ' ' || c == '-' || c == '/' || c == ','))
+                            {
+                                ++lines;
+                                column = 0u;
+                            }
+                            else if (column >= charsPerLine + 12u)
+                            {
+                                ++lines;
+                                column = 0u;
+                            }
+                        }
+                        return static_cast<float>(lines) * 18.0f;
+                    };
                 const auto trimmed_status = [&]() {
                     std::string text = editor.updateStatus;
                     constexpr std::size_t kMaxModalStatus = 176u;
@@ -5470,15 +5499,15 @@ namespace epochnamespace
                             : "Install Release is recommended. Advanced Source is only for intentionally building latest main locally.";
 
                 float desiredHeight = 54.0f;
-                desiredHeight += gui::wrapped_text_height(introText, contentWidth) + 8.0f;
-                desiredHeight += gui::wrapped_text_height(trimmed_status, contentWidth) + 10.0f;
+                desiredHeight += estimated_wrapped_height(introText, contentWidth) + 8.0f;
+                desiredHeight += estimated_wrapped_height(trimmed_status, contentWidth) + 10.0f;
                 desiredHeight += 22.0f + 14.0f;
-                desiredHeight += gui::wrapped_text_height(cacheText, contentWidth) + 8.0f;
-                desiredHeight += gui::wrapped_text_height(actionText, contentWidth) + 14.0f;
+                desiredHeight += estimated_wrapped_height(cacheText, contentWidth) + 8.0f;
+                desiredHeight += estimated_wrapped_height(actionText, contentWidth) + 14.0f;
                 desiredHeight += 30.0f + 18.0f;
 
-                const float minHeight = sourceWorkerRunning ? 292.0f : restartReady ? 286.0f : 292.0f;
-                const float maxDesiredHeight = sourceWorkerRunning ? 324.0f : restartReady ? 316.0f : 324.0f;
+                const float minHeight = sourceWorkerRunning ? 318.0f : restartReady ? 306.0f : 318.0f;
+                const float maxDesiredHeight = sourceWorkerRunning ? 372.0f : restartReady ? 348.0f : 372.0f;
                 desiredHeight = std::clamp(desiredHeight, minHeight, maxDesiredHeight);
                 return fit_modal_size({ modalWidth, desiredHeight }, { 660.0f, minHeight });
             };
@@ -6204,6 +6233,9 @@ namespace epochnamespace
                 break;
             }
         }
+
+        if (modal_visible_now())
+            editor.openMenu = TopMenu::None;
 
         if (editor.openMenu != TopMenu::None)
         {
@@ -8423,9 +8455,8 @@ namespace epochnamespace
             emitWrapped(updateStatusLine, 10.0f);
             if (cursorY + 22.0f <= contentBottom)
             {
-                const float progressWidth = std::clamp(contentWidth * 0.92f, 1.0f, (std::min)(contentWidth, 640.0f));
-                const float progressX = contentX + (std::max)(0.0f, (contentWidth - progressWidth) * 0.5f);
-                gui::set_cursor({ progressX, cursorY });
+                const float progressWidth = contentWidth;
+                gui::set_cursor({ contentX, cursorY });
                 gui::progress_bar(gui::ProgressBarOptions{
                     .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
                     .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",

@@ -1,6 +1,10 @@
 # Epoch Changelog
 
 ## [v0.87.08]
+- Fixed the update modal sizing root cause: it no longer asks the GUI runtime
+  for wrapped text height before a window exists, closes command menus before
+  modal dropdown draw, and keeps the progress lane full-width inside modal
+  content bounds. Validation: MSVC Debug x64 `ConsoleApplication1` passed.
 - Re-tightened the update modal after the latest operator screenshot showed the
   progress lane could still read as detached and the lower body could look too
   tall. The dialog now uses a smaller dynamic height envelope, centers the
