@@ -288,6 +288,20 @@ namespace epochnamespace::gui
             bool alignSelectedOnOpen = false;
         };
 
+        struct PendingSelectPopup
+        {
+            std::string scrollId{};
+            Vec2 position{};
+            float width = 0.0f;
+            float height = 0.0f;
+            float rowHeight = 0.0f;
+            float optionPitch = 0.0f;
+            float contentHeight = 0.0f;
+            bool showScrollbar = false;
+            std::string selected{};
+            std::vector<std::string> options{};
+        };
+
         struct SourceEditorState
         {
             bool contextMenuOpen = false;
@@ -364,6 +378,10 @@ namespace epochnamespace::gui
             bool insideWindow = false;
             bool justPressed = false;
             bool rightJustPressed = false;
+            bool mousePressConsumed = false;
+            bool mouseReleaseConsumed = false;
+            bool rightPressConsumed = false;
+            bool rightReleaseConsumed = false;
             int mouseWheelDelta = 0;
             bool modalInputCapture = false;
             Vec2 modalInputMin{};
@@ -379,6 +397,7 @@ namespace epochnamespace::gui
             std::vector<InputEvent> events{};
             std::vector<QueuedSpriteDraw> queuedDraws{};
             std::vector<QueuedSpriteDraw> topLayerDraws{};
+            std::vector<PendingSelectPopup> pendingSelectPopups{};
             std::vector<ThemeVariant> themeStack{};
             int topLayerDepth = 0;
         };
@@ -1020,6 +1039,58 @@ namespace epochnamespace::gui
                     g_frame.contentMin.y,
                     g_frame.contentMax.x - g_frame.contentMin.x,
                     g_frame.contentMax.y - g_frame.contentMin.y);
+        }
+
+        [[nodiscard]] static bool left_press_available() noexcept
+        {
+            return g_frame.justPressed
+                && !g_frame.mousePressConsumed
+                && point_in_modal_input_capture(g_frame.mousePos);
+        }
+
+        [[nodiscard]] static bool left_release_available() noexcept
+        {
+            return g_frame.justReleased
+                && !g_frame.mouseReleaseConsumed
+                && point_in_modal_input_capture(g_frame.mousePos);
+        }
+
+        [[nodiscard]] static bool right_press_available() noexcept
+        {
+            return g_frame.rightJustPressed
+                && !g_frame.rightPressConsumed
+                && point_in_modal_input_capture(g_frame.mousePos);
+        }
+
+        [[nodiscard]] static bool right_release_available() noexcept
+        {
+            return g_frame.rightJustReleased
+                && !g_frame.rightReleaseConsumed
+                && point_in_modal_input_capture(g_frame.mousePos);
+        }
+
+        static void consume_left_press() noexcept
+        {
+            if (g_frame.justPressed)
+                g_frame.mousePressConsumed = true;
+        }
+
+        static void consume_left_release() noexcept
+        {
+            if (g_frame.justReleased)
+                g_frame.mouseReleaseConsumed = true;
+        }
+
+        static void consume_right_press() noexcept
+        {
+            if (g_frame.rightJustPressed)
+                g_frame.rightPressConsumed = true;
+        }
+
+        static void consume_right_release() noexcept
+        {
+            if (g_frame.rightJustReleased)
+                g_frame.rightReleaseConsumed = true;
         }
 
         [[nodiscard]] static std::size_t widget_press_key(std::string_view label, Vec2 pos, Vec2 size) noexcept
@@ -1866,8 +1937,13 @@ namespace epochnamespace::gui
             g_frame.modalInputCapture = false;
             g_frame.modalInputMin = {};
             g_frame.modalInputMax = {};
+            g_frame.mousePressConsumed = false;
+            g_frame.mouseReleaseConsumed = false;
+            g_frame.rightPressConsumed = false;
+            g_frame.rightReleaseConsumed = false;
             g_frame.activeTheme = ThemeVariant::DefaultDark;
             g_frame.themeStack.clear();
+            g_frame.pendingSelectPopups.clear();
             g_scrollAreaStack.clear();
         }
 
@@ -2223,6 +2299,7 @@ namespace epochnamespace::gui
         g_frame.rightJustReleased = (prevMouseRightDown && !currentMouseRightDown);
         g_frame.queuedDraws.clear();
         g_frame.topLayerDraws.clear();
+        g_frame.pendingSelectPopups.clear();
         g_frame.topLayerDepth = 0;
 
         if (rawCtx)
@@ -2247,7 +2324,12 @@ namespace epochnamespace::gui
         g_frame.justReleased = false;
         g_frame.rightJustPressed = false;
         g_frame.rightJustReleased = false;
+        g_frame.mousePressConsumed = false;
+        g_frame.mouseReleaseConsumed = false;
+        g_frame.rightPressConsumed = false;
+        g_frame.rightReleaseConsumed = false;
         g_frame.mouseWheelDelta = 0;
+        g_frame.pendingSelectPopups.clear();
         g_frame.topLayerDepth = 0;
     }
 
@@ -2371,6 +2453,86 @@ namespace epochnamespace::gui
             pop_theme();
     }
 
+    static void render_select_popup(const PendingSelectPopup& popup) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx || popup.options.empty())
+            return;
+        if (!std::isfinite(popup.position.x) || !std::isfinite(popup.position.y)
+            || !std::isfinite(popup.width) || !std::isfinite(popup.height)
+            || popup.width <= 0.0f || popup.height <= 0.0f)
+        {
+            return;
+        }
+
+        auto& scrollState = g_scrollAreaStates[scroll_panel_key(popup.scrollId)];
+        scrollState.contentHeight = (std::max)(popup.height, popup.contentHeight);
+        const float maxScroll = (std::max)(0.0f, scrollState.contentHeight - popup.height);
+        if (!std::isfinite(scrollState.scrollY))
+            scrollState.scrollY = 0.0f;
+        scrollState.scrollY = (std::clamp)(scrollState.scrollY, 0.0f, maxScroll);
+
+        const bool showScrollbar = popup.showScrollbar && scrollState.contentHeight > popup.height + 1.0f;
+        const float scrollbarWidth = showScrollbar ? 10.0f : 0.0f;
+        const float contentWidth = (std::max)(1.0f, popup.width - scrollbarWidth - 2.0f);
+        const auto& palette = active_palette();
+
+        draw_sprite(palette.consoleBackground, popup.position.x, popup.position.y, popup.width, popup.height);
+
+        {
+            ContentClipScope clip(
+                popup.position,
+                { popup.position.x + contentWidth, popup.position.y + popup.height });
+
+            for (std::size_t i = 0; i < popup.options.size(); ++i)
+            {
+                const float rowY = popup.position.y - scrollState.scrollY + static_cast<float>(i) * popup.optionPitch;
+                if (rowY + popup.rowHeight < popup.position.y || rowY > popup.position.y + popup.height)
+                    continue;
+
+                const bool active = popup.options[i] == popup.selected;
+                const SpriteHandle background = active ? palette.buttonActive : palette.buttonNormal;
+                draw_sprite(background, popup.position.x, rowY, contentWidth, popup.rowHeight);
+                if (active)
+                {
+                    draw_sprite(palette.textFieldActive, popup.position.x, rowY, 2.0f, popup.rowHeight);
+                    draw_sprite(palette.textFieldActive, popup.position.x, rowY, contentWidth, 2.0f);
+                }
+
+                const std::string fitted = fit_text_to_width(
+                    popup.options[i],
+                    (std::max)(1.0f, contentWidth - 20.0f),
+                    kFontScale);
+                const std::string_view displayLabel = fitted.empty()
+                    ? std::string_view{ popup.options[i] }
+                    : std::string_view{ fitted };
+                const float textY = rowY + std::floor((std::max)(0.0f, (popup.rowHeight - base_line_height(kFontScale)) * 0.5f)) + 1.0f;
+                draw_text_line(displayLabel, popup.position.x + kContentPadding, textY, kFontScale);
+            }
+        }
+
+        if (showScrollbar)
+        {
+            const float trackX = popup.position.x + popup.width - scrollbarWidth;
+            const float trackY = popup.position.y;
+            draw_sprite(palette.textField, trackX, trackY, scrollbarWidth, popup.height);
+
+            const float visibleRatio = popup.height / scrollState.contentHeight;
+            const float thumbHeight = (std::min)(
+                popup.height,
+                (std::max)(18.0f, popup.height * visibleRatio));
+            const float scrollRatio = maxScroll > 0.0f ? scrollState.scrollY / maxScroll : 0.0f;
+            const float thumbY = trackY + (popup.height - thumbHeight) * scrollRatio;
+            draw_sprite(palette.buttonActive, trackX, thumbY, scrollbarWidth, thumbHeight);
+        }
+    }
+
+    static void render_pending_select_popups() noexcept
+    {
+        for (const PendingSelectPopup& popup : g_frame.pendingSelectPopups)
+            render_select_popup(popup);
+        g_frame.pendingSelectPopups.clear();
+    }
+
     void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept
     {
         begin_window(title, position, size, true);
@@ -2433,6 +2595,7 @@ namespace epochnamespace::gui
 
     void end_window() noexcept
     {
+        render_pending_select_popups();
         g_frame.insideWindow = false;
         g_frame.contentMin = {};
         g_frame.contentMax = {};
@@ -2603,13 +2766,20 @@ namespace epochnamespace::gui
             && point_in_active_clip(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key(label, pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && g_frame.justPressed)
+        if (hovered && left_press_available())
+        {
             pressedKey = pressKey;
+            consume_left_press();
+        }
 
         const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
-        const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
+        const bool clicked = left_release_available() && hovered && pressedKey == pressKey;
         if (g_frame.justReleased && pressedKey == pressKey)
+        {
+            if (hovered)
+                consume_left_release();
             pressedKey = 0;
+        }
 
         const auto& palette = active_palette();
 
@@ -2679,13 +2849,20 @@ namespace epochnamespace::gui
             && point_in_active_clip(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key(label, pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && g_frame.justPressed)
+        if (hovered && left_press_available())
+        {
             pressedKey = pressKey;
+            consume_left_press();
+        }
 
         const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
-        const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
+        const bool clicked = left_release_available() && hovered && pressedKey == pressKey;
         if (g_frame.justReleased && pressedKey == pressKey)
+        {
+            if (hovered)
+                consume_left_release();
             pressedKey = 0;
+        }
 
         const auto& palette = active_palette();
         if (selected)
@@ -2734,13 +2911,20 @@ namespace epochnamespace::gui
             && point_in_modal_input_capture(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key("window-close", pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && g_frame.justPressed)
+        if (hovered && left_press_available())
+        {
             pressedKey = pressKey;
+            consume_left_press();
+        }
 
         const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
-        const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
+        const bool clicked = left_release_available() && hovered && pressedKey == pressKey;
         if (g_frame.justReleased && pressedKey == pressKey)
+        {
+            if (hovered)
+                consume_left_release();
             pressedKey = 0;
+        }
 
         const auto& palette = active_palette();
         const SpriteHandle background =
@@ -2774,13 +2958,20 @@ namespace epochnamespace::gui
             && point_in_active_clip(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key("<image-button>", pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && g_frame.justPressed)
+        if (hovered && left_press_available())
+        {
             pressedKey = pressKey;
+            consume_left_press();
+        }
 
         const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
-        const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
+        const bool clicked = left_release_available() && hovered && pressedKey == pressKey;
         if (g_frame.justReleased && pressedKey == pressKey)
+        {
+            if (hovered)
+                consume_left_release();
             pressedKey = 0;
+        }
 
         const auto& palette = active_palette();
 
@@ -3495,10 +3686,11 @@ namespace epochnamespace::gui
         ensure_resources();
 
         const Vec2 pos = g_frame.cursor;
-        const float availableWidth = content_available_width(pos.x);
-        const float width = options.size.x > 0.0f
+        const float availableWidth = (std::max)(1.0f, content_available_width(pos.x));
+        const float requestedWidth = options.size.x > 0.0f
             ? (std::max)(96.0f, options.size.x)
             : availableWidth;
+        const float width = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
         const float height = (std::max)(120.0f, options.size.y > 0.0f ? options.size.y : 220.0f);
         const std::string id = options.id.empty()
             ? std::to_string(reinterpret_cast<std::uintptr_t>(&text))
@@ -3915,12 +4107,18 @@ namespace epochnamespace::gui
                 && point_in_active_clip(g_frame.mousePos);
             const std::size_t pressKey = widget_press_key(tab.label, { x, rowStart.y }, { width, h });
             auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-            if (hovered && g_frame.justPressed)
+            if (hovered && left_press_available())
+            {
                 pressedKey = pressKey;
+                consume_left_press();
+            }
 
             const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
-            if (g_frame.justReleased && hovered && pressedKey == pressKey)
+            if (left_release_available() && hovered && pressedKey == pressKey)
+            {
                 clicked = i;
+                consume_left_release();
+            }
             if (g_frame.justReleased && pressedKey == pressKey)
                 pressedKey = 0;
 
@@ -4000,10 +4198,11 @@ namespace epochnamespace::gui
         ensure_resources();
 
         const Vec2 start = g_frame.cursor;
-        const float availableWidth = content_available_width(start.x);
-        const float width = options.size.x > 0.0f
+        const float availableWidth = (std::max)(1.0f, content_available_width(start.x));
+        const float requestedWidth = options.size.x > 0.0f
             ? (std::max)(96.0f, options.size.x)
             : availableWidth;
+        const float width = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
         const float rowHeight = (std::max)(22.0f, options.row_height);
         const float closedHeight = options.size.y > 0.0f
             ? (std::max)(rowHeight, options.size.y)
@@ -4031,6 +4230,7 @@ namespace epochnamespace::gui
             state.alignSelectedOnOpen = nextOpen;
             toggledThisFrame = true;
         }
+        const Vec2 afterClosedCursor = g_frame.cursor;
 
         result.opened = state.open;
         if (!state.open || options.options.empty())
@@ -4049,7 +4249,7 @@ namespace epochnamespace::gui
         const float contentHeight = static_cast<float>(options.options.size()) * rowHeight
             + static_cast<float>(options.options.size() - 1u) * 2.0f;
         const std::string listId = key + "-list";
-        const Vec2 listPos = g_frame.cursor;
+        const Vec2 listPos = afterClosedCursor;
 
         if (state.alignSelectedOnOpen)
         {
@@ -4065,7 +4265,7 @@ namespace epochnamespace::gui
             state.alignSelectedOnOpen = false;
         }
 
-        if (!toggledThisFrame && (g_frame.justPressed || g_frame.rightJustPressed))
+        if (!toggledThisFrame && (left_press_available() || right_press_available()))
         {
             const bool pressedClosed = point_in_rect(g_frame.mousePos, start.x, start.y, width, closedHeight);
             const bool pressedList = point_in_rect(g_frame.mousePos, listPos.x, listPos.y, width, listHeight);
@@ -4073,60 +4273,61 @@ namespace epochnamespace::gui
             {
                 state.open = false;
                 result.opened = false;
+                if (left_press_available())
+                    consume_left_press();
+                if (right_press_available())
+                    consume_right_press();
                 return result;
             }
         }
 
-        (void)begin_scroll_area(ScrollAreaOptions{
-            .id = listId,
-            .size = { width, listHeight },
-            .content_height = contentHeight,
-            .draw_background = true,
-            .show_scrollbar = options.options.size() > visibleCount
-        });
+        auto& scrollState = g_scrollAreaStates[scroll_panel_key(listId)];
+        scrollState.contentHeight = (std::max)(listHeight, contentHeight);
+        const float maxScroll = (std::max)(0.0f, scrollState.contentHeight - listHeight);
+        if (!std::isfinite(scrollState.scrollY))
+            scrollState.scrollY = 0.0f;
+        scrollState.scrollY = (std::clamp)(scrollState.scrollY, 0.0f, maxScroll);
 
-        const auto& palette = active_palette();
-        const float itemWidth = (std::max)(64.0f, width - 14.0f);
+        const bool listHovered = point_in_rect(g_frame.mousePos, listPos.x, listPos.y, width, listHeight)
+            && point_in_active_clip(g_frame.mousePos);
+        if (listHovered && g_frame.mouseWheelDelta != 0)
+        {
+            const float wheelSteps = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
+            const float step = line_advance_amount(kFontScale) * 3.0f;
+            scrollState.scrollY = (std::clamp)(scrollState.scrollY - wheelSteps * step, 0.0f, maxScroll);
+            g_frame.mouseWheelDelta = 0;
+        }
+
+        const bool showScrollbar = options.options.size() > visibleCount;
+        const float scrollbarWidth = showScrollbar ? 10.0f : 0.0f;
+        const float itemWidth = (std::max)(64.0f, width - scrollbarWidth - 2.0f);
         for (std::size_t i = 0; i < options.options.size(); ++i)
         {
-            const Vec2 optionPos = g_frame.cursor;
-            const bool active = options.options[i] == options.selected;
+            const float optionY = listPos.y - scrollState.scrollY + static_cast<float>(i) * optionPitch;
+            if (optionY + rowHeight < listPos.y || optionY > listPos.y + listHeight)
+                continue;
+
+            const Vec2 optionPos{ listPos.x, optionY };
             const bool hovered = point_in_rect(g_frame.mousePos, optionPos.x, optionPos.y, itemWidth, rowHeight)
+                && point_in_rect(g_frame.mousePos, listPos.x, listPos.y, width, listHeight)
                 && point_in_active_clip(g_frame.mousePos);
             const std::size_t pressKey = widget_press_key(options.options[i], optionPos, { itemWidth, rowHeight });
             auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-            if (hovered && g_frame.justPressed)
-                pressedKey = pressKey;
-
-            const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
-            const bool clicked = g_frame.justReleased && hovered && pressedKey == pressKey;
-            if (g_frame.justReleased && pressedKey == pressKey)
-                pressedKey = 0;
-
-            const SpriteHandle background =
-                active ? palette.buttonActive
-                : hovered ? palette.buttonHover
-                : palette.buttonNormal;
-            draw_sprite(background, optionPos.x, optionPos.y, itemWidth, rowHeight);
-            if (active || hovered || pressed)
+            if (hovered && left_press_available())
             {
-                const SpriteHandle accent = active ? palette.textFieldActive : palette.buttonHover;
-                draw_sprite(accent, optionPos.x, optionPos.y, 2.0f, rowHeight);
-                draw_sprite(accent, optionPos.x, optionPos.y, itemWidth, 2.0f);
+                pressedKey = pressKey;
+                consume_left_press();
             }
 
-            const std::string fitted = fit_text_to_width(
-                options.options[i],
-                (std::max)(1.0f, itemWidth - 20.0f),
-                kFontScale);
-            const std::string_view displayLabel = fitted.empty()
-                ? std::string_view{ options.options[i] }
-                : std::string_view{ fitted };
-            const float textY = optionPos.y + std::floor((std::max)(0.0f, (rowHeight - base_line_height(kFontScale)) * 0.5f)) + 1.0f;
-            draw_text_line(displayLabel, optionPos.x + kContentPadding, textY, kFontScale);
+            const bool clicked = left_release_available() && hovered && pressedKey == pressKey;
+            if (g_frame.justReleased && pressedKey == pressKey)
+            {
+                if (hovered)
+                    consume_left_release();
+                pressedKey = 0;
+            }
 
             g_frame.lastButtonBounds = WidgetBounds{ .position = optionPos, .size = { itemWidth, rowHeight } };
-            advance_cursor({ 0.0f, rowHeight + 2.0f });
 
             if (clicked)
             {
@@ -4135,8 +4336,37 @@ namespace epochnamespace::gui
                 state.open = false;
             }
         }
+        if (point_in_rect(g_frame.mousePos, listPos.x, listPos.y, width, listHeight))
+        {
+            if (left_press_available())
+                consume_left_press();
+            if (left_release_available())
+                consume_left_release();
+            if (right_press_available())
+                consume_right_press();
+            if (right_release_available())
+                consume_right_release();
+        }
 
-        end_scroll_area();
+        if (state.open)
+        {
+            PendingSelectPopup popup{};
+            popup.scrollId = listId;
+            popup.position = listPos;
+            popup.width = width;
+            popup.height = listHeight;
+            popup.rowHeight = rowHeight;
+            popup.optionPitch = optionPitch;
+            popup.contentHeight = contentHeight;
+            popup.showScrollbar = showScrollbar;
+            popup.selected = std::string(options.selected);
+            popup.options.reserve(options.options.size());
+            for (std::string_view option : options.options)
+                popup.options.emplace_back(option);
+            g_frame.pendingSelectPopups.push_back(std::move(popup));
+        }
+
+        set_cursor(afterClosedCursor);
         return result;
     }
 
@@ -4148,31 +4378,33 @@ namespace epochnamespace::gui
         ensure_resources();
 
         const Vec2 pos = g_frame.cursor;
-        const float availableWidth = (std::max)(1.0f, content_available_width(pos.x));
-        float width = options.size.x > 0.0f
+        const float clipLeft = has_content_clip() ? g_frame.contentMin.x : g_frame.origin.x;
+        const float clipRight = content_right();
+        const float drawX = (std::min)((std::max)(pos.x, clipLeft), clipRight);
+        const float availableWidth = (std::max)(1.0f, clipRight - drawX);
+        const float requestedWidth = options.size.x > 0.0f
             ? (std::max)(1.0f, options.size.x)
             : availableWidth;
-        width = (std::min)(width, availableWidth);
-        if (has_content_clip())
-            width = (std::min)(width, (std::max)(1.0f, content_right() - pos.x));
+        const float width = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
+        const Vec2 drawPos{ drawX, pos.y };
         const float height = (std::max)(14.0f, options.size.y > 0.0f ? options.size.y : 18.0f);
         const float value = std::clamp(options.value, 0.0f, 1.0f);
         const auto& palette = active_palette();
         ContentClipScope localClip(
-            { pos.x, pos.y },
-            { pos.x + width, pos.y + height });
+            { drawPos.x, drawPos.y },
+            { drawPos.x + width, drawPos.y + height });
 
-        draw_sprite(palette.panelBackground, pos.x, pos.y, width, height);
-        draw_sprite(palette.consoleBackground, pos.x + 2.0f, pos.y + 2.0f, (std::max)(1.0f, width - 4.0f), (std::max)(1.0f, height - 4.0f));
+        draw_sprite(palette.panelBackground, drawPos.x, drawPos.y, width, height);
+        draw_sprite(palette.consoleBackground, drawPos.x + 2.0f, drawPos.y + 2.0f, (std::max)(1.0f, width - 4.0f), (std::max)(1.0f, height - 4.0f));
 
         const float fillWidth = std::floor((std::max)(0.0f, width - 4.0f) * value);
         if (fillWidth > 0.0f)
-            draw_sprite(palette.textFieldActive, pos.x + 2.0f, pos.y + 2.0f, fillWidth, (std::max)(1.0f, height - 4.0f));
+            draw_sprite(palette.textFieldActive, drawPos.x + 2.0f, drawPos.y + 2.0f, fillWidth, (std::max)(1.0f, height - 4.0f));
 
-        draw_sprite(palette.buttonHover, pos.x, pos.y, width, 1.0f);
-        draw_sprite(palette.buttonHover, pos.x, pos.y + height - 1.0f, width, 1.0f);
-        draw_sprite(palette.buttonHover, pos.x, pos.y, 1.0f, height);
-        draw_sprite(palette.buttonHover, pos.x + width - 1.0f, pos.y, 1.0f, height);
+        draw_sprite(palette.buttonHover, drawPos.x, drawPos.y, width, 1.0f);
+        draw_sprite(palette.buttonHover, drawPos.x, drawPos.y + height - 1.0f, width, 1.0f);
+        draw_sprite(palette.buttonHover, drawPos.x, drawPos.y, 1.0f, height);
+        draw_sprite(palette.buttonHover, drawPos.x + width - 1.0f, drawPos.y, 1.0f, height);
 
         std::string labelText;
         if (!options.label.empty())
@@ -4200,8 +4432,8 @@ namespace epochnamespace::gui
             const std::string_view displayLabel = fitted.empty()
                 ? std::string_view{ labelText }
                 : std::string_view{ fitted };
-            const float textY = pos.y + std::floor((std::max)(0.0f, (height - base_line_height(kFontScale)) * 0.5f)) + 1.0f;
-            draw_text_line(displayLabel, pos.x + kContentPadding, textY, kFontScale);
+            const float textY = drawPos.y + std::floor((std::max)(0.0f, (height - base_line_height(kFontScale)) * 0.5f)) + 1.0f;
+            draw_text_line(displayLabel, drawPos.x + kContentPadding, textY, kFontScale);
         }
 
         advance_cursor({ 0.0f, height + kContentPadding });
@@ -4217,15 +4449,16 @@ namespace epochnamespace::gui
         const float baseHeight = base_line_height(kFontScale);
         const float minWidth = space_advance(kFontScale) * 4.0f;
 
+        const float availableWidth = (std::max)(minWidth, content_available_width(pos.x));
         float width = static_cast<float>(size.x);
         if (width <= 0.0f)
         {
             const float estimated = measure_text_width(text, kFontScale) + 2.0f * kBoxInnerPadding;
-            width = (std::max)(minWidth, estimated);
+            width = (std::min)((std::max)(minWidth, estimated), availableWidth);
         }
         else
         {
-            width = (std::max)(width, minWidth);
+            width = (std::min)((std::max)(width, minWidth), availableWidth);
         }
 
         const float contentWidth = (std::max)(1.0f, width - 2.0f * kBoxInnerPadding);
@@ -4259,10 +4492,11 @@ namespace epochnamespace::gui
         if (!std::isfinite(pos.x) || !std::isfinite(pos.y))
             return result;
 
-        const float availableWidth = content_available_width(pos.x);
-        const float width = options.size.x > 0.0f
+        const float availableWidth = (std::max)(1.0f, content_available_width(pos.x));
+        const float requestedWidth = options.size.x > 0.0f
             ? (std::max)(48.0f, options.size.x)
             : availableWidth;
+        const float width = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
         const float height = options.size.y > 0.0f
             ? (std::max)(48.0f, options.size.y)
             : 180.0f;
@@ -4423,10 +4657,11 @@ namespace epochnamespace::gui
         ensure_resources();
 
         const Vec2 pos = g_frame.cursor;
-        const float availableWidth = content_available_width(pos.x);
-        const float width = options.size.x > 0.0f
+        const float availableWidth = (std::max)(1.0f, content_available_width(pos.x));
+        const float requestedWidth = options.size.x > 0.0f
             ? (std::max)(64.0f, options.size.x)
             : availableWidth;
+        const float width = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
         const float height = options.size.y > 0.0f
             ? (std::max)(48.0f, options.size.y)
             : 160.0f;

@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.87.09]
+- Promoted the current operator-approved GUI baseline for release. Shared GUI
+  dropdowns, modal-local progress lanes, scroll/text lanes, and editor settings
+  popups keep their z-order and content bounds without reopening the modal
+  flicker path. Validation: MSVC Debug x64 `ConsoleApplication1` passed and the
+  operator eye-tested the local build as stable.
+- Refreshed README proof references to additive `v0.87.09` screenshot paths
+  while preserving older screenshots as archive, and removed the tracked
+  `editor_launcher.exp` build residue from source control.
+
 ## [v0.87.08]
 - Restored the stable modal draw contract in `engine.gui`: modal input capture
   is armed before top-layer replay again, and the experimental global

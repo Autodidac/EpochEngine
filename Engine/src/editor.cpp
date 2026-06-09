@@ -5513,6 +5513,7 @@ namespace epochnamespace
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
         const gui::Vec2 sourceUpdateConfirmModalSize{ 620.0f, 292.0f };
+        const gui::Vec2 packageManagerModalSize = fit_modal_size({ 820.0f, 520.0f }, { 640.0f, 450.0f });
         auto modal_visible_now = [&editor]() noexcept -> bool
         {
             return editor.showAboutModal
@@ -5539,7 +5540,7 @@ namespace epochnamespace
         else if (editor.showSettingsModal)
             gui::begin_modal_input_capture(centered_modal_position({ 600.0f, 462.0f }), { 600.0f, 462.0f });
         else if (editor.showPackageManagerModal)
-            gui::begin_modal_input_capture(centered_modal_position({ 820.0f, 560.0f }), { 820.0f, 560.0f });
+            gui::begin_modal_input_capture(centered_modal_position(packageManagerModalSize), packageManagerModalSize);
         else if (editor.showAboutModal)
             gui::begin_modal_input_capture(centered_modal_position({ 456.0f, 222.0f }), { 456.0f, 222.0f });
 
@@ -6843,14 +6844,14 @@ namespace epochnamespace
             const gui::Vec2 scene_pos = gui::cursor_position();
             const float sceneAvailableWidth = (std::max)(48.0f, viewport_pos.x + viewport_size.x - scene_pos.x);
             const float sceneAvailableHeight = (std::max)(48.0f, viewport_pos.y + viewport_size.y - scene_pos.y);
-            const bool showSceneTimeline = sceneAvailableHeight > 190.0f;
+            const bool showSceneTimeline = sceneAvailableHeight > 128.0f;
             const float timelineStripGap = showSceneTimeline ? 6.0f : 0.0f;
             const float timelineStripHeight = showSceneTimeline
-                ? (std::min)(118.0f, (std::max)(82.0f, sceneAvailableHeight * 0.20f))
+                ? (std::min)(112.0f, (std::max)(64.0f, sceneAvailableHeight * 0.18f))
                 : 0.0f;
             const gui::Vec2 scene_size{
                 sceneAvailableWidth,
-                (std::max)(48.0f, sceneAvailableHeight - timelineStripHeight - timelineStripGap)
+                (std::max)(72.0f, sceneAvailableHeight - timelineStripHeight - timelineStripGap)
             };
             result.scene_viewport = gui::scene_viewport({}, scene_pos, scene_size);
             ctx->set_scene_preview_mode(editor.previewMode);
@@ -8736,12 +8737,14 @@ namespace epochnamespace
         if (editor.showPackageManagerModal)
         {
             editor.openMenu = TopMenu::None;
-            const gui::Vec2 modalSize{ 820.0f, 560.0f };
+            const gui::Vec2 modalSize = packageManagerModalSize;
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
-            const float contentWidth = modalSize.x - 32.0f;
+            const float contentWidth = (std::max)(320.0f, modalSize.x - 56.0f);
+            const float packageListHeight = (std::max)(150.0f, (std::min)(206.0f, modalSize.y * 0.36f));
+            const float packageDetailHeight = (std::max)(100.0f, (std::min)(126.0f, modalSize.y * 0.24f));
             const auto* activeProfile = editor_find_project_profile(editor.projectId);
             const bool engineArcadeEligible =
                 activeProfile
@@ -8942,8 +8945,8 @@ namespace epochnamespace
             gui::label("Available Packages");
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "package-manager-package-list",
-                .size = { contentWidth, 222.0f },
-                .content_height = (std::max)(222.0f, static_cast<float>(knownPackages.size()) * 68.0f + 12.0f),
+                .size = { contentWidth, packageListHeight },
+                .content_height = (std::max)(packageListHeight, static_cast<float>(knownPackages.size()) * 62.0f + 12.0f),
                 .draw_background = true,
                 .show_scrollbar = true
             });
@@ -8956,7 +8959,7 @@ namespace epochnamespace
                     + std::string(package.displayName);
                 const gui::Vec2 rowPos = gui::cursor_position();
                 constexpr float kPackageActionWidth = 122.0f;
-                constexpr float kPackageRowHeight = 64.0f;
+                constexpr float kPackageRowHeight = 58.0f;
                 const float packageLinkWidth = (std::max)(160.0f, contentWidth - kPackageActionWidth - 24.0f);
                 if (gui::text_link(rowLabel, { packageLinkWidth, 28.0f }, isSelected))
                     select_package(package);
@@ -8985,7 +8988,7 @@ namespace epochnamespace
             gui::label("Selected Package");
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "package-manager-detail-scroll",
-                .size = { contentWidth, 150.0f },
+                .size = { contentWidth, packageDetailHeight },
                 .content_height = 248.0f,
                 .draw_background = true,
                 .show_scrollbar = true
@@ -9056,7 +9059,7 @@ namespace epochnamespace
                 .label = "Install",
                 .status = editor.packageInstallStatus,
                 .value = packageProgress,
-                .size = { contentWidth, 20.0f },
+                .size = { (std::max)(240.0f, (std::min)(contentWidth, modalSize.x - 64.0f)), 20.0f },
                 .show_percent = true
             });
 

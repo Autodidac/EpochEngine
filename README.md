@@ -4,8 +4,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.08-1F7A4C?style=for-the-badge" alt="Current development source v0.87.08" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.84.38-2C6A8A?style=for-the-badge" alt="Published stable release v0.84.38" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.09-1F7A4C?style=for-the-badge" alt="Current development source v0.87.09" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.09-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.09" />
 </p>
 
 <p align="center">
@@ -75,9 +75,9 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.87.08`.
-- The latest published stable runtime release is `v0.84.38`.
-- Windows and Linux `v0.84.38` runtime packages use the production package
+- Source is currently the active development line at `v0.87.09`.
+- The latest published stable runtime release is `v0.87.09`.
+- Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
   headless smoke binaries, and duplicated compatibility output folders are not
@@ -113,7 +113,7 @@ bootstrap shells. The current public gallery is below; the top proof shows the
 Windows multicontext editor carrying every active backend lane.
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08700.png" alt="Epoch Windows multicontext editor proof" />
+  <img src="Images/readme/windows-multicontext-editor-v08709.png" alt="Epoch Windows multicontext editor proof" />
 </p>
 
 ## What Epoch Provides Right Now
@@ -151,27 +151,27 @@ builds.
 - A valid Windows six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
   `Vulkan`, `OpenGL`, and `DirectX`.
 - Floating-window proof is archived in `Images/readme/`; the active README
-  gallery now favors the current `v0.87.00` multicontext editor capture so old
+  gallery now favors the current `v0.87.09` multicontext editor capture so old
   promoted-window screenshots do not look like current UI proof.
 - The Linux proof comes from an asset-bearing WSL build output, not a source
   tree launched without runtime assets.
 
-Current Windows per-backend startup proofs from the same `v0.87.00` capture
+Current Windows per-backend startup proofs from the same `v0.87.09` capture
 round:
 
 <p align="center">
-  <a href="Images/readme/windows-raylib-v08700.png"><img src="Images/readme/windows-raylib-v08700.png" alt="Epoch Windows Raylib editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-sdl-v08700.png"><img src="Images/readme/windows-sdl-v08700.png" alt="Epoch Windows SDL editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-sfml-v08700.png"><img src="Images/readme/windows-sfml-v08700.png" alt="Epoch Windows SFML editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-vulkan-v08700.png"><img src="Images/readme/windows-vulkan-v08700.png" alt="Epoch Windows Vulkan editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-opengl-v08700.png"><img src="Images/readme/windows-opengl-v08700.png" alt="Epoch Windows OpenGL editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-directx-v08700.png"><img src="Images/readme/windows-directx-v08700.png" alt="Epoch Windows DirectX editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-raylib-v08709.png"><img src="Images/readme/windows-raylib-v08709.png" alt="Epoch Windows Raylib editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-sdl-v08709.png"><img src="Images/readme/windows-sdl-v08709.png" alt="Epoch Windows SDL editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-sfml-v08709.png"><img src="Images/readme/windows-sfml-v08709.png" alt="Epoch Windows SFML editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-vulkan-v08709.png"><img src="Images/readme/windows-vulkan-v08709.png" alt="Epoch Windows Vulkan editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-opengl-v08709.png"><img src="Images/readme/windows-opengl-v08709.png" alt="Epoch Windows OpenGL editor proof" width="15.6%" /></a>
+  <a href="Images/readme/windows-directx-v08709.png"><img src="Images/readme/windows-directx-v08709.png" alt="Epoch Windows DirectX editor proof" width="15.6%" /></a>
 </p>
 
 Windows multicontext editor proof from the same current capture round:
 
 <p align="center">
-  <a href="Images/readme/windows-multicontext-editor-v08700.png"><img src="Images/readme/windows-multicontext-editor-v08700.png" alt="Epoch Windows multicontext editor proof" width="960" /></a>
+  <a href="Images/readme/windows-multicontext-editor-v08709.png"><img src="Images/readme/windows-multicontext-editor-v08709.png" alt="Epoch Windows multicontext editor proof" width="960" /></a>
 </p>
 
 WSL/Linux editor proof, latest asset-bearing visual capture:
