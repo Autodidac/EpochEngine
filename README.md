@@ -75,8 +75,8 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.87.09`.
-- The latest published stable runtime release is `v0.87.09`.
+- Source is currently the active development line at `v0.87.10`.
+- The latest published stable runtime release is `v0.87.10`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
@@ -151,12 +151,12 @@ builds.
 - A valid Windows six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
   `Vulkan`, `OpenGL`, and `DirectX`.
 - Floating-window proof is archived in `Images/readme/`; the active README
-  gallery now favors the current `v0.87.09` multicontext editor capture so old
+  gallery now favors the current `v0.87.10` multicontext editor capture so old
   promoted-window screenshots do not look like current UI proof.
 - The Linux proof comes from an asset-bearing WSL build output, not a source
   tree launched without runtime assets.
 
-Current Windows per-backend startup proofs from the same `v0.87.09` capture
+Current Windows per-backend startup proofs from the same `v0.87.10` capture
 round:
 
 <p align="center">

@@ -57,10 +57,10 @@ OpenGL-derived identity in the OpenGL-family render device, and the build-only
 graph/cabinet/fake-native/requirements harnesses cover OpenGL, SDL3-over-GL,
 SFML-over-GL, and Raylib-over-GL without claiming live native allocation.
 
-Latest stabilization: `v0.87.09` preserves the operator-approved GUI baseline:
+Latest stabilization: `v0.87.10` preserves the operator-approved GUI baseline:
 modal/dropdown/progress lanes keep top-layer z-order and content bounds, the
 Video timeline remains scene-backed, and README proof points at additive
-`v08709` screenshots while older captures stay archived.
+current screenshots while older captures stay archived.
 
 Previous stabilization: Video is treated as a scene-backed workspace again so the
 timeline strip remains visible, update/package modals use matched body and input
