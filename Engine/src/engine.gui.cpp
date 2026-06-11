@@ -3320,6 +3320,17 @@ namespace epochnamespace::gui
         return measure_wrapped_text_height(text, wrapWidth, kFontScale);
     }
 
+    float measure_wrapped_label_height(std::string_view text, float width) noexcept
+    {
+        try { ensure_resources(); }
+        catch (...) { return 0.0f; }
+
+        const float wrapWidth = width > 0.0f
+            ? (std::max)(space_advance(kFontScale), width)
+            : 1.0f;
+        return measure_wrapped_text_height(text, wrapWidth, kFontScale);
+    }
+
     EditBoxResult edit_box(std::string& text, Vec2 size, std::size_t max_chars, bool multiline) noexcept
     {
         EditBoxResult result{};

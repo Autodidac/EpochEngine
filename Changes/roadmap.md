@@ -58,10 +58,13 @@ graph/cabinet/fake-native/requirements harnesses cover OpenGL, SDL3-over-GL,
 SFML-over-GL, and Raylib-over-GL without claiming live native allocation.
 
 Latest stabilization: `v0.87.11` keeps the operator-approved GUI baseline and
-fixes the release blockers around it: update/source modals now stack action
-buttons inside their fitted content lane on narrow surfaces, SFML/SDL/Vulkan
-API drift is repaired for the manifest-restored Windows dependency set, and
-MSVC Debug plus Release x64 editor builds pass.
+fixes the release blockers around it: update/source modals now use measured
+editor-owned layout, runtime, and view fragments under `Engine/src/editor/`,
+action buttons stack inside their fitted content lane on narrow surfaces,
+SFML/SDL/Vulkan API drift is repaired for the
+manifest-restored Windows dependency set, SFML 2/3 compatibility restores the
+hosted Linux `linux-clang-engine` lane, and MSVC plus Linux Clang editor builds
+pass with staged Windows/Linux package `--version` checks.
 
 Previous stabilization: Video is treated as a scene-backed workspace again so the
 timeline strip remains visible, update/package modals use matched body and input

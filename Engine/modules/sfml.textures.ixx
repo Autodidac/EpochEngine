@@ -48,7 +48,7 @@ module;
 #include <include/engine.config.hpp>
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-#include <SFML/Graphics.hpp>
+#include "sfml.compat.hpp"
 #endif
 
 export module sfml.textures;
@@ -146,10 +146,10 @@ export namespace epochnamespace::sfmlcontext
         }
 
         sf::Image image{};
-        image.resize(
-            sf::Vector2u{
-                static_cast<unsigned>(atlas.width),
-                static_cast<unsigned>(atlas.height) },
+        epoch::sfml_compat::resize_image(
+            image,
+            static_cast<unsigned>(atlas.width),
+            static_cast<unsigned>(atlas.height),
             reinterpret_cast<const std::uint8_t*>(atlas.pixel_data.data()));
 
         if (!gpu.texture.loadFromImage(image))
@@ -264,9 +264,11 @@ export namespace epochnamespace::sfmlcontext
         const auto& gpu = it->second;
 
         sf::Sprite sprite(gpu.texture);
-        sf::IntRect rect(
-            sf::Vector2i(static_cast<int>(region.x), static_cast<int>(region.y)),
-            sf::Vector2i(static_cast<int>(region.width), static_cast<int>(region.height)));
+        const sf::IntRect rect = epoch::sfml_compat::int_rect(
+            static_cast<int>(region.x),
+            static_cast<int>(region.y),
+            static_cast<int>(region.width),
+            static_cast<int>(region.height));
 
         sprite.setTextureRect(rect);
         sprite.setPosition(sf::Vector2f(x, y));

@@ -13,7 +13,7 @@ module;
 #include <vector>
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-#include <SFML/Graphics.hpp>
+#include "sfml.compat.hpp"
 #endif
 
 export module render.device_sfml;
@@ -243,7 +243,7 @@ export namespace epoch
             const u32 height = desc.height == 0 ? 1u : desc.height;
 
             auto target = std::make_unique<sf::RenderTexture>();
-            if (!target->resize(sf::Vector2u{ width, height }))
+            if (!epoch::sfml_compat::resize_render_texture(*target, width, height))
                 return {};
 
             const u32 slot = allocate_render_texture_slot();

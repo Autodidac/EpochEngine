@@ -356,6 +356,7 @@ namespace epochnamespace::gui
     export void wrapped_label(std::string_view text, float width = 0.0f) noexcept;
     export void property_row(std::string_view label, std::string_view value, float label_width = 152.0f) noexcept;
     export float wrapped_text_height(std::string_view text, float width = 0.0f) noexcept;
+    export float measure_wrapped_label_height(std::string_view text, float width = 0.0f) noexcept;
 
     export float line_height() noexcept;
     export float glyph_width() noexcept;

@@ -21,7 +21,7 @@ module;
 #endif
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-#include <SFML/Graphics.hpp>
+#include "../modules/sfml.compat.hpp"
 #endif
 
 module core.context;
@@ -141,14 +141,16 @@ namespace
         const float viewportHeight = (std::clamp)(viewport.height * invHeight, 0.0f, 1.0f - viewportTop);
 
         const auto previousView = s_window->getView();
-        sf::View previewView{ sf::FloatRect(
-            { 0.0f, 0.0f },
-            {
-                static_cast<float>(viewport.width),
-                static_cast<float>(viewport.height) }) };
-        previewView.setViewport(sf::FloatRect(
-            { viewportLeft, viewportTop },
-            { viewportWidth, viewportHeight }));
+        sf::View previewView{ epoch::sfml_compat::float_rect(
+            0.0f,
+            0.0f,
+            static_cast<float>(viewport.width),
+            static_cast<float>(viewport.height)) };
+        previewView.setViewport(epoch::sfml_compat::float_rect(
+            viewportLeft,
+            viewportTop,
+            viewportWidth,
+            viewportHeight));
         s_window->setView(previewView);
 
         const auto clearColor = epochnamespace::previewgrid::kClearColor;
@@ -273,9 +275,11 @@ namespace
             static_cast<unsigned>((std::max)(1, s_width)),
             static_cast<unsigned>((std::max)(1, s_height)));
         s_window->setSize(size);
-        s_window->setView(sf::View(sf::FloatRect(
-            { 0.0f, 0.0f },
-            { static_cast<float>(size.x), static_cast<float>(size.y) })));
+        s_window->setView(sf::View(epoch::sfml_compat::float_rect(
+            0.0f,
+            0.0f,
+            static_cast<float>(size.x),
+            static_cast<float>(size.y))));
     }
 
     void refresh_dimensions(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
@@ -399,14 +403,12 @@ namespace
             ? ctx->windowData->titleNarrow
             : (ctx->backendName.empty() ? "SFML" : ctx->backendName);
 
-        s_window = std::make_unique<sf::RenderWindow>(
-            sf::VideoMode(
-                sf::Vector2u{
-                    static_cast<unsigned>(s_width),
-                    static_cast<unsigned>(s_height) }),
+        s_window = epoch::sfml_compat::make_render_window(
+            epoch::sfml_compat::video_mode(
+                static_cast<unsigned>(s_width),
+                static_cast<unsigned>(s_height),
+                32u),
             title,
-            sf::Style::Default,
-            sf::State::Windowed,
             sf::ContextSettings{});
 
         if (!s_window || !s_window->isOpen())
@@ -422,7 +424,7 @@ namespace
         (void)s_window->setActive(false);
 
 #if defined(_WIN32)
-        s_childWindow = static_cast<HWND>(s_window->getNativeHandle());
+        s_childWindow = static_cast<HWND>(epoch::sfml_compat::native_handle(*s_window));
         if (!s_childWindow)
         {
             ctx->init_failed = true;
@@ -640,6 +642,7 @@ namespace
             return false;
         }
 
+#if EPOCH_SFML_HAS_V3_API
         while (const auto event = s_window->pollEvent())
         {
             if (event->is<sf::Event::Closed>())
@@ -657,6 +660,26 @@ namespace
                     ctx->onResize(ctx->framebufferWidth, ctx->framebufferHeight);
             }
         }
+#else
+        sf::Event event{};
+        while (s_window->pollEvent(event))
+        {
+            if (event.type == sf::Event::Closed)
+            {
+                request_host_shutdown(ctx);
+                (void)s_window->setActive(false);
+                return false;
+            }
+
+            if (event.type == sf::Event::Resized)
+            {
+                refresh_dimensions(ctx);
+                apply_view_size();
+                if (ctx->onResize)
+                    ctx->onResize(ctx->framebufferWidth, ctx->framebufferHeight);
+            }
+        }
+#endif
 
         sync_docked_child_size(ctx);
         refresh_dimensions(ctx);
