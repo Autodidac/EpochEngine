@@ -478,6 +478,29 @@ namespace epochnamespace::gui
             }
         };
 
+        struct ContentClipClearScope
+        {
+            Vec2 previousMin{};
+            Vec2 previousMax{};
+
+            ContentClipClearScope() noexcept
+            {
+                previousMin = g_frame.contentMin;
+                previousMax = g_frame.contentMax;
+                g_frame.contentMin = g_frame.origin;
+                g_frame.contentMax = {
+                    g_frame.origin.x + g_frame.windowSize.x,
+                    g_frame.origin.y + g_frame.windowSize.y
+                };
+            }
+
+            ~ContentClipClearScope()
+            {
+                g_frame.contentMin = previousMin;
+                g_frame.contentMax = previousMax;
+            }
+        };
+
         [[nodiscard]] static float content_right() noexcept
         {
             return has_content_clip() ? g_frame.contentMax.x : (g_frame.origin.x + g_frame.windowSize.x);
@@ -2636,8 +2659,17 @@ namespace epochnamespace::gui
 
     static void render_pending_select_popups() noexcept
     {
-        for (const PendingSelectPopup& popup : g_frame.pendingSelectPopups)
-            render_select_popup(popup);
+        if (g_frame.pendingSelectPopups.empty())
+            return;
+
+        begin_top_layer();
+        {
+            ContentClipClearScope clearClip;
+            for (const PendingSelectPopup& popup : g_frame.pendingSelectPopups)
+                render_select_popup(popup);
+        }
+        end_top_layer();
+
         g_frame.pendingSelectPopups.clear();
     }
 
@@ -4397,7 +4429,7 @@ namespace epochnamespace::gui
         scrollState.scrollY = (std::clamp)(scrollState.scrollY, 0.0f, maxScroll);
 
         const bool listHovered = point_in_rect(g_frame.mousePos, listPos.x, listPos.y, width, listHeight)
-            && point_in_active_clip(g_frame.mousePos);
+            && point_in_modal_input_capture(g_frame.mousePos);
         if (listHovered && g_frame.mouseWheelDelta != 0)
         {
             const float wheelSteps = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
@@ -4418,7 +4450,7 @@ namespace epochnamespace::gui
             const Vec2 optionPos{ listPos.x, optionY };
             const bool hovered = point_in_rect(g_frame.mousePos, optionPos.x, optionPos.y, itemWidth, rowHeight)
                 && point_in_rect(g_frame.mousePos, listPos.x, listPos.y, width, listHeight)
-                && point_in_active_clip(g_frame.mousePos);
+                && point_in_modal_input_capture(g_frame.mousePos);
             const std::size_t pressKey = widget_press_key(options.options[i], optionPos, { itemWidth, rowHeight });
             auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
             if (hovered && left_press_available())

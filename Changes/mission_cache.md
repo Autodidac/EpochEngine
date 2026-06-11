@@ -37,6 +37,9 @@ after choosing the current source gate from `Changes/active_pass.md`.
   windows.
 - Preserve the proven draw model. Command menus and modals stay above the scene,
   close/deselect predictably, and must not reintroduce OpenGL flicker.
+- Modal, dropdown, progress, and timeline surfaces share the same GUI containment
+  contract: top-layer popups render above their owner, hit testing respects modal
+  capture, and progress/timeline bars must fit their content rect without bleed.
 - Package Manager should use a real list with per-row status/action controls,
   visible transfer/build progress, license evidence, source gates, cache
   validation, cancel behavior, and no fake-progress claims.
@@ -47,6 +50,10 @@ after choosing the current source gate from `Changes/active_pass.md`.
 
 - Render-to-texture belongs in core engine. Arcade/game packages consume RTT
   later for in-game cabinets and runtime-minis.
+- Engine Arcade must resolve to a real upright arcade cabinet asset from
+  `Autodidac/EpochEngineExtensions` or executable-local `cache/packages/`,
+  including screen, marquee, control deck, coin/door panels, and cabinet shell.
+  Procedural boxes are only the fallback when no reviewed package model exists.
 - Built-in mini-runtimes remain kernel-owned and exposed to projects as
   package/script assets.
 - Play In Editor runs the saved scene inside the editor. External project launch

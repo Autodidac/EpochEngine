@@ -5512,8 +5512,8 @@ namespace epochnamespace
                 return fit_modal_size({ modalWidth, desiredHeight }, { 660.0f, minHeight });
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
-        const gui::Vec2 sourceUpdateConfirmModalSize{ 620.0f, 292.0f };
-        const gui::Vec2 packageManagerModalSize = fit_modal_size({ 820.0f, 438.0f }, { 640.0f, 398.0f });
+        const gui::Vec2 sourceUpdateConfirmModalSize = fit_modal_size({ 640.0f, 324.0f }, { 600.0f, 300.0f });
+        const gui::Vec2 packageManagerModalSize = fit_modal_size({ 820.0f, 560.0f }, { 640.0f, 500.0f });
         auto modal_visible_now = [&editor]() noexcept -> bool
         {
             return editor.showAboutModal
@@ -6733,7 +6733,7 @@ namespace epochnamespace
             epoch::timeline::sync_to_simulation(editor.timelineState, timelineStats);
             epoch::timeline::clamp_state(editor.timelineState);
 
-            const float width = (std::max)(180.0f, availableWidth);
+            const float width = (std::max)(1.0f, availableWidth);
             const float playheadValue = static_cast<float>(std::clamp(
                 editor.timelineState.duration_seconds > 0.0
                     ? editor.timelineState.playhead_seconds / editor.timelineState.duration_seconds
@@ -8742,7 +8742,7 @@ namespace epochnamespace
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
-            const float contentWidth = (std::max)(320.0f, modalSize.x - 56.0f);
+            const float contentWidth = (std::max)(1.0f, modalSize.x - 56.0f);
             const float packageListHeight = (std::max)(128.0f, (std::min)(178.0f, modalSize.y * 0.34f));
             const float packageDetailHeight = (std::max)(86.0f, (std::min)(112.0f, modalSize.y * 0.22f));
             const auto* activeProfile = editor_find_project_profile(editor.projectId);
@@ -9059,7 +9059,7 @@ namespace epochnamespace
                 .label = "Install",
                 .status = editor.packageInstallStatus,
                 .value = packageProgress,
-                .size = { (std::max)(240.0f, contentWidth - 2.0f), 20.0f },
+                .size = { (std::max)(1.0f, contentWidth - 2.0f), 20.0f },
                 .show_percent = true
             });
 

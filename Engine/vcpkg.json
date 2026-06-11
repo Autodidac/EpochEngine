@@ -1,7 +1,7 @@
 {
   "name": "epoch-engine",
   "version-string": "0.82.30",
-  "builtin-baseline": "74ec888e385d189b42d6b398d0bbaa6f1b1d3b0e",
+  "builtin-baseline": "02e9f067ac87b992659929b7d587069b42f112e9",
   "dependencies": [
     "asio",
     "fmt",
