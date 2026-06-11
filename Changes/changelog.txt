@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.87.09]
+- Added MSVC executable resource ownership for `EpochEditor.exe`: the final
+  app project now compiles the Windows resource script directly, embeds the
+  Epoch icon, and exposes explicit Epoch Editor version metadata in both Debug
+  and Release builds.
+- Added reusable GUI theme choices in `engine.gui`: Midnight Blue, Ember Forge,
+  Forest Terminal, and Aurora Steel now live beside Follow System Dark Mode,
+  Professional Dark, and Classic Launcher instead of being editor-local tables.
 - Promoted the current operator-approved GUI baseline for release. Shared GUI
   dropdowns, modal-local progress lanes, scroll/text lanes, and editor settings
   popups keep their z-order and content bounds without reopening the modal

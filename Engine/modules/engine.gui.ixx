@@ -67,14 +67,22 @@ namespace epochnamespace::gui
     export enum class ThemeVariant : std::uint8_t
     {
         DefaultDark = 0,
-        ClassicLauncher
+        ClassicLauncher,
+        MidnightBlue,
+        EmberForge,
+        ForestTerminal,
+        AuroraSteel
     };
 
     export enum class ThemePreference : std::uint8_t
     {
         FollowSystemDark = 0,
         ProfessionalDark,
-        ClassicLauncher
+        ClassicLauncher,
+        MidnightBlue,
+        EmberForge,
+        ForestTerminal,
+        AuroraSteel
     };
 
     export struct ThemePreferenceChoice

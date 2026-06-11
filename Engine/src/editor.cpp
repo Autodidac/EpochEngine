@@ -5513,7 +5513,7 @@ namespace epochnamespace
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
         const gui::Vec2 sourceUpdateConfirmModalSize{ 620.0f, 292.0f };
-        const gui::Vec2 packageManagerModalSize = fit_modal_size({ 820.0f, 520.0f }, { 640.0f, 450.0f });
+        const gui::Vec2 packageManagerModalSize = fit_modal_size({ 820.0f, 438.0f }, { 640.0f, 398.0f });
         auto modal_visible_now = [&editor]() noexcept -> bool
         {
             return editor.showAboutModal
@@ -8743,8 +8743,8 @@ namespace epochnamespace
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
             const float contentWidth = (std::max)(320.0f, modalSize.x - 56.0f);
-            const float packageListHeight = (std::max)(150.0f, (std::min)(206.0f, modalSize.y * 0.36f));
-            const float packageDetailHeight = (std::max)(100.0f, (std::min)(126.0f, modalSize.y * 0.24f));
+            const float packageListHeight = (std::max)(128.0f, (std::min)(178.0f, modalSize.y * 0.34f));
+            const float packageDetailHeight = (std::max)(86.0f, (std::min)(112.0f, modalSize.y * 0.22f));
             const auto* activeProfile = editor_find_project_profile(editor.projectId);
             const bool engineArcadeEligible =
                 activeProfile
@@ -9059,7 +9059,7 @@ namespace epochnamespace
                 .label = "Install",
                 .status = editor.packageInstallStatus,
                 .value = packageProgress,
-                .size = { (std::max)(240.0f, (std::min)(contentWidth, modalSize.x - 64.0f)), 20.0f },
+                .size = { (std::max)(240.0f, contentWidth - 2.0f), 20.0f },
                 .show_percent = true
             });
 

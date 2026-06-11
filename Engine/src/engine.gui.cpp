@@ -200,6 +200,10 @@ namespace epochnamespace::gui
 
             PaletteSprites defaultDark{};
             PaletteSprites classicLauncher{};
+            PaletteSprites midnightBlue{};
+            PaletteSprites emberForge{};
+            PaletteSprites forestTerminal{};
+            PaletteSprites auroraSteel{};
             GuiFontCache font{};
             font::FontRenderer fontRenderer{};
         };
@@ -411,6 +415,14 @@ namespace epochnamespace::gui
             {
             case ThemeVariant::ClassicLauncher:
                 return g_resources.classicLauncher;
+            case ThemeVariant::MidnightBlue:
+                return g_resources.midnightBlue;
+            case ThemeVariant::EmberForge:
+                return g_resources.emberForge;
+            case ThemeVariant::ForestTerminal:
+                return g_resources.forestTerminal;
+            case ThemeVariant::AuroraSteel:
+                return g_resources.auroraSteel;
             case ThemeVariant::DefaultDark:
             default:
                 return g_resources.defaultDark;
@@ -892,6 +904,90 @@ namespace epochnamespace::gui
                     make_solid_pixels(0x22, 0x24, 0x28, 0xFF, 8, 8), 8, 8);
                 g_resources.classicLauncher.modalScrim = add_sprite(atlas, "__agui_classic/modal_scrim",
                     make_solid_pixels(0x04, 0x05, 0x07, 0xB8, 8, 8), 8, 8);
+
+                g_resources.midnightBlue.windowBackground = add_sprite(atlas, "__agui_midnight/window_bg",
+                    make_solid_pixels(0x10, 0x19, 0x2A, 0xFF, 8, 8), 8, 8);
+                g_resources.midnightBlue.buttonNormal = add_sprite(atlas, "__agui_midnight/button_normal",
+                    make_solid_pixels(0x1D, 0x2E, 0x4A, 0xFF, 8, 8), 8, 8);
+                g_resources.midnightBlue.buttonHover = add_sprite(atlas, "__agui_midnight/button_hover",
+                    make_solid_pixels(0x28, 0x42, 0x66, 0xFF, 8, 8), 8, 8);
+                g_resources.midnightBlue.buttonActive = add_sprite(atlas, "__agui_midnight/button_active",
+                    make_solid_pixels(0x36, 0x5F, 0x91, 0xFF, 8, 8), 8, 8);
+                g_resources.midnightBlue.textField = add_sprite(atlas, "__agui_midnight/text_field",
+                    make_solid_pixels(0x0D, 0x14, 0x22, 0xFF, 8, 8), 8, 8);
+                g_resources.midnightBlue.textFieldActive = add_sprite(atlas, "__agui_midnight/text_field_active",
+                    make_solid_pixels(0x16, 0x25, 0x3D, 0xFF, 8, 8), 8, 8);
+                g_resources.midnightBlue.panelBackground = add_sprite(atlas, "__agui_midnight/panel_bg",
+                    make_solid_pixels(0x14, 0x21, 0x36, 0xFF, 8, 8), 8, 8);
+                g_resources.midnightBlue.consoleBackground = add_sprite(atlas, "__agui_midnight/console_bg",
+                    make_solid_pixels(0x08, 0x0F, 0x19, 0xFF, 8, 8), 8, 8);
+                g_resources.midnightBlue.titleBar = add_sprite(atlas, "__agui_midnight/title_bar",
+                    make_solid_pixels(0x19, 0x2B, 0x46, 0xFF, 8, 8), 8, 8);
+                g_resources.midnightBlue.modalScrim = add_sprite(atlas, "__agui_midnight/modal_scrim",
+                    make_solid_pixels(0x02, 0x05, 0x0B, 0xC4, 8, 8), 8, 8);
+
+                g_resources.emberForge.windowBackground = add_sprite(atlas, "__agui_ember/window_bg",
+                    make_solid_pixels(0x24, 0x1C, 0x19, 0xFF, 8, 8), 8, 8);
+                g_resources.emberForge.buttonNormal = add_sprite(atlas, "__agui_ember/button_normal",
+                    make_solid_pixels(0x3E, 0x2A, 0x22, 0xFF, 8, 8), 8, 8);
+                g_resources.emberForge.buttonHover = add_sprite(atlas, "__agui_ember/button_hover",
+                    make_solid_pixels(0x55, 0x37, 0x28, 0xFF, 8, 8), 8, 8);
+                g_resources.emberForge.buttonActive = add_sprite(atlas, "__agui_ember/button_active",
+                    make_solid_pixels(0x70, 0x45, 0x2D, 0xFF, 8, 8), 8, 8);
+                g_resources.emberForge.textField = add_sprite(atlas, "__agui_ember/text_field",
+                    make_solid_pixels(0x1B, 0x14, 0x12, 0xFF, 8, 8), 8, 8);
+                g_resources.emberForge.textFieldActive = add_sprite(atlas, "__agui_ember/text_field_active",
+                    make_solid_pixels(0x32, 0x22, 0x1C, 0xFF, 8, 8), 8, 8);
+                g_resources.emberForge.panelBackground = add_sprite(atlas, "__agui_ember/panel_bg",
+                    make_solid_pixels(0x2C, 0x20, 0x1A, 0xFF, 8, 8), 8, 8);
+                g_resources.emberForge.consoleBackground = add_sprite(atlas, "__agui_ember/console_bg",
+                    make_solid_pixels(0x14, 0x0F, 0x0D, 0xFF, 8, 8), 8, 8);
+                g_resources.emberForge.titleBar = add_sprite(atlas, "__agui_ember/title_bar",
+                    make_solid_pixels(0x42, 0x28, 0x1E, 0xFF, 8, 8), 8, 8);
+                g_resources.emberForge.modalScrim = add_sprite(atlas, "__agui_ember/modal_scrim",
+                    make_solid_pixels(0x08, 0x04, 0x03, 0xC0, 8, 8), 8, 8);
+
+                g_resources.forestTerminal.windowBackground = add_sprite(atlas, "__agui_forest/window_bg",
+                    make_solid_pixels(0x13, 0x22, 0x1D, 0xFF, 8, 8), 8, 8);
+                g_resources.forestTerminal.buttonNormal = add_sprite(atlas, "__agui_forest/button_normal",
+                    make_solid_pixels(0x24, 0x3D, 0x31, 0xFF, 8, 8), 8, 8);
+                g_resources.forestTerminal.buttonHover = add_sprite(atlas, "__agui_forest/button_hover",
+                    make_solid_pixels(0x30, 0x55, 0x40, 0xFF, 8, 8), 8, 8);
+                g_resources.forestTerminal.buttonActive = add_sprite(atlas, "__agui_forest/button_active",
+                    make_solid_pixels(0x3E, 0x72, 0x52, 0xFF, 8, 8), 8, 8);
+                g_resources.forestTerminal.textField = add_sprite(atlas, "__agui_forest/text_field",
+                    make_solid_pixels(0x0D, 0x17, 0x14, 0xFF, 8, 8), 8, 8);
+                g_resources.forestTerminal.textFieldActive = add_sprite(atlas, "__agui_forest/text_field_active",
+                    make_solid_pixels(0x1D, 0x34, 0x29, 0xFF, 8, 8), 8, 8);
+                g_resources.forestTerminal.panelBackground = add_sprite(atlas, "__agui_forest/panel_bg",
+                    make_solid_pixels(0x18, 0x2D, 0x24, 0xFF, 8, 8), 8, 8);
+                g_resources.forestTerminal.consoleBackground = add_sprite(atlas, "__agui_forest/console_bg",
+                    make_solid_pixels(0x08, 0x10, 0x0D, 0xFF, 8, 8), 8, 8);
+                g_resources.forestTerminal.titleBar = add_sprite(atlas, "__agui_forest/title_bar",
+                    make_solid_pixels(0x20, 0x3A, 0x2D, 0xFF, 8, 8), 8, 8);
+                g_resources.forestTerminal.modalScrim = add_sprite(atlas, "__agui_forest/modal_scrim",
+                    make_solid_pixels(0x02, 0x07, 0x05, 0xC0, 8, 8), 8, 8);
+
+                g_resources.auroraSteel.windowBackground = add_sprite(atlas, "__agui_aurora/window_bg",
+                    make_solid_pixels(0x20, 0x26, 0x2E, 0xFF, 8, 8), 8, 8);
+                g_resources.auroraSteel.buttonNormal = add_sprite(atlas, "__agui_aurora/button_normal",
+                    make_solid_pixels(0x34, 0x3F, 0x4A, 0xFF, 8, 8), 8, 8);
+                g_resources.auroraSteel.buttonHover = add_sprite(atlas, "__agui_aurora/button_hover",
+                    make_solid_pixels(0x41, 0x55, 0x61, 0xFF, 8, 8), 8, 8);
+                g_resources.auroraSteel.buttonActive = add_sprite(atlas, "__agui_aurora/button_active",
+                    make_solid_pixels(0x53, 0x72, 0x7B, 0xFF, 8, 8), 8, 8);
+                g_resources.auroraSteel.textField = add_sprite(atlas, "__agui_aurora/text_field",
+                    make_solid_pixels(0x18, 0x1E, 0x24, 0xFF, 8, 8), 8, 8);
+                g_resources.auroraSteel.textFieldActive = add_sprite(atlas, "__agui_aurora/text_field_active",
+                    make_solid_pixels(0x2A, 0x36, 0x3F, 0xFF, 8, 8), 8, 8);
+                g_resources.auroraSteel.panelBackground = add_sprite(atlas, "__agui_aurora/panel_bg",
+                    make_solid_pixels(0x26, 0x2E, 0x36, 0xFF, 8, 8), 8, 8);
+                g_resources.auroraSteel.consoleBackground = add_sprite(atlas, "__agui_aurora/console_bg",
+                    make_solid_pixels(0x14, 0x18, 0x1F, 0xFF, 8, 8), 8, 8);
+                g_resources.auroraSteel.titleBar = add_sprite(atlas, "__agui_aurora/title_bar",
+                    make_solid_pixels(0x2F, 0x3B, 0x45, 0xFF, 8, 8), 8, 8);
+                g_resources.auroraSteel.modalScrim = add_sprite(atlas, "__agui_aurora/modal_scrim",
+                    make_solid_pixels(0x04, 0x06, 0x08, 0xBE, 8, 8), 8, 8);
 
                 g_resources.atlasBuilt = true;
             }
@@ -2387,10 +2483,14 @@ namespace epochnamespace::gui
 
     std::span<const ThemePreferenceChoice> theme_preference_choices() noexcept
     {
-        static constexpr std::array<ThemePreferenceChoice, 3> kChoices{ {
+        static constexpr std::array<ThemePreferenceChoice, 7> kChoices{ {
             { "Follow System Dark Mode", ThemePreference::FollowSystemDark },
             { "Professional Dark", ThemePreference::ProfessionalDark },
-            { "Classic Launcher", ThemePreference::ClassicLauncher }
+            { "Classic Launcher", ThemePreference::ClassicLauncher },
+            { "Midnight Blue", ThemePreference::MidnightBlue },
+            { "Ember Forge", ThemePreference::EmberForge },
+            { "Forest Terminal", ThemePreference::ForestTerminal },
+            { "Aurora Steel", ThemePreference::AuroraSteel }
         } };
         return { kChoices.data(), kChoices.size() };
     }
@@ -2411,6 +2511,14 @@ namespace epochnamespace::gui
         {
         case ThemePreference::ClassicLauncher:
             return ThemeVariant::ClassicLauncher;
+        case ThemePreference::MidnightBlue:
+            return ThemeVariant::MidnightBlue;
+        case ThemePreference::EmberForge:
+            return ThemeVariant::EmberForge;
+        case ThemePreference::ForestTerminal:
+            return ThemeVariant::ForestTerminal;
+        case ThemePreference::AuroraSteel:
+            return ThemeVariant::AuroraSteel;
         case ThemePreference::FollowSystemDark:
         case ThemePreference::ProfessionalDark:
         default:

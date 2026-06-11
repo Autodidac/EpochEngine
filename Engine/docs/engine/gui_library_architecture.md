@@ -91,9 +91,10 @@ replay pass.
   ordering. Theme preference labels, option data, preference resolution, and
   scoped theme application belong to `engine.gui`; editor surfaces may store the
   selected preference but must not recreate theme tables in domain code. Current
-  exposed choices are Follow System Dark Mode, Professional Dark, and Classic
-  Launcher; Follow System Dark Mode resolves to the dark tool palette until a
-  real platform light/dark palette bridge lands.
+  exposed choices are Follow System Dark Mode, Professional Dark, Classic
+  Launcher, Midnight Blue, Ember Forge, Forest Terminal, and Aurora Steel;
+  Follow System Dark Mode resolves to the dark tool palette until a real
+  platform light/dark palette bridge lands.
 - Cross-backend visual parity starts in `engine.visuals`. Frame clears, scene
   clears, object colors, selection colors, look markers, and editor-only opacity
   factors are shared there so OpenGL, Vulkan, DirectX, Raylib, SDL, and SFML can

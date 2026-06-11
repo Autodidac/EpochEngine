@@ -1,45 +1,49 @@
-﻿/*************************************************************
- *   █████╗ ██╗     ███╗   ███╗   ███╗   ██╗    ██╗██████╗   *
- *  ██╔══██╗██║     ████╗ ████║ ██╔═══██╗████╗  ██║██╔══██╗  *
- *  ███████║██║     ██╔████╔██║ ██║   ██║██╔██╗ ██║██║  ██║  *
- *  ██╔══██║██║     ██║╚██╔╝██║ ██║   ██║██║╚██╗██║██║  ██║  *
- *  ██║  ██║███████╗██║ ╚═╝ ██║ ╚██████╔╝██║ ╚████║██████╔╝  *
- *  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝   *
- *                                                           *
- *   This file is part of the Epoch Project                  *
- *                                                           *
- *   epochengine - Modular C++ Framework                     *
- *                                                           *
- *   Copyright (c) 2025 Adam Rushford                        *
- *   All rights reserved.                                    *
- *                                                           *
- *   This software is provided "as is," without              *
- *   warranty of any kind, express or implied,               *
- *   including but not limited to the warranties             *
- *   of merchantability, fitness for a particular            *
- *   purpose, and noninfringement. In no event               *
- *   shall the authors be liable for any claim,              *
- *   damages, or other liability, whether in an              *
- *   action of contract, tort, or otherwise,                 *
- *   arising from, out of, or in connection with             *
- *   the software or the use or other dealings               *
- *   in the software.                                        *
- *                                                           *
- *************************************************************/
-
- //{{NO_DEPENDENCIES}}
-// Microsoft Visual C++ generated resource script.
-// Used by WinResources.rc
+// SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Copyright (c) 2026 Adam Rushford
 //
+// Windows/MSVC resource script for EpochEditor.exe.
 
-#include "resource.h" // Ensure this is included to access constants
+#include "resource.h"
 
-// String Table
+#include <winver.h>
+
+IDI_EPOCH_EDITOR ICON "icon.ico"
+
 STRINGTABLE
 BEGIN
-IDS_APP_TITLE           "Epoch Editor"               // Title of the app
-IDC_epochenginePROJECT  "EpochWindowClass"           // Window class name
+    IDS_APP_TITLE     "Epoch Editor"
+    IDC_EPOCH_EDITOR  "EpochEditorWindowClass"
 END
 
-// Icon
-IDI_APPLICATION ICON "icon.ico"    // Make sure the icon file exists at the specified location
+VS_VERSION_INFO VERSIONINFO
+    FILEVERSION 0,87,9,0
+    PRODUCTVERSION 0,87,9,0
+    FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+#ifdef _DEBUG
+    FILEFLAGS VS_FF_DEBUG
+#else
+    FILEFLAGS 0x0L
+#endif
+    FILEOS VOS_NT_WINDOWS32
+    FILETYPE VFT_APP
+    FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "Epoch Engine"
+            VALUE "FileDescription", "Epoch Editor"
+            VALUE "FileVersion", "0.87.09"
+            VALUE "InternalName", "EpochEditor"
+            VALUE "LegalCopyright", "Copyright (c) 2026 Adam Rushford"
+            VALUE "OriginalFilename", "EpochEditor.exe"
+            VALUE "ProductName", "Epoch Engine"
+            VALUE "ProductVersion", "0.87.09"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

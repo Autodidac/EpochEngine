@@ -22,6 +22,9 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="..\..\resource\WinResource.rc" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\StaticLib1\StaticLib1.vcxproj">
       <Project>{bba639b7-2b54-4e38-90ac-667fc3303475}</Project>
     </ProjectReference>
