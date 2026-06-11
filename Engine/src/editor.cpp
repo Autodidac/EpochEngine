@@ -5437,12 +5437,37 @@ namespace epochnamespace
                     std::clamp(desired.y, minHeight, maxHeight)
                 };
             };
+        const auto modal_action_strip_height = [](const std::array<float, 3>& widths,
+            const std::size_t count,
+            const float availableWidth,
+            const float buttonHeight,
+            const float horizontalGap,
+            const float verticalGap) noexcept -> float
+            {
+                if (count == 0u)
+                    return 0.0f;
+
+                float horizontalWidth = 0.0f;
+                for (std::size_t i = 0u; i < count; ++i)
+                {
+                    horizontalWidth += widths[i];
+                    if (i + 1u < count)
+                        horizontalWidth += horizontalGap;
+                }
+
+                if (horizontalWidth <= (std::max)(1.0f, availableWidth))
+                    return buttonHeight;
+
+                return static_cast<float>(count) * buttonHeight
+                    + static_cast<float>(count - 1u) * verticalGap;
+            };
         const auto update_confirm_modal_size = [&]() -> gui::Vec2
             {
                 const bool sourceOnlyUpdate =
                     editor.lastUpdateCheck.source_update_available
                     && !editor.lastUpdateCheck.packaged_update_available;
                 const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
+                const bool updateRunning = editor.updateCheckPending.has_value() || sourceWorkerRunning;
                 const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
 
                 const float modalWidth = fit_modal_size({ 760.0f, 1.0f }, { 660.0f, 1.0f }).x;
@@ -5504,7 +5529,24 @@ namespace epochnamespace
                 desiredHeight += 22.0f + 14.0f;
                 desiredHeight += estimated_wrapped_height(cacheText, contentWidth) + 8.0f;
                 desiredHeight += estimated_wrapped_height(actionText, contentWidth) + 14.0f;
-                desiredHeight += 30.0f + 18.0f;
+                constexpr float buttonHeight = 30.0f;
+                constexpr float buttonGap = 16.0f;
+                constexpr float buttonStackGap = 8.0f;
+                const float cancelButtonWidth = sourceWorkerRunning ? 148.0f : 120.0f;
+                const float primaryButtonWidth = (std::min)(220.0f, (std::max)(160.0f, contentWidth * 0.34f));
+                const float advancedButtonWidth = (std::min)(190.0f, (std::max)(156.0f, contentWidth * 0.28f));
+                const std::array<float, 3> actionWidths{ cancelButtonWidth, primaryButtonWidth, advancedButtonWidth };
+                const std::size_t actionCount = sourceWorkerRunning
+                    ? 1u
+                    : restartReady
+                        ? 1u
+                        : updateRunning
+                            ? 0u
+                            : 3u;
+                const float actionStripHeight = actionCount > 0u
+                    ? modal_action_strip_height(actionWidths, actionCount, contentWidth, buttonHeight, buttonGap, buttonStackGap)
+                    : buttonHeight;
+                desiredHeight += actionStripHeight + 18.0f;
 
                 const float minHeight = sourceWorkerRunning ? 278.0f : restartReady ? 258.0f : 286.0f;
                 const float maxDesiredHeight = sourceWorkerRunning ? 372.0f : restartReady ? 348.0f : 372.0f;
@@ -5512,7 +5554,25 @@ namespace epochnamespace
                 return fit_modal_size({ modalWidth, desiredHeight }, { 660.0f, minHeight });
             };
         const gui::Vec2 updateConfirmModalSize = update_confirm_modal_size();
-        const gui::Vec2 sourceUpdateConfirmModalSize = fit_modal_size({ 640.0f, 324.0f }, { 600.0f, 300.0f });
+        const auto source_update_confirm_modal_size = [&]() -> gui::Vec2
+            {
+                const float modalWidth = fit_modal_size({ 640.0f, 1.0f }, { 600.0f, 1.0f }).x;
+                const float contentWidth = (std::max)(1.0f, modalWidth - 48.0f);
+                constexpr float buttonHeight = 30.0f;
+                constexpr float buttonGap = 16.0f;
+                constexpr float buttonStackGap = 8.0f;
+                const std::array<float, 3> actionWidths{ 120.0f, 120.0f, 176.0f };
+                const float actionStripHeight = modal_action_strip_height(
+                    actionWidths,
+                    actionWidths.size(),
+                    contentWidth,
+                    buttonHeight,
+                    buttonGap,
+                    buttonStackGap);
+                const float desiredHeight = 324.0f + (std::max)(0.0f, actionStripHeight - buttonHeight);
+                return fit_modal_size({ modalWidth, desiredHeight }, { 600.0f, 300.0f });
+            };
+        const gui::Vec2 sourceUpdateConfirmModalSize = source_update_confirm_modal_size();
         const gui::Vec2 packageManagerModalSize = fit_modal_size({ 820.0f, 560.0f }, { 640.0f, 500.0f });
         auto modal_visible_now = [&editor]() noexcept -> bool
         {
@@ -8403,10 +8463,30 @@ namespace epochnamespace
             constexpr float buttonHeight = 30.0f;
             constexpr float buttonBottomPad = 18.0f;
             constexpr float buttonTopPad = 12.0f;
+            constexpr float buttonGap = 16.0f;
+            constexpr float buttonStackGap = 8.0f;
             const float contentX = modalPos.x + modalContentInset;
             const float contentRight = modalPos.x + modalSize.x - modalContentInset;
             const float contentWidth = (std::max)(1.0f, contentRight - contentX);
-            const float buttonY = modalPos.y + modalSize.y - buttonHeight - buttonBottomPad;
+            const float cancelButtonWidth = sourceWorkerRunning ? 148.0f : 120.0f;
+            const float primaryButtonWidth = (std::min)(220.0f, (std::max)(160.0f, contentWidth * 0.34f));
+            const float advancedButtonWidth = (std::min)(190.0f, (std::max)(156.0f, contentWidth * 0.28f));
+            const bool showCancelButton = sourceWorkerRunning || (!updateRunning && !restartReady);
+            const bool showPrimaryButton = !updateRunning;
+            const bool showAdvancedSourceButton = !updateRunning && !restartReady;
+            std::array<float, 3> actionWidths{};
+            std::size_t actionCount = 0u;
+            if (showCancelButton)
+                actionWidths[actionCount++] = cancelButtonWidth;
+            if (showPrimaryButton)
+                actionWidths[actionCount++] = primaryButtonWidth;
+            if (showAdvancedSourceButton)
+                actionWidths[actionCount++] = advancedButtonWidth;
+            const float actionStripHeight = actionCount > 0u
+                ? modal_action_strip_height(actionWidths, actionCount, contentWidth, buttonHeight, buttonGap, buttonStackGap)
+                : buttonHeight;
+            const bool actionStripStacked = actionStripHeight > buttonHeight + 0.5f;
+            const float buttonY = modalPos.y + modalSize.y - actionStripHeight - buttonBottomPad;
             const float contentBottom = (std::max)(modalPos.y + 64.0f, buttonY - buttonTopPad);
             const std::string updateStatusLine = [&]() {
                 std::string text = editor.updateStatus;
@@ -8476,59 +8556,118 @@ namespace epochnamespace
                         ? "Use Update From Source to build the newer source locally, or Cancel to stay on this build."
                         : "Install Release is recommended. Advanced Source is only for intentionally building latest main locally.";
             emitWrapped(actionText, 8.0f);
-            const float cancelButtonWidth = sourceWorkerRunning ? 148.0f : 120.0f;
-            const float primaryButtonWidth = (std::min)(220.0f, (std::max)(160.0f, contentWidth * 0.34f));
-            const float advancedButtonWidth = (std::min)(190.0f, (std::max)(156.0f, contentWidth * 0.28f));
-            const float buttonGap = 16.0f;
-            const float primaryButtonX = sourceWorkerRunning
-                ? contentX
-                : (std::min)(contentRight - primaryButtonWidth, contentX + cancelButtonWidth + buttonGap);
-            const float advancedButtonX = (std::max)(contentX, contentRight - advancedButtonWidth);
-            gui::set_cursor({ contentX, buttonY });
-            if (sourceWorkerRunning)
+            if (actionStripStacked)
             {
-                if (gui::button("Cancel Update", { cancelButtonWidth, buttonHeight }))
+                float stackedButtonY = buttonY;
+                if (showCancelButton)
                 {
-                    const bool cancelRequested = updater::request_source_update_cancel();
+                    gui::set_cursor({ contentX, stackedButtonY });
+                    if (sourceWorkerRunning)
+                    {
+                        if (gui::button("Cancel Update", { contentWidth, buttonHeight }))
+                        {
+                            const bool cancelRequested = updater::request_source_update_cancel();
+                            editor.showUpdateConfirmModal = false;
+                            editor.updateState = cancelRequested ? EditorUpdateState::Available : EditorUpdateState::Failed;
+                            editor.updateInstallPending = false;
+                            editor.updateSourceInstallPending = false;
+                            editor.updateOperationStartedAt = {};
+                            editor.updateStatus = cancelRequested
+                                ? "Source update cancel requested. The worker will stop at its next safe checkpoint; Update remains available for retry."
+                                : "Source update modal closed, but the cancel marker could not be written; check updater logs.";
+                            push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                        }
+                    }
+                    else if (!updateRunning && !restartReady && gui::button("Cancel", { contentWidth, buttonHeight }))
+                    {
+                        editor.showUpdateConfirmModal = false;
+                        push_editor_log(editor, "[command] Update canceled.");
+                    }
+                    stackedButtonY += buttonHeight + buttonStackGap;
+                }
+                const std::string primaryUpdateLabel = restartReady
+                    ? std::format("Restart Now ({})", restartSeconds)
+                    : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
+                if (showPrimaryButton)
+                {
+                    gui::set_cursor({ contentX, stackedButtonY });
+                    if (gui::button(primaryUpdateLabel, { contentWidth, buttonHeight }))
+                    {
+                        if (restartReady)
+                        {
+                            requestUpdateRestart();
+                        }
+                        else
+                        {
+                            push_editor_log(editor, "[command] Smart update confirmed.");
+                            start_editor_update_install(editor);
+                        }
+                    }
+                    stackedButtonY += buttonHeight + buttonStackGap;
+                }
+                if (showAdvancedSourceButton)
+                {
+                    gui::set_cursor({ contentX, stackedButtonY });
+                    if (gui::button("Advanced Source...", { contentWidth, buttonHeight }))
+                    {
+                        editor.showUpdateConfirmModal = false;
+                        editor.showSourceUpdateConfirmModal = true;
+                        push_editor_log(editor, "[command] Advanced source rebuild requested. Awaiting confirmation.");
+                    }
+                }
+            }
+            else
+            {
+                gui::set_cursor({ contentX, buttonY });
+                if (sourceWorkerRunning)
+                {
+                    if (gui::button("Cancel Update", { cancelButtonWidth, buttonHeight }))
+                    {
+                        const bool cancelRequested = updater::request_source_update_cancel();
+                        editor.showUpdateConfirmModal = false;
+                        editor.updateState = cancelRequested ? EditorUpdateState::Available : EditorUpdateState::Failed;
+                        editor.updateInstallPending = false;
+                        editor.updateSourceInstallPending = false;
+                        editor.updateOperationStartedAt = {};
+                        editor.updateStatus = cancelRequested
+                            ? "Source update cancel requested. The worker will stop at its next safe checkpoint; Update remains available for retry."
+                            : "Source update modal closed, but the cancel marker could not be written; check updater logs.";
+                        push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                    }
+                }
+                else if (!updateRunning && !restartReady && gui::button("Cancel", { 120.0f, buttonHeight }))
+                {
                     editor.showUpdateConfirmModal = false;
-                    editor.updateState = cancelRequested ? EditorUpdateState::Available : EditorUpdateState::Failed;
-                    editor.updateInstallPending = false;
-                    editor.updateSourceInstallPending = false;
-                    editor.updateOperationStartedAt = {};
-                    editor.updateStatus = cancelRequested
-                        ? "Source update cancel requested. The worker will stop at its next safe checkpoint; Update remains available for retry."
-                        : "Source update modal closed, but the cancel marker could not be written; check updater logs.";
-                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                    push_editor_log(editor, "[command] Update canceled.");
                 }
-            }
-            else if (!updateRunning && !restartReady && gui::button("Cancel", { 120.0f, 30.0f }))
-            {
-                editor.showUpdateConfirmModal = false;
-                push_editor_log(editor, "[command] Update canceled.");
-            }
-            gui::set_cursor({ primaryButtonX, buttonY });
-            const std::string primaryUpdateLabel = restartReady
-                ? std::format("Restart Now ({})", restartSeconds)
-                : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
-            if (!updateRunning && gui::button(primaryUpdateLabel, { primaryButtonWidth, buttonHeight }))
-            {
-                if (restartReady)
+
+                const float primaryButtonX = showCancelButton
+                    ? (std::min)(contentRight - primaryButtonWidth, contentX + cancelButtonWidth + buttonGap)
+                    : contentRight - primaryButtonWidth;
+                gui::set_cursor({ primaryButtonX, buttonY });
+                const std::string primaryUpdateLabel = restartReady
+                    ? std::format("Restart Now ({})", restartSeconds)
+                    : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
+                if (showPrimaryButton && gui::button(primaryUpdateLabel, { primaryButtonWidth, buttonHeight }))
                 {
-                    requestUpdateRestart();
+                    if (restartReady)
+                    {
+                        requestUpdateRestart();
+                    }
+                    else
+                    {
+                        push_editor_log(editor, "[command] Smart update confirmed.");
+                        start_editor_update_install(editor);
+                    }
                 }
-                else
+                const float advancedButtonX = (std::max)(contentX, contentRight - advancedButtonWidth);
+                gui::set_cursor({ advancedButtonX, buttonY });
+                if (showAdvancedSourceButton && gui::button("Advanced Source...", { advancedButtonWidth, buttonHeight }))
                 {
-                    push_editor_log(editor, "[command] Smart update confirmed.");
-                    start_editor_update_install(editor);
+                    editor.showUpdateConfirmModal = false;
+                    editor.showSourceUpdateConfirmModal = true;
+                    push_editor_log(editor, "[command] Advanced source rebuild requested. Awaiting confirmation.");
                 }
-            }
-            const bool showAdvancedSourceButton = !updateRunning && !restartReady;
-            gui::set_cursor({ advancedButtonX, buttonY });
-            if (showAdvancedSourceButton && gui::button("Advanced Source...", { advancedButtonWidth, buttonHeight }))
-            {
-                editor.showUpdateConfirmModal = false;
-                editor.showSourceUpdateConfirmModal = true;
-                push_editor_log(editor, "[command] Advanced source rebuild requested. Awaiting confirmation.");
             }
             gui::end_modal_window();
         }
@@ -8543,6 +8682,18 @@ namespace epochnamespace
             };
             constexpr float modalContentInset = 24.0f;
             const float contentWidth = modalSize.x - 2.0f * modalContentInset;
+            constexpr float buttonHeight = 30.0f;
+            constexpr float buttonGap = 16.0f;
+            constexpr float buttonStackGap = 8.0f;
+            const std::array<float, 3> sourceActionWidths{ 120.0f, 120.0f, 176.0f };
+            const float sourceActionStripHeight = modal_action_strip_height(
+                sourceActionWidths,
+                sourceActionWidths.size(),
+                contentWidth,
+                buttonHeight,
+                buttonGap,
+                buttonStackGap);
+            const bool sourceActionStripStacked = sourceActionStripHeight > buttonHeight + 0.5f;
             gui::begin_modal_window(gui::ModalWindowOptions{
                 .title = "Rebuild From Main Source",
                 .position = modalPos,
@@ -8560,25 +8711,55 @@ namespace epochnamespace
             gui::wrapped_label("Epoch deletes stale source snapshots before downloading, restores dependencies, rebuilds, and records handoff evidence.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 132.0f });
             gui::wrapped_label("For normal users, press Back and choose Install Release.", contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 184.0f });
-            if (gui::button("Back", { 120.0f, 30.0f }))
+            const float actionX = contentPos.x + 8.0f;
+            float actionY = contentPos.y + 184.0f;
+            if (sourceActionStripStacked)
             {
-                editor.showSourceUpdateConfirmModal = false;
-                editor.showUpdateConfirmModal = true;
+                gui::set_cursor({ actionX, actionY });
+                if (gui::button("Back", { contentWidth, buttonHeight }))
+                {
+                    editor.showSourceUpdateConfirmModal = false;
+                    editor.showUpdateConfirmModal = true;
+                }
+                actionY += buttonHeight + buttonStackGap;
+                gui::set_cursor({ actionX, actionY });
+                if (gui::button("Cancel", { contentWidth, buttonHeight }))
+                {
+                    editor.showSourceUpdateConfirmModal = false;
+                    push_editor_log(editor, "[command] Advanced source rebuild canceled.");
+                }
+                actionY += buttonHeight + buttonStackGap;
+                gui::set_cursor({ actionX, actionY });
+                if (gui::button("Start Source Rebuild", { contentWidth, buttonHeight }))
+                {
+                    editor.showSourceUpdateConfirmModal = false;
+                    editor.showUpdateConfirmModal = true;
+                    push_editor_log(editor, "[command] Advanced source rebuild confirmed.");
+                    start_editor_source_update_install(editor);
+                }
             }
-            gui::set_cursor({ contentPos.x + 148.0f, contentPos.y + 184.0f });
-            if (gui::button("Cancel", { 120.0f, 30.0f }))
+            else
             {
-                editor.showSourceUpdateConfirmModal = false;
-                push_editor_log(editor, "[command] Advanced source rebuild canceled.");
-            }
-            gui::set_cursor({ contentPos.x + 284.0f, contentPos.y + 184.0f });
-            if (gui::button("Start Source Rebuild", { 176.0f, 30.0f }))
-            {
-                editor.showSourceUpdateConfirmModal = false;
-                editor.showUpdateConfirmModal = true;
-                push_editor_log(editor, "[command] Advanced source rebuild confirmed.");
-                start_editor_source_update_install(editor);
+                gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 184.0f });
+                if (gui::button("Back", { 120.0f, buttonHeight }))
+                {
+                    editor.showSourceUpdateConfirmModal = false;
+                    editor.showUpdateConfirmModal = true;
+                }
+                gui::set_cursor({ contentPos.x + 148.0f, contentPos.y + 184.0f });
+                if (gui::button("Cancel", { 120.0f, buttonHeight }))
+                {
+                    editor.showSourceUpdateConfirmModal = false;
+                    push_editor_log(editor, "[command] Advanced source rebuild canceled.");
+                }
+                gui::set_cursor({ contentPos.x + 284.0f, contentPos.y + 184.0f });
+                if (gui::button("Start Source Rebuild", { 176.0f, buttonHeight }))
+                {
+                    editor.showSourceUpdateConfirmModal = false;
+                    editor.showUpdateConfirmModal = true;
+                    push_editor_log(editor, "[command] Advanced source rebuild confirmed.");
+                    start_editor_source_update_install(editor);
+                }
             }
             gui::end_modal_window();
         }

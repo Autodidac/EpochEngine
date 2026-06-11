@@ -65,7 +65,6 @@ module;
 #endif
 
 #if defined(EPOCH_USING_SFML)
-#define SFML_STATIC
 #include <SFML/Graphics.hpp>
 #endif
 

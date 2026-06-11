@@ -48,7 +48,6 @@ module;
 #include <include/engine.config.hpp>
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-#define SFML_STATIC
 #include <SFML/Graphics.hpp>
 #endif
 
@@ -147,11 +146,11 @@ export namespace epochnamespace::sfmlcontext
         }
 
         sf::Image image{};
-        image.create(
-            static_cast<unsigned>(atlas.width),
-            static_cast<unsigned>(atlas.height),
-            reinterpret_cast<const sf::Uint8*>(atlas.pixel_data.data())
-        );
+        image.resize(
+            sf::Vector2u{
+                static_cast<unsigned>(atlas.width),
+                static_cast<unsigned>(atlas.height) },
+            reinterpret_cast<const std::uint8_t*>(atlas.pixel_data.data()));
 
         if (!gpu.texture.loadFromImage(image))
         {

@@ -64,13 +64,12 @@ module;
 
 #include <include/engine.config.hpp>
 
-#define SFML_STATIC
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/Window/Event.hpp>
 #include <SFML/Window/ContextSettings.hpp>
 #include <SFML/Window/VideoMode.hpp>
-#include <SFML/Window/WindowStyle.hpp>
+#include <SFML/Window/WindowEnums.hpp>
 #include <SFML/Graphics.hpp>
 #include <glad/glad.h>
 
@@ -129,7 +128,9 @@ export namespace epochnamespace::sfmlcontext
             return;
 
         sf::Texture frameTexture{};
-        if (!frameTexture.create(static_cast<unsigned int>(width), static_cast<unsigned int>(height)))
+        if (!frameTexture.resize(sf::Vector2u{
+            static_cast<unsigned int>(width),
+            static_cast<unsigned int>(height) }))
         {
             logger::warn("SFML", "Failed to allocate SFML capture texture.");
             return;
@@ -203,10 +204,10 @@ export namespace epochnamespace::sfmlcontext
         [[nodiscard]] inline sf::Color to_sfml_color(
             const epochnamespace::previewgrid::Vec3& color) noexcept
         {
-            const auto clamp_channel = [](float value) noexcept -> sf::Uint8
+            const auto clamp_channel = [](float value) noexcept -> std::uint8_t
             {
                 const float scaled = (std::clamp)(value, 0.0f, 1.0f) * 255.0f;
-                return static_cast<sf::Uint8>(scaled);
+                return static_cast<std::uint8_t>(scaled);
             };
 
             return sf::Color(
@@ -261,15 +262,13 @@ export namespace epochnamespace::sfmlcontext
 
             const auto previousView = sfmlcontext.window->getView();
             sf::View previewView{ sf::FloatRect(
-                0.0f,
-                0.0f,
-                static_cast<float>(viewport.width),
-                static_cast<float>(viewport.height)) };
+                { 0.0f, 0.0f },
+                {
+                    static_cast<float>(viewport.width),
+                    static_cast<float>(viewport.height) }) };
             previewView.setViewport(sf::FloatRect(
-                viewportLeft,
-                viewportTop,
-                viewportWidth,
-                viewportHeight));
+                { viewportLeft, viewportTop },
+                { viewportWidth, viewportHeight }));
             sfmlcontext.window->setView(previewView);
 
             const auto clearColor = epochnamespace::previewgrid::kClearColor;
@@ -279,10 +278,10 @@ export namespace epochnamespace::sfmlcontext
                 static_cast<float>(viewport.width),
                 static_cast<float>(viewport.height)));
             background.setFillColor(sf::Color(
-                static_cast<sf::Uint8>(clearColor[0] * 255.0f),
-                static_cast<sf::Uint8>(clearColor[1] * 255.0f),
-                static_cast<sf::Uint8>(clearColor[2] * 255.0f),
-                static_cast<sf::Uint8>(clearColor[3] * 255.0f)));
+                static_cast<std::uint8_t>(clearColor[0] * 255.0f),
+                static_cast<std::uint8_t>(clearColor[1] * 255.0f),
+                static_cast<std::uint8_t>(clearColor[2] * 255.0f),
+                static_cast<std::uint8_t>(clearColor[3] * 255.0f)));
             sf::RenderStates renderStates{};
             sfmlcontext.window->draw(background, renderStates);
 
@@ -433,10 +432,10 @@ export namespace epochnamespace::sfmlcontext
                 if (sfmlcontext.window)
                     sfmlcontext.window->setView(sf::View(
                         sf::FloatRect(
-                            0.0f,
-                            0.0f,
-                            static_cast<float>(sfmlcontext.width),
-                            static_cast<float>(sfmlcontext.height))));
+                            { 0.0f, 0.0f },
+                            {
+                                static_cast<float>(sfmlcontext.width),
+                                static_cast<float>(sfmlcontext.height) })));
 
                 auto locked = weakCtx.lock();
                 refresh_dimensions(locked);
@@ -465,9 +464,9 @@ export namespace epochnamespace::sfmlcontext
             windowTitle = "SFML Window";
 
                 {
-            sf::VideoMode mode(sfmlcontext.width, sfmlcontext.height, 32u);
+            sf::VideoMode mode(sf::Vector2u{ sfmlcontext.width, sfmlcontext.height }, 32u);
             sfmlcontext.window = std::make_unique<sf::RenderWindow>(
-                mode, windowTitle, sf::Style::Default, settings);
+                mode, windowTitle, sf::Style::Default, sf::State::Windowed, settings);
         }
 
         if (!sfmlcontext.window || !sfmlcontext.window->isOpen())
@@ -492,7 +491,7 @@ export namespace epochnamespace::sfmlcontext
         state::s_sfmlstate.window.sfml_window = windowPtr;
 
 #if defined(_WIN32)
-        sfmlcontext.hwnd = static_cast<HWND>(sfmlcontext.window->getSystemHandle());
+        sfmlcontext.hwnd = static_cast<HWND>(sfmlcontext.window->getNativeHandle());
         sfmlcontext.hdc = GetDC(sfmlcontext.hwnd);
 
 #if !defined(EPOCH_MAIN_HEADLESS)
@@ -691,10 +690,9 @@ export namespace epochnamespace::sfmlcontext
         if (shouldResetSfmlState)
             sfmlcontext.window->resetGLStates();
 
-        sf::Event event{};
-        while (sfmlcontext.window->pollEvent(event))
+        while (const auto event = sfmlcontext.window->pollEvent())
         {
-            if (event.type == sf::Event::Closed)
+            if (event->is<sf::Event::Closed>())
             {
                 release_sfml_gpu_atlases_active();
                 sfmlcontext.window->close();
@@ -702,10 +700,10 @@ export namespace epochnamespace::sfmlcontext
                 state::s_sfmlstate.running = false;
                 state::s_sfmlstate.mark_should_close(true);
             }
-            else if (event.type == sf::Event::Resized)
+            else if (const auto* resized = event->getIf<sf::Event::Resized>())
             {
-                const int w = static_cast<int>((std::max)(1u, event.size.width));
-                const int h = static_cast<int>((std::max)(1u, event.size.height));
+                const int w = static_cast<int>((std::max)(1u, resized->size.x));
+                const int h = static_cast<int>((std::max)(1u, resized->size.y));
                 if (sfmlcontext.onResize) sfmlcontext.onResize(w, h);
             }
         }
@@ -738,9 +736,9 @@ export namespace epochnamespace::sfmlcontext
         const auto clearColor = useSharedScenePreview
             ? epochnamespace::previewgrid::kClearColor
             : core::clear_color_for_context(core::ContextType::SFML);
-        const auto r = static_cast<sf::Uint8>(clearColor[0] * 255.0f);
-        const auto g = static_cast<sf::Uint8>(clearColor[1] * 255.0f);
-        const auto b = static_cast<sf::Uint8>(clearColor[2] * 255.0f);
+        const auto r = static_cast<std::uint8_t>(clearColor[0] * 255.0f);
+        const auto g = static_cast<std::uint8_t>(clearColor[1] * 255.0f);
+        const auto b = static_cast<std::uint8_t>(clearColor[2] * 255.0f);
 
         if (useOpenGLPath)
         {

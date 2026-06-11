@@ -1,5 +1,22 @@
 # Epoch Changelog
 
+## [v0.87.11]
+- Fixed the update modal action strip so Cancel, Install/Restart, and Advanced
+  Source controls use the same measured modal-local width as the dialog body.
+  Narrow panes now stack the action buttons inside the modal instead of letting
+  them collide while the input-capture and drawn geometry still match.
+- Applied the same contained action-strip behavior to the Advanced Source
+  confirmation modal, keeping source-rebuild escape hatch controls inside the
+  fitted modal body on smaller editor surfaces.
+- Restored the Windows MSVC release build lane against the manifest-restored
+  vcpkg dependencies: SFML 3 headers now use the current `WindowEnums`,
+  `resize`, `std::uint8_t`, vector rect/video-mode, native-handle, and optional
+  event APIs; SDL 3 fullscreen uses the bool API; Vulkan device creation no
+  longer writes deprecated device-layer fields; SFML consumers no longer mix
+  static headers with dynamic vcpkg libraries.
+- Validation: MSVC `ConsoleApplication1|Debug|x64` and
+  `ConsoleApplication1|Release|x64` passed.
+
 ## [v0.87.09]
 - Added MSVC executable resource ownership for `EpochEditor.exe`: the final
   app project now compiles the Windows resource script directly, embeds the

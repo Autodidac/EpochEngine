@@ -57,10 +57,11 @@ OpenGL-derived identity in the OpenGL-family render device, and the build-only
 graph/cabinet/fake-native/requirements harnesses cover OpenGL, SDL3-over-GL,
 SFML-over-GL, and Raylib-over-GL without claiming live native allocation.
 
-Latest stabilization: `v0.87.10` preserves the operator-approved GUI baseline:
-modal/dropdown/progress lanes keep top-layer z-order and content bounds, the
-Video timeline remains scene-backed, and README proof points at additive
-current screenshots while older captures stay archived.
+Latest stabilization: `v0.87.11` keeps the operator-approved GUI baseline and
+fixes the release blockers around it: update/source modals now stack action
+buttons inside their fitted content lane on narrow surfaces, SFML/SDL/Vulkan
+API drift is repaired for the manifest-restored Windows dependency set, and
+MSVC Debug plus Release x64 editor builds pass.
 
 Previous stabilization: Video is treated as a scene-backed workspace again so the
 timeline strip remains visible, update/package modals use matched body and input

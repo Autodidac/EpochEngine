@@ -3,6 +3,7 @@ module;
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -20,7 +21,6 @@ module;
 #endif
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-#define SFML_STATIC
 #include <SFML/Graphics.hpp>
 #endif
 
@@ -85,10 +85,10 @@ namespace
 
     [[nodiscard]] sf::Color to_sfml_color(const epochnamespace::previewgrid::Vec3& color) noexcept
     {
-        const auto clamp_channel = [](float value) noexcept -> sf::Uint8
+        const auto clamp_channel = [](float value) noexcept -> std::uint8_t
         {
             const float scaled = (std::clamp)(value, 0.0f, 1.0f) * 255.0f;
-            return static_cast<sf::Uint8>(scaled);
+            return static_cast<std::uint8_t>(scaled);
         };
 
         return sf::Color(
@@ -142,15 +142,13 @@ namespace
 
         const auto previousView = s_window->getView();
         sf::View previewView{ sf::FloatRect(
-            0.0f,
-            0.0f,
-            static_cast<float>(viewport.width),
-            static_cast<float>(viewport.height)) };
+            { 0.0f, 0.0f },
+            {
+                static_cast<float>(viewport.width),
+                static_cast<float>(viewport.height) }) };
         previewView.setViewport(sf::FloatRect(
-            viewportLeft,
-            viewportTop,
-            viewportWidth,
-            viewportHeight));
+            { viewportLeft, viewportTop },
+            { viewportWidth, viewportHeight }));
         s_window->setView(previewView);
 
         const auto clearColor = epochnamespace::previewgrid::kClearColor;
@@ -160,10 +158,10 @@ namespace
             static_cast<float>(viewport.width),
             static_cast<float>(viewport.height)));
         background.setFillColor(sf::Color(
-            static_cast<sf::Uint8>(clearColor[0] * 255.0f),
-            static_cast<sf::Uint8>(clearColor[1] * 255.0f),
-            static_cast<sf::Uint8>(clearColor[2] * 255.0f),
-            static_cast<sf::Uint8>(clearColor[3] * 255.0f)));
+            static_cast<std::uint8_t>(clearColor[0] * 255.0f),
+            static_cast<std::uint8_t>(clearColor[1] * 255.0f),
+            static_cast<std::uint8_t>(clearColor[2] * 255.0f),
+            static_cast<std::uint8_t>(clearColor[3] * 255.0f)));
         sf::RenderStates renderStates{};
         s_window->draw(background, renderStates);
 
@@ -275,7 +273,9 @@ namespace
             static_cast<unsigned>((std::max)(1, s_width)),
             static_cast<unsigned>((std::max)(1, s_height)));
         s_window->setSize(size);
-        s_window->setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(size.x), static_cast<float>(size.y))));
+        s_window->setView(sf::View(sf::FloatRect(
+            { 0.0f, 0.0f },
+            { static_cast<float>(size.x), static_cast<float>(size.y) })));
     }
 
     void refresh_dimensions(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
@@ -400,9 +400,13 @@ namespace
             : (ctx->backendName.empty() ? "SFML" : ctx->backendName);
 
         s_window = std::make_unique<sf::RenderWindow>(
-            sf::VideoMode(static_cast<unsigned>(s_width), static_cast<unsigned>(s_height)),
+            sf::VideoMode(
+                sf::Vector2u{
+                    static_cast<unsigned>(s_width),
+                    static_cast<unsigned>(s_height) }),
             title,
             sf::Style::Default,
+            sf::State::Windowed,
             sf::ContextSettings{});
 
         if (!s_window || !s_window->isOpen())
@@ -418,7 +422,7 @@ namespace
         (void)s_window->setActive(false);
 
 #if defined(_WIN32)
-        s_childWindow = static_cast<HWND>(s_window->getSystemHandle());
+        s_childWindow = static_cast<HWND>(s_window->getNativeHandle());
         if (!s_childWindow)
         {
             ctx->init_failed = true;
@@ -636,17 +640,16 @@ namespace
             return false;
         }
 
-        sf::Event event{};
-        while (s_window->pollEvent(event))
+        while (const auto event = s_window->pollEvent())
         {
-            if (event.type == sf::Event::Closed)
+            if (event->is<sf::Event::Closed>())
             {
                 request_host_shutdown(ctx);
                 (void)s_window->setActive(false);
                 return false;
             }
 
-            if (event.type == sf::Event::Resized)
+            if (event->is<sf::Event::Resized>())
             {
                 refresh_dimensions(ctx);
                 apply_view_size();
@@ -663,10 +666,10 @@ namespace
 
         const auto clearColor = epochnamespace::core::clear_color_for_context(epochnamespace::core::ContextType::SFML);
         s_window->clear(sf::Color(
-            static_cast<sf::Uint8>(clearColor[0] * 255.0f),
-            static_cast<sf::Uint8>(clearColor[1] * 255.0f),
-            static_cast<sf::Uint8>(clearColor[2] * 255.0f),
-            static_cast<sf::Uint8>(clearColor[3] * 255.0f)));
+            static_cast<std::uint8_t>(clearColor[0] * 255.0f),
+            static_cast<std::uint8_t>(clearColor[1] * 255.0f),
+            static_cast<std::uint8_t>(clearColor[2] * 255.0f),
+            static_cast<std::uint8_t>(clearColor[3] * 255.0f)));
 
         s_window->resetGLStates();
         (void)queue.drain();

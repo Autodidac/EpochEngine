@@ -51,8 +51,9 @@ contracts instead of drift.
   cabinet material/model, fake-native hook, and descriptor/work-order contracts
   cover OpenGL, SDL3-over-GL, SFML-over-GL, and Raylib-over-GL without claiming
   live native allocation.
-- Build evidence: MSVC Debug x64 `ConsoleApplication1` passes after the Raylib3
-  OpenGL-family contract extension and update-modal top-layer cleanup.
+- Build evidence: MSVC Debug and Release x64 `ConsoleApplication1` pass after
+  the update/source modal action-strip containment fix and SFML3/SDL3/Vulkan
+  manifest-dependency compatibility cleanup.
 
 ## Allowed Source Areas
 

@@ -46,10 +46,6 @@ module;
 // Global module fragment: macros + C headers MUST live here.
 // -----------------------------------------------------------------------------
 
-#ifndef SDL_WINDOW_FULLSCREEN_DESKTOP
-#define SDL_WINDOW_FULLSCREEN_DESKTOP 1
-#endif
-
 // SDL wants this defined BEFORE including SDL headers.
 #define SDL_MAIN_HANDLED
 
@@ -845,7 +841,7 @@ export namespace epochnamespace::sdlcontext
         {
             SDL_SetWindowFullscreen(
                 state::get_sdl_state().window.sdl_window,
-                fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+                fullscreen);
         }
     }
 
