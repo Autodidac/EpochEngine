@@ -1586,7 +1586,7 @@ engine shape and should be treated as starting truth for the next passes:
 
 ## Current Push Order
 
-1. Preserve the `v0.87.08` editor/resource checkpoint: Raylib, SDL, SFML,
+1. Preserve the `v0.87.09` editor/resource checkpoint: Raylib, SDL, SFML,
    Vulkan, OpenGL, and DirectX must keep real panes, visible scene previews,
    Inspector, AI Chat, stable GUI-over-scene composition, curated command menus,
    and modal top-layer behavior. Any remaining mismatched clear/color/depth,

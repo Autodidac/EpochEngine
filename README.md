@@ -168,12 +168,6 @@ round:
   <a href="Images/readme/windows-directx-v08709.png"><img src="Images/readme/windows-directx-v08709.png" alt="Epoch Windows DirectX editor proof" width="15.6%" /></a>
 </p>
 
-Windows multicontext editor proof from the same current capture round:
-
-<p align="center">
-  <a href="Images/readme/windows-multicontext-editor-v08709.png"><img src="Images/readme/windows-multicontext-editor-v08709.png" alt="Epoch Windows multicontext editor proof" width="960" /></a>
-</p>
-
 WSL/Linux editor proof, latest asset-bearing visual capture:
 
 <p align="center">
