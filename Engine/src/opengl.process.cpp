@@ -40,13 +40,17 @@ namespace epochnamespace::openglcontext
         } scoped{ previousContext };
 
         // Stable OpenGL editor draw contract:
-        // Build the current GUI batch first, render the scene once, then replay
-        // only the explicit top-layer sprites above the scene. Keeping this
-        // order static prevents command menus from flip-flopping between
-        // scene-under and scene-over composition while a menu is open.
+        // GUI sprites are captured as one deferred snapshot, while modal/menu
+        // sprites are captured as a matching top-layer snapshot. Replaying both
+        // snapshots around the scene pass keeps modal scrims, Package Manager,
+        // and dropdowns from interleaving with a stale scene frame.
+        const bool overlayPriority = ctx->gui_overlay_priority();
         (void)queue.drain();
+        if (!overlayPriority)
+            (void)gui::render_deferred_batch(ctx.get());
         openglbridge::render_scene_preview(ctx, framebufferWidth, framebufferHeight);
         (void)queue.drain();
+        (void)gui::render_deferred_batch(ctx.get());
         (void)gui::render_top_layer_batch(ctx.get());
         openglbridge::capture_frame_if_requested(framebufferWidth, framebufferHeight, windowId);
     }

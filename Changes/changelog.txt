@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.87.14]
+- Fixed the OpenGL modal composition path so Package Manager, update dialogs,
+  settings/about modals, and dropdown top layers replay from the same deferred
+  GUI snapshot instead of interleaving modal sprites with a stale scene frame.
+- OpenGL now follows the shared deferred GUI/top-layer batch contract already
+  used by the other backend paths, removing the bad modal frame where the editor
+  shell could drop out behind a visible dialog.
+
 ## [v0.87.13]
 - Stabilized the update modal while it is visible so live status changes no
   longer resize/recenter the dialog and create OpenGL-visible flicker.
