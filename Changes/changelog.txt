@@ -1,5 +1,14 @@
 # Epoch Changelog
 
+## [v0.87.12]
+- Fixed the OpenGL GUI sprite coordinate path so pixel-sized UI primitives stay
+  pixel-sized. OpenGL no longer interprets 1px/2px modal borders, progress-bar
+  edges, glyph quads, or other small GUI sprites as normalized full-frame
+  dimensions, which keeps the update modal aligned with the DirectX path.
+- Published this as a new `v0.87.12` runtime line so existing
+  `cache/packages/epoch_win10_x64_v0.87.11.zip` caches cannot mask the fixed
+  package behind a same-version asset name.
+
 ## [v0.87.11]
 - Fixed the MSVC solution build restore path so `StaticLib1` restores the
   shared `Engine/vcpkg.json` manifest before C++ module scanning/compilation,

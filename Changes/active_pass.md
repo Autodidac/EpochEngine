@@ -57,7 +57,7 @@ contracts instead of drift.
   cleanup. The Linux Clang full-engine lane also configures, builds, and passes
   `ctest` with the hosted `linux-clang-engine` flags after the SFML 2/3
   compatibility boundary. Staged Windows and Linux packages both report
-  `Epoch v0.87.11` via `--version`.
+  `Epoch v0.87.12` via `--version` after the OpenGL GUI sprite coordinate fix.
 
 ## Allowed Source Areas
 

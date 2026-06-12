@@ -766,14 +766,10 @@ export namespace epochnamespace::opengltextures
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        const bool widthNormalized = width > 0.f && width <= 1.f;
-        const bool heightNormalized = height > 0.f && height <= 1.f;
-
-        float drawWidth = widthNormalized ? (std::max)(width * float(w), 1.0f) : width;
-        float drawHeight = heightNormalized ? (std::max)(height * float(h), 1.0f) : height;
-
-        float drawX = (widthNormalized && x >= 0.f && x <= 1.f) ? x * float(w) : x;
-        float drawY = (heightNormalized && y >= 0.f && y <= 1.f) ? y * float(h) : y;
+        const float drawWidth = width;
+        const float drawHeight = height;
+        const float drawX = x;
+        const float drawY = y;
 
         const float u0 = region.u1;
         const float du = region.u2 - region.u1;
