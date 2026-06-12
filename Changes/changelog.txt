@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.87.13]
+- Stabilized the update modal while it is visible so live status changes no
+  longer resize/recenter the dialog and create OpenGL-visible flicker.
+- Kept the launcher Update button rules intact: packaged updates still use the
+  normal confirmation lane, source rebuild remains behind Advanced Source,
+  source Cancel stays available while the worker runs, and Restart is offered
+  only after verified handoff evidence.
+
 ## [v0.87.12]
 - Fixed the OpenGL GUI sprite coordinate path so pixel-sized UI primitives stay
   pixel-sized. OpenGL no longer interprets 1px/2px modal borders, progress-bar

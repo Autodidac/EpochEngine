@@ -498,6 +498,10 @@ namespace epochnamespace
             bool autoUpdateCheckQueued{ true };
             bool showUpdateConfirmModal{ false };
             bool showSourceUpdateConfirmModal{ false };
+            gui::Vec2 updateConfirmModalStableSize{};
+            gui::Vec2 updateConfirmModalStableViewport{};
+            gui::Vec2 sourceUpdateConfirmModalStableSize{};
+            gui::Vec2 sourceUpdateConfirmModalStableViewport{};
             bool updateInstallPending{ false };
             bool updateSourceInstallPending{ false };
             std::chrono::steady_clock::time_point updateOperationStartedAt{};
@@ -4926,6 +4930,29 @@ namespace epochnamespace
             {
                 return gui::measure_wrapped_label_height(text, width);
             };
+        const auto stabilize_modal_size = [&](gui::Vec2& stableSize, gui::Vec2& stableViewport, const gui::Vec2 measuredSize, const bool visible) noexcept -> gui::Vec2
+            {
+                if (!visible)
+                {
+                    stableSize = {};
+                    stableViewport = {};
+                    return measuredSize;
+                }
+
+                const bool viewportChanged =
+                    std::abs(stableViewport.x - w) > 0.5f
+                    || std::abs(stableViewport.y - h) > 0.5f;
+                if (stableSize.x <= 0.0f || stableSize.y <= 0.0f || viewportChanged)
+                {
+                    stableSize = measuredSize;
+                    stableViewport = { w, h };
+                    return stableSize;
+                }
+
+                stableSize.x = std::clamp((std::max)(stableSize.x, measuredSize.x), 1.0f, (std::max)(1.0f, w - 64.0f));
+                stableSize.y = std::clamp((std::max)(stableSize.y, measuredSize.y), 1.0f, (std::max)(1.0f, h - 64.0f));
+                return stableSize;
+            };
         const auto update_modal_flags = [&]() noexcept -> editor_update_modal::UpdateFlags
             {
                 const bool sourceOnlyUpdate =
@@ -4951,17 +4978,27 @@ namespace epochnamespace
             editor.updateStatus,
             updateLayoutRestartSeconds,
             measure_modal_text);
-        const gui::Vec2 updateConfirmModalSize{
+        const gui::Vec2 measuredUpdateConfirmModalSize{
             updateConfirmModalLayout.size.x,
             updateConfirmModalLayout.size.y
         };
+        const gui::Vec2 updateConfirmModalSize = stabilize_modal_size(
+            editor.updateConfirmModalStableSize,
+            editor.updateConfirmModalStableViewport,
+            measuredUpdateConfirmModalSize,
+            editor.showUpdateConfirmModal);
         const auto sourceUpdateConfirmModalLayout = editor_update_modal::measure_source_layout(
             { w, h },
             measure_modal_text);
-        const gui::Vec2 sourceUpdateConfirmModalSize{
+        const gui::Vec2 measuredSourceUpdateConfirmModalSize{
             sourceUpdateConfirmModalLayout.size.x,
             sourceUpdateConfirmModalLayout.size.y
         };
+        const gui::Vec2 sourceUpdateConfirmModalSize = stabilize_modal_size(
+            editor.sourceUpdateConfirmModalStableSize,
+            editor.sourceUpdateConfirmModalStableViewport,
+            measuredSourceUpdateConfirmModalSize,
+            editor.showSourceUpdateConfirmModal);
         const gui::Vec2 packageManagerModalSize = fit_modal_size({ 820.0f, 560.0f }, { 640.0f, 500.0f });
         auto modal_visible_now = [&editor]() noexcept -> bool
         {

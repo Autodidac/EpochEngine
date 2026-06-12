@@ -142,14 +142,13 @@
 
         [[nodiscard]] std::string editor_update_running_status(const EditorState& editor)
         {
-            const double elapsed = editor_update_elapsed_seconds(editor);
             if (editor.updateSourceInstallPending)
-                return std::format("Source rebuild is running ({:.0f}s). Reading epoch_source_update.log and epoch_update_handoff.log for live evidence; Cancel asks the worker to stop at the next safe checkpoint.", elapsed);
+                return "Source rebuild is running. Reading epoch_source_update.log and epoch_update_handoff.log for live evidence; Cancel asks the worker to stop at the next safe checkpoint.";
 
             if (editor.updateInstallPending)
-                return std::format("Installing update ({:.0f}s). Checking platform release, replacing stale cache, and staging handoff.", elapsed);
+                return "Installing update. Checking platform release, replacing stale cache, and staging handoff.";
 
-            return std::format("Checking update availability ({:.0f}s). Epoch checks this platform's packaged release first.", elapsed);
+            return "Checking update availability. Epoch checks this platform's packaged release first.";
         }
 
         [[nodiscard]] std::string read_update_log_tail(const std::filesystem::path& path, const std::uintmax_t maxBytes = 2400)
@@ -517,4 +516,3 @@
             if (!lastLine.empty())
                 editor.updateStatus = std::string{ "Source rebuild running. Latest evidence: " } + lastLine;
         }
-
