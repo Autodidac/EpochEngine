@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.87.11]
+- Fixed the MSVC solution build restore path so `StaticLib1` restores the
+  shared `Engine/vcpkg.json` manifest before C++ module scanning/compilation,
+  both MSVC projects use the same non-nested
+  `Engine/vcpkg_installed/<triplet>` layout, and stale absolute module metadata
+  no longer points at an older Codex worktree. Validation: MSVC Debug x64
+  `ConsoleApplication1` passed and the operator eye-tested the replacement
+  release build as working.
 - Fixed the update modal layout contract so sizing and drawing share measured
   wrapped-text heights, modal-local content width, and action-strip geometry.
   Cancel, Install/Restart, and Advanced Source controls now stay inside the

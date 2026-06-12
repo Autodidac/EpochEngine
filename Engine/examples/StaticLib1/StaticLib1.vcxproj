@@ -97,11 +97,13 @@
     <IntDir>$(SolutionDir)\Release\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
-    <VcpkgEnableManifest>false</VcpkgEnableManifest>
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='x64'">x64-windows</VcpkgTriplet>
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='Win32'">x86-windows</VcpkgTriplet>
-    <VcpkgManifestInstall>false</VcpkgManifestInstall>
-    <VcpkgEnabled>false</VcpkgEnabled>
+    <VcpkgManifestInstall>true</VcpkgManifestInstall>
+    <VcpkgManifestRoot>$(SolutionDir)Engine\</VcpkgManifestRoot>
+    <VcpkgInstalledDir>$(SolutionDir)Engine\vcpkg_installed\</VcpkgInstalledDir>
+    <VcpkgEnabled>true</VcpkgEnabled>
     <VcpkgAutoLink>false</VcpkgAutoLink>
     <VcpkgApplocalDeps>false</VcpkgApplocalDeps>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')">true</VcpkgUseStatic>
@@ -230,134 +232,138 @@
     <ClCompile Include="StaticLib1.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\2048like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\2048like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\a2048like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\a2048like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\applicationmodule.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\applicationmodule.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\cellularsim.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\cellularsim.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\ecs.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\ecs.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\editor.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\editor.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\enduserapplication.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\enduserapplication.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.bindings.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.bindings.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.cli.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.cli.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.diagnostics.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.diagnostics.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.eventsystem.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.eventsystem.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.gui.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.gui.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.handles.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.handles.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.input.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.input.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.platform.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.platform.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.systems.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.systems.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.telemetry.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.telemetry.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.updater.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.updater.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\engine.version.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.version.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\entity.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\entity.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\framework.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\framework.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\froggerlike.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\froggerlike.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\gamecore.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\gamecore.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\imageatlaswriter.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\imageatlaswriter.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\match3like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\match3like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\minesweeperlike.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\minesweeperlike.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\mipmapatlas.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\mipmapatlas.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\mpmcboundedqueue.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\mpmcboundedqueue.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\pacmanlike.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\pacmanlike.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\platformpump.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\platformpump.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\sandsim.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\sandsim.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\scene.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\scene.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\sceneserializer.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\sceneserializer.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\scenesnapshot.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\scenesnapshot.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\scripting.system.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\scripting.system.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\slidingpuzzlelike.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\slidingpuzzlelike.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\snakelike.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\snakelike.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\sokobanlike.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\sokobanlike.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\spritehandle.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\spritehandle.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\spriteregistry.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\spriteregistry.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\tetrislike.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\tetrislike.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="C:\Users\iammi\.codex\worktrees\2a8f\epoch_vibed\Engine\modules\texture.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\texture.ixx">
       <FileType>Document</FileType>
     </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="EpochRestoreVcpkgBeforeModuleScan"
+          BeforeTargets="SetModuleDependencies"
+          DependsOnTargets="VcpkgInstallManifestDependencies"
+          Condition="'$(VcpkgEnabled)'=='true' And '$(VcpkgEnableManifest)'=='true' And '$(VcpkgManifestInstall)'=='true'" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
