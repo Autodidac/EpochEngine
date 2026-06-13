@@ -53,6 +53,10 @@ module;
 
 #include "../include/engine.config.hpp"
 
+#if defined(__linux__)
+#include <X11/X.h>
+#endif
+
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 // Make sure GL loaders see any platform defines they need.

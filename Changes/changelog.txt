@@ -8,6 +8,9 @@
   fixed the EpochGui implementation translation units to include `<cstdint>` so
   the Linux Clang full-engine CI lane can compile `std::uint32_t` and
   `std::uint64_t` explicitly.
+- Added the explicit Linux X11 `Window` declaration include in
+  `opengl.textures` so Clang modules no longer rely on transitive X11 headers
+  when binding GLX drawable state.
 
 ## [v0.87.25]
 - Guarded SFML editor context handoff in the toolbar selector so switching to
