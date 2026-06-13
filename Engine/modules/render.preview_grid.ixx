@@ -48,6 +48,7 @@ namespace epochnamespace::previewgrid
         Camera,
         Level,
         Canvas2D,
+        EngineArcadeScreen,
         ForestTrunk,
         ForestBranch,
         ForestLeafCluster
@@ -72,6 +73,7 @@ namespace epochnamespace::previewgrid
         ObjectPreviewPrimitive primitive{ ObjectPreviewPrimitive::Cube };
         bool selected = false;
         bool editorOnly = false;
+        bool sampledRenderSurface = false;
     };
 
     export inline constexpr std::array<float, 4> kClearColor = epochnamespace::visuals::scene_background();
@@ -1068,6 +1070,7 @@ namespace epochnamespace::previewgrid
                 push_box_edges(center, half, color);
                 break;
             case ObjectPreviewPrimitive::Canvas2D:
+            case ObjectPreviewPrimitive::EngineArcadeScreen:
                 half.z = (std::max)(0.025f, radius * 0.04f);
                 push_box_edges(center, half, color);
                 break;
@@ -1248,6 +1251,8 @@ namespace epochnamespace::previewgrid
                 half.z = (std::max)(0.025f, radius * 0.04f);
                 push_box(center, half, color);
                 break;
+            case ObjectPreviewPrimitive::EngineArcadeScreen:
+                break;
             case ObjectPreviewPrimitive::ForestTrunk:
             {
                 const Vec3 baseHalf{
@@ -1285,6 +1290,30 @@ namespace epochnamespace::previewgrid
         }
 
         return out;
+    }
+
+    export [[nodiscard]] inline std::vector<ObjectMarker> sampled_render_surface_markers_for(const void* ctxKey)
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return {};
+
+        std::vector<ObjectMarker> markers{};
+        {
+            std::shared_lock lock(detail::g_objectMarkerMutex);
+            const auto it = detail::g_objectMarkers.find(rigKey);
+            if (it == detail::g_objectMarkers.end())
+                return {};
+            markers = it->second;
+        }
+
+        std::erase_if(
+            markers,
+            [](const ObjectMarker& marker) noexcept
+            {
+                return !marker.sampledRenderSurface;
+            });
+        return markers;
     }
 
     export [[nodiscard]] inline std::span<const Vertex> grid_vertices() noexcept

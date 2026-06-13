@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.26-1F7A4C?style=for-the-badge" alt="Current development source v0.87.26" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.27-1F7A4C?style=for-the-badge" alt="Current development source v0.87.27" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.26-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.26" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.87.26`.
+- Source is currently the active development line at `v0.87.27`.
 - The latest published stable runtime release is `v0.87.26`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -98,13 +98,12 @@ For engine/tooling developers:
 - Phase 1 and Phase 2 of the active roadmap are complete. Current work is
   concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.
-- Latest source checkpoint: MSVC Debug/Release editor and EpochGui builds pass,
-  the release updater falls back to a downloadable managed vcpkg toolchain when
-  a manifest baseline archive is unavailable, context handoff now fails closed
-  for SFML and Raylib with visible console warnings instead of entering
-  crash-prone switch paths, and the Linux/Clang full-engine lane remains the
-  module-sensitive CI lane that must stay green before calling a source
-  checkpoint sealed.
+- Latest source checkpoint: the editor has a toolbar scene-mode selector for
+  3D scene construction versus 2D game/UI construction, OpenGL owns the first
+  visible sampled render-surface preview proof for Engine Arcade, SDL context
+  handoff stays docked in the parent grid, and the Linux/Clang full-engine lane
+  remains the module-sensitive CI lane that must stay green before calling a
+  source checkpoint sealed.
 
 OS AI model, tooling, and evidence rules live with the AI assets in
 `Engine/ai/README.md` and the engine policy docs.

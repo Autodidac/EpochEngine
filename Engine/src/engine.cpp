@@ -1076,6 +1076,44 @@ namespace epochnamespace::core
         return true;
     }
 
+    [[nodiscard]] inline bool sampled_render_surface_preview_marker_contract_ready()
+    {
+        int markerKey{};
+        const void* const ctxKey = &markerKey;
+        const std::array<epochnamespace::previewgrid::ObjectMarker, 2> markers{{
+            epochnamespace::previewgrid::ObjectMarker{
+                .position = { 0.0f, 0.0f, 0.0f },
+                .color = { 0.4f, 0.5f, 0.6f },
+                .scale = { 1.0f, 1.0f, 1.0f },
+                .primitive = epochnamespace::previewgrid::ObjectPreviewPrimitive::Cube,
+                .editorOnly = true,
+                .sampledRenderSurface = false
+            },
+            epochnamespace::previewgrid::ObjectMarker{
+                .position = { 0.0f, 1.78f, -0.42f },
+                .color = { 0.08f, 0.92f, 0.64f },
+                .scale = { 2.22f, 1.22f, 0.06f },
+                .primitive = epochnamespace::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen,
+                .editorOnly = false,
+                .sampledRenderSurface = true
+            }
+        }};
+
+        epochnamespace::previewgrid::set_object_markers(ctxKey, std::span<const epochnamespace::previewgrid::ObjectMarker>{ markers.data(), markers.size() });
+        const std::vector<epochnamespace::previewgrid::ObjectMarker> sampledMarkers =
+            epochnamespace::previewgrid::sampled_render_surface_markers_for(ctxKey);
+        epochnamespace::previewgrid::clear_object_markers(ctxKey);
+
+        if (sampledMarkers.size() != 1u)
+            return false;
+
+        const epochnamespace::previewgrid::ObjectMarker& screen = sampledMarkers.front();
+        return screen.primitive == epochnamespace::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen
+            && screen.sampledRenderSurface
+            && std::abs(screen.position.y - 1.78f) < 0.001f
+            && std::abs(screen.scale.x - 2.22f) < 0.001f
+            && std::abs(screen.scale.y - 1.22f) < 0.001f;
+    }
     [[nodiscard]] inline bool opengl_real_native_rtt_hook_contract_ready()
     {
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
@@ -1495,6 +1533,7 @@ namespace epochnamespace::core
         check("render.opengl_family_arcade_cabinet_graph", opengl_family_arcade_cabinet_graph_contract_ready());
         check("render.opengl_family_arcade_native_requirements", opengl_family_arcade_native_requirements_contract_ready());
         check("render.opengl_family_arcade_fake_native_rtt", opengl_family_arcade_fake_native_rtt_contract_ready());
+        check("render.sampled_surface_preview_marker", sampled_render_surface_preview_marker_contract_ready());
         check("render.opengl_real_native_rtt_hook", opengl_real_native_rtt_hook_contract_ready());
         check("render.sdl_native_render_texture_device", sdl_native_render_texture_device_contract_ready());
         check("render.sfml_native_render_texture_device", sfml_native_render_texture_device_contract_ready());
@@ -4121,6 +4160,8 @@ namespace epochnamespace::core
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Spawn;
             if (entity.type == "Camera")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
+            if (entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen;
             if (entity.type == "Canvas2D")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Canvas2D;
             if (entity.category == "World" || entity.type == "Level")
@@ -4159,7 +4200,8 @@ namespace epochnamespace::core
                     .radius = runtime_marker_radius_for_entity(entity),
                     .primitive = runtime_preview_primitive_for_entity(entity),
                     .selected = i == 0u,
-                    .editorOnly = entity.editor_only || entity.category == "Editor"
+                    .editorOnly = entity.editor_only || entity.category == "Editor",
+                    .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen"
                 });
             }
 

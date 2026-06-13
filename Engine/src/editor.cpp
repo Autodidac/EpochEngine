@@ -2093,6 +2093,8 @@ namespace epochnamespace
                 return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::object_camera());
             if (entity.category == "ForestFactory")
                 return forest_factory_color_for_entity(entity);
+            if (entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen")
+                return { 0.08f, 0.92f, 0.64f };
             if (entity.category == "World" || entity.type == "Level")
                 return epochnamespace::previewgrid::visual_rgb(epochnamespace::visuals::object_world());
             if (entity.editorOnly || entity.category == "Editor")
@@ -2125,6 +2127,8 @@ namespace epochnamespace
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Spawn;
             if (entity.type == "Camera")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Camera;
+            if (entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen")
+                return epochnamespace::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen;
             if (entity.type == "Canvas2D")
                 return epochnamespace::previewgrid::ObjectPreviewPrimitive::Canvas2D;
             if (entity.type == "ForestTrunk")
@@ -2193,7 +2197,8 @@ namespace epochnamespace
                     .radius = marker_radius_for_entity(entity),
                     .primitive = preview_primitive_for_entity(entity),
                     .selected = marker_selected_for_entity(entity, selected),
-                    .editorOnly = entity.editorOnly || entity.category == "Editor" || is_forest_factory_entity(entity)
+                    .editorOnly = entity.editorOnly || entity.category == "Editor" || is_forest_factory_entity(entity),
+                    .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen"
                 });
             }
 
@@ -6553,32 +6558,6 @@ namespace epochnamespace
             }
         };
 
-        auto render_main_surface_tabs = [&]()
-        {
-            const std::array<gui::SegmentedButtonSpec, 8> tabs{{
-                { "3D Scene", 96.0f, editor.mainSurface == EditorMainSurface::Scene },
-                { "2D Scene/UI", 116.0f, editor.mainSurface == EditorMainSurface::Game2D },
-                { "Assets", 74.0f, editor.mainSurface == EditorMainSurface::Assets },
-                { "Plant Lab", 92.0f, editor.mainSurface == EditorMainSurface::ForestFactory },
-                { "Video", 70.0f, editor.mainSurface == EditorMainSurface::Timeline },
-                { "Project", 84.0f, editor.mainSurface == EditorMainSurface::Project },
-                { "Intelligence", 116.0f, editor.mainSurface == EditorMainSurface::AISandbox },
-                { "System Info", 108.0f, editor.mainSurface == EditorMainSurface::Systems }
-            }};
-            const std::array<EditorMainSurface, 8> surfaces{{
-                EditorMainSurface::Scene,
-                EditorMainSurface::Game2D,
-                EditorMainSurface::Assets,
-                EditorMainSurface::ForestFactory,
-                EditorMainSurface::Timeline,
-                EditorMainSurface::Project,
-                EditorMainSurface::AISandbox,
-                EditorMainSurface::Systems
-            }};
-
-            if (const auto selected = gui::tab_bar(tabs, 28.0f, 5.0f))
-                open_editor_surface(surfaces[*selected], "center tabs");
-        };
 
         render_floating_gui_window();
 
@@ -6729,8 +6708,6 @@ namespace epochnamespace
         const float tab_gap = 8.0f;
         float tab_x = 16.0f;
 
-        const std::string editor_tab = "3D Scene";
-        const std::string runtime_tab = "2D Scene/UI";
         const std::string assets_tab = "Assets";
         const std::string forest_tab = "Plant Lab";
         const std::string timeline_tab = "Video";
@@ -6738,17 +6715,35 @@ namespace epochnamespace
         const std::string ai_control_tab = "Intelligence";
         const std::string systems_tab = "System Info";
 
-        gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(editor_tab, { 136.0f, tab_h }, editor.mainSurface == EditorMainSurface::Scene)
-            && !toolbarControlsBlockedByMenu)
-            open_editor_surface(EditorMainSurface::Scene, "toolbar");
-        tab_x += 136.0f + tab_gap;
+        const std::array<std::string_view, 2> sceneModeLabels{ "3D Scene", "2D Scene/UI" };
+        const std::array<EditorMainSurface, 2> sceneModeSurfaces{
+            EditorMainSurface::Scene,
+            EditorMainSurface::Game2D
+        };
+        std::string_view selectedSceneMode{};
+        if (editor.mainSurface == EditorMainSurface::Scene)
+            selectedSceneMode = sceneModeLabels[0];
+        else if (editor.mainSurface == EditorMainSurface::Game2D)
+            selectedSceneMode = sceneModeLabels[1];
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(runtime_tab, { 142.0f, tab_h }, editor.mainSurface == EditorMainSurface::Game2D)
-            && !toolbarControlsBlockedByMenu)
-            open_editor_surface(EditorMainSurface::Game2D, "toolbar");
-        tab_x += 142.0f + tab_gap;
+        const auto sceneModeSelect = gui::select_box(gui::SelectBoxOptions{
+            .id = "editor-scene-mode-select",
+            .placeholder = "Scene Mode",
+            .selected = selectedSceneMode,
+            .options = std::span<const std::string_view>{ sceneModeLabels.data(), sceneModeLabels.size() },
+            .size = { 166.0f, tab_h },
+            .row_height = 28.0f,
+            .max_visible_options = 2
+        });
+        if (sceneModeSelect.changed
+            && !toolbarControlsBlockedByMenu
+            && sceneModeSelect.selected_index
+            && *sceneModeSelect.selected_index < sceneModeSurfaces.size())
+        {
+            open_editor_surface(sceneModeSurfaces[*sceneModeSelect.selected_index], "scene mode selector");
+        }
+        tab_x += 166.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button_selected(assets_tab, { 104.0f, tab_h }, editor.mainSurface == EditorMainSurface::Assets)

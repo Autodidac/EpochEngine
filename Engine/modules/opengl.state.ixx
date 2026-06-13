@@ -32,6 +32,7 @@ module;
 
 #include <array>
 #include <bitset>
+#include <cstdint>
 #include <functional>
 
 // Global module fragment: macros + native headers + GL typedefs only.
@@ -146,6 +147,17 @@ export namespace epochnamespace::openglstate
         GLuint sceneEbo = 0;
         GLuint sceneMarkerVao = 0;
         GLuint sceneMarkerVbo = 0;
+
+        GLuint arcadeScreenShader = 0;
+        GLint arcadeScreenMvpLoc = -1;
+        GLint arcadeScreenTextureLoc = -1;
+        GLuint arcadeScreenVao = 0;
+        GLuint arcadeScreenVbo = 0;
+        GLuint arcadeScreenEbo = 0;
+        GLuint arcadeScreenTexture = 0;
+        GLuint arcadeScreenFramebuffer = 0;
+        GLuint arcadeScreenDepth = 0;
+        std::uint64_t arcadeScreenFrame = 0;
     };
 
     // header-dominant style: single TU-safe in C++20+ modules

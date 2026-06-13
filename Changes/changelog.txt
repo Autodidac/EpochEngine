@@ -1,5 +1,16 @@
 # Epoch Changelog
 
+## [v0.87.27]
+- Added an OpenGL-first sampled render-surface preview path for Engine Arcade:
+  editor/project markers now flag sampled panels, OpenGL renders a deterministic
+  attract pass into a native texture/FBO, and the 3D preview samples that target
+  onto the staged arcade screen.
+- Converted the 3D Scene / 2D Scene/UI toolbar pair into a scene-mode selector
+  so 2D game and GUI construction behaves like an explicit mode switch instead
+  of another wide toolbar tab.
+- Advanced source and EpochGui mirror metadata to `v0.87.27` while keeping the
+  published stable release line at `v0.87.26`.
+
 ## [v0.87.26]
 - Fixed the release updater source-build path so a stale or unavailable vcpkg
   manifest baseline archive no longer ends the update around dependency setup;

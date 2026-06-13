@@ -51,11 +51,18 @@ contracts instead of drift.
   cabinet material/model, fake-native hook, and descriptor/work-order contracts
   cover OpenGL, SDL3-over-GL, SFML-over-GL, and Raylib-over-GL without claiming
   live native allocation.
+- OpenGL editor preview now consumes sampled render-surface markers for Engine
+  Arcade: it owns a native texture/FBO/depth target, paints a deterministic
+  attract pass into that target, and samples the color texture onto the staged
+  `EngineArcadeScreen` panel as the first visible presentation proof.
+- The editor toolbar now exposes 3D scene construction and 2D game/UI
+  construction through one scene-mode selector, so Canvas2D work is an explicit
+  mode switch instead of a second wide workspace tab.
 - Source checkpoint: the SDL editor context switch fix is paired with a
   toolbar-equivalent smoke hook, keeping build/source validation aligned with
   the product toolbar handoff path.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1` and
-  `EpochGui` passed for the v0.87.26 source checkpoint. The hosted
+  `StaticLib1` passed for the v0.87.27 source checkpoint. The hosted
   `linux-clang-engine` lane caught module-sensitive include gaps in the
   EpochGui implementation translation units; the source now includes
   `<cstdint>` explicitly before relying on `std::uint32_t` or
