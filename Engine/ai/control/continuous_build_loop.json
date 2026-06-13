@@ -107,6 +107,13 @@
     "scene-state diff capture for object edits",
     "tool-schema replay against local MCP/control",
     "curated failure-analysis dataset lane",
-    "script/tool action replay against editor state"
+    "script/tool action replay against editor state",
+    "GUI feature verifier for theme selection, menu capture, and pane popout routes"
+  ],
+  "gui_feature_verifier": [
+    "Theme passes must exercise System Light/Dark, Light, and Dark by name and reject changes that only affect native window chrome.",
+    "Command-menu passes must click every visible Window-menu show/hide/reset row and prove visible top-layer menus own the click before toolbar, context selector, scene, or dock controls behind them.",
+    "Pane popout passes must start from real pane title-bar chrome, use a drag/release gesture, verify the detached route shows cloned pane content, hide the docked source pane while the route is open, restore it on Dock Back/Close/native close, preserve normal font rendering after spawn, and reject duplicate editor shells or generic GUI test windows.",
+    "Runtime GUI evidence should prefer engine-owned screenshots/captures from asset-bearing output folders and should run serially to avoid contaminated focus/drag data."
   ]
 }

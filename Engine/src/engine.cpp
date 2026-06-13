@@ -773,7 +773,7 @@ namespace epochnamespace::core
             epoch::array_view<const epoch::GraphMaterialTextureSlot>{ materialSlots, 1u });
 
         const epoch::GraphResource reads[] = { material };
-        builder.add_pass(
+        [[maybe_unused]] const auto pass = builder.add_pass(
             "plain.render_surface.reject.pass",
             epoch::array_view<const epoch::GraphResource>{ reads, 1u },
             {},
@@ -843,7 +843,7 @@ namespace epochnamespace::core
             epoch::array_view<const epoch::GraphMaterialTextureSlot>{ materialSlots, 1u });
 
         const epoch::GraphResource reads[] = { material };
-        builder.add_pass(
+        [[maybe_unused]] const auto pass = builder.add_pass(
             "render_surface.mismatched_sampler.pass",
             epoch::array_view<const epoch::GraphResource>{ reads, 1u },
             {},
@@ -2708,6 +2708,194 @@ namespace epochnamespace::core
         [[nodiscard]] std::unique_ptr<epochnamespace::scene::Scene> make_scene_from_id(std::string_view scene_id);
         [[nodiscard]] bool launch_project_child_process(std::string_view launch_argument);
 
+        [[nodiscard]] std::string_view context_type_label(epochnamespace::core::ContextType type) noexcept
+        {
+            switch (type)
+            {
+            case epochnamespace::core::ContextType::DirectX: return "DirectX";
+            case epochnamespace::core::ContextType::OpenGL: return "OpenGL";
+            case epochnamespace::core::ContextType::SDL: return "SDL";
+            case epochnamespace::core::ContextType::SFML: return "SFML";
+            case epochnamespace::core::ContextType::RayLib: return "Raylib";
+            case epochnamespace::core::ContextType::Vulkan: return "Vulkan";
+            case epochnamespace::core::ContextType::Software: return "Software";
+            default: return "Unknown";
+            }
+        }
+
+        [[nodiscard]] bool is_context_driver_candidate(epochnamespace::core::ContextType type) noexcept
+        {
+            switch (type)
+            {
+            case epochnamespace::core::ContextType::OpenGL:
+            case epochnamespace::core::ContextType::SDL:
+            case epochnamespace::core::ContextType::SFML:
+            case epochnamespace::core::ContextType::RayLib:
+            case epochnamespace::core::ContextType::Vulkan:
+            case epochnamespace::core::ContextType::DirectX:
+            case epochnamespace::core::ContextType::Software:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        [[nodiscard]] bool context_driver_handoff_guarded(epochnamespace::core::ContextType type) noexcept
+        {
+            switch (type)
+            {
+            case epochnamespace::core::ContextType::SFML:
+            case epochnamespace::core::ContextType::RayLib:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        struct DetachedPanelRouteMetadata
+        {
+            std::string_view title{};
+            int width{};
+            int height{};
+            std::string_view open_success{};
+            std::string_view open_failure{};
+        };
+
+        [[nodiscard]] DetachedPanelRouteMetadata detached_panel_route_metadata(std::string_view route) noexcept
+        {
+            if (route == "pane.outliner")
+            {
+                return DetachedPanelRouteMetadata{
+                    .title = "Epoch World Outliner",
+                    .width = 430,
+                    .height = 620,
+                    .open_success = "World Outliner popout requested.",
+                    .open_failure = "World Outliner popout request failed."
+                };
+            }
+            if (route == "pane.inspector")
+            {
+                return DetachedPanelRouteMetadata{
+                    .title = "Epoch Inspector",
+                    .width = 460,
+                    .height = 620,
+                    .open_success = "Inspector popout requested.",
+                    .open_failure = "Inspector popout request failed."
+                };
+            }
+            if (route == "pane.console")
+            {
+                return DetachedPanelRouteMetadata{
+                    .title = "Epoch Console Dock",
+                    .width = 760,
+                    .height = 420,
+                    .open_success = "Console Dock popout requested.",
+                    .open_failure = "Console Dock popout request failed."
+                };
+            }
+            if (route == "pane.ai_chat")
+            {
+                return DetachedPanelRouteMetadata{
+                    .title = "Epoch AI Chat",
+                    .width = 520,
+                    .height = 520,
+                    .open_success = "AI Chat popout requested.",
+                    .open_failure = "AI Chat popout request failed."
+                };
+            }
+            if (route == "floating.gui")
+            {
+                return DetachedPanelRouteMetadata{
+                    .title = "Epoch Floating GUI",
+                    .width = 560,
+                    .height = 360,
+                    .open_success = "Floating GUI routed window requested.",
+                    .open_failure = "Floating GUI routed window request failed."
+                };
+            }
+
+            return DetachedPanelRouteMetadata{
+                .title = "Epoch Context Driver",
+                .width = 720,
+                .height = 440,
+                .open_success = "Detached Context Driver window requested.",
+                .open_failure = "Detached Context Driver window request failed."
+            };
+        }
+
+        [[nodiscard]] int context_driver_priority(epochnamespace::core::ContextType type) noexcept
+        {
+            switch (type)
+            {
+            case epochnamespace::core::ContextType::DirectX: return 0;
+            case epochnamespace::core::ContextType::OpenGL: return 1;
+            case epochnamespace::core::ContextType::SDL: return 2;
+            case epochnamespace::core::ContextType::SFML: return 3;
+            case epochnamespace::core::ContextType::RayLib: return 4;
+            case epochnamespace::core::ContextType::Vulkan: return 5;
+            case epochnamespace::core::ContextType::Software: return 6;
+            default: return 100;
+            }
+        }
+
+        [[nodiscard]] epochnamespace::core::ContextType choose_context_driver_type(
+            epochnamespace::core::ContextType preferred)
+        {
+            epochnamespace::core::InitializeAllContexts();
+
+            std::vector<epochnamespace::core::ContextType> available;
+            {
+                std::shared_lock lock(epochnamespace::core::g_backendsMutex);
+                available.reserve(epochnamespace::core::g_backends.size());
+                for (const auto& [type, backend] : epochnamespace::core::g_backends)
+                {
+                    if (backend.master && is_context_driver_candidate(type))
+                        available.push_back(type);
+                }
+            }
+
+            if (available.empty())
+                return preferred == epochnamespace::core::ContextType::None
+                    ? epochnamespace::core::ContextType::OpenGL
+                    : preferred;
+
+            if (preferred != epochnamespace::core::ContextType::None
+                && std::find(available.begin(), available.end(), preferred) != available.end())
+                return preferred;
+
+            return *std::min_element(available.begin(), available.end(), [](auto a, auto b)
+            {
+                return context_driver_priority(a) < context_driver_priority(b);
+            });
+        }
+
+        [[nodiscard]] bool context_driver_type_available(epochnamespace::core::ContextType requested)
+        {
+            if (requested == epochnamespace::core::ContextType::None
+                || !is_context_driver_candidate(requested))
+            {
+                return false;
+            }
+
+            epochnamespace::core::InitializeAllContexts();
+            std::shared_lock lock(epochnamespace::core::g_backendsMutex);
+            const auto it = epochnamespace::core::g_backends.find(requested);
+            return it != epochnamespace::core::g_backends.end() && it->second.master;
+        }
+
+        [[nodiscard]] std::optional<epochnamespace::core::ContextType> resolve_context_driver_type(
+            epochnamespace::core::ContextType requested,
+            epochnamespace::core::ContextType fallback)
+        {
+            if (requested == epochnamespace::core::ContextType::None)
+                return choose_context_driver_type(fallback);
+
+            if (context_driver_type_available(requested))
+                return requested;
+
+            return std::nullopt;
+        }
+
         template <typename PumpFunc>
         int RunEditorInterfaceLoop(MultiContextManager& mgr, PumpFunc&& pump_events)
         {
@@ -2912,6 +3100,78 @@ namespace epochnamespace::core
                                 case epochnamespace::EditorCommand::RunGame:
                                     launch_requested_game(editor_frame.command_argument);
                                     break;
+                                case epochnamespace::EditorCommand::SwitchContext:
+                                {
+                                    const auto resolvedType = resolve_context_driver_type(
+                                        editor_frame.requested_context_type,
+                                        type);
+                                    if (!resolvedType)
+                                    {
+                                        epochnamespace::editor_set_context_selection_status(
+                                            ctx.get(),
+                                            "Context switch failed: requested backend is unavailable in this build/session.");
+                                        logger::get(kEditorLog).logf(
+                                            logger::LogLevel::Error,
+                                            std::source_location::current(),
+                                            "Context selector rejected unavailable explicit {} backend in the legacy editor loop.",
+                                            context_type_label(editor_frame.requested_context_type));
+                                        break;
+                                    }
+                                    const auto requestedType = *resolvedType;
+                                    epochnamespace::editor_set_context_selection_status(
+                                        ctx.get(),
+                                        requestedType == type
+                                            ? std::string{ "Already running in the active " }
+                                                + std::string{ context_type_label(requestedType) }
+                                                + " editor context."
+                                            : std::string{ "Single-context editor host cannot switch to " }
+                                                + std::string{ context_type_label(requestedType) }
+                                                + " without a live backend window; no restart or fake switch was performed.");
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::INFO,
+                                        std::source_location::current(),
+                                        "Context selector chose {} in the legacy editor loop; no detached window was opened.",
+                                        context_type_label(requestedType));
+                                    break;
+                                }
+                                case epochnamespace::EditorCommand::OpenContextWindow:
+                                {
+                                    const auto resolvedType = resolve_context_driver_type(
+                                        editor_frame.requested_context_type,
+                                        type);
+                                    if (!resolvedType)
+                                    {
+                                        logger::get(kEditorLog).logf(
+                                            logger::LogLevel::Error,
+                                            std::source_location::current(),
+                                            "Detached context request rejected unavailable explicit {} backend.",
+                                            context_type_label(editor_frame.requested_context_type));
+                                        break;
+                                    }
+                                    const auto requestedType = *resolvedType;
+                                    const std::string route = editor_frame.command_argument.empty()
+                                        ? std::string{ "context.driver" }
+                                        : editor_frame.command_argument;
+                                    const auto routeMeta = detached_panel_route_metadata(route);
+                                     const bool opened = mgr.OpenDetachedContextWindow(
+                                         epochnamespace::core::DetachedContextWindowRequest{
+                                             .type = requestedType,
+                                             .title = std::string{ routeMeta.title },
+                                             .gui_route = route,
+                                             .width = routeMeta.width,
+                                             .height = routeMeta.height
+                                         });
+                                    if (opened)
+                                        epochnamespace::editor_mark_context_panel_detached(route, true);
+                                     const std::string logLine = opened
+                                         ? std::string{ routeMeta.open_success }
+                                         : std::string{ routeMeta.open_failure };
+                                    logger::get(kEditorLog).log(
+                                        opened ? logger::LogLevel::INFO : logger::LogLevel::Error,
+                                        logLine,
+                                        std::source_location::current());
+                                    break;
+                                }
                                 case epochnamespace::EditorCommand::Exit:
                                     state = EditorSceneState::Exit;
                                     running = false;
@@ -3274,10 +3534,12 @@ namespace epochnamespace::core
                                     else if (*choice == Choice::Cellular)
                                         begin_scene([] { return std::make_unique<epochnamespace::cellularsim::CellularSimScene>(); }, SceneID::Cellular);
                                     else if (*choice == Choice::Settings)
+                                    {
                                         logger::get(kEngineLog).log(
                                             logger::LogLevel::INFO,
-                                            "Menu settings selected.",
+                                            "Launcher context switch selected, but this single-context session has no alternate live renderer window.",
                                             std::source_location::current());
+                                    }
                                     else if (*choice == Choice::Exit)
                                     {
                                         scene_id = SceneID::Exit;
@@ -3450,6 +3712,7 @@ namespace epochnamespace::core
             timing::Clock::time_point last_frame{};
             bool has_last_frame{ false };
             epoch::core::time::simulation_clock simulation{};
+            bool routed_gui_upload_refreshed{ false };
         };
 
         struct PreviewLookState
@@ -4209,10 +4472,20 @@ namespace epochnamespace::core
             epochnamespace::cleanup_chat_context(ctx.get());
         }
 
+        struct PendingEditorContextSnapshot
+        {
+            epochnamespace::core::ContextType target_type{ epochnamespace::core::ContextType::None };
+            std::string gui_route{};
+            Context* source_context{ nullptr };
+            bool close_source_on_restore{ false };
+            epochnamespace::EditorContextSnapshot snapshot{};
+        };
+
         template <typename PumpFunc>
         int RunContextSessionLoop(MultiContextManager& mgr, PumpFunc&& pump_events, SessionMode startup_mode)
         {
             std::unordered_map<Context*, ContextSession> sessions;
+            std::vector<PendingEditorContextSnapshot> pendingEditorSwitchSnapshots;
             bool running = true;
             bool deferred_updater_shell_update = false;
             bool smoke_capture_taken = false;
@@ -4228,6 +4501,106 @@ namespace epochnamespace::core
             const std::uint64_t smoke_capture_fallback_frames =
                 cli::capture_requested ? 150u : 0u;
             auto pump = std::forward<PumpFunc>(pump_events);
+            auto stash_editor_switch_snapshot = [&](
+                epochnamespace::core::ContextType targetType,
+                const std::shared_ptr<Context>& sourceCtx,
+                std::string_view guiRoute = {},
+                bool closeSourceOnRestore = false) -> bool
+            {
+                if (!sourceCtx)
+                    return false;
+
+                auto editorSnapshot = epochnamespace::editor_capture_context_snapshot(sourceCtx.get());
+                if (!editorSnapshot.valid)
+                    return false;
+
+                pendingEditorSwitchSnapshots.erase(
+                    std::remove_if(
+                        pendingEditorSwitchSnapshots.begin(),
+                        pendingEditorSwitchSnapshots.end(),
+                        [targetType, guiRoute](const auto& item) noexcept
+                        {
+                            return item.target_type == targetType && item.gui_route == guiRoute;
+                        }),
+                    pendingEditorSwitchSnapshots.end());
+                pendingEditorSwitchSnapshots.push_back(PendingEditorContextSnapshot{
+                    .target_type = targetType,
+                    .gui_route = std::string{ guiRoute },
+                    .source_context = sourceCtx.get(),
+                    .close_source_on_restore = closeSourceOnRestore,
+                    .snapshot = std::move(editorSnapshot)
+                });
+                return true;
+            };
+            enum class PendingEditorRestoreStatus : unsigned char
+            {
+                none = 0,
+                restored,
+                failed
+            };
+            auto restore_pending_editor_switch_snapshot = [&](
+                const std::shared_ptr<Context>& targetCtx,
+                ContextSession& targetSession,
+                std::string_view guiRoute) -> PendingEditorRestoreStatus
+            {
+                if (!targetCtx)
+                    return PendingEditorRestoreStatus::none;
+
+                auto pendingIt = std::find_if(
+                    pendingEditorSwitchSnapshots.begin(),
+                    pendingEditorSwitchSnapshots.end(),
+                    [&](const auto& item) noexcept
+                    {
+                        return item.target_type == targetCtx->type && item.gui_route == guiRoute;
+                    });
+                if (pendingIt == pendingEditorSwitchSnapshots.end())
+                    return PendingEditorRestoreStatus::none;
+
+                auto editorSnapshot = std::move(pendingIt->snapshot);
+                Context* const sourceContext = pendingIt->source_context;
+                const bool closeSourceOnRestore = pendingIt->close_source_on_restore;
+                pendingEditorSwitchSnapshots.erase(pendingIt);
+                if (!editorSnapshot.valid)
+                    return PendingEditorRestoreStatus::failed;
+
+                if (!epochnamespace::editor_restore_context_snapshot(targetCtx.get(), editorSnapshot))
+                    return PendingEditorRestoreStatus::failed;
+
+                unload_active_scene(targetSession);
+                targetSession.menu.cleanup();
+                targetSession.mode = SessionMode::Editor;
+                targetSession.return_mode = SessionMode::Menu;
+                targetCtx->clear_scene_viewport();
+                targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+
+                if (closeSourceOnRestore
+                    && sourceContext
+                    && sourceContext != targetCtx.get())
+                {
+                    for (const auto& window : mgr.GetWindows())
+                    {
+                        if (!window
+                            || !window->context
+                            || window->context.get() != sourceContext)
+                        {
+                            continue;
+                        }
+
+                        window->running = false;
+                        window->set_should_close(true);
+#if defined(_WIN32)
+                        if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+                            ::PostMessageW(window->hwnd, WM_CLOSE, 0, 0);
+                        if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+                            ::PostMessageW(window->hwndChild, WM_CLOSE, 0, 0);
+                        if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+                            ::PostMessageW(window->host_hwnd, WM_CLOSE, 0, 0);
+#endif
+                        break;
+                    }
+                }
+                return PendingEditorRestoreStatus::restored;
+            };
 
             while (running)
             {
@@ -4304,34 +4677,387 @@ namespace epochnamespace::core
 #endif
 #endif
 
-                auto switch_all_sessions_to_editor = [&](std::string_view project_id)
+                auto switch_session_to_editor = [&](
+                    ContextSession& targetSession,
+                    const std::shared_ptr<Context>& targetCtx,
+                    std::string_view project_id)
                 {
-                    for (auto& [_, contexts] : snapshot)
+                    if (!targetCtx)
+                        return;
+
+                    unload_active_scene(targetSession);
+                    targetSession.menu.cleanup();
+                    targetSession.mode = SessionMode::Editor;
+                    targetSession.return_mode = SessionMode::Menu;
+
+                    if (!project_id.empty())
+                        epochnamespace::editor_load_project(targetCtx, project_id);
+                    else
+                        epochnamespace::editor_reset_transient_ui(targetCtx.get());
+
+                    targetCtx->clear_scene_viewport();
+                    targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                };
+
+                auto focus_context_window = [&](const std::shared_ptr<Context>& targetCtx)
+                {
+                    if (!targetCtx)
+                        return;
+
+                    if (auto* targetWin = mgr.findWindowByContext(targetCtx))
                     {
-                        for (auto& targetCtx : contexts)
+#if defined(_WIN32)
+                        HWND focusHwnd = nullptr;
+                        if (targetWin->hwndChild && ::IsWindow(targetWin->hwndChild) != FALSE)
+                            focusHwnd = targetWin->hwndChild;
+                        else if (targetWin->hwnd && ::IsWindow(targetWin->hwnd) != FALSE)
+                            focusHwnd = targetWin->hwnd;
+                        else if (targetWin->host_hwnd && ::IsWindow(targetWin->host_hwnd) != FALSE)
+                            focusHwnd = targetWin->host_hwnd;
+
+                        if (focusHwnd)
                         {
-                            if (!targetCtx)
+                            ::ShowWindow(focusHwnd, SW_SHOWNORMAL);
+                            ::BringWindowToTop(focusHwnd);
+                            ::SetFocus(focusHwnd);
+                        }
+#endif
+                    }
+                };
+
+                auto switch_launcher_context = [&](const std::shared_ptr<Context>& sourceCtx)
+                {
+                    constexpr std::array contextOrder{
+                        epochnamespace::core::ContextType::DirectX,
+                        epochnamespace::core::ContextType::OpenGL,
+                        epochnamespace::core::ContextType::SDL,
+                        epochnamespace::core::ContextType::SFML,
+                        epochnamespace::core::ContextType::RayLib,
+                        epochnamespace::core::ContextType::Vulkan,
+                        epochnamespace::core::ContextType::Software
+                    };
+
+                    std::vector<std::shared_ptr<Context>> liveContexts;
+                    liveContexts.reserve(snapshot.size());
+
+                    auto append_live_contexts = [&](epochnamespace::core::ContextType desiredType)
+                    {
+                        for (auto& [candidateType, contexts] : snapshot)
+                        {
+                            if (candidateType != desiredType)
                                 continue;
 
-                            auto [targetIt, insertedForEditor] = sessions.try_emplace(targetCtx.get());
-                            auto& targetSession = targetIt->second;
-                            if (insertedForEditor)
-                                targetSession.menu.set_max_columns(epochnamespace::core::cli::menu_columns);
+                            for (auto& candidateCtx : contexts)
+                            {
+                                if (candidateCtx && mgr.findWindowByContext(candidateCtx))
+                                    liveContexts.push_back(candidateCtx);
+                            }
+                            break;
+                        }
+                    };
 
-                            unload_active_scene(targetSession);
-                            targetSession.menu.cleanup();
-                            targetSession.mode = SessionMode::Editor;
-                            targetSession.return_mode = SessionMode::Menu;
+                    for (const auto typeInOrder : contextOrder)
+                        append_live_contexts(typeInOrder);
 
-                            if (!project_id.empty())
-                                epochnamespace::editor_load_project(targetCtx, project_id);
-                            else
-                                epochnamespace::editor_reset_transient_ui(targetCtx.get());
+                    for (auto& [candidateType, contexts] : snapshot)
+                    {
+                        if (std::ranges::find(contextOrder, candidateType) != contextOrder.end())
+                            continue;
 
-                            targetCtx->clear_scene_viewport();
-                            targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                        for (auto& candidateCtx : contexts)
+                        {
+                            if (candidateCtx && mgr.findWindowByContext(candidateCtx))
+                                liveContexts.push_back(candidateCtx);
                         }
                     }
+
+                    if (liveContexts.size() <= 1)
+                    {
+                        logger::get(kEditorLog).log(
+                            logger::LogLevel::INFO,
+                            "Launcher context switch skipped because no alternate live docked context exists.",
+                            std::source_location::current());
+                        return;
+                    }
+
+                    auto sourceIt = std::ranges::find_if(liveContexts, [&](const std::shared_ptr<Context>& candidate)
+                    {
+                        return sourceCtx && candidate && candidate.get() == sourceCtx.get();
+                    });
+
+                    std::shared_ptr<Context> targetCtx;
+                    if (sourceIt == liveContexts.end())
+                    {
+                        targetCtx = liveContexts.front();
+                    }
+                    else
+                    {
+                        const auto sourceIndex = static_cast<std::size_t>(std::distance(liveContexts.begin(), sourceIt));
+                        for (std::size_t offset = 1; offset < liveContexts.size(); ++offset)
+                        {
+                            auto& candidate = liveContexts[(sourceIndex + offset) % liveContexts.size()];
+                            if (candidate && candidate.get() != sourceCtx.get())
+                            {
+                                targetCtx = candidate;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!targetCtx)
+                        return;
+
+                    auto [targetIt, insertedForTarget] = sessions.try_emplace(targetCtx.get());
+                    auto& targetSession = targetIt->second;
+                    if (insertedForTarget)
+                    {
+                        targetSession.menu.set_max_columns(epochnamespace::core::cli::menu_columns);
+                        ensure_menu_initialized(targetSession, targetCtx);
+                    }
+
+                    focus_context_window(targetCtx);
+
+                    logger::get(kEditorLog).logf(
+                        logger::LogLevel::INFO,
+                        std::source_location::current(),
+                        "Launcher context switch focused the live {} context.",
+                        context_type_label(targetCtx->type));
+                };
+
+                auto switch_editor_context = [&](const std::shared_ptr<Context>& sourceCtx,
+                    epochnamespace::core::ContextType requestedType)
+                {
+                    const auto resolvedTargetType = resolve_context_driver_type(
+                        requestedType,
+                        sourceCtx ? sourceCtx->type : epochnamespace::core::ContextType::OpenGL);
+                    if (!resolvedTargetType)
+                    {
+                        epochnamespace::editor_set_context_selection_status(
+                            sourceCtx.get(),
+                            "Context switch failed: requested backend is unavailable in this build/session.");
+                        logger::get(kEditorLog).logf(
+                            logger::LogLevel::Error,
+                            std::source_location::current(),
+                            "Context selector rejected unavailable explicit {} backend.",
+                            context_type_label(requestedType));
+                        return;
+                    }
+                    const auto targetType = *resolvedTargetType;
+                    if (!is_context_driver_candidate(targetType))
+                    {
+                        epochnamespace::editor_set_context_selection_status(
+                            sourceCtx.get(),
+                            "Context switch failed: requested backend is not an editor context candidate.");
+                        return;
+                    }
+                    const auto guardedHandoffType =
+                        (sourceCtx
+                            && context_driver_handoff_guarded(sourceCtx->type)
+                            && targetType != sourceCtx->type)
+                        ? sourceCtx->type
+                        : (context_driver_handoff_guarded(targetType)
+                            && (!sourceCtx || sourceCtx->type != targetType))
+                            ? targetType
+                            : epochnamespace::core::ContextType::None;
+                    if (guardedHandoffType != epochnamespace::core::ContextType::None)
+                    {
+                        const std::string guardedLabel{ context_type_label(guardedHandoffType) };
+                        const std::string warning =
+                            guardedLabel
+                            + " editor context handoff is disabled for this build because its native context crashes during backend switching. Use it as a diagnostic/runtime context until the handoff path is stabilized.";
+                        if (sourceCtx)
+                            epochnamespace::editor_set_context_selection_status(sourceCtx.get(), warning);
+                        logger::get(kEditorLog).log(
+                            logger::LogLevel::WARN,
+                            warning,
+                            std::source_location::current());
+                        return;
+                    }
+
+                    std::shared_ptr<Context> targetCtx;
+                    if (sourceCtx && sourceCtx->type == targetType && mgr.findWindowByContext(sourceCtx))
+                    {
+                        targetCtx = sourceCtx;
+                    }
+
+                    if (!targetCtx)
+                    {
+                        for (auto& [candidateType, contexts] : snapshot)
+                        {
+                            if (candidateType != targetType)
+                                continue;
+                            for (auto& candidateCtx : contexts)
+                            {
+                                if (candidateCtx && mgr.findWindowByContext(candidateCtx))
+                                {
+                                    targetCtx = candidateCtx;
+                                    break;
+                                }
+                            }
+                            if (targetCtx)
+                                break;
+                        }
+                    }
+
+                    if (!targetCtx)
+                    {
+                        if (!sourceCtx)
+                        {
+                            logger::get(kEditorLog).logf(
+                                logger::LogLevel::Error,
+                                std::source_location::current(),
+                                "Context selector chose {}, but no source editor context exists to migrate.",
+                                context_type_label(targetType));
+                            return;
+                        }
+
+                        if (!stash_editor_switch_snapshot(targetType, sourceCtx, {}, true))
+                        {
+                            epochnamespace::editor_set_context_selection_status(
+                                sourceCtx.get(),
+                                std::string{ "Context switch to " } + std::string{ context_type_label(targetType) }
+                                    + " failed: editor state capture did not produce a restorable snapshot.");
+                            logger::get(kEditorLog).logf(
+                                logger::LogLevel::Error,
+                                std::source_location::current(),
+                                "Context selector could not capture editor state before creating the {} replacement context.",
+                                context_type_label(targetType));
+                            return;
+                        }
+
+                        int replacementWidth = sourceCtx->get_width_safe();
+                        int replacementHeight = sourceCtx->get_height_safe();
+                        if (auto* sourceWin = mgr.findWindowByContext(sourceCtx))
+                        {
+                            replacementWidth = (std::max)(replacementWidth, sourceWin->width);
+                            replacementHeight = (std::max)(replacementHeight, sourceWin->height);
+                        }
+
+                        const bool opened = mgr.OpenDetachedContextWindow(
+                            epochnamespace::core::DetachedContextWindowRequest{
+                                .type = targetType,
+                                .title = std::string{ "Epoch Editor | " } + std::string{ context_type_label(targetType) },
+                                .gui_route = {},
+                                .width = (std::max)(720, replacementWidth),
+                                .height = (std::max)(440, replacementHeight),
+                                .start_docked = true
+                            });
+
+                        if (!opened)
+                        {
+                            epochnamespace::editor_set_context_selection_status(
+                                sourceCtx.get(),
+                                std::string{ "Context switch to " } + std::string{ context_type_label(targetType) }
+                                    + " failed: replacement context could not be created.");
+                            logger::get(kEditorLog).logf(
+                                logger::LogLevel::Error,
+                                std::source_location::current(),
+                                "Context selector failed to create a replacement {} editor context.",
+                                context_type_label(targetType));
+                            return;
+                        }
+
+                        epochnamespace::editor_set_context_selection_status(
+                            sourceCtx.get(),
+                            std::string{ "Switching editor to new " } + std::string{ context_type_label(targetType) }
+                                + " context; source context will close after restore.");
+                        logger::get(kEditorLog).logf(
+                            logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Context selector created a replacement {} editor context for single-context switching.",
+                            context_type_label(targetType));
+                        return;
+                    }
+
+                    auto [targetIt, insertedForTarget] = sessions.try_emplace(targetCtx.get());
+                    auto& targetSession = targetIt->second;
+                    if (insertedForTarget)
+                        targetSession.menu.set_max_columns(epochnamespace::core::cli::menu_columns);
+
+                    unload_active_scene(targetSession);
+                    targetSession.menu.cleanup();
+                    targetSession.mode = SessionMode::Editor;
+                    targetSession.return_mode = SessionMode::Menu;
+
+                    if (sourceCtx && targetCtx.get() != sourceCtx.get())
+                    {
+                        const auto editorSnapshot = epochnamespace::editor_capture_context_snapshot(sourceCtx.get());
+                        if (editorSnapshot.valid)
+                        {
+                            const bool restored = epochnamespace::editor_restore_context_snapshot(targetCtx.get(), editorSnapshot);
+                            if (restored)
+                            {
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::INFO,
+                                    std::source_location::current(),
+                                    "Context selector restored editor state into the live {} context.",
+                                    context_type_label(targetType));
+                            }
+                            else
+                            {
+                                epochnamespace::editor_set_context_selection_status(
+                                    sourceCtx.get(),
+                                    std::string{ "Focused live " } + std::string{ context_type_label(targetType) }
+                                        + " context, but editor state restore failed.");
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::Error,
+                                    std::source_location::current(),
+                                    "Context selector focused the live {} context but editor state restore failed.",
+                                    context_type_label(targetType));
+                            }
+                        }
+                        else
+                        {
+                            epochnamespace::editor_set_context_selection_status(
+                                sourceCtx.get(),
+                                std::string{ "Focused live " } + std::string{ context_type_label(targetType) }
+                                    + " context, but editor state capture failed.");
+                            logger::get(kEditorLog).logf(
+                                logger::LogLevel::Error,
+                                std::source_location::current(),
+                                "Context selector focused the live {} context but editor state capture failed.",
+                                context_type_label(targetType));
+                        }
+                    }
+
+                    for (auto& [_, contexts] : snapshot)
+                    {
+                        for (auto& candidateCtx : contexts)
+                        {
+                            if (!candidateCtx || candidateCtx.get() == targetCtx.get())
+                                continue;
+
+                            auto parkedIt = sessions.find(candidateCtx.get());
+                            if (parkedIt == sessions.end() || parkedIt->second.mode != SessionMode::Editor)
+                                continue;
+
+                            reset_to_menu(parkedIt->second, candidateCtx);
+                            epochnamespace::editor_set_context_selection_status(
+                                candidateCtx.get(),
+                                std::string{ "Editor parked; active editor is now the live " }
+                                    + std::string{ context_type_label(targetType) } + " context.");
+                        }
+                    }
+
+                    targetCtx->clear_scene_viewport();
+                    targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                    focus_context_window(targetCtx);
+
+                    epochnamespace::editor_set_context_selection_status(
+                        targetCtx.get(),
+                        std::string{ "Switched to exclusive live " } + std::string{ context_type_label(targetType) } + " editor context.");
+                    if (sourceCtx && targetCtx.get() != sourceCtx.get())
+                    {
+                        epochnamespace::editor_set_context_selection_status(
+                            sourceCtx.get(),
+                            std::string{ "Handed editor session to live " } + std::string{ context_type_label(targetType) } + " context.");
+                    }
+
+                    logger::get(kEditorLog).logf(
+                        logger::LogLevel::INFO,
+                        std::source_location::current(),
+                        "Context selector switched the editor session to the live {} context.",
+                        context_type_label(targetType));
                 };
 
                 for (auto& [type, contexts] : snapshot)
@@ -4354,6 +5080,41 @@ namespace epochnamespace::core
                             }
                             epochnamespace::gui::cleanup_context(ctx.get());
                             epochnamespace::cleanup_chat_context(ctx.get());
+                            continue;
+                        }
+
+                        if (win->routedRedockRequested.exchange(false))
+                        {
+                            if (!win->guiRoute.empty())
+                                epochnamespace::editor_notify_context_panel_closed(win->guiRoute);
+                            win->running = false;
+                            win->set_should_close(true);
+#if defined(_WIN32)
+                            if (win->hwnd && ::IsWindow(win->hwnd) != FALSE)
+                                ::PostMessageW(win->hwnd, WM_CLOSE, 0, 0);
+                            if (win->hwndChild && ::IsWindow(win->hwndChild) != FALSE)
+                                ::PostMessageW(win->hwndChild, WM_CLOSE, 0, 0);
+                            if (win->host_hwnd && ::IsWindow(win->host_hwnd) != FALSE)
+                                ::PostMessageW(win->host_hwnd, WM_CLOSE, 0, 0);
+#endif
+                        }
+
+                        if (!win->running || win->get_should_close())
+                        {
+                            if (!win->guiRoute.empty())
+                                epochnamespace::editor_notify_context_panel_closed(win->guiRoute);
+                            auto existingSession = sessions.find(ctx.get());
+                            if (existingSession != sessions.end())
+                            {
+                                unload_active_scene(existingSession->second);
+                                existingSession->second.menu.cleanup();
+                                sessions.erase(existingSession);
+                            }
+                            ctx->clear_scene_viewport();
+                            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+                            epochnamespace::gui::cleanup_context(ctx.get());
+                            epochnamespace::cleanup_chat_context(ctx.get());
+                            g_preview_look_states.erase(ctx.get());
                             continue;
                         }
 
@@ -4387,6 +5148,24 @@ namespace epochnamespace::core
                                     session.mode = SessionMode::Scene;
                                     session.return_mode = SessionMode::Exit;
                                 }
+                            }
+
+                            const auto pendingRestoreStatus = restore_pending_editor_switch_snapshot(ctx, session, win->guiRoute);
+                            if (pendingRestoreStatus == PendingEditorRestoreStatus::restored)
+                            {
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::INFO,
+                                    std::source_location::current(),
+                                    "Restored editor state into the new {} context.",
+                                    context_type_label(ctx->type));
+                            }
+                            else if (pendingRestoreStatus == PendingEditorRestoreStatus::failed)
+                            {
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::Error,
+                                    std::source_location::current(),
+                                    "New {} context entered the session loop, but editor state restore failed.",
+                                    context_type_label(ctx->type));
                             }
                         }
 
@@ -4436,6 +5215,120 @@ namespace epochnamespace::core
                         };
 
                         tick_time_spine();
+                        publish_time_snapshot();
+
+                        if (!win->guiRoute.empty())
+                        {
+                            int mx = 0;
+                            int my = 0;
+                            ctx->get_mouse_position_safe(mx, my);
+
+                            const gui::Vec2 mouse_pos{
+                                static_cast<float>(mx),
+                                static_cast<float>(my)
+                            };
+                            const bool mouse_left_down =
+                                ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseLeft);
+
+                            ctx->clear_scene_viewport();
+                            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+                            clear_before_ui_frame(ctx);
+                            if (!session.routed_gui_upload_refreshed)
+                            {
+                                gui::refresh_context_resources(ctx.get());
+                                session.routed_gui_upload_refreshed = true;
+                            }
+                            gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
+                            const auto panel_frame = epochnamespace::editor_run_context_panel(ctx, win->guiRoute);
+                            gui::end_frame();
+
+                            if (panel_frame.command == epochnamespace::EditorCommand::OpenContextWindow)
+                            {
+                                const auto resolvedType = resolve_context_driver_type(
+                                    panel_frame.requested_context_type,
+                                    type);
+                                if (!resolvedType)
+                                {
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::Error,
+                                        std::source_location::current(),
+                                        "Routed panel rejected unavailable explicit {} backend.",
+                                        context_type_label(panel_frame.requested_context_type));
+                                    if (ctx_running)
+                                        ctx->present_safe();
+                                    continue;
+                                }
+                                const auto requestedType = *resolvedType;
+                                const std::string route = panel_frame.command_argument.empty()
+                                    ? std::string{ "context.driver" }
+                                    : panel_frame.command_argument;
+                                const auto routeMeta = detached_panel_route_metadata(route);
+                                const bool opened = mgr.OpenDetachedContextWindow(
+                                    epochnamespace::core::DetachedContextWindowRequest{
+                                        .type = requestedType,
+                                        .title = std::string{ routeMeta.title },
+                                        .gui_route = route,
+                                        .width = routeMeta.width,
+                                        .height = routeMeta.height
+                                    });
+                                if (opened)
+                                {
+                                    stash_editor_switch_snapshot(requestedType, ctx, route);
+                                    epochnamespace::editor_mark_context_panel_detached(route, true);
+                                }
+                                const std::string logLine = opened
+                                    ? std::string{ routeMeta.open_success }
+                                    : std::string{ routeMeta.open_failure };
+                                logger::get(kEditorLog).log(
+                                    opened ? logger::LogLevel::INFO : logger::LogLevel::Error,
+                                    logLine,
+                                    std::source_location::current());
+                                if (opened && panel_frame.close_current_context_after_command)
+                                {
+                                    epochnamespace::editor_notify_context_panel_closed(win->guiRoute);
+                                    ctx_running = false;
+                                    win->running = false;
+                                    win->set_should_close(true);
+#if defined(_WIN32)
+                                    if (win->hwnd && ::IsWindow(win->hwnd) != FALSE)
+                                        ::PostMessageW(win->hwnd, WM_CLOSE, 0, 0);
+#endif
+                                }
+                                else if (ctx_running)
+                                {
+                                    ctx->present_safe();
+                                }
+                            }
+                            else if (panel_frame.command == epochnamespace::EditorCommand::Exit)
+                            {
+                                epochnamespace::editor_notify_context_panel_closed(win->guiRoute);
+                                ctx_running = false;
+                                win->running = false;
+                                win->set_should_close(true);
+#if defined(_WIN32)
+                                if (win->hwnd && ::IsWindow(win->hwnd) != FALSE)
+                                    ::PostMessageW(win->hwnd, WM_CLOSE, 0, 0);
+#endif
+                            }
+                            else if (ctx_running)
+                            {
+                                ctx->present_safe();
+                            }
+
+                            if (ctx_running)
+                                backend_has_live_context = true;
+                            else
+                            {
+                                epochnamespace::editor_notify_context_panel_closed(win->guiRoute);
+                                ctx->clear_scene_viewport();
+                                ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+                                epochnamespace::gui::cleanup_context(ctx.get());
+                                epochnamespace::cleanup_chat_context(ctx.get());
+                                g_preview_look_states.erase(ctx.get());
+                                sessions.erase(ctx.get());
+                            }
+                            continue;
+                        }
 
                         auto begin_scene = [&](std::string_view scene_id, SessionMode return_mode)
                         {
@@ -4476,7 +5369,6 @@ namespace epochnamespace::core
                             clear_before_ui_frame(ctx);
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             const auto editor_frame = epochnamespace::editor_run(ctx);
-                            publish_time_snapshot();
 
                             const auto viewport = editor_frame.scene_viewport;
                             const bool mouse_in_scene =
@@ -4614,6 +5506,54 @@ namespace epochnamespace::core
                                     "Editor script '{}' {}.",
                                     editor_frame.command_argument,
                                     ok ? "completed" : "failed");
+                                break;
+                            }
+                            case epochnamespace::EditorCommand::SwitchContext:
+                                switch_editor_context(
+                                    ctx,
+                                    editor_frame.requested_context_type == epochnamespace::core::ContextType::None
+                                    ? type
+                                    : editor_frame.requested_context_type);
+                                break;
+                            case epochnamespace::EditorCommand::OpenContextWindow:
+                            {
+                                const auto resolvedType = resolve_context_driver_type(
+                                    editor_frame.requested_context_type,
+                                    type);
+                                if (!resolvedType)
+                                {
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::Error,
+                                        std::source_location::current(),
+                                        "Detached context request rejected unavailable explicit {} backend.",
+                                        context_type_label(editor_frame.requested_context_type));
+                                    break;
+                                }
+                                const auto requestedType = *resolvedType;
+                                const std::string route = editor_frame.command_argument.empty()
+                                    ? std::string{ "context.driver" }
+                                    : editor_frame.command_argument;
+                                const auto routeMeta = detached_panel_route_metadata(route);
+                                const bool opened = mgr.OpenDetachedContextWindow(
+                                    epochnamespace::core::DetachedContextWindowRequest{
+                                        .type = requestedType,
+                                        .title = std::string{ routeMeta.title },
+                                        .gui_route = route,
+                                        .width = routeMeta.width,
+                                        .height = routeMeta.height
+                                    });
+                                if (opened)
+                                {
+                                    stash_editor_switch_snapshot(requestedType, ctx, route);
+                                    epochnamespace::editor_mark_context_panel_detached(route, true);
+                                }
+                                const std::string logLine = opened
+                                    ? std::string{ routeMeta.open_success }
+                                    : std::string{ routeMeta.open_failure };
+                                logger::get(kEditorLog).log(
+                                    opened ? logger::LogLevel::INFO : logger::LogLevel::Error,
+                                    logLine,
+                                    std::source_location::current());
                                 break;
                             }
                             case epochnamespace::EditorCommand::UpdateApplication:
@@ -4757,18 +5697,15 @@ namespace epochnamespace::core
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)
                                 {
-                                    switch_all_sessions_to_editor("projectlauncher");
+                                    switch_session_to_editor(session, ctx, "projectlauncher");
                                 }
                                 else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
                                 {
-                                    switch_all_sessions_to_editor(project_id);
+                                    switch_session_to_editor(session, ctx, project_id);
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::Settings)
                                 {
-                                    logger::get(kEditorLog).log(
-                                        logger::LogLevel::INFO,
-                                        "Launcher contexts/settings selected.",
-                                        std::source_location::current());
+                                    switch_launcher_context(ctx);
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::About)
                                 {

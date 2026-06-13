@@ -67,6 +67,7 @@ namespace epochnamespace::gui
     export enum class ThemeVariant : std::uint8_t
     {
         DefaultDark = 0,
+        DefaultLight,
         ClassicLauncher,
         MidnightBlue,
         EmberForge,
@@ -82,7 +83,9 @@ namespace epochnamespace::gui
         MidnightBlue,
         EmberForge,
         ForestTerminal,
-        AuroraSteel
+        AuroraSteel,
+        Light,
+        Dark
     };
 
     export struct ThemePreferenceChoice
@@ -227,7 +230,165 @@ namespace epochnamespace::gui
         bool dim_background{ true };
     };
 
+    export struct FloatingWindowState
+    {
+        Vec2 position{};
+        Vec2 size{};
+        Vec2 drag_offset{};
+        Vec2 resize_origin_mouse{};
+        Vec2 resize_origin_size{};
+        bool open{ true };
+        bool initialized{};
+        bool dragging{};
+        bool resizing{};
+        bool close_pressed{};
+        std::uint32_t focus_order{};
+    };
+
+    export struct FloatingWindowOptions
+    {
+        std::string_view id{};
+        std::string_view title{};
+        Vec2 default_position{};
+        Vec2 default_size{};
+        Vec2 min_size{ 160.0f, 96.0f };
+        Vec2 viewport_size{};
+        bool movable{ true };
+        bool resizable{ true };
+        bool closable{ true };
+        bool draw_background{ true };
+        bool top_layer{ true };
+        bool capture_input{ true };
+    };
+
+    export struct FloatingWindowResult
+    {
+        bool begun{};
+        bool focused{};
+        bool hovered{};
+        bool moved{};
+        bool resized{};
+        bool close_requested{};
+        bool title_hovered{};
+        bool close_hovered{};
+        bool resize_hovered{};
+        WidgetBounds window{};
+        WidgetBounds title_bar{};
+        WidgetBounds content{};
+        WidgetBounds close_button{};
+        WidgetBounds resize_handle{};
+    };
+
+    export enum class DockSlot : std::uint8_t
+    {
+        none,
+        left,
+        right,
+        top,
+        bottom,
+        center
+    };
+
+    export enum class DockableWindowMode : std::uint8_t
+    {
+        docked,
+        floating,
+        detached
+    };
+
+    export enum class DockableWindowAction : std::uint8_t
+    {
+        none,
+        focus,
+        dock,
+        float_window,
+        detach,
+        close
+    };
+
+    export struct DockableWindowHostState
+    {
+        std::uint32_t active_window_id{};
+        std::uint32_t next_focus_order{ 1 };
+        bool changed_this_frame{};
+    };
+
+    export struct DockableWindowState
+    {
+        std::uint32_t id{};
+        DockableWindowMode mode{ DockableWindowMode::floating };
+        DockSlot dock_slot{ DockSlot::right };
+        FloatingWindowState floating{};
+        bool visible{ true };
+        bool initialized{};
+        bool active{};
+        bool detach_requested{};
+        bool close_requested{};
+        std::uint32_t focus_order{};
+    };
+
+    export struct DockableWindowOptions
+    {
+        std::string_view title{};
+        WidgetBounds docked_frame{};
+        FloatingWindowOptions floating{};
+        Vec2 viewport_size{};
+        float title_bar_height{ 30.0f };
+        float content_padding{ 6.0f };
+        float action_button_width{ 72.0f };
+        float action_button_gap{ 4.0f };
+        bool allow_dock{ true };
+        bool allow_float{ true };
+        bool allow_detach{ true };
+        bool allow_close{ true };
+        DockSlot fallback_dock_slot{ DockSlot::right };
+    };
+
+    export struct DockableWindowInput
+    {
+        Vec2 mouse_position{};
+        bool mouse_down{};
+        bool mouse_pressed{};
+        bool mouse_released{};
+        DockableWindowAction requested_action{ DockableWindowAction::none };
+        DockSlot requested_dock_slot{ DockSlot::none };
+    };
+
+    export struct DockableWindowChrome
+    {
+        WidgetBounds frame{};
+        WidgetBounds title_bar{};
+        WidgetBounds content{};
+        WidgetBounds dock_button{};
+        WidgetBounds float_button{};
+        WidgetBounds detach_button{};
+        WidgetBounds close_button{};
+        bool visible{};
+        bool hovered{};
+        bool title_hovered{};
+        bool dock_hovered{};
+        bool float_hovered{};
+        bool detach_hovered{};
+        bool close_hovered{};
+        bool active{};
+    };
+
+    export struct DockableWindowResult
+    {
+        DockableWindowChrome chrome{};
+        DockableWindowMode mode{ DockableWindowMode::floating };
+        DockableWindowAction action{ DockableWindowAction::none };
+        DockSlot dock_slot{ DockSlot::none };
+        bool changed{};
+        bool focused{};
+        bool dock_requested{};
+        bool float_requested{};
+        bool detach_requested{};
+        bool close_requested{};
+    };
+
     export void begin_modal_input_capture(Vec2 position, Vec2 size) noexcept;
+    export void block_input_until_clear() noexcept;
     export void clear_modal_input_capture() noexcept;
 
     export struct SegmentedButtonSpec
@@ -274,6 +435,7 @@ namespace epochnamespace::gui
     export void push_input_for_context(const core::Context* ctx, const InputEvent& e) noexcept;
     export int consume_mouse_wheel_delta() noexcept;
     export void cleanup_context(const core::Context* ctx) noexcept;
+    export void refresh_context_resources(const core::Context* ctx) noexcept;
     export bool render_deferred_batch(core::Context* ctx) noexcept;
     export bool render_top_layer_batch(core::Context* ctx) noexcept;
     export std::uint64_t deferred_batch_generation(const core::Context* ctx) noexcept;
@@ -299,7 +461,21 @@ namespace epochnamespace::gui
     export void end_top_layer() noexcept;
     export void begin_modal_window(const ModalWindowOptions& options) noexcept;
     export void end_modal_window() noexcept;
+    export FloatingWindowResult begin_floating_window(
+        FloatingWindowState& state,
+        const FloatingWindowOptions& options) noexcept;
+    export void end_floating_window() noexcept;
+    export DockableWindowResult update_dockable_window(
+        DockableWindowHostState& host,
+        DockableWindowState& state,
+        const DockableWindowOptions& options,
+        const DockableWindowInput& input) noexcept;
+    export void focus_dockable_window(
+        DockableWindowHostState& host,
+        DockableWindowState& state) noexcept;
     export WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept;
+    export void panel_rect(Vec2 position, Vec2 size) noexcept;
+    export void titlebar_rect(Vec2 position, Vec2 size) noexcept;
     export void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active) noexcept;
     export std::span<const ThemePreferenceChoice> theme_preference_choices() noexcept;
     export std::string_view theme_preference_label(ThemePreference preference) noexcept;

@@ -57,9 +57,10 @@ contracts instead of drift.
   cleanup. The Linux Clang full-engine lane also configures, builds, and passes
   `ctest` with the hosted `linux-clang-engine` flags after the SFML 2/3
   compatibility boundary. Staged Windows and Linux packages both report
-  `Epoch v0.87.14` via `--version` after the OpenGL GUI sprite coordinate fix,
-  updater modal stabilization, and OpenGL modal/top-layer batch composition
-  fix.
+  `Epoch v0.87.15` via `--version` after the OpenGL GUI sprite coordinate fix,
+  updater modal stabilization, OpenGL modal/top-layer batch composition fix,
+  toolbar-owned context selection, and the C++23 module-backed `EpochGui`
+  static-library split.
 
 ## Allowed Source Areas
 
@@ -76,6 +77,43 @@ contracts instead of drift.
 - System Info renderer capability reporting if existing code supports it
 - `Engine/docs/engine/renderer_feature_matrix.md`
 - `Changes/roadmap.md`
+
+## Source Slice Ownership
+
+High-output work on this gate should land buildable code slices, not stop at
+inventory. Split work by ownership when using subagents:
+
+- descriptor/resource contract slice:
+  `render.device` handles/descriptors, backend requirements, sampled RTT
+  ownership records, and destroy/allocation contracts
+- graph/binding slice:
+  `render.graph` compile/bind validation, render-pass read/write resolution,
+  sampler/material slot correctness, and contract harness assertions
+- proof consumer slice:
+  `render.arcade` and `package.registry` declarations for
+  `engine_arcade.screen`, cabinet graph passes, and package-visible resource
+  requirements
+- OpenGL-family native slice:
+  OpenGL FBO/texture/sampler/depth hooks plus SDL3/SFML3/Raylib runtime-gated
+  native resource adapters, each kept in its backend-owned files
+- capability/status slice:
+  System Info and renderer matrix truth so `Present` is never claimed from
+  descriptor-only or no-runtime code
+  - promote capability reporting beyond booleans: distinguish descriptor
+    contract, build-only graph proof, hook readiness, live native allocation
+    readiness, and presentation proof
+  - DirectX/Vulkan sampled-RTT rows stay `Partial`/`Missing` until real
+    `render.device_*` native implementations exist
+  - OpenGL-family rows must separate hook factory readiness from allocation in
+    a live context
+  - SDL3/SFML3/Raylib rows must keep no-runtime refusal separate from live
+    runtime allocation support
+- build/metadata slice:
+  CMake, MSVC project/filter, and focused docs/changelog updates after the code
+  builds
+
+Run subagents only on disjoint slices with clear file ownership. The main agent
+keeps the integration path and final build proof.
 
 ## Forbidden Source Areas
 

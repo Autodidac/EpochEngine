@@ -25,9 +25,86 @@ after choosing the current source gate from `Changes/active_pass.md`.
 - Software is a debug/safe-launch fallback, not production parity.
 - All production contexts need shared visual palette, object colors, opacity,
   helper colors, and GUI theme inputs from the central spine.
-- Floating GUI/tool panes should become dockable/undockable context windows that
-  clone the selected backend family by default. Mixed-backend grids are
+- Floating GUI/tool panes are optional editor/tool host routes. Desktop editor
+  builds can present them as dockable/undockable context windows that clone the
+  selected backend family by default; games, mobile apps, console targets, and
+  headless tools should be able to omit those routes while still using the
+  portable `EpochGui` layout/state library. Mixed-backend grids are
   diagnostic/preview mode, not normal editor workflow.
+- Context selection must become a real session/backend handoff, not UI theater.
+  The editor toolbar combobox should:
+  - reflect the active context each frame
+  - keep only one live backend context as the editor owner during normal use;
+    other duplicate editor sessions in a diagnostic grid should park back to the
+    launcher/menu after handoff
+  - focus and restore an already-live context of the selected backend when it
+    exists
+  - create a replacement single editor context when the selected backend is
+    compiled but not live, restore the captured editor state into it, then close
+    the old source context after restore instead of opening a side editor shell
+  - fail closed with visible status when no selected backend can be created or
+    restored
+  - capture current editor state before handoff and restore it into the target
+    context when the target enters the session loop
+  - treat explicit unavailable backends as failures, never as permission to
+    silently substitute the priority/default backend
+  - distinguish request-posted, window/context-created, session-entered,
+    snapshot-restored, and frame-present evidence
+  - log snapshot capture/restore failures visibly and avoid success claims when
+    state handoff did not complete
+  - log unsupported/missing backend cases plainly instead of opening the wrong
+    shell or pretending the switch happened
+- Floating GUI and routed GUI windows are individual GUI containers. Current
+  pane popouts should start from real pane title-bar drag/release gestures and
+  open cloned routed context panels (`pane.outliner`, `pane.inspector`,
+  `pane.console`, `pane.ai_chat`). The Window menu owns show/hide/reset only.
+  Optional native routes such as `floating.gui` remain host infrastructure, not
+  another full editor and not the context picker. Future routes should be
+  concrete panels such as asset browser, code editor, build/output, or AI
+  visualizer.
+  Successful pane routes must hide the source pane in the original editor,
+  restore it on Dock Back, Close, or native window close, and refresh routed
+  GUI/font upload state before the first cloned-panel frame so font smearing
+  after spawn fails validation.
+- Redocking must grow into a professional docking guide system, not a vague
+  parent-rect drop. Add visible dock glyph/chrome controls on routed popout
+  windows and MSVC/Unreal-style guide zones so panes can redock into explicit
+  left/right/top/bottom/center slots, with the cloned routed context closing
+  cleanly after the original docked pane is restored.
+- SFML editor context handoff needs a dedicated stabilization pass. The toolbar
+  switch path is currently guarded because SFML proxy/native ownership can crash
+  during backend switching; future work should make SFML save/restore, GUI
+  resource refresh, proxy host/child lifetime, and focus/redock ownership safe
+  before re-enabling SFML as a normal editor handoff target.
+- Raylib editor context handoff is guarded for the same release-stability
+  reason. Its owner-thread native window/context path needs explicit
+  save/restore, focus, GUI resource refresh, and source-context shutdown proof
+  before Raylib becomes a normal toolbar handoff target.
+- Context implementation work should be split by source ownership when using
+  agents: one lane for session/window host code, one for editor route/UI
+  integration, one for backend capability truth, one for reusable GUI library
+  primitives, and one for MSVC/CMake/standalone mirror metadata. Do not ask
+  multiple agents to edit the same file family at the same time.
+- Daily implementation output target is roughly 9.2k lines of useful
+  source/docs/test delta when the operator asks for high-output mission flesh.
+  Prefer many bounded production slices with build evidence over long analysis,
+  summaries, placeholders, or fake UI.
+- Add background context scoring for normal editor runtime selection. The engine
+  should passively measure available single-context editor backends over time
+  with comparable workloads, record stability/performance/user-visible evidence,
+  and recommend the best default editor context without forcing restarts during
+  normal work. Multicontext diagnostic grids must be excluded from this runtime
+  scoring because concurrent panes distort FPS, timing, memory, input latency,
+  and backend contention; they remain diagnostics only, not data for automatic
+  default-context choice.
+- `Engine/include/epoch/context/passive_context_scoring.hpp` owns the portable
+  passive scoring model. Samples must be explicitly single-context before they
+  can score; multicontext, diagnostic-grid, and runtime-probe evidence is
+  rejected at the API boundary so automated default-context advice cannot learn
+  from artificial contention or launched probes.
+- The editor feeds that scorer only from passive timing snapshots. System Info
+  and the Systems dock may display the current score/recommendation, but the
+  scorer does not switch contexts, open windows, or launch probes by itself.
 
 ## GUI And Editor Workflow
 
@@ -35,6 +112,17 @@ after choosing the current source gate from `Changes/active_pass.md`.
   right-click context menus, copy/paste, word wrap, scroll bounds, modal focus,
   progress bars, list rows, tabs, docking chrome, theme tables, and floating
   windows.
+- `EpochGui` is the portable C++23 module/static-library layer. It owns OOP
+  layout/state controllers and backend-neutral data. It must not require native
+  popout windows, editor project state, renderer contexts, or OS-specific host
+  code.
+- `engine.gui` is the engine adapter. It owns input translation, theme/font
+  state, clipping, deferred GUI batches, top-layer replay, and renderer-facing
+  widget drawing.
+- Desktop editor/tool products may include routed native floating hosts and
+  docking. Games, mobile apps, console targets, generated software outputs, and
+  headless tools should be able to exclude those host routes while keeping the
+  reusable controls they need.
 - Preserve the proven draw model. Command menus and modals stay above the scene,
   close/deselect predictably, and must not reintroduce OpenGL flicker.
 - Modal, dropdown, progress, and timeline surfaces share the same GUI containment

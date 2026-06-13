@@ -96,6 +96,18 @@ namespace epochnamespace::previewgrid
         }
     }
 
+    export struct CameraRigSnapshot
+    {
+        bool valid{ false };
+        CameraMode mode{ CameraMode::Editor };
+        Vec3 focus{ 0.0f, 0.0f, 0.0f };
+        Vec3 position{ 0.0f, 1.8f, 6.0f };
+        float yaw_degrees = -135.0f;
+        float pitch_degrees = -28.0f;
+        float distance = 13.5f;
+        std::uint64_t revision = 1;
+    };
+
     export [[nodiscard]] inline Vec3 subtract(Vec3 lhs, Vec3 rhs) noexcept
     {
         return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z };
@@ -359,6 +371,33 @@ namespace epochnamespace::previewgrid
                 ++rig.revision;
         }
 
+        [[nodiscard]] inline CameraMode sanitize_camera_mode(CameraMode mode) noexcept
+        {
+            switch (mode)
+            {
+            case CameraMode::FPS:
+            case CameraMode::Canvas2D:
+            case CameraMode::Editor:
+                return mode;
+            default:
+                return CameraMode::Editor;
+            }
+        }
+
+        [[nodiscard]] inline float finite_or(float value, float fallback) noexcept
+        {
+            return std::isfinite(value) ? value : fallback;
+        }
+
+        [[nodiscard]] inline Vec3 finite_vec_or(Vec3 value, Vec3 fallback) noexcept
+        {
+            return Vec3{
+                finite_or(value.x, fallback.x),
+                finite_or(value.y, fallback.y),
+                finite_or(value.z, fallback.z)
+            };
+        }
+
         [[nodiscard]] inline Camera camera_from_rig(const CameraRigState& rig) noexcept
         {
             const Vec3 worldUp{ 0.0f, 1.0f, 0.0f };
@@ -405,6 +444,34 @@ namespace epochnamespace::previewgrid
             const void* const rigKey = normalize_camera_key(ctxKey);
             auto [it, inserted] = g_cameraRigs.try_emplace(rigKey, make_default_rig(CameraMode::Editor));
             return it->second;
+        }
+
+        [[nodiscard]] inline CameraRigSnapshot snapshot_from_rig(const CameraRigState& rig) noexcept
+        {
+            return CameraRigSnapshot{
+                .valid = true,
+                .mode = sanitize_camera_mode(rig.mode),
+                .focus = rig.focus,
+                .position = rig.position,
+                .yaw_degrees = rig.yawDegrees,
+                .pitch_degrees = rig.pitchDegrees,
+                .distance = rig.distance,
+                .revision = rig.revision
+            };
+        }
+
+        [[nodiscard]] inline CameraRigState rig_from_snapshot(const CameraRigSnapshot& snapshot) noexcept
+        {
+            CameraRigState rig = make_default_rig(sanitize_camera_mode(snapshot.mode));
+            rig.focus = finite_vec_or(snapshot.focus, rig.focus);
+            rig.position = finite_vec_or(snapshot.position, rig.position);
+            rig.yawDegrees = finite_or(snapshot.yaw_degrees, rig.yawDegrees);
+            rig.pitchDegrees = (std::clamp)(finite_or(snapshot.pitch_degrees, rig.pitchDegrees), -80.0f, 80.0f);
+            const float minDistance = rig.mode == CameraMode::Canvas2D ? 6.0f : 0.0f;
+            const float maxDistance = rig.mode == CameraMode::Canvas2D ? 64.0f : 96.0f;
+            rig.distance = (std::clamp)(finite_or(snapshot.distance, rig.distance), minDistance, maxDistance);
+            rig.revision = snapshot.revision == 0 ? 1 : snapshot.revision;
+            return rig;
         }
 
         struct Geometry
@@ -475,6 +542,30 @@ namespace epochnamespace::previewgrid
         std::shared_lock lock(detail::g_cameraRigMutex);
         const auto it = detail::g_cameraRigs.find(rigKey);
         return it != detail::g_cameraRigs.end() ? it->second.mode : CameraMode::Editor;
+    }
+
+    export [[nodiscard]] inline CameraRigSnapshot capture_camera_rig_snapshot(const void* ctxKey) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return {};
+
+        std::shared_lock lock(detail::g_cameraRigMutex);
+        const auto it = detail::g_cameraRigs.find(rigKey);
+        if (it == detail::g_cameraRigs.end())
+            return detail::snapshot_from_rig(detail::make_default_rig(CameraMode::Editor));
+        return detail::snapshot_from_rig(it->second);
+    }
+
+    export inline bool restore_camera_rig_snapshot(const void* ctxKey, const CameraRigSnapshot& snapshot) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey || !snapshot.valid)
+            return false;
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        detail::g_cameraRigs[rigKey] = detail::rig_from_snapshot(snapshot);
+        return true;
     }
 
     export inline void set_camera_mode(const void* ctxKey, CameraMode mode) noexcept
@@ -581,8 +672,15 @@ namespace epochnamespace::previewgrid
         if (!rigKey)
             return;
 
-        std::unique_lock lock(detail::g_objectMarkerMutex);
-        detail::g_objectMarkers.erase(rigKey);
+        {
+            std::unique_lock lock(detail::g_objectMarkerMutex);
+            detail::g_objectMarkers.erase(rigKey);
+            detail::g_lastMarkerHits.erase(rigKey);
+        }
+        {
+            std::unique_lock lock(detail::g_cameraRigMutex);
+            detail::g_cameraRigs.erase(rigKey);
+        }
     }
 
     export [[nodiscard]] inline Camera camera_for(const void* ctxKey) noexcept

@@ -1,5 +1,168 @@
 # Epoch Changelog
 
+## [v0.87.26]
+- Extended the editor context handoff guard to Raylib so selecting Raylib from
+  the toolbar fails closed with visible status instead of entering the unstable
+  native owner-thread switch path.
+
+## [v0.87.25]
+- Guarded SFML editor context handoff in the toolbar selector so switching to
+  or away from SFML fails closed with visible status instead of taking the app
+  down through the unstable SFML proxy-window ownership path.
+
+## [v0.87.24]
+- Fixed the toolbar context dropdown disappearing after the frame-end top-layer
+  move by allowing queued select popups to render after their owner window has
+  ended, while still requiring a live GUI context.
+
+## [v0.87.23]
+- Deferred GUI select-box popup drawing to the frame-end top layer so toolbar
+  context choices no longer render behind the 3D scene or lower editor panels.
+- Routed pane drag-redock now restores the original docked editor pane and
+  shuts down the cloned routed context instead of leaving a background context
+  embedded in the host.
+- Docked replacement editor contexts now start with docked window state instead
+  of carrying the floating-window flag from detached popouts.
+
+## [v0.87.22]
+- Context selection now creates a docked replacement editor context when the
+  requested backend is compiled but not already live, restores the captured
+  editor state into the replacement, and closes the source context after restore.
+- The 3D scene center now uses the GUI viewport's opaque titlebar, and the
+  embedded video timeline strip paints an opaque panel/title band to stop
+  transparent edge flicker.
+- Roadmap and mission cache now record the 9.2k LOC/day high-output expectation
+  as a production implementation-rate target backed by build evidence.
+
+## [v0.87.21]
+- Isolated OpenGL GUI atlas textures and quad pipeline state per native GL
+  context so routed popout panes do not corrupt the main/editor font renderer.
+- Routed native GUI popouts now remember the editor host as their dock target
+  and can enter the same titlebar drag/redock path as multicontext windows.
+
+## [v0.87.20]
+- Added editor-owned detached pane route state so successful World Outliner,
+  Inspector, Console Dock, and AI Chat popouts hide their docked source pane
+  while the routed native window is open.
+- Added routed pane Dock Back/Close restoration paths and native-close cleanup
+  so closing or docking a popout restores the source pane instead of leaving the
+  editor layout in a detached limbo.
+- Routed GUI contexts now refresh their GUI/font upload state before their
+  first routed frame, forcing the spawned native context to rebuild its own GUI
+  resources instead of inheriting stale atlas state.
+
+## [v0.87.19]
+- Replaced the editor's fake one-pixel menu-blocking rectangle with an explicit
+  GUI input-block state so open command menus mute toolbar, scene, and dock
+  controls behind them until the top-layer menu body is ready to receive input.
+- Removed pane-popout commands from the Window menu. The Window menu now owns
+  pane visibility and layout reset, while pane detachment starts from real pane
+  title-bar drag/release gestures.
+- Changed pane popout initiation to a release-based drag/drop gesture so a
+  routed context is requested after the user drops the dragged pane title bar,
+  not immediately during the drag threshold crossing.
+- Updated the current GUI docs and verifier prompts around the new behavior:
+  Window menu show/hide/reset only, pane title bars for popout, and explicit
+  menu input ownership.
+
+## [v0.87.18]
+- Added real GUI theme choices for `System Light/Dark`, `Light`, and `Dark`.
+  System mode now resolves through the Windows app-theme preference instead of
+  always using the dark palette, and the current visual profile label is plain
+  `Epoch Dark Visuals` while a more refined professional Epoch theme remains
+  future work.
+- Fixed top menu input ownership: open command menus now block toolbar/content
+  controls behind them until the top-layer menu is drawn, and the Window menu
+  hit bounds now match all nine rendered rows so lower entries do not close
+  early or leak clicks into the editor.
+- Added drag-to-popout gestures on real editor pane title bars for World
+  Outliner, Inspector, Console Dock, and AI Chat. The menu route remains as a
+  fallback, but the production path now starts from the actual pane chrome.
+- Routed detached pane panels now force GUI overlay priority for their native
+  context so popout GUI batches stay on the intended top-layer path.
+
+## [v0.87.17]
+- Replaced the failed global Floating GUI menu test with context-routed popouts
+  for existing editor panes: World Outliner, Inspector, Console Dock, and AI
+  Chat now request cloned native context panels by route id.
+- Routed pane popouts restore a cloned editor snapshot into the new context so
+  they show the current project/entity/log/chat state instead of an empty
+  placeholder or another full editor shell.
+- Made editor context selection an exclusive owner handoff: opening the editor
+  from the launcher affects only the clicked context, and selecting a live
+  backend parks other duplicate editor sessions back to the launcher/menu.
+- Added layered renderer capability reporting for descriptor contracts, build
+  graph proof, hook readiness, live native allocation readiness, and presentation
+  proof so System Info stops collapsing sampled RTT into one misleading boolean.
+- Moved the editor context combobox out of the update/status strip into the
+  toolbar tool area and kept missing live context targets as visible fail-closed
+  status instead of fake switches.
+
+## [v0.87.16]
+- Source-only update lane line. The editor context combobox now treats only
+  already-live backend windows as switch targets; missing backends fail closed
+  with visible status instead of spawning another full editor/context-driver
+  window or leaving a fake selection behind.
+- Added engine-facing context-selection status feedback so request, already
+  active, live handoff, capture failure, restore failure, and missing-live-target
+  states are visible in System Info and the Output dock.
+- Kept `Window > Pop Out Floating GUI` as the only route that opens the routed
+  native floating GUI proof; toolbar context selection no longer shares that
+  detached-window path.
+- Added the portable passive context scoring API for future editor default
+  recommendations. It accepts only normal single-context samples and rejects
+  multicontext grids, diagnostic panes, and runtime probes before scoring.
+- Added `EpochGui` panel-host state primitives for docked, floating, popup, and
+  optional external-host requests without making native floating windows a
+  required dependency of the GUI library.
+- Wired passive context scoring into the editor timing path. System Info and the
+  Systems dock now show whether scoring is active or paused, reject multicontext
+  and routed/floating-panel samples, and report the best editor-default
+  recommendation only from accepted single-context observations.
+
+## [v0.87.15]
+- Separated floating GUI proof from backend context selection. Context choice
+  now lives in the editor toolbar combobox, while `Window > Floating GUI` opens
+  a reusable top-layer panel that captures input instead of clicking through to
+  the scene or docked controls.
+- Kept context switching in-process and non-persistent: selecting a backend no
+  longer opens the old Context Driver window, and live-target switching no
+  longer demotes the source editor session back to the launcher.
+- Changed the launcher `Switch Context` button into a live dock handoff only:
+  it cycles focus to another registered renderer context and logs plainly when
+  no alternate live context exists instead of opening the editor or a context
+  driver shell.
+- Made the editor toolbar context combobox report the real active backend each
+  frame, so unavailable selections do not linger as fake state.
+- Removed the OpenGL-only one-pixel scene viewport guard and switched viewport
+  bounds to floor/ceil coverage so fractional GUI layouts do not leave stale
+  edge pixels around the 3D scene.
+- Added a reusable `EpochGui` dockable-window state controller and engine
+  adapter surface for dock/float/focus/close transitions, then converted the
+  existing Floating GUI proof to use that model so the panel can dock into an
+  editor-owned host or float as a top-layer captured window without changing
+  backend frame order.
+- Routed `Window > Pop Out Floating GUI` through the native detached-context
+  window host as `floating.gui`, with its own title, sizing, and editor-owned
+  GUI content while context selection remains in the toolbar combobox.
+- Made the editor context combobox perform a real in-process handoff: it
+  focuses/restores an existing live backend context, or opens a new editor
+  context for that backend and restores the current editor snapshot into it
+  instead of silently faking the switch.
+- Tightened context handoff honesty: explicit unavailable backend selections now
+  fail closed instead of being substituted, posted native window requests are
+  logged separately from session restore, and snapshot capture/restore failures
+  no longer get swallowed as successful switches.
+- Documented floating/native GUI hosts as optional editor/tool integrations:
+  games, mobile apps, console targets, and headless tools can link the portable
+  `EpochGui` layout/state library without shipping detached-window routes.
+- Promoted `EpochGui` into a C++23 `epoch.gui` module static library with OOP
+  layout controllers (`FloatingWindowController`, `PopupLayoutController`,
+  `LayoutPrimitiveController`, and `DockLayoutController`) plus compatibility
+  headers for the current engine adapter.
+- Added standalone CMake/MSVC module metadata for `Autodidac/EpochGui` and
+  pushed the standalone repo setup/module conversion on `main`.
+
 ## [v0.87.14]
 - Fixed the OpenGL modal composition path so Package Manager, update dialogs,
   settings/about modals, and dropdown top layers replay from the same deferred

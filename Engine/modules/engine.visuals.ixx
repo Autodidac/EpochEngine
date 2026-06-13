@@ -21,7 +21,7 @@ namespace epochnamespace::visuals
 
     export [[nodiscard]] constexpr std::string_view active_profile_name() noexcept
     {
-        return "Epoch Professional Dark";
+        return "Epoch Dark Visuals";
     }
 
     export [[nodiscard]] constexpr std::string_view parity_gate() noexcept

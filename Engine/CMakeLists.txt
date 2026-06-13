@@ -223,6 +223,28 @@ if(EPOCH_CI_HEADLESS_ONLY)
     return()
 endif()
 
+add_library(epoch_gui STATIC
+    src/gui/dockable_window.cpp
+    src/gui/dock_layout.cpp
+    src/gui/floating_window.cpp
+    src/gui/panel_host.cpp
+    src/gui/popup_layout.cpp
+)
+
+target_sources(epoch_gui PUBLIC
+    FILE_SET epoch_gui_modules TYPE CXX_MODULES
+        BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/lib/EpochGui/modules
+        FILES ${CMAKE_CURRENT_SOURCE_DIR}/lib/EpochGui/modules/epoch.gui.ixx
+)
+
+target_include_directories(epoch_gui PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+epoch_apply_cxx_dialect(epoch_gui)
+epoch_apply_warnings(epoch_gui)
+epoch_apply_sanitizers(epoch_gui)
+
 set(EPOCH_VERSION_OVERRIDE_MAJOR "" CACHE STRING "Override engine version major for packaging builds")
 set(EPOCH_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override engine version minor for packaging builds")
 set(EPOCH_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override engine version revision for packaging builds")
@@ -462,6 +484,8 @@ target_include_directories(epoch PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stb
 )
+
+target_link_libraries(epoch PRIVATE epoch_gui)
 
 find_path(CGLTF_INCLUDE_DIR cgltf.h)
 if(CGLTF_INCLUDE_DIR)

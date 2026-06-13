@@ -58,6 +58,11 @@
   <ImportGroup Label="Shared">
     <Import Project="..\..\Engine.vcxitems" Label="Shared" />
   </ImportGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\lib\EpochGui\EpochGui.vcxproj">
+      <Project>{7b41a9b2-4b7e-4b5d-9b39-68d2408bca90}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>

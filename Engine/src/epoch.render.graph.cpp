@@ -399,6 +399,10 @@ namespace epoch
         for (auto& asset : g.render_texture_assets)
         {
             asset.backend = dev.create_render_texture_asset(asset.desc);
+            const bool satisfiesRequirements = asset.backend.satisfies(asset.plan.backend_requirements);
+
+            if (!satisfiesRequirements)
+                continue;
 
             if (GraphTexture* texture = resolve_texture(asset.color_texture))
             {

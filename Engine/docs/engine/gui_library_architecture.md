@@ -53,6 +53,12 @@ make the outside-click guard close a menu while its drawn body is still being
 interacted with, which looks like command-menu flicker even when the renderer
 order is correct.
 
+When a top menu is open, normal toolbar and pane controls behind it must be
+input-muted until the top-layer menu body is rendered. It is not enough to draw
+the menu above the scene; click ownership must also prevent toolbar tabs,
+context selectors, scene widgets, and dock controls from consuming the same
+press/release before the menu item sees it.
+
 Outside-click dismissal is input-modal, not left-button-only. Command menus and
 select boxes must drop focus on any click outside their active bounds, including
 right-clicks used to open context menus elsewhere, so stale menu capture cannot
@@ -91,10 +97,11 @@ replay pass.
   ordering. Theme preference labels, option data, preference resolution, and
   scoped theme application belong to `engine.gui`; editor surfaces may store the
   selected preference but must not recreate theme tables in domain code. Current
-  exposed choices are Follow System Dark Mode, Professional Dark, Classic
-  Launcher, Midnight Blue, Ember Forge, Forest Terminal, and Aurora Steel;
-  Follow System Dark Mode resolves to the dark tool palette until a real
-  platform light/dark palette bridge lands.
+  exposed choices are `System Light/Dark`, `Light`, and `Dark`. System mode must
+  resolve through platform app-theme preference when available and fall back to
+  the dark palette on platforms without an OS light/dark bridge. More branded
+  Epoch themes such as a future professional dark style are palette extensions,
+  not replacements for the three basic choices.
 - Cross-backend visual parity starts in `engine.visuals`. Frame clears, scene
   clears, object colors, selection colors, look markers, and editor-only opacity
   factors are shared there so OpenGL, Vulkan, DirectX, Raylib, SDL, and SFML can
@@ -190,6 +197,18 @@ mixed-backend grids are reserved for explicit diagnostics or accurate-preview
 comparison. GUI primitives must therefore stay backend-neutral while the editor
 host owns which renderer family a pane belongs to.
 
+Desktop editor/tool builds may opt into native routed pane popouts. A valid
+popout starts from real pane chrome with a title-bar drag/release gesture,
+clones the current editor pane state into a detached context route, captures its
+own input, hides the docked source pane while the route is open, restores that
+source pane on Dock Back, Close, or native-window close, and keeps GUI overlay
+priority active in that routed context. The routed context must refresh GUI/font
+resource upload state before its first panel frame so cloned panes do not inherit
+stale atlas bindings. The Window menu manages pane visibility and layout reset;
+it is not the primary pane-detach surface. Games,
+mobile apps, console targets, and headless tools must be able to omit the native
+floating/detached host while still linking the portable GUI primitives.
+
 ## Artifact And Smear Guard
 
 Backends consume GUI sprites as pixel-space rectangles. Shared GUI code should
@@ -253,13 +272,158 @@ Do not split files only for aesthetics. The safe code split is:
 4. Build MSBuild Debug/Release and the active CMake preset before marking the
    split complete.
 
-Until that split is fully verified, `Engine/src/engine.gui.cpp` remains the
-canonical implementation file and this document is the contract for keeping new
-GUI work library-shaped.
+`EpochGui` is now a real linkable static-library target for backend-neutral
+layout primitives under `Engine/include/epoch/gui` and `Engine/src/gui`, with
+standalone mirror metadata in `Engine/lib/EpochGui` for `Autodidac/EpochGui`.
+Keep `engine.gui` as the engine module/API adapter around rendering, input,
+theme, text, and atlas/backend replay; keep portable math/control state in
+`EpochGui` first.
 
-The next ownership step is a real linkable GUI target, not just more code inside
-the editor. Keep `engine.gui` as the public module/API, then split reusable
-primitives, layout/docking, text/clipboard, progress bars, modal chrome, and
-backend replay support into a separately linked static/shared object target only
-when CMake, MSVC project files, filters, and all active backend consumers are
-updated and validated together.
+The current reusable payload includes floating-window layout, popup/dropdown
+layout, dock-layout math, dockable-window host/action state, splitters,
+progress-bar layout, and selectable-list row math. The current production
+editor route uses real pane title bars for detach requests; old generic
+Floating GUI proof routes are infrastructure only. The next safe conversion
+batch is native routed GUI pane redock, modal sizing/action rows, closable
+panels with scroll bodies, and Package Manager action rows before touching
+top-layer menu composition.
+
+Floating/native GUI hosts are optional integration features, not required
+`EpochGui` payload. Games, mobile apps, console targets, headless tools, and
+other constrained products can link only the backend-neutral layout/state
+library and omit detached-window routes, desktop docking chrome, and editor
+panel hosts entirely. The engine/editor adapter owns route ids such as
+`floating.gui` and any native window/context driver needed to present them; the
+static library must remain usable when those host capabilities are absent.
+
+## Portable Library Contract
+
+`EpochGui` is the reusable library, not the editor shell. Its public payload is
+allowed to know about rectangles, focus ids, layout controllers, theme-neutral
+state, window modes, dock slots, scroll offsets, selected rows, text edit state,
+and user-intent actions. It must not require an engine runtime, a renderer
+backend, a Win32/X11 native window, editor project state, package manager state,
+AI tooling, or a particular input system in order to compile.
+
+This split gives future products a clear choice:
+
+| Target kind | May link `EpochGui` | May use `engine.gui` adapter | May include native floating hosts | Default expectation |
+| --- | --- | --- | --- | --- |
+| Epoch desktop editor | Yes | Yes | Yes | Full panes, routed popouts, modal/top-layer replay, context handoff |
+| Desktop tool/software app | Yes | Usually | Optional | App chooses whether popouts/docking are worth the platform cost |
+| Game runtime | Yes | Optional | Usually no | In-game HUD/menu primitives without editor panels or detached windows |
+| Mobile app/game | Yes | Optional, platform-gated | No by default | Single-surface touch UI, no desktop window assumptions |
+| Console game/app | Yes | Optional, platform-gated | No | Controller-safe menus, no mouse/window chrome dependency |
+| Headless/server/test | Usually no, but buildable | No | No | CLI/log/test evidence only |
+
+Portable GUI code should therefore expose intent rather than perform host work.
+For example, a dockable-window controller can report `dock_requested`,
+`float_requested`, `detach_requested`, `focus_requested`, and `close_requested`.
+The editor adapter decides whether `detach_requested` maps to a native top-level
+window, an in-app floating panel, a no-op with status text, or a hidden build
+flag in a product that does not support it.
+
+## Host Capability Tiers
+
+There are three different concepts that must not be collapsed into one:
+
+1. **Portable control state**: layout, focus, hit-test decisions, scroll state,
+   selected rows, text edit state, dock/float action state, and reusable
+   controller classes. This belongs in `EpochGui`.
+2. **Engine GUI adapter**: renderer submission, font atlas access, input event
+   translation, theme tables, deferred GUI batches, top-layer replay, and editor
+   bridge functions. This belongs in `engine.gui`.
+3. **Native/application host**: OS windows, parented backend child panes,
+   detached routed contexts, redock/undock window movement, app lifecycle,
+   platform permission checks, and product-specific inclusion flags. This
+   belongs in the editor/runtime host layer, not in `EpochGui`.
+
+When adding a GUI feature, first decide which tier owns each piece. A context
+menu's open/close/focus state can be portable. A context menu's glyph rendering
+and clipping are adapter work. A context menu that escapes into a separate
+desktop window is native-host work and must be optional.
+
+## Optional Feature Flags And Build Shape
+
+The source should keep preparing for these compile-time or target-profile
+boundaries even before all flags exist:
+
+- `EpochGui` core: always free of renderer and OS-window dependencies.
+- `engine.gui` desktop adapter: enabled for editor/tool builds with renderer
+  replay and font atlas ownership.
+- Editor dock host: enabled for desktop editor shells that need docked panes,
+  splitters, modals, menus, and inspector/workspace windows.
+- Detached/native route host: enabled only when the platform/app owns native
+  top-level windows and lifecycle evidence. `floating.gui` is one such route.
+- Product HUD/menu profile: enabled for games and apps that need buttons,
+  lists, tabs, progress, sliders, text entry, and modals but not editor panes.
+- Headless profile: may compile shared data structures for tests, but does not
+  initialize renderer/GUI host state.
+
+Do not make a game, mobile app, console app, or generated software target pay
+for desktop editor windowing just because it uses buttons or tabs. Conversely,
+do not make the editor reimplement controls just because a product profile may
+exclude the host that presents them.
+
+## Current Floating Panel And Route Contract
+
+World Outliner, Inspector, Console Dock, and AI Chat popouts start from their
+real pane title bars with a drag/release gesture. They use explicit pane route
+ids and a cloned editor snapshot so the new context presents one current pane
+rather than a second editor shell. A successful route marks that pane detached
+inside the editor layout, removes the source pane from the docked window, and
+restores it when the routed pane uses Dock Back, Close, or native window close.
+`Window` menu entries are reserved for show/hide, recovery docking, and layout
+reset so menu clicks do not stand in for the primary docking gesture.
+
+The first named optional native GUI route remains `floating.gui`, but it is
+infrastructure for future low-level GUI host tests, not the current menu path,
+not a second editor shell, and not the context-selection UI. Its contract is:
+
+- The engine host may map `floating.gui` to an "Epoch Floating GUI" title and
+  route-specific default size when a desktop product enables native routed
+  panels.
+- The `WindowData::guiRoute` field tells the session loop to run
+  `editor_run_context_panel(ctx, route)` instead of the normal editor surface.
+- `editor_run_context_panel` branches on the route id and draws compact panel
+  content for concrete pane ids. `floating.gui` remains a low-level host proof,
+  not the user-facing pane-popout route.
+- A native route captures input inside its own native/context window. It must
+  not steal clicks from the original editor window, leave the docked source pane
+  visible behind it, or pretend to redock before a real host move exists. The
+  safe redock path is close-and-restore until drag/drop host redocking is owned
+  by the native application tier.
+- The session loop refreshes GUI/font upload state for the routed context before
+  its first routed panel frame. Font corruption after spawning a pane means the
+  route did not receive an isolated atlas upload and must fail validation.
+- Backend selection remains in the editor toolbar combobox. A floating GUI
+  panel or route may display the active renderer as evidence, but it does not
+  own backend switching.
+
+Additional optional routes should follow the same visible status path. Good
+candidate names are concrete panel ids such as `asset.browser`, `code.editor`,
+`ai.visualizer`, and `build.output`. Avoid names that imply broad engine
+authority, hidden automation, or a whole duplicate editor.
+
+## Conversion Checklist For New GUI Work
+
+Before a new GUI surface is considered production progress, record the answers:
+
+- Which pieces belong in `EpochGui`, `engine.gui`, editor domain code, and
+  native/application host code?
+- Can a game or mobile target use the reusable controls without linking the
+  desktop popout host?
+- What happens when detach/popout is unsupported: hidden option, disabled
+  command, in-app panel fallback, or status log?
+- Does the control capture input only inside its drawn bounds?
+- Does it use existing font/theme/atlas/replay paths?
+- Does it keep OpenGL top-layer replay order unchanged unless the task is
+  explicitly a draw-model change?
+- Does it provide a useful status/error path rather than silently doing nothing?
+- Are CMake, MSVC projects, filters, and standalone `Autodidac/EpochGui`
+  metadata updated when the reusable library grows?
+- Did Debug and Release builds pass before the changelog claims the feature?
+
+This checklist is intentionally stricter than a visual mockup. Epoch should
+prefer one real control with correct ownership over three fake panels that only
+work in the current editor frame.

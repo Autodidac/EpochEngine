@@ -86,6 +86,18 @@ When the pass is multicontext-specific, validate:
 - if startup settle timing is under investigation, run both a normal startup
   and a maximize pass; the same hidden-wrapper contract must survive both
 - backend palette parity when clear colors should match
+- GUI theme parity: `System Light/Dark` must follow the OS app-theme preference
+  when available, while manual `Light` and `Dark` selections visibly change the
+  editor palette without changing only the native window chrome
+- command-menu input capture: open the Window menu, click every visible
+  show/hide/reset row, and reject the build if toolbar tabs, context selectors,
+  scene widgets, or dock controls behind the menu receive the same click
+- pane popout input: drag the real World Outliner, Inspector, Console Dock, and
+  AI Chat title bars far enough and release to request their routed native
+  popouts; verify the result is that pane's cloned content, not a second editor
+  shell or generic GUI test window. A successful popout must hide the source
+  pane in the original editor, restore it on Dock Back, Close, or native window
+  close, and preserve normal text/font rendering after the routed context spawns
 - Systems workspace graph clipping and pan/zoom behavior
 - Video Editor time controls, pacing diagnostics, and the bottom scene timeline
   strip when the pass touches the shared time spine
@@ -214,6 +226,9 @@ Expected smoke behavior:
 - if allowed helpers split text and vision strengths, keep the selected editor
   model as runtime parity and use the vision-capable helper for screenshot
   review, pane/layout checks, and color/parity triage
+- for GUI behavior changes, helper review prompts should explicitly check theme
+  mode names, menu click capture, detached pane identity, and whether any click
+  behind a visible menu fired a different command
 - run GUI harness sessions serially, not in parallel; parallel parented runs can
   contaminate drag/focus evidence and should not be treated as trustworthy
 - keep startup-render proof and dock/undock validation as separate harness passes:
@@ -307,6 +322,8 @@ The next honest automation step is to script:
 - launch from the asset-bearing output folder
 - wait for warmup
 - request engine-owned captures
+- exercise feature-specific GUI actions such as theme selection, Window-menu row
+  clicks, and pane-title drag/release popouts when those areas changed
 - verify expected files landed
 - close the runtime cleanly
 - optionally refresh the README proof when the version cadence or visible

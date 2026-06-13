@@ -9,6 +9,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ConsoleApplication1", "Engi
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "StaticLib1", "Engine\examples\StaticLib1\StaticLib1.vcxproj", "{BBA639B7-2B54-4E38-90AC-667FC3303475}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochGui", "Engine\lib\EpochGui\EpochGui.vcxproj", "{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}"
+EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HeadlessCI", "Engine\examples\HeadlessCI\HeadlessCI.vcxproj", "{6F3753E7-9693-4CB7-AB33-5D9025A4C1F4}"
 EndProject
 Global
@@ -35,6 +37,14 @@ Global
 		{BBA639B7-2B54-4E38-90AC-667FC3303475}.Release|x64.Build.0 = Release|x64
 		{BBA639B7-2B54-4E38-90AC-667FC3303475}.Release|x86.ActiveCfg = Release|Win32
 		{BBA639B7-2B54-4E38-90AC-667FC3303475}.Release|x86.Build.0 = Release|Win32
+		{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}.Debug|x64.ActiveCfg = Debug|x64
+		{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}.Debug|x64.Build.0 = Debug|x64
+		{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}.Debug|x86.ActiveCfg = Debug|Win32
+		{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}.Debug|x86.Build.0 = Debug|Win32
+		{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}.Release|x64.ActiveCfg = Release|x64
+		{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}.Release|x64.Build.0 = Release|x64
+		{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}.Release|x86.ActiveCfg = Release|Win32
+		{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}.Release|x86.Build.0 = Release|Win32
 		{6F3753E7-9693-4CB7-AB33-5D9025A4C1F4}.Debug|x64.ActiveCfg = Debug|x64
 		{6F3753E7-9693-4CB7-AB33-5D9025A4C1F4}.Debug|x64.Build.0 = Debug|x64
 		{6F3753E7-9693-4CB7-AB33-5D9025A4C1F4}.Debug|x86.ActiveCfg = Debug|Win32

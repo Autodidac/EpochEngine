@@ -118,10 +118,11 @@ the same engine-owned path.
   script, a build fragment, and script include fallback so the full engine
   surface stays real instead of roadmap-only promise text
 - an editor/project launcher profile is valid here as a prestep for choosing
-  projects, contexts, settings, and future automation flows
+  projects, switching among live renderer contexts, updates, and future
+  automation flows
 - that launcher should stay flat and direct: project entry, clean editor launch,
-  contexts/settings, updates, and quit belong there; layered game/puzzle menus
-  do not
+  live context focus handoff, updates, and quit belong there; layered
+  game/puzzle menus do not
 - the launcher may open project demos directly or preload a project before the
   editor, but it should not drift back into multiple menu layers or become a
   fake game shell
@@ -129,9 +130,11 @@ the same engine-owned path.
   its classic steel palette while the editor stays on the darker neutral tool
   palette, and any future theme selector should preserve that separation rather
   than forcing one skin across both shells
-- backend ownership should stay equally explicit: switching the live editor to a
-  different backend should tear down the inactive backend rather than leaving it
-  rendering off-screen or parked in the background
+- backend ownership should stay equally explicit: the editor toolbar combobox
+  reports the active backend, only claims a switch when a live target exists,
+  and does not persist unavailable backend selections as fake state
+- launcher context switching is not another editor or driver shell; it only
+  focuses another registered live dock and reports when none exists
 - `editor.scene.cpp` should own project profiles, script profiles, runtime
   scene ids, and seed entities
 - `editor.cpp` should act as the live shell over that scene/project data, not
@@ -487,10 +490,27 @@ the same engine-owned path.
 - GUI draw and hit testing should remain clipped to active panel content so
   buttons, rows, and text do not bleed over or steal input from the Perspective
   scene view.
-- borderless linked-context popouts are a future editor-shell feature, not a
-  hidden always-running backend. Each popped GUI container needs explicit
-  operator action, focus ownership, teardown, redock behavior, and evidence
-  logging before it becomes part of the normal workflow.
+- detached context windows are explicit optional panel hosts, not hidden
+  always-running backends. Real pane title-bar drag/release gestures route
+  existing panes such as World Outliner, Inspector, Console Dock, and AI Chat
+  into cloned native context panels. A successful route hides the docked source
+  pane until the routed pane closes, docks back, or receives native close
+  cleanup. The routed context refreshes GUI/font upload state before its first
+  panel frame so cloned panes do not inherit broken atlas state. The Window menu
+  owns show/hide/reset and emergency source-pane restore; it is not the primary
+  detach surface. Optional low-level routes such as `floating.gui` remain host
+  infrastructure, not the current user-facing feature. Backend selection stays
+  in the editor toolbar combobox. Additional GUI containers must use visible
+  request/status paths with focus ownership, teardown, and evidence logging.
+  Games, mobile apps, console targets, and headless tools may omit native host
+  routes entirely while still using the portable `EpochGui` layout library.
+  True drag/drop redock behavior remains a later native-host movement feature.
+- editor context selection is an in-process handoff, not a process restart. The
+  toolbar combobox focuses/restores an existing live backend context and parks
+  duplicate editor sessions back to the launcher/menu. If no live target exists,
+  it fails closed with visible status instead of opening the wrong shell,
+  restarting the engine, or changing only the label. This is still a desktop
+  editor/tool host workflow, not a requirement for game/mobile products.
 - time diagnostics should show the shared simulation clock state: pause/resume,
   scale, fixed-step cadence, accumulator, and simulated time
 - time diagnostics should also show the current frame step budget and the
@@ -500,6 +520,104 @@ the same engine-owned path.
   editor panning and the visible look spot stay stable across contexts
 - this surface should help unify renderer/backend behavior instead of becoming
   another debug text dump
+
+### Context Implementation Contract
+
+The editor has two separate ideas that must stay separate in code and UI:
+
+1. **Backend/context selection**: the editor toolbar combobox chooses the
+   renderer/context family for the editor session.
+2. **Floating/routed GUI containers**: pane title-bar drag/release gestures
+   present existing editor panes in their own cloned native/context windows.
+   Optional desktop host routes such as `floating.gui` can still exercise lower
+   level GUI hosting, but they are not the user-facing popout feature.
+
+Do not merge those ideas back into one "Context Driver" button. A context
+selection action may open or focus an editor context, but it must not open the
+floating GUI proof panel. A floating GUI route may show its renderer as evidence,
+but it must not own backend switching.
+
+Current source ownership:
+
+| Responsibility | Primary files/modules |
+| --- | --- |
+| Editor command/result payloads | `Engine/modules/editor.ixx` |
+| Toolbar context combobox and visible status | `Engine/src/editor.cpp` |
+| Editor state capture/restore for handoff | `Engine/src/editor.cpp` |
+| Session loop, live context discovery, handoff fallback | `Engine/src/engine.cpp` |
+| Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context.multiplexer.ixx`, `Engine/modules/context.window.ixx`, `Engine/src/engine.context.host.*.cpp` |
+| Reusable GUI layout state | `Engine/include/epoch/gui`, `Engine/src/gui`, `Engine/lib/EpochGui` |
+| Engine GUI adapter/render/input bridge | `Engine/modules/engine.gui.ixx`, `Engine/src/engine.gui.cpp` |
+
+Context switching acceptance:
+
+- the combobox label tracks the actual active backend, not stale desired state
+- choosing the active backend logs that it was kept and does not create windows
+- choosing another live backend focuses/restores that context, carries the
+  editor snapshot, and parks other duplicate editor sessions back to the
+  launcher/menu
+- choosing an available backend with no live editor context fails closed with
+  visible status; a future create-new-context path must report posted request,
+  window/context creation, session entry, snapshot restore, and frame-present
+  evidence separately before claiming success
+- an explicit backend request must fail closed when that backend is unavailable;
+  it must not silently substitute the priority/default backend
+- request evidence is staged: `OpenDetachedContextWindow == true` means a native
+  request was posted or accepted by the host, not that the window was created,
+  entered the session loop, restored editor state, or presented a valid frame
+- successful handoff claims require the later evidence state: window/context
+  created, session entered, snapshot restored, and focus/present path live
+- snapshot capture or restore failure must log visibly and must not be reported
+  as a complete context switch
+- choosing a backend that cannot be created fails closed with visible log/status
+  evidence
+- the launcher `Switch Context` action cycles/focuses live contexts only; it
+  must not open the editor or duplicate the context-driver proof window
+- no context switch persists across full engine restarts unless a future
+  profile setting explicitly owns that policy
+- no switch path may fake success by only changing labels
+
+Current platform truth:
+
+| Host | Missing-live-target behavior from combobox | Notes |
+| --- | --- | --- |
+| Windows desktop editor | Fail closed today | Live backend handoff is supported; missing targets report visible status instead of posting another editor/context-driver window. Future host-created contexts need staged evidence before success claims. |
+| Linux/WSL | Fail closed today | Single-context OpenGL remains the default proof path. |
+| Mobile/console/headless | Excluded unless a product host implements it | These targets should hide or reject native popout/context-create commands while keeping portable `EpochGui` controls available. |
+
+Background context selection is a separate future system. It should passively
+measure normal single-context editor sessions and recommend the best default
+backend based on stability, frame pacing, input latency, memory pressure,
+feature support, and user-visible evidence. It must not use parented
+multicontext diagnostic grids as scoring data, because simultaneous panes
+distort FPS, timing, memory, upload contention, and input ownership. Mixed
+backend grids remain comparison/diagnostic tools, not runtime truth for choosing
+the editor's default context.
+
+Floating/routed GUI acceptance:
+
+- route ids are explicit strings such as `floating.gui`, not overloaded window
+  titles
+- a routed GUI window runs `editor_run_context_panel(ctx, route)` and draws only
+  the requested panel content
+- `floating.gui` is a single GUI host proof with its own title, size, input
+  capture, close path, and status evidence
+- current editor pane popouts start from pane title-bar drag/release gestures
+  and use concrete pane routes such as `pane.outliner`, `pane.inspector`,
+  `pane.console`, and `pane.ai_chat`; native `floating.gui` remains optional
+  host infrastructure, not required for games, mobile apps, console apps, or
+  headless tools
+- route windows are optional desktop editor/tool features. If a product target
+  excludes native popouts, the command should be absent or report unsupported,
+  not create hidden shells
+- future redock/undock support must move through the native host layer and the
+  reusable `EpochGui` dockable-window action model together
+
+When this area is split across agents, keep file ownership disjoint: one agent
+may work on editor UI/status, another on session/window host code, another on
+`EpochGui` primitives/build metadata, and another on docs/build evidence. Do
+not run two workers against `editor.cpp` or `engine.cpp` simultaneously unless
+the write ranges are explicitly isolated.
 
 ## Naming and structure direction
 
@@ -866,6 +984,13 @@ Current editor-shell gaps:
   of raw parameters directly.
 - the GUI still needs context menus, popouts, dockable editor windows,
   persisted layout profiles, resize cursors, resize handles, and column controls
+  for desktop editor/tool builds; product targets that do not support native
+  floating hosts should exclude those routes instead of carrying hidden shells
+- editor theme selection is intentionally simple and user-facing: `System
+  Light/Dark` follows the platform app-theme preference when available, while
+  `Light` and `Dark` are manual choices. More branded/professional Epoch themes
+  should be added later as optional palettes, not as replacements for those three
+  basic choices.
 - global UI scaling should behave like normal desktop software, with explicit
   user scale/font controls instead of one hardcoded pixel density
 - separate editor windows/domains are still needed inside the application:
@@ -876,10 +1001,17 @@ Current editor-shell gaps:
   debug/error messages, capture diagnostics, and headless validation; Windows
   native rendering is now moving through the first DirectX/D3D11 slice, with
   D3D12 still future work.
-- borderless linked-context popouts should be built as explicit panel hosts for
-  GUI containers such as Inspector, Asset Browser, Code Editor, AI Visualizer,
-  and Build/Output. They must be operator-opened, visible, redockable, and
-  logged; they must not become hidden always-running model/control channels.
+- linked-context panel hosts should remain explicit GUI containers such as
+  Inspector, Asset Browser, Code Editor, AI Visualizer, and Build/Output. They
+  must be operator-opened, visible, closable, and logged; future redock support
+  should extend the same host contract instead of becoming hidden model/control
+  channels.
+- pane popouts are editor pane routes, not a duplicate editor shell and not a
+  generic test window. Dragging a real pane title bar may request a cloned routed
+  native context for that pane after release. Window menu entries manage pane
+  visibility and layout reset only. The detached pane must own input and GUI
+  overlay priority, and command menus must not let lower toolbar/content
+  controls consume clicks behind them.
 - self-iteration needs visual state, not only console rows. The first visible
   surface is the AI loop card visualizer; later passes should add packet replay,
   scene-state diff views, and a 3D model/weight visualization surface

@@ -5,7 +5,7 @@ set "ROOT=%~dp0"
 set "BIN=%ROOT%x64\Debug"
 set "EXE=%BIN%\EpochEditor.exe"
 
-if "%EPOCH_BACKEND%"=="" set "EPOCH_BACKEND=directx"
+if "%EPOCH_BACKEND%"=="" set "EPOCH_BACKEND=opengl"
 
 if not exist "%EXE%" (
     echo Missing debug executable:

@@ -1,0 +1,12 @@
+/build/
+/out/
+/.vs/
+/Debug/
+/Release/
+/x64/
+*.user
+*.obj
+*.lib
+*.pdb
+*.idb
+*.tlog

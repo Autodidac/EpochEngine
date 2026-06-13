@@ -50,6 +50,12 @@ rewrite disguised as progress.
 - New backend files should follow the current split shape: context bridge,
   state/lifetime, device/setup, preview rendering, GUI replay, and upload/capture
   bridges where applicable.
+- Cleanup passes should increase implementation clarity, not merely shuffle
+  metadata. A useful pass leaves moved or split code in an owned folder,
+  repaired includes/imports, synchronized CMake/MSVC/filter entries, and at
+  least one focused build proof. Use helper agents for include/project inventory
+  only when that lets the main pass land more source, not as a substitute for
+  the source move itself.
 - Source organization should support the editor domains directly: scene/game,
   assets, project/build, systems/perf, AI sandbox, package manager, scripting,
   and backend/runtime.
@@ -85,6 +91,13 @@ be wired into the editor. Console Dock content remains a compact evidence/log
 strip; it should not become the home for central project, systems, AI, package,
 or scripting controls. The detailed contract lives in
 `Engine/docs/engine/gui_library_architecture.md`.
+
+The GUI split now has two layers. Portable layout/state controllers belong in
+`Engine/include/epoch/gui`, `Engine/src/gui`, and `Engine/lib/EpochGui`.
+Rendering, input, font/theme, clipping, and deferred/top-layer replay stay in
+`engine.gui`. Native detached windows and context route lifecycles stay in the
+context host/session code. Do not hide native host behavior inside `EpochGui`,
+and do not hide generic widget behavior inside `editor.cpp`.
 
 ## Open organization risks
 

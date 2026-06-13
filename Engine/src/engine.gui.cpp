@@ -57,6 +57,9 @@ module;
 #include "framework.hpp"
 #endif
 
+#include "epoch/gui/dockable_window.hpp"
+#include "epoch/gui/floating_window.hpp"
+
 module engine.gui;
 
 import context.type;
@@ -199,6 +202,7 @@ namespace epochnamespace::gui
             TextureAtlas* runtimeSurfaceAtlas = nullptr;
 
             PaletteSprites defaultDark{};
+            PaletteSprites defaultLight{};
             PaletteSprites classicLauncher{};
             PaletteSprites midnightBlue{};
             PaletteSprites emberForge{};
@@ -336,12 +340,26 @@ namespace epochnamespace::gui
             bool showScrollbar = true;
         };
 
+        struct WindowFrameState
+        {
+            Vec2 cursor{};
+            Vec2 origin{};
+            Vec2 windowSize{};
+            Vec2 contentMin{};
+            Vec2 contentMax{};
+            std::string windowKey{};
+            std::uint64_t widgetSerial = 0;
+            bool insideWindow = false;
+        };
+
         static thread_local std::unordered_map<std::string, ScrollTextState> g_scrollTextStates{};
         static thread_local std::unordered_map<std::string, ScrollAreaState> g_scrollAreaStates{};
         static thread_local std::unordered_map<std::string, SelectBoxState> g_selectBoxStates{};
         static thread_local std::unordered_map<std::string, SourceEditorState> g_sourceEditorStates{};
         static thread_local std::unordered_map<const void*, EditBoxMenuState, PtrHash> g_editBoxMenuStates{};
         static thread_local std::vector<ScrollAreaFrame> g_scrollAreaStack{};
+        static thread_local std::vector<bool> g_floatingWindowTopLayerStack{};
+        static thread_local std::vector<WindowFrameState> g_windowFrameStack{};
 
         [[nodiscard]] static bool any_select_box_open() noexcept
         {
@@ -388,6 +406,7 @@ namespace epochnamespace::gui
             bool rightReleaseConsumed = false;
             int mouseWheelDelta = 0;
             bool modalInputCapture = false;
+            bool inputBlockedUntilClear = false;
             Vec2 modalInputMin{};
             Vec2 modalInputMax{};
 
@@ -413,6 +432,8 @@ namespace epochnamespace::gui
         {
             switch (g_frame.activeTheme)
             {
+            case ThemeVariant::DefaultLight:
+                return g_resources.defaultLight;
             case ThemeVariant::ClassicLauncher:
                 return g_resources.classicLauncher;
             case ThemeVariant::MidnightBlue:
@@ -427,6 +448,25 @@ namespace epochnamespace::gui
             default:
                 return g_resources.defaultDark;
             }
+        }
+
+        [[nodiscard]] static bool system_prefers_dark_palette() noexcept
+        {
+#if defined(_WIN32)
+            DWORD appsUseLightTheme = 1;
+            DWORD valueSize = sizeof(appsUseLightTheme);
+            const LSTATUS status = ::RegGetValueW(
+                HKEY_CURRENT_USER,
+                L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                L"AppsUseLightTheme",
+                RRF_RT_REG_DWORD,
+                nullptr,
+                &appsUseLightTheme,
+                &valueSize);
+            if (status == ERROR_SUCCESS)
+                return appsUseLightTheme == 0;
+#endif
+            return true;
         }
 
         [[nodiscard]] static bool rects_intersect(
@@ -526,6 +566,264 @@ namespace epochnamespace::gui
         {
             const auto ctxValue = reinterpret_cast<std::uintptr_t>(g_frame.ctx);
             return std::to_string(ctxValue) + "|" + std::string(id);
+        }
+
+        [[nodiscard]] static gui_lib::Vec2 to_lib(Vec2 v) noexcept
+        {
+            return { v.x, v.y };
+        }
+
+        [[nodiscard]] static Vec2 from_lib(gui_lib::Vec2 v) noexcept
+        {
+            return { v.x, v.y };
+        }
+
+        [[nodiscard]] static gui_lib::FloatingWindowState to_lib(const FloatingWindowState& state) noexcept
+        {
+            return gui_lib::FloatingWindowState{
+                .position = to_lib(state.position),
+                .size = to_lib(state.size),
+                .drag_offset = to_lib(state.drag_offset),
+                .resize_origin_mouse = to_lib(state.resize_origin_mouse),
+                .resize_origin_size = to_lib(state.resize_origin_size),
+                .open = state.open,
+                .initialized = state.initialized,
+                .dragging = state.dragging,
+                .resizing = state.resizing,
+                .close_pressed = state.close_pressed,
+                .focus_order = state.focus_order
+            };
+        }
+
+        static void from_lib(const gui_lib::FloatingWindowState& source, FloatingWindowState& state) noexcept
+        {
+            state.position = from_lib(source.position);
+            state.size = from_lib(source.size);
+            state.drag_offset = from_lib(source.drag_offset);
+            state.resize_origin_mouse = from_lib(source.resize_origin_mouse);
+            state.resize_origin_size = from_lib(source.resize_origin_size);
+            state.open = source.open;
+            state.initialized = source.initialized;
+            state.dragging = source.dragging;
+            state.resizing = source.resizing;
+            state.close_pressed = source.close_pressed;
+            state.focus_order = source.focus_order;
+        }
+
+        [[nodiscard]] static WidgetBounds from_lib(gui_lib::Rect rect) noexcept
+        {
+            return WidgetBounds{
+                .position = from_lib(rect.position),
+                .size = from_lib(rect.size)
+            };
+        }
+
+        [[nodiscard]] static gui_lib::Rect to_lib(WidgetBounds bounds) noexcept
+        {
+            return gui_lib::Rect{
+                .position = to_lib(bounds.position),
+                .size = to_lib(bounds.size)
+            };
+        }
+
+        [[nodiscard]] static gui_lib::DockSlot to_lib(DockSlot slot) noexcept
+        {
+            switch (slot)
+            {
+            case DockSlot::left: return gui_lib::DockSlot::left;
+            case DockSlot::right: return gui_lib::DockSlot::right;
+            case DockSlot::top: return gui_lib::DockSlot::top;
+            case DockSlot::bottom: return gui_lib::DockSlot::bottom;
+            case DockSlot::center: return gui_lib::DockSlot::center;
+            case DockSlot::none:
+            default: return gui_lib::DockSlot::none;
+            }
+        }
+
+        [[nodiscard]] static DockSlot from_lib(gui_lib::DockSlot slot) noexcept
+        {
+            switch (slot)
+            {
+            case gui_lib::DockSlot::left: return DockSlot::left;
+            case gui_lib::DockSlot::right: return DockSlot::right;
+            case gui_lib::DockSlot::top: return DockSlot::top;
+            case gui_lib::DockSlot::bottom: return DockSlot::bottom;
+            case gui_lib::DockSlot::center: return DockSlot::center;
+            case gui_lib::DockSlot::none:
+            default: return DockSlot::none;
+            }
+        }
+
+        [[nodiscard]] static gui_lib::DockableWindowMode to_lib(DockableWindowMode mode) noexcept
+        {
+            switch (mode)
+            {
+            case DockableWindowMode::docked: return gui_lib::DockableWindowMode::docked;
+            case DockableWindowMode::detached: return gui_lib::DockableWindowMode::detached;
+            case DockableWindowMode::floating:
+            default: return gui_lib::DockableWindowMode::floating;
+            }
+        }
+
+        [[nodiscard]] static DockableWindowMode from_lib(gui_lib::DockableWindowMode mode) noexcept
+        {
+            switch (mode)
+            {
+            case gui_lib::DockableWindowMode::docked: return DockableWindowMode::docked;
+            case gui_lib::DockableWindowMode::detached: return DockableWindowMode::detached;
+            case gui_lib::DockableWindowMode::floating:
+            default: return DockableWindowMode::floating;
+            }
+        }
+
+        [[nodiscard]] static gui_lib::DockableWindowAction to_lib(DockableWindowAction action) noexcept
+        {
+            switch (action)
+            {
+            case DockableWindowAction::focus: return gui_lib::DockableWindowAction::focus;
+            case DockableWindowAction::dock: return gui_lib::DockableWindowAction::dock;
+            case DockableWindowAction::float_window: return gui_lib::DockableWindowAction::float_window;
+            case DockableWindowAction::detach: return gui_lib::DockableWindowAction::detach;
+            case DockableWindowAction::close: return gui_lib::DockableWindowAction::close;
+            case DockableWindowAction::none:
+            default: return gui_lib::DockableWindowAction::none;
+            }
+        }
+
+        [[nodiscard]] static DockableWindowAction from_lib(gui_lib::DockableWindowAction action) noexcept
+        {
+            switch (action)
+            {
+            case gui_lib::DockableWindowAction::focus: return DockableWindowAction::focus;
+            case gui_lib::DockableWindowAction::dock: return DockableWindowAction::dock;
+            case gui_lib::DockableWindowAction::float_window: return DockableWindowAction::float_window;
+            case gui_lib::DockableWindowAction::detach: return DockableWindowAction::detach;
+            case gui_lib::DockableWindowAction::close: return DockableWindowAction::close;
+            case gui_lib::DockableWindowAction::none:
+            default: return DockableWindowAction::none;
+            }
+        }
+
+        [[nodiscard]] static gui_lib::DockableWindowHostState to_lib(const DockableWindowHostState& host) noexcept
+        {
+            return gui_lib::DockableWindowHostState{
+                .active_window_id = host.active_window_id,
+                .next_focus_order = host.next_focus_order,
+                .changed_this_frame = host.changed_this_frame
+            };
+        }
+
+        static void from_lib(const gui_lib::DockableWindowHostState& source, DockableWindowHostState& host) noexcept
+        {
+            host.active_window_id = source.active_window_id;
+            host.next_focus_order = source.next_focus_order;
+            host.changed_this_frame = source.changed_this_frame;
+        }
+
+        [[nodiscard]] static gui_lib::DockableWindowState to_lib(const DockableWindowState& state) noexcept
+        {
+            return gui_lib::DockableWindowState{
+                .id = state.id,
+                .mode = to_lib(state.mode),
+                .dock_slot = to_lib(state.dock_slot),
+                .floating = to_lib(state.floating),
+                .visible = state.visible,
+                .initialized = state.initialized,
+                .active = state.active,
+                .detach_requested = state.detach_requested,
+                .close_requested = state.close_requested,
+                .focus_order = state.focus_order
+            };
+        }
+
+        static void from_lib(const gui_lib::DockableWindowState& source, DockableWindowState& state) noexcept
+        {
+            state.id = source.id;
+            state.mode = from_lib(source.mode);
+            state.dock_slot = from_lib(source.dock_slot);
+            from_lib(source.floating, state.floating);
+            state.visible = source.visible;
+            state.initialized = source.initialized;
+            state.active = source.active;
+            state.detach_requested = source.detach_requested;
+            state.close_requested = source.close_requested;
+            state.focus_order = source.focus_order;
+        }
+
+        [[nodiscard]] static gui_lib::DockableWindowOptions to_lib(const DockableWindowOptions& options) noexcept
+        {
+            return gui_lib::DockableWindowOptions{
+                .title = options.title,
+                .docked_frame = to_lib(options.docked_frame),
+                .floating = gui_lib::FloatingWindowOptions{
+                    .default_position = to_lib(options.floating.default_position),
+                    .default_size = to_lib(options.floating.default_size),
+                    .min_size = to_lib(options.floating.min_size),
+                    .viewport_size = to_lib(options.floating.viewport_size),
+                    .movable = options.floating.movable,
+                    .resizable = options.floating.resizable,
+                    .closable = options.floating.closable
+                },
+                .viewport_size = to_lib(options.viewport_size),
+                .title_bar_height = options.title_bar_height,
+                .content_padding = options.content_padding,
+                .action_button_width = options.action_button_width,
+                .action_button_gap = options.action_button_gap,
+                .allow_dock = options.allow_dock,
+                .allow_float = options.allow_float,
+                .allow_detach = options.allow_detach,
+                .allow_close = options.allow_close,
+                .fallback_dock_slot = to_lib(options.fallback_dock_slot)
+            };
+        }
+
+        [[nodiscard]] static gui_lib::DockableWindowInput to_lib(const DockableWindowInput& input) noexcept
+        {
+            return gui_lib::DockableWindowInput{
+                .mouse_position = to_lib(input.mouse_position),
+                .mouse_down = input.mouse_down,
+                .mouse_pressed = input.mouse_pressed,
+                .mouse_released = input.mouse_released,
+                .requested_action = to_lib(input.requested_action),
+                .requested_dock_slot = to_lib(input.requested_dock_slot)
+            };
+        }
+
+        [[nodiscard]] static DockableWindowChrome from_lib(const gui_lib::DockableWindowChrome& chrome) noexcept
+        {
+            return DockableWindowChrome{
+                .frame = from_lib(chrome.frame),
+                .title_bar = from_lib(chrome.title_bar),
+                .content = from_lib(chrome.content),
+                .dock_button = from_lib(chrome.dock_button),
+                .float_button = from_lib(chrome.float_button),
+                .detach_button = from_lib(chrome.detach_button),
+                .close_button = from_lib(chrome.close_button),
+                .visible = chrome.visible,
+                .hovered = chrome.hovered,
+                .title_hovered = chrome.title_hovered,
+                .dock_hovered = chrome.dock_hovered,
+                .float_hovered = chrome.float_hovered,
+                .detach_hovered = chrome.detach_hovered,
+                .close_hovered = chrome.close_hovered,
+                .active = chrome.active
+            };
+        }
+
+        [[nodiscard]] static DockableWindowResult from_lib(const gui_lib::DockableWindowResult& result) noexcept
+        {
+            return DockableWindowResult{
+                .chrome = from_lib(result.chrome),
+                .mode = from_lib(result.mode),
+                .action = from_lib(result.action),
+                .dock_slot = from_lib(result.dock_slot),
+                .changed = result.changed,
+                .focused = result.focused,
+                .dock_requested = result.dock_requested,
+                .float_requested = result.float_requested,
+                .detach_requested = result.detach_requested,
+                .close_requested = result.close_requested
+            };
         }
 
         [[nodiscard]] static bool uses_deferred_gui_batch(const core::Context* ctx) noexcept
@@ -908,6 +1206,27 @@ namespace epochnamespace::gui
                 g_resources.defaultDark.modalScrim = add_sprite(atlas, "__agui/modal_scrim",
                     make_solid_pixels(0x05, 0x07, 0x0B, 0xB8, 8, 8), 8, 8);
 
+                g_resources.defaultLight.windowBackground = add_sprite(atlas, "__agui_light/window_bg",
+                    make_solid_pixels(0x68, 0x6F, 0x78, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultLight.buttonNormal = add_sprite(atlas, "__agui_light/button_normal",
+                    make_solid_pixels(0x78, 0x80, 0x8B, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultLight.buttonHover = add_sprite(atlas, "__agui_light/button_hover",
+                    make_solid_pixels(0x8B, 0x95, 0xA1, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultLight.buttonActive = add_sprite(atlas, "__agui_light/button_active",
+                    make_solid_pixels(0x5E, 0x75, 0x94, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultLight.textField = add_sprite(atlas, "__agui_light/text_field",
+                    make_solid_pixels(0x61, 0x67, 0x70, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultLight.textFieldActive = add_sprite(atlas, "__agui_light/text_field_active",
+                    make_solid_pixels(0x53, 0x68, 0x82, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultLight.panelBackground = add_sprite(atlas, "__agui_light/panel_bg",
+                    make_solid_pixels(0x70, 0x78, 0x82, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultLight.consoleBackground = add_sprite(atlas, "__agui_light/console_bg",
+                    make_solid_pixels(0x55, 0x5B, 0x64, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultLight.titleBar = add_sprite(atlas, "__agui_light/title_bar",
+                    make_solid_pixels(0x50, 0x5C, 0x68, 0xFF, 8, 8), 8, 8);
+                g_resources.defaultLight.modalScrim = add_sprite(atlas, "__agui_light/modal_scrim",
+                    make_solid_pixels(0x22, 0x26, 0x2D, 0x98, 8, 8), 8, 8);
+
                 g_resources.classicLauncher.windowBackground = add_sprite(atlas, "__agui_classic/window_bg",
                     make_solid_pixels(0x33, 0x35, 0x38, 0xFF, 8, 8), 8, 8);
                 g_resources.classicLauncher.buttonNormal = add_sprite(atlas, "__agui_classic/button_normal",
@@ -1136,6 +1455,8 @@ namespace epochnamespace::gui
 
         [[nodiscard]] static bool point_in_modal_input_capture(Vec2 p) noexcept
         {
+            if (g_frame.inputBlockedUntilClear)
+                return false;
             if (!g_frame.modalInputCapture)
                 return true;
 
@@ -2055,6 +2376,7 @@ namespace epochnamespace::gui
             g_frame.insideWindow = false;
             g_frame.lastButtonBounds.reset();
             g_frame.modalInputCapture = false;
+            g_frame.inputBlockedUntilClear = false;
             g_frame.modalInputMin = {};
             g_frame.modalInputMax = {};
             g_frame.mousePressConsumed = false;
@@ -2065,6 +2387,8 @@ namespace epochnamespace::gui
             g_frame.themeStack.clear();
             g_frame.pendingSelectPopups.clear();
             g_scrollAreaStack.clear();
+            g_floatingWindowTopLayerStack.clear();
+            g_windowFrameStack.clear();
         }
 
         static void forget_upload_state(const void* ctxKey) noexcept
@@ -2270,6 +2594,11 @@ namespace epochnamespace::gui
         }
     }
 
+    void refresh_context_resources(const core::Context* ctx) noexcept
+    {
+        forget_upload_state(ctx);
+    }
+
     std::uint64_t deferred_batch_generation(const core::Context* ctx) noexcept
     {
         if (!ctx || !uses_deferred_gui_batch(ctx))
@@ -2433,8 +2762,11 @@ namespace epochnamespace::gui
         reset_frame();
     }
 
+    static void render_pending_select_popups() noexcept;
+
     void end_frame() noexcept
     {
+        render_pending_select_popups();
         flush_queued_draws();
         g_frame.ctxShared.reset();
         g_frame.ctx = nullptr;
@@ -2448,6 +2780,7 @@ namespace epochnamespace::gui
         g_frame.mouseReleaseConsumed = false;
         g_frame.rightPressConsumed = false;
         g_frame.rightReleaseConsumed = false;
+        g_frame.inputBlockedUntilClear = false;
         g_frame.mouseWheelDelta = 0;
         g_frame.pendingSelectPopups.clear();
         g_frame.topLayerDepth = 0;
@@ -2490,6 +2823,7 @@ namespace epochnamespace::gui
 
     void begin_modal_input_capture(Vec2 position, Vec2 size) noexcept
     {
+        g_frame.inputBlockedUntilClear = false;
         g_frame.modalInputCapture = size.x > 0.0f && size.y > 0.0f;
         g_frame.modalInputMin = position;
         g_frame.modalInputMax = {
@@ -2498,23 +2832,28 @@ namespace epochnamespace::gui
         };
     }
 
+    void block_input_until_clear() noexcept
+    {
+        g_frame.inputBlockedUntilClear = true;
+        g_frame.modalInputCapture = false;
+        g_frame.modalInputMin = {};
+        g_frame.modalInputMax = {};
+    }
+
     void clear_modal_input_capture() noexcept
     {
         g_frame.modalInputCapture = false;
+        g_frame.inputBlockedUntilClear = false;
         g_frame.modalInputMin = {};
         g_frame.modalInputMax = {};
     }
 
     std::span<const ThemePreferenceChoice> theme_preference_choices() noexcept
     {
-        static constexpr std::array<ThemePreferenceChoice, 7> kChoices{ {
-            { "Follow System Dark Mode", ThemePreference::FollowSystemDark },
-            { "Professional Dark", ThemePreference::ProfessionalDark },
-            { "Classic Launcher", ThemePreference::ClassicLauncher },
-            { "Midnight Blue", ThemePreference::MidnightBlue },
-            { "Ember Forge", ThemePreference::EmberForge },
-            { "Forest Terminal", ThemePreference::ForestTerminal },
-            { "Aurora Steel", ThemePreference::AuroraSteel }
+        static constexpr std::array<ThemePreferenceChoice, 3> kChoices{ {
+            { "System Light/Dark", ThemePreference::FollowSystemDark },
+            { "Light", ThemePreference::Light },
+            { "Dark", ThemePreference::Dark }
         } };
         return { kChoices.data(), kChoices.size() };
     }
@@ -2526,13 +2865,20 @@ namespace epochnamespace::gui
             if (choice.preference == preference)
                 return choice.label;
         }
-        return "Follow System Dark Mode";
+        if (preference == ThemePreference::ProfessionalDark)
+            return "Dark";
+        return "System Light/Dark";
     }
 
     ThemeVariant resolve_theme_preference(ThemePreference preference) noexcept
     {
         switch (preference)
         {
+        case ThemePreference::Light:
+            return ThemeVariant::DefaultLight;
+        case ThemePreference::Dark:
+        case ThemePreference::ProfessionalDark:
+            return ThemeVariant::DefaultDark;
         case ThemePreference::ClassicLauncher:
             return ThemeVariant::ClassicLauncher;
         case ThemePreference::MidnightBlue:
@@ -2544,7 +2890,9 @@ namespace epochnamespace::gui
         case ThemePreference::AuroraSteel:
             return ThemeVariant::AuroraSteel;
         case ThemePreference::FollowSystemDark:
-        case ThemePreference::ProfessionalDark:
+            return system_prefers_dark_palette()
+                ? ThemeVariant::DefaultDark
+                : ThemeVariant::DefaultLight;
         default:
             return ThemeVariant::DefaultDark;
         }
@@ -2587,7 +2935,7 @@ namespace epochnamespace::gui
 
     static void render_select_popup(const PendingSelectPopup& popup) noexcept
     {
-        if (!g_frame.insideWindow || !g_frame.ctx || popup.options.empty())
+        if (!g_frame.ctx || popup.options.empty())
             return;
         if (!std::isfinite(popup.position.x) || !std::isfinite(popup.position.y)
             || !std::isfinite(popup.width) || !std::isfinite(popup.height)
@@ -2686,6 +3034,17 @@ namespace epochnamespace::gui
         try { ensure_resources(); }
         catch (...) { return; }
 
+        g_windowFrameStack.push_back(WindowFrameState{
+            .cursor = g_frame.cursor,
+            .origin = g_frame.origin,
+            .windowSize = g_frame.windowSize,
+            .contentMin = g_frame.contentMin,
+            .contentMax = g_frame.contentMax,
+            .windowKey = g_frame.windowKey,
+            .widgetSerial = g_frame.widgetSerial,
+            .insideWindow = g_frame.insideWindow
+        });
+
         g_frame.origin = position;
         g_frame.windowSize = size;
         g_frame.insideWindow = true;
@@ -2736,12 +3095,26 @@ namespace epochnamespace::gui
 
     void end_window() noexcept
     {
-        render_pending_select_popups();
-        g_frame.insideWindow = false;
-        g_frame.contentMin = {};
-        g_frame.contentMax = {};
-        g_frame.windowKey.clear();
-        g_frame.widgetSerial = 0;
+        if (g_windowFrameStack.empty())
+        {
+            g_frame.insideWindow = false;
+            g_frame.contentMin = {};
+            g_frame.contentMax = {};
+            g_frame.windowKey.clear();
+            g_frame.widgetSerial = 0;
+            return;
+        }
+
+        const WindowFrameState previous = std::move(g_windowFrameStack.back());
+        g_windowFrameStack.pop_back();
+        g_frame.cursor = previous.cursor;
+        g_frame.origin = previous.origin;
+        g_frame.windowSize = previous.windowSize;
+        g_frame.contentMin = previous.contentMin;
+        g_frame.contentMax = previous.contentMax;
+        g_frame.windowKey = previous.windowKey;
+        g_frame.widgetSerial = previous.widgetSerial;
+        g_frame.insideWindow = previous.insideWindow;
     }
 
     void begin_top_layer() noexcept
@@ -2778,6 +3151,165 @@ namespace epochnamespace::gui
     {
         end_window();
         end_top_layer();
+    }
+
+    FloatingWindowResult begin_floating_window(
+        FloatingWindowState& state,
+        const FloatingWindowOptions& options) noexcept
+    {
+        FloatingWindowResult result{};
+        if (!g_frame.ctx || !state.open)
+            return result;
+
+        try { ensure_resources(); }
+        catch (...) { return result; }
+
+        const float titleHeight = line_advance_amount(kTitleScale) + 2.0f * kTitleBarPadding;
+        gui_lib::FloatingWindowState coreState = to_lib(state);
+        const bool wasInteracting = coreState.dragging || coreState.resizing || coreState.close_pressed;
+        const gui_lib::FloatingWindowOptions coreOptions{
+            .default_position = to_lib(options.default_position),
+            .default_size = to_lib(options.default_size),
+            .min_size = to_lib(options.min_size),
+            .viewport_size = to_lib(options.viewport_size),
+            .title_bar_height = titleHeight,
+            .content_padding = kContentPadding,
+            .movable = options.movable,
+            .resizable = options.resizable,
+            .closable = options.closable
+        };
+        const gui_lib::FloatingWindowInput coreInput{
+            .mouse_position = to_lib(g_frame.mousePos),
+            .mouse_down = g_frame.mouseDown,
+            .mouse_pressed = left_press_available(),
+            .mouse_released = left_release_available()
+        };
+
+        const gui_lib::FloatingWindowLayout layout =
+            gui_lib::update_floating_window(coreState, coreOptions, coreInput);
+        from_lib(coreState, state);
+
+        result.focused = layout.focused;
+        result.hovered = layout.hovered;
+        result.moved = layout.moved;
+        result.resized = layout.resized;
+        result.close_requested = layout.close_requested;
+        result.title_hovered = layout.title_hovered;
+        result.close_hovered = layout.close_hovered;
+        result.resize_hovered = layout.resize_hovered;
+        result.window = from_lib(layout.window);
+        result.title_bar = from_lib(layout.title_bar);
+        result.content = from_lib(layout.content);
+        result.close_button = from_lib(layout.close_button);
+        result.resize_handle = from_lib(layout.resize_handle);
+
+        if (coreInput.mouse_pressed && layout.hovered)
+            consume_left_press();
+        if (coreInput.mouse_released && (wasInteracting || layout.hovered || layout.close_requested))
+            consume_left_release();
+        if (layout.close_requested || !state.open)
+            return result;
+
+        if (options.capture_input && !g_frame.modalInputCapture)
+            begin_modal_input_capture(state.position, state.size);
+
+        if (options.top_layer)
+            begin_top_layer();
+        g_floatingWindowTopLayerStack.push_back(options.top_layer);
+
+        begin_window(options.title, state.position, state.size, options.draw_background);
+        if (!options.id.empty())
+            g_frame.windowKey.assign(options.id.begin(), options.id.end());
+
+        const auto& palette = active_palette();
+        if (options.closable)
+        {
+            const SpriteHandle closeBackground =
+                state.close_pressed ? palette.buttonActive
+                : result.close_hovered ? palette.buttonHover
+                : palette.buttonNormal;
+            draw_sprite(
+                closeBackground,
+                result.close_button.position.x,
+                result.close_button.position.y,
+                result.close_button.size.x,
+                result.close_button.size.y);
+            if (result.close_hovered || state.close_pressed)
+            {
+                draw_sprite(
+                    palette.textFieldActive,
+                    result.close_button.position.x,
+                    result.close_button.position.y,
+                    result.close_button.size.x,
+                    2.0f);
+            }
+
+            const float textWidth = measure_text_width("X", kFontScale);
+            const float textHeight = base_line_height(kFontScale);
+            draw_text_line(
+                "X",
+                result.close_button.position.x + std::floor((std::max)(0.0f, result.close_button.size.x - textWidth) * 0.5f),
+                result.close_button.position.y + std::floor((std::max)(0.0f, result.close_button.size.y - textHeight) * 0.5f) + 1.0f,
+                kFontScale);
+        }
+
+        if (options.resizable)
+        {
+            const SpriteHandle handleSprite =
+                state.resizing || result.resize_hovered ? palette.textFieldActive : palette.buttonHover;
+            const float x = result.resize_handle.position.x;
+            const float y = result.resize_handle.position.y;
+            const float w = result.resize_handle.size.x;
+            const float h = result.resize_handle.size.y;
+            draw_sprite(handleSprite, x + w - 10.0f, y + h - 3.0f, 8.0f, 2.0f);
+            draw_sprite(handleSprite, x + w - 6.0f, y + h - 7.0f, 4.0f, 2.0f);
+        }
+
+        set_cursor(result.content.position);
+        result.begun = true;
+        return result;
+    }
+
+    void end_floating_window() noexcept
+    {
+        if (g_floatingWindowTopLayerStack.empty())
+            return;
+
+        const bool topLayer = g_floatingWindowTopLayerStack.back();
+        g_floatingWindowTopLayerStack.pop_back();
+        end_window();
+        if (topLayer)
+            end_top_layer();
+    }
+
+    DockableWindowResult update_dockable_window(
+        DockableWindowHostState& host,
+        DockableWindowState& state,
+        const DockableWindowOptions& options,
+        const DockableWindowInput& input) noexcept
+    {
+        gui_lib::DockableWindowHostState coreHost = to_lib(host);
+        gui_lib::DockableWindowState coreState = to_lib(state);
+        const gui_lib::DockableWindowResult coreResult = gui_lib::update_dockable_window(
+            coreHost,
+            coreState,
+            to_lib(options),
+            to_lib(input));
+
+        from_lib(coreHost, host);
+        from_lib(coreState, state);
+        return from_lib(coreResult);
+    }
+
+    void focus_dockable_window(
+        DockableWindowHostState& host,
+        DockableWindowState& state) noexcept
+    {
+        gui_lib::DockableWindowHostState coreHost = to_lib(host);
+        gui_lib::DockableWindowState coreState = to_lib(state);
+        gui_lib::focus_dockable_window(coreHost, coreState);
+        from_lib(coreHost, host);
+        from_lib(coreState, state);
     }
 
     WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept
@@ -2866,6 +3398,28 @@ namespace epochnamespace::gui
         bounds.position = { position.x + border, contentY };
         bounds.size = { contentWidth, contentHeight };
         return bounds;
+    }
+
+    void panel_rect(Vec2 position, Vec2 size) noexcept
+    {
+        if (!g_frame.ctx || size.x <= 0.0f || size.y <= 0.0f)
+            return;
+
+        try { ensure_resources(); }
+        catch (...) { return; }
+
+        draw_sprite(active_palette().panelBackground, position.x, position.y, size.x, size.y);
+    }
+
+    void titlebar_rect(Vec2 position, Vec2 size) noexcept
+    {
+        if (!g_frame.ctx || size.x <= 0.0f || size.y <= 0.0f)
+            return;
+
+        try { ensure_resources(); }
+        catch (...) { return; }
+
+        draw_sprite(active_palette().titleBar, position.x, position.y, size.x, size.y);
     }
 
     void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active) noexcept

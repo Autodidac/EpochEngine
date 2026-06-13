@@ -128,11 +128,13 @@ namespace epochnamespace::core
 
         std::wstring titleWide{};
         std::string  titleNarrow{};
+        std::string  guiRoute{};
 
         int  width = DEFAULT_WINDOW_WIDTH;
         int  height = DEFAULT_WINDOW_HEIGHT;
         bool should_close = false;
         bool isFloating = false;
+        std::atomic_bool routedRedockRequested = false;
         std::atomic_bool firstPresentComplete = false;
         std::atomic_uint64_t resizeGeneration{ 0 };
 

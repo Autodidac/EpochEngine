@@ -385,6 +385,17 @@ export namespace epoch
         {
             return static_cast<bool>(color_texture) && static_cast<bool>(render_target);
         }
+
+        [[nodiscard]] constexpr bool satisfies(const RenderTextureBackendRequirements& requirements) const noexcept
+        {
+            if ((requirements.color_attachment || requirements.sampled_color) && !color_texture)
+                return false;
+            if (requirements.sampler && !sampler)
+                return false;
+            if (requirements.offscreen_target && !render_target)
+                return false;
+            return true;
+        }
     };
 
     struct MaterialTextureBinding
@@ -456,6 +467,57 @@ export namespace epoch
         bool deferred_gbuffer_ready = false;
     };
 
+    enum class RendererCapabilityStatus : u8
+    {
+        missing,
+        deferred,
+        partial,
+        present
+    };
+
+    struct RendererCapabilityReport
+    {
+        RendererBackendKind backend = RendererBackendKind::null;
+        RendererCapabilityStatus descriptor_contract = RendererCapabilityStatus::missing;
+        RendererCapabilityStatus build_graph_proof = RendererCapabilityStatus::missing;
+        RendererCapabilityStatus hook_readiness = RendererCapabilityStatus::missing;
+        RendererCapabilityStatus live_native_allocation = RendererCapabilityStatus::missing;
+        RendererCapabilityStatus presentation_proof = RendererCapabilityStatus::missing;
+        RendererCapabilityStatus sampled_render_targets = RendererCapabilityStatus::missing;
+        RendererCapabilityStatus mesh_model_resources = RendererCapabilityStatus::missing;
+    };
+
+    [[nodiscard]] constexpr const char* renderer_capability_status_label(RendererCapabilityStatus status) noexcept
+    {
+        switch (status)
+        {
+        case RendererCapabilityStatus::present: return "Present";
+        case RendererCapabilityStatus::partial: return "Partial";
+        case RendererCapabilityStatus::deferred: return "Deferred";
+        case RendererCapabilityStatus::missing:
+        default: return "Missing";
+        }
+    }
+
+    [[nodiscard]] constexpr bool renderer_capability_status_at_least(
+        RendererCapabilityStatus status,
+        RendererCapabilityStatus threshold) noexcept
+    {
+        auto rank = [](RendererCapabilityStatus value) constexpr noexcept -> u8
+        {
+            switch (value)
+            {
+            case RendererCapabilityStatus::present: return 3;
+            case RendererCapabilityStatus::partial: return 2;
+            case RendererCapabilityStatus::deferred: return 1;
+            case RendererCapabilityStatus::missing:
+            default: return 0;
+            }
+        };
+
+        return rank(status) >= rank(threshold);
+    }
+
     [[nodiscard]] constexpr RendererCapabilities renderer_capabilities_for(RendererBackendKind backend) noexcept
     {
         RendererCapabilities caps{};
@@ -521,6 +583,60 @@ export namespace epoch
         }
 
         return caps;
+    }
+
+    [[nodiscard]] constexpr RendererCapabilityReport renderer_capability_report_for(RendererBackendKind backend) noexcept
+    {
+        RendererCapabilityReport report{};
+        report.backend = backend;
+
+        switch (backend)
+        {
+        case RendererBackendKind::opengl:
+            report.descriptor_contract = RendererCapabilityStatus::present;
+            report.build_graph_proof = RendererCapabilityStatus::present;
+            report.hook_readiness = RendererCapabilityStatus::present;
+            report.live_native_allocation = RendererCapabilityStatus::partial;
+            report.presentation_proof = RendererCapabilityStatus::partial;
+            report.sampled_render_targets = RendererCapabilityStatus::partial;
+            report.mesh_model_resources = RendererCapabilityStatus::partial;
+            break;
+        case RendererBackendKind::sdl3:
+        case RendererBackendKind::sfml3:
+        case RendererBackendKind::raylib3:
+            report.descriptor_contract = RendererCapabilityStatus::present;
+            report.build_graph_proof = RendererCapabilityStatus::present;
+            report.hook_readiness = RendererCapabilityStatus::partial;
+            report.live_native_allocation = RendererCapabilityStatus::partial;
+            report.presentation_proof = RendererCapabilityStatus::partial;
+            report.sampled_render_targets = RendererCapabilityStatus::partial;
+            report.mesh_model_resources = RendererCapabilityStatus::partial;
+            break;
+        case RendererBackendKind::vulkan:
+        case RendererBackendKind::directx:
+            report.descriptor_contract = RendererCapabilityStatus::partial;
+            report.build_graph_proof = RendererCapabilityStatus::partial;
+            report.hook_readiness = RendererCapabilityStatus::missing;
+            report.live_native_allocation = RendererCapabilityStatus::missing;
+            report.presentation_proof = RendererCapabilityStatus::missing;
+            report.sampled_render_targets = RendererCapabilityStatus::partial;
+            report.mesh_model_resources = RendererCapabilityStatus::partial;
+            break;
+        case RendererBackendKind::software:
+            report.descriptor_contract = RendererCapabilityStatus::deferred;
+            report.build_graph_proof = RendererCapabilityStatus::deferred;
+            report.hook_readiness = RendererCapabilityStatus::deferred;
+            report.live_native_allocation = RendererCapabilityStatus::deferred;
+            report.presentation_proof = RendererCapabilityStatus::deferred;
+            report.sampled_render_targets = RendererCapabilityStatus::deferred;
+            report.mesh_model_resources = RendererCapabilityStatus::deferred;
+            break;
+        case RendererBackendKind::null:
+        default:
+            break;
+        }
+
+        return report;
     }
 
     [[nodiscard]] constexpr bool renderer_supports_sampled_render_targets(const RendererCapabilities& caps) noexcept

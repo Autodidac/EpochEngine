@@ -153,7 +153,7 @@ export namespace epochnamespace::menu
         static constexpr std::array kLauncherChoices = {
             ChoiceDescriptor{ Choice::ProjectTwoDStudio, "2D Studio", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Settings, "Contexts + Settings", { 256.0f, 96.0f } },
+            ChoiceDescriptor{ Choice::Settings, "Switch Context", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::UpdateLatest, "Update Epoch", { 256.0f, 96.0f } },
             ChoiceDescriptor{ Choice::Exit, "Quit", { 256.0f, 96.0f } }
         };
@@ -196,7 +196,7 @@ export namespace epochnamespace::menu
 
         static constexpr std::string_view launcher_hint() noexcept
         {
-            return "Open project demos directly, preload a project, jump into a clean editor workspace, adjust contexts and settings, or run updates without the old layered game/puzzle shell.";
+            return "Open project demos directly, preload a project, jump into a clean editor workspace, switch to another live renderer context, or run updates without the old layered game/puzzle shell.";
         }
 
         void refresh_launcher_descriptors()

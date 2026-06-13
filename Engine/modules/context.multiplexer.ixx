@@ -37,6 +37,7 @@ module;
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -93,6 +94,16 @@ using HGLRC = void*;
 
 namespace epochnamespace::core
 {
+    export struct DetachedContextWindowRequest
+    {
+        ContextType type{ ContextType::OpenGL };
+        std::string title{ "Epoch Context" };
+        std::string gui_route{};
+        int width{ 720 };
+        int height{ 440 };
+        bool start_docked{ false };
+    };
+
 #if defined(_WIN32)
 
     export struct DragState
@@ -151,6 +162,7 @@ namespace epochnamespace::core
         void ArrangeDockedWindowsGrid();
         void HandleResize(HWND hwnd, int width, int height);
         void StartRenderThreads();
+        bool OpenDetachedContextWindow(const DetachedContextWindowRequest& request);
 
         HWND GetParentWindow() const { return parent; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return windows; }
@@ -189,6 +201,7 @@ namespace epochnamespace::core
         void SetupPixelFormat(HDC hdc);
         HGLRC CreateSharedGLContext(HDC hdc);
         int get_title_bar_thickness(const HWND window_handle);
+        bool CreateDetachedContextWindowOnOwnerThread(const DetachedContextWindowRequest& request);
 
         inline static MultiContextManager* s_activeInstance = nullptr;
 
@@ -230,6 +243,7 @@ namespace epochnamespace::core
         void ArrangeDockedWindowsGrid();
         void HandleResize(HWND hwnd, int width, int height);
         void StartRenderThreads();
+        bool OpenDetachedContextWindow(const DetachedContextWindowRequest&) { return false; }
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return windows; }
@@ -292,6 +306,7 @@ namespace epochnamespace::core
         void ArrangeDockedWindowsGrid() {}
         void StartRenderThreads() {}
         void HandleResize(HWND, int, int) {}
+        bool OpenDetachedContextWindow(const DetachedContextWindowRequest&) { return false; }
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return s_emptyWindows; }

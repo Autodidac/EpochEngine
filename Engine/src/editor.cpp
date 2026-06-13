@@ -57,6 +57,7 @@ module;
 #include <mutex>
 #include <optional>
 #include <span>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -67,6 +68,7 @@ module;
 
 #include "editor/update_modal_layout.hpp"
 #include "epoch/core/cpp_feature_probe.hpp"
+#include "epoch/context/passive_context_scoring.hpp"
 
 module editor;
 
@@ -481,9 +483,27 @@ namespace epochnamespace
             bool showConsoleDock{ true };
             bool showAiChat{ true };
             EditorLayoutDrag layoutDrag{ EditorLayoutDrag::None };
+            bool paneTitleDragActive{ false };
+            std::string paneTitleDragRoute{};
+            std::string paneTitleDragLabel{};
+            gui::Vec2 paneTitleDragStart{};
             int surfaceSettleFrames{ 0 };
             gui::Vec2 lastLayoutExtent{};
-            std::string detachedPanelHostStatus{ "Docked panels active. Borderless popout routing is disabled while the editor layout is stabilized." };
+            gui::DockableWindowHostState dockableGuiHost{};
+            gui::DockableWindowState floatingGuiWindow{
+                .id = 1,
+                .mode = gui::DockableWindowMode::floating,
+                .dock_slot = gui::DockSlot::right,
+                .floating = { .open = false },
+                .visible = false
+            };
+            std::string detachedPanelHostStatus{ "Pane popouts are routed context panels; context selection stays in the editor toolbar." };
+            core::ContextType selectedContextBackend{ core::ContextType::None };
+            std::string contextSelectionStatus{ "Context follows the active editor window." };
+            std::string passiveContextScoreStatus{ "Passive context scoring is waiting for single-context editor timing." };
+            std::string passiveContextRecommendation{ "No recommended editor context yet." };
+            double passiveContextLastFrameMs{ 0.0 };
+            bool passiveContextHasLastFrame{ false };
             bool projectNotesVisible{ false };
             bool showAboutModal{ false };
             bool showSettingsModal{ false };
@@ -585,7 +605,21 @@ namespace epochnamespace
             editor.layoutDrag = EditorLayoutDrag::None;
             editor.surfaceSettleFrames = 0;
             editor.lastLayoutExtent = {};
-            editor.detachedPanelHostStatus = "Layout reset. Docked panels active; borderless popout routing remains disabled.";
+            editor.dockableGuiHost = {};
+            editor.floatingGuiWindow = {
+                .id = 1,
+                .mode = gui::DockableWindowMode::floating,
+                .dock_slot = gui::DockSlot::right,
+                .floating = { .open = false },
+                .visible = false
+            };
+            editor.detachedPanelHostStatus = "Layout reset. Pane popouts remain separate from context selection.";
+            editor.selectedContextBackend = core::ContextType::None;
+            editor.contextSelectionStatus = "Context follows the active editor window.";
+            editor.passiveContextScoreStatus = "Passive context scoring is waiting for single-context editor timing.";
+            editor.passiveContextRecommendation = "No recommended editor context yet.";
+            editor.passiveContextLastFrameMs = 0.0;
+            editor.passiveContextHasLastFrame = false;
         }
 
         struct ContextPtrEq
@@ -607,6 +641,8 @@ namespace epochnamespace
         {
             std::mutex mutex{};
             std::unordered_map<const core::Context*, EditorState, ContextPtrHash, ContextPtrEq> states{};
+            std::unordered_map<std::string, bool> detachedPaneRoutes{};
+            epochnamespace::context::PassiveContextScoreboard passiveContextScores{};
         };
 
         ChatStorage& chat_storage()
@@ -621,12 +657,206 @@ namespace epochnamespace
             return storage;
         }
 
+        [[nodiscard]] bool is_detachable_pane_route(std::string_view route) noexcept
+        {
+            return route == "pane.outliner"
+                || route == "pane.inspector"
+                || route == "pane.console"
+                || route == "pane.ai_chat";
+        }
+
+        void set_detached_pane_route(std::string_view route, bool detached)
+        {
+            if (!is_detachable_pane_route(route))
+                return;
+
+            auto& storage = editor_storage();
+            std::scoped_lock lock(storage.mutex);
+            if (detached)
+                storage.detachedPaneRoutes[std::string(route)] = true;
+            else
+                storage.detachedPaneRoutes.erase(std::string(route));
+        }
+
+        [[nodiscard]] bool pane_route_is_detached(std::string_view route)
+        {
+            if (!is_detachable_pane_route(route))
+                return false;
+
+            auto& storage = editor_storage();
+            std::scoped_lock lock(storage.mutex);
+            return storage.detachedPaneRoutes.contains(std::string(route));
+        }
+
         void push_editor_log(EditorState& state, std::string line)
         {
             state.logLines.push_back(std::move(line));
             constexpr std::size_t kMaxLogLines = 10;
             if (state.logLines.size() > kMaxLogLines)
                 state.logLines.erase(state.logLines.begin(), state.logLines.begin() + static_cast<std::ptrdiff_t>(state.logLines.size() - kMaxLogLines));
+        }
+
+        [[nodiscard]] EditorContextSnapshotEntity capture_snapshot_entity(const EditorEntity& entity)
+        {
+            return EditorContextSnapshotEntity{
+                .name = entity.name,
+                .type = entity.type,
+                .category = entity.category,
+                .position = entity.position,
+                .rotation = entity.rotation,
+                .scale = entity.scale,
+                .visible = entity.visible,
+                .editor_only = entity.editorOnly
+            };
+        }
+
+        [[nodiscard]] EditorEntity restore_snapshot_entity(const EditorContextSnapshotEntity& entity)
+        {
+            return EditorEntity{
+                .name = entity.name,
+                .type = entity.type,
+                .category = entity.category,
+                .position = entity.position,
+                .rotation = entity.rotation,
+                .scale = entity.scale,
+                .visible = entity.visible,
+                .editorOnly = entity.editor_only
+            };
+        }
+
+        [[nodiscard]] static previewgrid::CameraMode snapshot_camera_mode(std::uint8_t value) noexcept
+        {
+            switch (value)
+            {
+            case 1: return previewgrid::CameraMode::FPS;
+            case 2: return previewgrid::CameraMode::Canvas2D;
+            case 0:
+            default: return previewgrid::CameraMode::Editor;
+            }
+        }
+
+        [[nodiscard]] static EditorMainSurface snapshot_main_surface(std::uint8_t value) noexcept
+        {
+            switch (value)
+            {
+            case 1: return EditorMainSurface::Game2D;
+            case 2: return EditorMainSurface::Assets;
+            case 3: return EditorMainSurface::Project;
+            case 4: return EditorMainSurface::ForestFactory;
+            case 5: return EditorMainSurface::Timeline;
+            case 6: return EditorMainSurface::AISandbox;
+            case 7: return EditorMainSurface::Systems;
+            case 0:
+            default: return EditorMainSurface::Scene;
+            }
+        }
+
+        [[nodiscard]] static EditorWorkspaceTab snapshot_workspace_tab(EditorWorkspaceTab value) noexcept
+        {
+            switch (value)
+            {
+            case EditorWorkspaceTab::Project:
+            case EditorWorkspaceTab::Scripts:
+            case EditorWorkspaceTab::Assets:
+            case EditorWorkspaceTab::AI:
+            case EditorWorkspaceTab::Systems:
+            case EditorWorkspaceTab::Output:
+                return value;
+            default:
+                return EditorWorkspaceTab::Output;
+            }
+        }
+
+        [[nodiscard]] static core::ScenePreviewMode snapshot_preview_mode(core::ScenePreviewMode value) noexcept
+        {
+            switch (value)
+            {
+            case core::ScenePreviewMode::Editor:
+            case core::ScenePreviewMode::None:
+                return value;
+            default:
+                return core::ScenePreviewMode::Editor;
+            }
+        }
+
+        [[nodiscard]] static input::ProfilePreset snapshot_input_profile(std::uint8_t value) noexcept
+        {
+            switch (static_cast<input::ProfilePreset>(value))
+            {
+            case input::ProfilePreset::RuntimeWASD:
+            case input::ProfilePreset::ArrowPilot:
+            case input::ProfilePreset::LeftHanded:
+            case input::ProfilePreset::EditorDefault:
+                return static_cast<input::ProfilePreset>(value);
+            case input::ProfilePreset::Count:
+            default:
+                return input::ProfilePreset::EditorDefault;
+            }
+        }
+
+        [[nodiscard]] static gui::ThemePreference snapshot_theme_preference(gui::ThemePreference value) noexcept
+        {
+            switch (value)
+            {
+            case gui::ThemePreference::Light:
+            case gui::ThemePreference::Dark:
+            case gui::ThemePreference::ProfessionalDark:
+            case gui::ThemePreference::ClassicLauncher:
+            case gui::ThemePreference::MidnightBlue:
+            case gui::ThemePreference::EmberForge:
+            case gui::ThemePreference::ForestTerminal:
+            case gui::ThemePreference::AuroraSteel:
+            case gui::ThemePreference::FollowSystemDark:
+                return value;
+            default:
+                return gui::ThemePreference::FollowSystemDark;
+            }
+        }
+
+        [[nodiscard]] static AiWorkspaceDomain snapshot_ai_workspace_domain(std::uint8_t value) noexcept
+        {
+            switch (static_cast<AiWorkspaceDomain>(value))
+            {
+            case AiWorkspaceDomain::Tooling:
+            case AiWorkspaceDomain::Engine:
+            case AiWorkspaceDomain::Software:
+            case AiWorkspaceDomain::Training:
+            case AiWorkspaceDomain::Visualizer:
+            case AiWorkspaceDomain::Ops:
+            case AiWorkspaceDomain::Control:
+                return static_cast<AiWorkspaceDomain>(value);
+            default:
+                return AiWorkspaceDomain::Control;
+            }
+        }
+
+        [[nodiscard]] static float finite_or(float value, float fallback) noexcept
+        {
+            return std::isfinite(value) ? value : fallback;
+        }
+
+        [[nodiscard]] static double finite_or(double value, double fallback) noexcept
+        {
+            return std::isfinite(value) ? value : fallback;
+        }
+
+        [[nodiscard]] static float snapshot_layout_split(float value, float fallback) noexcept
+        {
+            return (std::clamp)(finite_or(value, fallback), 0.10f, 0.90f);
+        }
+
+        [[nodiscard]] static double snapshot_frame_limit(double value, double fallback) noexcept
+        {
+            return (std::clamp)(finite_or(value, fallback), 15.0, 1000.0);
+        }
+
+        [[nodiscard]] static EditorTimeControl snapshot_time_control(EditorTimeControl value) noexcept
+        {
+            value.fixed_dt_seconds = (std::clamp)(finite_or(value.fixed_dt_seconds, 1.0 / 60.0), 1.0 / 240.0, 0.25);
+            value.time_scale = (std::clamp)(finite_or(value.time_scale, 1.0), 0.0, 8.0);
+            value.max_steps_per_frame = (std::clamp)(value.max_steps_per_frame, 1u, 64u);
+            value.step_once = false;
+            return value;
         }
 
         #include "editor/update_runtime.inl"
@@ -2155,6 +2385,14 @@ namespace epochnamespace
                 return;
             }
 
+            if (result.scene_input_captured)
+            {
+                editor.sceneDragActive = false;
+                editor.sceneDragHasPlaneHit = false;
+                editor.sceneLeftWasHeld = ctx->is_mouse_button_held_safe(epochnamespace::input::MouseButton::MouseLeft);
+                return;
+            }
+
             int mx = 0;
             int my = 0;
             ctx->get_mouse_position_safe(mx, my);
@@ -2523,12 +2761,9 @@ namespace epochnamespace
             return 1;
         }
 
-        [[nodiscard]] std::string renderer_name(const std::shared_ptr<core::Context>& ctx)
+        [[nodiscard]] std::string renderer_name(core::ContextType type)
         {
-            if (!ctx)
-                return "Unknown";
-
-            switch (ctx->type)
+            switch (type)
             {
             case core::ContextType::OpenGL: return "OpenGL";
             case core::ContextType::Vulkan: return "Vulkan";
@@ -2538,6 +2773,264 @@ namespace epochnamespace
             case core::ContextType::DirectX: return "DirectX";
             case core::ContextType::Software: return "Software";
             default: return "Unknown";
+            }
+        }
+
+        [[nodiscard]] std::string renderer_name(const std::shared_ptr<core::Context>& ctx)
+        {
+            return ctx ? renderer_name(ctx->type) : std::string{ "Unknown" };
+        }
+
+        [[nodiscard]] bool is_context_driver_candidate(core::ContextType type) noexcept
+        {
+            switch (type)
+            {
+            case core::ContextType::OpenGL:
+            case core::ContextType::SDL:
+            case core::ContextType::SFML:
+            case core::ContextType::RayLib:
+            case core::ContextType::Vulkan:
+            case core::ContextType::DirectX:
+            case core::ContextType::Software:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        [[nodiscard]] int context_driver_sort_key(core::ContextType type) noexcept
+        {
+            switch (type)
+            {
+            case core::ContextType::DirectX: return 0;
+            case core::ContextType::OpenGL: return 1;
+            case core::ContextType::SDL: return 2;
+            case core::ContextType::SFML: return 3;
+            case core::ContextType::RayLib: return 4;
+            case core::ContextType::Vulkan: return 5;
+            case core::ContextType::Software: return 6;
+            default: return 100;
+            }
+        }
+
+        struct ContextBackendOption
+        {
+            core::ContextType type{ core::ContextType::None };
+            std::string label{};
+        };
+
+        [[nodiscard]] std::vector<ContextBackendOption> available_context_backend_options()
+        {
+            core::InitializeAllContexts();
+
+            std::vector<ContextBackendOption> options;
+            {
+                std::shared_lock lock(core::g_backendsMutex);
+                options.reserve(core::g_backends.size());
+                for (const auto& [type, backend] : core::g_backends)
+                {
+                    if (!backend.master || !is_context_driver_candidate(type))
+                        continue;
+
+                    options.push_back(ContextBackendOption{
+                        .type = type,
+                        .label = renderer_name(type)
+                    });
+                }
+            }
+
+            std::sort(options.begin(), options.end(), [](const auto& a, const auto& b)
+            {
+                const int ar = context_driver_sort_key(a.type);
+                const int br = context_driver_sort_key(b.type);
+                if (ar != br)
+                    return ar < br;
+                return a.label < b.label;
+            });
+            return options;
+        }
+
+        [[nodiscard]] std::string context_backend_summary(const std::vector<ContextBackendOption>& options)
+        {
+            if (options.empty())
+                return "none registered";
+
+            std::string summary;
+            for (const auto& option : options)
+            {
+                if (!summary.empty())
+                    summary += " | ";
+                summary += option.label;
+            }
+            return summary;
+        }
+
+        struct PassiveContextObservation
+        {
+            std::size_t liveWindowCount{ 0 };
+            std::size_t routedPanelCount{ 0 };
+            bool currentContextLive{ false };
+            bool currentContextRouted{ false };
+        };
+
+        [[nodiscard]] epochnamespace::context::PassiveContextBackend passive_context_backend(core::ContextType type) noexcept
+        {
+            switch (type)
+            {
+            case core::ContextType::OpenGL: return epochnamespace::context::PassiveContextBackend::OpenGL;
+            case core::ContextType::SDL: return epochnamespace::context::PassiveContextBackend::SDL;
+            case core::ContextType::SFML: return epochnamespace::context::PassiveContextBackend::SFML;
+            case core::ContextType::RayLib: return epochnamespace::context::PassiveContextBackend::RayLib;
+            case core::ContextType::Vulkan: return epochnamespace::context::PassiveContextBackend::Vulkan;
+            case core::ContextType::DirectX: return epochnamespace::context::PassiveContextBackend::DirectX;
+            case core::ContextType::Software: return epochnamespace::context::PassiveContextBackend::Software;
+            case core::ContextType::Noop: return epochnamespace::context::PassiveContextBackend::Noop;
+            case core::ContextType::Custom: return epochnamespace::context::PassiveContextBackend::Custom;
+            default: return epochnamespace::context::PassiveContextBackend::None;
+            }
+        }
+
+        [[nodiscard]] PassiveContextObservation passive_context_observation_for(const core::Context* activeContext)
+        {
+            PassiveContextObservation observation{};
+            std::shared_lock lock(core::g_backendsMutex);
+            for (const auto& [_, backend] : core::g_backends)
+            {
+                const auto visit = [&](const std::shared_ptr<core::Context>& candidate)
+                {
+                    if (!candidate || !candidate->windowData || !candidate->windowData->running)
+                        return;
+
+                    ++observation.liveWindowCount;
+                    if (!candidate->windowData->guiRoute.empty() || candidate->windowData->isFloating)
+                        ++observation.routedPanelCount;
+
+                    if (candidate.get() == activeContext)
+                    {
+                        observation.currentContextLive = true;
+                        observation.currentContextRouted =
+                            !candidate->windowData->guiRoute.empty() || candidate->windowData->isFloating;
+                    }
+                };
+
+                visit(backend.master);
+                for (const auto& duplicate : backend.duplicates)
+                    visit(duplicate);
+            }
+            return observation;
+        }
+
+        [[nodiscard]] epochnamespace::context::PassiveSignalStatus passive_stability_status(
+            double frameMs,
+            double jitterMs,
+            const EditorTimeSnapshot& snapshot) noexcept
+        {
+            if (!std::isfinite(frameMs) || frameMs <= 0.0)
+                return epochnamespace::context::PassiveSignalStatus::NotSampled;
+
+            const double targetMs = snapshot.fixed_dt_seconds > 0.0
+                ? snapshot.fixed_dt_seconds * 1000.0
+                : 16.6667;
+
+            if (frameMs <= targetMs * 1.25 && jitterMs <= 4.0)
+                return epochnamespace::context::PassiveSignalStatus::Healthy;
+            if (frameMs <= targetMs * 2.0 && jitterMs <= 12.0)
+                return epochnamespace::context::PassiveSignalStatus::Watch;
+            return epochnamespace::context::PassiveSignalStatus::Unstable;
+        }
+
+        [[nodiscard]] std::string passive_context_recommendation_text(
+            const epochnamespace::context::PassiveContextScoreboard& scoreboard)
+        {
+            const auto recommendation = scoreboard.best_recommendation();
+            if (!recommendation.available)
+            {
+                return std::format(
+                    "No recommendation yet ({} accepted / {} rejected samples).",
+                    scoreboard.accepted_sample_count(),
+                    scoreboard.rejected_sample_count());
+            }
+
+            return std::format(
+                "{} recommended for editor default: avg {:.1f}, recent {:.1f}, {} samples ({} accepted / {} rejected).",
+                std::string{ epochnamespace::context::backend_name(recommendation.backend) },
+                recommendation.average_score,
+                recommendation.recent_score,
+                recommendation.sample_count,
+                scoreboard.accepted_sample_count(),
+                scoreboard.rejected_sample_count());
+        }
+
+        void update_passive_context_scoring(
+            EditorStorage& storage,
+            EditorState& editor,
+            const core::Context* ctx,
+            const EditorTimeSnapshot& snapshot,
+            const PassiveContextObservation& observation)
+        {
+            if (!ctx)
+                return;
+
+            const bool validFrameTime = std::isfinite(snapshot.real_dt_seconds)
+                && snapshot.real_dt_seconds > 0.0;
+            const double frameMs = validFrameTime ? snapshot.real_dt_seconds * 1000.0 : 0.0;
+            const double jitterMs = editor.passiveContextHasLastFrame
+                ? std::fabs(frameMs - editor.passiveContextLastFrameMs)
+                : 0.0;
+            if (validFrameTime)
+            {
+                editor.passiveContextLastFrameMs = frameMs;
+                editor.passiveContextHasLastFrame = true;
+            }
+
+            auto kind = epochnamespace::context::PassiveContextSampleKind::SingleContextBackend;
+            if (!observation.currentContextLive || !validFrameTime)
+                kind = epochnamespace::context::PassiveContextSampleKind::Unknown;
+            else if (observation.currentContextRouted)
+                kind = epochnamespace::context::PassiveContextSampleKind::DiagnosticGrid;
+            else if (observation.liveWindowCount != 1U || observation.routedPanelCount != 0U)
+                kind = epochnamespace::context::PassiveContextSampleKind::MultiContextBackend;
+
+            const epochnamespace::context::PassiveContextEvidence evidence{
+                .source = epochnamespace::context::PassiveEvidenceSource::PassiveHostObservation,
+                .fps = validFrameTime ? std::optional<double>{ 1.0 / snapshot.real_dt_seconds } : std::optional<double>{},
+                .frame_time_ms = validFrameTime ? std::optional<double>{ frameMs } : std::optional<double>{},
+                .frame_time_jitter_ms = validFrameTime ? std::optional<double>{ jitterMs } : std::optional<double>{},
+                .stability = passive_stability_status(frameMs, jitterMs, snapshot),
+                .input_latency_ms = {},
+                .input_latency_status = epochnamespace::context::PassiveSignalStatus::NotSampled,
+                .runtime_launched = false
+            };
+            const epochnamespace::context::PassiveContextSample sample{
+                .backend = passive_context_backend(ctx->type),
+                .kind = kind,
+                .evidence = evidence,
+                .label = "editor.passive-context"
+            };
+            const auto score = epochnamespace::context::score_passive_context_sample(sample);
+            (void)storage.passiveContextScores.record(score);
+            editor.passiveContextRecommendation = passive_context_recommendation_text(storage.passiveContextScores);
+
+            if (score.accepted)
+            {
+                const auto summary = storage.passiveContextScores.summary_for(score.backend);
+                editor.passiveContextScoreStatus = std::format(
+                    "{} single-context score {:.1f} (avg {:.1f}, recent {:.1f}, {} samples, {:.1f} FPS, {:.2f} ms jitter).",
+                    renderer_name(ctx->type),
+                    score.score,
+                    summary.average_score,
+                    summary.recent_score,
+                    summary.sample_count,
+                    evidence.fps.value_or(0.0),
+                    evidence.frame_time_jitter_ms.value_or(0.0));
+            }
+            else
+            {
+                editor.passiveContextScoreStatus = std::format(
+                    "Paused: {} ({} live windows, {} routed/floating panels).",
+                    std::string{ epochnamespace::context::rejection_name(score.rejection) },
+                    observation.liveWindowCount,
+                    observation.routedPanelCount);
             }
         }
 
@@ -2604,6 +3097,20 @@ namespace epochnamespace
             return "buffers | textures | materials | targets | command lists | mesh descriptors | model descriptors";
         }
 
+        [[nodiscard]] std::string renderer_capability_proof_stage_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto kind = renderer_backend_kind(ctx);
+            const auto report = epoch::renderer_capability_report_for(kind);
+
+            return std::format(
+                "desc {} | graph {} | hook {} | live {} | present {}",
+                epoch::renderer_capability_status_label(report.descriptor_contract),
+                epoch::renderer_capability_status_label(report.build_graph_proof),
+                epoch::renderer_capability_status_label(report.hook_readiness),
+                epoch::renderer_capability_status_label(report.live_native_allocation),
+                epoch::renderer_capability_status_label(report.presentation_proof));
+        }
+
         [[nodiscard]] std::string renderer_native_mesh_model_status(const std::shared_ptr<core::Context>& ctx)
         {
             const auto kind = renderer_backend_kind(ctx);
@@ -2611,6 +3118,7 @@ namespace epochnamespace
                 return "debug fallback; production native mesh/model allocation is out of scope";
 
             const auto caps = epoch::renderer_capabilities_for(kind);
+            const auto report = epoch::renderer_capability_report_for(kind);
             const bool meshNative = epoch::renderer_supports_mesh_resources(caps);
             const bool modelNative = epoch::renderer_supports_model_resources(caps);
             if (meshNative && modelNative)
@@ -2619,6 +3127,8 @@ namespace epochnamespace
                 return "mesh native, model allocation pending";
             if (modelNative)
                 return "model native, mesh allocation pending";
+            if (report.mesh_model_resources == epoch::RendererCapabilityStatus::partial)
+                return "Partial: descriptors/graph path exists; backend-native mesh/model allocation pending";
             return "descriptors compile through graph; backend-native allocation pending";
         }
 
@@ -2629,11 +3139,28 @@ namespace epochnamespace
                 return "debug fallback; production sampled RTT allocation is out of scope";
 
             const auto caps = epoch::renderer_capabilities_for(kind);
+            const auto report = epoch::renderer_capability_report_for(kind);
+            const std::string status = epoch::renderer_capability_status_label(report.sampled_render_targets);
             if (epoch::renderer_supports_native_sampled_render_targets(caps))
-                return "native sampled RTT allocation active";
+                return status + ": native sampled RTT allocation active in this live backend";
             if (epoch::renderer_supports_sampled_render_targets(caps))
-                return "sampled RTT graph declared; backend-native allocation pending";
-            return "sampled RTT unavailable";
+            {
+                switch (kind)
+                {
+                case epoch::RendererBackendKind::opengl:
+                    return status + ": descriptors/graph/hook ready; live allocation and presentation still need active-context proof";
+                case epoch::RendererBackendKind::sdl3:
+                case epoch::RendererBackendKind::sfml3:
+                case epoch::RendererBackendKind::raylib3:
+                    return status + ": runtime-gated native allocation; no-runtime refusal is guard proof only";
+                case epoch::RendererBackendKind::vulkan:
+                case epoch::RendererBackendKind::directx:
+                    return status + ": shared descriptors/graph only; native render.device implementation missing";
+                default:
+                    return status + ": sampled RTT graph declared; backend-native allocation pending";
+                }
+            }
+            return status + ": sampled RTT unavailable";
         }
 
         [[nodiscard]] std::string renderer_next_feature_gate(const std::shared_ptr<core::Context>& ctx)
@@ -4711,12 +5238,23 @@ namespace epochnamespace
 
         chatStorage.chats.clear();
         editorStorage.states.clear();
+        editorStorage.detachedPaneRoutes.clear();
 
         if (chatStorage.bot_initialized)
         {
             epoch::ai::shutdown_engine_ai();
             chatStorage.bot_initialized = false;
         }
+    }
+
+    void editor_mark_context_panel_detached(std::string_view route_id, bool detached)
+    {
+        set_detached_pane_route(route_id, detached);
+    }
+
+    void editor_notify_context_panel_closed(std::string_view route_id)
+    {
+        set_detached_pane_route(route_id, false);
     }
 
     void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id)
@@ -4757,6 +5295,7 @@ namespace epochnamespace
         if (!ctx)
             return;
 
+        const auto passiveObservation = passive_context_observation_for(ctx);
         auto& storage = editor_storage();
         std::scoped_lock lock(storage.mutex);
         const auto it = storage.states.find(ctx);
@@ -4765,6 +5304,25 @@ namespace epochnamespace
 
         auto& state = it->second;
         state.timeSnapshot = snapshot;
+        update_passive_context_scoring(storage, state, ctx, snapshot, passiveObservation);
+    }
+
+    void editor_set_context_selection_status(const core::Context* ctx, std::string_view status)
+    {
+        if (!ctx)
+            return;
+
+        auto& storage = editor_storage();
+        std::scoped_lock lock(storage.mutex);
+        const auto it = storage.states.find(ctx);
+        if (it == storage.states.end())
+            return;
+
+        auto& state = it->second;
+        state.contextSelectionStatus = status.empty()
+            ? std::string{ "Context follows the active editor window." }
+            : std::string{ status };
+        push_editor_log(state, std::string{ "[context] " } + state.contextSelectionStatus);
     }
 
     EditorTimeControl editor_time_control(const core::Context* ctx)
@@ -4790,6 +5348,198 @@ namespace epochnamespace
             return;
 
         it->second.timeControl.step_once = false;
+    }
+
+    EditorContextSnapshot editor_capture_context_snapshot(const core::Context* ctx)
+    {
+        EditorContextSnapshot snapshot{};
+        if (!ctx)
+            return snapshot;
+
+        auto& storage = editor_storage();
+        std::scoped_lock lock(storage.mutex);
+        const auto it = storage.states.find(ctx);
+        if (it == storage.states.end())
+            return snapshot;
+
+        const EditorState& editor = it->second;
+        snapshot.valid = true;
+        snapshot.project_id = editor.projectId;
+        snapshot.project_name = editor.projectName;
+        snapshot.project_root = editor.projectRoot;
+        snapshot.project_scene_path = editor.projectScenePath;
+        snapshot.project_manifest = editor.projectManifest;
+        snapshot.project_template = editor.projectTemplate;
+        snapshot.project_kind = editor.projectKind;
+        snapshot.active_script = editor.activeScript;
+        snapshot.active_runtime_scene = editor.activeRuntimeScene;
+        snapshot.active_world = editor.activeWorld;
+        snapshot.project_status = editor.projectStatus;
+        snapshot.project_build_status = editor.projectBuildStatus;
+        snapshot.script_build_status = editor.scriptBuildStatus;
+        snapshot.script_editor_path = editor.scriptEditorPath;
+        snapshot.script_editor_text = editor.scriptEditorText;
+        snapshot.script_editor_status = editor.scriptEditorStatus;
+        snapshot.script_editor_dirty = editor.scriptEditorDirty;
+        snapshot.project_run_backend = editor.projectRunBackend;
+        snapshot.project_run_frame_limit_fps = snapshot_frame_limit(editor.projectRunFrameLimitFps, 60.0);
+        snapshot.project_camera_mode = static_cast<std::uint8_t>(editor.projectCameraMode);
+        snapshot.input_profile_preset = static_cast<std::uint8_t>(editor.inputProfilePreset);
+        snapshot.theme_preference = snapshot_theme_preference(editor.themePreference);
+        snapshot.editor_frame_limit_fps = snapshot_frame_limit(editor.editorFrameLimitFps, 120.0);
+        snapshot.selected_project_file = editor.selectedProjectFile;
+        snapshot.selected_asset_path = editor.selectedAssetPath;
+        snapshot.entities.reserve(editor.entities.size());
+        for (const EditorEntity& entity : editor.entities)
+            snapshot.entities.emplace_back(capture_snapshot_entity(entity));
+        snapshot.selected_entity = editor.selectedEntity;
+        snapshot.log_lines = editor.logLines;
+        snapshot.helpers_visible = editor.helpersVisible;
+        snapshot.time_snapshot = editor.timeSnapshot;
+        snapshot.time_control = snapshot_time_control(editor.timeControl);
+        snapshot.preview_mode = snapshot_preview_mode(editor.previewMode);
+        snapshot.workspace_tab = snapshot_workspace_tab(editor.workspaceTab);
+        snapshot.dock_status_tab = snapshot_workspace_tab(editor.dockStatusTab);
+        snapshot.main_surface = static_cast<std::uint8_t>(editor.mainSurface);
+        snapshot.workspace_split = snapshot_layout_split(editor.workspaceSplit, 0.68f);
+        snapshot.outliner_split = snapshot_layout_split(editor.outlinerSplit, 0.20f);
+        snapshot.inspector_split = snapshot_layout_split(editor.inspectorSplit, 0.22f);
+        snapshot.dock_split = snapshot_layout_split(editor.dockSplit, 0.24f);
+        snapshot.show_outliner = editor.showOutliner;
+        snapshot.show_inspector = editor.showInspector;
+        snapshot.show_console_dock = editor.showConsoleDock;
+        snapshot.show_ai_chat = editor.showAiChat;
+        snapshot.project_notes_visible = editor.projectNotesVisible;
+        snapshot.ai_workspace_domain = static_cast<std::uint8_t>(editor.aiWorkspaceDomain);
+        snapshot.systems_render_zoom = finite_or(editor.systems.renderZoom, 1.15f);
+        snapshot.systems_task_zoom = finite_or(editor.systems.taskZoom, 1.15f);
+        snapshot.systems_render_pan = editor.systems.renderPan;
+        snapshot.systems_task_pan = editor.systems.taskPan;
+        snapshot.camera = previewgrid::capture_camera_rig_snapshot(ctx);
+        return snapshot;
+    }
+
+    bool editor_restore_context_snapshot(core::Context* ctx, const EditorContextSnapshot& snapshot)
+    {
+        if (!ctx || !snapshot.valid)
+            return false;
+
+        auto& storage = editor_storage();
+        std::scoped_lock lock(storage.mutex);
+        EditorState& editor = storage.states[ctx];
+        editor.initialized = true;
+        editor.openMenu = TopMenu::None;
+        editor.projectId = snapshot.project_id;
+        editor.projectName = snapshot.project_name;
+        editor.projectRoot = snapshot.project_root;
+        editor.projectScenePath = snapshot.project_scene_path;
+        editor.projectManifest = snapshot.project_manifest;
+        editor.projectTemplate = snapshot.project_template;
+        editor.projectKind = snapshot.project_kind;
+        editor.activeScript = snapshot.active_script;
+        editor.activeRuntimeScene = snapshot.active_runtime_scene;
+        editor.activeWorld = snapshot.active_world;
+        editor.projectStatus = snapshot.project_status;
+        editor.projectBuildStatus = snapshot.project_build_status;
+        editor.scriptBuildStatus = snapshot.script_build_status;
+        editor.scriptEditorPath = snapshot.script_editor_path;
+        editor.scriptEditorText = snapshot.script_editor_text;
+        editor.scriptEditorStatus = snapshot.script_editor_status;
+        editor.scriptEditorDirty = snapshot.script_editor_dirty;
+        editor.projectBuildPending.reset();
+        editor.projectBuildRunAfterBuild = false;
+        editor.projectBuildRunScene.clear();
+        editor.projectBuildOutputPath.clear();
+        editor.projectBuildRunBackend.clear();
+        editor.projectRunBackend = snapshot.project_run_backend.empty() ? std::string{ "opengl" } : snapshot.project_run_backend;
+        editor.projectRunFrameLimitFps = snapshot_frame_limit(snapshot.project_run_frame_limit_fps, 60.0);
+        editor.projectCameraMode = snapshot_camera_mode(snapshot.project_camera_mode);
+        editor.projectBuildRunCameraMode = editor.projectCameraMode;
+        editor.inputProfilePreset = snapshot_input_profile(snapshot.input_profile_preset);
+        editor.projectBuildRunInputProfile = editor.inputProfilePreset;
+        editor.themePreference = snapshot_theme_preference(snapshot.theme_preference);
+        editor.editorFrameLimitFps = snapshot_frame_limit(snapshot.editor_frame_limit_fps, 120.0);
+        editor.selectedProjectFile = snapshot.selected_project_file;
+        editor.selectedAssetPath = snapshot.selected_asset_path;
+        editor.entities.clear();
+        editor.entities.reserve(snapshot.entities.size());
+        for (const EditorContextSnapshotEntity& entity : snapshot.entities)
+            editor.entities.emplace_back(restore_snapshot_entity(entity));
+        editor.selectedEntity = editor.entities.empty()
+            ? 0u
+            : (std::min)(snapshot.selected_entity, editor.entities.size() - 1u);
+        editor.logLines = snapshot.log_lines;
+        editor.helpersVisible = snapshot.helpers_visible;
+        editor.sceneDragActive = false;
+        editor.sceneLeftWasHeld = false;
+        editor.timeSnapshot = snapshot.time_snapshot;
+        editor.timeControl = snapshot_time_control(snapshot.time_control);
+        editor.previewMode = snapshot_preview_mode(snapshot.preview_mode);
+        editor.workspaceTab = snapshot_workspace_tab(snapshot.workspace_tab);
+        editor.dockStatusTab = snapshot_workspace_tab(snapshot.dock_status_tab);
+        editor.mainSurface = snapshot_main_surface(snapshot.main_surface);
+        editor.workspaceSplit = snapshot_layout_split(snapshot.workspace_split, 0.68f);
+        editor.outlinerSplit = snapshot_layout_split(snapshot.outliner_split, 0.20f);
+        editor.inspectorSplit = snapshot_layout_split(snapshot.inspector_split, 0.22f);
+        editor.dockSplit = snapshot_layout_split(snapshot.dock_split, 0.24f);
+        editor.showOutliner = snapshot.show_outliner;
+        editor.showInspector = snapshot.show_inspector;
+        editor.showConsoleDock = snapshot.show_console_dock;
+        editor.showAiChat = snapshot.show_ai_chat;
+        editor.layoutDrag = EditorLayoutDrag::None;
+        editor.surfaceSettleFrames = 1;
+        editor.lastLayoutExtent = {};
+        editor.dockableGuiHost = {};
+        editor.floatingGuiWindow = {
+            .id = 1,
+            .mode = gui::DockableWindowMode::floating,
+            .dock_slot = gui::DockSlot::right,
+            .floating = { .open = false },
+            .visible = false
+        };
+        editor.detachedPanelHostStatus = "Pane popouts are routed context panels; context selection stays in the editor toolbar.";
+        editor.projectNotesVisible = snapshot.project_notes_visible;
+        editor.systems.renderZoom = (std::clamp)(finite_or(snapshot.systems_render_zoom, 1.15f), 0.50f, 3.0f);
+        editor.systems.taskZoom = (std::clamp)(finite_or(snapshot.systems_task_zoom, 1.15f), 0.50f, 3.0f);
+        editor.systems.renderPan = (std::clamp)(snapshot.systems_render_pan, -32, 32);
+        editor.systems.taskPan = (std::clamp)(snapshot.systems_task_pan, -32, 32);
+        editor.systems.graphInputCooldownFrames = 0;
+        editor.systems.renderSurface = {};
+        editor.systems.taskSurface = {};
+        editor.systems.supportSurface = {};
+        editor.systems.aiLoopSurface = {};
+        editor.aiWorkspaceDomain = snapshot_ai_workspace_domain(snapshot.ai_workspace_domain);
+        editor.showAboutModal = false;
+        editor.showSettingsModal = false;
+        editor.showPackageManagerModal = false;
+        editor.showUpdateConfirmModal = false;
+        editor.showSourceUpdateConfirmModal = false;
+        editor.updateState = EditorUpdateState::Idle;
+        editor.updateStatus = "Updates have not been checked.";
+        editor.updateCheckPending.reset();
+        editor.lastUpdateCheck = {};
+        editor.autoUpdateCheckQueued = false;
+        editor.updateInstallPending = false;
+        editor.updateSourceInstallPending = false;
+        editor.updateConfirmModalStableSize = {};
+        editor.updateConfirmModalStableViewport = {};
+        editor.sourceUpdateConfirmModalStableSize = {};
+        editor.sourceUpdateConfirmModalStableViewport = {};
+        editor.automationCommand = EditorAutomationCommand::None;
+        editor.automationConsumed = true;
+        editor.aiContinuousBuildEnabled = false;
+        editor.aiContinuousBuildPending.reset();
+        editor.aiContinuousBuildStageOnNextFrame = false;
+        editor.aiContinuousBuildFingerprint.clear();
+        editor.aiContinuousBuildStatus = "Manual OS AI evidence gate is idle.";
+        if (snapshot.camera.valid)
+            (void)previewgrid::restore_camera_rig_snapshot(ctx, snapshot.camera);
+        else
+            previewgrid::set_camera_mode(ctx, editor.projectCameraMode);
+        input::set_active_profile(editor.inputProfilePreset);
+        ctx->set_scene_preview_mode(editor.previewMode);
+        publish_editor_preview_markers(ctx, editor);
+        return true;
     }
 
     bool editor_run_script(const core::Context* ctx, std::string_view script_name)
@@ -4844,6 +5594,193 @@ namespace epochnamespace
         }
 
         return ok;
+    }
+
+    EditorFrameResult editor_run_context_panel(
+        const std::shared_ptr<core::Context>& ctx,
+        std::string_view route_id)
+    {
+        EditorFrameResult result{};
+        if (!ctx)
+            return result;
+
+        auto& editor = editor_state_for(ctx);
+        ctx->set_gui_overlay_priority(true);
+        const gui::ScopedTheme editorThemeScope{ editor.themePreference };
+        int resolvedWidth = 0;
+        int resolvedHeight = 0;
+        if (ctx->windowData)
+        {
+            resolvedWidth = ctx->windowData->get_width();
+            resolvedHeight = ctx->windowData->get_height();
+        }
+        if (resolvedWidth <= 0 || resolvedHeight <= 0)
+        {
+            resolvedWidth = ctx->get_width_safe();
+            resolvedHeight = ctx->get_height_safe();
+        }
+
+        const float w = static_cast<float>((std::max)(1, resolvedWidth));
+        const float h = static_cast<float>((std::max)(1, resolvedHeight));
+        const bool outlinerRoute = route_id == "pane.outliner";
+        const bool inspectorRoute = route_id == "pane.inspector";
+        const bool consoleRoute = route_id == "pane.console";
+        const bool aiChatRoute = route_id == "pane.ai_chat";
+        const bool floatingGuiRoute = route_id == "floating.gui";
+        const bool sourcePaneRoute = outlinerRoute || inspectorRoute || consoleRoute || aiChatRoute;
+        const bool paneRoute = sourcePaneRoute || floatingGuiRoute;
+        const std::string_view windowTitle =
+            outlinerRoute ? std::string_view{ "World Outliner" }
+            : inspectorRoute ? std::string_view{ "Inspector" }
+            : consoleRoute ? std::string_view{ "Console Dock" }
+            : aiChatRoute ? std::string_view{ "AI Chat" }
+            : floatingGuiRoute ? std::string_view{ "Floating GUI" }
+            : std::string_view{ "Context Driver" };
+        gui::begin_window(windowTitle, { 0.0f, 0.0f }, { w, h });
+
+        const float contentWidth = (std::max)(1.0f, w - 32.0f);
+        if (paneRoute)
+        {
+            auto& chat = chat_state_for(ctx);
+            chat.pump();
+
+            gui::label(windowTitle);
+            gui::property_row("Route", std::string(route_id), 118.0f);
+            gui::property_row("Renderer", renderer_name(ctx), 118.0f);
+            gui::property_row("Project", editor.projectName.empty() ? std::string("(none)") : editor.projectName, 118.0f);
+            gui::property_row("Host", "Detached context panel cloned from the source editor state", 118.0f);
+
+            if (outlinerRoute)
+            {
+                std::vector<std::string> lines;
+                lines.reserve(editor.entities.size() + 3u);
+                lines.push_back("Scene: " + editor.activeWorld);
+                lines.push_back("Entities: " + std::to_string(editor.entities.size()));
+                for (std::size_t i = 0; i < editor.entities.size(); ++i)
+                {
+                    const auto& entity = editor.entities[i];
+                    lines.push_back(std::string(i == editor.selectedEntity ? "> " : "  ")
+                        + entity.name + " | " + entity.type + " | " + entity.category);
+                }
+                (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                    .id = "popout-world-outliner",
+                    .size = { contentWidth, (std::max)(120.0f, h - 178.0f) },
+                    .lines = lines,
+                    .max_line_chars = 160,
+                    .selectable = true
+                });
+            }
+            else if (inspectorRoute)
+            {
+                if (!editor.entities.empty())
+                {
+                    const std::size_t selectedIndex = (std::min)(editor.selectedEntity, editor.entities.size() - 1u);
+                    const auto& entity = editor.entities[selectedIndex];
+                    gui::property_row("Selected", entity.name, 118.0f);
+                    gui::property_row("Type", entity.type, 118.0f);
+                    gui::property_row("Category", entity.category, 118.0f);
+                    gui::property_row("Position", vec3_text(entity.position), 118.0f);
+                    gui::property_row("Rotation", vec3_text(entity.rotation), 118.0f);
+                    gui::property_row("Scale", vec3_text(entity.scale), 118.0f);
+                    gui::property_row("Visible", entity.visible ? std::string("true") : std::string("false"), 118.0f);
+                    gui::property_row("EditorOnly", entity.editorOnly ? std::string("true") : std::string("false"), 118.0f);
+                }
+                else
+                {
+                    gui::property_row("Selected", std::string("<none>"), 118.0f);
+                }
+                gui::property_row("Preview", std::string(preview_mode_name(editor.previewMode)), 118.0f);
+                gui::property_row("Camera", preview_camera_name(ctx), 118.0f);
+                gui::property_row("Zoom", preview_zoom_text(ctx), 118.0f);
+            }
+            else if (consoleRoute)
+            {
+                (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                    .id = "popout-console-dock",
+                    .size = { contentWidth, (std::max)(120.0f, h - 178.0f) },
+                    .lines = editor.logLines,
+                    .max_line_chars = 1024,
+                    .selectable = true,
+                    .stick_to_bottom = true
+                });
+            }
+            else if (aiChatRoute)
+            {
+                (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                    .id = "popout-ai-chat",
+                    .size = { contentWidth, (std::max)(120.0f, h - 212.0f) },
+                    .lines = chat.lines,
+                    .max_line_chars = 240,
+                    .selectable = true,
+                    .stick_to_bottom = true
+                });
+                const auto inputResult = gui::edit_box(chat.input, { contentWidth, 30.0f }, 4096, false);
+                if (inputResult.submitted)
+                {
+                    chat.submit(std::move(chat.input));
+                    chat.input.clear();
+                }
+            }
+            else
+            {
+                gui::wrapped_label(
+                    "Reusable EpochGui host surface routed through a native context panel. This route is infrastructure; current editor window popouts use concrete pane routes.",
+                    contentWidth);
+            }
+        }
+        else
+        {
+            gui::label("Context Driver");
+            gui::wrapped_label(
+                "Detached context host: the engine owns the native context/window driver, while this routed panel is editor-owned GUI content.",
+                contentWidth);
+            gui::property_row("Route", std::string(route_id), 132.0f);
+            gui::property_row("Renderer", renderer_name(ctx), 132.0f);
+            gui::property_row("Version", std::string("v") + epochnamespace::GetEngineVersionString(), 132.0f);
+            gui::property_row("Build", epochnamespace::GetEngineBuildTagString(), 132.0f);
+            gui::property_row("Host", "Detached native context", 132.0f);
+            gui::property_row("GUI", "EpochGui primitives through editor adapter", 132.0f);
+            const auto availableBackends = available_context_backend_options();
+            gui::property_row("Available", context_backend_summary(availableBackends), 132.0f);
+            gui::property_row("Context picker", "Editor toolbar combobox", 132.0f);
+        }
+
+        const float buttonWidth = (std::max)(112.0f, (std::min)(180.0f, contentWidth * 0.46f));
+        if (sourcePaneRoute)
+        {
+            const std::array actions{
+                gui::InlineButtonSpec{ .label = "Dock Back", .width = buttonWidth },
+                gui::InlineButtonSpec{ .label = "Close Window", .width = buttonWidth }
+            };
+            if (const auto selected = gui::inline_button_row(actions, 28.0f, 9.0f))
+            {
+                editor_mark_context_panel_detached(route_id, false);
+                result.command = EditorCommand::Exit;
+                if (*selected == 0)
+                    result.command_argument = "dock_back";
+            }
+        }
+        else
+        {
+            const std::array actions{
+                gui::InlineButtonSpec{ .label = "Close Window", .width = buttonWidth }
+            };
+            if (const auto selected = gui::inline_button_row(actions, 28.0f, 9.0f))
+            {
+                (void)selected;
+                result.command = EditorCommand::Exit;
+            }
+        }
+
+        if (!paneRoute)
+        {
+            gui::wrapped_label(
+                "Floating GUI and context selection are separate: this routed window is a GUI host proof, while backend selection lives in the docked editor toolbar.",
+                contentWidth);
+        }
+        gui::end_window();
+        result.scene_input_captured = true;
+        return result;
     }
 
     EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx)
@@ -5013,9 +5950,15 @@ namespace epochnamespace
         if (modalVisible)
             editor.openMenu = TopMenu::None;
 
+        auto floating_gui_visible = [&editor]() noexcept -> bool
+        {
+            return editor.floatingGuiWindow.visible;
+        };
+
         const bool overlayPriorityActive =
             editor.openMenu != TopMenu::None
-            || modalVisible;
+            || modalVisible
+            || floating_gui_visible();
         ctx->set_gui_overlay_priority(overlayPriorityActive);
 
         gui::clear_modal_input_capture();
@@ -5051,13 +5994,19 @@ namespace epochnamespace
         editor.dockSplit = std::clamp(editor.dockSplit, 0.08f, 0.80f);
 
         const bool center_uses_scene = main_surface_uses_scene(editor.mainSurface);
-        const bool layout_outliner_visible = editor.showOutliner && center_uses_scene;
-        const bool layout_inspector_visible = editor.showInspector;
+        const bool outliner_detached = pane_route_is_detached("pane.outliner");
+        const bool inspector_detached = pane_route_is_detached("pane.inspector");
+        const bool console_detached = pane_route_is_detached("pane.console");
+        const bool ai_chat_detached = pane_route_is_detached("pane.ai_chat");
+        const bool console_dock_visible = editor.showConsoleDock && !console_detached;
+        const bool ai_chat_dock_visible = editor.showAiChat && !ai_chat_detached;
+        const bool layout_outliner_visible = editor.showOutliner && !outliner_detached && center_uses_scene;
+        const bool layout_inspector_visible = editor.showInspector && !inspector_detached;
 
         const float toolbar_h = 98.0f;
         const float splitter_w = 7.0f;
         const float splitter_h = 7.0f;
-        const bool bottom_visible = editor.showConsoleDock || editor.showAiChat;
+        const bool bottom_visible = console_dock_visible || ai_chat_dock_visible;
         const float raw_bottom_h = bottom_visible ? h * editor.dockSplit : 0.0f;
         const float bottom_h = bottom_visible
             ? clamp_layout(raw_bottom_h, (std::min)(96.0f, h * 0.22f), (std::max)(96.0f, h * 0.82f))
@@ -5100,10 +6049,24 @@ namespace epochnamespace
             main_h
         };
 
-        auto emit_command = [&](EditorCommand command, std::string_view argument = {})
+        auto emit_command = [&](
+            EditorCommand command,
+            std::string_view argument = {},
+            core::ContextType requestedContextType = core::ContextType::None)
         {
             result.command = command;
             result.command_argument.assign(argument.begin(), argument.end());
+            result.requested_context_type = requestedContextType;
+        };
+
+        auto request_context_backend_selection = [&](const ContextBackendOption& option)
+        {
+            editor.openMenu = TopMenu::None;
+            editor.selectedContextBackend = option.type;
+            editor.contextSelectionStatus =
+                "Requested " + option.label + " for this editor session.";
+            emit_command(EditorCommand::SwitchContext, option.label, option.type);
+            push_editor_log(editor, "[context] Requested " + option.label + " from the editor toolbar.");
         };
 
         auto submit_ai_prompt = [&](std::string prompt, std::string_view logLine)
@@ -5418,6 +6381,178 @@ namespace epochnamespace
             apply_editor_surface(surface, source);
         };
 
+        auto request_pane_popout = [&](std::string_view route, std::string_view label)
+        {
+            editor.openMenu = TopMenu::None;
+            editor.detachedPanelHostStatus = std::string(label) + " popout requested through a cloned routed context.";
+            emit_command(
+                EditorCommand::OpenContextWindow,
+                route,
+                ctx ? ctx->type : core::ContextType::None);
+            push_editor_log(editor, std::string("[window] ") + std::string(label) + " popout requested.");
+        };
+
+        auto render_floating_gui_window = [&]()
+        {
+            if (!editor.floatingGuiWindow.visible || modal_visible_now())
+                return;
+
+            const bool docked = editor.floatingGuiWindow.mode == gui::DockableWindowMode::docked;
+            const gui::Vec2 defaultFloatingPosition{
+                (std::max)(24.0f, w - 560.0f),
+                (std::max)(118.0f, h * 0.22f)
+            };
+            const gui::Vec2 dockedPosition{
+                (std::max)(24.0f, viewport_pos.x + viewport_size.x - 520.0f),
+                (std::max)(toolbar_h + 18.0f, viewport_pos.y + 20.0f)
+            };
+            const gui::Vec2 dockedSize{
+                (std::min)(500.0f, (std::max)(320.0f, viewport_size.x - 32.0f)),
+                300.0f
+            };
+
+            const gui::FloatingWindowOptions floatingOptions{
+                .default_position = {
+                    defaultFloatingPosition.x,
+                    defaultFloatingPosition.y
+                },
+                .default_size = { 500.0f, 300.0f },
+                .min_size = { 320.0f, 196.0f },
+                .viewport_size = { w, h },
+                .movable = true,
+                .resizable = true,
+                .closable = true,
+                .draw_background = true,
+                .top_layer = true,
+                .capture_input = true
+            };
+            const gui::DockableWindowOptions dockableOptions{
+                .title = "Floating GUI",
+                .docked_frame = { .position = dockedPosition, .size = dockedSize },
+                .floating = floatingOptions,
+                .viewport_size = { w, h },
+                .title_bar_height = 30.0f,
+                .content_padding = 6.0f,
+                .action_button_width = 72.0f,
+                .action_button_gap = 4.0f,
+                .allow_dock = true,
+                .allow_float = true,
+                .allow_detach = false,
+                .allow_close = true,
+                .fallback_dock_slot = gui::DockSlot::right
+            };
+
+            result.scene_input_captured = true;
+            (void)gui::update_dockable_window(
+                editor.dockableGuiHost,
+                editor.floatingGuiWindow,
+                dockableOptions,
+                {});
+
+            auto apply_dockable_action = [&](gui::DockableWindowAction action)
+            {
+                const auto actionResult = gui::update_dockable_window(
+                    editor.dockableGuiHost,
+                    editor.floatingGuiWindow,
+                    dockableOptions,
+                    gui::DockableWindowInput{
+                        .requested_action = action,
+                        .requested_dock_slot = gui::DockSlot::right
+                    });
+
+                if (actionResult.dock_requested)
+                {
+                    editor.detachedPanelHostStatus = "Floating GUI docked into the editor-owned GUI host.";
+                    push_editor_log(editor, "[window] Floating GUI docked.");
+                }
+                else if (actionResult.float_requested)
+                {
+                    editor.detachedPanelHostStatus = "Floating GUI undocked into a top-layer panel.";
+                    push_editor_log(editor, "[window] Floating GUI floated.");
+                }
+                else if (actionResult.close_requested)
+                {
+                    editor.detachedPanelHostStatus = "Floating GUI closed.";
+                    push_editor_log(editor, "[window] Floating GUI closed.");
+                }
+            };
+
+            auto draw_panel_contents = [&](float contentWidth)
+            {
+                const bool currentlyDocked = editor.floatingGuiWindow.mode == gui::DockableWindowMode::docked;
+                const std::string_view dockAction = currentlyDocked ? "Float" : "Dock";
+
+                gui::label(currentlyDocked ? "Docked GUI" : "Floating GUI");
+                gui::wrapped_label(
+                    "This panel is backed by the reusable EpochGui dockable-window state model. Dock and Float now move through the same GUI library path; backend context selection stays in the toolbar.",
+                    contentWidth);
+                gui::property_row("Renderer", renderer_name(ctx), 112.0f);
+                gui::property_row("Module", "epoch.gui", 112.0f);
+                gui::property_row("Mode", currentlyDocked ? "Docked GUI panel" : "Floating GUI panel", 112.0f);
+                gui::property_row("Context", "Toolbar combobox owns backend selection", 112.0f);
+
+                const std::array actions{
+                    gui::InlineButtonSpec{ .label = "System Info", .width = 112.0f },
+                    gui::InlineButtonSpec{ .label = "Project", .width = 88.0f },
+                    gui::InlineButtonSpec{ .label = dockAction, .width = 78.0f },
+                    gui::InlineButtonSpec{ .label = "Close", .width = 72.0f }
+                };
+                if (const auto action = gui::inline_button_row(actions, 28.0f, 8.0f))
+                {
+                    switch (*action)
+                    {
+                    case 0:
+                        open_editor_surface(EditorMainSurface::Systems, "dockable gui");
+                        break;
+                    case 1:
+                        open_editor_surface(EditorMainSurface::Project, "dockable gui");
+                        break;
+                    case 2:
+                        apply_dockable_action(currentlyDocked
+                            ? gui::DockableWindowAction::float_window
+                            : gui::DockableWindowAction::dock);
+                        break;
+                    case 3:
+                        apply_dockable_action(gui::DockableWindowAction::close);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            };
+
+            if (editor.floatingGuiWindow.mode == gui::DockableWindowMode::docked)
+            {
+                gui::begin_top_layer();
+                gui::begin_window("Floating GUI Dock", dockedPosition, dockedSize, true);
+                draw_panel_contents((std::max)(1.0f, dockedSize.x - 16.0f));
+                gui::end_window();
+                gui::end_top_layer();
+                editor.detachedPanelHostStatus = "Floating GUI docked; context selection stays in the toolbar.";
+            }
+            else
+            {
+                const auto floating = gui::begin_floating_window(
+                    editor.floatingGuiWindow.floating,
+                    floatingOptions);
+                if (!floating.begun)
+                    return;
+
+                draw_panel_contents((std::max)(1.0f, floating.content.size.x - 8.0f));
+                gui::end_floating_window();
+
+                if (editor.floatingGuiWindow.visible
+                    && (!editor.floatingGuiWindow.floating.open || floating.close_requested))
+                {
+                    apply_dockable_action(gui::DockableWindowAction::close);
+                }
+                else if (floating.moved || floating.resized || floating.focused)
+                {
+                    editor.detachedPanelHostStatus = "Floating GUI active; context selection stays in the toolbar.";
+                }
+            }
+        };
+
         auto render_main_surface_tabs = [&]()
         {
             const std::array<gui::SegmentedButtonSpec, 8> tabs{{
@@ -5444,6 +6579,8 @@ namespace epochnamespace
             if (const auto selected = gui::tab_bar(tabs, 28.0f, 5.0f))
                 open_editor_surface(surfaces[*selected], "center tabs");
         };
+
+        render_floating_gui_window();
 
         gui::begin_window("", toolbar_pos, toolbar_size);
         const float toolbar_button_y = toolbar_pos.y + 10.0f;
@@ -5484,11 +6621,55 @@ namespace epochnamespace
                 editor.openMenu = item.menu;
             toolbar_x += item.width + 6.0f;
         }
+        const bool toolbarControlsBlockedByMenu = editor.openMenu != TopMenu::None;
+        if (toolbarControlsBlockedByMenu)
+        {
+            result.scene_input_captured = true;
+            gui::block_input_until_clear();
+        }
+
+        const auto toolbarContextOptions = available_context_backend_options();
+        if (ctx)
+            editor.selectedContextBackend = ctx->type;
+
+        std::vector<std::string_view> toolbarContextLabels;
+        toolbarContextLabels.reserve(toolbarContextOptions.size());
+        std::string selectedContextLabel = ctx ? renderer_name(ctx) : std::string{ "Unknown" };
+        for (const auto& option : toolbarContextOptions)
+        {
+            toolbarContextLabels.emplace_back(option.label);
+            if (option.type == editor.selectedContextBackend)
+                selectedContextLabel = option.label;
+        }
+
+        if (!toolbarContextOptions.empty())
+        {
+            constexpr float context_select_w = 188.0f;
+            gui::set_cursor({ toolbar_x, toolbar_button_y });
+            const auto contextSelect = gui::select_box(gui::SelectBoxOptions{
+                .id = "editor-toolbar-context-select",
+                .placeholder = "Context",
+                .selected = selectedContextLabel,
+                .options = std::span<const std::string_view>{ toolbarContextLabels.data(), toolbarContextLabels.size() },
+                .size = { context_select_w, toolbar_button_h },
+                .row_height = 24.0f,
+                .max_visible_options = 7
+            });
+            if (contextSelect.changed
+                && !toolbarControlsBlockedByMenu
+                && contextSelect.selected_index
+                && *contextSelect.selected_index < toolbarContextOptions.size())
+            {
+                request_context_backend_selection(toolbarContextOptions[*contextSelect.selected_index]);
+                selectedContextLabel = toolbarContextOptions[*contextSelect.selected_index].label;
+            }
+            toolbar_x += context_select_w + 8.0f;
+        }
 
         const float run_button_w = 108.0f;
         const float run_button_x = (std::max)(toolbar_x + 12.0f, viewport_pos.x + (viewport_size.x - run_button_w) * 0.5f);
         gui::set_cursor({ run_button_x, toolbar_button_y });
-        if (gui::button("Run", { run_button_w, toolbar_button_h }))
+        if (gui::button("Run", { run_button_w, toolbar_button_h }) && !toolbarControlsBlockedByMenu)
         {
             if (editor.projectKind == "Engine Self-Iteration")
                 play_active_context();
@@ -5505,7 +6686,8 @@ namespace epochnamespace
             const bool updateButtonActive = editor.showUpdateConfirmModal
                 || editor.showSourceUpdateConfirmModal
                 || editor.updateInstallPending;
-            if (gui::button_selected(update_toolbar_button_label(editor.updateState), { update_button_w, toolbar_button_h }, updateButtonActive))
+            if (gui::button_selected(update_toolbar_button_label(editor.updateState), { update_button_w, toolbar_button_h }, updateButtonActive)
+                && !toolbarControlsBlockedByMenu)
             {
                 if (editor.updateState == EditorUpdateState::RestartReady)
                 {
@@ -5530,6 +6712,7 @@ namespace epochnamespace
             std::thread::hardware_concurrency() > 0
             ? static_cast<std::size_t>(std::thread::hardware_concurrency())
             : std::size_t{ 1 });
+
         const float status_x = (std::max)(toolbar_x + 12.0f, status_anchor_x);
         gui::set_cursor({ status_x, toolbar_button_y + 4.0f });
         gui::wrapped_label(
@@ -5537,7 +6720,7 @@ namespace epochnamespace
             + "  |  " + epochnamespace::GetEngineBuildTagString()
             + "  |  Threads " + std::to_string(toolbarThreadCount)
             + "/" + std::to_string(toolbarCpuThreadCount)
-            + "  |  " + renderer_name(ctx)
+            + "  |  Context " + selectedContextLabel
             + "  |  Zoom " + preview_zoom_text(ctx),
             (std::max)(180.0f, w - status_x - 12.0f));
 
@@ -5556,42 +6739,50 @@ namespace epochnamespace
         const std::string systems_tab = "System Info";
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(editor_tab, { 136.0f, tab_h }, editor.mainSurface == EditorMainSurface::Scene))
+        if (gui::button_selected(editor_tab, { 136.0f, tab_h }, editor.mainSurface == EditorMainSurface::Scene)
+            && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::Scene, "toolbar");
         tab_x += 136.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(runtime_tab, { 142.0f, tab_h }, editor.mainSurface == EditorMainSurface::Game2D))
+        if (gui::button_selected(runtime_tab, { 142.0f, tab_h }, editor.mainSurface == EditorMainSurface::Game2D)
+            && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::Game2D, "toolbar");
         tab_x += 142.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(assets_tab, { 104.0f, tab_h }, editor.mainSurface == EditorMainSurface::Assets))
+        if (gui::button_selected(assets_tab, { 104.0f, tab_h }, editor.mainSurface == EditorMainSurface::Assets)
+            && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::Assets, "toolbar");
         tab_x += 104.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(forest_tab, { 116.0f, tab_h }, editor.mainSurface == EditorMainSurface::ForestFactory))
+        if (gui::button_selected(forest_tab, { 116.0f, tab_h }, editor.mainSurface == EditorMainSurface::ForestFactory)
+            && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::ForestFactory, "toolbar");
         tab_x += 116.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(timeline_tab, { 92.0f, tab_h }, editor.mainSurface == EditorMainSurface::Timeline))
+        if (gui::button_selected(timeline_tab, { 92.0f, tab_h }, editor.mainSurface == EditorMainSurface::Timeline)
+            && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::Timeline, "toolbar");
         tab_x += 92.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(project_tab, { 112.0f, tab_h }, editor.mainSurface == EditorMainSurface::Project))
+        if (gui::button_selected(project_tab, { 112.0f, tab_h }, editor.mainSurface == EditorMainSurface::Project)
+            && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::Project, "toolbar");
         tab_x += 112.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(ai_control_tab, { 142.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox))
+        if (gui::button_selected(ai_control_tab, { 142.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox)
+            && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::AISandbox, "toolbar");
         tab_x += 142.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(systems_tab, { 132.0f, tab_h }, editor.mainSurface == EditorMainSurface::Systems))
+        if (gui::button_selected(systems_tab, { 132.0f, tab_h }, editor.mainSurface == EditorMainSurface::Systems)
+            && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::Systems, "toolbar");
 
         gui::end_window();
@@ -5681,7 +6872,10 @@ namespace epochnamespace
         };
 
         const gui::Vec2 mouse = toolbarMouse;
-        if (gui::was_mouse_pressed())
+        if (floating_gui_visible())
+            editor.layoutDrag = EditorLayoutDrag::None;
+
+        if (!floating_gui_visible() && editor.openMenu == TopMenu::None && gui::was_mouse_pressed())
         {
             if (layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size))
                 editor.layoutDrag = EditorLayoutDrag::Outliner;
@@ -5693,7 +6887,7 @@ namespace epochnamespace
         if (!gui::is_mouse_down())
             editor.layoutDrag = EditorLayoutDrag::None;
 
-        if (gui::is_mouse_down())
+        if (!floating_gui_visible() && gui::is_mouse_down())
         {
             switch (editor.layoutDrag)
             {
@@ -5720,6 +6914,7 @@ namespace epochnamespace
 
         if (editor.openMenu != TopMenu::None)
         {
+            result.scene_input_captured = true;
             const auto buttonBounds = top_menu_button_bounds(editor.openMenu);
             const gui::Vec2 dropdownPos = dropdown_position_for(editor.openMenu);
             const gui::Vec2 dropdownSize = dropdown_size_for(editor.openMenu);
@@ -5747,6 +6942,54 @@ namespace epochnamespace
                 close_handler();
         };
 
+        auto reset_pane_title_drag = [&]() noexcept
+        {
+            editor.paneTitleDragActive = false;
+            editor.paneTitleDragRoute.clear();
+            editor.paneTitleDragLabel.clear();
+            editor.paneTitleDragStart = {};
+        };
+
+        auto handle_pane_title_drag_to_popout = [&](std::string_view route, std::string_view label, gui::Vec2 panel_pos, gui::Vec2 panel_size)
+        {
+            if (modal_visible_now() || editor.openMenu != TopMenu::None || floating_gui_visible())
+                return;
+            if (panel_size.x <= 1.0f || panel_size.y <= 1.0f)
+                return;
+
+            const gui::Vec2 titleHitSize{
+                (std::max)(1.0f, panel_size.x - 36.0f),
+                (std::min)(32.0f, panel_size.y)
+            };
+            const bool overTitle = editor_point_in_rect(mouse, panel_pos, titleHitSize);
+            if (gui::was_mouse_pressed() && overTitle)
+            {
+                editor.paneTitleDragActive = true;
+                editor.paneTitleDragRoute = std::string(route);
+                editor.paneTitleDragLabel = std::string(label);
+                editor.paneTitleDragStart = mouse;
+                result.scene_input_captured = true;
+            }
+
+            if (!editor.paneTitleDragActive || std::string_view{ editor.paneTitleDragRoute } != route)
+                return;
+
+            result.scene_input_captured = true;
+            const float dx = mouse.x - editor.paneTitleDragStart.x;
+            const float dy = mouse.y - editor.paneTitleDragStart.y;
+            constexpr float kPopoutDragThresholdSq = 16.0f * 16.0f;
+            if (gui::was_mouse_released())
+            {
+                if ((dx * dx + dy * dy) >= kPopoutDragThresholdSq)
+                    request_pane_popout(route, label);
+                reset_pane_title_drag();
+                return;
+            }
+
+            if (!gui::is_mouse_down())
+                reset_pane_title_drag();
+        };
+
         auto render_outliner_window = [&]()
         {
         if (layout_outliner_visible && outliner_size.x > 1.0f && outliner_size.y > 1.0f)
@@ -5756,6 +6999,7 @@ namespace epochnamespace
             editor.showOutliner = false;
             push_editor_log(editor, "[ui] World Outliner hidden. Reopen it from Window > Toggle Outliner.");
         });
+        handle_pane_title_drag_to_popout("pane.outliner", "World Outliner", outliner_pos, outliner_size);
         const gui::Vec2 outlinerScrollStart = gui::cursor_position();
         const float outlinerScrollHeight = (std::max)(
             48.0f,
@@ -5832,6 +7076,7 @@ namespace epochnamespace
             editor.showInspector = false;
             push_editor_log(editor, "[ui] Inspector hidden. Reopen it from Window > Toggle Inspector.");
         });
+        handle_pane_title_drag_to_popout("pane.inspector", "Inspector", details_pos, details_size);
         const gui::Vec2 inspectorScrollStart = gui::cursor_position();
         const float inspectorScrollHeight = (std::max)(
             48.0f,
@@ -6326,7 +7571,6 @@ namespace epochnamespace
         if (active_center_uses_scene)
         {
             const std::string_view sceneTitle = main_surface_title(editor.mainSurface);
-            gui::label(std::string(sceneTitle));
             const gui::Vec2 scene_pos = gui::cursor_position();
             const float sceneAvailableWidth = (std::max)(48.0f, viewport_pos.x + viewport_size.x - scene_pos.x);
             const float sceneAvailableHeight = (std::max)(48.0f, viewport_pos.y + viewport_size.y - scene_pos.y);
@@ -6339,22 +7583,33 @@ namespace epochnamespace
                 sceneAvailableWidth,
                 (std::max)(72.0f, sceneAvailableHeight - timelineStripHeight - timelineStripGap)
             };
-            result.scene_viewport = gui::scene_viewport({}, scene_pos, scene_size);
+            result.scene_viewport = gui::scene_viewport(sceneTitle, scene_pos, scene_size);
             ctx->set_scene_preview_mode(editor.previewMode);
-            const int viewportGuard = ctx->type == core::ContextType::OpenGL ? 1 : 0;
+            const int viewportX = (std::max)(0, static_cast<int>(std::floor(result.scene_viewport.position.x)));
+            const int viewportY = (std::max)(0, static_cast<int>(std::floor(result.scene_viewport.position.y)));
+            const int viewportRight = (std::max)(
+                viewportX,
+                static_cast<int>(std::ceil(result.scene_viewport.position.x + result.scene_viewport.size.x)));
+            const int viewportBottom = (std::max)(
+                viewportY,
+                static_cast<int>(std::ceil(result.scene_viewport.position.y + result.scene_viewport.size.y)));
             ctx->set_scene_viewport(core::RenderViewport{
-                static_cast<int>((std::max)(0.0f, result.scene_viewport.position.x)) + viewportGuard,
-                static_cast<int>((std::max)(0.0f, result.scene_viewport.position.y)) + viewportGuard,
-                (std::max)(0, static_cast<int>((std::max)(0.0f, result.scene_viewport.size.x)) - viewportGuard * 2),
-                (std::max)(0, static_cast<int>((std::max)(0.0f, result.scene_viewport.size.y)) - viewportGuard * 2)
+                viewportX,
+                viewportY,
+                (std::max)(0, viewportRight - viewportX),
+                (std::max)(0, viewportBottom - viewportY)
             });
             update_scene_object_interaction(ctx, editor, result);
             publish_editor_preview_markers(ctx.get(), editor);
 
             if (showSceneTimeline)
             {
-                gui::set_cursor({ scene_pos.x, scene_pos.y + scene_size.y + timelineStripGap });
+                const gui::Vec2 timelinePos{ scene_pos.x, scene_pos.y + scene_size.y + timelineStripGap };
+                gui::panel_rect(timelinePos, { scene_size.x, timelineStripHeight });
+                gui::titlebar_rect(timelinePos, { scene_size.x, 24.0f });
+                gui::set_cursor({ timelinePos.x + 8.0f, timelinePos.y + 5.0f });
                 gui::label("Video Timeline");
+                gui::set_cursor({ timelinePos.x + 8.0f, timelinePos.y + 30.0f });
                 render_timeline_time_controls(scene_size.x, true);
             }
         }
@@ -7137,10 +8392,16 @@ namespace epochnamespace
                 gui::property_row("[system] Live threads", std::to_string(liveThreadCount), 112.0f);
                 gui::property_row("[system] CPU threads", std::to_string(hardwareThreadCount), 112.0f);
                 gui::property_row("[system] Panel host", editor.detachedPanelHostStatus, 112.0f);
+                const auto systemContextOptions = available_context_backend_options();
+                gui::property_row("[system] Contexts", context_backend_summary(systemContextOptions), 112.0f);
+                gui::property_row("[system] Context picker", editor.contextSelectionStatus, 112.0f);
+                gui::property_row("[context] Passive score", editor.passiveContextScoreStatus, 132.0f);
+                gui::property_row("[context] Recommendation", editor.passiveContextRecommendation, 132.0f);
                 gui::property_row("[visual] Profile", std::string(epochnamespace::visuals::active_profile_name()), 112.0f);
                 gui::property_row("[visual] Parity gate", std::string(epochnamespace::visuals::parity_gate()), 132.0f);
                 gui::property_row("[renderer] Resource spine", renderer_resource_spine_summary(ctx), 132.0f);
                 gui::property_row("[renderer] Declared desc", renderer_declared_descriptor_status(), 132.0f);
+                gui::property_row("[renderer] Proof stages", renderer_capability_proof_stage_status(ctx), 132.0f);
                 gui::property_row("[renderer] Mesh/model", renderer_native_mesh_model_status(ctx), 132.0f);
                 gui::property_row("[renderer] Sampled RTT", renderer_native_sampled_rtt_status(ctx), 132.0f);
                 gui::property_row("[renderer] Next gate", renderer_next_feature_gate(ctx), 132.0f);
@@ -7264,8 +8525,8 @@ namespace epochnamespace
         if (bottom_visible && bottom_split_size.x > 1.0f && bottom_split_size.y > 1.0f)
             gui::splitter_bar(bottom_split_pos, bottom_split_size, bottomSplitHovered, editor.layoutDrag == EditorLayoutDrag::Dock);
 
-        const bool show_workspace_dock = editor.showConsoleDock && bottom_h > 1.0f;
-        const bool show_chat_dock = editor.showAiChat && bottom_h > 1.0f;
+        const bool show_workspace_dock = console_dock_visible && bottom_h > 1.0f;
+        const bool show_chat_dock = ai_chat_dock_visible && bottom_h > 1.0f;
         const float bottom_workspace_split_w = (show_workspace_dock && show_chat_dock) ? splitter_w : 0.0f;
         const float bottom_available_w = (std::max)(0.0f, w - bottom_workspace_split_w);
         editor.workspaceSplit = std::clamp(editor.workspaceSplit, 0.30f, 0.82f);
@@ -7293,6 +8554,7 @@ namespace epochnamespace
         if (show_workspace_dock)
         {
         gui::begin_window("Console Dock", log_pos, log_size);
+        handle_pane_title_drag_to_popout("pane.console", "Console Dock", log_pos, log_size);
         const std::array<gui::SegmentedButtonSpec, 5> workspaceTabs{{
             { "Output", 78.0f, editor.dockStatusTab == EditorWorkspaceTab::Output },
             { "Project", 78.0f, editor.dockStatusTab == EditorWorkspaceTab::Project },
@@ -7673,6 +8935,9 @@ namespace epochnamespace
                 dockLine("[systems] Ownership model", backend_ownership_model(ctx)),
                 dockLine("[systems] Preview camera", preview_camera_name(ctx)),
                 dockLine("[systems] Runtime target", editor.activeRuntimeScene),
+                dockLine("[systems] Contexts", context_backend_summary(available_context_backend_options())),
+                dockLine("[context] Passive score", editor.passiveContextScoreStatus),
+                dockLine("[context] Recommendation", editor.passiveContextRecommendation),
                 dockLine("[systems] Registered systems", std::to_string(orderedSystems.size)),
                 dockLine("[systems] Live threads", std::to_string(liveThreadCount)),
                 dockLine("[systems] CPU threads", std::to_string(hardwareThreadCount)),
@@ -7680,6 +8945,7 @@ namespace epochnamespace
                 dockLine("[visual] Profile", std::string(epochnamespace::visuals::active_profile_name())),
                 dockLine("[visual] Parity gate", std::string(epochnamespace::visuals::parity_gate())),
                 dockLine("[renderer] Resource spine", renderer_resource_spine_summary(ctx)),
+                dockLine("[renderer] Proof stages", renderer_capability_proof_stage_status(ctx)),
                 dockLine("[renderer] Sampled RTT", renderer_native_sampled_rtt_status(ctx)),
                 dockLine("[renderer] Next gate", renderer_next_feature_gate(ctx)),
                 dockLine("[build] Compiler", compiler_identity()),
@@ -7718,6 +8984,7 @@ namespace epochnamespace
 
         if (show_chat_dock)
         {
+        handle_pane_title_drag_to_popout("pane.ai_chat", "AI Chat", chat_pos, chat_size);
         gui::ConsoleWindowOptions opts{
             .title = "AI Chat",
             .position = chat_pos,
@@ -7743,6 +9010,9 @@ namespace epochnamespace
         }
 
         render_inspector_window();
+
+        if (editor.openMenu != TopMenu::None)
+            gui::clear_modal_input_capture();
 
         open_dropdown("File", TopMenu::File, dropdown_window_size(192.0f, 4), [&](gui::Vec2 pos)
         {
@@ -7809,19 +9079,47 @@ namespace epochnamespace
 
         open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, 5), [&](gui::Vec2 pos)
         {
-            menu_item(editor.showOutliner ? "Hide Outliner" : "Show Outliner", { pos.x + 12.0f, pos.y + 14.0f }, 248.0f, [&]() {
+            menu_item(outliner_detached ? "Dock Outliner" : (editor.showOutliner ? "Hide Outliner" : "Show Outliner"), { pos.x + 12.0f, pos.y + 14.0f }, 248.0f, [&]() {
+                if (pane_route_is_detached("pane.outliner"))
+                {
+                    editor_mark_context_panel_detached("pane.outliner", false);
+                    editor.showOutliner = true;
+                    push_editor_log(editor, "[window] World Outliner docked back into the editor.");
+                    return;
+                }
                 editor.showOutliner = !editor.showOutliner;
                 push_editor_log(editor, editor.showOutliner ? "[window] World Outliner shown." : "[window] World Outliner hidden.");
             });
-            menu_item(editor.showInspector ? "Hide Inspector" : "Show Inspector", { pos.x + 12.0f, pos.y + 48.0f }, 248.0f, [&]() {
+            menu_item(inspector_detached ? "Dock Inspector" : (editor.showInspector ? "Hide Inspector" : "Show Inspector"), { pos.x + 12.0f, pos.y + 48.0f }, 248.0f, [&]() {
+                if (pane_route_is_detached("pane.inspector"))
+                {
+                    editor_mark_context_panel_detached("pane.inspector", false);
+                    editor.showInspector = true;
+                    push_editor_log(editor, "[window] Inspector docked back into the editor.");
+                    return;
+                }
                 editor.showInspector = !editor.showInspector;
                 push_editor_log(editor, editor.showInspector ? "[window] Inspector shown." : "[window] Inspector hidden.");
             });
-            menu_item(editor.showConsoleDock ? "Hide Console Dock" : "Show Console Dock", { pos.x + 12.0f, pos.y + 82.0f }, 248.0f, [&]() {
+            menu_item(console_detached ? "Dock Console Dock" : (editor.showConsoleDock ? "Hide Console Dock" : "Show Console Dock"), { pos.x + 12.0f, pos.y + 82.0f }, 248.0f, [&]() {
+                if (pane_route_is_detached("pane.console"))
+                {
+                    editor_mark_context_panel_detached("pane.console", false);
+                    editor.showConsoleDock = true;
+                    push_editor_log(editor, "[window] Console Dock docked back into the editor.");
+                    return;
+                }
                 editor.showConsoleDock = !editor.showConsoleDock;
                 push_editor_log(editor, editor.showConsoleDock ? "[window] Console Dock shown." : "[window] Console Dock hidden.");
             });
-            menu_item(editor.showAiChat ? "Hide AI Chat" : "Show AI Chat", { pos.x + 12.0f, pos.y + 116.0f }, 248.0f, [&]() {
+            menu_item(ai_chat_detached ? "Dock AI Chat" : (editor.showAiChat ? "Hide AI Chat" : "Show AI Chat"), { pos.x + 12.0f, pos.y + 116.0f }, 248.0f, [&]() {
+                if (pane_route_is_detached("pane.ai_chat"))
+                {
+                    editor_mark_context_panel_detached("pane.ai_chat", false);
+                    editor.showAiChat = true;
+                    push_editor_log(editor, "[window] AI Chat docked back into the editor.");
+                    return;
+                }
                 editor.showAiChat = !editor.showAiChat;
                 push_editor_log(editor, editor.showAiChat ? "[window] AI Chat shown." : "[window] AI Chat hidden.");
             });
@@ -8371,7 +9669,7 @@ namespace epochnamespace
             gui::end_modal_window();
         }
 
-        ctx->set_gui_overlay_priority(editor.openMenu != TopMenu::None || modal_visible_now());
+        ctx->set_gui_overlay_priority(editor.openMenu != TopMenu::None || modal_visible_now() || floating_gui_visible());
 
         return result;
     }

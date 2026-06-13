@@ -610,6 +610,14 @@ namespace
             | SWP_SHOWWINDOW);
     }
 
+    inline void request_routed_panel_redock_close(epochnamespace::core::WindowData* window) noexcept
+    {
+        if (!window || window->guiRoute.empty())
+            return;
+
+        window->routedRedockRequested.store(true);
+    }
+
     [[nodiscard]] inline bool child_window_matches_parent_slot(
         HWND hwnd,
         HWND parent,
@@ -660,6 +668,7 @@ namespace
     constexpr UINT WM_EPOCH_DOCKCMD = WM_APP + 0x4A11;
     constexpr UINT WM_EPOCH_LAYOUT = WM_APP + 0x4A12;
     constexpr UINT WM_EPOCH_PROXY_DOCKCMD = WM_APP + 0x4A13;
+    constexpr UINT WM_EPOCH_OPEN_DETACHED_CONTEXT = WM_APP + 0x4A14;
     constexpr wchar_t kEpochLayoutPendingProp[] = L"EpochLayoutPending";
     constexpr wchar_t kEpochBackendBridgeProp[] = L"EpochBackendInputBridge";
     enum class DockCmd : WPARAM
@@ -1597,6 +1606,7 @@ namespace
     constexpr wchar_t kEpochBackendBridgeProp[] = L"EpochBackendInputBridge";
     constexpr UINT WM_EPOCH_LAYOUT = WM_APP + 0x4A12;
     constexpr UINT WM_EPOCH_PROXY_DOCKCMD = WM_APP + 0x4A13;
+    constexpr UINT WM_EPOCH_OPEN_DETACHED_CONTEXT = WM_APP + 0x4A14;
 
     enum class ProxyDockCmd : WPARAM
     {
@@ -2062,6 +2072,46 @@ namespace epochnamespace::core
         if (it != windows.end()) (*it)->EnqueueCommand(std::move(cmd));
     }
 
+    bool MultiContextManager::OpenDetachedContextWindow(const DetachedContextWindowRequest& request)
+    {
+        if (!running.load(std::memory_order_acquire))
+            return false;
+
+        s_activeInstance = this;
+        g_activeManager = this;
+
+        if (uiThreadId == 0 || ::GetCurrentThreadId() == uiThreadId)
+            return CreateDetachedContextWindowOnOwnerThread(request);
+
+        HWND target = parent;
+        if (!target || ::IsWindow(target) == FALSE)
+        {
+            std::scoped_lock lock(windowsMutex);
+            for (const auto& window : windows)
+            {
+                target = primary_window_handle(window.get());
+                if (target && ::IsWindow(target) != FALSE)
+                    break;
+            }
+        }
+
+        if (!target || ::IsWindow(target) == FALSE)
+            return false;
+
+        auto* posted = new DetachedContextWindowRequest(request);
+        if (::PostMessageW(
+            target,
+            WM_EPOCH_OPEN_DETACHED_CONTEXT,
+            0,
+            reinterpret_cast<LPARAM>(posted)) == FALSE)
+        {
+            delete posted;
+            return false;
+        }
+
+        return true;
+    }
+
     // ------------------------------------------------------------
     // Implementation
     // ------------------------------------------------------------
@@ -2075,6 +2125,193 @@ namespace epochnamespace::core
             freopen_s(&f, "CONOUT$", "w", stderr);
             std::ios::sync_with_stdio(true);
         }
+    }
+
+    bool MultiContextManager::CreateDetachedContextWindowOnOwnerThread(
+        const DetachedContextWindowRequest& request)
+    {
+        if (!running.load(std::memory_order_acquire))
+            return false;
+
+        s_activeInstance = this;
+        g_activeManager = this;
+
+        const int clientW = clamp_positive(request.width);
+        const int clientH = clamp_positive(request.height);
+        std::wstring title = epochnamespace::text::widen_utf16(request.title);
+        if (title.empty())
+            title = L"Epoch Context";
+
+        int initialX = CW_USEDEFAULT;
+        int initialY = CW_USEDEFAULT;
+        RECT workArea{};
+        if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0) != FALSE)
+        {
+            constexpr int kMargin = 36;
+            initialX = (std::max)(static_cast<int>(workArea.left) + kMargin,
+                static_cast<int>(workArea.right) - clientW - kMargin);
+            initialY = static_cast<int>(workArea.top) + kMargin + 56;
+        }
+
+        const bool startDocked =
+            request.start_docked
+            && parent
+            && ::IsWindow(parent) != FALSE
+            && !backend_uses_proxy_child(request.type);
+
+        HWND hwnd = ::CreateWindowExW(
+            startDocked ? 0 : WS_EX_APPWINDOW,
+            L"EpochChild",
+            title.c_str(),
+            startDocked
+                ? (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
+                : (WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN),
+            startDocked ? 0 : initialX,
+            startDocked ? 0 : initialY,
+            clientW,
+            clientH,
+            startDocked ? parent : nullptr,
+            nullptr,
+            ::GetModuleHandleW(nullptr),
+            this);
+
+        if (!hwnd)
+            return false;
+
+        ::SetWindowTextW(hwnd, title.c_str());
+        apply_dark_window_chrome(hwnd);
+        ::DragAcceptFiles(hwnd, TRUE);
+        if (startDocked)
+        {
+            MakeDockable(hwnd, parent);
+        }
+        else if (const HWND dockParent = GetParentWindow();
+            dockParent && ::IsWindow(dockParent) != FALSE && !backend_uses_proxy_child(request.type))
+        {
+            MakeDockable(hwnd, dockParent);
+        }
+
+        HDC hdc = ::GetDC(hwnd);
+        HGLRC glrc = nullptr;
+        bool usesSharedContext = false;
+
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        if (request.type == ContextType::OpenGL)
+        {
+            glrc = CreateSharedGLContext(hdc);
+            usesSharedContext = (glrc != nullptr);
+            if (!glrc)
+            {
+                ::ReleaseDC(hwnd, hdc);
+                ::DestroyWindow(hwnd);
+                return false;
+            }
+        }
+#endif
+
+        {
+            bool needInit = false;
+            {
+                std::shared_lock lock(g_backendsMutex);
+                needInit = g_backends.empty();
+            }
+            if (needInit)
+                InitializeAllContexts();
+        }
+
+        std::shared_ptr<Context> ctx;
+        {
+            std::unique_lock lock(g_backendsMutex);
+            auto it = g_backends.find(request.type);
+            if (it == g_backends.end() || !it->second.master)
+            {
+                ::ReleaseDC(hwnd, hdc);
+                ::DestroyWindow(hwnd);
+                return false;
+            }
+
+            auto& backendSlot = it->second;
+            if (!backendSlot.master->windowData)
+            {
+                ctx = backendSlot.master;
+            }
+            else
+            {
+                auto freeIt = std::find_if(
+                    backendSlot.duplicates.begin(),
+                    backendSlot.duplicates.end(),
+                    [](const std::shared_ptr<Context>& dup) { return dup && !dup->windowData; });
+
+                if (freeIt != backendSlot.duplicates.end())
+                {
+                    ctx = *freeIt;
+                }
+                else
+                {
+                    auto dup = CloneContext(*backendSlot.master);
+                    backendSlot.duplicates.push_back(dup);
+                    ctx = std::move(dup);
+                }
+            }
+        }
+
+        if (!ctx)
+        {
+            ::ReleaseDC(hwnd, hdc);
+            ::DestroyWindow(hwnd);
+            return false;
+        }
+
+        ctx->type = request.type;
+        ctx->hwnd = hwnd;
+        ctx->hdc = hdc;
+        ctx->hglrc = glrc;
+        ctx->native_window = hwnd;
+        ctx->native_drawable = hdc;
+        ctx->native_gl_context = glrc;
+
+        auto winPtr = std::make_unique<WindowData>(hwnd, hdc, glrc, usesSharedContext, request.type);
+        winPtr->running = true;
+        winPtr->context = ctx;
+        winPtr->titleWide = title;
+        winPtr->titleNarrow = epochnamespace::text::narrow_utf8(title);
+        winPtr->guiRoute = request.gui_route;
+        winPtr->isFloating = !startDocked;
+        winPtr->firstPresentComplete.store(request.type != ContextType::OpenGL, std::memory_order_release);
+        ctx->windowData = winPtr.get();
+
+        RECT rc{};
+        ::GetClientRect(hwnd, &rc);
+        ctx->width = clamp_positive(static_cast<int>(rc.right - rc.left));
+        ctx->height = clamp_positive(static_cast<int>(rc.bottom - rc.top));
+        winPtr->width = ctx->width;
+        winPtr->height = ctx->height;
+        if (!ctx->onResize && winPtr->onResize)
+            ctx->onResize = winPtr->onResize;
+
+        WindowData* rawWin = winPtr.get();
+        {
+            std::scoped_lock lock(windowsMutex);
+            windows.emplace_back(std::move(winPtr));
+        }
+
+        auto& threads = Threads();
+        if (!threads.contains(hwnd) && rawWin)
+        {
+            threads[hwnd] = std::thread([this, rawWin]()
+                {
+                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    RenderLoop(*rawWin);
+                });
+        }
+
+        ::ShowWindow(hwnd, SW_SHOWNORMAL);
+        ::BringWindowToTop(hwnd);
+        ::SetForegroundWindow(hwnd);
+        ::SetFocus(hwnd);
+        if (startDocked)
+            ArrangeDockedWindowsGrid();
+        return true;
     }
 
     ATOM MultiContextManager::RegisterParentClass(HINSTANCE hInst, LPCWSTR name)
@@ -3470,6 +3707,16 @@ namespace epochnamespace::core
             mgr->ArrangeDockedWindowsGrid();
             return 0;
 
+        case WM_EPOCH_OPEN_DETACHED_CONTEXT:
+        {
+            std::unique_ptr<DetachedContextWindowRequest> request{
+                reinterpret_cast<DetachedContextWindowRequest*>(lParam)
+            };
+            if (request)
+                static_cast<void>(mgr->CreateDetachedContextWindowOnOwnerThread(*request));
+            return 0;
+        }
+
         case WM_ERASEBKGND:
             return 1;
 
@@ -3588,6 +3835,18 @@ namespace epochnamespace::core
 
         switch (msg)
         {
+        case WM_EPOCH_OPEN_DETACHED_CONTEXT:
+        {
+            std::unique_ptr<DetachedContextWindowRequest> request{
+                reinterpret_cast<DetachedContextWindowRequest*>(lParam)
+            };
+            if (request)
+            {
+                if (auto* mgr = s_activeInstance)
+                    static_cast<void>(mgr->CreateDetachedContextWindowOnOwnerThread(*request));
+            }
+            return 0;
+        }
         case WM_SETFOCUS:
             remember_gui_input_owner(hwnd);
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -3619,10 +3878,16 @@ namespace epochnamespace::core
                 window
                 && is_proxy_host_hwnd(window, hwnd)
                 && is_sfml_proxy_detached(window);
+            const bool detachedRoutedHost =
+                window
+                && !window->guiRoute.empty()
+                && window->hwnd == hwnd
+                && (::GetParent(hwnd) == nullptr || window->isFloating);
+            const bool detachedNativeTitleHost = detachedProxyHost || detachedRoutedHost;
 
             if (msg == WM_NCLBUTTONDOWN)
             {
-                if (!detachedProxyHost || static_cast<UINT>(wParam) != HTCAPTION)
+                if (!detachedNativeTitleHost || static_cast<UINT>(wParam) != HTCAPTION)
                     return ::DefWindowProcW(hwnd, msg, wParam, lParam);
             }
             else
@@ -3703,7 +3968,13 @@ namespace epochnamespace::core
                 && window
                 && is_proxy_host_hwnd(window, hwnd)
                 && drag.draggedWindow == hwnd;
-            if (msg == WM_NCMOUSEMOVE && !detachedProxyHostDrag)
+            const bool detachedRoutedHostDrag =
+                drag.dragging
+                && window
+                && !window->guiRoute.empty()
+                && window->hwnd == hwnd
+                && drag.draggedWindow == hwnd;
+            if (msg == WM_NCMOUSEMOVE && !detachedProxyHostDrag && !detachedRoutedHostDrag)
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
             if (msg == WM_MOUSEMOVE)
@@ -3721,7 +3992,7 @@ namespace epochnamespace::core
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
             POINT pt = screen_mouse_point(hwnd, msg, lParam);
-            if (proxyChildContinuingHostDrag || detachedProxyHostDrag || is_sfml_proxy_detached(window))
+            if (proxyChildContinuingHostDrag || detachedProxyHostDrag || detachedRoutedHostDrag || is_sfml_proxy_detached(window))
             {
                 POINT cursor{};
                 if (::GetCursorPos(&cursor) != FALSE)
@@ -3836,6 +4107,7 @@ namespace epochnamespace::core
                         drag.proxyRedockPending = false;
                         if (::GetParent(hwnd) != drag.originalParent || window->isFloating)
                         {
+                            window->isFloating = false;
                             static_cast<void>(post_owner_thread_dock_command(
                                 window,
                                 ProxyDockCmd::Redock,
@@ -3864,6 +4136,8 @@ namespace epochnamespace::core
                             newY,
                             wndW,
                             wndH);
+                        if (window)
+                            window->isFloating = false;
                         if (auto* mgr = s_activeInstance)
                             mgr->HandleResize(hwnd, wndW, wndH);
                     }
@@ -3883,6 +4157,8 @@ namespace epochnamespace::core
                             newY,
                             wndW,
                             wndH);
+                        if (window)
+                            window->isFloating = false;
                     }
 
                     hide_associated_host_window(
@@ -4006,6 +4282,8 @@ namespace epochnamespace::core
                         ::SetWindowPos(hwnd, HWND_NOTOPMOST, escaped.x, escaped.y, wndW, wndH,
                             SWP_SHOWWINDOW);
                         apply_dark_window_chrome(hwnd);
+                        if (window)
+                            window->isFloating = true;
                         ::BringWindowToTop(hwnd);
                         ::SetActiveWindow(hwnd);
                         ::SetForegroundWindow(hwnd);
@@ -4024,6 +4302,8 @@ namespace epochnamespace::core
                     }
                     else
                     {
+                        if (window)
+                            window->isFloating = true;
                         ::SetWindowPos(hwnd, nullptr, newX, newY, 0, 0,
                             SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
                     }
@@ -4044,6 +4324,8 @@ namespace epochnamespace::core
                 }
                 else
                 {
+                    if (window)
+                        window->isFloating = true;
                     ::SetWindowPos(hwnd, nullptr, newX, newY, 0, 0,
                         SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
                 }
@@ -4181,7 +4463,13 @@ namespace epochnamespace::core
                 && window
                 && is_proxy_host_hwnd(window, hwnd)
                 && drag.draggedWindow == hwnd;
-            if (msg == WM_NCLBUTTONUP && !detachedProxyHostDrag)
+            const bool detachedRoutedHostDrag =
+                drag.dragging
+                && window
+                && !window->guiRoute.empty()
+                && window->hwnd == hwnd
+                && drag.draggedWindow == hwnd;
+            if (msg == WM_NCLBUTTONUP && !detachedProxyHostDrag && !detachedRoutedHostDrag)
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
             if (msg == WM_LBUTTONUP)
@@ -4199,7 +4487,7 @@ namespace epochnamespace::core
             {
                 const HWND originalParent = drag.originalParent;
                 POINT releasePoint = screen_mouse_point(hwnd, msg, lParam);
-                if (proxyChildContinuingHostDrag || detachedProxyHostDrag || is_sfml_proxy_detached(window))
+                if (proxyChildContinuingHostDrag || detachedProxyHostDrag || detachedRoutedHostDrag || is_sfml_proxy_detached(window))
                 {
                     POINT cursor{};
                     if (::GetCursorPos(&cursor) != FALSE)
@@ -4284,6 +4572,7 @@ namespace epochnamespace::core
                         }
                         else if (window && backend_requires_owner_thread_dock_commands(window))
                         {
+                            window->isFloating = false;
                             static_cast<void>(post_owner_thread_dock_command(
                                 window,
                                 ProxyDockCmd::Redock,
@@ -4309,9 +4598,12 @@ namespace epochnamespace::core
                                 wndRect.top,
                                 clientW,
                                 clientH);
+                            if (window)
+                                window->isFloating = false;
                         }
                         if (auto* mgr = s_activeInstance)
                             mgr->HandleResize(hwnd, clientW, clientH);
+                        request_routed_panel_redock_close(window);
                     }
                     else if (window
                         && is_sfml_proxy_candidate(window)

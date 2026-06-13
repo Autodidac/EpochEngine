@@ -39,6 +39,67 @@ reports real per-backend capability states.
 3. Keep GUI/modal/command-menu flicker protected while renderer work lands.
 4. Preserve stable push points before broad context, GUI, package, or AI churn.
 
+## High-Output Source Strategy
+
+The current operator preference is implementation throughput with build proof.
+Agents should spend less time restating goals and more time landing bounded
+source slices that move one of the mission spines forward. The default shape of
+a productive pass is:
+
+Production-rate target: sustained high-output passes should aim at roughly
+9.2k lines of useful source/docs/test delta per day, every day, while still
+preserving buildability, ownership boundaries, and reviewable evidence. The
+number is a throughput floor for real implementation flesh, not permission for
+placeholder churn or unverified rewrites.
+
+1. Read `AGENTS.md` and `Changes/active_pass.md`.
+2. Inspect status/branch/remotes and preserve unrelated work.
+3. Pick one concrete source slice tied to the active gate or an explicit
+   operator mission.
+4. Use subagents only for independent sidecar lanes that can finish in
+   parallel, such as backend-specific capability audits, MSVC/CMake metadata,
+   standalone `EpochGui` mirror updates, or doc/source consistency checks.
+5. Implement the blocking path locally in production C++.
+6. Build Debug and Release, or the safest matching target from `AGENTS.md`.
+7. Update docs/changelog with only the changed contract and the evidence.
+8. Commit the focused batch when the operator wants the checkpoint preserved.
+
+The high-output lanes that should be split across agents when they are active
+and independent are:
+
+- renderer resource spine: OpenGL-derived sampled RTT, graph binding,
+  capability truth, and backend-native resource devices
+- context host/session spine: toolbar backend handoff, editor snapshot
+  restore, routed GUI windows, focus ownership, teardown, and optional host
+  exclusion for non-editor products
+- reusable GUI spine: `EpochGui` portable controllers, `engine.gui` adapter
+  rendering/input/theme work, editor composition, modals, menus, text controls,
+  and standalone `Autodidac/EpochGui` metadata
+- updater/release spine: platform-build gating, binary-first handoff, source
+  fallback evidence, launcher/editor update button parity, cache hygiene, and
+  packaged asset identity
+- package/project spine: reviewable package activation, generated project
+  build/run parity, scene persistence, and cache/package boundaries
+- OS AI spine: selected external model control, packet evidence, verifier/gate
+  contracts, and no hidden autonomy
+
+Normal editor context selection is now expected to become real source behavior,
+not a fake selector: choosing a backend should focus a live context of that
+type, or create a new editor context of that type and restore the captured
+editor state when the host supports it. Unsupported products should exclude the
+desktop host route instead of carrying hidden shells.
+
+Capability truth also needs source flesh, not only docs. The next renderer
+capability slice should replace boolean overclaiming with status/proof layers:
+descriptor contract, build graph proof, hook readiness, live native allocation
+readiness, and presentation proof. System Info should consume the selected/live
+context's capability report, not only static backend-family defaults. OpenGL
+family sampled RTT must separate hook-factory readiness from real GPU allocation
+inside a registered live context. SDL3/SFML3/Raylib no-runtime refusal proves
+the guard, not feature support. Explicit DirectX/Vulkan sampled-RTT claims
+remain `Partial` or `Missing` until real backend-native `render.device_*`
+implementations and build proof exist.
+
 Current evidence: OpenGL's real native sampled-RTT hook factory is now wired
 into the engine contract harness, SDL3/SFML3/Raylib sampled-RTT capability
 reporting is runtime-availability-gated instead of always-on, and the render
@@ -1605,8 +1666,9 @@ engine shape and should be treated as starting truth for the next passes:
 4. Strengthen the System Info workspace with deeper pacing diagnostics and
    backend convergence guidance, including present/partial/missing renderer
    feature status from the feature matrix, backend-native mesh/model allocation
-   proof, sampled-RTT native allocation readiness, Raylib no-runtime allocation
-   safety, OpenGL-family native RTT hookup, and mini-arcade graph parity.
+   proof, sampled-RTT descriptor contract, build graph proof, hook readiness,
+   live native allocation readiness, no-runtime refusal guards, presentation
+   proof, and mini-arcade graph parity.
 5. Carry the time spine deeper into runtime and scene ownership.
 6. Keep UI/editor maturity moving forward, especially text/input reliability,
    shell polish, drag/drop, and backend-window stability.
