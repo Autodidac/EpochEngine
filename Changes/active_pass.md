@@ -53,10 +53,11 @@ contracts instead of drift.
   live native allocation.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1` and
   `EpochGui` passed for the v0.87.26 source checkpoint. The hosted
-  `linux-clang-engine` lane caught a module-sensitive include gap in
-  `Engine/src/gui/dockable_window.cpp`; the source now includes `<cstdint>`
-  explicitly before relying on `std::uint32_t`. Keep the Linux Clang
-  full-engine job green before calling a checkpoint sealed, because the
+  `linux-clang-engine` lane caught module-sensitive include gaps in the
+  EpochGui implementation translation units; the source now includes
+  `<cstdint>` explicitly before relying on `std::uint32_t` or
+  `std::uint64_t`. Keep the Linux Clang full-engine job green before calling a
+  checkpoint sealed, because the
   portable Linux Clang, GCC, and Windows lanes can pass while this full-engine
   lane still catches C++23 module/header hygiene regressions.
 

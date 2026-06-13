@@ -2,6 +2,7 @@ module;
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <string_view>
 
 module epoch.gui;
