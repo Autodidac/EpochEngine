@@ -323,6 +323,9 @@ namespace
 
 #if defined(_WIN32)
         s_hostWindow = ctx->get_hwnd();
+        const bool hostedWindow =
+            s_hostWindow
+            && ::IsWindow(s_hostWindow) != FALSE;
 #endif
 
         if (static_cast<int>(SDL_Init(SDL_INIT_VIDEO)) < 0)
@@ -349,6 +352,10 @@ namespace
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, s_width);
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, s_height);
         SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
+#if defined(_WIN32)
+        if (hostedWindow)
+            SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, true);
+#endif
 
         s_window = SDL_CreateWindowWithProperties(props);
         SDL_DestroyProperties(props);
@@ -402,7 +409,7 @@ namespace
             return;
         }
 
-        if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
+        if (hostedWindow)
         {
             const HWND dockParent = ::GetParent(s_hostWindow);
             if (dockParent && ::IsWindow(dockParent) != FALSE)
@@ -412,7 +419,7 @@ namespace
 
                 LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
                 style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
-                style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+                style |= WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
                 ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
                 epochnamespace::core::MakeDockable(s_childWindow, dockParent);
 
@@ -421,6 +428,9 @@ namespace
                 s_width = (std::max)(1, static_cast<int>(client.right - client.left));
                 s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
 
+                // Keep SDL's internal window/backbuffer size aligned with the dock slot
+                // before showing so the pane does not flash as a top-level window.
+                SDL_SetWindowSize(s_window, s_width, s_height);
                 ::SetWindowPos(
                     s_childWindow,
                     nullptr,
@@ -428,11 +438,7 @@ namespace
                     0,
                     s_width,
                     s_height,
-                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-
-                // Keep SDL's internal window/backbuffer size aligned with the dock slot
-                // before the first present so the pane does not stay blank until resize.
-                SDL_SetWindowSize(s_window, s_width, s_height);
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
                 ::RedrawWindow(
                     s_childWindow,
                     nullptr,
@@ -447,7 +453,7 @@ namespace
                 s_dockParent = nullptr;
                 LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
                 style &= ~static_cast<LONG_PTR>(WS_CHILD);
-                style |= WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+                style |= WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
                 ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
                 ::SetWindowPos(
                     s_childWindow,
@@ -456,7 +462,7 @@ namespace
                     0,
                     0,
                     0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
                 if (s_hostWindow != s_childWindow)
                     ::ShowWindow(s_hostWindow, SW_HIDE);

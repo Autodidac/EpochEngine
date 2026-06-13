@@ -51,6 +51,9 @@ contracts instead of drift.
   cabinet material/model, fake-native hook, and descriptor/work-order contracts
   cover OpenGL, SDL3-over-GL, SFML-over-GL, and Raylib-over-GL without claiming
   live native allocation.
+- Source checkpoint: the SDL editor context switch fix is paired with a
+  toolbar-equivalent smoke hook, keeping build/source validation aligned with
+  the product toolbar handoff path.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1` and
   `EpochGui` passed for the v0.87.26 source checkpoint. The hosted
   `linux-clang-engine` lane caught module-sensitive include gaps in the

@@ -11,6 +11,9 @@
 - Extended the editor context handoff guard to Raylib so selecting Raylib from
   the toolbar fails closed with visible status instead of entering the unstable
   native owner-thread switch path.
+- Fixed the SDL editor context switch path and added a toolbar-equivalent
+  smoke hook so source checkpoint validation exercises the same handoff route
+  operators use from the editor toolbar.
 - Updated release-facing README metadata for the v0.87.26 source checkpoint and
   fixed the EpochGui implementation translation units to include `<cstdint>` so
   the Linux Clang full-engine CI lane can compile `std::uint32_t` and

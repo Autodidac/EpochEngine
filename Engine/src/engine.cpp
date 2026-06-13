@@ -2723,6 +2723,26 @@ namespace epochnamespace::core
             }
         }
 
+        [[nodiscard]] epochnamespace::core::ContextType context_type_from_backend_token(
+            const std::string& token) noexcept
+        {
+            if (token == "opengl" || token == "gl")
+                return epochnamespace::core::ContextType::OpenGL;
+            if (token == "sdl")
+                return epochnamespace::core::ContextType::SDL;
+            if (token == "sfml")
+                return epochnamespace::core::ContextType::SFML;
+            if (token == "raylib" || token == "ray")
+                return epochnamespace::core::ContextType::RayLib;
+            if (token == "vulkan" || token == "vk")
+                return epochnamespace::core::ContextType::Vulkan;
+            if (token == "directx" || token == "dx" || token == "d3d" || token == "d3d11")
+                return epochnamespace::core::ContextType::DirectX;
+            if (token == "software" || token == "cpu")
+                return epochnamespace::core::ContextType::Software;
+            return epochnamespace::core::ContextType::None;
+        }
+
         [[nodiscard]] bool is_context_driver_candidate(epochnamespace::core::ContextType type) noexcept
         {
             switch (type)
@@ -4492,6 +4512,12 @@ namespace epochnamespace::core
             bool smoke_capture_armed = false;
             std::uint64_t frame_count = 0;
             const std::uint64_t smoke_max_frames = smoke_frame_budget();
+            const auto smokeSwitchTarget =
+                epochnamespace::core::cli::smoke_context_switch_requested
+                ? context_type_from_backend_token(epochnamespace::core::cli::smoke_context_switch_backend)
+                : epochnamespace::core::ContextType::None;
+            bool smoke_context_switch_posted = false;
+            std::uint64_t smoke_context_switch_exit_frame = 0;
             const std::uint64_t smoke_capture_frame =
                 cli::smoke_requested
                 ? (cli::capture_requested ? 420u : 30u)
@@ -4538,6 +4564,41 @@ namespace epochnamespace::core
                 restored,
                 failed
             };
+            auto request_context_window_close = [&](Context* context, std::string_view reason) -> bool
+            {
+                if (!context)
+                    return false;
+
+                for (const auto& window : mgr.GetWindows())
+                {
+                    if (!window
+                        || !window->context
+                        || window->context.get() != context)
+                    {
+                        continue;
+                    }
+
+                    window->running = false;
+                    window->set_should_close(true);
+#if defined(_WIN32)
+                    if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+                        ::PostMessageW(window->hwnd, WM_CLOSE, 0, 0);
+                    if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+                        ::PostMessageW(window->hwndChild, WM_CLOSE, 0, 0);
+                    if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+                        ::PostMessageW(window->host_hwnd, WM_CLOSE, 0, 0);
+#endif
+                    logger::get(kEditorLog).logf(
+                        logger::LogLevel::INFO,
+                        std::source_location::current(),
+                        "Requested {} context window close: {}",
+                        context_type_label(context->type),
+                        std::string{ reason });
+                    return true;
+                }
+
+                return false;
+            };
             auto restore_pending_editor_switch_snapshot = [&](
                 const std::shared_ptr<Context>& targetCtx,
                 ContextSession& targetSession,
@@ -4560,11 +4621,29 @@ namespace epochnamespace::core
                 Context* const sourceContext = pendingIt->source_context;
                 const bool closeSourceOnRestore = pendingIt->close_source_on_restore;
                 pendingEditorSwitchSnapshots.erase(pendingIt);
-                if (!editorSnapshot.valid)
+
+                auto fail_restore = [&](std::string_view reason) -> PendingEditorRestoreStatus
+                {
+                    if (closeSourceOnRestore
+                        && targetCtx
+                        && targetCtx.get() != sourceContext)
+                    {
+                        epochnamespace::editor_set_context_selection_status(
+                            targetCtx.get(),
+                            std::string{ "Context switch failed: " } + std::string{ reason }
+                                + "; closing replacement and keeping the original editor active.");
+                        unload_active_scene(targetSession);
+                        targetSession.menu.cleanup();
+                        request_context_window_close(targetCtx.get(), reason);
+                    }
                     return PendingEditorRestoreStatus::failed;
+                };
+
+                if (!editorSnapshot.valid)
+                    return fail_restore("replacement editor state snapshot was invalid");
 
                 if (!epochnamespace::editor_restore_context_snapshot(targetCtx.get(), editorSnapshot))
-                    return PendingEditorRestoreStatus::failed;
+                    return fail_restore("replacement editor state restore failed");
 
                 unload_active_scene(targetSession);
                 targetSession.menu.cleanup();
@@ -4577,27 +4656,9 @@ namespace epochnamespace::core
                     && sourceContext
                     && sourceContext != targetCtx.get())
                 {
-                    for (const auto& window : mgr.GetWindows())
-                    {
-                        if (!window
-                            || !window->context
-                            || window->context.get() != sourceContext)
-                        {
-                            continue;
-                        }
-
-                        window->running = false;
-                        window->set_should_close(true);
-#if defined(_WIN32)
-                        if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
-                            ::PostMessageW(window->hwnd, WM_CLOSE, 0, 0);
-                        if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
-                            ::PostMessageW(window->hwndChild, WM_CLOSE, 0, 0);
-                        if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
-                            ::PostMessageW(window->host_hwnd, WM_CLOSE, 0, 0);
-#endif
-                        break;
-                    }
+                    request_context_window_close(
+                        sourceContext,
+                        "source editor context handed off after replacement restore");
                 }
                 return PendingEditorRestoreStatus::restored;
             };
@@ -5370,6 +5431,23 @@ namespace epochnamespace::core
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             const auto editor_frame = epochnamespace::editor_run(ctx);
 
+                            if (epochnamespace::core::cli::smoke_context_switch_requested
+                                && !smoke_context_switch_posted
+                                && smokeSwitchTarget != epochnamespace::core::ContextType::None
+                                && frame_count >= 45u
+                                && editor_frame.command == epochnamespace::EditorCommand::None
+                                && ctx->type != smokeSwitchTarget)
+                            {
+                                smoke_context_switch_posted = true;
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::INFO,
+                                    std::source_location::current(),
+                                    "Smoke requested toolbar-equivalent context switch to {}.",
+                                    context_type_label(smokeSwitchTarget));
+                                switch_editor_context(ctx, smokeSwitchTarget);
+                                smoke_context_switch_exit_frame = frame_count + 90u;
+                            }
+
                             const auto viewport = editor_frame.scene_viewport;
                             const bool mouse_in_scene =
                                 mouse_pos.x >= viewport.position.x
@@ -5832,8 +5910,30 @@ namespace epochnamespace::core
                             mgr,
                             startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog);
                         smoke_capture_taken = true;
+                        if (epochnamespace::core::cli::smoke_context_switch_requested
+                            && smoke_context_switch_posted)
+                        {
+                            logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
+                                logger::LogLevel::INFO,
+                                "Smoke context switch proof captured; ending bounded switch smoke.",
+                                std::source_location::current());
+                            running = false;
+                        }
                     }
 #endif
+                }
+
+                if (epochnamespace::core::cli::smoke_context_switch_requested
+                    && smoke_context_switch_posted
+                    && !cli::capture_requested
+                    && smoke_context_switch_exit_frame > 0
+                    && frame_count >= smoke_context_switch_exit_frame)
+                {
+                    logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
+                        logger::LogLevel::INFO,
+                        "Smoke context switch settled; ending bounded switch smoke.",
+                        std::source_location::current());
+                    running = false;
                 }
 
                 std::this_thread::sleep_for(std::chrono::milliseconds(16));

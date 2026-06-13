@@ -420,7 +420,8 @@ export namespace epochnamespace::sdlcontext
 
 #if defined(_WIN32)
         HWND hostWnd = parentWnd;
-        HWND dockParent = hostWnd ? ::GetParent(hostWnd) : nullptr;
+        const bool hostedWindow = hostWnd && ::IsWindow(hostWnd) != FALSE;
+        HWND dockParent = hostedWindow ? ::GetParent(hostWnd) : nullptr;
         sdlcontext.parent = dockParent;
 #endif
 
@@ -471,6 +472,10 @@ export namespace epochnamespace::sdlcontext
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, sdlcontext.width);
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, sdlcontext.height);
         SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
+#if defined(_WIN32)
+        if (hostedWindow)
+            SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, true);
+#endif
 
         sdlcontext.window = SDL_CreateWindowWithProperties(props);
         SDL_DestroyProperties(props);
@@ -584,7 +589,7 @@ export namespace epochnamespace::sdlcontext
         refresh_dimensions(ctx);
 
 #if defined(_WIN32)
-        if (hostWnd)
+        if (hostedWindow)
         {
             if (sdlcontext.parent)
             {
@@ -592,7 +597,7 @@ export namespace epochnamespace::sdlcontext
 
                 LONG_PTR style = GetWindowLongPtr(sdlcontext.hwnd, GWL_STYLE);
                 style &= ~WS_OVERLAPPEDWINDOW;
-                style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+                style |= WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
                 SetWindowLongPtr(sdlcontext.hwnd, GWL_STYLE, style);
 
                 epochnamespace::core::MakeDockable(sdlcontext.hwnd, sdlcontext.parent);
@@ -607,13 +612,12 @@ export namespace epochnamespace::sdlcontext
                 sdlcontext.width = width;
                 sdlcontext.height = height;
 
+                // Keep SDL's internal window/backbuffer size aligned with the dock slot
+                // before showing so startup does not flash a top-level window.
+                SDL_SetWindowSize(sdlcontext.window, width, height);
                 SetWindowPos(
                     sdlcontext.hwnd, nullptr, 0, 0, width, height,
-                    SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-
-                // Keep SDL's internal window/backbuffer size aligned with the dock slot
-                // before the first present so startup does not wait on resize.
-                SDL_SetWindowSize(sdlcontext.window, width, height);
+                    SWP_NOZORDER | SWP_FRAMECHANGED);
                 RedrawWindow(
                     sdlcontext.hwnd, nullptr, nullptr,
                     RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);

@@ -255,6 +255,7 @@ namespace epochnamespace::core::cli
     export inline bool run_menu_loop = false;
     export inline bool capture_requested = false;
     export inline bool smoke_requested = false;
+    export inline bool smoke_context_switch_requested = false;
     export inline bool editor_requested = false;
     export inline bool updater_shell_requested = false;
     export inline bool backend_selection_explicit = false;
@@ -262,6 +263,7 @@ namespace epochnamespace::core::cli
     export inline double frame_limit_fps = 0.0;
     export inline std::uint32_t capture_warmup_frames = 12;
     export inline std::string scene_name{};
+    export inline std::string smoke_context_switch_backend{};
     export inline std::filesystem::path exe_path;
 
     export inline RuntimePath runtime_path = RuntimePath::Epoch;
@@ -413,6 +415,8 @@ namespace epochnamespace::core::cli
         run_menu_loop = false;
         capture_requested = false;
         smoke_requested = false;
+        smoke_context_switch_requested = false;
+        smoke_context_switch_backend.clear();
         editor_requested = false;
         updater_shell_requested = detail::default_updater_shell_mode();
         scene_name.clear();
@@ -525,6 +529,8 @@ namespace epochnamespace::core::cli
                     "  --scene <name>             Optional scene hint for smoke tooling\n"
                     "  --capture                  Optional capture hint for smoke tooling\n"
                     "  --smoke                    Run bounded smoke flow where supported\n"
+                    "  --smoke-switch-context <backend>\n"
+                    "                             During editor smoke, request one toolbar-equivalent context switch\n"
                     "  --updater-shell            Start the bootstrap updater shell\n"
                     "  --update, -u               Check for a newer epochengine build\n"
                     "  --force                    Apply the available update immediately\n"
@@ -721,6 +727,26 @@ namespace epochnamespace::core::cli
             else if (key == "--smoke"sv)
             {
                 smoke_requested = true;
+            }
+            else if (key == "--smoke-switch-context"sv)
+            {
+                const auto parsed = read_value(key);
+                if (!parsed.empty())
+                {
+                    const auto selected = detail::parse_backend(parsed);
+                    if (selected == detail::BackendSelection::Auto && detail::to_lower(parsed) != "auto")
+                    {
+                        detail::log_error("Unknown smoke context switch backend: " + std::string(parsed));
+                    }
+                    else
+                    {
+                        smoke_context_switch_requested = true;
+                        smoke_context_switch_backend = detail::to_lower(parsed);
+                        smoke_requested = true;
+                        editor_requested = true;
+                        result.editor_requested = true;
+                    }
+                }
             }
             else
             {

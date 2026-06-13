@@ -2153,19 +2153,39 @@ namespace epochnamespace::core
             initialY = static_cast<int>(workArea.top) + kMargin + 56;
         }
 
+        const bool proxyChildBackend = backend_uses_proxy_child(request.type);
+        const bool hasValidParent =
+            parent
+            && ::IsWindow(parent) != FALSE;
+
+        if (request.start_docked && proxyChildBackend && !hasValidParent)
+        {
+            epochnamespace::logger::get(kLogSys).logf(
+                logger::LogLevel::Error,
+                std::source_location::current(),
+                "Refusing start-docked proxy-child context '{}' because no valid parent host exists.",
+                request.title);
+            return false;
+        }
+
         const bool startDocked =
             request.start_docked
-            && parent
-            && ::IsWindow(parent) != FALSE
-            && !backend_uses_proxy_child(request.type);
+            && hasValidParent;
+
+        const DWORD childStyle = WS_CHILD
+            | WS_CLIPSIBLINGS
+            | WS_CLIPCHILDREN
+            | (proxyChildBackend ? 0u : WS_VISIBLE);
+        const DWORD floatingStyle = WS_OVERLAPPEDWINDOW
+            | WS_VISIBLE
+            | WS_CLIPSIBLINGS
+            | WS_CLIPCHILDREN;
 
         HWND hwnd = ::CreateWindowExW(
             startDocked ? 0 : WS_EX_APPWINDOW,
             L"EpochChild",
             title.c_str(),
-            startDocked
-                ? (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
-                : (WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN),
+            startDocked ? childStyle : floatingStyle,
             startDocked ? 0 : initialX,
             startDocked ? 0 : initialY,
             clientW,
@@ -2186,7 +2206,7 @@ namespace epochnamespace::core
             MakeDockable(hwnd, parent);
         }
         else if (const HWND dockParent = GetParentWindow();
-            dockParent && ::IsWindow(dockParent) != FALSE && !backend_uses_proxy_child(request.type))
+            dockParent && ::IsWindow(dockParent) != FALSE && !proxyChildBackend)
         {
             MakeDockable(hwnd, dockParent);
         }
@@ -2305,10 +2325,13 @@ namespace epochnamespace::core
                 });
         }
 
-        ::ShowWindow(hwnd, SW_SHOWNORMAL);
-        ::BringWindowToTop(hwnd);
-        ::SetForegroundWindow(hwnd);
-        ::SetFocus(hwnd);
+        if (!startDocked || !proxyChildBackend)
+        {
+            ::ShowWindow(hwnd, SW_SHOWNORMAL);
+            ::BringWindowToTop(hwnd);
+            ::SetForegroundWindow(hwnd);
+            ::SetFocus(hwnd);
+        }
         if (startDocked)
             ArrangeDockedWindowsGrid();
         return true;
