@@ -56,9 +56,11 @@ contracts instead of drift.
   `linux-clang-engine` lane caught module-sensitive include gaps in the
   EpochGui implementation translation units; the source now includes
   `<cstdint>` explicitly before relying on `std::uint32_t` or
-  `std::uint64_t`, and `opengl.textures` now includes the Linux X11 `Window`
-  declaration before binding GLX drawable state. Keep the Linux Clang
-  full-engine job green before calling a checkpoint sealed, because the
+  `std::uint64_t`, `opengl.textures` now includes the Linux X11 `Window`
+  declaration before binding GLX drawable state, and `engine.gui` imports the
+  `epoch.gui` module rather than including its headers in the global module
+  fragment. Keep the Linux Clang full-engine job green before calling a
+  checkpoint sealed, because the
   portable Linux Clang, GCC, and Windows lanes can pass while this full-engine
   lane still catches C++23 module/header hygiene regressions.
 

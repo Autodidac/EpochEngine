@@ -57,10 +57,9 @@ module;
 #include "framework.hpp"
 #endif
 
-#include "epoch/gui/dockable_window.hpp"
-#include "epoch/gui/floating_window.hpp"
-
 module engine.gui;
+
+import epoch.gui;
 
 import context.type;
 import core.context;

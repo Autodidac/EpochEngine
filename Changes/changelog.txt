@@ -11,6 +11,9 @@
 - Added the explicit Linux X11 `Window` declaration include in
   `opengl.textures` so Clang modules no longer rely on transitive X11 headers
   when binding GLX drawable state.
+- Changed the engine GUI adapter to import the `epoch.gui` module instead of
+  including EpochGui headers in its global module fragment, keeping Linux Clang
+  symbol binding aligned with the module-backed static library.
 
 ## [v0.87.25]
 - Guarded SFML editor context handoff in the toolbar selector so switching to
