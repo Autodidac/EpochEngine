@@ -51,16 +51,14 @@ contracts instead of drift.
   cabinet material/model, fake-native hook, and descriptor/work-order contracts
   cover OpenGL, SDL3-over-GL, SFML-over-GL, and Raylib-over-GL without claiming
   live native allocation.
-- Build evidence: MSVC Debug and Release x64 `ConsoleApplication1` pass after
-  the update/source modal layout/runtime/view split, measured action-strip
-  containment fix, and SFML3/SDL3/Vulkan manifest-dependency compatibility
-  cleanup. The Linux Clang full-engine lane also configures, builds, and passes
-  `ctest` with the hosted `linux-clang-engine` flags after the SFML 2/3
-  compatibility boundary. Staged Windows and Linux packages both report
-  `Epoch v0.87.15` via `--version` after the OpenGL GUI sprite coordinate fix,
-  updater modal stabilization, OpenGL modal/top-layer batch composition fix,
-  toolbar-owned context selection, and the C++23 module-backed `EpochGui`
-  static-library split.
+- Build evidence: MSVC Debug and Release x64 `ConsoleApplication1` and
+  `EpochGui` passed for the v0.87.26 source checkpoint. The hosted
+  `linux-clang-engine` lane caught a module-sensitive include gap in
+  `Engine/src/gui/dockable_window.cpp`; the source now includes `<cstdint>`
+  explicitly before relying on `std::uint32_t`. Keep the Linux Clang
+  full-engine job green before calling a checkpoint sealed, because the
+  portable Linux Clang, GCC, and Windows lanes can pass while this full-engine
+  lane still catches C++23 module/header hygiene regressions.
 
 ## Allowed Source Areas
 

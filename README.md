@@ -4,8 +4,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.15-1F7A4C?style=for-the-badge" alt="Current development source v0.87.15" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.14-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.14" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.26-1F7A4C?style=for-the-badge" alt="Current development source v0.87.26" />
+  <img src="https://img.shields.io/badge/Stable_Source_Checkpoint-v0.87.26-2C6A8A?style=for-the-badge" alt="Stable source checkpoint v0.87.26" />
 </p>
 
 <p align="center">
@@ -75,8 +75,9 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.87.15`.
-- The latest published stable runtime release is `v0.87.14`.
+- Source is currently the active development line at `v0.87.26`.
+- The latest published stable source checkpoint is `v0.87.26` on `main` and
+  `multicontext-base-stable`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
@@ -98,10 +99,11 @@ For engine/tooling developers:
 - Phase 1 and Phase 2 of the active roadmap are complete. Current work is
   concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.
-- Latest source checkpoint: Linux/Clang full-engine `epoch` builds again after
-  the C++23 module/API type include fix, and Raylib's native sampled
-  render-texture lane now fails closed in build-only/no-runtime validation
-  instead of attempting GPU allocation without a live Raylib context.
+- Latest source checkpoint: MSVC Debug/Release editor and EpochGui builds pass,
+  context handoff now fails closed for SFML and Raylib with visible console
+  warnings instead of entering crash-prone switch paths, and the Linux/Clang
+  full-engine lane remains the module-sensitive CI lane that must stay green
+  before calling a source checkpoint sealed.
 
 OS AI model, tooling, and evidence rules live with the AI assets in
 `Engine/ai/README.md` and the engine policy docs.
