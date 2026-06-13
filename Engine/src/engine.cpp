@@ -5684,7 +5684,8 @@ namespace epochnamespace::core
                                     std::source_location::current());
                                 const auto result = epochnamespace::updater::run_update_command(
                                     default_update_channel(),
-                                    true);
+                                    true,
+                                    false);
                                 if (result.platform_build_checked && !result.platform_build_ok)
                                 {
                                     const std::string reason = result.platform_build_reason.empty()
@@ -5720,7 +5721,10 @@ namespace epochnamespace::core
                                     "Running confirmed advanced source rebuild command.",
                                     std::source_location::current());
                                 const bool ok = epochnamespace::updater::run_source_update_command(
-                                    default_update_channel());
+                                    default_update_channel(),
+                                    true,
+                                    false,
+                                    false);
                                 if (!ok)
                                 {
                                     logger::get(kEditorLog).log(
@@ -6496,7 +6500,8 @@ int WINAPI wWinMain(
 
             if (cli_result.force_update
                 && update_result.update_available
-                && !update_result.update_performed)
+                && !update_result.update_performed
+                && !update_result.source_update_performed)
             {
                 return 1;
             }
@@ -6566,7 +6571,8 @@ int main(int argc, char** argv)
 
             if (cli_result.force_update
                 && update_result.update_available
-                && !update_result.update_performed)
+                && !update_result.update_performed
+                && !update_result.source_update_performed)
             {
                 return 1;
             }

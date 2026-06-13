@@ -4225,7 +4225,8 @@ namespace epochnamespace::updater
     export bool run_source_update_command(
         const UpdateChannel& channel,
         const bool recheck_source_version = true,
-        const bool silent_worker = false)
+        const bool silent_worker = false,
+        const bool honor_env_silent = true)
     {
         if (channel.source_url.empty())
         {
@@ -4248,7 +4249,7 @@ namespace epochnamespace::updater
         }
 
         const bool effective_silent_worker =
-            silent_worker || system_detail::env_flag_enabled("EPOCH_UPDATER_SILENT");
+            silent_worker || (honor_env_silent && system_detail::env_flag_enabled("EPOCH_UPDATER_SILENT"));
         const bool hide_worker_window =
             effective_silent_worker
             || !system_detail::env_flag_enabled("EPOCH_UPDATER_SHOW_WORKER_CONSOLE");
@@ -4361,7 +4362,8 @@ namespace epochnamespace::updater
 
     export UpdateCommandResult run_update_command(
         const UpdateChannel& channel,
-        const bool force)
+        const bool force,
+        const bool honor_env_silent = true)
     {
         cleanup_previous_update_artifacts();
 
@@ -4533,7 +4535,7 @@ namespace epochnamespace::updater
                 ? "No " + platform_key + " packaged runtime asset was found. Starting source update from main."
                 : "No newer packaged runtime is available. Starting source update from main.";
             system_detail::log_info(fallback_message);
-            const bool worker_launched = run_source_update_command(channel, false, false);
+            const bool worker_launched = run_source_update_command(channel, false, false, honor_env_silent);
             result.update_performed = false;
             result.source_update_performed = worker_launched;
             result.status_message = worker_launched

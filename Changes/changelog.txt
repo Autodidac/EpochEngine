@@ -1,6 +1,9 @@
 # Epoch Changelog
 
 ## [v0.87.27]
+- Fixed GUI-launched source updates so editor/release update buttons no longer honor
+  `EPOCH_UPDATER_SILENT`; silent source-worker exit remains reserved for CLI or
+  updater-shell lanes that opt in explicitly.
 - Added an OpenGL-first sampled render-surface preview path for Engine Arcade:
   editor/project markers now flag sampled panels, OpenGL renders a deterministic
   attract pass into a native texture/FBO, and the 3D preview samples that target

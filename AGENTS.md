@@ -7,9 +7,11 @@
   `Engine/ai/`, and `Engine/examples/`.
 - Use the documentation map instead of guessing:
   `Changes/active_pass.md` is the hot acceptance gate,
+  `Changes/mission_cache.md` preserves durable cross-pass mission memory,
   `Changes/roadmap.md` is the compact planning contract,
   `Changes/changelog.txt` records version work, `Engine/docs/README.md` is the
-  docs index, `Engine/docs/engine/runtime_and_editor_workflows.md` owns
+  docs index, `Engine/docs/engine/renderer_feature_matrix.md` owns renderer
+  capability truth, `Engine/docs/engine/runtime_and_editor_workflows.md` owns
   launcher/editor behavior, `Engine/docs/engine/gui_library_architecture.md`
   owns reusable GUI primitives, and
   `Engine/docs/engine/os_ai_tooling_and_evidence_policy.md` owns OS AI policy.
@@ -33,9 +35,12 @@
   upstream before editing project files.
 - Preserve unrelated dirty work. Never clean, delete, revert, or stage files the
   operator did not ask you to touch.
-- GPU/runtime launches are approval-only. Do not run `EpochEditor.exe`, GUI
-  runtime probes, generated project self-tests, Sandbox self-tests, or
-  multicontext launches unless the operator explicitly asks for that exact run.
+- GPU/runtime launches are approval-only. Do not run GUI `EpochEditor.exe`
+  launches, GUI runtime probes, generated project self-tests, Sandbox
+  self-tests, or multicontext launches unless the operator explicitly asks for
+  that exact run. The documented `--engine-contract-self-test` lane is the
+  build-safe exception because it exits before project-profile builds, child
+  runtimes, updater work, OS-AI gates, or renderer startup.
 - Prefer source review and build-only checks until runtime proof is requested.
   If a runtime command crashes, hangs, or appears to destabilize GPU/driver
   state, stop runtime probing, preserve logs, check for leftover processes, and
@@ -76,6 +81,18 @@
 
 - Useful MSBuild targets in `Engine.sln`: `ConsoleApplication1`,
   `StaticLib1`, and `HeadlessCI`.
+- Build-safe pure engine contract check after rebuilding the editor target:
+
+  ```powershell
+  .\x64\Debug\EpochEditor.exe --engine-contract-self-test
+  ```
+
+  Prefer this for fast agent churn when GUI/runtime validation is not explicitly
+  approved. Reserve heavier validation commands such as
+  `--engine-validation-self-test`, `--editor-project-self-test <id>`, and
+  generated child `--project-self-test` runs for operator-approved use because
+  they can materialize projects, create child processes, or touch runtime/editor
+  state.
 - Root CMake presets:
 
   ```powershell
@@ -165,7 +182,8 @@
 
 - Start every churn pass by reading this file and `Changes/active_pass.md`.
   Read `Changes/roadmap.md` only for broader context or durable follow-up
-  placement.
+  placement. Use `Changes/mission_cache.md` only after identifying the current
+  gate; it is long-term memory, not permission to widen the pass.
 - The active pass owns the current source gate. Implement/refactor production
   C++ first, build/test what changed, then record only new/completed systems
   and changed contracts.

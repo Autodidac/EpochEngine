@@ -158,7 +158,8 @@ int main(int argc, char** argv)
 
             if (cli_result.force_update
                 && update_result.update_available
-                && !update_result.update_performed)
+                && !update_result.update_performed
+                && !update_result.source_update_performed)
             {
                 return 1;
             }

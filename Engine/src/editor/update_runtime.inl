@@ -261,7 +261,7 @@
                 editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
                     ScopedEditorUpdateOperation updateOperation{};
                     epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                    return updater::run_update_command(editor_update_channel(), false);
+                    return updater::run_update_command(editor_update_channel(), false, false);
                 }));
             }
             catch (...)
@@ -299,7 +299,7 @@
                 editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
                     ScopedEditorUpdateOperation updateOperation{};
                     epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                    return updater::run_update_command(editor_update_channel(), true);
+                    return updater::run_update_command(editor_update_channel(), true, false);
                 }));
             }
             catch (...)
@@ -341,7 +341,7 @@
                     result.update_available = true;
                     result.source_update_available = true;
                     result.source_fallback_attempted = true;
-                    const bool workerLaunched = updater::run_source_update_command(editor_update_channel(), false);
+                    const bool workerLaunched = updater::run_source_update_command(editor_update_channel(), false, false, false);
                     result.update_performed = false;
                     result.source_update_performed = workerLaunched;
                     result.status_message = workerLaunched
