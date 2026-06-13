@@ -5,7 +5,7 @@
 
 <p align="left">
   <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.26-1F7A4C?style=for-the-badge" alt="Current development source v0.87.26" />
-  <img src="https://img.shields.io/badge/Stable_Source_Checkpoint-v0.87.26-2C6A8A?style=for-the-badge" alt="Stable source checkpoint v0.87.26" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.26-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.26" />
 </p>
 
 <p align="center">
@@ -76,8 +76,7 @@ For engine/tooling developers:
 ## Current Snapshot
 
 - Source is currently the active development line at `v0.87.26`.
-- The latest published stable source checkpoint is `v0.87.26` on `main` and
-  `multicontext-base-stable`.
+- The latest published stable runtime release is `v0.87.26`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
