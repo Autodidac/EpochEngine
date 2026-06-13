@@ -1,6 +1,13 @@
 # Epoch Changelog
 
 ## [v0.87.26]
+- Fixed the release updater source-build path so a stale or unavailable vcpkg
+  manifest baseline archive no longer ends the update around dependency setup;
+  the updater now logs the unavailable ref and falls back to a downloadable
+  managed vcpkg toolchain before restoring dependencies.
+- Aligned CLI update entry points with the editor updater by passing the same
+  platform build-gate metadata, so command-line and GUI update checks follow
+  the same Windows/Linux release readiness rules.
 - Extended the editor context handoff guard to Raylib so selecting Raylib from
   the toolbar fails closed with visible status instead of entering the unstable
   native owner-thread switch path.

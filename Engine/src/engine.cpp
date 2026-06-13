@@ -6340,6 +6340,8 @@ int WINAPI wWinMain(
             .binary_url = urls::binary_url,
             .source_url = urls::source_url,
             .source_version_url = urls::source_version_url,
+            .platform_build_status_url = epochnamespace::updater::PROJECT_ACTION_RUNS_API_URL(),
+            .platform_build_job_name = epochnamespace::updater::PROJECT_UPDATE_BUILD_JOB_NAME(),
         };
 
         if (cli_result.update_requested)
@@ -6408,6 +6410,8 @@ int main(int argc, char** argv)
             .binary_url = urls::binary_url,
             .source_url = urls::source_url,
             .source_version_url = urls::source_version_url,
+            .platform_build_status_url = epochnamespace::updater::PROJECT_ACTION_RUNS_API_URL(),
+            .platform_build_job_name = epochnamespace::updater::PROJECT_UPDATE_BUILD_JOB_NAME(),
         };
 
         if (cli_result.update_requested)

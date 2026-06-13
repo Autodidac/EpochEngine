@@ -144,6 +144,8 @@ int main(int argc, char** argv)
             .binary_url = epochnamespace::updater::PROJECT_BINARY_URL(),
             .source_url = epochnamespace::updater::PROJECT_SOURCE_URL(),
             .source_version_url = epochnamespace::updater::PROJECT_SOURCE_VERSION_URL(),
+            .platform_build_status_url = epochnamespace::updater::PROJECT_ACTION_RUNS_API_URL(),
+            .platform_build_job_name = epochnamespace::updater::PROJECT_UPDATE_BUILD_JOB_NAME(),
         };
 
         if (cli_result.update_requested)

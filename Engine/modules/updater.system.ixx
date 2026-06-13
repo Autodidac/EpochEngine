@@ -1483,8 +1483,23 @@ namespace epochnamespace::updater
 
             if (!download_file(VCPKG_ARCHIVE_URL(resolved_ref), archive_path.string()))
             {
-                append_log_line(log_path, "[ERROR] Failed to download managed vcpkg archive.");
-                return {};
+                if (resolved_ref == VCPKG_DEFAULT_REF)
+                {
+                    append_log_line(log_path, "[ERROR] Failed to download managed vcpkg archive.");
+                    return {};
+                }
+
+                append_log_line(
+                    log_path,
+                    "[WARN] Managed vcpkg ref " + resolved_ref
+                    + " was not downloadable; falling back to " + std::string{ VCPKG_DEFAULT_REF } + ".");
+
+                std::filesystem::remove(archive_path, ec);
+                if (!download_file(VCPKG_ARCHIVE_URL(VCPKG_DEFAULT_REF), archive_path.string()))
+                {
+                    append_log_line(log_path, "[ERROR] Failed to download fallback managed vcpkg archive.");
+                    return {};
+                }
             }
 
             if (!extract_archive(archive_path.string(), staging_dir.string()))
@@ -3129,7 +3144,27 @@ namespace epochnamespace::updater
             << "  Remove-Item -LiteralPath $managedVcpkgRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "  Write-Step 'INFO' ('Downloading managed vcpkg (' + $vcpkgRef + ').')\n"
             << "  $headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
-            << "  Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri (Get-VcpkgArchiveUrl $vcpkgRef) -OutFile $vcpkgArchive\n"
+            << "  try {\n"
+            << "    Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri (Get-VcpkgArchiveUrl $vcpkgRef) -OutFile $vcpkgArchive\n"
+            << "  }\n"
+            << "  catch {\n"
+            << "    if ($vcpkgRef -eq $vcpkgDefaultRef) {\n"
+            << "      throw\n"
+            << "    }\n"
+            << "    Write-Step 'WARN' ('Managed vcpkg ref ' + $vcpkgRef + ' was not downloadable: ' + $_.Exception.Message + '. Falling back to ' + $vcpkgDefaultRef + '.')\n"
+            << "    $vcpkgRef = $vcpkgDefaultRef\n"
+            << "    $safeRef = Get-ShortToken $vcpkgRef\n"
+            << "    $managedVcpkgRoot = Join-Path $managedToolsRoot ('v-' + $safeRef)\n"
+            << "    $managedVcpkgExe = Join-Path $managedVcpkgRoot $vcpkgExeName\n"
+            << "    $vcpkgArchive = Join-Path $managedToolsRoot ('v-' + $safeRef + '.zip')\n"
+            << "    $vcpkgStaging = Join-Path $managedToolsRoot ('vx-' + $safeRef)\n"
+            << "    $bootstrapScript = Join-Path $managedVcpkgRoot $vcpkgBootstrapName\n"
+            << "    Remove-Item -LiteralPath $vcpkgArchive -Force -ErrorAction SilentlyContinue\n"
+            << "    Remove-Item -LiteralPath $vcpkgStaging -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "    Remove-Item -LiteralPath $managedVcpkgRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "    Write-Step 'INFO' ('Downloading managed vcpkg fallback (' + $vcpkgRef + ').')\n"
+            << "    Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri (Get-VcpkgArchiveUrl $vcpkgRef) -OutFile $vcpkgArchive\n"
+            << "  }\n"
             << "  Expand-Archive -LiteralPath $vcpkgArchive -DestinationPath $vcpkgStaging -Force\n"
             << "  $extractedRoot = Get-ChildItem -LiteralPath $vcpkgStaging -Directory | Select-Object -First 1\n"
             << "  if ($null -eq $extractedRoot) {\n"
