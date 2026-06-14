@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.87.29]
+- Advanced the source line after the `v0.87.28` updater release so packaged
+  installs can distinguish the stable runtime from newer main source.
+
 ## [v0.87.28]
 - Repaired the Windows updater UX so editor/launcher update checks no longer
   flash console windows during startup downloads, and packaged installs stage a
