@@ -4,8 +4,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.31-1F7A4C?style=for-the-badge" alt="Current development source v0.87.31" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.30-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.30" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.32-1F7A4C?style=for-the-badge" alt="Current development source v0.87.32" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.32-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.32" />
 </p>
 
 <p align="center">
@@ -75,8 +75,8 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.87.31`.
-- The latest published stable runtime release is `v0.87.30`.
+- Source is currently the active development line at `v0.87.32`.
+- The latest published stable runtime release is `v0.87.32`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
@@ -95,6 +95,10 @@ For engine/tooling developers:
   installs use the newest matching `.zip`, packaged Linux/WSL installs use the
   newest matching `.tar.gz`, and source checkouts rebuild from source only after
   packaged-runtime parity or when no newer packaged runtime exists.
+- The launcher Update button now stays inside the launcher while it checks,
+  stages, or launches the source worker. It only exits after packaged handoff is
+  staged or source-rebuild handoff evidence is ready, so failed update work
+  remains visible in the package logs instead of looking like a sudden shutdown.
 - Phase 1 and Phase 2 of the active roadmap are complete. Current work is
   concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.

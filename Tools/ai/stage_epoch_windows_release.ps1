@@ -1,6 +1,6 @@
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [string]$Version = '0.87.26',
+    [string]$Version = '0.87.32',
     [string]$OutputRoot = "C:\tmp\epoch_release_v$Version"
 )
 
@@ -37,7 +37,7 @@ $assets = Join-Path $repo 'Engine\assets'
 $stageName = "epoch_win10_x64_v$Version"
 $stage = Join-Path $OutputRoot $stageName
 $zip = Join-Path $OutputRoot "$stageName.zip"
-$checksumFile = Join-Path $OutputRoot "epoch_release_v$Version`_windows_checksums.txt"
+$checksumFile = Join-Path $OutputRoot "v$Version`_checksums.txt"
 
 Require-Path -Path $repo -Label 'Repo root'
 Require-Path -Path $releaseOutput -Label 'Release output'

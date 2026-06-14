@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.87.32]
+- Fixed the launcher Update button so packaged releases no longer close the
+  launcher before update evidence exists. The launcher now keeps an in-window
+  status line, stages packaged handoff for the next click, watches source
+  worker handoff logs, and only exits when the package or source worker is
+  ready to replace/restart the runtime.
+- Updated Windows file metadata, EpochGui mirror version constants, and release
+  staging tooling so the checksum asset is named `v0.87.32_checksums.txt`
+  instead of carrying the old `epoch_release_` prefix.
+
 ## [v0.87.31]
 - Advanced the source line after the `v0.87.30` stable updater release so
   packaged installs can distinguish the published runtime from newer main

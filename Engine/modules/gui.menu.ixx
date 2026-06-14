@@ -149,6 +149,7 @@ export namespace epochnamespace::menu
         float layoutOriginY = 0.0f;
         float layoutWidth = 0.0f;
         float layoutHeight = 0.0f;
+        std::string statusLine{};
 
         static constexpr std::array kLauncherChoices = {
             ChoiceDescriptor{ Choice::ProjectTwoDStudio, "2D Studio", { 256.0f, 96.0f } },
@@ -208,6 +209,16 @@ export namespace epochnamespace::menu
 
             cachedWidth = -1;
             cachedHeight = -1;
+        }
+
+        void set_status(std::string status)
+        {
+            statusLine = std::move(status);
+        }
+
+        [[nodiscard]] const std::string& status() const noexcept
+        {
+            return statusLine;
         }
 
         // ----------------------------------------------------
@@ -434,7 +445,7 @@ export namespace epochnamespace::menu
                     windowSize,
                     clampToWindow);
 
-            constexpr float kHeaderOffsetY = 136.0f;
+            constexpr float kHeaderOffsetY = 166.0f;
 
             std::ignore = win;
             std::ignore = dt;
@@ -541,6 +552,11 @@ export namespace epochnamespace::menu
             gui::label(std::string("Launcher: ") + std::string(launcher_title()));
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 92.0f });
             gui::wrapped_label(launcher_hint(), frameSize.x - 32.0f);
+            if (!statusLine.empty())
+            {
+                gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 122.0f });
+                gui::wrapped_label(statusLine, frameSize.x - 32.0f);
+            }
 
             std::optional<Choice> chosen{};
             for (int i = 0; i < totalItems; ++i) {
