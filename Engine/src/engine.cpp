@@ -5937,7 +5937,8 @@ namespace epochnamespace::core
                                 const auto result = epochnamespace::updater::run_update_command(
                                     default_update_channel(),
                                     true,
-                                    false);
+                                    false,
+                                    epochnamespace::updater::UpdateHandoffMode::StageForRestart);
                                 if (result.platform_build_checked && !result.platform_build_ok)
                                 {
                                     const std::string reason = result.platform_build_reason.empty()

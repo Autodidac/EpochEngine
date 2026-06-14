@@ -2334,6 +2334,15 @@ namespace epochnamespace::updater
 #endif
         }
 
+        [[nodiscard]] inline std::filesystem::path staged_update_handoff_script_path()
+        {
+#if defined(_WIN32)
+            return updater_cache_root() / "epoch_staged_update_handoff.bat";
+#else
+            return updater_cache_root() / "epoch_staged_update_handoff.sh";
+#endif
+        }
+
 #if defined(_WIN32)
         [[nodiscard]] inline std::filesystem::path make_temp_powershell_script_path(const std::string_view stem)
         {
@@ -2826,6 +2835,7 @@ namespace epochnamespace::updater
         bool force_required{ false };
         bool update_performed{ false };
         bool packaged_update_performed{ false };
+        bool packaged_handoff_staged{ false };
         bool source_update_performed{ false };
         bool packaged_release_checked{ false };
         bool packaged_release_found{ false };
@@ -2846,6 +2856,12 @@ namespace epochnamespace::updater
         std::string platform_build_reason;
         std::string packaged_release_reason;
         std::string status_message;
+    };
+
+    export enum class UpdateHandoffMode
+    {
+        LaunchImmediately,
+        StageForRestart
     };
 
     export struct UpdateChannel
@@ -3510,10 +3526,13 @@ namespace epochnamespace::updater
 
     bool replace_binary_from_script(
         const std::filesystem::path& target_binary,
-        const std::filesystem::path& new_binary)
+        const std::filesystem::path& new_binary,
+        const UpdateHandoffMode handoff_mode = UpdateHandoffMode::LaunchImmediately)
     {
 #if defined(_WIN32)
-        const auto script_path = system_detail::make_temp_script_path("replace_binary");
+        const auto script_path = handoff_mode == UpdateHandoffMode::StageForRestart
+            ? system_detail::staged_update_handoff_script_path()
+            : system_detail::make_temp_script_path("replace_binary");
         const auto handoff_log = target_binary.parent_path() / "epoch_update_handoff.log";
 
         std::error_code replacement_exists_ec;
@@ -3525,6 +3544,11 @@ namespace epochnamespace::updater
             system_detail::append_log_line(handoff_log, "[ERROR] " + message);
             return false;
         }
+
+        std::error_code script_ec;
+        std::filesystem::create_directories(script_path.parent_path(), script_ec);
+        script_ec.clear();
+        std::filesystem::remove(script_path, script_ec);
 
         std::ofstream bat(script_path, std::ios::binary);
         if (!bat)
@@ -3573,10 +3597,14 @@ namespace epochnamespace::updater
 
         bat.close();
 
-        const std::string command =
-            "cmd.exe /C start \"\" /min " + system_detail::quote_shell_arg(script_path.string());
+        if (handoff_mode == UpdateHandoffMode::StageForRestart)
+        {
+            system_detail::append_log_line(
+                handoff_log,
+                "[INFO] Binary replacement handoff staged; waiting for Restart.");
+            return true;
+        }
 
-        (void)command;
         if (!system_detail::launch_batch_hidden(script_path))
         {
             system_detail::log_error("Failed to launch binary replacement batch.");
@@ -3585,7 +3613,9 @@ namespace epochnamespace::updater
 
         std::exit(0);
 #else
-        const auto script_path = system_detail::make_temp_script_path("replace_binary");
+        const auto script_path = handoff_mode == UpdateHandoffMode::StageForRestart
+            ? system_detail::staged_update_handoff_script_path()
+            : system_detail::make_temp_script_path("replace_binary");
 
         std::ofstream sh(script_path, std::ios::binary);
         if (!sh)
@@ -3611,6 +3641,9 @@ namespace epochnamespace::updater
 
         sh.close();
 
+        if (handoff_mode == UpdateHandoffMode::StageForRestart)
+            return true;
+
         if (!system_detail::launch_detached_posix_script(script_path))
         {
             system_detail::log_error("Failed to launch binary replacement script.");
@@ -3625,11 +3658,14 @@ namespace epochnamespace::updater
         const std::filesystem::path& target_binary,
         const std::filesystem::path& extracted_runtime_dir,
         const std::filesystem::path& package_archive,
-        const std::string_view restart_auto_command = {})
+        const std::string_view restart_auto_command = {},
+        const UpdateHandoffMode handoff_mode = UpdateHandoffMode::LaunchImmediately)
     {
 #if defined(_WIN32)
         const auto target_dir = target_binary.parent_path();
-        const auto script_path = system_detail::make_temp_script_path("replace_runtime_zip");
+        const auto script_path = handoff_mode == UpdateHandoffMode::StageForRestart
+            ? system_detail::staged_update_handoff_script_path()
+            : system_detail::make_temp_script_path("replace_runtime_zip");
         const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
         const bool chain_after_restart = !restart_auto_command.empty();
@@ -3643,6 +3679,11 @@ namespace epochnamespace::updater
             system_detail::append_log_line(handoff_log, "[ERROR] " + message);
             return false;
         }
+
+        std::error_code script_ec;
+        std::filesystem::create_directories(script_path.parent_path(), script_ec);
+        script_ec.clear();
+        std::filesystem::remove(script_path, script_ec);
 
         std::ofstream bat(script_path, std::ios::binary);
         if (!bat)
@@ -3717,6 +3758,14 @@ namespace epochnamespace::updater
 
         bat.close();
 
+        if (handoff_mode == UpdateHandoffMode::StageForRestart)
+        {
+            system_detail::append_log_line(
+                handoff_log,
+                "[INFO] Packaged runtime handoff staged; waiting for Restart.");
+            return true;
+        }
+
         if (!system_detail::launch_batch_hidden(script_path))
         {
             system_detail::log_error("Failed to launch packaged runtime replacement batch.");
@@ -3726,7 +3775,9 @@ namespace epochnamespace::updater
         std::exit(0);
 #else
         const auto target_dir = target_binary.parent_path();
-        const auto script_path = system_detail::make_temp_script_path("replace_runtime_zip");
+        const auto script_path = handoff_mode == UpdateHandoffMode::StageForRestart
+            ? system_detail::staged_update_handoff_script_path()
+            : system_detail::make_temp_script_path("replace_runtime_zip");
         const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
         const bool chain_after_restart = !restart_auto_command.empty();
@@ -3805,6 +3856,14 @@ namespace epochnamespace::updater
             << "rm -f \"$0\"\n";
 
         sh.close();
+
+        if (handoff_mode == UpdateHandoffMode::StageForRestart)
+        {
+            system_detail::append_log_line(
+                handoff_log,
+                "[INFO] Packaged runtime handoff staged; waiting for Restart.");
+            return true;
+        }
 
         if (!system_detail::launch_detached_posix_script(script_path))
         {
@@ -4003,10 +4062,11 @@ namespace epochnamespace::updater
 
     bool replace_binary(
         const std::filesystem::path& target_binary,
-        const std::filesystem::path& new_binary)
+        const std::filesystem::path& new_binary,
+        const UpdateHandoffMode handoff_mode = UpdateHandoffMode::LaunchImmediately)
     {
         clean_up_build_files();
-        return replace_binary_from_script(target_binary, new_binary);
+        return replace_binary_from_script(target_binary, new_binary, handoff_mode);
     }
 
     system_detail::VersionCheckResult check_for_updates(
@@ -4216,7 +4276,8 @@ namespace epochnamespace::updater
 
     bool install_from_binary(
         const std::string& url,
-        const std::string_view restart_auto_command = {})
+        const std::string_view restart_auto_command = {},
+        const UpdateHandoffMode handoff_mode = UpdateHandoffMode::LaunchImmediately)
     {
         const auto target_binary = system_detail::current_binary_path();
         const auto normalized_url =
@@ -4249,7 +4310,8 @@ namespace epochnamespace::updater
                 target_binary,
                 extract_dir,
                 archive_path,
-                restart_auto_command);
+                restart_auto_command,
+                handoff_mode);
         }
 
         const auto new_binary = system_detail::replacement_binary_path(target_binary);
@@ -4257,7 +4319,7 @@ namespace epochnamespace::updater
         if (!download_update_file_atomic(url, new_binary))
             return false;
 
-        return replace_binary(target_binary, new_binary);
+        return replace_binary(target_binary, new_binary, handoff_mode);
     }
 
     export std::filesystem::path source_update_log_path()
@@ -4268,6 +4330,45 @@ namespace epochnamespace::updater
     export std::filesystem::path update_handoff_log_path()
     {
         return system_detail::current_binary_path().parent_path() / "epoch_update_handoff.log";
+    }
+
+    export bool launch_staged_update_handoff()
+    {
+        const auto script_path = system_detail::staged_update_handoff_script_path();
+        const auto handoff_log = update_handoff_log_path();
+
+        std::error_code ec;
+        if (!std::filesystem::exists(script_path, ec) || ec)
+        {
+            system_detail::append_log_line(
+                handoff_log,
+                "[ERROR] Restart requested, but no staged update handoff script exists.");
+            system_detail::log_error("No staged update handoff script exists.");
+            return false;
+        }
+
+#if defined(_WIN32)
+        if (!system_detail::launch_batch_hidden(script_path))
+        {
+            system_detail::append_log_line(
+                handoff_log,
+                "[ERROR] Failed to launch staged update handoff.");
+            return false;
+        }
+#else
+        if (!system_detail::launch_detached_posix_script(script_path))
+        {
+            system_detail::append_log_line(
+                handoff_log,
+                "[ERROR] Failed to launch staged update handoff.");
+            return false;
+        }
+#endif
+
+        system_detail::append_log_line(
+            handoff_log,
+            "[INFO] Staged update handoff launched from Restart.");
+        return true;
     }
 
     export bool request_source_update_cancel()
@@ -4349,8 +4450,8 @@ namespace epochnamespace::updater
 
         if (effective_silent_worker)
         {
-            system_detail::log_info("Closing the current runtime so the silent source update worker can finish the replacement.");
-            std::exit(0);
+            system_detail::log_info("Silent source update worker launched; caller owns runtime shutdown after handoff evidence.");
+            return true;
         }
 
         system_detail::log_info("Source update worker launched. Keep using Epoch while it builds; close and restart after the worker reports replacement evidence.");
@@ -4453,7 +4554,8 @@ namespace epochnamespace::updater
     export UpdateCommandResult run_update_command(
         const UpdateChannel& channel,
         const bool force,
-        const bool honor_env_silent = true)
+        const bool honor_env_silent = true,
+        const UpdateHandoffMode packaged_handoff_mode = UpdateHandoffMode::LaunchImmediately)
     {
         cleanup_previous_update_artifacts();
 
@@ -4590,10 +4692,18 @@ namespace epochnamespace::updater
                     "Run update again after restart if you want to continue from the packaged build to main source.");
             }
 
-            result.update_performed = install_from_binary(packaged_release.binary_url);
+            result.update_performed = install_from_binary(
+                packaged_release.binary_url,
+                {},
+                packaged_handoff_mode);
             result.packaged_update_performed = result.update_performed;
+            result.packaged_handoff_staged =
+                result.packaged_update_performed
+                && packaged_handoff_mode == UpdateHandoffMode::StageForRestart;
             result.status_message = result.update_performed
-                ? "Packaged update handoff started. Restart Epoch if this window remains open."
+                ? (result.packaged_handoff_staged
+                    ? "Packaged update staged. Press Restart to close Epoch and let the hidden handoff replace the runtime."
+                    : "Packaged update handoff started. Restart Epoch if this window remains open.")
                 : "Packaged update failed before handoff. The cached package or replacement executable was not verified.";
             return result;
         }

@@ -299,7 +299,11 @@
                 editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
                     ScopedEditorUpdateOperation updateOperation{};
                     epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                    return updater::run_update_command(editor_update_channel(), true, false);
+                    return updater::run_update_command(
+                        editor_update_channel(),
+                        true,
+                        false,
+                        updater::UpdateHandoffMode::StageForRestart);
                 }));
             }
             catch (...)

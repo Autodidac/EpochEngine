@@ -42,14 +42,22 @@
             const float contentBottom = (std::max)(modalPos.y + 64.0f, buttonY - buttonTopPad);
             const std::string updateStatusLine = editor_update_modal::trim_status(editor.updateStatus);
             const auto requestUpdateRestart = [&]() {
+                if (editor.lastUpdateCheck.packaged_handoff_staged
+                    && !updater::launch_staged_update_handoff())
+                {
+                    editor.updateState = EditorUpdateState::Failed;
+                    editor.updateStatus = "Restart failed because the staged update handoff could not be launched. Check epoch_update_handoff.log beside the executable.";
+                    clear_editor_update_restart_countdown(editor);
+                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                    return;
+                }
+
                 editor.showUpdateConfirmModal = false;
                 editor.updateStatus = "Restarting Epoch to finish the staged update handoff.";
                 clear_editor_update_restart_countdown(editor);
                 push_editor_log(editor, "[update] Restart requested after verified update handoff.");
                 emit_command(EditorCommand::Exit);
             };
-            if (restartReady && editor_update_restart_countdown_elapsed(editor))
-                requestUpdateRestart();
             gui::begin_modal_window(gui::ModalWindowOptions{
                 .title = "Update Epoch",
                 .position = modalPos,
@@ -117,7 +125,7 @@
                     stackedButtonY += buttonHeight + buttonStackGap;
                 }
                 const std::string primaryUpdateLabel = restartReady
-                    ? std::format("Restart Now ({})", restartSeconds)
+                    ? std::string{ "Restart Now" }
                     : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
                 if (showPrimaryButton)
                 {
@@ -177,7 +185,7 @@
                     : contentRight - primaryButtonWidth;
                 gui::set_cursor({ primaryButtonX, buttonY });
                 const std::string primaryUpdateLabel = restartReady
-                    ? std::format("Restart Now ({})", restartSeconds)
+                    ? std::string{ "Restart Now" }
                     : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
                 if (showPrimaryButton && gui::button(primaryUpdateLabel, { primaryButtonWidth, buttonHeight }))
                 {
@@ -327,4 +335,3 @@
                 break;
             }
         }
-

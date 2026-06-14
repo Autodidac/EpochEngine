@@ -41,6 +41,16 @@ module;
 #include <string_view>
 #include <system_error>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#endif
+
 export module updater.tools;
 
 import updater.config;
@@ -118,6 +128,72 @@ namespace epochnamespace::updater
             return out;
 #endif
         }
+
+#if defined(_WIN32)
+        [[nodiscard]] inline std::wstring to_wide(const std::string_view value)
+        {
+            if (value.empty())
+                return {};
+
+            const int required = MultiByteToWideChar(
+                CP_UTF8,
+                0,
+                value.data(),
+                static_cast<int>(value.size()),
+                nullptr,
+                0);
+            if (required <= 0)
+                return std::wstring(value.begin(), value.end());
+
+            std::wstring wide(static_cast<std::size_t>(required), L'\0');
+            MultiByteToWideChar(
+                CP_UTF8,
+                0,
+                value.data(),
+                static_cast<int>(value.size()),
+                wide.data(),
+                required);
+            return wide;
+        }
+
+        [[nodiscard]] inline int run_hidden_command(const std::string& command)
+        {
+            STARTUPINFOW startup{};
+            startup.cb = sizeof(startup);
+            startup.dwFlags = STARTF_USESHOWWINDOW;
+            startup.wShowWindow = SW_HIDE;
+
+            PROCESS_INFORMATION process{};
+            std::wstring command_line = to_wide(command);
+            const BOOL created = CreateProcessW(
+                nullptr,
+                command_line.data(),
+                nullptr,
+                nullptr,
+                FALSE,
+                CREATE_NO_WINDOW,
+                nullptr,
+                nullptr,
+                &startup,
+                &process);
+
+            if (!created)
+            {
+                log_error("Failed to launch hidden updater download process.");
+                return -1;
+            }
+
+            WaitForSingleObject(process.hProcess, INFINITE);
+
+            DWORD exit_code = static_cast<DWORD>(-1);
+            if (!GetExitCodeProcess(process.hProcess, &exit_code))
+                exit_code = static_cast<DWORD>(-1);
+
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+            return static_cast<int>(exit_code);
+        }
+#endif
 
         [[nodiscard]] inline std::string strip_utf8_bom(std::string text)
         {
@@ -229,7 +305,7 @@ namespace epochnamespace::updater
 
 #if defined(_WIN32)
         const std::string command =
-            "curl -L --fail --silent --show-error "
+            "\"curl.exe\" -L --fail --silent --show-error "
             "-A \"EpochUpdater\" "
             "-H \"Accept: application/octet-stream, application/vnd.github+json\" "
             "-H \"X-GitHub-Api-Version: 2022-11-28\" "
@@ -242,7 +318,11 @@ namespace epochnamespace::updater
             + detail::quote_shell_arg(url);
 #endif
 
+#if defined(_WIN32)
+        const int result = detail::run_hidden_command(command);
+#else
         const int result = std::system(command.c_str());
+#endif
 
         if (result != 0 || !detail::file_exists_and_nontrivial(output_path))
         {

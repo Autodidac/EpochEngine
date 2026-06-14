@@ -83,11 +83,8 @@ namespace epochnamespace::editor_update_modal
     {
         if (flags.restartReady)
         {
-            return "The update is staged. Epoch will restart automatically in "
-                + std::to_string(restartSeconds)
-                + " second"
-                + (restartSeconds == 1 ? "" : "s")
-                + "; press Restart to finish now.";
+            (void)restartSeconds;
+            return "The update is staged. Press Restart when you are ready to close Epoch and let the hidden handoff replace the runtime.";
         }
 
         if (flags.sourceWorkerRunning)

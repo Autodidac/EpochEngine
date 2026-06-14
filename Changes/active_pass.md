@@ -76,7 +76,7 @@ contracts instead of drift.
   toolbar-equivalent smoke hook, keeping build/source validation aligned with
   the product toolbar handoff path.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1` and
-  `StaticLib1` passed for the v0.87.27 source checkpoint. The local MSVC Debug
+  `StaticLib1` passed for the v0.87.28 source checkpoint. The local MSVC Debug
   `ConsoleApplication1` target and `x64/Debug/EpochEditor.exe
   --engine-contract-self-test` now pass after the Raylib/OpenGL-family/SDL/SFML
   arcade RTT contract and capability-layer updates. The hosted
