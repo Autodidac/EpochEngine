@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.87.30]
+- Superseded the deleted updater package line with a fresh Windows/Linux stable
+  release checkpoint.
+- Removed the remaining editor update restart countdown plumbing so packaged
+  update handoff stays staged until the user presses Restart.
+- Kept the Windows updater download helper on the hidden-process lane so startup
+  update checks do not flash console windows.
+
 ## [v0.87.29]
 - Advanced the source line after the `v0.87.28` updater release so packaged
   installs can distinguish the stable runtime from newer main source.

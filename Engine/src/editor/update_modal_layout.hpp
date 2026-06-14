@@ -79,13 +79,10 @@ namespace epochnamespace::editor_update_modal
             : "Cached packages are checked before use; stale or broken downloads are replaced.";
     }
 
-    [[nodiscard]] inline std::string action_text(const UpdateFlags flags, const int restartSeconds)
+    [[nodiscard]] inline std::string action_text(const UpdateFlags flags)
     {
         if (flags.restartReady)
-        {
-            (void)restartSeconds;
             return "The update is staged. Press Restart when you are ready to close Epoch and let the hidden handoff replace the runtime.";
-        }
 
         if (flags.sourceWorkerRunning)
             return "Keep Epoch open while the source worker runs. Cancel stops at the next safe checkpoint.";
@@ -169,7 +166,6 @@ namespace epochnamespace::editor_update_modal
         const Vec2 viewport,
         const UpdateFlags flags,
         const std::string_view status,
-        const int restartSeconds,
         MeasureWrappedText measure_wrapped_text)
     {
         ModalLayout layout{};
@@ -178,7 +174,7 @@ namespace epochnamespace::editor_update_modal
         layout.actions = update_action_strip(flags, layout.contentWidth);
 
         const std::string statusLine = trim_status(status);
-        const std::string actionLine = action_text(flags, restartSeconds);
+        const std::string actionLine = action_text(flags);
 
         float desiredHeight = 54.0f;
         desiredHeight += measure_wrapped_text(intro_text(flags), layout.contentWidth) + 8.0f;

@@ -75,10 +75,11 @@ contracts instead of drift.
 - Source checkpoint: the SDL editor context switch fix is paired with a
   toolbar-equivalent smoke hook, keeping build/source validation aligned with
   the product toolbar handoff path.
-- Build evidence: MSVC Debug and Release x64 `ConsoleApplication1` and
-  `StaticLib1` passed for the v0.87.29 source checkpoint. The local MSVC Debug
-  `ConsoleApplication1` target and `x64/Debug/EpochEditor.exe
-  --engine-contract-self-test` now pass after the Raylib/OpenGL-family/SDL/SFML
+- Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
+  CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
+  CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30
+  updater checkpoint. The local MSVC Debug `ConsoleApplication1` target and
+  build-safe contract tests now pass after the Raylib/OpenGL-family/SDL/SFML
   arcade RTT contract and capability-layer updates. The hosted
   `linux-clang-engine` lane caught module-sensitive include gaps in the
   EpochGui implementation translation units; the source now includes

@@ -525,7 +525,6 @@ namespace epochnamespace
             bool updateInstallPending{ false };
             bool updateSourceInstallPending{ false };
             std::chrono::steady_clock::time_point updateOperationStartedAt{};
-            std::chrono::steady_clock::time_point updateRestartReadyAt{};
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
             SystemsSurfaceState systems{};
@@ -5955,14 +5954,10 @@ namespace epochnamespace
                     .restartReady = restartReady
                 };
             };
-        const int updateLayoutRestartSeconds = editor.updateState == EditorUpdateState::RestartReady
-            ? editor_update_restart_countdown_seconds(editor)
-            : 0;
         const auto updateConfirmModalLayout = editor_update_modal::measure_update_layout(
             { w, h },
             update_modal_flags(),
             editor.updateStatus,
-            updateLayoutRestartSeconds,
             measure_modal_text);
         const gui::Vec2 measuredUpdateConfirmModalSize{
             updateConfirmModalLayout.size.x,

@@ -84,39 +84,6 @@
                 std::chrono::steady_clock::now() - editor.updateOperationStartedAt).count();
         }
 
-        constexpr auto kEditorUpdateRestartDelay = std::chrono::seconds{ 10 };
-
-        void clear_editor_update_restart_countdown(EditorState& editor) noexcept
-        {
-            editor.updateRestartReadyAt = {};
-        }
-
-        void arm_editor_update_restart_countdown(EditorState& editor)
-        {
-            if (editor.updateRestartReadyAt == std::chrono::steady_clock::time_point{})
-                editor.updateRestartReadyAt = std::chrono::steady_clock::now();
-        }
-
-        [[nodiscard]] int editor_update_restart_countdown_seconds(const EditorState& editor)
-        {
-            if (editor.updateRestartReadyAt == std::chrono::steady_clock::time_point{})
-                return static_cast<int>(kEditorUpdateRestartDelay.count());
-
-            const auto elapsed = std::chrono::steady_clock::now() - editor.updateRestartReadyAt;
-            if (elapsed >= kEditorUpdateRestartDelay)
-                return 0;
-
-            const auto remaining = kEditorUpdateRestartDelay - elapsed;
-            const auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(remaining).count();
-            return static_cast<int>((remainingMs + 999) / 1000);
-        }
-
-        [[nodiscard]] bool editor_update_restart_countdown_elapsed(const EditorState& editor)
-        {
-            return editor.updateRestartReadyAt != std::chrono::steady_clock::time_point{}
-                && std::chrono::steady_clock::now() - editor.updateRestartReadyAt >= kEditorUpdateRestartDelay;
-        }
-
         [[nodiscard]] float editor_update_progress_value(const EditorState& editor)
         {
             if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
@@ -252,7 +219,6 @@
             editor.updateStatus = "Checking for updates...";
             editor.updateInstallPending = false;
             editor.updateSourceInstallPending = false;
-            clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Checking for available Epoch updates.");
 
@@ -290,7 +256,6 @@
             editor.updateStatus = "Installing the best available update. Epoch checks packaged releases first, then falls back to source only when no newer package exists.";
             editor.updateInstallPending = true;
             editor.updateSourceInstallPending = false;
-            clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Installing through the binary-first update gate.");
 
@@ -332,7 +297,6 @@
             editor.updateStatus = "Launching the advanced source rebuild worker. Use this only when you intentionally want latest main source instead of the packaged platform release.";
             editor.updateInstallPending = true;
             editor.updateSourceInstallPending = true;
-            clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Launching advanced source rebuild worker.");
 
@@ -423,7 +387,6 @@
                     {
                         editor.updateState = EditorUpdateState::RestartReady;
                         editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
-                        arm_editor_update_restart_countdown(editor);
                         push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                         return;
                     }
@@ -474,7 +437,6 @@
                 editor.updateStatus = "Source update canceled. Update remains available if you want to retry.";
                 editor.showUpdateConfirmModal = false;
                 editor.updateOperationStartedAt = {};
-                clear_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
@@ -487,7 +449,6 @@
                     ? "Source update failed. Check epoch_source_update.log and epoch_update_handoff.log beside the executable."
                     : std::string{ "Source update failed: " } + lastLine;
                 editor.updateOperationStartedAt = {};
-                clear_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
@@ -499,7 +460,6 @@
                 editor.updateStatus = "Source rebuild is ready for runtime handoff. Press Restart to close Epoch and let the worker replace the executable.";
                 editor.updateOperationStartedAt = {};
                 editor.showUpdateConfirmModal = true;
-                arm_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
@@ -511,7 +471,6 @@
                 editor.updateStatus = "Source update handoff completed. Restart Epoch if this window did not close automatically.";
                 editor.updateOperationStartedAt = {};
                 editor.showUpdateConfirmModal = true;
-                arm_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }

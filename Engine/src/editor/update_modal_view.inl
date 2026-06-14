@@ -10,9 +10,6 @@
             const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
             const bool updateRunning = editor.updateCheckPending.has_value() || sourceWorkerRunning;
             const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
-            if (restartReady)
-                arm_editor_update_restart_countdown(editor);
-            const int restartSeconds = restartReady ? editor_update_restart_countdown_seconds(editor) : 0;
             const gui::Vec2 modalSize = updateConfirmModalSize;
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
@@ -47,14 +44,12 @@
                 {
                     editor.updateState = EditorUpdateState::Failed;
                     editor.updateStatus = "Restart failed because the staged update handoff could not be launched. Check epoch_update_handoff.log beside the executable.";
-                    clear_editor_update_restart_countdown(editor);
                     push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                     return;
                 }
 
                 editor.showUpdateConfirmModal = false;
                 editor.updateStatus = "Restarting Epoch to finish the staged update handoff.";
-                clear_editor_update_restart_countdown(editor);
                 push_editor_log(editor, "[update] Restart requested after verified update handoff.");
                 emit_command(EditorCommand::Exit);
             };
@@ -93,7 +88,7 @@
                 cursorY += 36.0f;
             }
             emitWrapped(editor_update_modal::cache_text(flags), 8.0f);
-            const std::string actionText = editor_update_modal::action_text(flags, restartSeconds);
+            const std::string actionText = editor_update_modal::action_text(flags);
             emitWrapped(actionText, 8.0f);
             if (actionStripStacked)
             {
