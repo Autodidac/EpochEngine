@@ -2893,6 +2893,7 @@ namespace epochnamespace::updater
         const auto built_assets_dir = built_runtime_dir / "assets";
         const auto source_repo_assets_dir = manifest_root / "assets";
         const auto managed_tools_root = system_detail::managed_tools_root();
+        const auto source_fallback_urls = PROJECT_SOURCE_FALLBACK_URLS();
 
         std::ofstream ps(worker_script, std::ios::binary);
         if (!ps)
@@ -2911,6 +2912,16 @@ namespace epochnamespace::updater
             << "$ErrorActionPreference = 'Stop'\n"
             << "$ProgressPreference = 'SilentlyContinue'\n"
             << "$sourceUrl = '" << esc(channel.source_url) << "'\n"
+            << "$sourceFallbackUrls = @(\n";
+
+        for (const auto& fallback_url : source_fallback_urls)
+        {
+            if (!fallback_url.empty() && fallback_url != channel.source_url)
+                ps << "  '" << esc(fallback_url) << "'\n";
+        }
+
+        ps
+            << ")\n"
             << "$sourceArchive = '" << esc(archive_path.string()) << "'\n"
             << "$stagingDir = '" << esc(staging_dir.string()) << "'\n"
             << "$sourceRoot = '" << esc(final_dir.string()) << "'\n"
@@ -3026,6 +3037,42 @@ namespace epochnamespace::updater
             << "function Write-Handoff([string]$Level, [string]$Message) {\n"
             << "  $line = \"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Message\"\n"
             << "  Append-Text $handoffLog ($line + [Environment]::NewLine)\n"
+            << "}\n"
+            << "function Invoke-DownloadWithFallback([string]$PrimaryUrl, [string[]]$FallbackUrls, [string]$OutFile, [string]$Label) {\n"
+            << "  $headers = @{ 'User-Agent' = 'EpochUpdater/1.0'; 'Accept' = 'application/octet-stream, application/vnd.github+json' }\n"
+            << "  $urls = New-Object System.Collections.Generic.List[string]\n"
+            << "  if (-not [string]::IsNullOrWhiteSpace($PrimaryUrl)) { $urls.Add($PrimaryUrl) }\n"
+            << "  foreach ($fallbackUrl in $FallbackUrls) {\n"
+            << "    if ([string]::IsNullOrWhiteSpace($fallbackUrl)) { continue }\n"
+            << "    $duplicate = $false\n"
+            << "    foreach ($existingUrl in $urls) {\n"
+            << "      if ([string]::Equals($existingUrl, $fallbackUrl, [System.StringComparison]::OrdinalIgnoreCase)) {\n"
+            << "        $duplicate = $true\n"
+            << "        break\n"
+            << "      }\n"
+            << "    }\n"
+            << "    if (-not $duplicate) { $urls.Add($fallbackUrl) }\n"
+            << "  }\n"
+            << "  $lastError = ''\n"
+            << "  foreach ($candidateUrl in $urls) {\n"
+            << "    try {\n"
+            << "      Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue\n"
+            << "      Write-Step 'INFO' ($Label + ' URL: ' + $candidateUrl)\n"
+            << "      Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $candidateUrl -OutFile $OutFile\n"
+            << "      if ((Test-Path -LiteralPath $OutFile) -and ((Get-Item -LiteralPath $OutFile).Length -gt 0)) {\n"
+            << "        Write-Step 'INFO' ($Label + ' downloaded successfully.')\n"
+            << "        return\n"
+            << "      }\n"
+            << "      $lastError = 'downloaded file was empty'\n"
+            << "      Write-Step 'WARN' ($Label + ' produced an empty file from ' + $candidateUrl + '.')\n"
+            << "    }\n"
+            << "    catch {\n"
+            << "      $lastError = $_.Exception.Message\n"
+            << "      if ([string]::IsNullOrWhiteSpace($lastError)) { $lastError = $_.ToString() }\n"
+            << "      Write-Step 'WARN' ($Label + ' failed from ' + $candidateUrl + ': ' + $lastError)\n"
+            << "    }\n"
+            << "  }\n"
+            << "  throw ($Label + ' failed from all configured URLs. Last error: ' + $lastError)\n"
             << "}\n"
             << "function Test-Cancel {\n"
             << "  if (Test-Path -LiteralPath $cancelPath) {\n"
@@ -3321,9 +3368,8 @@ namespace epochnamespace::updater
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "New-Item -ItemType Directory -Path (Split-Path -Parent $sourceArchive) -Force | Out-Null\n"
             << "Write-Step 'INFO' 'Downloading latest " << PROJECT_SOURCE_ARCHIVE_LABEL() << ".'\n"
-            << "$headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
             << "Test-Cancel\n"
-            << "Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $sourceUrl -OutFile $sourceArchive\n"
+            << "Invoke-DownloadWithFallback $sourceUrl $sourceFallbackUrls $sourceArchive 'Source snapshot download'\n"
             << "Test-Cancel\n"
             << "Expand-Archive -LiteralPath $sourceArchive -DestinationPath $stagingDir -Force\n"
             << "Test-Cancel\n"
@@ -4063,7 +4109,10 @@ namespace epochnamespace::updater
         std::filesystem::remove(temporary_path, ec);
 
         if (!download_file(url, temporary_path.string()))
+        {
+            system_detail::log_error("Update download failed from URL: " + url);
             return false;
+        }
 
         if (!move_download_into_place(temporary_path, final_path))
         {
@@ -4072,6 +4121,47 @@ namespace epochnamespace::updater
         }
 
         return true;
+    }
+
+    [[nodiscard]] bool download_source_archive_with_fallbacks(
+        const std::string& primary_url,
+        const std::filesystem::path& final_path)
+    {
+        std::vector<std::string> urls;
+        if (!primary_url.empty())
+            urls.push_back(primary_url);
+
+        for (const auto& fallback_url : PROJECT_SOURCE_FALLBACK_URLS())
+        {
+            if (fallback_url.empty())
+                continue;
+
+            bool duplicate = false;
+            for (const auto& existing_url : urls)
+            {
+                if (system_detail::lower_ascii(existing_url)
+                    == system_detail::lower_ascii(fallback_url))
+                {
+                    duplicate = true;
+                    break;
+                }
+            }
+
+            if (!duplicate)
+                urls.push_back(fallback_url);
+        }
+
+        for (const auto& url : urls)
+        {
+            system_detail::log_info("Source snapshot download URL: " + url);
+            if (download_update_file_atomic(url, final_path))
+                return true;
+
+            system_detail::log_error("Source snapshot download failed from: " + url);
+        }
+
+        system_detail::log_error("Source snapshot download failed from all configured URLs.");
+        return false;
     }
 
     [[nodiscard]] bool prepare_cached_update_archive(
@@ -4296,7 +4386,7 @@ namespace epochnamespace::updater
             "Downloading latest "
             + system_detail::describe_source_archive(channel.source_url)
             + ".");
-        if (!download_update_file_atomic(channel.source_url, archive_path))
+        if (!download_source_archive_with_fallbacks(channel.source_url, archive_path))
             return false;
 
         if (!extract_archive(archive_path.string(), staging_dir.string()))

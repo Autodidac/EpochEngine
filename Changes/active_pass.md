@@ -55,6 +55,20 @@ contracts instead of drift.
   Arcade: it owns a native texture/FBO/depth target, paints a deterministic
   attract pass into that target, and samples the color texture onto the staged
   `EngineArcadeScreen` panel as the first visible presentation proof.
+- The build-safe arcade RTT contract now covers OpenGL-family, SDL3, SFML3, and
+  Raylib cabinet graph submission honestly. OpenGL-family command contexts keep
+  post-frame render-target evidence after the pass closes, SDL3/SFML3/Raylib
+  cabinet checks require sampled bindings only when a live native runtime exists,
+  and otherwise prove fail-closed no-runtime behavior without claiming allocation.
+- Raylib's render device now owns CPU-side resource records for graph buffers,
+  materials, meshes, models, binding sets, and submitted model evidence, so the
+  Engine Arcade cabinet graph can prove model submission in the Raylib lane while
+  native RTT allocation remains runtime-availability-gated.
+- System Info and the contract harness now report sampled RTT as layered
+  evidence instead of a single support claim: descriptor contract, graph proof,
+  hook/adaptor readiness, live native allocation, presentation proof, and the
+  sampled-RTT rollup are distinct. SDL3/SFML3/Raylib remain missing for
+  presentation proof until a live runtime allocation and display path is proven.
 - The editor toolbar now exposes 3D scene construction and 2D game/UI
   construction through one scene-mode selector, so Canvas2D work is an explicit
   mode switch instead of a second wide workspace tab.
@@ -62,7 +76,10 @@ contracts instead of drift.
   toolbar-equivalent smoke hook, keeping build/source validation aligned with
   the product toolbar handoff path.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1` and
-  `StaticLib1` passed for the v0.87.27 source checkpoint. The hosted
+  `StaticLib1` passed for the v0.87.26 release checkpoint. The local MSVC Debug
+  `ConsoleApplication1` target and `x64/Debug/EpochEditor.exe
+  --engine-contract-self-test` now pass after the Raylib/OpenGL-family/SDL/SFML
+  arcade RTT contract and capability-layer updates. The hosted
   `linux-clang-engine` lane caught module-sensitive include gaps in the
   EpochGui implementation translation units; the source now includes
   `<cstdint>` explicitly before relying on `std::uint32_t` or

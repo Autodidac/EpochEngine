@@ -455,6 +455,9 @@ export namespace epoch
         bool frame_graph = false;
         bool render_to_texture = false;
         bool sampled_render_targets = false;
+        bool sampled_rtt_hook_ready = false;
+        bool sampled_rtt_live_allocation_ready = false;
+        bool sampled_rtt_presentation_proven = false;
         bool native_sampled_render_targets = false;
         bool binding_sets = false;
         bool mesh_resources = false;
@@ -608,7 +611,7 @@ export namespace epoch
             report.build_graph_proof = RendererCapabilityStatus::present;
             report.hook_readiness = RendererCapabilityStatus::partial;
             report.live_native_allocation = RendererCapabilityStatus::partial;
-            report.presentation_proof = RendererCapabilityStatus::partial;
+            report.presentation_proof = RendererCapabilityStatus::missing;
             report.sampled_render_targets = RendererCapabilityStatus::partial;
             report.mesh_model_resources = RendererCapabilityStatus::partial;
             break;
@@ -648,9 +651,24 @@ export namespace epoch
                caps.sampled_render_targets;
     }
 
+    [[nodiscard]] constexpr bool renderer_supports_sampled_rtt_hooks(const RendererCapabilities& caps) noexcept
+    {
+        return renderer_supports_sampled_render_targets(caps) && caps.sampled_rtt_hook_ready;
+    }
+
+    [[nodiscard]] constexpr bool renderer_supports_live_sampled_rtt_allocation(const RendererCapabilities& caps) noexcept
+    {
+        return renderer_supports_sampled_render_targets(caps) && caps.sampled_rtt_live_allocation_ready;
+    }
+
+    [[nodiscard]] constexpr bool renderer_has_sampled_rtt_presentation_proof(const RendererCapabilities& caps) noexcept
+    {
+        return renderer_supports_sampled_render_targets(caps) && caps.sampled_rtt_presentation_proven;
+    }
+
     [[nodiscard]] constexpr bool renderer_supports_native_sampled_render_targets(const RendererCapabilities& caps) noexcept
     {
-        return renderer_supports_sampled_render_targets(caps) && caps.native_sampled_render_targets;
+        return renderer_supports_live_sampled_rtt_allocation(caps);
     }
 
     [[nodiscard]] constexpr bool renderer_supports_mesh_resources(const RendererCapabilities& caps) noexcept

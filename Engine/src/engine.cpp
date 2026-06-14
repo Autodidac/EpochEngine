@@ -1005,7 +1005,7 @@ namespace epochnamespace::core
                 && context.last_height() == epoch::package_registry::engine_arcade_render_texture_height()
                 && context.last_render_target()
                 && context.bound_binding_set()
-                && boundResources.read_materials.size() == 1u
+                && boundResources.read_materials.size() == 2u
                 && boundResources.read_models.size() == 1u
                 && boundResources.read_material_textures.size() == 1u
                 && boundResources.read_samplers.size() == 1u
@@ -1014,7 +1014,9 @@ namespace epochnamespace::core
                 && boundResources.read_material_textures.front().sampler
                 && boundResources.read_material_textures.front().sampler == boundResources.read_samplers.front()
                 && context.last_model()
-                && context.last_model() == boundResources.read_models.front();
+                && context.last_model() == boundResources.read_models.front()
+                && boundResources.read_materials.front()
+                && boundResources.read_materials[1u];
 
             if (!cabinetBindingEvidence)
                 return false;
@@ -1048,7 +1050,7 @@ namespace epochnamespace::core
             });
 
             const epoch::RendererCapabilities caps = device.capabilities();
-            if (!epoch::renderer_supports_native_sampled_render_targets(caps)
+            if (!epoch::renderer_supports_sampled_rtt_hooks(caps)
                 || !engine_arcade_cabinet_graph_contract_ready(device))
             {
                 return false;
@@ -1114,6 +1116,128 @@ namespace epochnamespace::core
             && std::abs(screen.scale.x - 2.22f) < 0.001f
             && std::abs(screen.scale.y - 1.22f) < 0.001f;
     }
+
+    [[nodiscard]] inline bool renderer_capability_report_contract_ready()
+    {
+        const auto opengl = epoch::renderer_capability_report_for(epoch::RendererBackendKind::opengl);
+        const auto sdl = epoch::renderer_capability_report_for(epoch::RendererBackendKind::sdl3);
+        const auto sfml = epoch::renderer_capability_report_for(epoch::RendererBackendKind::sfml3);
+        const auto raylib = epoch::renderer_capability_report_for(epoch::RendererBackendKind::raylib3);
+        const auto vulkan = epoch::renderer_capability_report_for(epoch::RendererBackendKind::vulkan);
+        const auto directx = epoch::renderer_capability_report_for(epoch::RendererBackendKind::directx);
+        const auto software = epoch::renderer_capability_report_for(epoch::RendererBackendKind::software);
+
+        const auto present = epoch::RendererCapabilityStatus::present;
+        const auto partial = epoch::RendererCapabilityStatus::partial;
+        const auto missing = epoch::RendererCapabilityStatus::missing;
+        const auto deferred = epoch::RendererCapabilityStatus::deferred;
+
+        const auto openglReady =
+            opengl.descriptor_contract == present
+            && opengl.build_graph_proof == present
+            && opengl.hook_readiness == present
+            && opengl.live_native_allocation == partial
+            && opengl.presentation_proof == partial
+            && opengl.sampled_render_targets == partial;
+
+        const auto runtimeGuardedReady = [present, partial, missing](const epoch::RendererCapabilityReport& report) noexcept
+        {
+            return report.descriptor_contract == present
+                && report.build_graph_proof == present
+                && report.hook_readiness == partial
+                && report.live_native_allocation == partial
+                && report.presentation_proof == missing
+                && report.sampled_render_targets == partial;
+        };
+
+        const auto futureNativeReady = [partial, missing](const epoch::RendererCapabilityReport& report) noexcept
+        {
+            return report.descriptor_contract == partial
+                && report.build_graph_proof == partial
+                && report.hook_readiness == missing
+                && report.live_native_allocation == missing
+                && report.presentation_proof == missing
+                && report.sampled_render_targets == partial;
+        };
+
+        const auto softwareReady =
+            software.descriptor_contract == deferred
+            && software.build_graph_proof == deferred
+            && software.hook_readiness == deferred
+            && software.live_native_allocation == deferred
+            && software.presentation_proof == deferred
+            && software.sampled_render_targets == deferred;
+
+        epoch::OpenGLFamilyRenderDevice openGlNoHooks{ epoch::RendererBackendKind::opengl };
+        const epoch::RendererCapabilities openGlNoHookCaps = openGlNoHooks.capabilities();
+
+        OpenGLFamilyFakeNativeRttState hookState{};
+        epoch::OpenGLFamilyRenderDevice openGlHooks{ epoch::RendererBackendKind::opengl };
+        openGlHooks.set_native_render_texture_hooks(epoch::OpenGLFamilyNativeRenderTextureHooks{
+            .user = &hookState,
+            .allocate = fake_opengl_family_allocate_rtt,
+            .destroy = fake_opengl_family_destroy_rtt,
+            .begin_pass = fake_opengl_family_begin_rtt_pass,
+            .end_pass = fake_opengl_family_end_rtt_pass
+        });
+        const epoch::RendererCapabilities openGlHookCaps = openGlHooks.capabilities();
+
+        const bool openGlCapsReady =
+            epoch::renderer_supports_sampled_render_targets(openGlNoHookCaps)
+            && !epoch::renderer_supports_sampled_rtt_hooks(openGlNoHookCaps)
+            && !epoch::renderer_supports_live_sampled_rtt_allocation(openGlNoHookCaps)
+            && !epoch::renderer_supports_native_sampled_render_targets(openGlNoHookCaps)
+            && epoch::renderer_supports_sampled_render_targets(openGlHookCaps)
+            && epoch::renderer_supports_sampled_rtt_hooks(openGlHookCaps)
+            && !epoch::renderer_supports_live_sampled_rtt_allocation(openGlHookCaps)
+            && !epoch::renderer_supports_native_sampled_render_targets(openGlHookCaps);
+
+        bool runtimeGuardCapsReady = true;
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+        {
+            epoch::SdlRenderDevice device{};
+            const epoch::RendererCapabilities caps = device.capabilities();
+            runtimeGuardCapsReady = runtimeGuardCapsReady
+                && epoch::renderer_supports_sampled_render_targets(caps)
+                && epoch::renderer_supports_sampled_rtt_hooks(caps)
+                && (epoch::renderer_supports_live_sampled_rtt_allocation(caps) == device.runtime_renderer_available())
+                && (epoch::renderer_supports_native_sampled_render_targets(caps) == device.runtime_renderer_available());
+        }
+#endif
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
+        {
+            epoch::SfmlRenderDevice device{};
+            const epoch::RendererCapabilities caps = device.capabilities();
+            runtimeGuardCapsReady = runtimeGuardCapsReady
+                && epoch::renderer_supports_sampled_render_targets(caps)
+                && epoch::renderer_supports_sampled_rtt_hooks(caps)
+                && (epoch::renderer_supports_live_sampled_rtt_allocation(caps) == device.runtime_renderer_available())
+                && (epoch::renderer_supports_native_sampled_render_targets(caps) == device.runtime_renderer_available());
+        }
+#endif
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+        {
+            epoch::RaylibRenderDevice device{};
+            const epoch::RendererCapabilities caps = device.capabilities();
+            runtimeGuardCapsReady = runtimeGuardCapsReady
+                && epoch::renderer_supports_sampled_render_targets(caps)
+                && epoch::renderer_supports_sampled_rtt_hooks(caps)
+                && (epoch::renderer_supports_live_sampled_rtt_allocation(caps) == device.runtime_renderer_available())
+                && (epoch::renderer_supports_native_sampled_render_targets(caps) == device.runtime_renderer_available());
+        }
+#endif
+
+        return openglReady
+            && runtimeGuardedReady(sdl)
+            && runtimeGuardedReady(sfml)
+            && runtimeGuardedReady(raylib)
+            && futureNativeReady(vulkan)
+            && futureNativeReady(directx)
+            && softwareReady
+            && openGlCapsReady
+            && runtimeGuardCapsReady;
+    }
+
     [[nodiscard]] inline bool opengl_real_native_rtt_hook_contract_ready()
     {
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
@@ -1122,7 +1246,7 @@ namespace epochnamespace::core
             epochnamespace::opengltextures::make_native_render_texture_hooks());
 
         const epoch::RendererCapabilities caps = device.capabilities();
-        if (!epoch::renderer_supports_native_sampled_render_targets(caps))
+        if (!epoch::renderer_supports_sampled_rtt_hooks(caps))
             return false;
 
         const epoch::RenderTextureAssetDesc desc = epoch::render_arcade::make_screen_render_texture_desc();
@@ -1304,9 +1428,11 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
         epoch::SdlRenderDevice device{};
         const epoch::RendererCapabilities caps = device.capabilities();
+        const bool runtimeAvailable = device.runtime_renderer_available();
         if (device.backend_name() != "sdl3"
             || !epoch::renderer_supports_sampled_render_targets(caps)
-            || !epoch::renderer_supports_model_resources(caps))
+            || !epoch::renderer_supports_model_resources(caps)
+            || epoch::renderer_supports_native_sampled_render_targets(caps) != runtimeAvailable)
         {
             return false;
         }
@@ -1328,6 +1454,7 @@ namespace epochnamespace::core
             return false;
         }
 
+        const epoch::GraphRenderTextureAsset& compiledScreen = graph.render_texture_assets.front();
         const epoch::GraphMaterial& compiledScreenMaterial = graph.materials[1u];
         const epoch::GraphMaterial& compiledBodyMaterial = graph.materials[2u];
         const epoch::GraphMesh& compiledScreenMesh = graph.meshes[1u];
@@ -1352,17 +1479,27 @@ namespace epochnamespace::core
             && cabinetPass.bindings.read_materials[1u] == compiledBodyMaterial.backend
             && cabinetPass.bindings.read_models.size() == 1u
             && cabinetPass.bindings.read_models.front() == compiledModel.backend
-            && cabinetPass.bindings.read_material_textures.size() == 1u
-            && cabinetPass.bindings.read_material_textures.front().slot == epoch::MaterialTextureSlot::render_surface
             && cabinetPass.draw_models.size() == 1u
             && cabinetPass.draw_models.front().model == cabinet.model
             && cabinetPass.draw_models.front().backend == compiledModel.backend;
+
+        const bool sampledBindingReady = runtimeAvailable
+            ? compiledScreen.backend
+                && device.render_texture_count() == 1u
+                && cabinetPass.bindings.read_material_textures.size() == 1u
+                && cabinetPass.bindings.read_material_textures.front().slot == epoch::MaterialTextureSlot::render_surface
+                && cabinetPass.bindings.read_samplers.size() == 1u
+            : !compiledScreen.backend
+                && device.render_texture_count() == 0u
+                && cabinetPass.bindings.read_material_textures.empty()
+                && cabinetPass.bindings.read_samplers.empty();
 
         epoch::SdlCommandContext& context = static_cast<epoch::SdlCommandContext&>(device.acquire_graphics_context());
         graph.execute(device);
         const epoch::ModelHandle submitted = context.last_model();
         const bool submitReady =
             graphReady
+            && sampledBindingReady
             && submitted
             && submitted == compiledModel.backend
             && context.bound_binding_set() == cabinetPass.binding_set
@@ -1371,7 +1508,9 @@ namespace epochnamespace::core
             && device.resolve_model(submitted) != nullptr;
 
         graph.destroy(device);
-        return submitReady && device.resolve_model(submitted) == nullptr;
+        return submitReady
+            && device.resolve_model(submitted) == nullptr
+            && device.render_texture_count() == 0u;
 #else
         return true;
 #endif
@@ -1382,9 +1521,11 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
         epoch::SfmlRenderDevice device{};
         const epoch::RendererCapabilities caps = device.capabilities();
+        const bool runtimeAvailable = device.runtime_renderer_available();
         if (device.backend_name() != "sfml3"
             || !epoch::renderer_supports_sampled_render_targets(caps)
-            || !epoch::renderer_supports_model_resources(caps))
+            || !epoch::renderer_supports_model_resources(caps)
+            || epoch::renderer_supports_native_sampled_render_targets(caps) != runtimeAvailable)
         {
             return false;
         }
@@ -1406,6 +1547,7 @@ namespace epochnamespace::core
             return false;
         }
 
+        const epoch::GraphRenderTextureAsset& compiledScreen = graph.render_texture_assets.front();
         const epoch::GraphMaterial& compiledScreenMaterial = graph.materials[1u];
         const epoch::GraphMaterial& compiledBodyMaterial = graph.materials[2u];
         const epoch::GraphMesh& compiledScreenMesh = graph.meshes[1u];
@@ -1430,17 +1572,27 @@ namespace epochnamespace::core
             && cabinetPass.bindings.read_materials[1u] == compiledBodyMaterial.backend
             && cabinetPass.bindings.read_models.size() == 1u
             && cabinetPass.bindings.read_models.front() == compiledModel.backend
-            && cabinetPass.bindings.read_material_textures.size() == 1u
-            && cabinetPass.bindings.read_material_textures.front().slot == epoch::MaterialTextureSlot::render_surface
             && cabinetPass.draw_models.size() == 1u
             && cabinetPass.draw_models.front().model == cabinet.model
             && cabinetPass.draw_models.front().backend == compiledModel.backend;
+
+        const bool sampledBindingReady = runtimeAvailable
+            ? compiledScreen.backend
+                && device.render_texture_count() == 1u
+                && cabinetPass.bindings.read_material_textures.size() == 1u
+                && cabinetPass.bindings.read_material_textures.front().slot == epoch::MaterialTextureSlot::render_surface
+                && cabinetPass.bindings.read_samplers.size() == 1u
+            : !compiledScreen.backend
+                && device.render_texture_count() == 0u
+                && cabinetPass.bindings.read_material_textures.empty()
+                && cabinetPass.bindings.read_samplers.empty();
 
         epoch::SfmlCommandContext& context = static_cast<epoch::SfmlCommandContext&>(device.acquire_graphics_context());
         graph.execute(device);
         const epoch::ModelHandle submitted = context.last_model();
         const bool submitReady =
             graphReady
+            && sampledBindingReady
             && submitted
             && submitted == compiledModel.backend
             && context.bound_binding_set() == cabinetPass.binding_set
@@ -1449,7 +1601,105 @@ namespace epochnamespace::core
             && device.resolve_model(submitted) != nullptr;
 
         graph.destroy(device);
-        return submitReady && device.resolve_model(submitted) == nullptr;
+        return submitReady
+            && device.resolve_model(submitted) == nullptr
+            && device.render_texture_count() == 0u;
+#else
+        return true;
+#endif
+    }
+
+    [[nodiscard]] inline bool raylib_arcade_cabinet_graph_contract_ready()
+    {
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+        epoch::RaylibRenderDevice device{};
+        const epoch::RendererCapabilities caps = device.capabilities();
+        const bool runtimeAvailable = device.runtime_renderer_available();
+        if (device.backend_name() != "raylib"
+            || !epoch::renderer_supports_sampled_render_targets(caps)
+            || !epoch::renderer_supports_model_resources(caps)
+            || epoch::renderer_supports_native_sampled_render_targets(caps) != runtimeAvailable)
+        {
+            return false;
+        }
+
+        epoch::GraphBuilder builder{};
+        const epoch::render_arcade::ArcadeCabinetGraphBuild cabinet = epoch::render_arcade::add_cabinet_graph(builder);
+        epoch::CompiledGraph graph = builder.compile(device);
+
+        const bool resourceShape =
+            graph.render_texture_assets.size() == 1u
+            && graph.textures.size() == 1u
+            && graph.samplers.size() == 1u
+            && graph.render_targets.size() == 1u
+            && graph.buffers.size() == 6u
+            && graph.materials.size() == 3u
+            && graph.meshes.size() == 3u
+            && graph.models.size() == 2u
+            && graph.passes.size() == 2u;
+        if (!resourceShape)
+        {
+            graph.destroy(device);
+            return false;
+        }
+
+        const epoch::GraphRenderTextureAsset& compiledScreen = graph.render_texture_assets.front();
+        const epoch::GraphMaterial& compiledScreenMaterial = graph.materials[1u];
+        const epoch::GraphMaterial& compiledBodyMaterial = graph.materials[2u];
+        const epoch::GraphMesh& compiledScreenMesh = graph.meshes[1u];
+        const epoch::GraphMesh& compiledBodyMesh = graph.meshes[2u];
+        const epoch::GraphModel& compiledModel = graph.models.back();
+        const epoch::PassDecl& cabinetPass = graph.passes[1u];
+
+        const bool graphReady =
+            compiledScreenMaterial.backend
+            && compiledBodyMaterial.backend
+            && compiledScreenMesh.backend
+            && compiledBodyMesh.backend
+            && compiledModel.backend
+            && compiledModel.mesh_slots.size() == 2u
+            && compiledModel.mesh_slots[0u].mesh == cabinet.body_mesh
+            && compiledModel.mesh_slots[0u].material == cabinet.body_material
+            && compiledModel.mesh_slots[1u].mesh == cabinet.mesh
+            && compiledModel.mesh_slots[1u].material == cabinet.material
+            && cabinetPass.binding_set
+            && cabinetPass.bindings.read_materials.size() == 2u
+            && cabinetPass.bindings.read_materials[0u] == compiledScreenMaterial.backend
+            && cabinetPass.bindings.read_materials[1u] == compiledBodyMaterial.backend
+            && cabinetPass.bindings.read_models.size() == 1u
+            && cabinetPass.bindings.read_models.front() == compiledModel.backend
+            && cabinetPass.draw_models.size() == 1u
+            && cabinetPass.draw_models.front().model == cabinet.model
+            && cabinetPass.draw_models.front().backend == compiledModel.backend;
+
+        const bool sampledBindingReady = runtimeAvailable
+            ? compiledScreen.backend
+                && device.render_texture_count() == 1u
+                && cabinetPass.bindings.read_material_textures.size() == 1u
+                && cabinetPass.bindings.read_material_textures.front().slot == epoch::MaterialTextureSlot::render_surface
+                && cabinetPass.bindings.read_samplers.size() == 1u
+            : !compiledScreen.backend
+                && device.render_texture_count() == 0u
+                && cabinetPass.bindings.read_material_textures.empty()
+                && cabinetPass.bindings.read_samplers.empty();
+
+        epoch::RaylibCommandContext& context = static_cast<epoch::RaylibCommandContext&>(device.acquire_graphics_context());
+        graph.execute(device);
+        const epoch::ModelHandle submitted = context.last_model();
+        const bool submitReady =
+            graphReady
+            && sampledBindingReady
+            && submitted
+            && submitted == compiledModel.backend
+            && context.bound_binding_set() == cabinetPass.binding_set
+            && context.bound_resources().read_models.size() == 1u
+            && context.bound_resources().read_models.front() == submitted
+            && device.resolve_model(submitted) != nullptr;
+
+        graph.destroy(device);
+        return submitReady
+            && device.resolve_model(submitted) == nullptr
+            && device.render_texture_count() == 0u;
 #else
         return true;
 #endif
@@ -1534,12 +1784,14 @@ namespace epochnamespace::core
         check("render.opengl_family_arcade_native_requirements", opengl_family_arcade_native_requirements_contract_ready());
         check("render.opengl_family_arcade_fake_native_rtt", opengl_family_arcade_fake_native_rtt_contract_ready());
         check("render.sampled_surface_preview_marker", sampled_render_surface_preview_marker_contract_ready());
+        check("render.capability_report_layers", renderer_capability_report_contract_ready());
         check("render.opengl_real_native_rtt_hook", opengl_real_native_rtt_hook_contract_ready());
         check("render.sdl_native_render_texture_device", sdl_native_render_texture_device_contract_ready());
         check("render.sfml_native_render_texture_device", sfml_native_render_texture_device_contract_ready());
         check("render.raylib_native_render_texture_device", raylib_native_render_texture_device_contract_ready());
         check("render.sdl_arcade_cabinet_graph", sdl_arcade_cabinet_graph_contract_ready());
         check("render.sfml_arcade_cabinet_graph", sfml_arcade_cabinet_graph_contract_ready());
+        check("render.raylib_arcade_cabinet_graph", raylib_arcade_cabinet_graph_contract_ready());
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;

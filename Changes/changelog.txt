@@ -1,6 +1,18 @@
 # Epoch Changelog
 
-## [v0.87.27]
+## [v0.87.26]
+- Extended the build-safe Engine Arcade RTT contract across OpenGL-family, SDL3,
+  SFML3, and Raylib cabinet graph lanes: OpenGL-family now preserves post-frame
+  render-target evidence, SDL3/SFML3/Raylib fail closed when no native runtime is
+  live, and Raylib owns CPU-side graph resource records for model submission
+  proof without claiming native RTT allocation.
+- Tightened renderer capability reporting so System Info and the contract
+  harness display sampled RTT as descriptor, graph, hook/adaptor,
+  live-allocation, presentation, and rollup layers; SDL3/SFML3/Raylib no longer
+  imply presentation proof from no-runtime guard coverage.
+- Hardened source-update downloads against GitHub archive-route 404s by trying
+  the codeload/API source snapshot URLs after the friendly archive URL fails and
+  logging the exact failed URL in both worker and in-process updater lanes.
 - Fixed GUI-launched source updates so editor/release update buttons no longer honor
   `EPOCH_UPDATER_SILENT`; silent source-worker exit remains reserved for CLI or
   updater-shell lanes that opt in explicitly.
@@ -11,10 +23,6 @@
 - Converted the 3D Scene / 2D Scene/UI toolbar pair into a scene-mode selector
   so 2D game and GUI construction behaves like an explicit mode switch instead
   of another wide toolbar tab.
-- Advanced source and EpochGui mirror metadata to `v0.87.27` while keeping the
-  published stable release line at `v0.87.26`.
-
-## [v0.87.26]
 - Fixed the release updater source-build path so a stale or unavailable vcpkg
   manifest baseline archive no longer ends the update around dependency setup;
   the updater now logs the unavailable ref and falls back to a downloadable

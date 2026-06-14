@@ -3086,7 +3086,7 @@ namespace epochnamespace
             append(caps.command_lists, "commands");
             append(caps.frame_graph, "graph");
             append(caps.render_to_texture, "RTT");
-            append(caps.sampled_render_targets, "sampled targets");
+            append(caps.sampled_render_targets, "sampled RTT contract");
             append(caps.binding_sets, "binding sets");
             append(caps.mesh_resources, "meshes");
             append(caps.model_resources, "models");
@@ -3108,12 +3108,49 @@ namespace epochnamespace
             const auto report = epoch::renderer_capability_report_for(kind);
 
             return std::format(
-                "desc {} | graph {} | hook {} | live {} | present {}",
+                "desc {} | graph {} | hook {} | live {} | presentation {} | sampled {}",
                 epoch::renderer_capability_status_label(report.descriptor_contract),
                 epoch::renderer_capability_status_label(report.build_graph_proof),
                 epoch::renderer_capability_status_label(report.hook_readiness),
                 epoch::renderer_capability_status_label(report.live_native_allocation),
-                epoch::renderer_capability_status_label(report.presentation_proof));
+                epoch::renderer_capability_status_label(report.presentation_proof),
+                epoch::renderer_capability_status_label(report.sampled_render_targets));
+        }
+
+        [[nodiscard]] std::string renderer_sampled_rtt_descriptor_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto report = epoch::renderer_capability_report_for(renderer_backend_kind(ctx));
+            return epoch::renderer_capability_status_label(report.descriptor_contract);
+        }
+
+        [[nodiscard]] std::string renderer_sampled_rtt_graph_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto report = epoch::renderer_capability_report_for(renderer_backend_kind(ctx));
+            return epoch::renderer_capability_status_label(report.build_graph_proof);
+        }
+
+        [[nodiscard]] std::string renderer_sampled_rtt_hook_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto report = epoch::renderer_capability_report_for(renderer_backend_kind(ctx));
+            return epoch::renderer_capability_status_label(report.hook_readiness);
+        }
+
+        [[nodiscard]] std::string renderer_sampled_rtt_live_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto report = epoch::renderer_capability_report_for(renderer_backend_kind(ctx));
+            return epoch::renderer_capability_status_label(report.live_native_allocation);
+        }
+
+        [[nodiscard]] std::string renderer_sampled_rtt_presentation_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto report = epoch::renderer_capability_report_for(renderer_backend_kind(ctx));
+            return epoch::renderer_capability_status_label(report.presentation_proof);
+        }
+
+        [[nodiscard]] std::string renderer_sampled_rtt_rollup_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto report = epoch::renderer_capability_report_for(renderer_backend_kind(ctx));
+            return epoch::renderer_capability_status_label(report.sampled_render_targets);
         }
 
         [[nodiscard]] std::string renderer_native_mesh_model_status(const std::shared_ptr<core::Context>& ctx)
@@ -3146,23 +3183,30 @@ namespace epochnamespace
             const auto caps = epoch::renderer_capabilities_for(kind);
             const auto report = epoch::renderer_capability_report_for(kind);
             const std::string status = epoch::renderer_capability_status_label(report.sampled_render_targets);
+            const std::string liveStatus = epoch::renderer_capability_status_label(report.live_native_allocation);
+            const std::string presentationStatus = epoch::renderer_capability_status_label(report.presentation_proof);
             if (epoch::renderer_supports_native_sampled_render_targets(caps))
-                return status + ": native sampled RTT allocation active in this live backend";
+                return status + ": native sampled RTT allocation active; live " + liveStatus +
+                    " | presentation " + presentationStatus;
             if (epoch::renderer_supports_sampled_render_targets(caps))
             {
                 switch (kind)
                 {
                 case epoch::RendererBackendKind::opengl:
-                    return status + ": descriptors/graph/hook ready; live allocation and presentation still need active-context proof";
+                    return status + ": descriptors/graph/hook ready; live " + liveStatus +
+                        " | presentation " + presentationStatus;
                 case epoch::RendererBackendKind::sdl3:
                 case epoch::RendererBackendKind::sfml3:
                 case epoch::RendererBackendKind::raylib3:
-                    return status + ": runtime-gated native allocation; no-runtime refusal is guard proof only";
+                    return status + ": graph/model submission plus no-runtime guard; live " + liveStatus +
+                        " | presentation " + presentationStatus;
                 case epoch::RendererBackendKind::vulkan:
                 case epoch::RendererBackendKind::directx:
-                    return status + ": shared descriptors/graph only; native render.device implementation missing";
+                    return status + ": shared descriptors/graph only; live " + liveStatus +
+                        " | presentation " + presentationStatus;
                 default:
-                    return status + ": sampled RTT graph declared; backend-native allocation pending";
+                    return status + ": sampled RTT graph declared; live " + liveStatus +
+                        " | presentation " + presentationStatus;
                 }
             }
             return status + ": sampled RTT unavailable";
@@ -8397,6 +8441,12 @@ namespace epochnamespace
                 gui::property_row("[renderer] Resource spine", renderer_resource_spine_summary(ctx), 132.0f);
                 gui::property_row("[renderer] Declared desc", renderer_declared_descriptor_status(), 132.0f);
                 gui::property_row("[renderer] Proof stages", renderer_capability_proof_stage_status(ctx), 132.0f);
+                gui::property_row("[rtt] Descriptor", renderer_sampled_rtt_descriptor_status(ctx), 132.0f);
+                gui::property_row("[rtt] Graph", renderer_sampled_rtt_graph_status(ctx), 132.0f);
+                gui::property_row("[rtt] Hook/adaptor", renderer_sampled_rtt_hook_status(ctx), 132.0f);
+                gui::property_row("[rtt] Live allocation", renderer_sampled_rtt_live_status(ctx), 132.0f);
+                gui::property_row("[rtt] Presentation", renderer_sampled_rtt_presentation_status(ctx), 132.0f);
+                gui::property_row("[rtt] Overall", renderer_sampled_rtt_rollup_status(ctx), 132.0f);
                 gui::property_row("[renderer] Mesh/model", renderer_native_mesh_model_status(ctx), 132.0f);
                 gui::property_row("[renderer] Sampled RTT", renderer_native_sampled_rtt_status(ctx), 132.0f);
                 gui::property_row("[renderer] Next gate", renderer_next_feature_gate(ctx), 132.0f);
@@ -8941,6 +8991,12 @@ namespace epochnamespace
                 dockLine("[visual] Parity gate", std::string(epochnamespace::visuals::parity_gate())),
                 dockLine("[renderer] Resource spine", renderer_resource_spine_summary(ctx)),
                 dockLine("[renderer] Proof stages", renderer_capability_proof_stage_status(ctx)),
+                dockLine("[rtt] Descriptor", renderer_sampled_rtt_descriptor_status(ctx)),
+                dockLine("[rtt] Graph", renderer_sampled_rtt_graph_status(ctx)),
+                dockLine("[rtt] Hook/adaptor", renderer_sampled_rtt_hook_status(ctx)),
+                dockLine("[rtt] Live allocation", renderer_sampled_rtt_live_status(ctx)),
+                dockLine("[rtt] Presentation", renderer_sampled_rtt_presentation_status(ctx)),
+                dockLine("[rtt] Overall", renderer_sampled_rtt_rollup_status(ctx)),
                 dockLine("[renderer] Sampled RTT", renderer_native_sampled_rtt_status(ctx)),
                 dockLine("[renderer] Next gate", renderer_next_feature_gate(ctx)),
                 dockLine("[build] Compiler", compiler_identity()),

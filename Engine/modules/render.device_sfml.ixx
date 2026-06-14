@@ -193,7 +193,10 @@ export namespace epoch
         {
             RendererCapabilities caps = renderer_capabilities_for(RendererBackendKind::sfml3);
             caps.buffers = true;
-            caps.native_sampled_render_targets = runtime_renderer_available();
+            caps.sampled_rtt_hook_ready = true;
+            caps.sampled_rtt_live_allocation_ready = runtime_renderer_available();
+            caps.sampled_rtt_presentation_proven = false;
+            caps.native_sampled_render_targets = caps.sampled_rtt_live_allocation_ready;
             caps.mesh_resources = true;
             caps.model_resources = true;
             return caps;

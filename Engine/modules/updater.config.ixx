@@ -267,6 +267,41 @@ namespace epochnamespace::updater
             + std::string{ BRANCH } + PROJECT_SOURCE_ARCHIVE_EXTENSION();
     }
 
+    export inline std::vector<std::string> PROJECT_SOURCE_FALLBACK_URLS()
+    {
+        const auto extension = PROJECT_SOURCE_ARCHIVE_EXTENSION();
+        std::vector<std::string> urls;
+
+        if (extension == ".tar.gz")
+        {
+            urls.push_back(
+                "https://codeload.github.com/"
+                + std::string{ OWNER } + "/"
+                + std::string{ REPO } + "/tar.gz/refs/heads/"
+                + std::string{ BRANCH });
+            urls.push_back(
+                std::string{ GITHUB_API_BASE }
+                + std::string{ OWNER } + "/"
+                + std::string{ REPO } + "/tarball/"
+                + std::string{ BRANCH });
+        }
+        else
+        {
+            urls.push_back(
+                "https://codeload.github.com/"
+                + std::string{ OWNER } + "/"
+                + std::string{ REPO } + "/zip/refs/heads/"
+                + std::string{ BRANCH });
+            urls.push_back(
+                std::string{ GITHUB_API_BASE }
+                + std::string{ OWNER } + "/"
+                + std::string{ REPO } + "/zipball/"
+                + std::string{ BRANCH });
+        }
+
+        return urls;
+    }
+
     export inline std::string PROJECT_BINARY_URL()
     {
         return {};

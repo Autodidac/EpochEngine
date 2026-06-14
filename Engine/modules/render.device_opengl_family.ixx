@@ -164,6 +164,7 @@ export namespace epoch
             m_render_pass.render_target = render_target;
             m_render_pass.desc = pass;
             m_render_pass.open = true;
+            m_last_render_target = render_target;
             m_last_width = record->width;
             m_last_height = record->height;
             m_native_pass_bound = false;
@@ -185,7 +186,7 @@ export namespace epoch
         [[nodiscard]] bool active() const noexcept { return m_open; }
         [[nodiscard]] bool render_pass_open() const noexcept { return m_render_pass.open; }
         [[nodiscard]] BindingSetHandle bound_binding_set() const noexcept { return m_binding_set; }
-        [[nodiscard]] RenderTargetHandle last_render_target() const noexcept { return m_render_pass.render_target; }
+        [[nodiscard]] RenderTargetHandle last_render_target() const noexcept { return m_last_render_target; }
         [[nodiscard]] const CommandResourceBindings& bound_resources() const noexcept { return m_bindings; }
         [[nodiscard]] bool native_pass_bound() const noexcept { return m_native_pass_bound; }
         [[nodiscard]] u32 last_width() const noexcept { return m_last_width; }
@@ -213,6 +214,7 @@ export namespace epoch
         CommandResourceBindings m_bindings{};
         BindingSetHandle m_binding_set{};
         OpenGLFamilyRenderPassRecord m_render_pass{};
+        RenderTargetHandle m_last_render_target{};
         MeshHandle m_last_mesh{};
         MaterialHandle m_last_material{};
         ModelHandle m_last_model{};
@@ -262,7 +264,10 @@ export namespace epoch
             caps.frame_graph = true;
             caps.render_to_texture = true;
             caps.sampled_render_targets = true;
-            caps.native_sampled_render_targets = m_native_hooks.ready();
+            caps.sampled_rtt_hook_ready = m_native_hooks.ready();
+            caps.sampled_rtt_live_allocation_ready = false;
+            caps.sampled_rtt_presentation_proven = false;
+            caps.native_sampled_render_targets = caps.sampled_rtt_live_allocation_ready;
             caps.binding_sets = true;
             caps.mesh_resources = true;
             caps.model_resources = true;

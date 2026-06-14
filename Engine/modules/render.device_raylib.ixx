@@ -37,12 +37,35 @@ export namespace epoch
         bool active = false;
     };
 
+    struct RaylibSlotRecord
+    {
+        bool active = false;
+    };
+
+    struct RaylibMeshRecord
+    {
+        MeshDesc desc{};
+        bool active = false;
+    };
+
+    struct RaylibModelRecord
+    {
+        ModelDesc desc{};
+        int live_model_id = -1;
+        bool active = false;
+    };
+
     class RaylibCommandContext final : public ICommandContext
     {
     public:
         void set_render_textures(std::vector<RaylibRenderTextureRecord>* records) noexcept
         {
             m_render_textures = records;
+        }
+
+        void set_models(std::vector<RaylibModelRecord>* records) noexcept
+        {
+            m_models = records;
         }
 
         void begin(const char*) override {}
@@ -83,9 +106,16 @@ export namespace epoch
 
         void draw_model(ModelHandle model) override
         {
-            if (model)
-                epochnamespace::raylib_api::draw_model(static_cast<int>(model.value - 1));
+            m_last_model = model;
+
+            const RaylibModelRecord* const record = resolve(model);
+            if (record && record->live_model_id >= 0)
+                epochnamespace::raylib_api::draw_model(record->live_model_id);
         }
+
+        [[nodiscard]] BindingSetHandle bound_binding_set() const noexcept { return m_binding_set; }
+        [[nodiscard]] const CommandResourceBindings& bound_resources() const noexcept { return m_bindings; }
+        [[nodiscard]] ModelHandle last_model() const noexcept { return m_last_model; }
 
     private:
         [[nodiscard]] RaylibRenderTextureRecord* resolve(RenderTargetHandle render_target) noexcept
@@ -101,6 +131,19 @@ export namespace epoch
             return record.active ? &record : nullptr;
         }
 
+        [[nodiscard]] const RaylibModelRecord* resolve(ModelHandle model) const noexcept
+        {
+            if (!m_models || !model)
+                return nullptr;
+
+            const u32 index = model.value - 1u;
+            if (index >= m_models->size())
+                return nullptr;
+
+            const RaylibModelRecord& record = (*m_models)[index];
+            return record.active ? &record : nullptr;
+        }
+
         [[nodiscard]] static constexpr unsigned char to_channel(float value) noexcept
         {
             if (value <= 0.0f)
@@ -111,8 +154,10 @@ export namespace epoch
         }
 
         std::vector<RaylibRenderTextureRecord>* m_render_textures = nullptr;
+        std::vector<RaylibModelRecord>* m_models = nullptr;
         CommandResourceBindings m_bindings{};
         BindingSetHandle m_binding_set{};
+        ModelHandle m_last_model{};
         bool m_render_pass_open = false;
     };
 
@@ -122,6 +167,7 @@ export namespace epoch
         RaylibRenderDevice()
         {
             m_context.set_render_textures(&m_render_textures);
+            m_context.set_models(&m_models);
         }
 
         std::string backend_name() const override { return "raylib"; }
@@ -129,19 +175,23 @@ export namespace epoch
         RendererCapabilities capabilities() const noexcept override
         {
             RendererCapabilities caps = renderer_capabilities_for(RendererBackendKind::raylib3);
-            caps.native_sampled_render_targets = runtime_renderer_available();
+            caps.sampled_rtt_hook_ready = true;
+            caps.sampled_rtt_live_allocation_ready = runtime_renderer_available();
+            caps.sampled_rtt_presentation_proven = false;
+            caps.native_sampled_render_targets = caps.sampled_rtt_live_allocation_ready;
+            caps.mesh_resources = true;
             caps.model_resources = true;
             caps.model_import_ready = true;
             return caps;
         }
 
-        BufferHandle create_buffer(const BufferDesc&) override { return {}; }
-        TextureHandle create_texture(const TextureDesc&) override { return {}; }
-        SamplerHandle create_sampler(const SamplerDesc&) override { return {}; }
-        ShaderHandle create_shader(const ShaderDesc&) override { return {}; }
-        PipelineHandle create_pipeline(const PipelineDesc&) override { return {}; }
-        MaterialHandle create_material(const MaterialDesc&) override { return {}; }
-        RenderTargetHandle create_render_target(const RenderTargetDesc&) override { return {}; }
+        BufferHandle create_buffer(const BufferDesc&) override { return BufferHandle{ allocate_slot(m_buffers) }; }
+        TextureHandle create_texture(const TextureDesc&) override { return TextureHandle{ allocate_slot(m_textures) }; }
+        SamplerHandle create_sampler(const SamplerDesc&) override { return SamplerHandle{ allocate_slot(m_samplers) }; }
+        ShaderHandle create_shader(const ShaderDesc&) override { return ShaderHandle{ allocate_slot(m_shaders) }; }
+        PipelineHandle create_pipeline(const PipelineDesc&) override { return PipelineHandle{ allocate_slot(m_pipelines) }; }
+        MaterialHandle create_material(const MaterialDesc&) override { return MaterialHandle{ allocate_slot(m_materials) }; }
+        RenderTargetHandle create_render_target(const RenderTargetDesc&) override { return RenderTargetHandle{ allocate_slot(m_render_targets) }; }
 
         BindingSetHandle create_binding_set(const CommandResourceBindings& bindings) override
         {
@@ -152,16 +202,27 @@ export namespace epoch
             return BindingSetHandle{ slot + 1u };
         }
 
-        MeshHandle create_mesh(const MeshDesc&) override { return {}; }
+        MeshHandle create_mesh(const MeshDesc& desc) override
+        {
+            const u32 slot = allocate_mesh_slot();
+            RaylibMeshRecord& record = m_meshes[slot];
+            record.desc = desc;
+            record.active = true;
+            return MeshHandle{ slot + 1u };
+        }
 
         ModelHandle create_model(const ModelDesc& desc) override
         {
-            const char* path = desc.source_path ? desc.source_path : desc.name;
-            const int model_id = epochnamespace::raylib_api::load_model(path);
-            if (model_id < 0)
-                return {};
+            int liveModelId = -1;
+            if (runtime_renderer_available() && desc.source_path && desc.source_path[0] != '\0')
+                liveModelId = epochnamespace::raylib_api::load_model(desc.source_path);
 
-            return ModelHandle{ static_cast<u32>(model_id + 1) };
+            const u32 slot = allocate_model_slot();
+            RaylibModelRecord& record = m_models[slot];
+            record.desc = desc;
+            record.live_model_id = liveModelId;
+            record.active = true;
+            return ModelHandle{ slot + 1u };
         }
 
         RenderTextureAssetHandles create_render_texture_asset(const RenderTextureAssetDesc& desc) override
@@ -191,13 +252,13 @@ export namespace epoch
                 RenderTargetHandle{ handle_value } };
         }
 
-        void destroy(BufferHandle) noexcept override {}
-        void destroy(TextureHandle) noexcept override {}
-        void destroy(SamplerHandle) noexcept override {}
-        void destroy(ShaderHandle) noexcept override {}
-        void destroy(PipelineHandle) noexcept override {}
-        void destroy(MaterialHandle) noexcept override {}
-        void destroy(RenderTargetHandle) noexcept override {}
+        void destroy(BufferHandle handle) noexcept override { release_slot(m_buffers, handle.value); }
+        void destroy(TextureHandle handle) noexcept override { release_slot(m_textures, handle.value); }
+        void destroy(SamplerHandle handle) noexcept override { release_slot(m_samplers, handle.value); }
+        void destroy(ShaderHandle handle) noexcept override { release_slot(m_shaders, handle.value); }
+        void destroy(PipelineHandle handle) noexcept override { release_slot(m_pipelines, handle.value); }
+        void destroy(MaterialHandle handle) noexcept override { release_slot(m_materials, handle.value); }
+        void destroy(RenderTargetHandle handle) noexcept override { release_slot(m_render_targets, handle.value); }
 
         void destroy(BindingSetHandle binding_set) noexcept override
         {
@@ -209,12 +270,30 @@ export namespace epoch
                 m_binding_sets[index] = {};
         }
 
-        void destroy(MeshHandle) noexcept override {}
+        void destroy(MeshHandle mesh) noexcept override
+        {
+            if (!mesh)
+                return;
+
+            const u32 index = mesh.value - 1u;
+            if (index < m_meshes.size())
+                m_meshes[index] = {};
+        }
 
         void destroy(ModelHandle model) noexcept override
         {
-            if (model)
-                epochnamespace::raylib_api::unload_model(static_cast<int>(model.value - 1));
+            if (!model)
+                return;
+
+            const u32 index = model.value - 1u;
+            if (index >= m_models.size())
+                return;
+
+            RaylibModelRecord& record = m_models[index];
+            if (record.live_model_id >= 0)
+                epochnamespace::raylib_api::unload_model(record.live_model_id);
+
+            record = {};
         }
 
         void destroy(RenderTextureAssetHandles handles) noexcept override
@@ -260,6 +339,19 @@ export namespace epoch
             return count;
         }
 
+        [[nodiscard]] const RaylibModelRecord* resolve_model(ModelHandle model) const noexcept
+        {
+            if (!model)
+                return nullptr;
+
+            const u32 index = model.value - 1u;
+            if (index >= m_models.size())
+                return nullptr;
+
+            const RaylibModelRecord& record = m_models[index];
+            return record.active ? &record : nullptr;
+        }
+
         ICommandContext& acquire_graphics_context() override { return m_context; }
         CommandListHandle begin_command_list(const char*) override { return {}; }
         void end_command_list(CommandListHandle) override {}
@@ -272,6 +364,31 @@ export namespace epoch
         }
 
     private:
+        [[nodiscard]] static u32 allocate_slot(std::vector<RaylibSlotRecord>& records)
+        {
+            for (u32 i = 0; i < static_cast<u32>(records.size()); ++i)
+            {
+                if (!records[i].active)
+                {
+                    records[i].active = true;
+                    return i + 1u;
+                }
+            }
+
+            records.push_back(RaylibSlotRecord{ true });
+            return static_cast<u32>(records.size());
+        }
+
+        static void release_slot(std::vector<RaylibSlotRecord>& records, u32 handle_value) noexcept
+        {
+            if (handle_value == 0u)
+                return;
+
+            const u32 index = handle_value - 1u;
+            if (index < records.size())
+                records[index] = {};
+        }
+
         [[nodiscard]] u32 allocate_render_texture_slot()
         {
             for (u32 i = 0; i < static_cast<u32>(m_render_textures.size()); ++i)
@@ -282,6 +399,30 @@ export namespace epoch
 
             m_render_textures.push_back({});
             return static_cast<u32>(m_render_textures.size() - 1u);
+        }
+
+        [[nodiscard]] u32 allocate_mesh_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_meshes.size()); ++i)
+            {
+                if (!m_meshes[i].active)
+                    return i;
+            }
+
+            m_meshes.push_back({});
+            return static_cast<u32>(m_meshes.size() - 1u);
+        }
+
+        [[nodiscard]] u32 allocate_model_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_models.size()); ++i)
+            {
+                if (!m_models[i].active)
+                    return i;
+            }
+
+            m_models.push_back({});
+            return static_cast<u32>(m_models.size() - 1u);
         }
 
         [[nodiscard]] u32 allocate_binding_set_slot()
@@ -297,7 +438,16 @@ export namespace epoch
         }
 
         RaylibCommandContext m_context{};
+        std::vector<RaylibSlotRecord> m_buffers{};
+        std::vector<RaylibSlotRecord> m_textures{};
+        std::vector<RaylibSlotRecord> m_samplers{};
+        std::vector<RaylibSlotRecord> m_shaders{};
+        std::vector<RaylibSlotRecord> m_pipelines{};
+        std::vector<RaylibSlotRecord> m_materials{};
+        std::vector<RaylibSlotRecord> m_render_targets{};
         std::vector<RaylibRenderTextureRecord> m_render_textures{};
+        std::vector<RaylibMeshRecord> m_meshes{};
+        std::vector<RaylibModelRecord> m_models{};
         std::vector<RaylibBindingSetRecord> m_binding_sets{};
     };
 #endif
