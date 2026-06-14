@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.87.27]
+- Advanced the source line and EpochGui mirror metadata to `v0.87.27` after the
+  refreshed `v0.87.26` stable release tag so packaged installs can detect a
+  newer source snapshot from `main` during update checks.
+
 ## [v0.87.26]
 - Extended the build-safe Engine Arcade RTT contract across OpenGL-family, SDL3,
   SFML3, and Raylib cabinet graph lanes: OpenGL-family now preserves post-frame
@@ -36,7 +41,7 @@
 - Fixed the SDL editor context switch path and added a toolbar-equivalent
   smoke hook so source checkpoint validation exercises the same handoff route
   operators use from the editor toolbar.
-- Updated release-facing README metadata for the v0.87.26 source checkpoint and
+- Updated release-facing README metadata for the v0.87.26 release checkpoint and
   fixed the EpochGui implementation translation units to include `<cstdint>` so
   the Linux Clang full-engine CI lane can compile `std::uint32_t` and
   `std::uint64_t` explicitly.
