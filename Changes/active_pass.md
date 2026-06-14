@@ -75,6 +75,9 @@ contracts instead of drift.
 - Source checkpoint: the SDL editor context switch fix is paired with a
   toolbar-equivalent smoke hook, keeping build/source validation aligned with
   the product toolbar handoff path.
+- Source checkpoint: `main` is advanced to v0.87.31 after the v0.87.30
+  Windows/Linux updater release so packaged runtime installs can distinguish
+  stable release parity from newer main-source availability.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30
