@@ -80,6 +80,9 @@ contracts instead of drift.
   evidence is ready. Packaged runtime installs can still distinguish stable
   release parity from newer main-source availability after the follow-up source
   bump.
+- Source checkpoint: `main` is advanced to v0.87.33 after the v0.87.32
+  Windows/Linux updater release so packaged installs can intentionally continue
+  from release parity into a main-source rebuild.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

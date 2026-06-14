@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.87.33]
+- Advanced the source line after the `v0.87.32` stable updater release so
+  packaged installs can detect and intentionally rebuild the newer main source
+  after release-package parity is reached.
+
 ## [v0.87.32]
 - Fixed the launcher Update button so packaged releases no longer close the
   launcher before update evidence exists. The launcher now keeps an in-window
