@@ -96,6 +96,9 @@ contracts instead of drift.
 - Release checkpoint: `v0.87.38` routes editor source-only update confirmation
   directly to the detached source worker and reports guarded failures instead
   of leaving the modal at the early install progress band.
+- Source checkpoint: `main` is advanced to v0.87.39 after the v0.87.38 editor
+  source-update handoff release while the published stable runtime remains
+  v0.87.38.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

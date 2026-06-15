@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.87.39]
+- Advanced the source line after the `v0.87.38` editor source-update handoff
+  release while keeping the published stable runtime release on `v0.87.38`.
+
 ## [v0.87.38]
 - Fixed the editor update modal so a source-only update no longer routes
   through the packaged smart-install button state. It now starts the detached

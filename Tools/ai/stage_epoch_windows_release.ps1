@@ -1,6 +1,6 @@
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [string]$Version = '0.87.38',
+    [string]$Version = '0.87.39',
     [string]$OutputRoot = "C:\tmp\epoch_release_v$Version"
 )
 
