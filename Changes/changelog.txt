@@ -4,6 +4,10 @@
 - Advanced the source line after the `v0.87.32` stable updater release so
   packaged installs can detect and intentionally rebuild the newer main source
   after release-package parity is reached.
+- Fixed packaged release handoff staging when a downloaded runtime archive
+  extracts into a nested payload folder, so the updater verifies the real
+  runtime binary and keeps restart evidence instead of failing immediately
+  after the early install progress step.
 
 ## [v0.87.32]
 - Fixed the launcher Update button so packaged releases no longer close the
