@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.87.34]
+- Fixed packaged release updater handoff for both nested and flat runtime
+  payload archives, so the verified executable path comes from the extracted
+  payload instead of assuming one archive shape.
+- Changed the Windows release staging archive to put the runtime payload at the
+  archive root, so the already-published `v0.87.32` updater can consume the new
+  package without tripping over a nested top-level folder.
+
 ## [v0.87.33]
 - Advanced the source line after the `v0.87.32` stable updater release so
   packaged installs can detect and intentionally rebuild the newer main source

@@ -1,6 +1,6 @@
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [string]$Version = '0.87.33',
+    [string]$Version = '0.87.34',
     [string]$OutputRoot = "C:\tmp\epoch_release_v$Version"
 )
 
@@ -98,7 +98,15 @@ if ($versionText -notmatch [regex]::Escape("Epoch v$Version")) {
     throw "Staged Windows package reports the wrong version. Expected Epoch v$Version."
 }
 
-Compress-Archive -LiteralPath $stage -DestinationPath $zip -Force
+Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+
+$verifyRoot = Join-Path $OutputRoot "verify_$stageName"
+Remove-Item -LiteralPath $verifyRoot -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $verifyRoot -Force | Out-Null
+Expand-Archive -LiteralPath $zip -DestinationPath $verifyRoot -Force
+Require-Path -Path (Join-Path $verifyRoot 'EpochEditor.exe') -Label 'Flat release archive executable'
+Remove-Item -LiteralPath $verifyRoot -Recurse -Force -ErrorAction SilentlyContinue
+
 $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $zip
 ('{0}  {1}' -f $hash.Hash.ToLowerInvariant(), (Split-Path -Leaf $hash.Path)) |
     Set-Content -LiteralPath $checksumFile -Encoding ascii
