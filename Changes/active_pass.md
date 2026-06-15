@@ -88,6 +88,9 @@ contracts instead of drift.
   so older packaged updaters can install the repaired line.
 - Source checkpoint: `main` is advanced to v0.87.35 after the v0.87.34
   packaged-updater release while the published stable runtime remains v0.87.34.
+- Release checkpoint: `v0.87.36` fixes GUI-host updater child-process stdio so
+  hidden downloader, extractor, staged handoff, and source rebuild workers do
+  not inherit invalid descriptors from launcher/editor windows.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

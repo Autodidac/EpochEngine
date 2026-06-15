@@ -1,5 +1,12 @@
 # Epoch Changelog
 
+## [v0.87.36]
+- Fixed hidden updater child-process launch on Windows by giving downloader,
+  extractor, batch handoff, and source-worker processes valid stdin/stdout/stderr
+  handles from GUI hosts.
+- Routed hidden source update workers into `epoch_source_update.log` and stopped
+  generated workers from writing host output when no visible console exists.
+
 ## [v0.87.35]
 - Advanced the source line after the `v0.87.34` packaged-updater release while
   keeping the published stable runtime release on `v0.87.34`.

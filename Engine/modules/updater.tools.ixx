@@ -158,10 +158,44 @@ namespace epochnamespace::updater
 
         [[nodiscard]] inline int run_hidden_command(const std::string& command)
         {
+            SECURITY_ATTRIBUTES sa{};
+            sa.nLength = sizeof(sa);
+            sa.bInheritHandle = TRUE;
+
+            HANDLE null_input = CreateFileW(
+                L"NUL",
+                GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                &sa,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                nullptr);
+            HANDLE null_output = CreateFileW(
+                L"NUL",
+                GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                &sa,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                nullptr);
+
+            if (null_input == INVALID_HANDLE_VALUE || null_output == INVALID_HANDLE_VALUE)
+            {
+                if (null_input != INVALID_HANDLE_VALUE)
+                    CloseHandle(null_input);
+                if (null_output != INVALID_HANDLE_VALUE)
+                    CloseHandle(null_output);
+                log_error("Failed to prepare hidden updater download stdio handles.");
+                return -1;
+            }
+
             STARTUPINFOW startup{};
             startup.cb = sizeof(startup);
-            startup.dwFlags = STARTF_USESHOWWINDOW;
+            startup.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
             startup.wShowWindow = SW_HIDE;
+            startup.hStdInput = null_input;
+            startup.hStdOutput = null_output;
+            startup.hStdError = null_output;
 
             PROCESS_INFORMATION process{};
             std::wstring command_line = to_wide(command);
@@ -170,12 +204,15 @@ namespace epochnamespace::updater
                 command_line.data(),
                 nullptr,
                 nullptr,
-                FALSE,
+                TRUE,
                 CREATE_NO_WINDOW,
                 nullptr,
                 nullptr,
                 &startup,
                 &process);
+
+            CloseHandle(null_input);
+            CloseHandle(null_output);
 
             if (!created)
             {
@@ -423,7 +460,11 @@ namespace epochnamespace::updater
         }
 #endif
 
+#if defined(_WIN32)
+        if (detail::run_hidden_command(cmd) != 0)
+#else
         if (std::system(cmd.c_str()) != 0)
+#endif
         {
             detail::log_error("Failed to extract archive: " + archive);
             return false;

@@ -1897,10 +1897,11 @@ namespace epochnamespace::updater
             sa.nLength = sizeof(sa);
             sa.bInheritHandle = TRUE;
 
-            HANDLE log_handle = INVALID_HANDLE_VALUE;
+            HANDLE output_handle = INVALID_HANDLE_VALUE;
+            bool close_output_handle = false;
             if (!log_path.empty())
             {
-                log_handle = CreateFileW(
+                output_handle = CreateFileW(
                     log_path.wstring().c_str(),
                     FILE_APPEND_DATA,
                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -1909,22 +1910,32 @@ namespace epochnamespace::updater
                     FILE_ATTRIBUTE_NORMAL,
                     nullptr);
 
-                if (log_handle == INVALID_HANDLE_VALUE)
+                if (output_handle == INVALID_HANDLE_VALUE)
                 {
                     log_error(last_error_message("Failed to open updater process log"));
                     return false;
                 }
+                close_output_handle = true;
             }
 
             HANDLE input_handle = INVALID_HANDLE_VALUE;
             bool close_input_handle = false;
-            STARTUPINFOW si{};
-            si.cb = sizeof(si);
-            si.dwFlags = STARTF_USESHOWWINDOW;
-            si.wShowWindow = hidden ? SW_HIDE : SW_SHOWNORMAL;
-
-            if (log_handle != INVALID_HANDLE_VALUE)
+            const bool use_std_handles = hidden || output_handle != INVALID_HANDLE_VALUE;
+            if (use_std_handles)
             {
+                if (output_handle == INVALID_HANDLE_VALUE)
+                {
+                    output_handle = CreateFileW(
+                        L"NUL",
+                        GENERIC_WRITE,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        &sa,
+                        OPEN_EXISTING,
+                        FILE_ATTRIBUTE_NORMAL,
+                        nullptr);
+                    close_output_handle = output_handle != INVALID_HANDLE_VALUE;
+                }
+
                 input_handle = CreateFileW(
                     L"NUL",
                     GENERIC_READ,
@@ -1935,10 +1946,28 @@ namespace epochnamespace::updater
                     nullptr);
                 close_input_handle = input_handle != INVALID_HANDLE_VALUE;
 
+                if (output_handle == INVALID_HANDLE_VALUE || input_handle == INVALID_HANDLE_VALUE)
+                {
+                    if (close_output_handle)
+                        CloseHandle(output_handle);
+                    if (close_input_handle)
+                        CloseHandle(input_handle);
+                    log_error("Failed to prepare updater child-process stdio handles.");
+                    return false;
+                }
+            }
+
+            STARTUPINFOW si{};
+            si.cb = sizeof(si);
+            si.dwFlags = STARTF_USESHOWWINDOW;
+            si.wShowWindow = hidden ? SW_HIDE : SW_SHOWNORMAL;
+
+            if (use_std_handles)
+            {
                 si.dwFlags |= STARTF_USESTDHANDLES;
-                si.hStdOutput = log_handle;
-                si.hStdError = log_handle;
-                si.hStdInput = close_input_handle ? input_handle : nullptr;
+                si.hStdOutput = output_handle;
+                si.hStdError = output_handle;
+                si.hStdInput = input_handle;
             }
 
             PROCESS_INFORMATION pi{};
@@ -1953,15 +1982,15 @@ namespace epochnamespace::updater
                 command_line_wide.data(),
                 nullptr,
                 nullptr,
-                log_handle != INVALID_HANDLE_VALUE ? TRUE : FALSE,
+                use_std_handles ? TRUE : FALSE,
                 hidden ? CREATE_NO_WINDOW : 0,
                 nullptr,
                 working_directory.empty() ? nullptr : working_directory_wide.c_str(),
                 &si,
                 &pi);
 
-            if (log_handle != INVALID_HANDLE_VALUE)
-                CloseHandle(log_handle);
+            if (close_output_handle)
+                CloseHandle(output_handle);
             if (close_input_handle)
                 CloseHandle(input_handle);
 
@@ -2365,7 +2394,8 @@ namespace epochnamespace::updater
 
         [[nodiscard]] inline bool launch_powershell_script(
             const std::filesystem::path& script_path,
-            const bool hidden)
+            const bool hidden,
+            const std::filesystem::path& log_path = {})
         {
             auto powershell = env_path("SystemRoot") / "System32/WindowsPowerShell/v1.0/powershell.exe";
             if (powershell.empty() || !std::filesystem::exists(powershell))
@@ -2382,7 +2412,7 @@ namespace epochnamespace::updater
                     script_path.string()
                 },
                 script_path.parent_path(),
-                {},
+                log_path,
                 false,
                 hidden,
                 nullptr);
@@ -2989,6 +3019,7 @@ namespace epochnamespace::updater
             << "$buildConfiguration = '" << esc(SOURCE_BUILD_CONFIGURATION()) << "'\n"
             << "$buildPlatform = '" << esc(SOURCE_BUILD_PLATFORM()) << "'\n"
             << "$workerPath = $MyInvocation.MyCommand.Path\n"
+            << "$workerHidden = $" << (silent_worker ? "true" : "false") << "\n"
             << "$utf8NoBom = New-Object System.Text.UTF8Encoding($false)\n"
             << "function Append-Text([string]$Path, [string]$Text) {\n"
             << "  if ([string]::IsNullOrEmpty($Path) -or [string]::IsNullOrEmpty($Text)) {\n"
@@ -3070,7 +3101,7 @@ namespace epochnamespace::updater
             << "}\n"
             << "function Write-Step([string]$Level, [string]$Message) {\n"
             << "  $line = \"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Message\"\n"
-            << "  Write-Host $line\n"
+            << "  if (-not $workerHidden) { Write-Host $line }\n"
             << "  Append-Text $buildLog ($line + [Environment]::NewLine)\n"
             << "}\n"
             << "function Write-Handoff([string]$Level, [string]$Message) {\n"
@@ -3519,7 +3550,7 @@ namespace epochnamespace::updater
 
         ps.close();
 
-        if (!system_detail::launch_powershell_script(worker_script, silent_worker))
+        if (!system_detail::launch_powershell_script(worker_script, silent_worker, build_log))
         {
             system_detail::log_error("Failed to launch source update worker.");
             return false;
