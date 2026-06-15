@@ -91,6 +91,8 @@ contracts instead of drift.
 - Release checkpoint: `v0.87.36` fixes GUI-host updater child-process stdio so
   hidden downloader, extractor, staged handoff, and source rebuild workers do
   not inherit invalid descriptors from launcher/editor windows.
+- Source checkpoint: `main` is advanced to v0.87.37 after the v0.87.36 updater
+  stdio release while the published stable runtime remains v0.87.36.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

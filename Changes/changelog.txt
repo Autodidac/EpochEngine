@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.87.37]
+- Advanced the source line after the `v0.87.36` updater stdio release while
+  keeping the published stable runtime release on `v0.87.36`.
+
 ## [v0.87.36]
 - Fixed hidden updater child-process launch on Windows by giving downloader,
   extractor, batch handoff, and source-worker processes valid stdin/stdout/stderr
