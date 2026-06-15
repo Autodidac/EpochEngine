@@ -2422,25 +2422,48 @@ namespace epochnamespace::updater
             const std::filesystem::path& target_binary)
         {
 #if defined(_WIN32)
-            const std::array<std::filesystem::path, 4> candidates{
-                runtime_dir / target_binary.filename(),
-                runtime_dir / "EpochEditor.exe",
-                runtime_dir / "ConsoleApplication1.exe",
-                runtime_dir / "epoch.exe",
+            const std::array<std::filesystem::path, 4> names{
+                target_binary.filename(),
+                "EpochEditor.exe",
+                "ConsoleApplication1.exe",
+                "epoch.exe",
             };
 #else
-            const std::array<std::filesystem::path, 2> candidates{
-                runtime_dir / target_binary.filename(),
-                runtime_dir / "epoch",
+            const std::array<std::filesystem::path, 2> names{
+                target_binary.filename(),
+                "epoch",
             };
 #endif
 
             std::error_code ec;
-            for (const auto& candidate : candidates)
+            for (const auto& name : names)
             {
+                const auto candidate = runtime_dir / name;
                 if (!candidate.empty() && std::filesystem::exists(candidate, ec))
                     return candidate;
                 ec.clear();
+            }
+
+            if (std::filesystem::exists(runtime_dir, ec) && std::filesystem::is_directory(runtime_dir, ec))
+            {
+                for (std::filesystem::recursive_directory_iterator it{ runtime_dir, ec }, end; it != end; it.increment(ec))
+                {
+                    if (ec)
+                    {
+                        ec.clear();
+                        continue;
+                    }
+
+                    if (!it->is_regular_file(ec))
+                    {
+                        ec.clear();
+                        continue;
+                    }
+
+                    const auto filename = it->path().filename();
+                    if (std::find(names.begin(), names.end(), filename) != names.end())
+                        return it->path();
+                }
             }
 
             return runtime_dir / target_binary.filename();
@@ -3667,6 +3690,7 @@ namespace epochnamespace::updater
             ? system_detail::staged_update_handoff_script_path()
             : system_detail::make_temp_script_path("replace_runtime_zip");
         const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
+        const auto runtime_payload_dir = extracted_binary.parent_path();
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
         const bool chain_after_restart = !restart_auto_command.empty();
 
@@ -3695,7 +3719,8 @@ namespace epochnamespace::updater
         bat
             << "@echo off\r\n"
             << "setlocal\r\n"
-            << "set \"EXTRACTED=" << extracted_runtime_dir.string() << "\"\r\n"
+            << "set \"EXTRACTED=" << runtime_payload_dir.string() << "\"\r\n"
+            << "set \"PACKAGE_ROOT=" << extracted_runtime_dir.string() << "\"\r\n"
             << "set \"TARGETDIR=" << target_dir.string() << "\"\r\n"
             << "set \"TARGETEXE=" << target_binary.string() << "\"\r\n"
             << "set \"NEWEXE=" << extracted_binary.string() << "\"\r\n"
@@ -3737,7 +3762,7 @@ namespace epochnamespace::updater
             << "  exit /b 1\r\n"
             << ")\r\n"
             << ">> \"%LOG%\" echo [INFO] Packaged runtime files copied successfully.\r\n"
-            << "rmdir /S /Q \"%EXTRACTED%\" >nul 2>&1\r\n"
+            << "rmdir /S /Q \"%PACKAGE_ROOT%\" >nul 2>&1\r\n"
             << "del /F /Q \"%ARCHIVE%\" >nul 2>&1\r\n"
             << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000\"\r\n"
             << (chain_after_restart
@@ -3779,6 +3804,7 @@ namespace epochnamespace::updater
             ? system_detail::staged_update_handoff_script_path()
             : system_detail::make_temp_script_path("replace_runtime_zip");
         const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
+        const auto runtime_payload_dir = extracted_binary.parent_path();
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
         const bool chain_after_restart = !restart_auto_command.empty();
 
@@ -3802,7 +3828,8 @@ namespace epochnamespace::updater
         sh
             << "#!/bin/sh\n"
             << "set -eu\n"
-            << "EXTRACTED=" << system_detail::quote_shell_arg(extracted_runtime_dir.string()) << "\n"
+            << "EXTRACTED=" << system_detail::quote_shell_arg(runtime_payload_dir.string()) << "\n"
+            << "PACKAGE_ROOT=" << system_detail::quote_shell_arg(extracted_runtime_dir.string()) << "\n"
             << "TARGETDIR=" << system_detail::quote_shell_arg(target_dir.string()) << "\n"
             << "ARCHIVE=" << system_detail::quote_shell_arg(package_archive.string()) << "\n"
             << "TARGETEXE=" << system_detail::quote_shell_arg(target_binary.string()) << "\n"
@@ -3840,7 +3867,7 @@ namespace epochnamespace::updater
             << "  cp -R \"$EXTRACTED/assets/.\" \"$TARGETDIR/assets/\" 2>/dev/null || true\n"
             << "fi\n"
             << "echo \"[INFO] Packaged runtime files copied successfully.\" >> \"$LOG\"\n"
-            << "rm -rf \"$EXTRACTED\"\n"
+            << "rm -rf \"$PACKAGE_ROOT\"\n"
             << "rm -f \"$ARCHIVE\"\n"
             << "cd \"$TARGETDIR\"\n"
             << (chain_after_restart
