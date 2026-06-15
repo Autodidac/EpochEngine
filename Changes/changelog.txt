@@ -1,5 +1,12 @@
 # Epoch Changelog
 
+## [v0.87.38]
+- Fixed the editor update modal so a source-only update no longer routes
+  through the packaged smart-install button state. It now starts the detached
+  source rebuild worker directly and enters source-worker progress immediately.
+- Added guarded editor update futures so update exceptions return visible
+  status instead of leaving the modal stuck in the early install progress band.
+
 ## [v0.87.37]
 - Advanced the source line after the `v0.87.36` updater stdio release while
   keeping the published stable runtime release on `v0.87.36`.

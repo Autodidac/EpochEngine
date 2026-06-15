@@ -133,8 +133,16 @@
                         }
                         else
                         {
-                            push_editor_log(editor, "[command] Smart update confirmed.");
-                            start_editor_update_install(editor);
+                            if (sourceOnlyUpdate)
+                            {
+                                push_editor_log(editor, "[command] Source update confirmed from smart update modal.");
+                                start_editor_source_update_install(editor);
+                            }
+                            else
+                            {
+                                push_editor_log(editor, "[command] Smart update confirmed.");
+                                start_editor_update_install(editor);
+                            }
                         }
                     }
                     stackedButtonY += buttonHeight + buttonStackGap;
@@ -190,8 +198,16 @@
                     }
                     else
                     {
-                        push_editor_log(editor, "[command] Smart update confirmed.");
-                        start_editor_update_install(editor);
+                        if (sourceOnlyUpdate)
+                        {
+                            push_editor_log(editor, "[command] Source update confirmed from smart update modal.");
+                            start_editor_source_update_install(editor);
+                        }
+                        else
+                        {
+                            push_editor_log(editor, "[command] Smart update confirmed.");
+                            start_editor_update_install(editor);
+                        }
                     }
                 }
                 const float advancedButtonX = (std::max)(contentX, contentRight - advancedButtonWidth);

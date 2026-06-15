@@ -16,8 +16,8 @@ BEGIN
 END
 
 VS_VERSION_INFO VERSIONINFO
-    FILEVERSION 0,87,37,0
-    PRODUCTVERSION 0,87,37,0
+    FILEVERSION 0,87,38,0
+    PRODUCTVERSION 0,87,38,0
     FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
 #ifdef _DEBUG
     FILEFLAGS VS_FF_DEBUG
@@ -34,12 +34,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Epoch Engine"
             VALUE "FileDescription", "Epoch Editor"
-            VALUE "FileVersion", "0.87.37"
+            VALUE "FileVersion", "0.87.38"
             VALUE "InternalName", "EpochEditor"
             VALUE "LegalCopyright", "Copyright (c) 2026 Adam Rushford"
             VALUE "OriginalFilename", "EpochEditor.exe"
             VALUE "ProductName", "Epoch Engine"
-            VALUE "ProductVersion", "0.87.37"
+            VALUE "ProductVersion", "0.87.38"
         END
     END
     BLOCK "VarFileInfo"

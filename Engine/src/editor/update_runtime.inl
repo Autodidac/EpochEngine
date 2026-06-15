@@ -53,6 +53,23 @@
             return "Epoch is already current.";
         }
 
+        [[nodiscard]] bool editor_update_result_is_source_only(const updater::UpdateCommandResult& result) noexcept
+        {
+            return result.source_update_available
+                && !result.packaged_update_available
+                && !result.packaged_handoff_staged;
+        }
+
+        [[nodiscard]] updater::UpdateCommandResult make_editor_update_failure_result(
+            std::string message,
+            const bool sourceAttempted = false)
+        {
+            updater::UpdateCommandResult result{};
+            result.source_fallback_attempted = sourceAttempted;
+            result.status_message = std::move(message);
+            return result;
+        }
+
         [[nodiscard]] std::string update_toolbar_button_label(EditorUpdateState state)
         {
             switch (state)
@@ -200,6 +217,8 @@
             }
         };
 
+        void start_editor_source_update_install(EditorState& editor);
+
         void start_editor_update_check(EditorState& editor)
         {
             if (editor.updateCheckPending.has_value())
@@ -227,7 +246,20 @@
                 editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
                     ScopedEditorUpdateOperation updateOperation{};
                     epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                    return updater::run_update_command(editor_update_channel(), false, false);
+                    try
+                    {
+                        return updater::run_update_command(editor_update_channel(), false, false);
+                    }
+                    catch (const std::exception& ex)
+                    {
+                        return make_editor_update_failure_result(
+                            std::string{ "Update check failed: " } + ex.what());
+                    }
+                    catch (...)
+                    {
+                        return make_editor_update_failure_result(
+                            "Update check failed with an unknown exception.");
+                    }
                 }));
             }
             catch (...)
@@ -242,6 +274,13 @@
             if (editor.updateCheckPending.has_value())
             {
                 push_editor_log(editor, "[update] Update worker is already running.");
+                return;
+            }
+
+            if (editor_update_result_is_source_only(editor.lastUpdateCheck))
+            {
+                push_editor_log(editor, "[update] Source-only update confirmed from the smart update modal.");
+                start_editor_source_update_install(editor);
                 return;
             }
 
@@ -264,11 +303,24 @@
                 editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
                     ScopedEditorUpdateOperation updateOperation{};
                     epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                    return updater::run_update_command(
-                        editor_update_channel(),
-                        true,
-                        false,
-                        updater::UpdateHandoffMode::StageForRestart);
+                    try
+                    {
+                        return updater::run_update_command(
+                            editor_update_channel(),
+                            true,
+                            false,
+                            updater::UpdateHandoffMode::StageForRestart);
+                    }
+                    catch (const std::exception& ex)
+                    {
+                        return make_editor_update_failure_result(
+                            std::string{ "Update install failed: " } + ex.what());
+                    }
+                    catch (...)
+                    {
+                        return make_editor_update_failure_result(
+                            "Update install failed with an unknown exception.");
+                    }
                 }));
             }
             catch (...)
@@ -309,12 +361,23 @@
                     result.update_available = true;
                     result.source_update_available = true;
                     result.source_fallback_attempted = true;
-                    const bool workerLaunched = updater::run_source_update_command(editor_update_channel(), false, false, false);
-                    result.update_performed = false;
-                    result.source_update_performed = workerLaunched;
-                    result.status_message = workerLaunched
-                        ? "Source rebuild worker started. Epoch will restart automatically only after build and handoff evidence succeeds; watch epoch_source_update.log beside the executable."
-                        : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
+                    try
+                    {
+                        const bool workerLaunched = updater::run_source_update_command(editor_update_channel(), false, false, false);
+                        result.update_performed = false;
+                        result.source_update_performed = workerLaunched;
+                        result.status_message = workerLaunched
+                            ? "Source rebuild worker started. Epoch will restart automatically only after build and handoff evidence succeeds; watch epoch_source_update.log beside the executable."
+                            : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
+                    }
+                    catch (const std::exception& ex)
+                    {
+                        result.status_message = std::string{ "Source update failed to start: " } + ex.what();
+                    }
+                    catch (...)
+                    {
+                        result.status_message = "Source update failed to start with an unknown exception.";
+                    }
                     return result;
                 }));
             }

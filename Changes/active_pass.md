@@ -93,6 +93,9 @@ contracts instead of drift.
   not inherit invalid descriptors from launcher/editor windows.
 - Source checkpoint: `main` is advanced to v0.87.37 after the v0.87.36 updater
   stdio release while the published stable runtime remains v0.87.36.
+- Release checkpoint: `v0.87.38` routes editor source-only update confirmation
+  directly to the detached source worker and reports guarded failures instead
+  of leaving the modal at the early install progress band.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30
