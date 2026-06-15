@@ -86,6 +86,8 @@ contracts instead of drift.
 - Release checkpoint: `v0.87.34` keeps nested package resolution in the updater
   and stages Windows release archives with the runtime payload at archive root
   so older packaged updaters can install the repaired line.
+- Source checkpoint: `main` is advanced to v0.87.35 after the v0.87.34
+  packaged-updater release while the published stable runtime remains v0.87.34.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

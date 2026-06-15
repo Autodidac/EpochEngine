@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.87.35]
+- Advanced the source line after the `v0.87.34` packaged-updater release while
+  keeping the published stable runtime release on `v0.87.34`.
+
 ## [v0.87.34]
 - Fixed packaged release updater handoff for both nested and flat runtime
   payload archives, so the verified executable path comes from the extracted
