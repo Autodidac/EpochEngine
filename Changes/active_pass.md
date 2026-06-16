@@ -122,6 +122,9 @@ contracts instead of drift.
   The WSL manifest/vcpkg lane is blocked in this environment until
   `python3.10-venv` is available for the `libsystemd` port, so the package lane
   used the already-supported no-vcpkg Clang path instead of shipping stale bits.
+- Source checkpoint: `main` is advanced to v0.87.43 after the refreshed
+  v0.87.42 Windows/Linux packaged-updater release while the published stable
+  runtime remains v0.87.42.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30
