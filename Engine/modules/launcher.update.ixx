@@ -1,6 +1,7 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -140,13 +141,13 @@ export namespace epochnamespace::launcher_update
         {
             cancel_requested = requested;
             status = requested
-                ? "Source update cancel requested. The worker will stop at its next safe checkpoint."
+                ? "Source update cancel requested. Disposable source/download cache is being cleared; the worker will stop at its next safe checkpoint."
                 : "Source update cancel could not be requested; check updater logs beside EpochEditor.exe.";
         }
 
         void mark_packaged_restart_failed()
         {
-            status = "Restart failed: staged update handoff script was not found.";
+            status = "Restart failed: staged replacement script was not found.";
         }
 
         void mark_packaged_restarting()
@@ -158,7 +159,7 @@ export namespace epochnamespace::launcher_update
         void mark_source_restart_requested()
         {
             clear_restart_countdown();
-            status = "Closing Epoch so the source handoff can replace and restart the runtime.";
+            status = "Closing Epoch so the source-built replacement can restart the runtime.";
         }
 
         void pump_source_worker()
@@ -198,7 +199,7 @@ export namespace epochnamespace::launcher_update
                 const std::string line = last_nonempty_update_log_line(evidence);
                 status = line.empty()
                     ? "Source update failed. Check epoch_source_update.log beside EpochEditor.exe."
-                    : "Source update failed: " + line;
+                    : status_with_evidence("Source update failed:", line);
                 return;
             }
 
@@ -211,13 +212,13 @@ export namespace epochnamespace::launcher_update
                 cancel_requested = false;
                 operation_started_at = {};
                 arm_restart_countdown();
-                status = "Source build is ready. Restart will close this launcher and let the handoff finish.";
+                status = "Source build is ready. Restart will close this launcher and finish the runtime replacement.";
                 return;
             }
 
             const std::string line = last_nonempty_update_log_line(evidence);
             if (!line.empty())
-                status = "Source update running: " + line;
+                status = status_with_evidence("Source update running:", line);
         }
 
         [[nodiscard]] double update_elapsed_seconds() const
@@ -288,7 +289,7 @@ export namespace epochnamespace::launcher_update
                 return panel;
 
             panel.progress = progress_value();
-            panel.status = status;
+            panel.status = format_log_markers(status);
 
             if (is_restart_ready())
             {
@@ -308,8 +309,9 @@ export namespace epochnamespace::launcher_update
             if (cancel_requested)
             {
                 panel.progress_status = "cancel requested";
-                panel.action_label = "Cancel Requested";
+                panel.action_label.clear();
                 panel.action_enabled = false;
+                panel.action_visible = false;
             }
             else if (source_worker_running)
             {
@@ -321,8 +323,9 @@ export namespace epochnamespace::launcher_update
             else
             {
                 panel.progress_status = pending ? "checking / staging" : "waiting";
-                panel.action_label = pending ? "Preparing Update" : "Update Epoch";
+                panel.action_label = pending ? std::string{} : std::string{ "Update Epoch" };
                 panel.action_enabled = !pending;
+                panel.action_visible = !pending;
             }
             return panel;
         }
@@ -346,10 +349,10 @@ export namespace epochnamespace::launcher_update
             }
 
             if (result.packaged_handoff_staged)
-                return std::string{ "Packaged update is staged. Restart will close this launcher and let the hidden handoff replace the runtime." };
+                return std::string{ "Packaged update is staged. Restart will close this launcher and finish the hidden runtime replacement." };
 
             if (result.source_update_performed)
-                return std::string{ "Source rebuild worker started. Keep this launcher open until it reports handoff-ready evidence." };
+                return std::string{ "Source rebuild worker started. Keep this launcher open until restart-ready evidence is reported." };
 
             if (result.force_required || result.update_available)
             {
@@ -359,6 +362,58 @@ export namespace epochnamespace::launcher_update
             }
 
             return std::string{ "Epoch is already current." };
+        }
+
+        [[nodiscard]] static std::string format_log_markers(std::string text)
+        {
+            constexpr std::array<std::string_view, 4> kMarkers{
+                "[INFO]",
+                "[WARN]",
+                "[ERROR]",
+                "[FATAL]"
+            };
+
+            std::string out;
+            out.reserve(text.size() + 8u);
+
+            for (std::size_t i = 0u; i < text.size();)
+            {
+                bool matched = false;
+                for (const std::string_view marker : kMarkers)
+                {
+                    if (marker.size() <= text.size() - i
+                        && text.compare(i, marker.size(), marker) == 0)
+                    {
+                        if (!out.empty() && out.back() != '\n' && out.back() != '\r')
+                            out.push_back('\n');
+                        out.append(marker);
+                        i += marker.size();
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if (!matched)
+                {
+                    out.push_back(text[i]);
+                    ++i;
+                }
+            }
+
+            return out;
+        }
+
+        [[nodiscard]] static std::string status_with_evidence(
+            const std::string_view prefix,
+            const std::string_view evidence)
+        {
+            std::string status{ prefix };
+            if (!evidence.empty())
+            {
+                status.push_back('\n');
+                status += format_log_markers(std::string{ evidence });
+            }
+            return status;
         }
 
         [[nodiscard]] static std::string read_update_log_tail(

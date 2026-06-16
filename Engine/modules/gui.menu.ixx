@@ -120,6 +120,7 @@ export namespace epochnamespace::menu
     {
         bool active = false;
         bool action_enabled = true;
+        bool action_visible = true;
         bool restart_ready = false;
         bool cancel_available = false;
         float progress = 0.0f;
@@ -243,6 +244,7 @@ export namespace epochnamespace::menu
             const bool layoutModeChanged = updatePanel.active != state.active
                 || updatePanel.restart_ready != state.restart_ready
                 || updatePanel.cancel_available != state.cancel_available
+                || updatePanel.action_visible != state.action_visible
                 || updatePanel.action_label != state.action_label;
             updatePanel = std::move(state);
             if (layoutModeChanged)
@@ -577,7 +579,7 @@ export namespace epochnamespace::menu
                 message += epochnamespace::GetEngineDisplayString();
                 message += "\n";
                 message += updatePanel.status.empty()
-                    ? std::string{ "Preparing update evidence." }
+                    ? std::string{ "Checking update status." }
                     : updatePanel.status;
 
                 const auto loading = gui::loading_screen(gui::LoadingScreenOptions{
@@ -592,11 +594,13 @@ export namespace epochnamespace::menu
                     .dim_background = false,
                     .capture_input = true,
                     .show_percent = true,
-                    .reserve_action_row = true
+                    .reserve_action_row = updatePanel.action_visible
                 });
 
                 bool clicked = false;
-                if (loading.action.size.x > 0.0f && loading.action.size.y > 0.0f)
+                if (updatePanel.action_visible
+                    && loading.action.size.x > 0.0f
+                    && loading.action.size.y > 0.0f)
                 {
                     gui::set_cursor(loading.action.position);
                     clicked = gui::button(updatePanel.action_label, loading.action.size);
@@ -606,9 +610,9 @@ export namespace epochnamespace::menu
                 gui::pop_theme();
 
                 std::optional<Choice> chosen{};
-                if (!inputGuarded && updatePanel.action_enabled && clicked)
+                if (!inputGuarded && updatePanel.action_visible && updatePanel.action_enabled && clicked)
                     chosen = Choice::UpdateLatest;
-                else if (!inputGuarded && updatePanel.action_enabled && enterPressed && !prevEnter)
+                else if (!inputGuarded && updatePanel.action_visible && updatePanel.action_enabled && enterPressed && !prevEnter)
                     chosen = Choice::UpdateLatest;
 
                 prevEnter = enterPressed;

@@ -5206,6 +5206,9 @@ namespace epochnamespace::gui
         const Vec2 viewportSize = options.viewport_size.x > 0.0f && options.viewport_size.y > 0.0f
             ? options.viewport_size
             : (g_frame.insideWindow ? g_frame.windowSize : Vec2{ 1.0f, 1.0f });
+        const float titleScale = options.title_scale > 0.0f ? options.title_scale : kTitleScale;
+        const float messageScale = options.message_scale > 0.0f ? options.message_scale : kFontScale;
+        const float statusScale = options.status_scale > 0.0f ? options.status_scale : kFontScale;
         const auto layout = gui_lib::make_loading_screen_layout(gui_lib::LoadingScreenLayoutOptions{
             .viewport = gui_lib::Rect{ to_lib(viewportPos), to_lib(viewportSize) },
             .preferred_panel_size = to_lib(options.panel_size),
@@ -5213,10 +5216,10 @@ namespace epochnamespace::gui
             .margin = 32.0f,
             .padding = 28.0f,
             .gap = 14.0f,
-            .title_height = (std::max)(line_advance_amount(kTitleScale) + 4.0f, 30.0f),
-            .message_height = 76.0f,
+            .title_height = (std::max)(line_advance_amount(titleScale) + 4.0f, 30.0f),
+            .message_height = (std::max)(76.0f, line_advance_amount(messageScale) * 3.0f + 10.0f),
             .progress_height = 24.0f,
-            .status_height = line_advance_amount(kFontScale) + 4.0f,
+            .status_height = line_advance_amount(statusScale) + 4.0f,
             .action_height = options.reserve_action_row ? 64.0f : 0.0f,
             .progress_padding = 2.0f,
             .progress_value = std::clamp(options.progress, 0.0f, 1.0f)
@@ -5271,7 +5274,7 @@ namespace epochnamespace::gui
             layout.panel.size.y);
 
         if (!options.title.empty())
-            draw_text_line(options.title, layout.title.position.x, layout.title.position.y, kTitleScale);
+            draw_text_line(options.title, layout.title.position.x, layout.title.position.y, titleScale);
 
         if (!options.message.empty())
         {
@@ -5280,7 +5283,7 @@ namespace epochnamespace::gui
                 layout.message.position.x,
                 layout.message.position.y,
                 layout.message.size.x,
-                kFontScale);
+                messageScale);
         }
 
         draw_progress_bar_layout(
@@ -5290,7 +5293,7 @@ namespace epochnamespace::gui
             options.show_percent);
 
         if (!options.progress_status.empty())
-            draw_text_line(options.progress_status, layout.status.position.x, layout.status.position.y, kFontScale);
+            draw_text_line(options.progress_status, layout.status.position.x, layout.status.position.y, statusScale);
 
         return result;
     }

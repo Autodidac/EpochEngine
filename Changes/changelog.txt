@@ -1,10 +1,5 @@
 # Epoch Changelog
 
-## [v0.87.43]
-- Advanced the source line after the refreshed `v0.87.42` Windows/Linux
-  packaged updater release while keeping the published stable runtime release
-  on `v0.87.42`.
-
 ## [v0.87.42]
 - Prepared the packaged updater release with a launcher-owned progress surface:
   the normal launcher grid is hidden while an update is active, source rebuilds
@@ -24,6 +19,14 @@
   cleared before the detached worker launches, stale source roots are removed or
   renamed before extraction, and nested source snapshots are repaired only when
   they contain the required `Engine/vcpkg.json` manifest.
+- Hardened updater retry behavior after Cancel or a crash: packaged archives
+  now redownload instead of reusing same-URL caches, and source rebuild workers
+  use disposable per-run work roots with an active-run marker that Cancel can
+  clear without poisoning the next Update press.
+- Cleaned launcher/editor update surfaces so checking/cancel states do not show
+  a fake `Preparing Update` action, updater log markers such as `[INFO]` and
+  `[ERROR]` break onto readable status lines, and launcher/editor loading
+  screens use larger replacement/restart wording.
 - Moved reusable GUI implementation sources from `Engine/src/gui` to
   `Engine/src/epochgui`, and moved context/backend implementation units into
   per-backend `Engine/src/renderers/...` folders with CMake/MSVC metadata and

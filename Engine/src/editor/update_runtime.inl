@@ -52,7 +52,7 @@
         [[nodiscard]] std::string describe_update_result(const updater::UpdateCommandResult& result)
         {
             if (!result.status_message.empty())
-                return result.status_message;
+                return editor_update_modal::format_status_markers(result.status_message);
 
             if (!result.platform_build_ok
                 && (!result.platform_build_reason.empty() || result.platform_build_checked))
@@ -166,7 +166,7 @@
                 return "Source rebuild is running. Reading epoch_source_update.log and epoch_update_handoff.log for live evidence; Cancel asks the worker to stop at the next safe checkpoint.";
 
             if (editor.updateInstallPending)
-                return "Installing update. Checking platform release, replacing stale cache, and staging handoff.";
+                return "Installing update. Checking platform release, replacing stale cache, and staging replacement.";
 
             return "Checking update availability. Epoch checks this platform's packaged release first.";
         }
@@ -406,7 +406,7 @@
                         result.update_performed = false;
                         result.source_update_performed = workerLaunched;
                         result.status_message = workerLaunched
-                            ? "Source rebuild worker started. Epoch will restart automatically only after build and handoff evidence succeeds; watch epoch_source_update.log beside the executable."
+                            ? "Source rebuild worker started. Epoch will restart automatically only after build and restart evidence succeeds; watch epoch_source_update.log beside the executable."
                             : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
                     }
                     catch (const std::exception& ex)
@@ -552,7 +552,7 @@
                 editor.updateState = EditorUpdateState::Failed;
                 editor.updateStatus = lastLine.empty()
                     ? "Source update failed. Check epoch_source_update.log and epoch_update_handoff.log beside the executable."
-                    : std::string{ "Source update failed: " } + lastLine;
+                    : std::string{ "Source update failed:\n" } + editor_update_modal::format_status_markers(lastLine);
                 editor.updateOperationStartedAt = {};
                 clear_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
@@ -563,7 +563,7 @@
                 || update_log_contains(sourceTail, "Built runtime ready at"))
             {
                 editor.updateState = EditorUpdateState::RestartReady;
-                editor.updateStatus = "Source rebuild is ready for runtime handoff. Press Restart to close Epoch and let the worker replace the executable.";
+                editor.updateStatus = "Source rebuild is ready for runtime replacement. Press Restart to close Epoch and let the worker replace the executable.";
                 editor.updateOperationStartedAt = {};
                 editor.showUpdateConfirmModal = true;
                 arm_editor_update_restart_countdown(editor);
@@ -575,7 +575,7 @@
                 || update_log_contains(handoffTail, "Source runtime files copied successfully"))
             {
                 editor.updateState = EditorUpdateState::RestartReady;
-                editor.updateStatus = "Source update handoff completed. Restart Epoch if this window did not close automatically.";
+                editor.updateStatus = "Source update replacement completed. Restart Epoch if this window did not close automatically.";
                 editor.updateOperationStartedAt = {};
                 editor.showUpdateConfirmModal = true;
                 arm_editor_update_restart_countdown(editor);
@@ -585,5 +585,6 @@
 
             const std::string lastLine = last_nonempty_update_log_line(evidence);
             if (!lastLine.empty())
-                editor.updateStatus = std::string{ "Source rebuild running. Latest evidence: " } + lastLine;
+                editor.updateStatus = std::string{ "Source rebuild running. Latest evidence:\n" }
+                    + editor_update_modal::format_status_markers(lastLine);
         }

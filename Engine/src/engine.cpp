@@ -5981,14 +5981,14 @@ namespace epochnamespace::core
                                 {
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
-                                        "Source rebuild worker started; restart after handoff-ready evidence is reported.",
+                                        "Source rebuild worker started; restart after restart-ready evidence is reported.",
                                         std::source_location::current());
                                 }
                                 else if (!result.update_performed)
                                 {
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::Error,
-                                        "Update was available but the handoff/install step did not complete.",
+                                        "Update was available but the replacement/install step did not complete.",
                                         std::source_location::current());
                                 }
                                 break;
@@ -6145,7 +6145,7 @@ namespace epochnamespace::core
                                 const std::string transitionMessage = loadingEditor
                                     ? std::string{ "Preparing editor workspace for " } + projectLabel + "."
                                     : std::string{ "Returning to the project launcher." };
-                                const std::string transitionLabel = loadingEditor ? "Editor handoff" : "Launcher handoff";
+                                const std::string transitionLabel = loadingEditor ? "Editor loading" : "Launcher loading";
                                 gui::push_theme(gui::ThemeVariant::ClassicLauncher);
                                 gui::begin_window("", { 0.0f, 0.0f }, {
                                     static_cast<float>(transitionWidth),
@@ -6162,7 +6162,10 @@ namespace epochnamespace::core
                                         static_cast<float>(transitionWidth),
                                         static_cast<float>(transitionHeight)
                                     },
-                                    .panel_size = { 620.0f, 280.0f },
+                                    .panel_size = { 700.0f, 320.0f },
+                                    .title_scale = 1.45f,
+                                    .message_scale = 1.18f,
+                                    .status_scale = 1.08f,
                                     .dim_background = false,
                                     .capture_input = true,
                                     .show_percent = true,

@@ -108,22 +108,20 @@ contracts instead of drift.
   source, and handoff logs before spawning the detached source worker, refuses
   uncleared source snapshot roots, repairs nested GitHub archive roots only when
   they contain `Engine/vcpkg.json`, and drives launcher/editor loading states
-  through the reusable EpochGui loading-screen primitive.
+  through the reusable EpochGui loading-screen primitive. The retry path also
+  redownloads same-URL packaged archives, isolates source rebuild
+  downloads/extraction in per-run work roots, lets Cancel clear the active
+  disposable source cache, and removes fake launcher update actions while
+  preserving restart-only completion evidence.
 - Repair evidence: the refreshed `v0.87.42` release candidate passed MSVC
-  Release `ConsoleApplication1`, packaged `EpochEditor.exe --version`, Release
-  `--engine-contract-self-test`, Windows CMake Release configure/build plus
-  CTest, Linux Clang `ninja-clang-debug` configure/build plus CTest, Linux
-  `epoch --version`, standalone EpochGui Debug/Release builds, Windows package
-  staging/unzip verification, Linux tarball version verification, and refreshed
-  Windows/Linux checksums.
-- Release evidence: the `v0.87.42` package line passed MSVC Release
-  `ConsoleApplication1` rebuild plus a second vcpkg/MSBuild pass, Windows CMake
-  Release configure/build plus CTest, Linux Clang Release full-engine build plus
-  CTest, and staged Windows/Linux package `--version` checks before archive
-  checksums were written.
-- Source checkpoint: `main` is advanced to v0.87.43 after the v0.87.42
-  Windows/Linux packaged-updater release while the published stable runtime
-  remains v0.87.42.
+  Debug and Release `ConsoleApplication1`, Debug and Release
+  `--engine-contract-self-test`, staged Windows package `EpochEditor.exe
+  --version`, Windows package unzip verification, Linux Clang Release
+  no-manifest OpenGL/software build, Linux CTest, Linux `epoch --version`,
+  Linux tarball executable verification, and refreshed Windows/Linux checksums.
+  The WSL manifest/vcpkg lane is blocked in this environment until
+  `python3.10-venv` is available for the `libsystemd` port, so the package lane
+  used the already-supported no-vcpkg Clang path instead of shipping stale bits.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

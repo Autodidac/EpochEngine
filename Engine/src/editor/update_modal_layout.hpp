@@ -57,19 +57,59 @@ namespace epochnamespace::editor_update_modal
         };
     }
 
+    [[nodiscard]] inline std::string format_status_markers(std::string_view text)
+    {
+        constexpr std::array<std::string_view, 4> kMarkers{
+            "[INFO]",
+            "[WARN]",
+            "[ERROR]",
+            "[FATAL]"
+        };
+
+        std::string out;
+        out.reserve(text.size() + 8u);
+
+        for (std::size_t i = 0u; i < text.size();)
+        {
+            bool matched = false;
+            for (const std::string_view marker : kMarkers)
+            {
+                if (marker.size() <= text.size() - i
+                    && text.compare(i, marker.size(), marker) == 0)
+                {
+                    if (!out.empty() && out.back() != '\n' && out.back() != '\r')
+                        out.push_back('\n');
+                    out.append(marker);
+                    i += marker.size();
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched)
+            {
+                out.push_back(text[i]);
+                ++i;
+            }
+        }
+
+        return out;
+    }
+
     [[nodiscard]] inline std::string trim_status(std::string_view text)
     {
+        std::string formatted = format_status_markers(text);
         constexpr std::size_t kMaxModalStatus = 176u;
-        if (text.size() <= kMaxModalStatus)
-            return std::string{ text };
-        return std::string{ text.substr(0u, kMaxModalStatus - 3u) } + "...";
+        if (formatted.size() <= kMaxModalStatus)
+            return formatted;
+        return formatted.substr(0u, kMaxModalStatus - 3u) + "...";
     }
 
     [[nodiscard]] inline std::string_view intro_text(const UpdateFlags flags) noexcept
     {
         return flags.sourceOnlyUpdate
             ? "No packaged runtime was found for this platform, so Epoch is using the source rebuild lane."
-            : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and hand off the replacement.";
+            : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and prepare the replacement.";
     }
 
     [[nodiscard]] inline std::string_view cache_text(const UpdateFlags flags) noexcept
@@ -82,7 +122,7 @@ namespace epochnamespace::editor_update_modal
     [[nodiscard]] inline std::string action_text(const UpdateFlags flags)
     {
         if (flags.restartReady)
-            return "The update is staged. Press Restart when you are ready to close Epoch and let the hidden handoff replace the runtime.";
+            return "The update is staged. Press Restart when you are ready to close Epoch and finish the hidden runtime replacement.";
 
         if (flags.sourceWorkerRunning)
             return "Keep Epoch open while the source worker runs. Cancel stops at the next safe checkpoint.";
@@ -98,7 +138,7 @@ namespace epochnamespace::editor_update_modal
         constexpr std::array<std::string_view, 4> kLines{
             "Advanced Source skips the packaged runtime and rebuilds the latest main source locally.",
             "This is slower and riskier than Install Release. It is for source testing, not the default update path.",
-            "Epoch deletes stale source snapshots before downloading, restores dependencies, rebuilds, and records handoff evidence.",
+            "Epoch overwrites stale source snapshots before downloading, restores dependencies, rebuilds, and records restart evidence.",
             "For normal users, press Back and choose Install Release."
         };
         return index < kLines.size() ? kLines[index] : std::string_view{};

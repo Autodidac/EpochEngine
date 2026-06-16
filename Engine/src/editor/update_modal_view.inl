@@ -51,15 +51,15 @@
                     && !updater::launch_staged_update_handoff())
                 {
                     editor.updateState = EditorUpdateState::Failed;
-                    editor.updateStatus = "Restart failed because the staged update handoff could not be launched. Check epoch_update_handoff.log beside the executable.";
+                    editor.updateStatus = "Restart failed because the staged update replacement could not be launched. Check epoch_update_handoff.log beside the executable.";
                     push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                     return;
                 }
 
                 editor.showUpdateConfirmModal = false;
                 clear_editor_update_restart_countdown(editor);
-                editor.updateStatus = "Restarting Epoch to finish the staged update handoff.";
-                push_editor_log(editor, "[update] Restart requested after verified update handoff.");
+                editor.updateStatus = "Restarting Epoch to finish the staged update replacement.";
+                push_editor_log(editor, "[update] Restart requested after verified update replacement.");
                 emit_command(EditorCommand::Exit);
             };
             const bool autoRestartNow = restartReady && editor_update_restart_countdown_expired(editor);
@@ -139,7 +139,7 @@
                             editor.updateSourceInstallPending = false;
                             editor.updateOperationStartedAt = {};
                             editor.updateStatus = cancelRequested
-                                ? "Source update cancel requested. The worker will stop at its next safe checkpoint; Update remains available for retry."
+                                ? "Source update cancel requested. Disposable source/download cache is being cleared; Update remains available for retry."
                                 : "Source update modal closed, but the cancel marker could not be written; check updater logs.";
                             push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                         }
@@ -204,7 +204,7 @@
                         editor.updateSourceInstallPending = false;
                         editor.updateOperationStartedAt = {};
                         editor.updateStatus = cancelRequested
-                            ? "Source update cancel requested. The worker will stop at its next safe checkpoint; Update remains available for retry."
+                            ? "Source update cancel requested. Disposable source/download cache is being cleared; Update remains available for retry."
                             : "Source update modal closed, but the cancel marker could not be written; check updater logs.";
                         push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                     }

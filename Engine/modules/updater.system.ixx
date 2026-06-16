@@ -2265,14 +2265,19 @@ namespace epochnamespace::updater
             return install_root;
         }
 
-        [[nodiscard]] inline std::filesystem::path source_archive_path(const std::filesystem::path& target_binary)
+        [[nodiscard]] inline std::filesystem::path source_work_root(const std::filesystem::path& target_binary)
         {
-            return (managed_work_root()
+            return ensure_directory(
+                managed_work_root()
                 / shorten_token(
                     target_binary.parent_path().filename().string()
                     + "_" + target_binary.stem().string(),
-                    24))
-                / "source_snapshot";
+                    24));
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_archive_path(const std::filesystem::path& target_binary)
+        {
+            return source_work_root(target_binary) / "source_snapshot";
         }
 
         [[nodiscard]] inline std::string archive_extension_from_url(const std::string_view url)
@@ -2300,6 +2305,36 @@ namespace epochnamespace::updater
             return archive_path;
         }
 
+        [[nodiscard]] inline std::string make_source_update_run_token()
+        {
+            static std::atomic<unsigned long long> s_source_run_counter{ 0 };
+            const auto serial = s_source_run_counter.fetch_add(1, std::memory_order_relaxed);
+            const auto tick = static_cast<unsigned long long>(
+                std::chrono::high_resolution_clock::now().time_since_epoch().count());
+            return std::to_string(tick) + "_" + std::to_string(serial);
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_run_dir(
+            const std::filesystem::path& target_binary,
+            const std::string_view run_token)
+        {
+            return ensure_directory(
+                source_work_root(target_binary)
+                / ("run_" + shorten_token(std::string{ run_token }, 40)));
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_archive_path(
+            const std::filesystem::path& target_binary,
+            const std::string_view source_url,
+            const std::string_view run_token)
+        {
+            auto archive_path = source_run_dir(target_binary, run_token) / "source_snapshot";
+            const auto extension = archive_extension_from_url(source_url);
+            if (!extension.empty())
+                archive_path += extension;
+            return archive_path;
+        }
+
         [[nodiscard]] inline std::string describe_source_archive(const std::string_view /*source_url*/)
         {
             return PROJECT_SOURCE_ARCHIVE_LABEL();
@@ -2307,27 +2342,137 @@ namespace epochnamespace::updater
 
         [[nodiscard]] inline std::filesystem::path source_staging_dir(const std::filesystem::path& target_binary)
         {
-            return (managed_work_root()
-                / shorten_token(
-                    target_binary.parent_path().filename().string()
-                    + "_" + target_binary.stem().string(),
-                    24))
-                / "sx";
+            return source_work_root(target_binary) / "sx";
         }
 
         [[nodiscard]] inline std::filesystem::path source_final_dir(const std::filesystem::path& target_binary)
         {
-            return (managed_work_root()
-                / shorten_token(
-                    target_binary.parent_path().filename().string()
-                    + "_" + target_binary.stem().string(),
-                    24))
-                / "src";
+            return source_work_root(target_binary) / "src";
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_staging_dir(
+            const std::filesystem::path& target_binary,
+            const std::string_view run_token)
+        {
+            return source_run_dir(target_binary, run_token) / "sx";
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_final_dir(
+            const std::filesystem::path& target_binary,
+            const std::string_view run_token)
+        {
+            return source_run_dir(target_binary, run_token) / "src";
         }
 
         [[nodiscard]] inline std::filesystem::path source_cancel_path(const std::filesystem::path& target_binary)
         {
             return target_binary.parent_path() / "epoch_source_update.cancel";
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_active_run_path(const std::filesystem::path& target_binary)
+        {
+            return target_binary.parent_path() / "epoch_source_update.active";
+        }
+
+        [[nodiscard]] inline std::string normalized_absolute_path_string(
+            const std::filesystem::path& path)
+        {
+            std::error_code ec;
+            auto absolute = std::filesystem::absolute(path, ec);
+            if (ec)
+            {
+                ec.clear();
+                absolute = path;
+            }
+
+            auto normalized = absolute.lexically_normal().string();
+#if defined(_WIN32)
+            normalized = lower_ascii(std::move(normalized));
+#endif
+            return normalized;
+        }
+
+        [[nodiscard]] inline bool path_is_inside(
+            const std::filesystem::path& root,
+            const std::filesystem::path& candidate)
+        {
+            std::string root_text = normalized_absolute_path_string(root);
+            std::string candidate_text = normalized_absolute_path_string(candidate);
+            if (root_text.empty() || candidate_text.empty())
+                return false;
+
+            while (!root_text.empty()
+                && (root_text.back() == '\\' || root_text.back() == '/'))
+            {
+                root_text.pop_back();
+            }
+
+            if (candidate_text == root_text)
+                return true;
+            if (candidate_text.size() <= root_text.size())
+                return false;
+            if (candidate_text.compare(0u, root_text.size(), root_text) != 0)
+                return false;
+
+            const char separator = candidate_text[root_text.size()];
+            return separator == '\\' || separator == '/';
+        }
+
+        inline void remove_update_cache_path_best_effort(const std::filesystem::path& path)
+        {
+            if (path.empty())
+                return;
+
+            std::error_code ec;
+            if (std::filesystem::is_directory(path, ec))
+            {
+                std::filesystem::remove_all(path, ec);
+                return;
+            }
+
+            ec.clear();
+            std::filesystem::remove(path, ec);
+        }
+
+        inline void cleanup_stale_source_update_runs(
+            const std::filesystem::path& target_binary,
+            const std::filesystem::path& keep_run_dir = {})
+        {
+            const auto work_root = source_work_root(target_binary);
+            std::error_code ec;
+            if (!std::filesystem::exists(work_root, ec))
+                return;
+
+            const std::string keep_text = keep_run_dir.empty()
+                ? std::string{}
+                : normalized_absolute_path_string(keep_run_dir);
+
+            for (std::filesystem::directory_iterator it{ work_root, ec }, end; it != end; it.increment(ec))
+            {
+                if (ec)
+                {
+                    ec.clear();
+                    continue;
+                }
+
+                const auto path = it->path();
+                if (!keep_text.empty()
+                    && normalized_absolute_path_string(path) == keep_text)
+                {
+                    continue;
+                }
+
+                const std::string name = path.filename().string();
+                const bool managed_source_cache =
+                    name == "sx"
+                    || name == "src"
+                    || name.starts_with("run_")
+                    || name.starts_with(".stale")
+                    || name.starts_with("source_snapshot");
+
+                if (managed_source_cache && path_is_inside(work_root, path))
+                    remove_update_cache_path_best_effort(path);
+            }
         }
 
         [[nodiscard]] inline std::filesystem::path make_temp_download_path(const std::string_view stem)
@@ -2946,13 +3091,17 @@ namespace epochnamespace::updater
             return false;
         }
 
-        const auto archive_path = system_detail::source_archive_path(target_binary, channel.source_url);
-        const auto staging_dir = system_detail::source_staging_dir(target_binary);
-        const auto final_dir = system_detail::source_final_dir(target_binary);
+        const auto run_token = system_detail::make_source_update_run_token();
+        const auto work_root = system_detail::source_work_root(target_binary);
+        const auto run_dir = system_detail::source_run_dir(target_binary, run_token);
+        const auto archive_path = system_detail::source_archive_path(target_binary, channel.source_url, run_token);
+        const auto staging_dir = system_detail::source_staging_dir(target_binary, run_token);
+        const auto final_dir = system_detail::source_final_dir(target_binary, run_token);
         const auto target_dir = target_binary.parent_path();
         const auto build_log = target_dir / "epoch_source_update.log";
         const auto handoff_log = target_dir / "epoch_update_handoff.log";
         const auto cancel_path = system_detail::source_cancel_path(target_binary);
+        const auto active_run_path = system_detail::source_active_run_path(target_binary);
         const auto worker_script = system_detail::make_temp_powershell_script_path("source_update_worker");
         const auto built_runtime_dir = system_detail::source_runtime_output_dir(final_dir);
         const auto built_binary = system_detail::source_runtime_binary_path(final_dir, target_binary);
@@ -2966,6 +3115,8 @@ namespace epochnamespace::updater
 
         {
             std::error_code cleanup_ec;
+            system_detail::cleanup_stale_source_update_runs(target_binary, run_dir);
+            cleanup_ec.clear();
             std::filesystem::remove(cancel_path, cleanup_ec);
             cleanup_ec.clear();
             std::filesystem::remove(build_log, cleanup_ec);
@@ -2973,6 +3124,14 @@ namespace epochnamespace::updater
             std::filesystem::remove(handoff_log, cleanup_ec);
             cleanup_ec.clear();
             std::filesystem::remove(system_detail::staged_update_handoff_script_path(), cleanup_ec);
+        }
+
+        {
+            std::ofstream active_run(active_run_path, std::ios::binary | std::ios::trunc);
+            if (active_run)
+                active_run << run_dir.string() << '\n';
+            else
+                system_detail::log_error("Failed to write source update active-run marker; Cancel will still signal the worker.");
         }
 
         std::ofstream ps(worker_script, std::ios::binary);
@@ -3002,6 +3161,8 @@ namespace epochnamespace::updater
 
         ps
             << ")\n"
+            << "$workRoot = '" << esc(work_root.string()) << "'\n"
+            << "$runDir = '" << esc(run_dir.string()) << "'\n"
             << "$sourceArchive = '" << esc(archive_path.string()) << "'\n"
             << "$stagingDir = '" << esc(staging_dir.string()) << "'\n"
             << "$sourceRoot = '" << esc(final_dir.string()) << "'\n"
@@ -3010,6 +3171,7 @@ namespace epochnamespace::updater
             << "$buildLog = '" << esc(build_log.string()) << "'\n"
             << "$handoffLog = '" << esc(handoff_log.string()) << "'\n"
             << "$cancelPath = '" << esc(cancel_path.string()) << "'\n"
+            << "$activeRunPath = '" << esc(active_run_path.string()) << "'\n"
             << "$targetExe = '" << esc(target_binary.string()) << "'\n"
             << "$targetDir = '" << esc(target_dir.string()) << "'\n"
             << "$targetAssetsDir = '" << esc(target_assets_dir.string()) << "'\n"
@@ -3158,13 +3320,29 @@ namespace epochnamespace::updater
             << "function Test-Cancel {\n"
             << "  if (Test-Path -LiteralPath $cancelPath) {\n"
             << "    Write-Step 'WARN' 'Source update canceled by operator.'\n"
-            << "    Write-Handoff 'WARN' 'Source update canceled by operator before runtime handoff.'\n"
+            << "    Write-Handoff 'WARN' 'Source update canceled by operator before runtime replacement.'\n"
             << "    Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "    Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "    Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "    Remove-Item -LiteralPath $runDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "    Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue\n"
+            << "    Remove-Item -LiteralPath $activeRunPath -Force -ErrorAction SilentlyContinue\n"
             << "    Remove-Item -LiteralPath $workerPath -Force -ErrorAction SilentlyContinue\n"
             << "    exit 130\n"
+            << "  }\n"
+            << "}\n"
+            << "function Clear-StaleSourceRuns {\n"
+            << "  if (-not (Test-Path -LiteralPath $workRoot)) { return }\n"
+            << "  $runFull = [System.IO.Path]::GetFullPath($runDir)\n"
+            << "  Get-ChildItem -LiteralPath $workRoot -Force -ErrorAction SilentlyContinue | ForEach-Object {\n"
+            << "    $name = $_.Name\n"
+            << "    $managed = ($name -eq 'sx' -or $name -eq 'src' -or $name.StartsWith('run_') -or $name.StartsWith('.stale') -or $name.StartsWith('source_snapshot'))\n"
+            << "    if ($managed) {\n"
+            << "      $itemFull = [System.IO.Path]::GetFullPath($_.FullName)\n"
+            << "      if (-not [string]::Equals($itemFull, $runFull, [System.StringComparison]::OrdinalIgnoreCase)) {\n"
+            << "        Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "      }\n"
+            << "    }\n"
             << "  }\n"
             << "}\n"
             << "trap {\n"
@@ -3174,6 +3352,11 @@ namespace epochnamespace::updater
             << "  }\n"
             << "  Write-Step 'ERROR' $message\n"
             << "  Write-Handoff 'ERROR' $message\n"
+            << "  Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
+            << "  Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  Remove-Item -LiteralPath $runDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "  Remove-Item -LiteralPath $activeRunPath -Force -ErrorAction SilentlyContinue\n"
             << "  Remove-Item -LiteralPath $workerPath -Force -ErrorAction SilentlyContinue\n"
             << "  exit 1\n"
             << "}\n"
@@ -3432,7 +3615,11 @@ namespace epochnamespace::updater
             << "  Write-Step 'INFO' 'Prepared updater overlay ports for modern CMake policy handling.'\n"
             << "  return $overlayRoot\n"
             << "}\n"
-            << "Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue\n"
+            << "New-Item -ItemType Directory -Path $workRoot -Force | Out-Null\n"
+            << "Clear-StaleSourceRuns\n"
+            << "Remove-Item -LiteralPath $runDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "New-Item -ItemType Directory -Path $runDir -Force | Out-Null\n"
+            << "Set-Content -LiteralPath $activeRunPath -Value $runDir -NoNewline -Encoding UTF8\n"
             << "Remove-Item -LiteralPath $buildLog -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $handoffLog -Force -ErrorAction SilentlyContinue\n"
             << "Write-Step 'INFO' 'Source update worker started.'\n"
@@ -3447,6 +3634,7 @@ namespace epochnamespace::updater
             << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "New-Item -ItemType Directory -Path $runDir -Force | Out-Null\n"
             << "if (Test-Path -LiteralPath $sourceRoot) {\n"
             << "  $staleSourceRoot = $sourceRoot + '.stale.' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()\n"
             << "  Move-Item -LiteralPath $sourceRoot -Destination $staleSourceRoot -Force -ErrorAction SilentlyContinue\n"
@@ -3574,7 +3762,9 @@ namespace epochnamespace::updater
             << "Write-Handoff 'INFO' 'Source runtime files copied successfully.'\n"
             << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "Remove-Item -LiteralPath $runDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue\n"
+            << "Remove-Item -LiteralPath $activeRunPath -Force -ErrorAction SilentlyContinue\n"
             << "$env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS = '3000'\n"
             << "$restartedProcess = Start-Process -FilePath $targetExe -WorkingDirectory $targetDir -PassThru\n"
             << "Remove-Item Env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS -Force -ErrorAction SilentlyContinue\n"
@@ -4336,6 +4526,12 @@ namespace epochnamespace::updater
         fs::remove_all(extract_dir, ec);
         ec.clear();
 
+        if (LEAVE_NO_FILES_ALWAYS_REDOWNLOAD)
+        {
+            fs::remove(archive_path, ec);
+            ec.clear();
+        }
+
         if (fs::exists(archive_path, ec) && !ec)
         {
             const auto cached_size = fs::file_size(archive_path, ec);
@@ -4443,8 +4639,8 @@ namespace epochnamespace::updater
         {
             system_detail::append_log_line(
                 handoff_log,
-                "[ERROR] Restart requested, but no staged update handoff script exists.");
-            system_detail::log_error("No staged update handoff script exists.");
+                "[ERROR] Restart requested, but no staged update replacement script exists.");
+            system_detail::log_error("No staged update replacement script exists.");
             return false;
         }
 
@@ -4453,7 +4649,7 @@ namespace epochnamespace::updater
         {
             system_detail::append_log_line(
                 handoff_log,
-                "[ERROR] Failed to launch staged update handoff.");
+                "[ERROR] Failed to launch staged update replacement.");
             return false;
         }
 #else
@@ -4461,14 +4657,14 @@ namespace epochnamespace::updater
         {
             system_detail::append_log_line(
                 handoff_log,
-                "[ERROR] Failed to launch staged update handoff.");
+                "[ERROR] Failed to launch staged update replacement.");
             return false;
         }
 #endif
 
         system_detail::append_log_line(
             handoff_log,
-            "[INFO] Staged update handoff launched from Restart.");
+            "[INFO] Staged update replacement launched from Restart.");
         return true;
     }
 
@@ -4479,6 +4675,7 @@ namespace epochnamespace::updater
         {
             const auto target_binary = system_detail::current_binary_path();
             const auto cancel_path = system_detail::source_cancel_path(target_binary);
+            const auto active_run_path = system_detail::source_active_run_path(target_binary);
 
             std::error_code ec;
             std::filesystem::create_directories(cancel_path.parent_path(), ec);
@@ -4492,9 +4689,26 @@ namespace epochnamespace::updater
 
             cancel << "cancel requested by editor\n";
             cancel.close();
+
+            const auto work_root = system_detail::source_work_root(target_binary);
+            const std::string active_run_text =
+                system_detail::trim_ascii(system_detail::read_text_file(active_run_path));
+            if (!active_run_text.empty())
+            {
+                const std::filesystem::path active_run{ active_run_text };
+                if (system_detail::path_is_inside(work_root, active_run))
+                    system_detail::remove_update_cache_path_best_effort(active_run);
+                else
+                    system_detail::log_error("Ignored source update active-run marker outside updater cache.");
+            }
+            else
+            {
+                system_detail::cleanup_stale_source_update_runs(target_binary);
+            }
+
             system_detail::append_log_line(
                 update_handoff_log_path(),
-                "[WARN] Source update cancel requested by operator.");
+                "[WARN] Source update cancel requested by operator. Disposable source cache cleared when possible.");
             system_detail::log_info("Source update cancel requested.");
             return true;
         }
@@ -4551,7 +4765,7 @@ namespace epochnamespace::updater
 
         if (effective_silent_worker)
         {
-            system_detail::log_info("Silent source update worker launched; caller owns runtime shutdown after handoff evidence.");
+            system_detail::log_info("Silent source update worker launched; caller owns runtime shutdown after replacement evidence.");
             return true;
         }
 
@@ -4803,9 +5017,9 @@ namespace epochnamespace::updater
                 && packaged_handoff_mode == UpdateHandoffMode::StageForRestart;
             result.status_message = result.update_performed
                 ? (result.packaged_handoff_staged
-                    ? "Packaged update staged. Press Restart to close Epoch and let the hidden handoff replace the runtime."
-                    : "Packaged update handoff started. Restart Epoch if this window remains open.")
-                : "Packaged update failed before handoff. The cached package or replacement executable was not verified.";
+                    ? "Packaged update staged. Press Restart to close Epoch and finish the hidden runtime replacement."
+                    : "Packaged update replacement started. Restart Epoch if this window remains open.")
+                : "Packaged update failed before replacement. The cached package or replacement executable was not verified.";
             return result;
         }
 
@@ -4840,7 +5054,7 @@ namespace epochnamespace::updater
             result.update_performed = false;
             result.source_update_performed = worker_launched;
             result.status_message = worker_launched
-                ? "Source rebuild worker started. Keep Epoch open until the worker reports handoff-ready evidence, then restart from the update modal."
+                ? "Source rebuild worker started. Keep Epoch open until the worker reports restart-ready evidence, then restart from the update modal."
                 : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
             return result;
         }

@@ -441,6 +441,9 @@ namespace epochnamespace::gui
         Vec2 viewport_position{};
         Vec2 viewport_size{};
         Vec2 panel_size{ 640.0f, 300.0f };
+        float title_scale{ 0.0f };
+        float message_scale{ 0.0f };
+        float status_scale{ 0.0f };
         bool dim_background{ true };
         bool capture_input{ true };
         bool show_percent{ true };
