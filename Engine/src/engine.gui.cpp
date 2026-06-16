@@ -5075,6 +5075,90 @@ namespace epochnamespace::gui
         return result;
     }
 
+    static void draw_progress_bar_layout(
+        const gui_lib::ProgressBarLayout& layout,
+        std::string_view label,
+        std::string_view status,
+        bool show_percent) noexcept
+    {
+        if (!g_frame.ctx)
+            return;
+
+        const auto& palette = active_palette();
+        draw_sprite(palette.panelBackground,
+            layout.track.position.x,
+            layout.track.position.y,
+            layout.track.size.x,
+            layout.track.size.y);
+        draw_sprite(palette.consoleBackground,
+            layout.inner.position.x,
+            layout.inner.position.y,
+            layout.inner.size.x,
+            layout.inner.size.y);
+
+        if (layout.fill.size.x > 0.0f && layout.fill.size.y > 0.0f)
+        {
+            draw_sprite(palette.textFieldActive,
+                layout.fill.position.x,
+                layout.fill.position.y,
+                layout.fill.size.x,
+                layout.fill.size.y);
+        }
+
+        draw_sprite(palette.buttonHover,
+            layout.track.position.x,
+            layout.track.position.y,
+            layout.track.size.x,
+            1.0f);
+        draw_sprite(palette.buttonHover,
+            layout.track.position.x,
+            layout.track.position.y + layout.track.size.y - 1.0f,
+            layout.track.size.x,
+            1.0f);
+        draw_sprite(palette.buttonHover,
+            layout.track.position.x,
+            layout.track.position.y,
+            1.0f,
+            layout.track.size.y);
+        draw_sprite(palette.buttonHover,
+            layout.track.position.x + layout.track.size.x - 1.0f,
+            layout.track.position.y,
+            1.0f,
+            layout.track.size.y);
+
+        std::string labelText;
+        if (!label.empty())
+            labelText = std::string(label);
+        if (!status.empty())
+        {
+            if (!labelText.empty())
+                labelText += " - ";
+            labelText += status;
+        }
+        if (show_percent)
+        {
+            if (!labelText.empty())
+                labelText += " ";
+            labelText += std::to_string(static_cast<int>(std::round(layout.fraction * 100.0f)));
+            labelText += "%";
+        }
+
+        if (!labelText.empty())
+        {
+            const std::string fitted = fit_text_to_width(
+                labelText,
+                (std::max)(1.0f, layout.track.size.x - 2.0f * kContentPadding),
+                kFontScale);
+            const std::string_view displayLabel = fitted.empty()
+                ? std::string_view{ labelText }
+                : std::string_view{ fitted };
+            const float textY = layout.track.position.y
+                + std::floor((std::max)(0.0f, (layout.track.size.y - base_line_height(kFontScale)) * 0.5f))
+                + 1.0f;
+            draw_text_line(displayLabel, layout.track.position.x + kContentPadding, textY, kFontScale);
+        }
+    }
+
     void progress_bar(const ProgressBarOptions& options) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx)
@@ -5093,55 +5177,122 @@ namespace epochnamespace::gui
         const float width = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
         const Vec2 drawPos{ drawX, pos.y };
         const float height = (std::max)(14.0f, options.size.y > 0.0f ? options.size.y : 18.0f);
-        const float value = std::clamp(options.value, 0.0f, 1.0f);
-        const auto& palette = active_palette();
+        const auto layout = gui_lib::make_progress_bar_layout(gui_lib::ProgressBarLayoutOptions{
+            .track = gui_lib::Rect{ to_lib(drawPos), { width, height } },
+            .value = std::clamp(options.value, 0.0f, 1.0f),
+            .minimum = 0.0f,
+            .maximum = 1.0f,
+            .padding = 2.0f,
+            .direction = gui_lib::ProgressBarDirection::left_to_right
+        });
+
         ContentClipScope localClip(
             { drawPos.x, drawPos.y },
             { drawPos.x + width, drawPos.y + height });
-
-        draw_sprite(palette.panelBackground, drawPos.x, drawPos.y, width, height);
-        draw_sprite(palette.consoleBackground, drawPos.x + 2.0f, drawPos.y + 2.0f, (std::max)(1.0f, width - 4.0f), (std::max)(1.0f, height - 4.0f));
-
-        const float fillWidth = std::floor((std::max)(0.0f, width - 4.0f) * value);
-        if (fillWidth > 0.0f)
-            draw_sprite(palette.textFieldActive, drawPos.x + 2.0f, drawPos.y + 2.0f, fillWidth, (std::max)(1.0f, height - 4.0f));
-
-        draw_sprite(palette.buttonHover, drawPos.x, drawPos.y, width, 1.0f);
-        draw_sprite(palette.buttonHover, drawPos.x, drawPos.y + height - 1.0f, width, 1.0f);
-        draw_sprite(palette.buttonHover, drawPos.x, drawPos.y, 1.0f, height);
-        draw_sprite(palette.buttonHover, drawPos.x + width - 1.0f, drawPos.y, 1.0f, height);
-
-        std::string labelText;
-        if (!options.label.empty())
-            labelText = std::string(options.label);
-        if (!options.status.empty())
-        {
-            if (!labelText.empty())
-                labelText += " - ";
-            labelText += options.status;
-        }
-        if (options.show_percent)
-        {
-            if (!labelText.empty())
-                labelText += " ";
-            labelText += std::to_string(static_cast<int>(std::round(value * 100.0f)));
-            labelText += "%";
-        }
-
-        if (!labelText.empty())
-        {
-            const std::string fitted = fit_text_to_width(
-                labelText,
-                (std::max)(1.0f, width - 2.0f * kContentPadding),
-                kFontScale);
-            const std::string_view displayLabel = fitted.empty()
-                ? std::string_view{ labelText }
-                : std::string_view{ fitted };
-            const float textY = drawPos.y + std::floor((std::max)(0.0f, (height - base_line_height(kFontScale)) * 0.5f)) + 1.0f;
-            draw_text_line(displayLabel, drawPos.x + kContentPadding, textY, kFontScale);
-        }
+        draw_progress_bar_layout(layout, options.label, options.status, options.show_percent);
 
         advance_cursor({ 0.0f, height + kContentPadding });
+    }
+
+    LoadingScreenResult loading_screen(const LoadingScreenOptions& options) noexcept
+    {
+        LoadingScreenResult result{};
+        if (!g_frame.ctx)
+            return result;
+
+        ensure_resources();
+
+        const Vec2 viewportPos = options.viewport_position;
+        const Vec2 viewportSize = options.viewport_size.x > 0.0f && options.viewport_size.y > 0.0f
+            ? options.viewport_size
+            : (g_frame.insideWindow ? g_frame.windowSize : Vec2{ 1.0f, 1.0f });
+        const auto layout = gui_lib::make_loading_screen_layout(gui_lib::LoadingScreenLayoutOptions{
+            .viewport = gui_lib::Rect{ to_lib(viewportPos), to_lib(viewportSize) },
+            .preferred_panel_size = to_lib(options.panel_size),
+            .minimum_panel_size = { 360.0f, 220.0f },
+            .margin = 32.0f,
+            .padding = 28.0f,
+            .gap = 14.0f,
+            .title_height = (std::max)(line_advance_amount(kTitleScale) + 4.0f, 30.0f),
+            .message_height = 76.0f,
+            .progress_height = 24.0f,
+            .status_height = line_advance_amount(kFontScale) + 4.0f,
+            .action_height = options.reserve_action_row ? 64.0f : 0.0f,
+            .progress_padding = 2.0f,
+            .progress_value = std::clamp(options.progress, 0.0f, 1.0f)
+        });
+
+        result.visible = layout.visible;
+        result.panel = from_lib(layout.panel);
+        result.progress = from_lib(layout.progress.track);
+        result.action = from_lib(layout.action);
+        if (!layout.visible)
+            return result;
+
+        if (options.capture_input)
+            begin_modal_input_capture(viewportPos, viewportSize);
+
+        const auto& palette = active_palette();
+        ContentClipClearScope clearClip;
+
+        if (options.dim_background)
+        {
+            draw_sprite(palette.modalScrim,
+                viewportPos.x,
+                viewportPos.y,
+                viewportSize.x,
+                viewportSize.y);
+        }
+
+        draw_sprite(palette.windowBackground,
+            layout.panel.position.x,
+            layout.panel.position.y,
+            layout.panel.size.x,
+            layout.panel.size.y);
+        draw_sprite(palette.titleBar,
+            layout.panel.position.x,
+            layout.panel.position.y,
+            layout.panel.size.x,
+            4.0f);
+        draw_sprite(palette.panelBackground,
+            layout.panel.position.x,
+            layout.panel.position.y + layout.panel.size.y - 2.0f,
+            layout.panel.size.x,
+            2.0f);
+        draw_sprite(palette.panelBackground,
+            layout.panel.position.x,
+            layout.panel.position.y,
+            2.0f,
+            layout.panel.size.y);
+        draw_sprite(palette.panelBackground,
+            layout.panel.position.x + layout.panel.size.x - 2.0f,
+            layout.panel.position.y,
+            2.0f,
+            layout.panel.size.y);
+
+        if (!options.title.empty())
+            draw_text_line(options.title, layout.title.position.x, layout.title.position.y, kTitleScale);
+
+        if (!options.message.empty())
+        {
+            draw_wrapped_text(
+                options.message,
+                layout.message.position.x,
+                layout.message.position.y,
+                layout.message.size.x,
+                kFontScale);
+        }
+
+        draw_progress_bar_layout(
+            layout.progress,
+            options.progress_label,
+            options.progress_status,
+            options.show_percent);
+
+        if (!options.progress_status.empty())
+            draw_text_line(options.progress_status, layout.status.position.x, layout.status.position.y, kFontScale);
+
+        return result;
     }
 
     void text_box(std::string_view text, Vec2 size) noexcept

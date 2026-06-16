@@ -165,6 +165,36 @@ export namespace epochnamespace::gui_lib
         bool has_range{};
     };
 
+    struct LoadingScreenLayoutOptions
+    {
+        Rect viewport{};
+        Vec2 preferred_panel_size{ 640.0f, 300.0f };
+        Vec2 minimum_panel_size{ 360.0f, 220.0f };
+        float margin{ 32.0f };
+        float padding{ 28.0f };
+        float gap{ 14.0f };
+        float title_height{ 30.0f };
+        float message_height{ 72.0f };
+        float progress_height{ 24.0f };
+        float status_height{ 22.0f };
+        float action_height{ 64.0f };
+        float progress_padding{ 2.0f };
+        float progress_value{};
+    };
+
+    struct LoadingScreenLayout
+    {
+        Rect viewport{};
+        Rect panel{};
+        Rect title{};
+        Rect message{};
+        ProgressBarLayout progress{};
+        Rect status{};
+        Rect action{};
+        float progress_fraction{};
+        bool visible{};
+    };
+
     inline constexpr std::uint32_t invalid_selectable_row_index = 0xffffffffU;
 
     struct SelectableListLayoutOptions
@@ -204,6 +234,7 @@ export namespace epochnamespace::gui_lib
         [[nodiscard]] float splitter_fraction_from(Vec2 point, const SplitterLayoutOptions& options) const noexcept;
         [[nodiscard]] bool splitter_hit_test(const SplitterLayout& layout, Vec2 point, float hit_padding = 0.0f) const noexcept;
         [[nodiscard]] ProgressBarLayout make_progress_bar(const ProgressBarLayoutOptions& options) const noexcept;
+        [[nodiscard]] LoadingScreenLayout make_loading_screen(const LoadingScreenLayoutOptions& options) const noexcept;
         [[nodiscard]] SelectableListVisibleRange visible_range(const SelectableListLayoutOptions& options) const noexcept;
         [[nodiscard]] SelectableRowLayout make_selectable_row(
             const SelectableListLayoutOptions& options,
@@ -218,6 +249,7 @@ export namespace epochnamespace::gui_lib
     [[nodiscard]] float splitter_fraction_from_point(const SplitterLayoutOptions& options, Vec2 point) noexcept;
     [[nodiscard]] bool splitter_hit_test(const SplitterLayout& layout, Vec2 point, float hit_padding = 0.0f) noexcept;
     [[nodiscard]] ProgressBarLayout make_progress_bar_layout(const ProgressBarLayoutOptions& options) noexcept;
+    [[nodiscard]] LoadingScreenLayout make_loading_screen_layout(const LoadingScreenLayoutOptions& options) noexcept;
     [[nodiscard]] SelectableListVisibleRange selectable_list_visible_range(const SelectableListLayoutOptions& options) noexcept;
     [[nodiscard]] SelectableRowLayout make_selectable_row_layout(
         const SelectableListLayoutOptions& options,

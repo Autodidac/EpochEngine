@@ -1,9 +1,5 @@
 # Epoch Changelog
 
-## [v0.87.43]
-- Advanced the source line after the `v0.87.42` Windows/Linux packaged updater
-  release while keeping the published stable runtime release on `v0.87.42`.
-
 ## [v0.87.42]
 - Prepared the packaged updater release with a launcher-owned progress surface:
   the normal launcher grid is hidden while an update is active, source rebuilds
@@ -13,6 +9,16 @@
   status text owned for the draw call so update modal labels stay stable.
 - Updated Windows handoff scripts to foreground the restarted Epoch runtime
   after replacement while keeping updater workers hidden.
+- Rebuilt the release updater path so a fresh source update cannot reuse stale
+  handoff/log evidence from an older worker and fails closed when the downloaded
+  source snapshot does not contain the expected vcpkg manifest.
+- Added the reusable EpochGui loading-screen layout and routed the launcher
+  update panel plus launcher/editor handoff frame through the shared
+  progress/loading surface instead of one-off row math.
+- Hardened source-update worker startup so stale cancel/log/handoff files are
+  cleared before the detached worker launches, stale source roots are removed or
+  renamed before extraction, and nested source snapshots are repaired only when
+  they contain the required `Engine/vcpkg.json` manifest.
 - Moved reusable GUI implementation sources from `Engine/src/gui` to
   `Engine/src/epochgui`, and moved context/backend implementation units into
   per-backend `Engine/src/renderers/...` folders with CMake/MSVC metadata and

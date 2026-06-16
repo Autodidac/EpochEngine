@@ -2964,6 +2964,17 @@ namespace epochnamespace::updater
         const auto managed_tools_root = system_detail::managed_tools_root();
         const auto source_fallback_urls = PROJECT_SOURCE_FALLBACK_URLS();
 
+        {
+            std::error_code cleanup_ec;
+            std::filesystem::remove(cancel_path, cleanup_ec);
+            cleanup_ec.clear();
+            std::filesystem::remove(build_log, cleanup_ec);
+            cleanup_ec.clear();
+            std::filesystem::remove(handoff_log, cleanup_ec);
+            cleanup_ec.clear();
+            std::filesystem::remove(system_detail::staged_update_handoff_script_path(), cleanup_ec);
+        }
+
         std::ofstream ps(worker_script, std::ios::binary);
         if (!ps)
         {
@@ -3436,6 +3447,13 @@ namespace epochnamespace::updater
             << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "if (Test-Path -LiteralPath $sourceRoot) {\n"
+            << "  $staleSourceRoot = $sourceRoot + '.stale.' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()\n"
+            << "  Move-Item -LiteralPath $sourceRoot -Destination $staleSourceRoot -Force -ErrorAction SilentlyContinue\n"
+            << "}\n"
+            << "if (Test-Path -LiteralPath $sourceRoot) {\n"
+            << "  throw ('Could not clear stale source update root: ' + $sourceRoot)\n"
+            << "}\n"
             << "New-Item -ItemType Directory -Path (Split-Path -Parent $sourceArchive) -Force | Out-Null\n"
             << "Write-Step 'INFO' 'Downloading latest " << PROJECT_SOURCE_ARCHIVE_LABEL() << ".'\n"
             << "Test-Cancel\n"
@@ -3451,6 +3469,22 @@ namespace epochnamespace::updater
             << "  Copy-Item -Path (Join-Path $stagingDir '*') -Destination $sourceRoot -Recurse -Force\n"
             << "}\n"
             << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "$manifestFile = Join-Path $manifestRoot 'vcpkg.json'\n"
+            << "if (-not (Test-Path -LiteralPath $manifestFile)) {\n"
+            << "  $nestedRoot = Get-ChildItem -LiteralPath $sourceRoot -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'Engine\\vcpkg.json') } | Select-Object -First 1\n"
+            << "  if ($null -ne $nestedRoot) {\n"
+            << "    $repairRoot = $sourceRoot + '.nested.' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()\n"
+            << "    $nestedName = $nestedRoot.Name\n"
+            << "    Move-Item -LiteralPath $sourceRoot -Destination $repairRoot -Force\n"
+            << "    Move-Item -LiteralPath (Join-Path $repairRoot $nestedName) -Destination $sourceRoot -Force\n"
+            << "    Remove-Item -LiteralPath $repairRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "    $manifestFile = Join-Path $manifestRoot 'vcpkg.json'\n"
+            << "    Write-Step 'INFO' 'Repaired nested source snapshot root.'\n"
+            << "  }\n"
+            << "}\n"
+            << "if (-not (Test-Path -LiteralPath $manifestFile)) {\n"
+            << "  throw ('Downloaded source snapshot did not contain Engine\\vcpkg.json at: ' + $manifestFile)\n"
+            << "}\n"
             << "Write-Step 'INFO' ('Source snapshot ready at: ' + $sourceRoot)\n"
             << "Write-Handoff 'INFO' 'Source snapshot downloaded and extracted.'\n"
             << "Test-Cancel\n"

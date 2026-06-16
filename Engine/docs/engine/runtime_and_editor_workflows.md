@@ -52,6 +52,9 @@ the same engine-owned path.
   start, mirror major download/dependency/build stages into it, and surface
   `[ERROR]` handoff lines as failed update evidence instead of parking the UI at
   a progress ceiling.
+- starting a source rebuild worker must clear stale cancel/source/handoff logs
+  before the detached process is spawned. A previous worker's final error or
+  handoff script is not valid evidence for the new run.
 - source rebuild workers always build the Windows `Release|x64` runtime lane,
   even when the editor was launched from `Debug|x64`. Debug update tests should
   keep Epoch open, watch the handoff/progress evidence, and only restart after
@@ -73,6 +76,16 @@ the same engine-owned path.
   suffix inside `cache/packages/`. Cached packages are extraction-verified
   before reuse, invalid package caches are deleted and redownloaded, and source
   rebuilds delete stale source snapshots before fetching new source.
+- source snapshot extraction must prove the manifest root before running vcpkg
+  or MSBuild. If a downloaded GitHub archive leaves one nested top-level folder,
+  the worker may repair that shape only when the nested root contains
+  `Engine/vcpkg.json`; otherwise the update fails with visible evidence instead
+  of continuing into a missing-manifest toolchain shutdown.
+- launcher/editor mode changes and update handoff waits should use the shared
+  EpochGui loading-screen/progress primitive. During an active update the
+  launcher hides unrelated Start/Quit actions and exposes only the valid
+  update-stage action: Cancel while the source worker can still honor it, then
+  Restart after replacement evidence is ready.
 - OpenGL editor composition is queue-explicit: build the normal GUI/backend
   batch before the scene, render the scene preview once, drain follow-up work,
   then replay only the explicit GUI top-layer batch for command menus and modal

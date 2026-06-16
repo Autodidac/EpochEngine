@@ -573,49 +573,34 @@ export namespace epochnamespace::menu
                 gui::push_theme(gui::ThemeVariant::ClassicLauncher);
                 gui::begin_window(title, framePosition, frameSize);
 
-                const float contentWidth = (std::max)(420.0f, (std::min)(frameSize.x - 96.0f, 760.0f));
-                const float contentX = framePosition.x + (frameSize.x - contentWidth) * 0.5f;
-                const float lineHeight = gui::line_height();
-                const float textWidth = (std::max)(240.0f, contentWidth - 16.0f);
-                const float buttonHeight = (std::max)(96.0f, (std::min)(132.0f, frameSize.y * 0.18f));
-                const float statusHeight = updatePanel.status.empty()
-                    ? lineHeight
-                    : gui::wrapped_text_height(updatePanel.status, textWidth);
-                const float stackHeight =
-                    lineHeight +
-                    18.0f +
-                    lineHeight +
-                    18.0f +
-                    statusHeight +
-                    22.0f +
-                    28.0f +
-                    28.0f +
-                    buttonHeight;
-                const float contentY = framePosition.y + (std::max)(48.0f, (frameSize.y - stackHeight) * 0.5f);
+                std::string message = "Version: ";
+                message += epochnamespace::GetEngineDisplayString();
+                message += "\n";
+                message += updatePanel.status.empty()
+                    ? std::string{ "Preparing update evidence." }
+                    : updatePanel.status;
 
-                gui::set_cursor({ contentX, contentY });
-                gui::label(updatePanel.title);
-
-                gui::set_cursor({ contentX, contentY + lineHeight + 18.0f });
-                gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
-
-                gui::set_cursor({ contentX + 8.0f, contentY + lineHeight * 2.0f + 36.0f });
-                if (!updatePanel.status.empty())
-                    gui::wrapped_label(updatePanel.status, textWidth);
-                else
-                    gui::wrapped_label("Preparing update evidence.", textWidth);
-
-                gui::set_cursor({ contentX, contentY + lineHeight * 2.0f + 58.0f + statusHeight });
-                gui::progress_bar(gui::ProgressBarOptions{
-                    .label = updatePanel.progress_label,
-                    .status = updatePanel.progress_status,
-                    .value = std::clamp(updatePanel.progress, 0.0f, 1.0f),
-                    .size = { contentWidth, 24.0f },
-                    .show_percent = true
+                const auto loading = gui::loading_screen(gui::LoadingScreenOptions{
+                    .title = updatePanel.title,
+                    .message = message,
+                    .progress_label = updatePanel.progress_label,
+                    .progress_status = updatePanel.progress_status,
+                    .progress = std::clamp(updatePanel.progress, 0.0f, 1.0f),
+                    .viewport_position = framePosition,
+                    .viewport_size = frameSize,
+                    .panel_size = { (std::max)(460.0f, (std::min)(frameSize.x - 96.0f, 760.0f)), 340.0f },
+                    .dim_background = false,
+                    .capture_input = true,
+                    .show_percent = true,
+                    .reserve_action_row = true
                 });
 
-                gui::set_cursor({ contentX, contentY + lineHeight * 2.0f + 112.0f + statusHeight });
-                const bool clicked = gui::button(updatePanel.action_label, { contentWidth, buttonHeight });
+                bool clicked = false;
+                if (loading.action.size.x > 0.0f && loading.action.size.y > 0.0f)
+                {
+                    gui::set_cursor(loading.action.position);
+                    clicked = gui::button(updatePanel.action_label, loading.action.size);
+                }
 
                 gui::end_window();
                 gui::pop_theme();

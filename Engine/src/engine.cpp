@@ -4027,6 +4027,8 @@ namespace epochnamespace::core
             bool has_last_frame{ false };
             epoch::core::time::simulation_clock simulation{};
             bool routed_gui_upload_refreshed{ false };
+            std::optional<std::string> pending_editor_project_id{};
+            std::uint32_t launcher_loading_frames{ 0 };
         };
 
         struct PreviewLookState
@@ -5851,6 +5853,7 @@ namespace epochnamespace::core
                             switch (editor_frame.command)
                             {
                             case epochnamespace::EditorCommand::OpenLauncher:
+                                session.launcher_loading_frames = (std::max)(session.launcher_loading_frames, std::uint32_t{ 1 });
                                 reset_to_menu(session, ctx);
                                 ctx_running = true;
                                 break;
@@ -6125,16 +6128,79 @@ namespace epochnamespace::core
                             ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
                             clear_before_ui_frame(ctx);
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
-                            auto choice = session.menu.update_and_draw(
-                                ctx,
-                                win,
-                                dt,
-                                up_pressed,
-                                down_pressed,
-                                left_pressed,
-                                right_pressed,
-                                enter_pressed);
+                            std::optional<epochnamespace::menu::Choice> choice{};
+                            std::optional<std::string> pendingEditorProject{};
+                            const int transitionWidth = (std::max)(1, ctx ? ctx->get_width_safe() : (win ? win->width : 1));
+                            const int transitionHeight = (std::max)(1, ctx ? ctx->get_height_safe() : (win ? win->height : 1));
+                            const bool draw_transition_loading =
+                                session.launcher_loading_frames > 0
+                                || session.pending_editor_project_id.has_value();
+                            if (draw_transition_loading)
+                            {
+                                const bool loadingEditor = session.pending_editor_project_id.has_value();
+                                const std::string projectLabel = loadingEditor
+                                    ? *session.pending_editor_project_id
+                                    : std::string{ "projectlauncher" };
+                                const std::string transitionTitle = loadingEditor ? "Loading Editor" : "Loading Launcher";
+                                const std::string transitionMessage = loadingEditor
+                                    ? std::string{ "Preparing editor workspace for " } + projectLabel + "."
+                                    : std::string{ "Returning to the project launcher." };
+                                const std::string transitionLabel = loadingEditor ? "Editor handoff" : "Launcher handoff";
+                                gui::push_theme(gui::ThemeVariant::ClassicLauncher);
+                                gui::begin_window("", { 0.0f, 0.0f }, {
+                                    static_cast<float>(transitionWidth),
+                                    static_cast<float>(transitionHeight)
+                                });
+                                gui::loading_screen(gui::LoadingScreenOptions{
+                                    .title = transitionTitle,
+                                    .message = transitionMessage,
+                                    .progress_label = transitionLabel,
+                                    .progress_status = "ready",
+                                    .progress = 0.92f,
+                                    .viewport_position = { 0.0f, 0.0f },
+                                    .viewport_size = {
+                                        static_cast<float>(transitionWidth),
+                                        static_cast<float>(transitionHeight)
+                                    },
+                                    .panel_size = { 620.0f, 280.0f },
+                                    .dim_background = false,
+                                    .capture_input = true,
+                                    .show_percent = true,
+                                    .reserve_action_row = false
+                                });
+                                gui::end_window();
+                                gui::pop_theme();
+
+                                if (session.launcher_loading_frames > 0)
+                                    --session.launcher_loading_frames;
+                                if (session.pending_editor_project_id)
+                                {
+                                    pendingEditorProject = std::move(session.pending_editor_project_id);
+                                    session.pending_editor_project_id.reset();
+                                }
+                            }
+                            else
+                            {
+                                choice = session.menu.update_and_draw(
+                                    ctx,
+                                    win,
+                                    dt,
+                                    up_pressed,
+                                    down_pressed,
+                                    left_pressed,
+                                    right_pressed,
+                                    enter_pressed);
+                            }
                             gui::end_frame();
+
+                            if (draw_transition_loading)
+                            {
+                                if (ctx_running)
+                                    ctx->present_safe();
+                                if (pendingEditorProject)
+                                    switch_session_to_editor(session, ctx, *pendingEditorProject);
+                                break;
+                            }
 
                             if (choice)
                             {
@@ -6183,11 +6249,13 @@ namespace epochnamespace::core
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)
                                 {
-                                    switch_session_to_editor(session, ctx, "projectlauncher");
+                                    session.pending_editor_project_id = "projectlauncher";
+                                    session.menu.guard_next_input_frames(3u);
                                 }
                                 else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
                                 {
-                                    switch_session_to_editor(session, ctx, project_id);
+                                    session.pending_editor_project_id = project_id;
+                                    session.menu.guard_next_input_frames(3u);
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::Settings)
                                 {

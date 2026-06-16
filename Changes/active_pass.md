@@ -104,6 +104,18 @@ contracts instead of drift.
   surface, foregrounds restarted Windows runtimes from the handoff scripts, and
   moves GUI/context implementation ownership to `src/epochgui` and
   per-backend `src/renderers/...` folders.
+- Release repair checkpoint: `v0.87.42` now also clears stale updater cancel,
+  source, and handoff logs before spawning the detached source worker, refuses
+  uncleared source snapshot roots, repairs nested GitHub archive roots only when
+  they contain `Engine/vcpkg.json`, and drives launcher/editor loading states
+  through the reusable EpochGui loading-screen primitive.
+- Repair evidence: the refreshed `v0.87.42` release candidate passed MSVC
+  Release `ConsoleApplication1`, packaged `EpochEditor.exe --version`, Release
+  `--engine-contract-self-test`, Windows CMake Release configure/build plus
+  CTest, Linux Clang `ninja-clang-debug` configure/build plus CTest, Linux
+  `epoch --version`, standalone EpochGui Debug/Release builds, Windows package
+  staging/unzip verification, Linux tarball version verification, and refreshed
+  Windows/Linux checksums.
 - Release evidence: the `v0.87.42` package line passed MSVC Release
   `ConsoleApplication1` rebuild plus a second vcpkg/MSBuild pass, Windows CMake
   Release configure/build plus CTest, Linux Clang Release full-engine build plus

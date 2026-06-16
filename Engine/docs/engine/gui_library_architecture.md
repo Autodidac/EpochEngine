@@ -131,6 +131,13 @@ Before a control is considered ready, it needs:
   loading, updater/cache operations, generated-project builds, and any future
   visible long-running editor action; do not draw one-off progress rows in
   Console Dock or domain code when `engine.gui` can own the behavior
+- loading screens are shared GUI primitives too. `EpochGui` owns the
+  backend-neutral `LoadingScreenLayout`; `engine.gui` owns drawing, input
+  capture, and theme integration; launcher/editor/update domains provide only
+  title, message, progress, status, and action text. Loading surfaces are valid
+  for mode handoff, updater handoff, package/cache work, and project build
+  waits, but they are not a replacement for the launcher command grid or the
+  editor command menu.
 - Package Manager uses a reusable list/action/detail shape. Package selection
   should not be a cramped one-line combo box when rows need per-package status,
   Install/Remove/Review Gate actions, provenance, and bounded progress. Package

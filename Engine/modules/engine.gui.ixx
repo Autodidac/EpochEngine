@@ -431,6 +431,30 @@ namespace epochnamespace::gui
         bool show_percent{ true };
     };
 
+    export struct LoadingScreenOptions
+    {
+        std::string_view title{};
+        std::string_view message{};
+        std::string_view progress_label{};
+        std::string_view progress_status{};
+        float progress{};
+        Vec2 viewport_position{};
+        Vec2 viewport_size{};
+        Vec2 panel_size{ 640.0f, 300.0f };
+        bool dim_background{ true };
+        bool capture_input{ true };
+        bool show_percent{ true };
+        bool reserve_action_row{ true };
+    };
+
+    export struct LoadingScreenResult
+    {
+        WidgetBounds panel{};
+        WidgetBounds progress{};
+        WidgetBounds action{};
+        bool visible{};
+    };
+
     export void push_input(const InputEvent& e) noexcept;
     export void push_input_for_context(const core::Context* ctx, const InputEvent& e) noexcept;
     export int consume_mouse_wheel_delta() noexcept;
@@ -511,6 +535,7 @@ namespace epochnamespace::gui
         float gap = 6.0f) noexcept;
     export SelectBoxResult select_box(const SelectBoxOptions& options) noexcept;
     export void progress_bar(const ProgressBarOptions& options) noexcept;
+    export LoadingScreenResult loading_screen(const LoadingScreenOptions& options) noexcept;
 
     export EditBoxResult edit_box(std::string& text,
         Vec2 size,

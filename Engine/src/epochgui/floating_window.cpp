@@ -392,6 +392,88 @@ namespace epochnamespace::gui_lib
         return layout;
     }
 
+    LoadingScreenLayout make_loading_screen_layout(const LoadingScreenLayoutOptions& options) noexcept
+    {
+        LoadingScreenLayout layout{};
+        layout.viewport = sane_rect(options.viewport);
+        layout.visible = layout.viewport.size.x > 1.0f && layout.viewport.size.y > 1.0f;
+        if (!layout.visible)
+            return layout;
+
+        const float margin = (std::max)(0.0f, sane_or(options.margin, 32.0f));
+        const float padding = (std::max)(8.0f, sane_or(options.padding, 28.0f));
+        const float gap = (std::max)(0.0f, sane_or(options.gap, 14.0f));
+        const float title_height = (std::max)(12.0f, sane_or(options.title_height, 30.0f));
+        const float message_height = (std::max)(24.0f, sane_or(options.message_height, 72.0f));
+        const float progress_height = (std::max)(12.0f, sane_or(options.progress_height, 24.0f));
+        const float status_height = (std::max)(12.0f, sane_or(options.status_height, 22.0f));
+        const float action_height = (std::max)(0.0f, sane_or(options.action_height, 64.0f));
+
+        const Vec2 minimum_panel = clamp_size(options.minimum_panel_size, { 240.0f, 160.0f });
+        Vec2 preferred_panel = clamp_size(options.preferred_panel_size, minimum_panel);
+        const float available_width = (std::max)(minimum_panel.x, layout.viewport.size.x - 2.0f * margin);
+        const float available_height = (std::max)(minimum_panel.y, layout.viewport.size.y - 2.0f * margin);
+
+        preferred_panel.x = (std::max)(minimum_panel.x, (std::min)(preferred_panel.x, available_width));
+        preferred_panel.y = (std::max)(minimum_panel.y, (std::min)(preferred_panel.y, available_height));
+
+        const float required_height =
+            padding * 2.0f
+            + title_height
+            + gap
+            + message_height
+            + gap
+            + progress_height
+            + gap * 0.5f
+            + status_height
+            + (action_height > 0.0f ? gap + action_height : 0.0f);
+        preferred_panel.y = (std::max)(preferred_panel.y, (std::min)(available_height, required_height));
+
+        layout.panel = Rect{
+            {
+                layout.viewport.position.x + std::floor((layout.viewport.size.x - preferred_panel.x) * 0.5f),
+                layout.viewport.position.y + std::floor((layout.viewport.size.y - preferred_panel.y) * 0.5f)
+            },
+            preferred_panel
+        };
+
+        const float content_x = layout.panel.position.x + padding;
+        const float content_width = (std::max)(1.0f, layout.panel.size.x - 2.0f * padding);
+        float y = layout.panel.position.y + padding;
+
+        layout.title = Rect{ { content_x, y }, { content_width, title_height } };
+        y += title_height + gap;
+
+        layout.message = Rect{ { content_x, y }, { content_width, message_height } };
+        y += message_height + gap;
+
+        const Rect progress_track{ { content_x, y }, { content_width, progress_height } };
+        layout.progress = make_progress_bar_layout(ProgressBarLayoutOptions{
+            .track = progress_track,
+            .value = options.progress_value,
+            .minimum = 0.0f,
+            .maximum = 1.0f,
+            .padding = options.progress_padding,
+            .direction = ProgressBarDirection::left_to_right
+        });
+        layout.progress_fraction = layout.progress.fraction;
+        y += progress_height + gap * 0.5f;
+
+        layout.status = Rect{ { content_x, y }, { content_width, status_height } };
+        y += status_height + gap;
+
+        if (action_height > 0.0f)
+        {
+            const float action_width = (std::max)(160.0f, (std::min)(content_width, content_width * 0.72f));
+            layout.action = Rect{
+                { content_x + std::floor((content_width - action_width) * 0.5f), y },
+                { action_width, action_height }
+            };
+        }
+
+        return layout;
+    }
+
     SelectableListVisibleRange selectable_list_visible_range(const SelectableListLayoutOptions& options) noexcept
     {
         SelectableListVisibleRange range{};
@@ -541,6 +623,12 @@ namespace epochnamespace::gui_lib
         const ProgressBarLayoutOptions& options) const noexcept
     {
         return make_progress_bar_layout(options);
+    }
+
+    LoadingScreenLayout LayoutPrimitiveController::make_loading_screen(
+        const LoadingScreenLayoutOptions& options) const noexcept
+    {
+        return make_loading_screen_layout(options);
     }
 
     SelectableListVisibleRange LayoutPrimitiveController::visible_range(
