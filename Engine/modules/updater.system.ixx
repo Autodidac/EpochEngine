@@ -3542,8 +3542,14 @@ namespace epochnamespace::updater
             << "Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue\n"
             << "$env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS = '3000'\n"
-            << "Start-Process -FilePath $targetExe -WorkingDirectory $targetDir\n"
+            << "$restartedProcess = Start-Process -FilePath $targetExe -WorkingDirectory $targetDir -PassThru\n"
             << "Remove-Item Env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS -Force -ErrorAction SilentlyContinue\n"
+            << "Start-Sleep -Milliseconds 900\n"
+            << "try {\n"
+            << "  $focusShell = New-Object -ComObject WScript.Shell\n"
+            << "  [void]$focusShell.AppActivate($restartedProcess.Id)\n"
+            << "} catch {\n"
+            << "}\n"
             << "Write-Handoff 'INFO' 'Restarted updated runtime.'\n"
             << "Start-Sleep -Seconds 1\n"
             << "Remove-Item -LiteralPath $workerPath -Force -ErrorAction SilentlyContinue\n";
@@ -3644,6 +3650,7 @@ namespace epochnamespace::updater
             << ">> \"%LOG%\" echo [INFO] Replacement executable copied successfully.\r\n"
             << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000\"\r\n"
             << "start \"\" \"%TARGET%\"\r\n"
+            << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"$target=$env:TARGET; Start-Sleep -Milliseconds 900; try { $name=[IO.Path]::GetFileNameWithoutExtension($target); $p=Get-Process -Name $name -ErrorAction SilentlyContinue ^| Sort-Object StartTime -Descending ^| Select-Object -First 1; if ($p) { $shell=New-Object -ComObject WScript.Shell; [void]$shell.AppActivate($p.Id) } } catch { }\" >nul 2>&1\r\n"
             << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=\"\r\n"
             << ">> \"%LOG%\" echo [INFO] Restarted updated executable.\r\n"
             << "del /F /Q \"%NEWBIN%\" >nul 2>&1\r\n"
@@ -3801,14 +3808,15 @@ namespace epochnamespace::updater
                     + system_detail::powershell_escape_single_quoted(std::string{ restart_auto_command }) + "\"\r\n")
                 : std::string{})
             << "start \"\" /D \"%TARGETDIR%\" \"%TARGETEXE%\"\r\n"
-            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=\"\r\n"
-            << (chain_after_restart
-                ? "set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND=\"\r\n"
-                : "")
             << "if errorlevel 1 (\r\n"
             << "  >> \"%LOG%\" echo [ERROR] Failed to restart updated runtime.\r\n"
             << "  exit /b 1\r\n"
             << ")\r\n"
+            << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"$target=$env:TARGETEXE; Start-Sleep -Milliseconds 900; try { $name=[IO.Path]::GetFileNameWithoutExtension($target); $p=Get-Process -Name $name -ErrorAction SilentlyContinue ^| Sort-Object StartTime -Descending ^| Select-Object -First 1; if ($p) { $shell=New-Object -ComObject WScript.Shell; [void]$shell.AppActivate($p.Id) } } catch { }\" >nul 2>&1\r\n"
+            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=\"\r\n"
+            << (chain_after_restart
+                ? "set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND=\"\r\n"
+                : "")
             << ">> \"%LOG%\" echo [INFO] Restarted updated runtime.\r\n"
             << "del /F /Q \"%~f0\" >nul 2>&1\r\n";
 
@@ -4019,6 +4027,7 @@ namespace epochnamespace::updater
             << "  >> \"%LOG%\" echo [ERROR] Failed to restart updated runtime.\r\n"
             << "  exit /b 1\r\n"
             << ")\r\n"
+            << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"$target=$env:TARGETEXE; Start-Sleep -Milliseconds 900; try { $name=[IO.Path]::GetFileNameWithoutExtension($target); $p=Get-Process -Name $name -ErrorAction SilentlyContinue ^| Sort-Object StartTime -Descending ^| Select-Object -First 1; if ($p) { $shell=New-Object -ComObject WScript.Shell; [void]$shell.AppActivate($p.Id) } } catch { }\" >nul 2>&1\r\n"
             << ">> \"%LOG%\" echo [INFO] Restarted updated runtime.\r\n"
             << "rmdir /S /Q \"%SRCROOT%\" >nul 2>&1\r\n"
             << "del /F /Q \"%~f0\" >nul 2>&1\r\n";

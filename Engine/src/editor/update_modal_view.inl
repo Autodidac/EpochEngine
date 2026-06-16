@@ -10,6 +10,14 @@
             const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
             const bool updateRunning = editor.updateCheckPending.has_value() || sourceWorkerRunning;
             const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
+            if (restartReady)
+                arm_editor_update_restart_countdown(editor);
+            const int restartCountdownSeconds = restartReady
+                ? static_cast<int>(std::ceil(editor_update_restart_seconds_remaining(editor)))
+                : 0;
+            const std::string restartButtonLabel = restartReady
+                ? std::format("Restart Now ({}s)", restartCountdownSeconds)
+                : std::string{ "Restart Now" };
             const gui::Vec2 modalSize = updateConfirmModalSize;
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
@@ -49,17 +57,25 @@
                 }
 
                 editor.showUpdateConfirmModal = false;
+                clear_editor_update_restart_countdown(editor);
                 editor.updateStatus = "Restarting Epoch to finish the staged update handoff.";
                 push_editor_log(editor, "[update] Restart requested after verified update handoff.");
                 emit_command(EditorCommand::Exit);
             };
-            gui::begin_modal_window(gui::ModalWindowOptions{
-                .title = "Update Epoch",
-                .position = modalPos,
-                .size = modalSize,
-                .viewport_size = { w, h },
-                .dim_background = true
-            });
+            const bool autoRestartNow = restartReady && editor_update_restart_countdown_expired(editor);
+            if (autoRestartNow)
+            {
+                requestUpdateRestart();
+            }
+            if (!autoRestartNow)
+            {
+                gui::begin_modal_window(gui::ModalWindowOptions{
+                    .title = "Update Epoch",
+                    .position = modalPos,
+                    .size = modalSize,
+                    .viewport_size = { w, h },
+                    .dim_background = true
+                });
             const gui::Vec2 contentPos = gui::cursor_position();
             float cursorY = contentPos.y;
             const auto emitWrapped = [&](const std::string_view text, const float gap) {
@@ -74,13 +90,29 @@
             };
             emitWrapped(editor_update_modal::intro_text(flags), 8.0f);
             emitWrapped(updateStatusLine, 10.0f);
+            if (restartReady)
+            {
+                emitWrapped(std::format("Epoch will restart automatically in {} second{}.",
+                    restartCountdownSeconds,
+                    restartCountdownSeconds == 1 ? "" : "s"), 10.0f);
+            }
             if (cursorY + 22.0f <= contentBottom)
             {
                 const float progressWidth = (std::max)(1.0f, (std::min)(contentWidth, 560.0f));
+                const std::string progressLabel = sourceWorkerRunning
+                    ? "Source rebuild"
+                    : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready";
+                const std::string progressStatus = sourceWorkerRunning
+                    ? "cancel available"
+                    : updateRunning
+                        ? "downloading / staging"
+                        : restartReady
+                            ? std::format("auto restart in {}s", restartCountdownSeconds)
+                            : "waiting";
                 gui::set_cursor({ contentX, cursorY });
                 gui::progress_bar(gui::ProgressBarOptions{
-                    .label = sourceWorkerRunning ? "Source rebuild" : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready",
-                    .status = sourceWorkerRunning ? "cancel available" : updateRunning ? "downloading / staging" : restartReady ? "restart required" : "waiting",
+                    .label = progressLabel,
+                    .status = progressStatus,
                     .value = editor_update_progress_value(editor),
                     .size = { progressWidth, 22.0f },
                     .show_percent = true
@@ -120,7 +152,7 @@
                     stackedButtonY += buttonHeight + buttonStackGap;
                 }
                 const std::string primaryUpdateLabel = restartReady
-                    ? std::string{ "Restart Now" }
+                    ? restartButtonLabel
                     : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
                 if (showPrimaryButton)
                 {
@@ -188,7 +220,7 @@
                     : contentRight - primaryButtonWidth;
                 gui::set_cursor({ primaryButtonX, buttonY });
                 const std::string primaryUpdateLabel = restartReady
-                    ? std::string{ "Restart Now" }
+                    ? restartButtonLabel
                     : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
                 if (showPrimaryButton && gui::button(primaryUpdateLabel, { primaryButtonWidth, buttonHeight }))
                 {
@@ -220,6 +252,7 @@
                 }
             }
             gui::end_modal_window();
+            }
         }
 
         if (editor.showSourceUpdateConfirmModal)

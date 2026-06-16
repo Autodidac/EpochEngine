@@ -224,11 +224,11 @@ if(EPOCH_CI_HEADLESS_ONLY)
 endif()
 
 add_library(epoch_gui STATIC
-    src/gui/dockable_window.cpp
-    src/gui/dock_layout.cpp
-    src/gui/floating_window.cpp
-    src/gui/panel_host.cpp
-    src/gui/popup_layout.cpp
+    src/epochgui/dockable_window.cpp
+    src/epochgui/dock_layout.cpp
+    src/epochgui/floating_window.cpp
+    src/epochgui/panel_host.cpp
+    src/epochgui/popup_layout.cpp
 )
 
 target_sources(epoch_gui PUBLIC
@@ -260,35 +260,35 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override pac
 
 set(EPOCH_SOURCES
     src/engine.cpp
-    src/engine.context.cpp
-    src/context_directx.cpp
-    src/context_software.cpp
-    src/context_vulkan.cpp
-    src/directx.context.cpp
+    src/renderers/core/engine.context.cpp
+    src/renderers/directx/context_directx.cpp
+    src/renderers/software/context_software.cpp
+    src/renderers/vulkan/context_vulkan.cpp
+    src/renderers/directx/directx.context.cpp
     src/directx.device.cpp
     src/directx.gui.cpp
     src/directx.preview.cpp
     src/directx.state.cpp
     src/opengl.backend.cpp
-    src/opengl.context.cpp
+    src/renderers/opengl/opengl.context.cpp
     src/opengl.init.cpp
     src/opengl.process.cpp
     src/opengl.cleanup.cpp
     src/opengl_capture_bridge.cpp
-    src/opengl_context_detail.cpp
+    src/renderers/opengl/opengl_context_detail.cpp
     src/opengl_preview_bridge.cpp
     src/opengl_process_impl.cpp
     src/opengl_upload_bridge.cpp
-    src/software.context.cpp
-    src/render/software.context_capture.cpp
-    src/software.context_draw.cpp
-    src/software.context_present.cpp
-    src/software.context_preview.cpp
-    src/software.context_render.cpp
-    src/context_opengl.cpp
-    src/context_sfml.cpp
-    src/context_sdl.cpp
-    src/context_raylib.cpp
+    src/renderers/software/software.context.cpp
+    src/renderers/software/software.context_capture.cpp
+    src/renderers/software/software.context_draw.cpp
+    src/renderers/software/software.context_present.cpp
+    src/renderers/software/software.context_preview.cpp
+    src/renderers/software/software.context_render.cpp
+    src/renderers/opengl/context_opengl.cpp
+    src/renderers/sfml/context_sfml.cpp
+    src/renderers/sdl/context_sdl.cpp
+    src/renderers/raylib/context_raylib.cpp
     src/raylib.bridge.cpp
     src/engine.gui.cpp
     src/engine.scripting.compiler.cpp
@@ -308,7 +308,7 @@ set(EPOCH_SOURCES
     src/epoch.ai.cpp
     src/epoch.engine.cpp
     src/epoch.headers.cpp
-    src/epoch.platform.context.cpp
+    src/renderers/platform/epoch.platform.context.cpp
     src/epoch.platform.window.cpp
     src/epoch.render.graph.cpp
     src/epoch.systems.cpp
@@ -319,12 +319,12 @@ set(EPOCH_SOURCES
 
 if(WIN32)
     list(APPEND EPOCH_SOURCES
-        src/engine.context.host.win.cpp
+        src/renderers/host/engine.context.host.win.cpp
         resource/WinResource.rc
     )
 elseif(UNIX AND NOT APPLE)
     list(APPEND EPOCH_SOURCES
-        src/engine.context.host.linux.cpp
+        src/renderers/host/engine.context.host.linux.cpp
     )
 endif()
 
@@ -337,38 +337,38 @@ endif()
 
 if(MSVC)
     set_source_files_properties(
-        src/engine.context.cpp
-        src/context_software.cpp
-        src/context_vulkan.cpp
-        src/software.context.cpp
-        src/render/software.context_capture.cpp
-        src/software.context_draw.cpp
-        src/software.context_present.cpp
-        src/software.context_preview.cpp
-        src/software.context_render.cpp
-        src/context_opengl.cpp
-        src/context_sfml.cpp
-        src/context_sdl.cpp
-        src/context_raylib.cpp
+        src/renderers/core/engine.context.cpp
+        src/renderers/software/context_software.cpp
+        src/renderers/vulkan/context_vulkan.cpp
+        src/renderers/software/software.context.cpp
+        src/renderers/software/software.context_capture.cpp
+        src/renderers/software/software.context_draw.cpp
+        src/renderers/software/software.context_present.cpp
+        src/renderers/software/software.context_preview.cpp
+        src/renderers/software/software.context_render.cpp
+        src/renderers/opengl/context_opengl.cpp
+        src/renderers/sfml/context_sfml.cpp
+        src/renderers/sdl/context_sdl.cpp
+        src/renderers/raylib/context_raylib.cpp
         PROPERTIES
             COMPILE_OPTIONS "/Zm500"
     )
 
     set_source_files_properties(
-        src/engine.context.cpp
+        src/renderers/core/engine.context.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj;/Zm2000"
     )
 
     set_source_files_properties(
-        src/context_opengl.cpp
+        src/renderers/opengl/context_opengl.cpp
         src/opengl.backend.cpp
-        src/opengl.context.cpp
+        src/renderers/opengl/opengl.context.cpp
         src/opengl.init.cpp
         src/opengl.process.cpp
         src/opengl.cleanup.cpp
         src/opengl_capture_bridge.cpp
-        src/opengl_context_detail.cpp
+        src/renderers/opengl/opengl_context_detail.cpp
         src/opengl_preview_bridge.cpp
         src/opengl_process_impl.cpp
         src/opengl_upload_bridge.cpp
@@ -377,11 +377,11 @@ if(MSVC)
     )
 
     set_source_files_properties(
-        src/context_sfml.cpp
-        src/context_sdl.cpp
-        src/context_raylib.cpp
-        src/context_directx.cpp
-        src/directx.context.cpp
+        src/renderers/sfml/context_sfml.cpp
+        src/renderers/sdl/context_sdl.cpp
+        src/renderers/raylib/context_raylib.cpp
+        src/renderers/directx/context_directx.cpp
+        src/renderers/directx/directx.context.cpp
         src/directx.device.cpp
         src/directx.gui.cpp
         src/directx.preview.cpp
@@ -391,7 +391,7 @@ if(MSVC)
     )
 
     set_source_files_properties(
-        src/software.context_render.cpp
+        src/renderers/software/software.context_render.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj;/Zm2000;/GL-"
     )
@@ -812,7 +812,7 @@ if(EPOCH_VULKAN_ACTIVE)
     if(EPOCH_VULKAN_ACTIVE)
         target_sources(epoch PRIVATE
             src/image.stb.cpp
-            src/vulkan.platform.context.cpp
+            src/renderers/vulkan/vulkan.platform.context.cpp
             src/vulkan.platform.descriptors.cpp
             src/vulkan.dispatch_storage.cpp
             modules/vulkan.context_api_unit.ixx
@@ -926,7 +926,7 @@ endif()
 
 if(NOT EPOCH_RAYLIB_ACTIVE)
     set_source_files_properties(
-        src/context_raylib.cpp
+        src/renderers/raylib/context_raylib.cpp
         src/raylib.bridge.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
@@ -934,22 +934,22 @@ endif()
 
 if(NOT EPOCH_SDL_ACTIVE)
     set_source_files_properties(
-        src/context_sdl.cpp
+        src/renderers/sdl/context_sdl.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
 endif()
 
 if(NOT EPOCH_SFML_ACTIVE)
     set_source_files_properties(
-        src/context_sfml.cpp
+        src/renderers/sfml/context_sfml.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
 endif()
 
 if(NOT EPOCH_DIRECTX_ACTIVE)
     set_source_files_properties(
-        src/context_directx.cpp
-        src/directx.context.cpp
+        src/renderers/directx/context_directx.cpp
+        src/renderers/directx/directx.context.cpp
         src/directx.device.cpp
         src/directx.gui.cpp
         src/directx.preview.cpp

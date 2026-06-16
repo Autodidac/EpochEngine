@@ -545,8 +545,8 @@ Current source ownership:
 | Toolbar context combobox and visible status | `Engine/src/editor.cpp` |
 | Editor state capture/restore for handoff | `Engine/src/editor.cpp` |
 | Session loop, live context discovery, handoff fallback | `Engine/src/engine.cpp` |
-| Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context.multiplexer.ixx`, `Engine/modules/context.window.ixx`, `Engine/src/engine.context.host.*.cpp` |
-| Reusable GUI layout state | `Engine/include/epoch/gui`, `Engine/src/gui`, `Engine/lib/EpochGui` |
+| Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context.multiplexer.ixx`, `Engine/modules/context.window.ixx`, `Engine/src/renderers/host/engine.context.host.*.cpp` |
+| Reusable GUI layout state | `Engine/include/epoch/gui`, `Engine/src/epochgui`, `Engine/lib/EpochGui` |
 | Engine GUI adapter/render/input bridge | `Engine/modules/engine.gui.ixx`, `Engine/src/engine.gui.cpp` |
 
 Context switching acceptance:

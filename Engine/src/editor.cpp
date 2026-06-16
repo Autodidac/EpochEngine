@@ -525,6 +525,8 @@ namespace epochnamespace
             bool updateInstallPending{ false };
             bool updateSourceInstallPending{ false };
             std::chrono::steady_clock::time_point updateOperationStartedAt{};
+            bool updateRestartCountdownArmed{ false };
+            std::chrono::steady_clock::time_point updateRestartCountdownStartedAt{};
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
             SystemsSurfaceState systems{};
@@ -5569,6 +5571,8 @@ namespace epochnamespace
         editor.autoUpdateCheckQueued = false;
         editor.updateInstallPending = false;
         editor.updateSourceInstallPending = false;
+        editor.updateRestartCountdownArmed = false;
+        editor.updateRestartCountdownStartedAt = {};
         editor.updateConfirmModalStableSize = {};
         editor.updateConfirmModalStableViewport = {};
         editor.sourceUpdateConfirmModalStableSize = {};

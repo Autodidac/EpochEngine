@@ -27,7 +27,7 @@ import atlas.texture;
 import spritehandle;
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
-#include "directx_context_detail.hpp"
+#include "renderers/directx/directx_context_detail.hpp"
 
 namespace epochnamespace::directxcontext::detail
 {

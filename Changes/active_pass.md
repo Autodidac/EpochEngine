@@ -99,6 +99,16 @@ contracts instead of drift.
 - Source checkpoint: `main` is advanced to v0.87.39 after the v0.87.38 editor
   source-update handoff release while the published stable runtime remains
   v0.87.38.
+- Release checkpoint: `v0.87.42` restores updater restart countdown/progress
+  behavior, gives the launcher a dedicated update progress/cancel/restart
+  surface, foregrounds restarted Windows runtimes from the handoff scripts, and
+  moves GUI/context implementation ownership to `src/epochgui` and
+  per-backend `src/renderers/...` folders.
+- Release evidence: the `v0.87.42` package line passed MSVC Release
+  `ConsoleApplication1` rebuild plus a second vcpkg/MSBuild pass, Windows CMake
+  Release configure/build plus CTest, Linux Clang Release full-engine build plus
+  CTest, and staged Windows/Linux package `--version` checks before archive
+  checksums were written.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

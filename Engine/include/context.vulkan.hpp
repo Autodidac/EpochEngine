@@ -42,7 +42,7 @@
 //
 // IMPORTANT:
 //   - Do NOT define VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE here.
-//     Define it in exactly ONE TU (see src/vulkan.platform.context.cpp).
+//     Define it in exactly ONE TU (see src/renderers/vulkan/vulkan.platform.context.cpp).
 // ============================================================================
 
 #if defined(EPOCH_USING_VULKAN)

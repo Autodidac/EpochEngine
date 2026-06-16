@@ -42,10 +42,10 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_model.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_service.hpp" />
       <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_response.hpp" />
-      <ClInclude Include="$(MSBuildThisFileDirectory)src\core_context_backends.hpp" />
-      <ClInclude Include="$(MSBuildThisFileDirectory)src\directx_context_detail.hpp" />
+      <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\core\core_context_backends.hpp" />
+      <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx_context_detail.hpp" />
       <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_context_detail.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl_context_detail.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_upload_bridge.hpp" />
@@ -148,6 +148,7 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\taskgraph.dotsystem.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.updater.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\launcher.update.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\enduserapplication.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.tools.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.bindings.ixx" />
@@ -286,19 +287,19 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.dispatch_storage.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\image.stb.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.context-texture.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context-texture.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.context_buffers.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_buffers.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.platform.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.platform.context.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
@@ -317,10 +318,10 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor.scene.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\engine.context.cpp">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.init.cpp">
@@ -335,7 +336,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_context_detail.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl_context_detail.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.cpp">
@@ -350,22 +351,22 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.backend.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_opengl.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\context_opengl.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_sfml.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sfml\context_sfml.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_sdl.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sdl\context_sdl.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_raylib.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\raylib\context_raylib.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_directx.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\context_directx.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.context.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.device.cpp">
@@ -383,37 +384,37 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\raylib.bridge.cpp">
       <AdditionalOptions>/GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_software.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\context_software.cpp">
       <AdditionalOptions>/Zm500 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_vulkan.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\context_vulkan.cpp">
       <AdditionalOptions>/Zm500 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context.cpp">
       <AdditionalOptions>/Zm500 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\render\software.context_capture.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_capture.cpp">
       <AdditionalOptions>/Zm500 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_draw.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_draw.cpp">
       <AdditionalOptions>/Zm500 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_present.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_present.cpp">
       <AdditionalOptions>/Zm500 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_preview.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_preview.cpp">
       <AdditionalOptions>/Zm500 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_render.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_render.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.host.linux.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\host\engine.context.host.linux.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.host.win.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\host\engine.context.host.win.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -433,7 +434,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.ai.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.engine.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.headers.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.platform.context.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\platform\epoch.platform.context.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.platform.window.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.render.graph.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.systems.cpp" />

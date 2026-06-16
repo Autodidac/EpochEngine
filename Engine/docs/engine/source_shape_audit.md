@@ -93,7 +93,7 @@ or scripting controls. The detailed contract lives in
 `Engine/docs/engine/gui_library_architecture.md`.
 
 The GUI split now has two layers. Portable layout/state controllers belong in
-`Engine/include/epoch/gui`, `Engine/src/gui`, and `Engine/lib/EpochGui`.
+`Engine/include/epoch/gui`, `Engine/src/epochgui`, and `Engine/lib/EpochGui`.
 Rendering, input, font/theme, clipping, and deferred/top-layer replay stay in
 `engine.gui`. Native detached windows and context route lifecycles stay in the
 context host/session code. Do not hide native host behavior inside `EpochGui`,

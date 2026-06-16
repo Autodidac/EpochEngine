@@ -120,7 +120,7 @@ using PFNWGLCREATECONTEXTATTRIBSARBPROC = HGLRC(WINAPI*)(HDC, HGLRC, const int*)
 #include <chrono>
 #endif
 
-#include "opengl_context_detail.hpp"
+#include "renderers/opengl/opengl_context_detail.hpp"
 
 module opengl.context;
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)

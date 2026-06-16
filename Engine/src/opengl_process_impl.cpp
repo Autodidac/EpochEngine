@@ -16,7 +16,7 @@
 #   include <glad/glad.h>
 #endif
 
-#include "opengl_context_detail.hpp"
+#include "renderers/opengl/opengl_context_detail.hpp"
 #include "opengl_process_impl.hpp"
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)

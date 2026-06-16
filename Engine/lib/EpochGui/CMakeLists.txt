@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.87.39 LANGUAGES CXX)
+project(EpochGui VERSION 0.87.42 LANGUAGES CXX)
 
-set(EPOCHGUI_SOURCE_ROOT "" CACHE PATH "Directory containing include/epoch/gui and src/gui.")
+set(EPOCHGUI_SOURCE_ROOT "" CACHE PATH "Directory containing include/epoch/gui and src/epochgui.")
 
 set(_epochgui_source_root_candidates)
 if(EPOCHGUI_SOURCE_ROOT)
@@ -20,7 +20,7 @@ set(_epochgui_resolved_source_root "")
 foreach(_epochgui_candidate IN LISTS _epochgui_source_root_candidates)
     get_filename_component(_epochgui_candidate_abs "${_epochgui_candidate}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
     if(EXISTS "${_epochgui_candidate_abs}/include/epoch/gui/floating_window.hpp"
-        AND EXISTS "${_epochgui_candidate_abs}/src/gui/floating_window.cpp")
+        AND EXISTS "${_epochgui_candidate_abs}/src/epochgui/floating_window.cpp")
         set(_epochgui_resolved_source_root "${_epochgui_candidate_abs}")
         break()
     endif()
@@ -29,11 +29,11 @@ endforeach()
 if(NOT _epochgui_resolved_source_root)
     message(FATAL_ERROR
         "EpochGui could not find its source root. Expected include/epoch/gui and "
-        "src/gui either beside this CMakeLists.txt or two directories above it. "
+        "src/epochgui either beside this CMakeLists.txt or two directories above it. "
         "Pass -DEPOCHGUI_SOURCE_ROOT=<path> to select another source root.")
 endif()
 
-set(EPOCHGUI_SOURCE_ROOT "${_epochgui_resolved_source_root}" CACHE PATH "Directory containing include/epoch/gui and src/gui." FORCE)
+set(EPOCHGUI_SOURCE_ROOT "${_epochgui_resolved_source_root}" CACHE PATH "Directory containing include/epoch/gui and src/epochgui." FORCE)
 
 set(EPOCHGUI_MODULE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "Directory containing modules/epoch.gui.ixx." FORCE)
 
@@ -52,11 +52,11 @@ set(EPOCHGUI_PUBLIC_HEADERS
 )
 
 set(EPOCHGUI_SOURCES
-    "${EPOCHGUI_SOURCE_ROOT}/src/gui/dockable_window.cpp"
-    "${EPOCHGUI_SOURCE_ROOT}/src/gui/dock_layout.cpp"
-    "${EPOCHGUI_SOURCE_ROOT}/src/gui/floating_window.cpp"
-    "${EPOCHGUI_SOURCE_ROOT}/src/gui/panel_host.cpp"
-    "${EPOCHGUI_SOURCE_ROOT}/src/gui/popup_layout.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/dockable_window.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/dock_layout.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/floating_window.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/panel_host.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/popup_layout.cpp"
 )
 
 add_library(EpochGui STATIC

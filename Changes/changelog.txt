@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.87.42]
+- Prepared the packaged updater release with a launcher-owned progress surface:
+  the normal launcher grid is hidden while an update is active, source rebuilds
+  expose Cancel only while the worker can still honor it, and verified handoff
+  states switch to Restart with an automatic countdown.
+- Restored editor updater restart countdown behavior and kept progress-bar
+  status text owned for the draw call so update modal labels stay stable.
+- Updated Windows handoff scripts to foreground the restarted Epoch runtime
+  after replacement while keeping updater workers hidden.
+- Moved reusable GUI implementation sources from `Engine/src/gui` to
+  `Engine/src/epochgui`, and moved context/backend implementation units into
+  per-backend `Engine/src/renderers/...` folders with CMake/MSVC metadata and
+  docs aligned.
+
 ## [v0.87.39]
 - Advanced the source line after the `v0.87.38` editor source-update handoff
   release while keeping the published stable runtime release on `v0.87.38`.

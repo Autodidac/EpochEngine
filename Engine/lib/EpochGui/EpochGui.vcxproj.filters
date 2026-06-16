@@ -43,19 +43,19 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="$(EpochGuiSourceRoot)src\gui\dockable_window.cpp">
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dockable_window.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="$(EpochGuiSourceRoot)src\gui\dock_layout.cpp">
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dock_layout.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="$(EpochGuiSourceRoot)src\gui\floating_window.cpp">
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\floating_window.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="$(EpochGuiSourceRoot)src\gui\panel_host.cpp">
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\panel_host.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="$(EpochGuiSourceRoot)src\gui\popup_layout.cpp">
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\popup_layout.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

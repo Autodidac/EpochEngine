@@ -63,6 +63,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -99,6 +100,7 @@ import epochengine;
 import engine.cli;
 import engine.version;
 import engine.updater;
+import launcher.update;
 import engine.input;
 import engine.components;
 
@@ -4796,15 +4798,7 @@ namespace epochnamespace::core
             epochnamespace::EditorContextSnapshot snapshot{};
         };
 
-        struct LauncherUpdateState
-        {
-            std::optional<std::future<epochnamespace::updater::UpdateCommandResult>> pending{};
-            epochnamespace::updater::UpdateCommandResult last_result{};
-            bool packaged_restart_ready{ false };
-            bool source_worker_running{ false };
-            bool source_restart_ready{ false };
-            std::string status{ "Update checks run in this launcher window." };
-        };
+        using LauncherUpdateState = epochnamespace::launcher_update::Flow;
 
         template <typename PumpFunc>
         int RunContextSessionLoop(MultiContextManager& mgr, PumpFunc&& pump_events, SessionMode startup_mode)
@@ -4834,107 +4828,14 @@ namespace epochnamespace::core
             auto pump = std::forward<PumpFunc>(pump_events);
             auto publish_launcher_update_status = [&](std::string status)
             {
-                launcherUpdate.status = std::move(status);
+                launcherUpdate.set_status(std::move(status));
                 for (auto& [_, session] : sessions)
                     session.menu.set_status(launcherUpdate.status);
             };
-            auto describe_launcher_update_result = [](const epochnamespace::updater::UpdateCommandResult& result)
+            auto publish_current_launcher_update_status = [&]()
             {
-                if (!result.status_message.empty())
-                    return result.status_message;
-
-                if (result.platform_build_checked && !result.platform_build_ok)
-                {
-                    const std::string job = result.platform_build_job.empty()
-                        ? std::string{ "platform build" }
-                        : result.platform_build_job;
-                    const std::string reason = result.platform_build_reason.empty()
-                        ? std::string{ "build status could not be proven." }
-                        : result.platform_build_reason;
-                    return "Update withheld until " + job + " is green: " + reason;
-                }
-
-                if (result.packaged_handoff_staged)
-                    return std::string{ "Packaged update staged. Press Update Epoch again to restart and finish." };
-
-                if (result.source_update_performed)
-                    return std::string{ "Source rebuild worker started. Keep this launcher open until it reports handoff-ready evidence." };
-
-                if (result.force_required || result.update_available)
-                {
-                    if (result.source_update_available && !result.packaged_update_available)
-                        return std::string{ "Source update is available. Press Update Epoch to build current main source." };
-                    return std::string{ "Update is available. Press Update Epoch to install." };
-                }
-
-                return std::string{ "Epoch is already current." };
-            };
-            auto read_update_log_tail = [](const std::filesystem::path& path, const std::uintmax_t maxBytes = 2400)
-            {
-                std::error_code sizeEc;
-                const auto size = std::filesystem::file_size(path, sizeEc);
-                if (sizeEc || size == 0)
-                    return std::string{};
-
-                std::ifstream in(path, std::ios::binary);
-                if (!in)
-                    return std::string{};
-
-                const std::uintmax_t start = size > maxBytes ? size - maxBytes : 0;
-                in.seekg(static_cast<std::streamoff>(start), std::ios::beg);
-                std::string text;
-                text.resize(static_cast<std::size_t>(size - start));
-                in.read(text.data(), static_cast<std::streamsize>(text.size()));
-                text.resize(static_cast<std::size_t>(in.gcount()));
-                return text;
-            };
-            auto update_log_contains = [](const std::string_view text, const std::string_view needle) noexcept
-            {
-                return !needle.empty() && text.find(needle) != std::string_view::npos;
-            };
-            auto last_nonempty_update_log_line = [](std::string_view text)
-            {
-                while (!text.empty() && (text.back() == '\n' || text.back() == '\r'))
-                    text.remove_suffix(1);
-
-                const std::size_t pos = text.find_last_of("\r\n");
-                std::string_view line = pos == std::string_view::npos ? text : text.substr(pos + 1);
-                while (!line.empty() && (line.front() == '\n' || line.front() == '\r'))
-                    line.remove_prefix(1);
-                return std::string{ line };
-            };
-            auto pump_launcher_source_update = [&]()
-            {
-                if (!launcherUpdate.source_worker_running || launcherUpdate.source_restart_ready)
-                    return;
-
-                const std::string handoffTail = read_update_log_tail(epochnamespace::updater::update_handoff_log_path());
-                const std::string sourceTail = read_update_log_tail(epochnamespace::updater::source_update_log_path());
-                const std::string_view evidence = !handoffTail.empty()
-                    ? std::string_view{ handoffTail }
-                    : std::string_view{ sourceTail };
-
-                if (update_log_contains(handoffTail, "[ERROR]") || update_log_contains(sourceTail, "[ERROR]"))
-                {
-                    launcherUpdate.source_worker_running = false;
-                    const std::string line = last_nonempty_update_log_line(evidence);
-                    publish_launcher_update_status(line.empty()
-                        ? "Source update failed. Check epoch_source_update.log beside EpochEditor.exe."
-                        : "Source update failed: " + line);
-                    return;
-                }
-
-                if (update_log_contains(handoffTail, "Waiting for runtime handoff")
-                    || update_log_contains(sourceTail, "Built runtime ready at"))
-                {
-                    launcherUpdate.source_restart_ready = true;
-                    publish_launcher_update_status("Source build is ready. Press Update Epoch again to close and let the handoff finish.");
-                    return;
-                }
-
-                const std::string line = last_nonempty_update_log_line(evidence);
-                if (!line.empty())
-                    publish_launcher_update_status("Source update running: " + line);
+                for (auto& [_, session] : sessions)
+                    session.menu.set_status(launcherUpdate.status);
             };
             auto stash_editor_switch_snapshot = [&](
                 epochnamespace::core::ContextType targetType,
@@ -6130,19 +6031,46 @@ namespace epochnamespace::core
                         case SessionMode::Menu:
                         {
                             ensure_menu_initialized(session, ctx);
-                            if (launcherUpdate.pending
-                                && launcherUpdate.pending->wait_for(std::chrono::milliseconds{ 0 }) == std::future_status::ready)
+                            bool suppress_menu_present = false;
+                            auto finish_launcher_update_restart = [&]() -> bool
+                            {
+                                if (launcherUpdate.restart_kind() == epochnamespace::launcher_update::RestartKind::packaged)
+                                {
+                                    launcherUpdate.mark_packaged_restarting();
+                                    publish_current_launcher_update_status();
+                                    if (epochnamespace::updater::launch_staged_update_handoff())
+                                    {
+                                        suppress_menu_present = true;
+                                        session.mode = SessionMode::Exit;
+                                        ctx_running = false;
+                                        win->running = false;
+                                        return true;
+                                    }
+
+                                    launcherUpdate.mark_packaged_restart_failed();
+                                    publish_current_launcher_update_status();
+                                    return false;
+                                }
+
+                                if (launcherUpdate.restart_kind() == epochnamespace::launcher_update::RestartKind::source)
+                                {
+                                    launcherUpdate.mark_source_restart_requested();
+                                    publish_current_launcher_update_status();
+                                    suppress_menu_present = true;
+                                    session.mode = SessionMode::Exit;
+                                    ctx_running = false;
+                                    win->running = false;
+                                    return true;
+                                }
+
+                                return false;
+                            };
+                            if (launcherUpdate.pending_ready())
                             {
                                 try
                                 {
-                                    launcherUpdate.last_result = launcherUpdate.pending->get();
-                                    launcherUpdate.pending.reset();
-                                    launcherUpdate.packaged_restart_ready = launcherUpdate.last_result.packaged_handoff_staged;
-                                    launcherUpdate.source_worker_running =
-                                        launcherUpdate.last_result.source_update_performed
-                                        && !launcherUpdate.last_result.packaged_update_performed;
-                                    launcherUpdate.source_restart_ready = false;
-                                    publish_launcher_update_status(describe_launcher_update_result(launcherUpdate.last_result));
+                                    launcherUpdate.complete_pending_result(launcherUpdate.take_pending_result());
+                                    publish_current_launcher_update_status();
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::INFO,
                                         launcherUpdate.status,
@@ -6150,19 +6078,26 @@ namespace epochnamespace::core
                                 }
                                 catch (...)
                                 {
-                                    launcherUpdate.pending.reset();
-                                    launcherUpdate.packaged_restart_ready = false;
-                                    launcherUpdate.source_worker_running = false;
-                                    launcherUpdate.source_restart_ready = false;
-                                    publish_launcher_update_status("Update failed before the updater could report evidence.");
+                                    launcherUpdate.complete_pending_error();
+                                    publish_current_launcher_update_status();
                                     logger::get(kEditorLog).log(
                                         logger::LogLevel::Error,
                                         launcherUpdate.status,
                                         std::source_location::current());
                                 }
                             }
-                            pump_launcher_source_update();
-                            session.menu.set_status(launcherUpdate.status);
+                            launcherUpdate.pump_source_worker();
+                            publish_current_launcher_update_status();
+                            session.menu.set_update_panel_state(launcherUpdate.panel_state());
+                            if (launcherUpdate.is_restart_ready() && launcherUpdate.restart_countdown_expired())
+                            {
+                                (void)finish_launcher_update_restart();
+                                if (!ctx_running)
+                                {
+                                    clear_before_ui_frame(ctx);
+                                    break;
+                                }
+                            }
 
                             int mx = 0;
                             int my = 0;
@@ -6201,7 +6136,6 @@ namespace epochnamespace::core
                                 enter_pressed);
                             gui::end_frame();
 
-                            bool suppress_menu_present = false;
                             if (choice)
                             {
                                 if (*choice == epochnamespace::menu::Choice::Exit)
@@ -6213,51 +6147,38 @@ namespace epochnamespace::core
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::UpdateLatest)
                                 {
-                                    if (launcherUpdate.pending)
+                                    if (launcherUpdate.has_pending_work())
                                     {
                                         publish_launcher_update_status("Update is already checking or staging. Keep this launcher open.");
                                     }
                                     else if (launcherUpdate.packaged_restart_ready)
                                     {
-                                        if (epochnamespace::updater::launch_staged_update_handoff())
-                                        {
-                                            publish_launcher_update_status("Restarting Epoch to finish the staged package update.");
-                                            suppress_menu_present = true;
-                                            session.mode = SessionMode::Exit;
-                                            ctx_running = false;
-                                            win->running = false;
-                                        }
-                                        else
-                                        {
-                                            publish_launcher_update_status("Restart failed: staged update handoff script was not found.");
-                                        }
+                                        (void)finish_launcher_update_restart();
                                     }
                                     else if (launcherUpdate.source_restart_ready)
                                     {
-                                        publish_launcher_update_status("Closing Epoch so the source handoff can replace and restart the runtime.");
-                                        suppress_menu_present = true;
-                                        session.mode = SessionMode::Exit;
-                                        ctx_running = false;
-                                        win->running = false;
+                                        (void)finish_launcher_update_restart();
                                     }
                                     else if (launcherUpdate.source_worker_running)
                                     {
-                                        publish_launcher_update_status("Source update is still building. Keep this launcher open until it reports ready.");
+                                        launcherUpdate.request_source_cancel(
+                                            epochnamespace::updater::request_source_update_cancel());
+                                        publish_current_launcher_update_status();
                                     }
                                     else
                                     {
-                                        publish_launcher_update_status("Checking GitHub releases, source version, and platform build gate...");
                                         logger::get(kEditorLog).log(
                                             logger::LogLevel::INFO,
                                             "Launcher update requested in-place; keeping the window open while the updater reports evidence.",
                                             std::source_location::current());
-                                        launcherUpdate.pending.emplace(std::async(std::launch::async, [] {
+                                        launcherUpdate.begin_update_check(std::async(std::launch::async, [] {
                                             return epochnamespace::updater::run_update_command(
                                                 default_update_channel(),
                                                 true,
                                                 false,
                                                 epochnamespace::updater::UpdateHandoffMode::StageForRestart);
                                         }));
+                                        publish_current_launcher_update_status();
                                     }
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)

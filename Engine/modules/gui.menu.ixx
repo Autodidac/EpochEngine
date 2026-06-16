@@ -37,6 +37,7 @@ module; // REQUIRED global module fragment
 #include <cstdlib>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <source_location>
 #include <string>
 #include <string_view>
@@ -115,6 +116,20 @@ export namespace epochnamespace::menu
         gui::Vec2   size;
     };
 
+    struct LauncherUpdatePanelState
+    {
+        bool active = false;
+        bool action_enabled = true;
+        bool restart_ready = false;
+        bool cancel_available = false;
+        float progress = 0.0f;
+        std::string title{ "Update Epoch" };
+        std::string status{};
+        std::string progress_label{ "Update" };
+        std::string progress_status{ "waiting" };
+        std::string action_label{ "Update Epoch" };
+    };
+
     struct EditorCommandDescriptor {
         EditorCommandChoice choice;
         std::string_view label;
@@ -139,6 +154,7 @@ export namespace epochnamespace::menu
         int cachedHeight = -1;
         int columns = 1;
         int rows = 0;
+        std::size_t inputGuardFrames = 0;
 
         static constexpr int ExpectedColumns = 4;
         static constexpr float LayoutSpacing = 32.f;
@@ -150,6 +166,7 @@ export namespace epochnamespace::menu
         float layoutWidth = 0.0f;
         float layoutHeight = 0.0f;
         std::string statusLine{};
+        LauncherUpdatePanelState updatePanel{};
 
         static constexpr std::array kLauncherChoices = {
             ChoiceDescriptor{ Choice::ProjectTwoDStudio, "2D Studio", { 256.0f, 96.0f } },
@@ -219,6 +236,22 @@ export namespace epochnamespace::menu
         [[nodiscard]] const std::string& status() const noexcept
         {
             return statusLine;
+        }
+
+        void set_update_panel_state(LauncherUpdatePanelState state)
+        {
+            const bool layoutModeChanged = updatePanel.active != state.active
+                || updatePanel.restart_ready != state.restart_ready
+                || updatePanel.cancel_available != state.cancel_available
+                || updatePanel.action_label != state.action_label;
+            updatePanel = std::move(state);
+            if (layoutModeChanged)
+                inputGuardFrames = (std::max)(inputGuardFrames, std::size_t{ 2u });
+        }
+
+        void guard_next_input_frames(const std::size_t frameCount = 2u) noexcept
+        {
+            inputGuardFrames = (std::max)(inputGuardFrames, frameCount);
         }
 
         // ----------------------------------------------------
@@ -327,6 +360,7 @@ export namespace epochnamespace::menu
 
             set_max_columns(core::cli::updater_shell_requested ? 1 : core::cli::menu_columns);
             autoCommandConsumed = false;
+            guard_next_input_frames();
 
             if (core::cli::updater_shell_requested)
             {
@@ -430,7 +464,7 @@ export namespace epochnamespace::menu
             bool clampToWindow)
         {
             if (!initialized) return std::nullopt;
-            if (core::cli::updater_shell_requested)
+            if (core::cli::updater_shell_requested && !updatePanel.active)
                 return update_and_draw_updater_shell(
                     ctx,
                     win,
@@ -459,6 +493,10 @@ export namespace epochnamespace::menu
 
             if (currentWidth != cachedWidth || currentHeight != cachedHeight)
                 recompute_layout(ctx, currentWidth, (std::max)(1, currentHeight - static_cast<int>(kHeaderOffsetY)));
+
+            const bool inputGuarded = inputGuardFrames > 0u;
+            if (inputGuardFrames > 0u)
+                --inputGuardFrames;
 
             int mx = 0, my = 0;
             ctx->get_mouse_position_safe(mx, my);
@@ -520,7 +558,77 @@ export namespace epochnamespace::menu
                     base.first + static_cast<int>(std::round(framePosition.x)),
                     base.second + static_cast<int>(std::round(framePosition.y + kHeaderOffsetY))
                 };
-                };
+            };
+
+            if (updatePanel.active)
+            {
+                const gui::Vec2 framePosition = windowPosition;
+                const gui::Vec2 frameSize = (clampToWindow && windowSize.x > 0.f && windowSize.y > 0.f)
+                    ? windowSize
+                    : gui::Vec2{
+                        static_cast<float>(currentWidth),
+                        static_cast<float>(currentHeight)
+                    };
+
+                gui::push_theme(gui::ThemeVariant::ClassicLauncher);
+                gui::begin_window(title, framePosition, frameSize);
+
+                const float contentWidth = (std::max)(420.0f, (std::min)(frameSize.x - 96.0f, 760.0f));
+                const float contentX = framePosition.x + (frameSize.x - contentWidth) * 0.5f;
+                const float lineHeight = gui::line_height();
+                const float textWidth = (std::max)(240.0f, contentWidth - 16.0f);
+                const float buttonHeight = (std::max)(96.0f, (std::min)(132.0f, frameSize.y * 0.18f));
+                const float statusHeight = updatePanel.status.empty()
+                    ? lineHeight
+                    : gui::wrapped_text_height(updatePanel.status, textWidth);
+                const float stackHeight =
+                    lineHeight +
+                    18.0f +
+                    lineHeight +
+                    18.0f +
+                    statusHeight +
+                    22.0f +
+                    28.0f +
+                    28.0f +
+                    buttonHeight;
+                const float contentY = framePosition.y + (std::max)(48.0f, (frameSize.y - stackHeight) * 0.5f);
+
+                gui::set_cursor({ contentX, contentY });
+                gui::label(updatePanel.title);
+
+                gui::set_cursor({ contentX, contentY + lineHeight + 18.0f });
+                gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
+
+                gui::set_cursor({ contentX + 8.0f, contentY + lineHeight * 2.0f + 36.0f });
+                if (!updatePanel.status.empty())
+                    gui::wrapped_label(updatePanel.status, textWidth);
+                else
+                    gui::wrapped_label("Preparing update evidence.", textWidth);
+
+                gui::set_cursor({ contentX, contentY + lineHeight * 2.0f + 58.0f + statusHeight });
+                gui::progress_bar(gui::ProgressBarOptions{
+                    .label = updatePanel.progress_label,
+                    .status = updatePanel.progress_status,
+                    .value = std::clamp(updatePanel.progress, 0.0f, 1.0f),
+                    .size = { contentWidth, 24.0f },
+                    .show_percent = true
+                });
+
+                gui::set_cursor({ contentX, contentY + lineHeight * 2.0f + 112.0f + statusHeight });
+                const bool clicked = gui::button(updatePanel.action_label, { contentWidth, buttonHeight });
+
+                gui::end_window();
+                gui::pop_theme();
+
+                std::optional<Choice> chosen{};
+                if (!inputGuarded && updatePanel.action_enabled && clicked)
+                    chosen = Choice::UpdateLatest;
+                else if (!inputGuarded && updatePanel.action_enabled && enterPressed && !prevEnter)
+                    chosen = Choice::UpdateLatest;
+
+                prevEnter = enterPressed;
+                return chosen;
+            }
 
             int hover = -1;
             for (int i = 0; i < totalItems; ++i) {
@@ -537,7 +645,7 @@ export namespace epochnamespace::menu
             if (downPressed && !prevDown) move_vertical(+1);
             if (leftPressed && !prevLeft) selection = (selection == 0) ? totalItems - 1 : selection - 1;
             if (rightPressed && !prevRight) selection = (selection + 1) % totalItems;
-            if (!upPressed && !downPressed && !leftPressed && !rightPressed && hover >= 0)
+            if (!inputGuarded && !upPressed && !downPressed && !leftPressed && !rightPressed && hover >= 0)
                 selection = hover;
 
             prevUp = upPressed; prevDown = downPressed;
@@ -565,7 +673,7 @@ export namespace epochnamespace::menu
 
                 const std::string label{ descriptors[i].label };
 
-                if (gui::button(label, descriptors[i].size)) {
+                if (gui::button(label, descriptors[i].size) && !inputGuarded) {
                     selection = size_t(i);
                     chosen = descriptors[i].choice;
                 }
@@ -575,7 +683,7 @@ export namespace epochnamespace::menu
             gui::pop_theme();
 
             if (chosen) return chosen;
-            if (enterPressed && !prevEnter)
+            if (!inputGuarded && enterPressed && !prevEnter)
                 return descriptors[selection].choice;
 
             prevEnter = enterPressed;
@@ -694,6 +802,8 @@ export namespace epochnamespace::menu
             selection = 0;
             prevUp = prevDown = prevLeft = prevRight = prevEnter = false;
             autoCommandConsumed = false;
+            inputGuardFrames = 0;
+            updatePanel = {};
             initialized = false;
         }
     };

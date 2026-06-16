@@ -249,16 +249,16 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h">
       <Filter>Resource Files</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\core_context_backends.hpp">
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\core\core_context_backends.hpp">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\directx_context_detail.hpp">
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx_context_detail.hpp">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_context_detail.hpp">
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl_context_detail.hpp">
       <Filter>Header Files\engine</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp">
@@ -548,6 +548,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.menu.ixx">
       <Filter>Module Files\ixx\gui</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\launcher.update.ixx">
+      <Filter>Module Files\ixx\gui</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\net.ixx">
       <Filter>Module Files\ixx\core\networking</Filter>
     </ClCompile>
@@ -653,10 +656,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\font.renderer.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.host.linux.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\host\engine.context.host.linux.cpp">
       <Filter>Source Files\core\crossplatform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.host.win.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\host\engine.context.host.win.cpp">
       <Filter>Source Files\core\crossplatform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\saveload.system.ixx">
@@ -752,16 +755,16 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.platform.descriptors.cpp">
       <Filter>Source Files\core\crossplatform\backends\vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.platform.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.platform.context.cpp">
       <Filter>Source Files\core\crossplatform\backends\vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\engine.context.cpp">
       <Filter>Source Files\core\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.context_buffers.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_buffers.cpp">
       <Filter>Source Files\core\context\vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.context-texture.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context-texture.cpp">
       <Filter>Source Files\core\context\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.dispatch_storage.cpp">
@@ -932,7 +935,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.headers.cpp">
       <Filter>Source Files\core\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.platform.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\platform\epoch.platform.context.cpp">
       <Filter>Source Files\core\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.platform.window.cpp">
@@ -959,31 +962,31 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\assets.streaming.ixx">
       <Filter>Module Files\ixx\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_raylib.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\raylib\context_raylib.cpp">
       <Filter>Source Files\core\context\raylib</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_render.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_render.cpp">
       <Filter>Source Files\core\context\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_preview.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_preview.cpp">
       <Filter>Source Files\core\context\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_present.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_present.cpp">
       <Filter>Source Files\core\context\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context_draw.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_draw.cpp">
       <Filter>Source Files\core\context\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\render\software.context_capture.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_capture.cpp">
       <Filter>Source Files\render</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\software.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context.cpp">
       <Filter>Source Files\core\context\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.cpp">
       <Filter>Source Files\core\context\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_context_detail.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl_context_detail.cpp">
       <Filter>Source Files\core\context\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.process.cpp">
@@ -992,22 +995,22 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.init.cpp">
       <Filter>Source Files\core\context\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context.cpp">
       <Filter>Source Files\core\context\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.cleanup.cpp">
       <Filter>Source Files\core\context\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_opengl.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\context_opengl.cpp">
       <Filter>Source Files\core\context\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_sdl.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sdl\context_sdl.cpp">
       <Filter>Source Files\core\context\sdl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_directx.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\context_directx.cpp">
       <Filter>Source Files\core\context\directx</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.context.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.context.cpp">
       <Filter>Source Files\core\context\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.device.cpp">
@@ -1022,13 +1025,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\directx.state.cpp">
       <Filter>Source Files\core\context\directx</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_software.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\context_software.cpp">
       <Filter>Source Files\core\context\software</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_vulkan.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\context_vulkan.cpp">
       <Filter>Source Files\core\context\vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\context_sfml.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sfml\context_sfml.cpp">
       <Filter>Source Files\core\context\sfml</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.backend.cpp">

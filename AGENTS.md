@@ -126,8 +126,8 @@
 - Public/external headers belong under `Engine/include/...`; internal
   implementation headers stay near owning source under `Engine/src/...` or
   module-private paths.
-- Prefer owned folders over flat dumps as systems mature: `src/gui`,
-  `src/editor`, `src/project`, `src/packages`, `src/render/<backend>`,
+- Prefer owned folders over flat dumps as systems mature: `src/epochgui`,
+  `src/editor`, `src/project`, `src/packages`, `src/renderers/<backend>`,
   `src/ai`, `src/platform`, and similar ownership boundaries.
 - Renames and moves are source work, not cosmetics. Before moving files,
   inventory includes/imports, module ownership, MSVC projects/filters, CMake
