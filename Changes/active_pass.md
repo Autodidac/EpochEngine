@@ -109,6 +109,9 @@ contracts instead of drift.
   Release configure/build plus CTest, Linux Clang Release full-engine build plus
   CTest, and staged Windows/Linux package `--version` checks before archive
   checksums were written.
+- Source checkpoint: `main` is advanced to v0.87.43 after the v0.87.42
+  Windows/Linux packaged-updater release while the published stable runtime
+  remains v0.87.42.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30
