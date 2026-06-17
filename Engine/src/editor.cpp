@@ -524,7 +524,10 @@ namespace epochnamespace
             gui::Vec2 sourceUpdateConfirmModalStableViewport{};
             bool updateInstallPending{ false };
             bool updateSourceInstallPending{ false };
+            bool updateSourceCancelRequested{ false };
+            bool updateProjectSourceDownloadPending{ false };
             std::chrono::steady_clock::time_point updateOperationStartedAt{};
+            std::chrono::steady_clock::time_point updateRetryAfter{};
             bool updateRestartCountdownArmed{ false };
             std::chrono::steady_clock::time_point updateRestartCountdownStartedAt{};
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
@@ -5318,6 +5321,24 @@ namespace epochnamespace
         epochnamespace::previewgrid::reset_camera(ctx.get());
     }
 
+    void editor_suppress_startup_update_check(const std::shared_ptr<core::Context>& ctx)
+    {
+        if (!ctx)
+            return;
+
+        auto& editor = editor_state_for(ctx);
+        editor.autoUpdateCheckQueued = false;
+        if (editor.updateCheckPending.has_value()
+            || editor.updateState == EditorUpdateState::SourceWorkerRunning
+            || editor.updateState == EditorUpdateState::RestartReady)
+        {
+            return;
+        }
+
+        editor.showUpdateConfirmModal = false;
+        editor.showSourceUpdateConfirmModal = false;
+    }
+
     void editor_reset_transient_ui(const core::Context* ctx)
     {
         if (!ctx)
@@ -5571,6 +5592,10 @@ namespace epochnamespace
         editor.autoUpdateCheckQueued = false;
         editor.updateInstallPending = false;
         editor.updateSourceInstallPending = false;
+        editor.updateSourceCancelRequested = false;
+        editor.updateProjectSourceDownloadPending = false;
+        editor.updateOperationStartedAt = {};
+        editor.updateRetryAfter = {};
         editor.updateRestartCountdownArmed = false;
         editor.updateRestartCountdownStartedAt = {};
         editor.updateConfirmModalStableSize = {};
@@ -5947,6 +5972,12 @@ namespace epochnamespace
                 const bool sourceOnlyUpdate =
                     editor.lastUpdateCheck.source_update_available
                     && !editor.lastUpdateCheck.packaged_update_available;
+                const bool installableUpdate =
+                    editor.lastUpdateCheck.update_available
+                    || editor.lastUpdateCheck.force_required
+                    || editor.lastUpdateCheck.packaged_update_available
+                    || editor.lastUpdateCheck.source_update_available
+                    || editor.lastUpdateCheck.packaged_handoff_staged;
                 const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
                 const bool updateRunning = editor.updateCheckPending.has_value() || sourceWorkerRunning;
                 const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
@@ -5955,7 +5986,10 @@ namespace epochnamespace
                     .sourceOnlyUpdate = sourceOnlyUpdate,
                     .sourceWorkerRunning = sourceWorkerRunning,
                     .updateRunning = updateRunning,
-                    .restartReady = restartReady
+                    .restartReady = restartReady,
+                    .installableUpdate = installableUpdate,
+                    .projectSourceDownload = editor.updateProjectSourceDownloadPending,
+                    .sourceCancelAvailable = editor_source_cancel_available(editor)
                 };
             };
         const auto updateConfirmModalLayout = editor_update_modal::measure_update_layout(
@@ -9688,7 +9722,7 @@ namespace epochnamespace
         if (editor.showAboutModal)
         {
             editor.openMenu = TopMenu::None;
-            const gui::Vec2 modalSize{ 456.0f, 222.0f };
+            const gui::Vec2 modalSize{ 560.0f, 292.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
@@ -9713,7 +9747,40 @@ namespace epochnamespace
             gui::label(std::string("Renderer: ") + renderer_name(ctx));
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 110.0f });
             gui::label(std::string("Project: ") + editor.projectName);
-            gui::set_cursor({ contentPos.x + 8.0f, contentPos.y + 136.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 136.0f });
+            gui::wrapped_label(
+                "Update Epoch uses the same modern update path as the toolbar button. Project Source Code Download caches a source snapshot as project material and does not update or restart Epoch.",
+                contentWidth);
+            const gui::Vec2 buttonRow{ contentPos.x + 8.0f, contentY + 198.0f };
+            gui::set_cursor(buttonRow);
+            if (gui::button("Update Epoch", { 154.0f, 30.0f }))
+            {
+                editor.showAboutModal = false;
+                editor.showUpdateConfirmModal = true;
+                editor.showSourceUpdateConfirmModal = false;
+                push_editor_log(editor, "[update] Update modal opened from About.");
+                if (editor.updateState != EditorUpdateState::Available
+                    && editor.updateState != EditorUpdateState::RestartReady
+                    && !editor.updateCheckPending.has_value()
+                    && !updater::source_update_worker_active())
+                {
+                    start_editor_update_check(editor);
+                }
+                else if (updater::source_update_worker_active())
+                {
+                    adopt_editor_source_update_worker(editor);
+                }
+            }
+            gui::set_cursor({ buttonRow.x + 170.0f, buttonRow.y });
+            if (gui::button("Project Source", { 164.0f, 30.0f }))
+            {
+                editor.showAboutModal = false;
+                editor.showUpdateConfirmModal = false;
+                editor.showSourceUpdateConfirmModal = true;
+                editor.updateStatus = "Project Source Code Download stores the latest source snapshot in the executable-local project source cache.";
+                push_editor_log(editor, "[update] Project source code download modal opened from About.");
+            }
+            gui::set_cursor({ buttonRow.x + 350.0f, buttonRow.y });
             if (gui::button("Close", { 120.0f, 30.0f }))
                 editor.showAboutModal = false;
             gui::end_modal_window();

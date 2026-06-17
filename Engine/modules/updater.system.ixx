@@ -37,9 +37,11 @@ module;
 #include <charconv>
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <optional>
 #include <regex>
 #include <source_location>
@@ -223,6 +225,32 @@ namespace epochnamespace::updater
                 std::istreambuf_iterator<char>{ in },
                 std::istreambuf_iterator<char>{}
             };
+
+            text = strip_utf8_bom(std::move(text));
+            text = normalize_line_endings(std::move(text));
+            return text;
+        }
+
+        [[nodiscard]] inline std::string read_text_file_tail(
+            const std::filesystem::path& path,
+            const std::uintmax_t max_bytes = 65536)
+        {
+            std::error_code size_ec;
+            const auto size = std::filesystem::file_size(path, size_ec);
+            if (size_ec || size == 0)
+                return {};
+
+            std::ifstream in(path, std::ios::binary);
+            if (!in)
+                return {};
+
+            const std::uintmax_t start = size > max_bytes ? size - max_bytes : 0;
+            in.seekg(static_cast<std::streamoff>(start), std::ios::beg);
+
+            std::string text;
+            text.resize(static_cast<std::size_t>(size - start));
+            in.read(text.data(), static_cast<std::streamsize>(text.size()));
+            text.resize(static_cast<std::size_t>(std::max<std::streamsize>(0, in.gcount())));
 
             text = strip_utf8_bom(std::move(text));
             text = normalize_line_endings(std::move(text));
@@ -517,7 +545,12 @@ namespace epochnamespace::updater
         [[nodiscard]] inline std::filesystem::path runtime_cache_root()
         {
             std::error_code ec;
-            auto root = epoch::core::path::runtime_root_dir();
+            auto root = env_path("EPOCH_UPDATER_CACHE_ROOT");
+            if (!root.empty())
+                return ensure_directory(root);
+
+            if (root.empty())
+                root = epoch::core::path::executable_dir();
             if (root.empty())
                 root = std::filesystem::current_path(ec);
             if (root.empty() || ec)
@@ -970,12 +1003,15 @@ namespace epochnamespace::updater
                 return result;
             }
 
+            bool attempted_job_metadata = false;
+            bool parsed_job_metadata = false;
             for (const auto& run_object : extract_json_objects(workflow_runs))
             {
                 const auto jobs_url = extract_json_string_field(run_object, "jobs_url");
                 if (jobs_url.empty())
                     continue;
 
+                attempted_job_metadata = true;
                 const auto jobs_json_path =
                     make_temp_download_path("actions_jobs").replace_extension(".json");
                 if (!download_file(jobs_url, jobs_json_path.string()))
@@ -990,6 +1026,7 @@ namespace epochnamespace::updater
                 if (jobs_array.empty())
                     continue;
 
+                parsed_job_metadata = true;
                 for (const auto& job_object : extract_json_objects(jobs_array))
                 {
                     const auto candidate_name = extract_json_string_field(job_object, "name");
@@ -1027,8 +1064,24 @@ namespace epochnamespace::updater
                 }
             }
 
+            if (attempted_job_metadata && !parsed_job_metadata)
+            {
+                result.reason = "Could not download GitHub Actions job metadata.";
+                return result;
+            }
+
             result.reason = "No matching platform build job was found for '" + job_name + "'.";
             return result;
+        }
+
+        [[nodiscard]] inline bool build_status_failure_is_transient(const BuildStatusResult& result)
+        {
+            if (result.checked || result.pending || result.ok)
+                return false;
+
+            return result.reason.find("Could not download GitHub Actions") != std::string::npos
+                || result.reason.find("GitHub Actions run metadata was empty") != std::string::npos
+                || result.reason.find("GitHub Actions response did not contain workflow runs") != std::string::npos;
         }
 
         [[nodiscard]] inline std::string capture_process_output(
@@ -1362,7 +1415,7 @@ namespace epochnamespace::updater
                 return {};
             }
 
-            const std::array<std::vector<std::string>, 3> setup_steps{
+            const std::array<std::vector<std::string>, 4> setup_steps{
                 std::vector<std::string>{
                     "--git-dir=" + local_git_dir.string(),
                     "--work-tree=" + vcpkg_root.string(),
@@ -1376,6 +1429,13 @@ namespace epochnamespace::updater
                     "config",
                     "user.email",
                     "updater@epoch.local"
+                },
+                std::vector<std::string>{
+                    "--git-dir=" + local_git_dir.string(),
+                    "--work-tree=" + vcpkg_root.string(),
+                    "config",
+                    "core.longpaths",
+                    "true"
                 },
                 std::vector<std::string>{
                     "--git-dir=" + local_git_dir.string(),
@@ -1509,33 +1569,78 @@ namespace epochnamespace::updater
                 return {};
             }
 
-            std::filesystem::path extracted_root;
-            for (const auto& entry : std::filesystem::directory_iterator(staging_dir, ec))
+            std::filesystem::path bootstrap_candidate;
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(staging_dir, ec))
             {
                 if (ec)
                     break;
 
-                if (entry.is_directory())
+                if (entry.is_regular_file()
+                    && entry.path().filename() == VCPKG_BOOTSTRAP_SCRIPT_NAME())
                 {
-                    extracted_root = entry.path();
+                    bootstrap_candidate = entry.path();
                     break;
                 }
             }
 
-            if (extracted_root.empty())
+            if (bootstrap_candidate.empty())
             {
-                append_log_line(log_path, "[ERROR] Managed vcpkg archive did not contain an extracted root directory.");
+                append_log_line(log_path, "[ERROR] Managed vcpkg archive did not contain bootstrap-vcpkg.bat.");
                 std::filesystem::remove(archive_path, ec);
                 std::filesystem::remove_all(staging_dir, ec);
                 return {};
             }
 
+            const std::filesystem::path extracted_root = bootstrap_candidate.parent_path();
+            const auto normalized_for_compare = [](const std::filesystem::path& path)
+                {
+                    std::error_code path_ec;
+                    auto absolute = std::filesystem::absolute(path, path_ec);
+                    if (path_ec)
+                    {
+                        path_ec.clear();
+                        absolute = path;
+                    }
+
+                    auto text = absolute.lexically_normal().string();
+#if defined(_WIN32)
+                    text = lower_ascii(std::move(text));
+#endif
+                    return text;
+                };
             ec.clear();
-            std::filesystem::rename(extracted_root, managed_root, ec);
-            if (ec)
+            const bool direct_staging_root =
+                normalized_for_compare(extracted_root)
+                == normalized_for_compare(staging_dir);
+            if (direct_staging_root)
             {
-                ec.clear();
-                std::filesystem::create_directories(managed_root.parent_path(), ec);
+                std::filesystem::create_directories(managed_root, ec);
+                if (ec)
+                {
+                    append_log_line(log_path, "[ERROR] Failed to prepare managed vcpkg destination directory.");
+                    std::filesystem::remove(archive_path, ec);
+                    std::filesystem::remove_all(staging_dir, ec);
+                    return {};
+                }
+
+                std::filesystem::copy(
+                    staging_dir,
+                    managed_root,
+                    std::filesystem::copy_options::recursive
+                    | std::filesystem::copy_options::overwrite_existing,
+                    ec);
+
+                if (ec)
+                {
+                    append_log_line(log_path, "[ERROR] Failed to copy managed vcpkg files into place.");
+                    std::filesystem::remove(archive_path, ec);
+                    std::filesystem::remove_all(staging_dir, ec);
+                    return {};
+                }
+            }
+            else
+            {
+                std::filesystem::create_directories(managed_root, ec);
                 if (ec)
                 {
                     append_log_line(log_path, "[ERROR] Failed to prepare managed vcpkg destination directory.");
@@ -1591,7 +1696,7 @@ namespace epochnamespace::updater
                 append_log_line(
                     log_path,
                     "[ERROR] Managed vcpkg bootstrap failed with exit code " + std::to_string(bootstrap_exit));
-                log_error("Managed vcpkg bootstrap failed. See epoch_source_update.log for details.");
+                log_error("Managed vcpkg bootstrap failed. See logs/epoch_source_update.log for details.");
                 return {};
             }
 
@@ -2275,6 +2380,18 @@ namespace epochnamespace::updater
                     24));
         }
 
+        [[nodiscard]] inline std::filesystem::path source_run_tools_root(
+            const std::filesystem::path& target_binary,
+            const std::string_view run_token)
+        {
+            return ensure_directory(
+                target_binary.parent_path()
+                / CACHE_ROOT_SUBDIR()
+                / UPDATER_CACHE_SUBDIR()
+                / "t"
+                / shorten_token(std::string{ run_token }, 16));
+        }
+
         [[nodiscard]] inline std::filesystem::path source_archive_path(const std::filesystem::path& target_binary)
         {
             return source_work_root(target_binary) / "source_snapshot";
@@ -2350,6 +2467,36 @@ namespace epochnamespace::updater
             return source_work_root(target_binary) / "src";
         }
 
+        [[nodiscard]] inline std::filesystem::path project_source_cache_root()
+        {
+            return ensure_directory(runtime_cache_root() / "project_sources" / "epoch_engine");
+        }
+
+        [[nodiscard]] inline std::filesystem::path project_source_downloads_dir()
+        {
+            return ensure_directory(project_source_cache_root() / "downloads");
+        }
+
+        [[nodiscard]] inline std::filesystem::path project_source_archive_path(
+            const std::string_view source_url)
+        {
+            auto archive_path = project_source_downloads_dir() / "source_snapshot";
+            const auto extension = archive_extension_from_url(source_url);
+            if (!extension.empty())
+                archive_path += extension;
+            return archive_path;
+        }
+
+        [[nodiscard]] inline std::filesystem::path project_source_staging_dir()
+        {
+            return project_source_cache_root() / "staging";
+        }
+
+        [[nodiscard]] inline std::filesystem::path project_source_final_dir()
+        {
+            return project_source_cache_root() / "source";
+        }
+
         [[nodiscard]] inline std::filesystem::path source_staging_dir(
             const std::filesystem::path& target_binary,
             const std::string_view run_token)
@@ -2372,6 +2519,19 @@ namespace epochnamespace::updater
         [[nodiscard]] inline std::filesystem::path source_active_run_path(const std::filesystem::path& target_binary)
         {
             return target_binary.parent_path() / "epoch_source_update.active";
+        }
+
+        struct SourceActiveMarker
+        {
+            std::filesystem::path run_dir{};
+            unsigned long process_id{};
+            bool has_process_id{ false };
+        };
+
+        [[nodiscard]] inline bool source_cancel_requested(const std::filesystem::path& target_binary)
+        {
+            std::error_code ec;
+            return std::filesystem::exists(source_cancel_path(target_binary), ec) && !ec;
         }
 
         [[nodiscard]] inline std::string normalized_absolute_path_string(
@@ -2473,6 +2633,386 @@ namespace epochnamespace::updater
                 if (managed_source_cache && path_is_inside(work_root, path))
                     remove_update_cache_path_best_effort(path);
             }
+        }
+
+        inline void cleanup_stale_source_tool_runs(
+            const std::filesystem::path& target_binary,
+            const std::filesystem::path& keep_tools_dir = {})
+        {
+            const auto tools_root =
+                target_binary.parent_path()
+                / CACHE_ROOT_SUBDIR()
+                / UPDATER_CACHE_SUBDIR()
+                / "t";
+            std::error_code ec;
+            if (!std::filesystem::exists(tools_root, ec))
+                return;
+
+            const std::string keep_text = keep_tools_dir.empty()
+                ? std::string{}
+                : normalized_absolute_path_string(keep_tools_dir);
+
+            for (std::filesystem::directory_iterator it{ tools_root, ec }, end; it != end; it.increment(ec))
+            {
+                if (ec)
+                {
+                    ec.clear();
+                    continue;
+                }
+
+                const auto path = it->path();
+                if (!keep_text.empty()
+                    && normalized_absolute_path_string(path) == keep_text)
+                {
+                    continue;
+                }
+
+                if (path_is_inside(tools_root, path) && std::filesystem::is_directory(path, ec))
+                    remove_update_cache_path_best_effort(path);
+            }
+        }
+
+        [[nodiscard]] inline std::optional<SourceActiveMarker> read_source_active_marker(
+            const std::filesystem::path& target_binary)
+        {
+            const auto active_run_path = source_active_run_path(target_binary);
+            const auto active_run_marker = read_text_file(active_run_path);
+            const auto line_end = active_run_marker.find_first_of("\r\n");
+            const auto active_run_text = trim_ascii(active_run_marker.substr(0u, line_end));
+            if (active_run_text.empty())
+                return std::nullopt;
+
+            const auto work_root = source_work_root(target_binary);
+            const std::filesystem::path active_run{ active_run_text };
+            if (!path_is_inside(work_root, active_run))
+                return std::nullopt;
+
+            SourceActiveMarker marker{};
+            marker.run_dir = active_run;
+
+            const auto pid_marker = active_run_marker.find("pid=");
+            if (pid_marker != std::string::npos)
+            {
+                const auto digits_begin = pid_marker + 4u;
+                auto digits_end = digits_begin;
+                while (digits_end < active_run_marker.size()
+                    && std::isdigit(static_cast<unsigned char>(active_run_marker[digits_end])) != 0)
+                {
+                    ++digits_end;
+                }
+
+                if (digits_end > digits_begin)
+                {
+                    unsigned long parsed_pid{};
+                    const auto* begin = active_run_marker.data() + digits_begin;
+                    const auto* end = active_run_marker.data() + digits_end;
+                    const auto [ptr, ec] = std::from_chars(begin, end, parsed_pid);
+                    if (ec == std::errc{} && ptr == end && parsed_pid != 0ul)
+                    {
+                        marker.process_id = parsed_pid;
+                        marker.has_process_id = true;
+                    }
+                }
+            }
+
+            return marker;
+        }
+
+        [[nodiscard]] inline bool source_update_active_marker_present(
+            const std::filesystem::path& target_binary,
+            std::filesystem::path* active_run_out = nullptr)
+        {
+            const auto marker = read_source_active_marker(target_binary);
+            if (!marker)
+                return false;
+            if (active_run_out)
+                *active_run_out = marker->run_dir;
+            return true;
+        }
+
+        [[nodiscard]] inline bool source_update_active_run_exists(
+            const std::filesystem::path& target_binary,
+            std::filesystem::path* active_run_out = nullptr)
+        {
+            std::filesystem::path active_run;
+            if (!source_update_active_marker_present(target_binary, &active_run))
+                return false;
+
+            std::error_code ec;
+            if (!std::filesystem::exists(active_run, ec) || ec)
+                return false;
+
+            if (active_run_out)
+                *active_run_out = active_run;
+            return true;
+        }
+
+        [[nodiscard]] inline bool process_is_running(const unsigned long process_id) noexcept
+        {
+            if (process_id == 0ul)
+                return false;
+#if defined(_WIN32)
+            HANDLE process = OpenProcess(
+                SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+                FALSE,
+                static_cast<DWORD>(process_id));
+            if (process == nullptr)
+                return false;
+
+            DWORD exit_code = 0u;
+            const bool running =
+                GetExitCodeProcess(process, &exit_code) != 0 && exit_code == STILL_ACTIVE;
+            CloseHandle(process);
+            return running;
+#else
+            return false;
+#endif
+        }
+
+        [[nodiscard]] inline bool file_recently_modified(
+            const std::filesystem::path& path,
+            const std::chrono::seconds max_age) noexcept
+        {
+            std::error_code ec;
+            const auto write_time = std::filesystem::last_write_time(path, ec);
+            if (ec)
+                return false;
+
+            const auto now = std::filesystem::file_time_type::clock::now();
+            return write_time >= now || (now - write_time) <= max_age;
+        }
+
+        [[nodiscard]] inline std::filesystem::path source_update_log_path_for(
+            const std::filesystem::path& target_binary)
+        {
+            return ensure_directory(target_binary.parent_path() / "logs") / "epoch_source_update.log";
+        }
+
+        [[nodiscard]] inline std::filesystem::path update_handoff_log_path_for(
+            const std::filesystem::path& target_binary)
+        {
+            return ensure_directory(target_binary.parent_path() / "logs") / "epoch_update_handoff.log";
+        }
+
+        [[nodiscard]] inline bool contains_text(
+            const std::string_view text,
+            const std::string_view needle) noexcept
+        {
+            return !needle.empty() && text.find(needle) != std::string_view::npos;
+        }
+
+        [[nodiscard]] inline bool source_update_terminal_evidence(
+            const std::string_view source_log,
+            const std::string_view handoff_log) noexcept
+        {
+            const auto has = [&](const std::string_view needle) noexcept
+                {
+                    return contains_text(source_log, needle) || contains_text(handoff_log, needle);
+                };
+
+            return has("[ERROR]")
+                || has("Source update cancel complete")
+                || has("Source update canceled by operator")
+                || has("Built runtime ready at")
+                || has("Waiting for runtime handoff")
+                || has("Source runtime files copied successfully")
+                || has("Restarted updated runtime");
+        }
+
+        [[nodiscard]] inline bool source_update_pending_log_evidence(
+            const std::filesystem::path& target_binary)
+        {
+            const std::string source_log = read_text_file_tail(source_update_log_path_for(target_binary));
+            const std::string handoff_log = read_text_file_tail(update_handoff_log_path_for(target_binary));
+            if (source_log.empty() && handoff_log.empty())
+                return false;
+
+            if (source_update_terminal_evidence(source_log, handoff_log))
+                return false;
+
+            const auto has = [&](const std::string_view needle) noexcept
+                {
+                    return contains_text(source_log, needle) || contains_text(handoff_log, needle);
+                };
+
+            return has("Source update worker started")
+                || has("Source rebuild cancellation requested")
+                || has("Source update cancel requested")
+                || has("Source snapshot download")
+                || has("Downloading latest")
+                || has("Downloading managed vcpkg")
+                || has("Restoring source dependencies")
+                || has("MSBuild attempt")
+                || has("Waiting for target runtime unlock");
+        }
+
+        [[nodiscard]] inline bool source_update_recent_pending_log_evidence(
+            const std::filesystem::path& target_binary,
+            const std::chrono::seconds max_age = std::chrono::minutes{ 3 })
+        {
+            if (!source_update_pending_log_evidence(target_binary))
+                return false;
+
+            return file_recently_modified(source_update_log_path_for(target_binary), max_age)
+                || file_recently_modified(update_handoff_log_path_for(target_binary), max_age);
+        }
+
+        [[nodiscard]] inline std::optional<std::filesystem::file_time_type> file_write_time_or_none(
+            const std::filesystem::path& path) noexcept
+        {
+            std::error_code ec;
+            const auto write_time = std::filesystem::last_write_time(path, ec);
+            if (ec)
+                return std::nullopt;
+
+            return write_time;
+        }
+
+        [[nodiscard]] inline int source_update_recent_cancel_seconds_remaining(
+            const std::filesystem::path& target_binary,
+            const std::chrono::seconds cooldown)
+        {
+            if (cooldown.count() <= 0)
+                return 0;
+
+            const auto source_log_path = source_update_log_path_for(target_binary);
+            const auto handoff_log_path = update_handoff_log_path_for(target_binary);
+            const std::string source_log = read_text_file_tail(source_log_path);
+            const std::string handoff_log = read_text_file_tail(handoff_log_path);
+
+            const auto latest_line_has_cancel_terminal = [](const std::string_view text) noexcept
+                {
+                    std::size_t end = text.find_last_not_of(" \t\r\n");
+                    while (end != std::string_view::npos)
+                    {
+                        const std::size_t start = text.find_last_of("\r\n", end);
+                        const std::string_view line =
+                            start == std::string_view::npos
+                                ? text.substr(0, end + 1u)
+                                : text.substr(start + 1u, end - start);
+                        if (!line.empty())
+                        {
+                            return contains_text(line, "Source update cancel complete")
+                                || contains_text(line, "Source update canceled by operator");
+                        }
+
+                        if (start == std::string_view::npos || start == 0u)
+                            break;
+                        end = text.find_last_not_of(" \t\r\n", start - 1u);
+                    }
+
+                    return false;
+                };
+
+            const bool source_cancel_terminal = latest_line_has_cancel_terminal(source_log);
+            const bool handoff_cancel_terminal = latest_line_has_cancel_terminal(handoff_log);
+            if (!source_cancel_terminal && !handoff_cancel_terminal)
+                return 0;
+
+            std::optional<std::filesystem::file_time_type> newest_cancel_write{};
+            const auto note_write_time = [&](const std::filesystem::path& path)
+                {
+                    if (const auto write_time = file_write_time_or_none(path))
+                    {
+                        if (!newest_cancel_write || *write_time > *newest_cancel_write)
+                            newest_cancel_write = write_time;
+                    }
+                };
+
+            if (source_cancel_terminal)
+                note_write_time(source_log_path);
+            if (handoff_cancel_terminal)
+                note_write_time(handoff_log_path);
+            if (!newest_cancel_write)
+                return 0;
+
+            const auto now = std::filesystem::file_time_type::clock::now();
+            const auto elapsed = *newest_cancel_write >= now
+                ? std::chrono::seconds{ 0 }
+                : std::chrono::duration_cast<std::chrono::milliseconds>(now - *newest_cancel_write);
+            const auto elapsed_seconds =
+                std::chrono::duration_cast<std::chrono::seconds>(elapsed);
+            const int remaining = static_cast<int>(cooldown.count() - elapsed_seconds.count());
+
+            return (std::max)(0, remaining);
+        }
+
+        [[nodiscard]] inline bool source_update_active_marker_live(
+            const std::filesystem::path& target_binary,
+            std::filesystem::path* active_run_out = nullptr)
+        {
+            const auto marker = read_source_active_marker(target_binary);
+            if (!marker)
+                return false;
+
+            std::error_code ec;
+            const bool run_exists = std::filesystem::exists(marker->run_dir, ec) && !ec;
+
+            if (marker->has_process_id)
+            {
+                if (process_is_running(marker->process_id))
+                {
+                    if (active_run_out)
+                        *active_run_out = marker->run_dir;
+                    return true;
+                }
+
+                remove_update_cache_path_best_effort(source_active_run_path(target_binary));
+                if (!source_update_recent_pending_log_evidence(target_binary, std::chrono::seconds{ 20 }))
+                    remove_update_cache_path_best_effort(source_cancel_path(target_binary));
+                return false;
+            }
+
+            const auto active_marker_path = source_active_run_path(target_binary);
+            if (!run_exists)
+            {
+                if (file_recently_modified(active_marker_path, std::chrono::seconds{ 45 }))
+                {
+                    if (active_run_out)
+                        *active_run_out = marker->run_dir;
+                    return true;
+                }
+
+                remove_update_cache_path_best_effort(active_marker_path);
+                if (!source_update_recent_pending_log_evidence(target_binary, std::chrono::seconds{ 20 }))
+                    remove_update_cache_path_best_effort(source_cancel_path(target_binary));
+                return false;
+            }
+
+            const bool old_marker_recent =
+                file_recently_modified(active_marker_path, std::chrono::minutes{ 3 })
+                || source_update_recent_pending_log_evidence(target_binary, std::chrono::minutes{ 3 });
+            if (!old_marker_recent)
+                return false;
+
+            if (active_run_out)
+                *active_run_out = marker->run_dir;
+            return true;
+        }
+
+        [[nodiscard]] inline bool source_update_session_active(
+            const std::filesystem::path& target_binary)
+        {
+            return source_update_active_marker_live(target_binary);
+        }
+
+        [[nodiscard]] inline bool source_update_cancellation_pending(
+            const std::filesystem::path& target_binary)
+        {
+            const bool cancel_marker_present = source_cancel_requested(target_binary);
+            const std::string source_log = read_text_file_tail(source_update_log_path_for(target_binary));
+            const std::string handoff_log = read_text_file_tail(update_handoff_log_path_for(target_binary));
+            if (source_update_terminal_evidence(source_log, handoff_log))
+                return false;
+
+            if (cancel_marker_present)
+            {
+                return source_update_active_marker_live(target_binary);
+            }
+
+            return (contains_text(source_log, "Source rebuild cancellation requested")
+                    || contains_text(handoff_log, "Source rebuild cancellation requested"))
+                && source_update_active_marker_live(target_binary);
         }
 
         [[nodiscard]] inline std::filesystem::path make_temp_download_path(const std::string_view stem)
@@ -2749,7 +3289,7 @@ namespace epochnamespace::updater
         {
 #if defined(_WIN32)
             const auto manifest_root = source_manifest_root(source_root);
-            const auto build_log = target_binary.parent_path() / "epoch_source_update.log";
+            const auto build_log = source_update_log_path_for(target_binary);
 
             const auto msbuild = find_msbuild_path();
             if (msbuild.empty())
@@ -2824,7 +3364,7 @@ namespace epochnamespace::updater
                 append_log_line(
                     build_log,
                     "[ERROR] vcpkg dependency restore failed with exit code " + std::to_string(vcpkg_exit));
-                log_error("vcpkg dependency restore failed. See epoch_source_update.log for details.");
+                log_error("vcpkg dependency restore failed. See logs/epoch_source_update.log for details.");
                 return false;
             }
 
@@ -2891,7 +3431,7 @@ namespace epochnamespace::updater
             if (!build_ok)
             {
                 append_log_line(build_log, "[ERROR] Source build failed after two attempts.");
-                log_error("Source build failed. See epoch_source_update.log for details.");
+                log_error("Source build failed. See logs/epoch_source_update.log for details.");
                 return false;
             }
 
@@ -2907,7 +3447,7 @@ namespace epochnamespace::updater
             return true;
 #else
             const auto manifest_root = source_manifest_root(source_root);
-            const auto build_log = target_binary.parent_path() / "epoch_source_update.log";
+            const auto build_log = source_update_log_path_for(target_binary);
             const auto build_script = manifest_root / "build.sh";
 
             if (!std::filesystem::exists(build_script))
@@ -2987,7 +3527,7 @@ namespace epochnamespace::updater
             if (!build_ok)
             {
                 append_log_line(build_log, "[ERROR] Linux source build failed.");
-                log_error("Linux source build failed. See epoch_source_update.log for details.");
+                log_error("Linux source build failed. See logs/epoch_source_update.log for details.");
                 return false;
             }
 
@@ -3056,6 +3596,13 @@ namespace epochnamespace::updater
         std::string status_message;
     };
 
+    export struct ProjectSourceDownloadResult
+    {
+        bool ok{ false };
+        std::filesystem::path project_root{};
+        std::string status_message{};
+    };
+
     export enum class UpdateHandoffMode
     {
         LaunchImmediately,
@@ -3098,8 +3645,8 @@ namespace epochnamespace::updater
         const auto staging_dir = system_detail::source_staging_dir(target_binary, run_token);
         const auto final_dir = system_detail::source_final_dir(target_binary, run_token);
         const auto target_dir = target_binary.parent_path();
-        const auto build_log = target_dir / "epoch_source_update.log";
-        const auto handoff_log = target_dir / "epoch_update_handoff.log";
+        const auto build_log = system_detail::source_update_log_path_for(target_binary);
+        const auto handoff_log = system_detail::update_handoff_log_path_for(target_binary);
         const auto cancel_path = system_detail::source_cancel_path(target_binary);
         const auto active_run_path = system_detail::source_active_run_path(target_binary);
         const auto worker_script = system_detail::make_temp_powershell_script_path("source_update_worker");
@@ -3110,12 +3657,27 @@ namespace epochnamespace::updater
         const auto target_assets_dir = target_dir / "assets";
         const auto built_assets_dir = built_runtime_dir / "assets";
         const auto source_repo_assets_dir = manifest_root / "assets";
-        const auto managed_tools_root = system_detail::managed_tools_root();
+        const auto managed_tools_root = system_detail::source_run_tools_root(target_binary, run_token);
         const auto source_fallback_urls = PROJECT_SOURCE_FALLBACK_URLS();
+
+        std::filesystem::path existing_active_run;
+        if (system_detail::source_update_session_active(target_binary))
+        {
+            const bool has_active_run =
+                system_detail::source_update_active_run_exists(target_binary, &existing_active_run);
+            system_detail::append_log_line(
+                handoff_log,
+                has_active_run
+                    ? "[WARN] Existing source update worker is still active at: " + existing_active_run.string()
+                    : "[WARN] Existing source update session is still settling; not launching a second worker.");
+            system_detail::log_info("Source update worker launch skipped because an existing worker is still active.");
+            return true;
+        }
 
         {
             std::error_code cleanup_ec;
             system_detail::cleanup_stale_source_update_runs(target_binary, run_dir);
+            system_detail::cleanup_stale_source_tool_runs(target_binary, managed_tools_root);
             cleanup_ec.clear();
             std::filesystem::remove(cancel_path, cleanup_ec);
             cleanup_ec.clear();
@@ -3127,6 +3689,23 @@ namespace epochnamespace::updater
         }
 
         {
+            std::error_code active_ec;
+            std::filesystem::create_directories(run_dir, active_ec);
+            if (active_ec)
+            {
+                system_detail::log_error("Failed to prepare source update run directory: " + run_dir.string());
+                return false;
+            }
+
+            active_ec.clear();
+            std::filesystem::create_directories(active_run_path.parent_path(), active_ec);
+            if (active_ec)
+            {
+                system_detail::remove_update_cache_path_best_effort(run_dir);
+                system_detail::log_error("Failed to prepare source update marker directory: " + active_run_path.parent_path().string());
+                return false;
+            }
+
             std::ofstream active_run(active_run_path, std::ios::binary | std::ios::trunc);
             if (active_run)
                 active_run << run_dir.string() << '\n';
@@ -3137,6 +3716,9 @@ namespace epochnamespace::updater
         std::ofstream ps(worker_script, std::ios::binary);
         if (!ps)
         {
+            std::error_code marker_ec;
+            std::filesystem::remove(active_run_path, marker_ec);
+            system_detail::remove_update_cache_path_best_effort(run_dir);
             system_detail::log_error("Failed to create source update worker script.");
             return false;
         }
@@ -3272,6 +3854,19 @@ namespace epochnamespace::updater
             << "  }\n"
             << "  Append-Text $buildLog $text\n"
             << "}\n"
+            << "function Append-ToolTextToBuildLog([string]$Text) {\n"
+            << "  if ([string]::IsNullOrEmpty($Text)) {\n"
+            << "    return\n"
+            << "  }\n"
+            << "  if (-not $Text.EndsWith([Environment]::NewLine)) {\n"
+            << "    $Text += [Environment]::NewLine\n"
+            << "  }\n"
+            << "  Append-Text $buildLog $Text\n"
+            << "}\n"
+            << "function Complete-ToolOutput($StdoutTask, $StderrTask) {\n"
+            << "  try { Append-ToolTextToBuildLog ([string]$StdoutTask.Result) } catch { }\n"
+            << "  try { Append-ToolTextToBuildLog ([string]$StderrTask.Result) } catch { }\n"
+            << "}\n"
             << "function Write-Step([string]$Level, [string]$Message) {\n"
             << "  $line = \"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') [$Level] $Message\"\n"
             << "  if (-not $workerHidden) { Write-Host $line }\n"
@@ -3319,13 +3914,11 @@ namespace epochnamespace::updater
             << "}\n"
             << "function Test-Cancel {\n"
             << "  if (Test-Path -LiteralPath $cancelPath) {\n"
-            << "    Write-Step 'WARN' 'Source update canceled by operator.'\n"
-            << "    Write-Handoff 'WARN' 'Source update canceled by operator before runtime replacement.'\n"
-            << "    Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
-            << "    Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
-            << "    Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
-            << "    Remove-Item -LiteralPath $runDir -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "    Write-Step 'WARN' 'Source update cancel requested by operator.'\n"
+            << "    Write-Handoff 'WARN' 'Source update cancel requested before runtime replacement.'\n"
             << "    Remove-Item -LiteralPath $cancelPath -Force -ErrorAction SilentlyContinue\n"
+            << "    Write-Step 'WARN' 'Source update cancel complete.'\n"
+            << "    Write-Handoff 'WARN' 'Source update cancel complete.'\n"
             << "    Remove-Item -LiteralPath $activeRunPath -Force -ErrorAction SilentlyContinue\n"
             << "    Remove-Item -LiteralPath $workerPath -Force -ErrorAction SilentlyContinue\n"
             << "    exit 130\n"
@@ -3355,25 +3948,108 @@ namespace epochnamespace::updater
             << "  Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "  Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "  Remove-Item -LiteralPath $sourceRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
-            << "  Remove-Item -LiteralPath $runDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "  Remove-Item -LiteralPath $activeRunPath -Force -ErrorAction SilentlyContinue\n"
             << "  Remove-Item -LiteralPath $workerPath -Force -ErrorAction SilentlyContinue\n"
+            << "  Start-Sleep -Milliseconds 100\n"
+            << "  Remove-Item -LiteralPath $runDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "  exit 1\n"
             << "}\n"
-            << "function Invoke-Tool([string]$FilePath, [string[]]$Arguments, [string]$WorkingDir, [string]$StepName) {\n"
-            << "  $toolLog = [System.IO.Path]::GetTempFileName()\n"
+            << "function Join-ProcessArguments([string[]]$Arguments) {\n"
+            << "  $parts = New-Object System.Collections.Generic.List[string]\n"
+            << "  foreach ($argument in $Arguments) {\n"
+            << "    if ($null -eq $argument) { continue }\n"
+            << "    if ($argument.Length -eq 0) { $parts.Add('\"\"'); continue }\n"
+            << "    if ($argument.IndexOfAny([char[]]@(' ', \"`t\", '\"')) -lt 0) { $parts.Add($argument); continue }\n"
+            << "    $escaped = $argument.Replace('\\\\', '\\\\').Replace('\"', '\\\"')\n"
+            << "    $parts.Add(('\"' + $escaped + '\"'))\n"
+            << "  }\n"
+            << "  return [string]::Join(' ', $parts)\n"
+            << "}\n"
+            << "function Stop-ProcessTree([int]$RootPid) {\n"
+            << "  try {\n"
+            << "    $all = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue\n"
+            << "    $children = @{}\n"
+            << "    foreach ($proc in $all) {\n"
+            << "      if (-not $children.ContainsKey($proc.ParentProcessId)) { $children[$proc.ParentProcessId] = @() }\n"
+            << "      $children[$proc.ParentProcessId] += $proc\n"
+            << "    }\n"
+            << "    $ids = New-Object System.Collections.Generic.List[int]\n"
+            << "    function Add-ChildTree([int]$ProcessIdToAdd) {\n"
+            << "      $ids.Add($ProcessIdToAdd) | Out-Null\n"
+            << "      if ($children.ContainsKey($ProcessIdToAdd)) {\n"
+            << "        foreach ($child in $children[$ProcessIdToAdd]) { Add-ChildTree $child.ProcessId }\n"
+            << "      }\n"
+            << "    }\n"
+            << "    Add-ChildTree $RootPid\n"
+            << "    foreach ($id in ($ids | Sort-Object -Descending)) {\n"
+            << "      Stop-Process -Id $id -Force -ErrorAction SilentlyContinue\n"
+            << "    }\n"
+            << "  }\n"
+            << "  catch {\n"
+            << "    Stop-Process -Id $RootPid -Force -ErrorAction SilentlyContinue\n"
+            << "  }\n"
+            << "}\n"
+            << "function Invoke-Tool([string]$FilePath, [string[]]$Arguments, [string]$WorkingDir, [string]$StepName, [string]$ExpectedOutputPath = '') {\n"
+            << "  $toolProcess = $null\n"
+            << "  $stdoutTask = $null\n"
+            << "  $stderrTask = $null\n"
             << "  Push-Location $WorkingDir\n"
             << "  try {\n"
-            << "    & $FilePath @Arguments *> $toolLog\n"
-            << "    $toolExitCode = $LASTEXITCODE\n"
-            << "    Append-FileToBuildLog $toolLog\n"
+            << "    $argumentText = Join-ProcessArguments $Arguments\n"
+            << "    $launchFilePath = $FilePath\n"
+            << "    $launchArguments = $argumentText\n"
+            << "    $extension = [System.IO.Path]::GetExtension($FilePath)\n"
+            << "    if ([string]::Equals($extension, '.bat', [System.StringComparison]::OrdinalIgnoreCase) -or [string]::Equals($extension, '.cmd', [System.StringComparison]::OrdinalIgnoreCase)) {\n"
+            << "      $comspec = [System.Environment]::GetEnvironmentVariable('ComSpec')\n"
+            << "      if ([string]::IsNullOrWhiteSpace($comspec)) { $comspec = 'C:\\Windows\\System32\\cmd.exe' }\n"
+            << "      $launchFilePath = $comspec\n"
+            << "      $launchArguments = '/d /s /c \"\"' + $FilePath + '\"'\n"
+            << "      if (-not [string]::IsNullOrWhiteSpace($argumentText)) { $launchArguments += ' ' + $argumentText }\n"
+            << "      $launchArguments += '\"'\n"
+            << "    }\n"
+            << "    $startInfo = New-Object System.Diagnostics.ProcessStartInfo\n"
+            << "    $startInfo.FileName = $launchFilePath\n"
+            << "    $startInfo.Arguments = $launchArguments\n"
+            << "    $startInfo.WorkingDirectory = $WorkingDir\n"
+            << "    $startInfo.UseShellExecute = $false\n"
+            << "    $startInfo.RedirectStandardOutput = $true\n"
+            << "    $startInfo.RedirectStandardError = $true\n"
+            << "    $startInfo.CreateNoWindow = $true\n"
+            << "    $toolProcess = New-Object System.Diagnostics.Process\n"
+            << "    $toolProcess.StartInfo = $startInfo\n"
+            << "    if (-not $toolProcess.Start()) { throw ($StepName + ' failed to launch.') }\n"
+            << "    $stdoutTask = $toolProcess.StandardOutput.ReadToEndAsync()\n"
+            << "    $stderrTask = $toolProcess.StandardError.ReadToEndAsync()\n"
+            << "    while (-not $toolProcess.WaitForExit(1000)) {\n"
+            << "      if (Test-Path -LiteralPath $cancelPath) {\n"
+            << "        Write-Step 'WARN' ($StepName + ' canceled; stopping child process tree.')\n"
+            << "        Stop-ProcessTree $toolProcess.Id\n"
+            << "        Start-Sleep -Milliseconds 250\n"
+            << "        try { $toolProcess.WaitForExit(5000) | Out-Null } catch { }\n"
+            << "        Complete-ToolOutput $stdoutTask $stderrTask\n"
+            << "        Test-Cancel\n"
+            << "      }\n"
+            << "    }\n"
+            << "    try { $toolProcess.WaitForExit() } catch { }\n"
+            << "    Complete-ToolOutput $stdoutTask $stderrTask\n"
+            << "    try { $toolProcess.Refresh() } catch { }\n"
+            << "    $toolExitCode = $toolProcess.ExitCode\n"
+            << "    $toolExitCodeText = [string]$toolExitCode\n"
+            << "    if ([string]::IsNullOrWhiteSpace($toolExitCodeText)) {\n"
+            << "      if (-not [string]::IsNullOrWhiteSpace($ExpectedOutputPath) -and (Test-Path -LiteralPath $ExpectedOutputPath)) {\n"
+            << "        Write-Step 'WARN' ($StepName + ' did not report an exit code, but expected output exists; continuing.')\n"
+            << "        Write-Handoff 'WARN' ($StepName + ' completed without an exit code; verified expected output exists.')\n"
+            << "        return\n"
+            << "      }\n"
+            << "      throw ($StepName + ' did not report an exit code.')\n"
+            << "    }\n"
             << "    if ($toolExitCode -ne 0) {\n"
             << "      throw ($StepName + ' failed with exit code ' + $toolExitCode + '.')\n"
             << "    }\n"
             << "  }\n"
             << "  finally {\n"
             << "    Pop-Location\n"
-            << "    Remove-Item -LiteralPath $toolLog -Force -ErrorAction SilentlyContinue\n"
+            << "    if ($null -ne $toolProcess) { try { $toolProcess.Dispose() } catch { } }\n"
             << "  }\n"
             << "}\n"
             << "function Resolve-GitExe {\n"
@@ -3438,12 +4114,14 @@ namespace epochnamespace::updater
             << "  throw 'Managed git extraction did not produce git.exe.'\n"
             << "}\n"
             << "function Resolve-VcpkgExe {\n"
+            << "  Test-Cancel\n"
             << "  $vcpkgRef = Get-VcpkgRef\n"
             << "  $safeRef = Get-ShortToken $vcpkgRef\n"
             << "  $managedVcpkgRoot = Join-Path $managedToolsRoot ('v-' + $safeRef)\n"
             << "  $managedVcpkgExe = Join-Path $managedVcpkgRoot $vcpkgExeName\n"
             << "  if (Test-Path -LiteralPath $managedVcpkgExe) {\n"
             << "    Write-Step 'INFO' ('Using managed vcpkg: ' + $managedVcpkgRoot)\n"
+            << "    Write-Handoff 'INFO' 'Using cached managed vcpkg toolchain.'\n"
             << "    return $managedVcpkgExe\n"
             << "  }\n"
             << "  $vcpkgArchive = Join-Path $managedToolsRoot ('v-' + $safeRef + '.zip')\n"
@@ -3454,15 +4132,19 @@ namespace epochnamespace::updater
             << "  Remove-Item -LiteralPath $vcpkgStaging -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "  Remove-Item -LiteralPath $managedVcpkgRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "  Write-Step 'INFO' ('Downloading managed vcpkg (' + $vcpkgRef + ').')\n"
+            << "  Write-Handoff 'INFO' 'Downloading managed vcpkg toolchain.'\n"
             << "  $headers = @{ 'User-Agent' = 'EpochUpdater/1.0' }\n"
+            << "  Test-Cancel\n"
             << "  try {\n"
             << "    Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri (Get-VcpkgArchiveUrl $vcpkgRef) -OutFile $vcpkgArchive\n"
+            << "    Test-Cancel\n"
             << "  }\n"
             << "  catch {\n"
             << "    if ($vcpkgRef -eq $vcpkgDefaultRef) {\n"
             << "      throw\n"
             << "    }\n"
             << "    Write-Step 'WARN' ('Managed vcpkg ref ' + $vcpkgRef + ' was not downloadable: ' + $_.Exception.Message + '. Falling back to ' + $vcpkgDefaultRef + '.')\n"
+            << "    Write-Handoff 'WARN' 'Pinned vcpkg snapshot was unavailable; using the managed fallback toolchain.'\n"
             << "    $vcpkgRef = $vcpkgDefaultRef\n"
             << "    $safeRef = Get-ShortToken $vcpkgRef\n"
             << "    $managedVcpkgRoot = Join-Path $managedToolsRoot ('v-' + $safeRef)\n"
@@ -3474,21 +4156,46 @@ namespace epochnamespace::updater
             << "    Remove-Item -LiteralPath $vcpkgStaging -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "    Remove-Item -LiteralPath $managedVcpkgRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "    Write-Step 'INFO' ('Downloading managed vcpkg fallback (' + $vcpkgRef + ').')\n"
+            << "    Write-Handoff 'INFO' 'Downloading managed vcpkg fallback toolchain.'\n"
+            << "    Test-Cancel\n"
             << "    Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri (Get-VcpkgArchiveUrl $vcpkgRef) -OutFile $vcpkgArchive\n"
+            << "    Test-Cancel\n"
             << "  }\n"
+            << "  Test-Cancel\n"
             << "  Expand-Archive -LiteralPath $vcpkgArchive -DestinationPath $vcpkgStaging -Force\n"
-            << "  $extractedRoot = Get-ChildItem -LiteralPath $vcpkgStaging -Directory | Select-Object -First 1\n"
-            << "  if ($null -eq $extractedRoot) {\n"
-            << "    throw 'Managed vcpkg archive did not extract correctly.'\n"
+            << "  Test-Cancel\n"
+            << "  $bootstrapCandidate = Get-ChildItem -LiteralPath $vcpkgStaging -Recurse -File -Filter $vcpkgBootstrapName -ErrorAction SilentlyContinue | Select-Object -First 1\n"
+            << "  if ($null -eq $bootstrapCandidate) {\n"
+            << "    Remove-Item -LiteralPath $managedVcpkgRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "    throw 'Managed vcpkg archive did not contain bootstrap-vcpkg.bat.'\n"
             << "  }\n"
-            << "  Move-Item -LiteralPath $extractedRoot.FullName -Destination $managedVcpkgRoot -Force\n"
+            << "  $extractedRoot = Split-Path -Parent $bootstrapCandidate.FullName\n"
+            << "  $stagingFull = [System.IO.Path]::GetFullPath($vcpkgStaging)\n"
+            << "  $rootFull = [System.IO.Path]::GetFullPath($extractedRoot)\n"
+            << "  if ([string]::Equals($stagingFull, $rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {\n"
+            << "    New-Item -ItemType Directory -Path $managedVcpkgRoot -Force | Out-Null\n"
+            << "    Copy-Item -Path (Join-Path $vcpkgStaging '*') -Destination $managedVcpkgRoot -Recurse -Force\n"
+            << "  }\n"
+            << "  else {\n"
+            << "    New-Item -ItemType Directory -Path $managedVcpkgRoot -Force | Out-Null\n"
+            << "    Copy-Item -Path (Join-Path $extractedRoot '*') -Destination $managedVcpkgRoot -Recurse -Force\n"
+            << "  }\n"
             << "  Remove-Item -LiteralPath $vcpkgArchive -Force -ErrorAction SilentlyContinue\n"
             << "  Remove-Item -LiteralPath $vcpkgStaging -Recurse -Force -ErrorAction SilentlyContinue\n"
-            << "  Invoke-Tool $bootstrapScript @('-disableMetrics') $managedVcpkgRoot 'vcpkg bootstrap'\n"
+            << "  if (-not (Test-Path -LiteralPath $bootstrapScript)) {\n"
+            << "    Remove-Item -LiteralPath $managedVcpkgRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
+            << "    throw 'Managed vcpkg bootstrap script is missing after extraction repair.'\n"
+            << "  }\n"
+            << "  Test-Cancel\n"
+            << "  Write-Step 'INFO' 'Bootstrapping managed vcpkg.'\n"
+            << "  Write-Handoff 'INFO' 'Bootstrapping managed vcpkg toolchain.'\n"
+            << "  Invoke-Tool $bootstrapScript @('-disableMetrics') $managedVcpkgRoot 'vcpkg bootstrap' $managedVcpkgExe\n"
+            << "  Test-Cancel\n"
             << "  if (-not (Test-Path -LiteralPath $managedVcpkgExe)) {\n"
             << "    throw 'Managed vcpkg bootstrap did not produce vcpkg.exe.'\n"
             << "  }\n"
             << "  Write-Step 'INFO' ('Managed vcpkg ready at: ' + $managedVcpkgExe)\n"
+            << "  Write-Handoff 'INFO' 'Managed vcpkg toolchain is ready.'\n"
             << "  return $managedVcpkgExe\n"
             << "}\n"
             << "function Prepare-ManifestForManagedVcpkg([string]$ManifestRoot, [string]$VcpkgRoot) {\n"
@@ -3527,6 +4234,7 @@ namespace epochnamespace::updater
             << "    }\n"
             << "    Invoke-Tool $gitExe @(('--git-dir=' + $gitDir), ('--work-tree=' + $VcpkgRoot), 'config', 'user.name', 'Epoch Updater') $VcpkgRoot 'git config user.name'\n"
             << "    Invoke-Tool $gitExe @(('--git-dir=' + $gitDir), ('--work-tree=' + $VcpkgRoot), 'config', 'user.email', 'updater@epoch.local') $VcpkgRoot 'git config user.email'\n"
+            << "    Invoke-Tool $gitExe @(('--git-dir=' + $gitDir), ('--work-tree=' + $VcpkgRoot), 'config', 'core.longpaths', 'true') $VcpkgRoot 'git config core.longpaths'\n"
             << "    Invoke-Tool $gitExe @(('--git-dir=' + $gitDir), ('--work-tree=' + $VcpkgRoot), 'add', '--all') $VcpkgRoot 'git add'\n"
             << "    try {\n"
             << "      Invoke-Tool $gitExe @(('--git-dir=' + $gitDir), ('--work-tree=' + $VcpkgRoot), 'commit', '--no-gpg-sign', '-m', 'Managed vcpkg registry snapshot') $VcpkgRoot 'git commit'\n"
@@ -3619,7 +4327,7 @@ namespace epochnamespace::updater
             << "Clear-StaleSourceRuns\n"
             << "Remove-Item -LiteralPath $runDir -Recurse -Force -ErrorAction SilentlyContinue\n"
             << "New-Item -ItemType Directory -Path $runDir -Force | Out-Null\n"
-            << "Set-Content -LiteralPath $activeRunPath -Value $runDir -NoNewline -Encoding UTF8\n"
+            << "Set-Content -LiteralPath $activeRunPath -Value ($runDir + [Environment]::NewLine + 'pid=' + $PID) -NoNewline -Encoding UTF8\n"
             << "Remove-Item -LiteralPath $buildLog -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $handoffLog -Force -ErrorAction SilentlyContinue\n"
             << "Write-Step 'INFO' 'Source update worker started.'\n"
@@ -3681,6 +4389,7 @@ namespace epochnamespace::updater
             << "}\n"
             << "Remove-Item Env:VCPKG_ROOT -Force -ErrorAction SilentlyContinue\n"
             << "$vcpkgExe = Resolve-VcpkgExe\n"
+            << "Test-Cancel\n"
             << "$vcpkgRoot = Split-Path -Parent $vcpkgExe\n"
             << "$managedInstallRoot = Join-Path $manifestRoot 'vcpkg_installed'\n"
             << "$env:VCPKG_ROOT = $vcpkgRoot\n"
@@ -3782,6 +4491,9 @@ namespace epochnamespace::updater
 
         if (!system_detail::launch_powershell_script(worker_script, silent_worker, build_log))
         {
+            std::error_code marker_ec;
+            std::filesystem::remove(active_run_path, marker_ec);
+            system_detail::remove_update_cache_path_best_effort(run_dir);
             system_detail::log_error("Failed to launch source update worker.");
             return false;
         }
@@ -3817,7 +4529,7 @@ namespace epochnamespace::updater
         const auto script_path = handoff_mode == UpdateHandoffMode::StageForRestart
             ? system_detail::staged_update_handoff_script_path()
             : system_detail::make_temp_script_path("replace_binary");
-        const auto handoff_log = target_binary.parent_path() / "epoch_update_handoff.log";
+        const auto handoff_log = system_detail::update_handoff_log_path_for(target_binary);
 
         std::error_code replacement_exists_ec;
         if (!std::filesystem::exists(new_binary, replacement_exists_ec))
@@ -3953,7 +4665,7 @@ namespace epochnamespace::updater
             : system_detail::make_temp_script_path("replace_runtime_zip");
         const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
         const auto runtime_payload_dir = extracted_binary.parent_path();
-        const auto handoff_log = target_dir / "epoch_update_handoff.log";
+        const auto handoff_log = system_detail::update_handoff_log_path_for(target_binary);
         const bool chain_after_restart = !restart_auto_command.empty();
 
         std::error_code extracted_exists_ec;
@@ -4068,7 +4780,7 @@ namespace epochnamespace::updater
             : system_detail::make_temp_script_path("replace_runtime_zip");
         const auto extracted_binary = system_detail::resolve_runtime_binary_path(extracted_runtime_dir, target_binary);
         const auto runtime_payload_dir = extracted_binary.parent_path();
-        const auto handoff_log = target_dir / "epoch_update_handoff.log";
+        const auto handoff_log = system_detail::update_handoff_log_path_for(target_binary);
         const bool chain_after_restart = !restart_auto_command.empty();
 
         std::error_code extracted_exists_ec;
@@ -4181,7 +4893,7 @@ namespace epochnamespace::updater
 #if defined(_WIN32)
         const auto target_dir = target_binary.parent_path();
         const auto script_path = system_detail::make_temp_script_path("replace_runtime_source");
-        const auto handoff_log = target_dir / "epoch_update_handoff.log";
+        const auto handoff_log = system_detail::update_handoff_log_path_for(target_binary);
 
         std::ofstream bat(script_path, std::ios::binary);
         if (!bat)
@@ -4268,7 +4980,7 @@ namespace epochnamespace::updater
 #else
         const auto target_dir = target_binary.parent_path();
         const auto script_path = system_detail::make_temp_script_path("replace_runtime_source");
-        const auto handoff_log = target_dir / "epoch_update_handoff.log";
+        const auto handoff_log = system_detail::update_handoff_log_path_for(target_binary);
         const auto source_assets_dir = built_runtime_dir / "assets";
         const auto source_repo_assets_dir = system_detail::source_manifest_root(source_root) / "assets";
         const auto target_assets_dir = target_dir / "assets";
@@ -4416,6 +5128,110 @@ namespace epochnamespace::updater
         return result;
     }
 
+    namespace update_discovery_cache
+    {
+        struct RunCache
+        {
+            bool packaged_release_cached{ false };
+            system_detail::ResolvedPackagedRelease packaged_release{};
+            bool source_version_cached{ false };
+            system_detail::VersionCheckResult source_version{};
+            std::string source_version_url;
+            std::string source_version_label;
+            std::string source_local_version;
+            bool platform_build_cached{ false };
+            system_detail::BuildStatusResult platform_build{};
+            std::string platform_build_url;
+            std::string platform_build_job_name;
+        };
+
+        [[nodiscard]] inline std::mutex& mutex()
+        {
+            static std::mutex instance;
+            return instance;
+        }
+
+        [[nodiscard]] inline RunCache& cache()
+        {
+            static RunCache instance;
+            return instance;
+        }
+    }
+
+    [[nodiscard]] inline system_detail::ResolvedPackagedRelease resolve_packaged_release_once_per_run()
+    {
+        std::lock_guard lock{ update_discovery_cache::mutex() };
+        auto& cache = update_discovery_cache::cache();
+        if (cache.packaged_release_cached)
+        {
+            system_detail::log_info("Using cached packaged release discovery for this run.");
+            return cache.packaged_release;
+        }
+
+        cache.packaged_release = system_detail::resolve_packaged_release();
+        cache.packaged_release_cached = true;
+        return cache.packaged_release;
+    }
+
+    [[nodiscard]] inline system_detail::VersionCheckResult check_source_version_once_per_run(
+        const std::string& url,
+        const std::string_view label,
+        const std::string& local_version_override)
+    {
+        std::lock_guard lock{ update_discovery_cache::mutex() };
+        auto& cache = update_discovery_cache::cache();
+        const std::string label_text{ label };
+        const std::string normalized_local =
+            local_version_override.empty()
+            ? system_detail::extract_version_string(PROJECT_SOURCE_VERSION)
+            : system_detail::extract_version_string(local_version_override);
+
+        if (cache.source_version_cached
+            && cache.source_version_url == url
+            && cache.source_version_label == label_text
+            && cache.source_local_version == normalized_local)
+        {
+            system_detail::log_info("Using cached source version discovery for this run.");
+            return cache.source_version;
+        }
+
+        cache.source_version = check_for_updates(url, label, local_version_override);
+        cache.source_version_cached = true;
+        cache.source_version_url = url;
+        cache.source_version_label = label_text;
+        cache.source_local_version = normalized_local;
+        return cache.source_version;
+    }
+
+    [[nodiscard]] inline system_detail::BuildStatusResult check_platform_build_status_once_per_run(
+        const std::string& runs_api_url,
+        const std::string& job_name)
+    {
+        std::lock_guard lock{ update_discovery_cache::mutex() };
+        auto& cache = update_discovery_cache::cache();
+        if (cache.platform_build_cached
+            && cache.platform_build_url == runs_api_url
+            && cache.platform_build_job_name == job_name)
+        {
+            system_detail::log_info("Using cached platform build status for this run.");
+            return cache.platform_build;
+        }
+
+        auto fresh_status = system_detail::check_platform_build_status(runs_api_url, job_name);
+        if (system_detail::build_status_failure_is_transient(fresh_status))
+        {
+            system_detail::log_info(
+                "Platform build status check was transiently unavailable; not caching this failure for the run.");
+            return fresh_status;
+        }
+
+        cache.platform_build = std::move(fresh_status);
+        cache.platform_build_cached = true;
+        cache.platform_build_url = runs_api_url;
+        cache.platform_build_job_name = job_name;
+        return cache.platform_build;
+    }
+
     [[nodiscard]] bool move_download_into_place(
         const std::filesystem::path& downloaded_path,
         const std::filesystem::path& final_path)
@@ -4513,6 +5329,94 @@ namespace epochnamespace::updater
 
         system_detail::log_error("Source snapshot download failed from all configured URLs.");
         return false;
+    }
+
+    export ProjectSourceDownloadResult download_project_source_code(
+        const UpdateChannel& channel)
+    {
+        ProjectSourceDownloadResult result{};
+        if (channel.source_url.empty())
+        {
+            result.status_message = "Project source code download failed: source URL is not configured.";
+            system_detail::log_error(result.status_message);
+            return result;
+        }
+
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        const fs::path cache_root = system_detail::project_source_cache_root();
+        const fs::path archive_path = system_detail::project_source_archive_path(channel.source_url);
+        const fs::path staging_dir = system_detail::project_source_staging_dir();
+        const fs::path final_dir = system_detail::project_source_final_dir();
+
+        fs::remove_all(staging_dir, ec);
+        ec.clear();
+        fs::remove(archive_path, ec);
+        ec.clear();
+        fs::create_directories(archive_path.parent_path(), ec);
+        if (ec)
+        {
+            result.status_message = "Project source code download failed: could not prepare cache downloads folder.";
+            system_detail::log_error(result.status_message + " " + archive_path.parent_path().string());
+            return result;
+        }
+
+        system_detail::log_info("Downloading project source code snapshot into cache: " + cache_root.string());
+        if (!download_source_archive_with_fallbacks(channel.source_url, archive_path))
+        {
+            result.status_message = "Project source code download failed: source archive download did not complete.";
+            return result;
+        }
+
+        fs::remove_all(staging_dir, ec);
+        ec.clear();
+        if (!extract_archive(archive_path.string(), staging_dir.string()))
+        {
+            fs::remove_all(staging_dir, ec);
+            result.status_message = "Project source code download failed: downloaded source archive did not extract.";
+            system_detail::log_error(result.status_message);
+            return result;
+        }
+
+        fs::path extracted_root = system_detail::first_subdirectory(staging_dir);
+        if (extracted_root.empty())
+            extracted_root = staging_dir;
+
+        fs::remove_all(final_dir, ec);
+        ec.clear();
+        fs::create_directories(final_dir.parent_path(), ec);
+        if (ec)
+        {
+            fs::remove_all(staging_dir, ec);
+            result.status_message = "Project source code download failed: could not prepare final source project folder.";
+            system_detail::log_error(result.status_message + " " + final_dir.string());
+            return result;
+        }
+
+        fs::rename(extracted_root, final_dir, ec);
+        if (ec)
+        {
+            ec.clear();
+            fs::copy(
+                extracted_root,
+                final_dir,
+                fs::copy_options::recursive | fs::copy_options::overwrite_existing,
+                ec);
+            if (ec)
+            {
+                fs::remove_all(staging_dir, ec);
+                result.status_message = "Project source code download failed: could not move source project into cache.";
+                system_detail::log_error(result.status_message + " " + final_dir.string());
+                return result;
+            }
+        }
+
+        fs::remove_all(staging_dir, ec);
+        result.ok = true;
+        result.project_root = final_dir;
+        result.status_message = "Project source code downloaded to cache: " + final_dir.string();
+        system_detail::log_info(result.status_message);
+        return result;
     }
 
     [[nodiscard]] bool prepare_cached_update_archive(
@@ -4621,12 +5525,84 @@ namespace epochnamespace::updater
 
     export std::filesystem::path source_update_log_path()
     {
-        return system_detail::current_binary_path().parent_path() / "epoch_source_update.log";
+        return system_detail::source_update_log_path_for(system_detail::current_binary_path());
     }
 
     export std::filesystem::path update_handoff_log_path()
     {
-        return system_detail::current_binary_path().parent_path() / "epoch_update_handoff.log";
+        return system_detail::update_handoff_log_path_for(system_detail::current_binary_path());
+    }
+
+    export bool source_update_worker_active()
+    {
+#if defined(_WIN32)
+        try
+        {
+            return system_detail::source_update_session_active(system_detail::current_binary_path());
+        }
+        catch (const std::exception& e)
+        {
+            system_detail::log_error(std::string{ "Source update liveness check failed: " } + e.what());
+            return false;
+        }
+        catch (...)
+        {
+            system_detail::log_error("Source update liveness check failed with an unknown exception.");
+            return false;
+        }
+#else
+        return false;
+#endif
+    }
+
+    export int source_update_recent_cancel_seconds_remaining(const int cooldown_seconds)
+    {
+#if defined(_WIN32)
+        if (cooldown_seconds <= 0)
+            return 0;
+
+        try
+        {
+            return system_detail::source_update_recent_cancel_seconds_remaining(
+                system_detail::current_binary_path(),
+                std::chrono::seconds{ cooldown_seconds });
+        }
+        catch (const std::exception& e)
+        {
+            system_detail::log_error(std::string{ "Source update cancel cooldown check failed: " } + e.what());
+            return 0;
+        }
+        catch (...)
+        {
+            system_detail::log_error("Source update cancel cooldown check failed with an unknown exception.");
+            return 0;
+        }
+#else
+        (void)cooldown_seconds;
+        return 0;
+#endif
+    }
+
+    export bool source_update_cancel_requested()
+    {
+#if defined(_WIN32)
+        try
+        {
+            return system_detail::source_update_cancellation_pending(system_detail::current_binary_path());
+        }
+        catch (const std::exception& e)
+        {
+            system_detail::log_error(std::string{ "Source update cancel-state check failed: " } + e.what());
+            return false;
+        }
+        catch (...)
+        {
+            system_detail::log_error("Source update cancel-state check failed with an unknown exception.");
+            return false;
+        }
+#else
+        return false;
+#endif
     }
 
     export bool launch_staged_update_handoff()
@@ -4675,42 +5651,59 @@ namespace epochnamespace::updater
         {
             const auto target_binary = system_detail::current_binary_path();
             const auto cancel_path = system_detail::source_cancel_path(target_binary);
-            const auto active_run_path = system_detail::source_active_run_path(target_binary);
 
-            std::error_code ec;
-            std::filesystem::create_directories(cancel_path.parent_path(), ec);
-
-            std::ofstream cancel(cancel_path, std::ios::binary | std::ios::trunc);
-            if (!cancel)
+            std::error_code dir_ec;
+            std::filesystem::create_directories(cancel_path.parent_path(), dir_ec);
+            if (dir_ec)
             {
-                system_detail::log_error("Failed to write source update cancel marker.");
+                system_detail::log_error(
+                    "Source update cancel failed to prepare marker directory: "
+                    + cancel_path.parent_path().string());
                 return false;
             }
 
-            cancel << "cancel requested by editor\n";
-            cancel.close();
-
-            const auto work_root = system_detail::source_work_root(target_binary);
-            const std::string active_run_text =
-                system_detail::trim_ascii(system_detail::read_text_file(active_run_path));
-            if (!active_run_text.empty())
+            const std::wstring cancel_path_text = cancel_path.wstring();
+            HANDLE file = ::CreateFileW(
+                cancel_path_text.c_str(),
+                GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr,
+                CREATE_ALWAYS,
+                FILE_ATTRIBUTE_NORMAL,
+                nullptr);
+            if (file == INVALID_HANDLE_VALUE)
             {
-                const std::filesystem::path active_run{ active_run_text };
-                if (system_detail::path_is_inside(work_root, active_run))
-                    system_detail::remove_update_cache_path_best_effort(active_run);
-                else
-                    system_detail::log_error("Ignored source update active-run marker outside updater cache.");
+                system_detail::log_error("Source update cancel marker could not be opened.");
+                return false;
+            }
+
+            constexpr char kCancelText[] = "cancel requested by runtime ui\r\n";
+            DWORD written = 0u;
+            const BOOL ok = ::WriteFile(
+                file,
+                kCancelText,
+                static_cast<DWORD>(sizeof(kCancelText) - 1u),
+                &written,
+                nullptr);
+            ::CloseHandle(file);
+
+            const bool wrote_marker =
+                ok != FALSE && written == static_cast<DWORD>(sizeof(kCancelText) - 1u);
+            if (wrote_marker)
+            {
+                system_detail::append_log_line(
+                    system_detail::source_update_log_path_for(target_binary),
+                    "[WARN] Source rebuild cancellation requested from runtime UI.");
+                system_detail::append_log_line(
+                    system_detail::update_handoff_log_path_for(target_binary),
+                    "[WARN] Source rebuild cancellation requested from runtime UI.");
             }
             else
             {
-                system_detail::cleanup_stale_source_update_runs(target_binary);
+                system_detail::log_error("Source update cancel marker write failed.");
             }
 
-            system_detail::append_log_line(
-                update_handoff_log_path(),
-                "[WARN] Source update cancel requested by operator. Disposable source cache cleared when possible.");
-            system_detail::log_info("Source update cancel requested.");
-            return true;
+            return wrote_marker;
         }
         catch (const std::exception& e)
         {
@@ -4723,7 +5716,6 @@ namespace epochnamespace::updater
             return false;
         }
 #else
-        system_detail::log_info("Source update cancel is only available for the detached Windows source worker.");
         return false;
 #endif
     }
@@ -4743,10 +5735,19 @@ namespace epochnamespace::updater
         const auto target_binary = system_detail::current_binary_path();
 
 #if defined(_WIN32)
+        if (system_detail::source_update_session_active(target_binary))
+        {
+            system_detail::append_log_line(
+                system_detail::update_handoff_log_path_for(target_binary),
+                "[WARN] Source update request ignored because an existing source-update session is still active.");
+            system_detail::log_info("Source update request is already covered by an active source-update session.");
+            return true;
+        }
+
         if (recheck_source_version && !channel.source_version_url.empty())
         {
             const auto source_status =
-                check_for_updates(channel.source_version_url, "Source", PROJECT_SOURCE_VERSION);
+                check_source_version_once_per_run(channel.source_version_url, "Source", PROJECT_SOURCE_VERSION);
 
             if (source_status.ok && source_status.update_available)
                 system_detail::log_info("A newer source snapshot is available on main.");
@@ -4782,7 +5783,7 @@ namespace epochnamespace::updater
                 system_detail::read_local_source_version(final_dir);
 
             const auto source_status =
-                check_for_updates(channel.source_version_url, "Source", local_source_version);
+                check_source_version_once_per_run(channel.source_version_url, "Source", local_source_version);
 
             if (source_status.ok && source_status.update_available)
                 system_detail::log_info("A newer source snapshot is available on main.");
@@ -4835,6 +5836,7 @@ namespace epochnamespace::updater
                 }
             }
         }
+
         else
         {
             std::filesystem::rename(staging_dir, final_dir, ec);
@@ -4881,7 +5883,7 @@ namespace epochnamespace::updater
             system_detail::extract_version_string(PROJECT_SOURCE_VERSION);
         const std::string platform_key{ platform::current_platform_key() };
 
-        auto packaged_release = system_detail::resolve_packaged_release();
+        auto packaged_release = resolve_packaged_release_once_per_run();
         system_detail::VersionCheckResult packaged_status{};
         packaged_status.local = local_packaged_version;
         result.local_version = local_packaged_version;
@@ -4932,7 +5934,7 @@ namespace epochnamespace::updater
         system_detail::VersionCheckResult source_status{};
         if (!channel.source_version_url.empty())
         {
-            source_status = check_for_updates(
+            source_status = check_source_version_once_per_run(
                 channel.source_version_url,
                 "Source",
                 PROJECT_SOURCE_VERSION);
@@ -4950,7 +5952,7 @@ namespace epochnamespace::updater
             || (source_status.ok && source_status.update_available);
         if (candidate_update_available)
         {
-            const auto build_status = system_detail::check_platform_build_status(
+            const auto build_status = check_platform_build_status_once_per_run(
                 channel.platform_build_status_url,
                 channel.platform_build_job_name);
 
@@ -4965,23 +5967,43 @@ namespace epochnamespace::updater
 
             if (!build_status.ok)
             {
-                packaged_status.update_available = false;
-                source_status.update_available = false;
-                result.packaged_update_available = false;
-                result.source_update_available = false;
-                result.update_available = false;
-                result.force_required = false;
-
                 const std::string job =
                     build_status.job_name.empty() ? std::string{ "platform build" } : build_status.job_name;
                 const std::string reason =
                     build_status.reason.empty() ? std::string{ "build status could not be proven." } : build_status.reason;
-                result.status_message = "Update withheld until " + job + " is green: " + reason;
-                system_detail::log_info("Update withheld until " + job + " is green: " + reason);
-                return result;
+                const bool transient_build_status_failure =
+                    system_detail::build_status_failure_is_transient(build_status);
+                const bool source_only_update =
+                    source_status.ok
+                    && source_status.update_available
+                    && !packaged_status.update_available;
+
+                if (source_only_update && transient_build_status_failure)
+                {
+                    result.update_available = true;
+                    result.source_update_available = true;
+                    result.status_message =
+                        "Source update is available, but the platform build status check is temporarily unavailable: "
+                        + reason;
+                    system_detail::log_info(
+                        "Continuing source update path despite transient platform build status failure: " + reason);
+                }
+                else
+                {
+                    packaged_status.update_available = false;
+                    source_status.update_available = false;
+                    result.packaged_update_available = false;
+                    result.source_update_available = false;
+                    result.update_available = false;
+                    result.force_required = false;
+
+                    result.status_message = "Update withheld until " + job + " is green: " + reason;
+                    system_detail::log_info("Update withheld until " + job + " is green: " + reason);
+                    return result;
+                }
             }
 
-            if (!build_status.job_name.empty())
+            if (build_status.ok && !build_status.job_name.empty())
                 system_detail::log_info("Update platform build gate passed: " + build_status.job_name);
         }
 
@@ -4993,9 +6015,23 @@ namespace epochnamespace::updater
             if (!force)
             {
                 result.force_required = true;
-                result.status_message = packaged_status.remote.empty()
-                    ? "Packaged runtime update available."
-                    : "Packaged runtime update available: " + packaged_status.remote + ".";
+                if (source_status.ok && source_status.update_available)
+                {
+                    const std::string packaged = packaged_status.remote.empty()
+                        ? std::string{ "packaged runtime" }
+                        : std::string{ "packaged runtime " } + packaged_status.remote;
+                    const std::string source = source_status.remote.empty()
+                        ? std::string{ "main source" }
+                        : std::string{ "main source " } + source_status.remote;
+                    result.status_message =
+                        "Update available: " + packaged + " first; " + source + " is also available after restart.";
+                }
+                else
+                {
+                    result.status_message = packaged_status.remote.empty()
+                        ? "Packaged runtime update available."
+                        : "Packaged runtime update available: " + packaged_status.remote + ".";
+                }
                 return result;
             }
 
@@ -5015,11 +6051,23 @@ namespace epochnamespace::updater
             result.packaged_handoff_staged =
                 result.packaged_update_performed
                 && packaged_handoff_mode == UpdateHandoffMode::StageForRestart;
-            result.status_message = result.update_performed
-                ? (result.packaged_handoff_staged
+            if (result.update_performed)
+            {
+                result.status_message = result.packaged_handoff_staged
                     ? "Packaged update staged. Press Restart to close Epoch and finish the hidden runtime replacement."
-                    : "Packaged update replacement started. Restart Epoch if this window remains open.")
-                : "Packaged update failed before replacement. The cached package or replacement executable was not verified.";
+                    : "Packaged update replacement started. Restart Epoch if this window remains open.";
+                if (source_status.ok && source_status.update_available)
+                {
+                    result.status_message += source_status.remote.empty()
+                        ? " Main source is also available after restart."
+                        : " Main source " + source_status.remote + " is also available after restart.";
+                }
+            }
+            else
+            {
+                result.status_message =
+                    "Packaged update failed before replacement. The cached package or replacement executable was not verified.";
+            }
             return result;
         }
 
@@ -5055,7 +6103,7 @@ namespace epochnamespace::updater
             result.source_update_performed = worker_launched;
             result.status_message = worker_launched
                 ? "Source rebuild worker started. Keep Epoch open until the worker reports restart-ready evidence, then restart from the update modal."
-                : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
+                : "Source update failed to start. Check logs/epoch_source_update.log and logs/epoch_update_handoff.log beside the executable.";
             return result;
         }
 

@@ -14,11 +14,83 @@
         }
 
         constexpr double kEditorUpdateRestartCountdownSeconds = 10.0;
+        constexpr int kEditorUpdateCancelRetryCooldownSeconds = 5;
+        constexpr double kEditorSourceCancelArmSeconds = 8.0;
 
         void clear_editor_update_restart_countdown(EditorState& editor) noexcept
         {
             editor.updateRestartCountdownArmed = false;
             editor.updateRestartCountdownStartedAt = {};
+        }
+
+        void clear_editor_update_retry_wait(EditorState& editor) noexcept
+        {
+            editor.updateRetryAfter = {};
+        }
+
+        void arm_editor_update_retry_wait(EditorState& editor)
+        {
+            if constexpr (kEditorUpdateCancelRetryCooldownSeconds <= 0)
+            {
+                clear_editor_update_retry_wait(editor);
+                return;
+            }
+
+            editor.updateRetryAfter =
+                std::chrono::steady_clock::now()
+                + std::chrono::seconds{ kEditorUpdateCancelRetryCooldownSeconds };
+        }
+
+        [[nodiscard]] bool editor_update_retry_waiting(const EditorState& editor)
+        {
+            return editor.updateRetryAfter != std::chrono::steady_clock::time_point{}
+                && std::chrono::steady_clock::now() < editor.updateRetryAfter;
+        }
+
+        [[nodiscard]] int editor_update_retry_seconds_remaining(const EditorState& editor)
+        {
+            if (!editor_update_retry_waiting(editor))
+                return 0;
+
+            const double seconds = std::chrono::duration<double>(
+                editor.updateRetryAfter - std::chrono::steady_clock::now()).count();
+            return static_cast<int>(std::ceil((std::max)(0.0, seconds)));
+        }
+
+        [[nodiscard]] bool guard_editor_update_retry_wait(EditorState& editor)
+        {
+            if (!editor_update_retry_waiting(editor))
+            {
+                clear_editor_update_retry_wait(editor);
+                return false;
+            }
+
+            editor.updateState = EditorUpdateState::Available;
+            editor.updateInstallPending = false;
+            editor.updateSourceInstallPending = false;
+            editor.updateProjectSourceDownloadPending = false;
+            editor.updateSourceCancelRequested = false;
+            editor.showUpdateConfirmModal = true;
+            editor.updateOperationStartedAt = {};
+            clear_editor_update_restart_countdown(editor);
+            editor.updateStatus =
+                "Update retry is cooling down so the previous cancel can finish clearing worker state. Try again in "
+                + std::to_string(editor_update_retry_seconds_remaining(editor))
+                + "s.";
+            push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+            return true;
+        }
+
+        [[nodiscard]] bool guard_editor_recent_source_cancel(EditorState& editor)
+        {
+            const int waitSeconds =
+                updater::source_update_recent_cancel_seconds_remaining(kEditorUpdateCancelRetryCooldownSeconds);
+            if (waitSeconds <= 0)
+                return false;
+
+            editor.updateRetryAfter =
+                std::chrono::steady_clock::now() + std::chrono::seconds{ waitSeconds };
+            return guard_editor_update_retry_wait(editor);
         }
 
         void arm_editor_update_restart_countdown(EditorState& editor)
@@ -69,6 +141,16 @@
 
             if (result.packaged_update_available)
             {
+                if (result.source_update_available)
+                {
+                    const std::string packaged = result.remote_version.empty()
+                        ? std::string{ "packaged runtime" }
+                        : std::string{ "packaged runtime " } + result.remote_version;
+                    const std::string source = result.source_remote_version.empty()
+                        ? std::string{ "main source" }
+                        : std::string{ "main source " } + result.source_remote_version;
+                    return "Update available: " + packaged + " first; " + source + " is also available after restart.";
+                }
                 if (!result.remote_version.empty())
                     return std::string{ "Packaged update available: " } + result.remote_version;
                 return "Packaged update available.";
@@ -106,6 +188,40 @@
             return result;
         }
 
+        [[nodiscard]] bool editor_update_result_has_installable_intent(
+            const updater::UpdateCommandResult& result) noexcept
+        {
+            return result.update_available
+                || result.force_required
+                || result.packaged_update_available
+                || result.source_update_available
+                || result.packaged_handoff_staged;
+        }
+
+        void make_editor_source_attempt_retryable(
+            EditorState& editor,
+            const updater::UpdateCommandResult& fallback)
+        {
+            updater::UpdateCommandResult clean = editor.lastUpdateCheck;
+            if (!editor_update_result_has_installable_intent(clean))
+                clean = fallback;
+
+            clean.update_performed = false;
+            clean.packaged_update_performed = false;
+            clean.packaged_handoff_staged = false;
+            clean.source_update_performed = false;
+            clean.source_fallback_attempted = false;
+            clean.status_message.clear();
+
+            if (!editor_update_result_has_installable_intent(clean))
+            {
+                clean.update_available = true;
+                clean.source_update_available = true;
+            }
+
+            editor.lastUpdateCheck = std::move(clean);
+        }
+
         [[nodiscard]] std::string update_toolbar_button_label(EditorUpdateState state)
         {
             switch (state)
@@ -137,12 +253,206 @@
                 std::chrono::steady_clock::now() - editor.updateOperationStartedAt).count();
         }
 
+        [[nodiscard]] float editor_source_worker_progress_from_status(
+            const std::string_view status,
+            const bool cancelRequested) noexcept
+        {
+            const auto has = [&](const std::string_view needle) noexcept
+                {
+                    return status.find(needle) != std::string_view::npos;
+                };
+
+            if (cancelRequested)
+                return 0.10f;
+
+            float progress = 0.08f;
+            if (has("Downloading latest") || has("Source snapshot download URL"))
+                progress = 0.16f;
+            if (has("downloaded successfully") || has("Source snapshot downloaded and extracted"))
+                progress = 0.28f;
+            if (has("Source snapshot ready at"))
+                progress = 0.34f;
+            if (has("Downloading managed vcpkg") || has("managed vcpkg toolchain"))
+                progress = 0.38f;
+            if (has("Downloading managed vcpkg fallback") || has("managed fallback toolchain"))
+                progress = 0.40f;
+            if (has("Bootstrapping managed vcpkg") || has("Validating signature"))
+                progress = 0.41f;
+            if (has("Managed vcpkg ready") || has("Managed vcpkg toolchain is ready"))
+                progress = 0.42f;
+            if (has("Initializing managed vcpkg git registry") || has("Reconfigured the source snapshot"))
+                progress = 0.43f;
+            if (has("Restoring source dependencies"))
+                progress = 0.44f;
+            if (has("Source dependencies restored"))
+                progress = 0.54f;
+            if (has("MSBuild Release attempt") || has("MSBuild attempt"))
+                progress = 0.62f;
+            if (has("completed successfully"))
+                progress = 0.82f;
+            if (has("Built runtime ready at"))
+                progress = 0.92f;
+            if (has("Waiting for runtime handoff"))
+                progress = 0.96f;
+            if (has("Source runtime files copied successfully") || has("Restarted updated runtime"))
+                progress = 1.0f;
+            return std::clamp(progress, 0.02f, 1.0f);
+        }
+
+        [[nodiscard]] float editor_source_worker_progress_soft_cap(
+            const std::string_view status,
+            const float anchoredProgress,
+            const bool cancelRequested) noexcept
+        {
+            const auto has = [&](const std::string_view needle) noexcept
+                {
+                    return status.find(needle) != std::string_view::npos;
+                };
+
+            if (cancelRequested)
+                return anchoredProgress;
+            if (has("Waiting for runtime handoff") || has("Built runtime ready at"))
+                return 0.97f;
+            if (has("completed successfully"))
+                return 0.92f;
+            if (has("MSBuild Release attempt") || has("MSBuild attempt"))
+                return 0.90f;
+            if (has("Source dependencies restored"))
+                return 0.72f;
+            if (has("Restoring source dependencies"))
+                return 0.68f;
+            if (has("Initializing managed vcpkg")
+                || has("Reconfigured the source snapshot")
+                || has("git registry"))
+            {
+                return 0.56f;
+            }
+            if (has("Managed vcpkg")
+                || has("Bootstrapping managed vcpkg")
+                || has("Downloading managed vcpkg")
+                || has("Validating signature")
+                || has("toolchain"))
+            {
+                return 0.50f;
+            }
+            if (has("Source snapshot ready"))
+                return 0.40f;
+            if (has("Source snapshot") || has("Downloading latest"))
+                return 0.32f;
+            return (std::min)(0.94f, (std::max)(anchoredProgress + 0.06f, 0.14f));
+        }
+
+        [[nodiscard]] float editor_source_worker_progress_value(const EditorState& editor) noexcept
+        {
+            const float anchoredProgress = editor_source_worker_progress_from_status(
+                editor.updateStatus,
+                editor.updateSourceCancelRequested);
+            if (editor.updateSourceCancelRequested)
+                return anchoredProgress;
+
+            const float cap = (std::max)(
+                anchoredProgress,
+                editor_source_worker_progress_soft_cap(
+                    editor.updateStatus,
+                    anchoredProgress,
+                    editor.updateSourceCancelRequested));
+            const float elapsedLift = static_cast<float>(
+                (std::max)(0.0, editor_update_elapsed_seconds(editor)) * 0.0028);
+            return std::clamp((std::min)(cap, anchoredProgress + elapsedLift), 0.02f, 1.0f);
+        }
+
+        [[nodiscard]] std::string format_editor_update_elapsed_seconds(const int totalSeconds)
+        {
+            const int clampedSeconds = (std::max)(0, totalSeconds);
+            const int minutes = clampedSeconds / 60;
+            const int seconds = clampedSeconds % 60;
+            if (minutes <= 0)
+                return std::format("{}s", seconds);
+            return std::format("{}m {:02}s", minutes, seconds);
+        }
+
+        [[nodiscard]] std::string editor_source_worker_progress_phase(
+            const EditorState& editor,
+            const bool cancelRequested)
+        {
+            const std::string_view status{ editor.updateStatus };
+            const auto has = [&](const std::string_view needle) noexcept
+                {
+                    return status.find(needle) != std::string_view::npos;
+                };
+
+            if (cancelRequested)
+                return "cancel requested";
+            if (has("Downloading managed vcpkg fallback") || has("managed fallback toolchain"))
+                return "vcpkg fallback";
+            if (has("Bootstrapping managed vcpkg") || has("Validating signature"))
+                return "vcpkg bootstrap";
+            if (has("Downloading managed vcpkg") || has("managed vcpkg toolchain"))
+                return "vcpkg download";
+            if (has("Managed vcpkg ready")
+                || has("Initializing managed vcpkg")
+                || has("Reconfigured the source snapshot")
+                || has("git registry"))
+            {
+                return "vcpkg registry";
+            }
+            if (has("Restoring source dependencies"))
+                return "dependency restore";
+            if (has("MSBuild Release attempt") || has("MSBuild attempt"))
+                return "compiler";
+            if (has("Source snapshot") || has("Downloading latest"))
+                return "source download";
+            return "working";
+        }
+
+        [[nodiscard]] std::string editor_source_worker_progress_status(
+            const EditorState& editor,
+            const bool cancelRequested)
+        {
+            const auto elapsed = static_cast<int>((std::max)(0.0, editor_update_elapsed_seconds(editor)));
+            return editor_source_worker_progress_phase(editor, cancelRequested)
+                + " "
+                + format_editor_update_elapsed_seconds(elapsed);
+        }
+
+        [[nodiscard]] int editor_source_cancel_arm_seconds_remaining(const EditorState& editor)
+        {
+            const double remaining = kEditorSourceCancelArmSeconds - editor_update_elapsed_seconds(editor);
+            return static_cast<int>(std::ceil((std::max)(0.0, remaining)));
+        }
+
+        [[nodiscard]] bool editor_source_cancel_available(const EditorState& editor)
+        {
+            if (editor.updateState != EditorUpdateState::SourceWorkerRunning
+                || editor.updateSourceCancelRequested
+                || editor.updateOperationStartedAt == std::chrono::steady_clock::time_point{})
+            {
+                return false;
+            }
+
+            if (editor_update_elapsed_seconds(editor) < kEditorSourceCancelArmSeconds)
+                return false;
+
+            return updater::source_update_worker_active();
+        }
+
+        [[nodiscard]] float editor_update_activity_phase(const EditorState& editor)
+        {
+            if (editor.updateOperationStartedAt == std::chrono::steady_clock::time_point{})
+            {
+                const double nowSeconds = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count();
+                return static_cast<float>(std::fmod(nowSeconds * 0.35, 1.0));
+            }
+
+            return static_cast<float>(std::fmod(editor_update_elapsed_seconds(editor) * 0.35, 1.0));
+        }
+
         [[nodiscard]] float editor_update_progress_value(const EditorState& editor)
         {
             if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
             {
-                const double elapsed = editor_update_elapsed_seconds(editor);
-                return static_cast<float>(std::clamp(0.14 + elapsed * 0.004, 0.14, 0.98));
+                return editor_source_worker_progress_value(editor);
             }
 
             if (!editor.updateCheckPending)
@@ -162,8 +472,11 @@
 
         [[nodiscard]] std::string editor_update_running_status(const EditorState& editor)
         {
+            if (editor.updateProjectSourceDownloadPending)
+                return "Downloading project source code into the project source cache. This does not update or restart the runtime.";
+
             if (editor.updateSourceInstallPending)
-                return "Source rebuild is running. Reading epoch_source_update.log and epoch_update_handoff.log for live evidence; Cancel asks the worker to stop at the next safe checkpoint.";
+                return "Source rebuild is running. Reading logs/epoch_source_update.log and logs/epoch_update_handoff.log for live evidence; Cancel asks the worker to stop at the next safe checkpoint.";
 
             if (editor.updateInstallPending)
                 return "Installing update. Checking platform release, replacing stale cache, and staging replacement.";
@@ -203,6 +516,26 @@
             const auto pos = text.find_last_of("\r\n");
             const std::string_view line = pos == std::string_view::npos ? text : text.substr(pos + 1);
             return std::string{ line };
+        }
+
+        [[nodiscard]] std::string visible_update_evidence_line(
+            const std::string_view sourceText,
+            const std::string_view handoffText)
+        {
+            std::string sourceLine = last_nonempty_update_log_line(sourceText);
+            const bool sourceLineIsUpdaterEvidence =
+                sourceLine.find("[INFO]") != std::string::npos
+                || sourceLine.find("[WARN]") != std::string::npos
+                || sourceLine.find("[ERROR]") != std::string::npos
+                || sourceLine.find("[FATAL]") != std::string::npos;
+            if (!sourceLine.empty() && sourceLineIsUpdaterEvidence)
+                return sourceLine;
+
+            std::string handoffLine = last_nonempty_update_log_line(handoffText);
+            if (!handoffLine.empty())
+                return handoffLine;
+
+            return sourceLine;
         }
 
         [[nodiscard]] bool update_log_contains(std::string_view text, std::string_view needle) noexcept
@@ -253,13 +586,27 @@
             }
         };
 
+        void adopt_editor_source_update_worker(EditorState& editor);
         void start_editor_source_update_install(EditorState& editor);
+        void start_editor_project_source_code_download(EditorState& editor);
 
         void start_editor_update_check(EditorState& editor)
         {
+            if (guard_editor_update_retry_wait(editor))
+                return;
+
             if (editor.updateCheckPending.has_value())
             {
                 push_editor_log(editor, "[update] Update check is already running.");
+                return;
+            }
+
+            if (guard_editor_recent_source_cancel(editor))
+                return;
+
+            if (updater::source_update_worker_active())
+            {
+                adopt_editor_source_update_worker(editor);
                 return;
             }
 
@@ -274,6 +621,9 @@
             editor.updateStatus = "Checking for updates...";
             editor.updateInstallPending = false;
             editor.updateSourceInstallPending = false;
+            editor.updateProjectSourceDownloadPending = false;
+            editor.updateSourceCancelRequested = false;
+            clear_editor_update_retry_wait(editor);
             clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Checking for available Epoch updates.");
@@ -306,11 +656,40 @@
             }
         }
 
+        void adopt_editor_source_update_worker(EditorState& editor)
+        {
+            editor.updateState = EditorUpdateState::SourceWorkerRunning;
+            editor.updateInstallPending = false;
+            editor.updateSourceInstallPending = false;
+            editor.updateProjectSourceDownloadPending = false;
+            editor.updateSourceCancelRequested = updater::source_update_cancel_requested();
+            editor.showUpdateConfirmModal = true;
+            if (editor.updateOperationStartedAt == std::chrono::steady_clock::time_point{})
+                editor.updateOperationStartedAt = std::chrono::steady_clock::now();
+            clear_editor_update_restart_countdown(editor);
+            editor.updateStatus = editor.updateSourceCancelRequested
+                ? "A source rebuild is already stopping. Waiting for worker cleanup before retry."
+                : "A source rebuild is already active. Waiting for worker evidence before starting another update.";
+            push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+        }
+
         void start_editor_update_install(EditorState& editor)
         {
+            if (guard_editor_update_retry_wait(editor))
+                return;
+
             if (editor.updateCheckPending.has_value())
             {
                 push_editor_log(editor, "[update] Update worker is already running.");
+                return;
+            }
+
+            if (guard_editor_recent_source_cancel(editor))
+                return;
+
+            if (updater::source_update_worker_active())
+            {
+                adopt_editor_source_update_worker(editor);
                 return;
             }
 
@@ -332,6 +711,9 @@
             editor.updateStatus = "Installing the best available update. Epoch checks packaged releases first, then falls back to source only when no newer package exists.";
             editor.updateInstallPending = true;
             editor.updateSourceInstallPending = false;
+            editor.updateProjectSourceDownloadPending = false;
+            editor.updateSourceCancelRequested = false;
+            clear_editor_update_retry_wait(editor);
             clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Installing through the binary-first update gate.");
@@ -370,9 +752,21 @@
 
         void start_editor_source_update_install(EditorState& editor)
         {
+            if (guard_editor_update_retry_wait(editor))
+                return;
+
             if (editor.updateCheckPending.has_value())
             {
                 push_editor_log(editor, "[update] Source update worker is already running.");
+                return;
+            }
+
+            if (guard_editor_recent_source_cancel(editor))
+                return;
+
+            if (updater::source_update_worker_active())
+            {
+                adopt_editor_source_update_worker(editor);
                 return;
             }
 
@@ -387,6 +781,9 @@
             editor.updateStatus = "Launching the advanced source rebuild worker. Use this only when you intentionally want latest main source instead of the packaged platform release.";
             editor.updateInstallPending = true;
             editor.updateSourceInstallPending = true;
+            editor.updateProjectSourceDownloadPending = false;
+            editor.updateSourceCancelRequested = false;
+            clear_editor_update_retry_wait(editor);
             clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
             push_editor_log(editor, "[update] Launching advanced source rebuild worker.");
@@ -406,8 +803,8 @@
                         result.update_performed = false;
                         result.source_update_performed = workerLaunched;
                         result.status_message = workerLaunched
-                            ? "Source rebuild worker started. Epoch will restart automatically only after build and restart evidence succeeds; watch epoch_source_update.log beside the executable."
-                            : "Source update failed to start. Check epoch_source_update.log and epoch_update_handoff.log beside the executable.";
+                            ? "Source rebuild worker started. Epoch will restart automatically only after build and restart evidence succeeds; watch logs/epoch_source_update.log beside the executable."
+                            : "Source update failed to start. Check logs/epoch_source_update.log and logs/epoch_update_handoff.log beside the executable.";
                     }
                     catch (const std::exception& ex)
                     {
@@ -416,6 +813,77 @@
                     catch (...)
                     {
                         result.status_message = "Source update failed to start with an unknown exception.";
+                    }
+                    return result;
+                }));
+            }
+            catch (...)
+            {
+                release_editor_update_operation();
+                throw;
+            }
+        }
+
+        void start_editor_project_source_code_download(EditorState& editor)
+        {
+            if (guard_editor_update_retry_wait(editor))
+                return;
+
+            if (editor.updateCheckPending.has_value())
+            {
+                push_editor_log(editor, "[update] Project source code download is already running.");
+                return;
+            }
+
+            if (guard_editor_recent_source_cancel(editor))
+                return;
+
+            if (updater::source_update_worker_active())
+            {
+                editor.updateStatus = "Project source code download waits while the source update worker is active.";
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                adopt_editor_source_update_worker(editor);
+                return;
+            }
+
+            if (!try_claim_editor_update_operation())
+            {
+                editor.updateStatus = "Another editor pane is already checking, installing, or downloading source.";
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                return;
+            }
+
+            editor.updateState = EditorUpdateState::Checking;
+            editor.updateStatus = "Downloading project source code into the project source cache. This will not update, rebuild, restart, or replace Epoch.";
+            editor.updateInstallPending = false;
+            editor.updateSourceInstallPending = false;
+            editor.updateProjectSourceDownloadPending = true;
+            editor.updateSourceCancelRequested = false;
+            clear_editor_update_retry_wait(editor);
+            clear_editor_update_restart_countdown(editor);
+            editor.updateOperationStartedAt = std::chrono::steady_clock::now();
+            push_editor_log(editor, "[update] Project source code download started.");
+
+            try
+            {
+                editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
+                    ScopedEditorUpdateOperation updateOperation{};
+                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    updater::UpdateCommandResult result{};
+                    try
+                    {
+                        const updater::ProjectSourceDownloadResult download =
+                            updater::download_project_source_code(editor_update_channel());
+                        result.update_performed = download.ok;
+                        result.status_message = download.status_message;
+                    }
+                    catch (const std::exception& ex)
+                    {
+                        result.status_message = std::string{ "Project source code download failed: " } + ex.what();
+                    }
+                    catch (...)
+                    {
+                        result.status_message = "Project source code download failed with an unknown exception.";
                     }
                     return result;
                 }));
@@ -440,27 +908,48 @@
 
             const bool installPending = editor.updateInstallPending;
             const bool sourceInstallPending = editor.updateSourceInstallPending;
+            const bool projectSourceDownloadPending = editor.updateProjectSourceDownloadPending;
+            const updater::UpdateCommandResult previousUpdateCheck = editor.lastUpdateCheck;
 
             try
             {
-                editor.lastUpdateCheck = editor.updateCheckPending->get();
+                updater::UpdateCommandResult completedUpdateCheck = editor.updateCheckPending->get();
+                editor.lastUpdateCheck = completedUpdateCheck;
                 editor.updateCheckPending.reset();
                 const bool sourceWorkerRunning =
                     installPending
-                    && editor.lastUpdateCheck.source_fallback_attempted
-                    && editor.lastUpdateCheck.source_update_performed
-                    && !editor.lastUpdateCheck.packaged_update_performed;
+                    && completedUpdateCheck.source_fallback_attempted
+                    && completedUpdateCheck.source_update_performed
+                    && !completedUpdateCheck.packaged_update_performed;
                 editor.updateInstallPending = false;
                 editor.updateSourceInstallPending = false;
+                editor.updateProjectSourceDownloadPending = false;
+                if (!sourceWorkerRunning)
+                    editor.updateSourceCancelRequested = false;
                 if (!sourceWorkerRunning)
                     editor.updateOperationStartedAt = {};
+
+                if (projectSourceDownloadPending)
+                {
+                    editor.updateState = editor.lastUpdateCheck.update_performed
+                        ? EditorUpdateState::Idle
+                        : EditorUpdateState::Failed;
+                    editor.updateSourceCancelRequested = false;
+                    editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                    editor.showUpdateConfirmModal = !editor.lastUpdateCheck.update_performed;
+                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                    return;
+                }
 
                 if (installPending)
                 {
                     if (sourceWorkerRunning)
                     {
+                        editor.lastUpdateCheck = previousUpdateCheck;
+                        make_editor_source_attempt_retryable(editor, completedUpdateCheck);
                         editor.updateState = EditorUpdateState::SourceWorkerRunning;
-                        editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                        editor.updateSourceCancelRequested = false;
+                        editor.updateStatus = describe_update_result(completedUpdateCheck);
                         editor.showUpdateConfirmModal = true;
                         push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                         return;
@@ -471,6 +960,7 @@
                         && !editor.lastUpdateCheck.source_update_performed)
                     {
                         editor.updateState = EditorUpdateState::Failed;
+                        editor.updateSourceCancelRequested = false;
                         editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
                         push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                         return;
@@ -480,6 +970,7 @@
                         && !editor.lastUpdateCheck.platform_build_ok)
                     {
                         editor.updateState = EditorUpdateState::Failed;
+                        editor.updateSourceCancelRequested = false;
                         editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
                         push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                         return;
@@ -488,6 +979,7 @@
                     if (editor.lastUpdateCheck.update_performed)
                     {
                         editor.updateState = EditorUpdateState::RestartReady;
+                        editor.updateSourceCancelRequested = false;
                         editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
                         arm_editor_update_restart_countdown(editor);
                         push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
@@ -495,6 +987,7 @@
                     }
 
                     editor.updateState = EditorUpdateState::Failed;
+                    editor.updateSourceCancelRequested = false;
                     editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
                     push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                     return;
@@ -503,12 +996,14 @@
                 if (editor.lastUpdateCheck.update_available || editor.lastUpdateCheck.force_required)
                 {
                     editor.updateState = EditorUpdateState::Available;
+                    editor.updateSourceCancelRequested = false;
                     editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
                     push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                     return;
                 }
 
                 editor.updateState = EditorUpdateState::Idle;
+                editor.updateSourceCancelRequested = false;
                 editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
             }
@@ -517,6 +1012,8 @@
                 editor.updateCheckPending.reset();
                 editor.updateInstallPending = false;
                 editor.updateSourceInstallPending = false;
+                editor.updateProjectSourceDownloadPending = false;
+                editor.updateSourceCancelRequested = false;
                 editor.updateOperationStartedAt = {};
                 clear_editor_update_restart_countdown(editor);
                 editor.updateState = EditorUpdateState::Failed;
@@ -532,26 +1029,77 @@
 
             const std::string handoffTail = read_update_log_tail(updater::update_handoff_log_path());
             const std::string sourceTail = read_update_log_tail(updater::source_update_log_path());
-            const std::string_view evidence = !handoffTail.empty() ? std::string_view{ handoffTail } : std::string_view{ sourceTail };
+            const std::string_view evidence = !sourceTail.empty() ? std::string_view{ sourceTail } : std::string_view{ handoffTail };
 
-            if (update_log_contains(handoffTail, "Source update cancel")
-                || update_log_contains(sourceTail, "Source update cancel"))
+            const bool sourceWorkerCancelEvidence =
+                update_log_contains(handoffTail, "Source update cancel complete")
+                || update_log_contains(sourceTail, "Source update cancel complete")
+                || update_log_contains(handoffTail, "Source update canceled by operator")
+                || update_log_contains(sourceTail, "Source update canceled by operator");
+
+            if (sourceWorkerCancelEvidence && editor.updateSourceCancelRequested)
             {
+                make_editor_source_attempt_retryable(editor, editor.lastUpdateCheck);
                 editor.updateState = EditorUpdateState::Available;
+                editor.updateSourceCancelRequested = false;
                 editor.updateStatus = "Source update canceled. Update remains available if you want to retry.";
-                editor.showUpdateConfirmModal = false;
+                editor.showUpdateConfirmModal = true;
                 editor.updateOperationStartedAt = {};
+                arm_editor_update_retry_wait(editor);
                 clear_editor_update_restart_countdown(editor);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
 
-            if (update_log_contains(handoffTail, "[ERROR]") || update_log_contains(sourceTail, "[ERROR]"))
+            const bool sourceWorkerActive = updater::source_update_worker_active();
+            const bool sourceWorkerCanceled =
+                (sourceWorkerCancelEvidence || editor.updateSourceCancelRequested)
+                && !sourceWorkerActive;
+
+            if (sourceWorkerCanceled)
             {
-                const std::string lastLine = last_nonempty_update_log_line(!handoffTail.empty() ? handoffTail : sourceTail);
-                editor.updateState = EditorUpdateState::Failed;
+                make_editor_source_attempt_retryable(editor, editor.lastUpdateCheck);
+                editor.updateState = EditorUpdateState::Available;
+                editor.updateSourceCancelRequested = false;
+                editor.updateStatus = "Source update canceled. Update remains available if you want to retry.";
+                editor.showUpdateConfirmModal = true;
+                editor.updateOperationStartedAt = {};
+                arm_editor_update_retry_wait(editor);
+                clear_editor_update_restart_countdown(editor);
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                return;
+            }
+
+            if (sourceWorkerCancelEvidence && sourceWorkerActive)
+            {
+                editor.updateSourceCancelRequested = true;
+                if (editor.updateOperationStartedAt == std::chrono::steady_clock::time_point{})
+                    editor.updateOperationStartedAt = std::chrono::steady_clock::now();
+                editor.updateStatus = "Source update cancel reached the worker. Waiting for process cleanup before retry.";
+                return;
+            }
+
+            const bool sourceWorkerErrorEvidence =
+                update_log_contains(handoffTail, "[ERROR]")
+                || update_log_contains(sourceTail, "[ERROR]");
+            if (sourceWorkerErrorEvidence && sourceWorkerActive)
+            {
+                const std::string lastLine = last_nonempty_update_log_line(
+                    update_log_contains(sourceTail, "[ERROR]") ? std::string_view{ sourceTail } : std::string_view{ handoffTail });
                 editor.updateStatus = lastLine.empty()
-                    ? "Source update failed. Check epoch_source_update.log and epoch_update_handoff.log beside the executable."
+                    ? "Source update reported an error and is still cleaning up worker state before retry."
+                    : std::string{ "Source update cleanup after error:\n" } + editor_update_modal::format_status_markers(lastLine);
+                return;
+            }
+
+            if (sourceWorkerErrorEvidence)
+            {
+                const std::string lastLine = last_nonempty_update_log_line(
+                    update_log_contains(sourceTail, "[ERROR]") ? std::string_view{ sourceTail } : std::string_view{ handoffTail });
+                editor.updateState = EditorUpdateState::Failed;
+                editor.updateSourceCancelRequested = false;
+                editor.updateStatus = lastLine.empty()
+                    ? "Source update failed. Check logs/epoch_source_update.log and logs/epoch_update_handoff.log beside the executable."
                     : std::string{ "Source update failed:\n" } + editor_update_modal::format_status_markers(lastLine);
                 editor.updateOperationStartedAt = {};
                 clear_editor_update_restart_countdown(editor);
@@ -563,6 +1111,7 @@
                 || update_log_contains(sourceTail, "Built runtime ready at"))
             {
                 editor.updateState = EditorUpdateState::RestartReady;
+                editor.updateSourceCancelRequested = false;
                 editor.updateStatus = "Source rebuild is ready for runtime replacement. Press Restart to close Epoch and let the worker replace the executable.";
                 editor.updateOperationStartedAt = {};
                 editor.showUpdateConfirmModal = true;
@@ -575,6 +1124,7 @@
                 || update_log_contains(handoffTail, "Source runtime files copied successfully"))
             {
                 editor.updateState = EditorUpdateState::RestartReady;
+                editor.updateSourceCancelRequested = false;
                 editor.updateStatus = "Source update replacement completed. Restart Epoch if this window did not close automatically.";
                 editor.updateOperationStartedAt = {};
                 editor.showUpdateConfirmModal = true;
@@ -583,8 +1133,41 @@
                 return;
             }
 
-            const std::string lastLine = last_nonempty_update_log_line(evidence);
+            const std::string lastLine = visible_update_evidence_line(evidence, handoffTail);
             if (!lastLine.empty())
                 editor.updateStatus = std::string{ "Source rebuild running. Latest evidence:\n" }
                     + editor_update_modal::format_status_markers(lastLine);
+        }
+
+        void request_editor_source_update_cancel(EditorState& editor)
+        {
+            if (editor.updateSourceCancelRequested)
+            {
+                editor.updateState = EditorUpdateState::SourceWorkerRunning;
+                editor.showUpdateConfirmModal = true;
+                editor.updateStatus =
+                    "Source rebuild cancellation is already requested. Waiting for the worker checkpoint before retry.";
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                return;
+            }
+
+            editor.updateInstallPending = false;
+            editor.updateSourceInstallPending = false;
+            editor.updateProjectSourceDownloadPending = false;
+            clear_editor_update_restart_countdown(editor);
+
+            editor.updateState = EditorUpdateState::SourceWorkerRunning;
+            editor.updateSourceCancelRequested = true;
+            editor.showUpdateConfirmModal = true;
+            if (editor.updateOperationStartedAt == std::chrono::steady_clock::time_point{})
+                editor.updateOperationStartedAt = std::chrono::steady_clock::now();
+            editor.updateStatus =
+                "Source rebuild cancellation requested. Waiting for the worker to stop at its next safe checkpoint before retry.";
+            if (!updater::request_source_update_cancel())
+            {
+                editor.updateStatus =
+                    "Source rebuild cancellation could not write the cancel marker. Check logs/epoch_source_update.log beside the executable.";
+            }
+
+            push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
         }

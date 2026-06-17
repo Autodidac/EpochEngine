@@ -429,6 +429,8 @@ namespace epochnamespace::gui
         float value{};
         Vec2 size{};
         bool show_percent{ true };
+        bool activity{ false };
+        float activity_phase{ 0.0f };
     };
 
     export struct LoadingScreenOptions
@@ -447,6 +449,8 @@ namespace epochnamespace::gui
         bool dim_background{ true };
         bool capture_input{ true };
         bool show_percent{ true };
+        bool activity{ false };
+        float activity_phase{ 0.0f };
         bool reserve_action_row{ true };
     };
 

@@ -1,5 +1,5 @@
         // Included from editor.cpp inside editor_run after toolbar/menu rendering.
-        // Owns update confirmation, advanced source confirmation, and update automation UI.
+        // Owns update confirmation, project source download confirmation, and update automation UI.
 
         if (editor.showUpdateConfirmModal)
         {
@@ -8,6 +8,8 @@
                 editor.lastUpdateCheck.source_update_available
                 && !editor.lastUpdateCheck.packaged_update_available;
             const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
+            const bool sourceCancelRequested = editor.updateSourceCancelRequested;
+            const bool sourceCancelAvailable = sourceWorkerRunning && editor_source_cancel_available(editor);
             const bool updateRunning = editor.updateCheckPending.has_value() || sourceWorkerRunning;
             const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
             if (restartReady)
@@ -36,8 +38,13 @@
             const float cancelButtonWidth = sourceWorkerRunning ? 148.0f : 120.0f;
             const float primaryButtonWidth = (std::min)(220.0f, (std::max)(160.0f, contentWidth * 0.34f));
             const float advancedButtonWidth = (std::min)(190.0f, (std::max)(156.0f, contentWidth * 0.28f));
-            const bool showCancelButton = sourceWorkerRunning || (!updateRunning && !restartReady);
-            const bool showPrimaryButton = !updateRunning;
+            const bool showCancelButton =
+                sourceWorkerRunning
+                    ? (!sourceCancelRequested && sourceCancelAvailable)
+                    : (!updateRunning && !restartReady);
+            const bool showPrimaryButton =
+                !updateRunning
+                && (flags.installableUpdate || restartReady || sourceWorkerRunning);
             const bool showAdvancedSourceButton = !updateRunning && !restartReady;
             const editor_update_modal::ActionStrip actionStrip =
                 editor_update_modal::update_action_strip(flags, contentWidth);
@@ -51,7 +58,7 @@
                     && !updater::launch_staged_update_handoff())
                 {
                     editor.updateState = EditorUpdateState::Failed;
-                    editor.updateStatus = "Restart failed because the staged update replacement could not be launched. Check epoch_update_handoff.log beside the executable.";
+                    editor.updateStatus = "Restart failed because the staged update replacement could not be launched. Check logs/epoch_update_handoff.log beside the executable.";
                     push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                     return;
                 }
@@ -101,9 +108,17 @@
                 const float progressWidth = (std::max)(1.0f, (std::min)(contentWidth, 560.0f));
                 const std::string progressLabel = sourceWorkerRunning
                     ? "Source rebuild"
+                    : editor.updateProjectSourceDownloadPending ? "Project source"
                     : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready";
                 const std::string progressStatus = sourceWorkerRunning
-                    ? "cancel available"
+                    ? (!sourceCancelRequested && !sourceCancelAvailable)
+                        ? std::format(
+                            "{} - cancel update available in {}s",
+                            editor_source_worker_progress_status(editor, sourceCancelRequested),
+                            editor_source_cancel_arm_seconds_remaining(editor))
+                        : editor_source_worker_progress_status(editor, sourceCancelRequested)
+                    : editor.updateProjectSourceDownloadPending
+                        ? "downloading / extracting"
                     : updateRunning
                         ? "downloading / staging"
                         : restartReady
@@ -115,7 +130,9 @@
                     .status = progressStatus,
                     .value = editor_update_progress_value(editor),
                     .size = { progressWidth, 22.0f },
-                    .show_percent = true
+                    .show_percent = !sourceWorkerRunning,
+                    .activity = updateRunning || sourceWorkerRunning,
+                    .activity_phase = editor_update_activity_phase(editor)
                 });
                 cursorY += 36.0f;
             }
@@ -132,16 +149,7 @@
                     {
                         if (gui::button("Cancel Update", { contentWidth, buttonHeight }))
                         {
-                            const bool cancelRequested = updater::request_source_update_cancel();
-                            editor.showUpdateConfirmModal = false;
-                            editor.updateState = cancelRequested ? EditorUpdateState::Available : EditorUpdateState::Failed;
-                            editor.updateInstallPending = false;
-                            editor.updateSourceInstallPending = false;
-                            editor.updateOperationStartedAt = {};
-                            editor.updateStatus = cancelRequested
-                                ? "Source update cancel requested. Disposable source/download cache is being cleared; Update remains available for retry."
-                                : "Source update modal closed, but the cancel marker could not be written; check updater logs.";
-                            push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                            request_editor_source_update_cancel(editor);
                         }
                     }
                     else if (!updateRunning && !restartReady && gui::button("Cancel", { contentWidth, buttonHeight }))
@@ -182,34 +190,25 @@
                 if (showAdvancedSourceButton)
                 {
                     gui::set_cursor({ contentX, stackedButtonY });
-                    if (gui::button("Advanced Source...", { contentWidth, buttonHeight }))
+                    if (gui::button("Project Source...", { contentWidth, buttonHeight }))
                     {
                         editor.showUpdateConfirmModal = false;
                         editor.showSourceUpdateConfirmModal = true;
-                        push_editor_log(editor, "[command] Advanced source rebuild requested. Awaiting confirmation.");
+                        push_editor_log(editor, "[command] Project source code download requested. Awaiting confirmation.");
                     }
                 }
             }
             else
             {
                 gui::set_cursor({ contentX, buttonY });
-                if (sourceWorkerRunning)
+                if (showCancelButton && sourceWorkerRunning)
                 {
                     if (gui::button("Cancel Update", { cancelButtonWidth, buttonHeight }))
                     {
-                        const bool cancelRequested = updater::request_source_update_cancel();
-                        editor.showUpdateConfirmModal = false;
-                        editor.updateState = cancelRequested ? EditorUpdateState::Available : EditorUpdateState::Failed;
-                        editor.updateInstallPending = false;
-                        editor.updateSourceInstallPending = false;
-                        editor.updateOperationStartedAt = {};
-                        editor.updateStatus = cancelRequested
-                            ? "Source update cancel requested. Disposable source/download cache is being cleared; Update remains available for retry."
-                            : "Source update modal closed, but the cancel marker could not be written; check updater logs.";
-                        push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                        request_editor_source_update_cancel(editor);
                     }
                 }
-                else if (!updateRunning && !restartReady && gui::button("Cancel", { 120.0f, buttonHeight }))
+                else if (showCancelButton && !updateRunning && !restartReady && gui::button("Cancel", { 120.0f, buttonHeight }))
                 {
                     editor.showUpdateConfirmModal = false;
                     push_editor_log(editor, "[command] Update canceled.");
@@ -244,11 +243,11 @@
                 }
                 const float advancedButtonX = (std::max)(contentX, contentRight - advancedButtonWidth);
                 gui::set_cursor({ advancedButtonX, buttonY });
-                if (showAdvancedSourceButton && gui::button("Advanced Source...", { advancedButtonWidth, buttonHeight }))
+                if (showAdvancedSourceButton && gui::button("Project Source...", { advancedButtonWidth, buttonHeight }))
                 {
                     editor.showUpdateConfirmModal = false;
                     editor.showSourceUpdateConfirmModal = true;
-                    push_editor_log(editor, "[command] Advanced source rebuild requested. Awaiting confirmation.");
+                    push_editor_log(editor, "[command] Project source code download requested. Awaiting confirmation.");
                 }
             }
             gui::end_modal_window();
@@ -277,7 +276,7 @@
             const float actionBaseY = modalPos.y + modalSize.y - sourceActionStripHeight - editor_update_modal::kButtonBottomPad;
             const float contentBottom = (std::max)(modalPos.y + 64.0f, actionBaseY - editor_update_modal::kButtonTopPad);
             gui::begin_modal_window(gui::ModalWindowOptions{
-                .title = "Rebuild From Main Source",
+                .title = "Project Source Code Download",
                 .position = modalPos,
                 .size = modalSize,
                 .viewport_size = { w, h },
@@ -310,16 +309,16 @@
                 if (gui::button("Cancel", { contentWidth, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
-                    push_editor_log(editor, "[command] Advanced source rebuild canceled.");
+                    push_editor_log(editor, "[command] Project source code download canceled.");
                 }
                 actionY += buttonHeight + buttonStackGap;
                 gui::set_cursor({ actionX, actionY });
-                if (gui::button("Start Source Rebuild", { contentWidth, buttonHeight }))
+                if (gui::button("Download Source Project", { contentWidth, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
                     editor.showUpdateConfirmModal = true;
-                    push_editor_log(editor, "[command] Advanced source rebuild confirmed.");
-                    start_editor_source_update_install(editor);
+                    push_editor_log(editor, "[command] Project source code download confirmed.");
+                    start_editor_project_source_code_download(editor);
                 }
             }
             else
@@ -334,15 +333,15 @@
                 if (gui::button("Cancel", { 120.0f, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
-                    push_editor_log(editor, "[command] Advanced source rebuild canceled.");
+                    push_editor_log(editor, "[command] Project source code download canceled.");
                 }
                 gui::set_cursor({ actionX + 240.0f + 2.0f * buttonGap, actionY });
-                if (gui::button("Start Source Rebuild", { 176.0f, buttonHeight }))
+                if (gui::button("Download Source Project", { 220.0f, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
                     editor.showUpdateConfirmModal = true;
-                    push_editor_log(editor, "[command] Advanced source rebuild confirmed.");
-                    start_editor_source_update_install(editor);
+                    push_editor_log(editor, "[command] Project source code download confirmed.");
+                    start_editor_project_source_code_download(editor);
                 }
             }
             gui::end_modal_window();
@@ -371,9 +370,9 @@
                 if (editor.automationConsumed)
                     break;
                 editor.automationConsumed = true;
-                push_editor_log(editor, "[command] Auto command triggered: advanced source rebuild.");
+                push_editor_log(editor, "[command] Auto command triggered: project source code download.");
                 append_editor_automation_trace("triggered source-update");
-                start_editor_source_update_install(editor);
+                start_editor_project_source_code_download(editor);
                 break;
             case EditorAutomationCommand::None:
                 break;

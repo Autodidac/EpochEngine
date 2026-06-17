@@ -270,6 +270,7 @@ namespace epochnamespace
         const std::shared_ptr<core::Context>& ctx,
         std::string_view route_id);
     export void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id);
+    export void editor_suppress_startup_update_check(const std::shared_ptr<core::Context>& ctx);
     export void editor_reset_transient_ui(const core::Context* ctx);
     export bool editor_run_script(const core::Context* ctx, std::string_view script_name);
     export [[nodiscard]] std::span<const EditorProjectProfile> editor_project_profiles() noexcept;

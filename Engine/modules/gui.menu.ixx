@@ -96,6 +96,9 @@ export namespace epochnamespace::menu
 
     enum class Choice {
         UpdateLatest,
+        UpdatePanelCancel,
+        UpdatePanelDismiss,
+        UpdatePanelRestart,
         OpenEditor,
         ProjectTwoDStudio,
         Snake, Tetris, Pacman, Frogger, Sokoban,
@@ -121,14 +124,19 @@ export namespace epochnamespace::menu
         bool active = false;
         bool action_enabled = true;
         bool action_visible = true;
+        bool action_accepts_enter = true;
         bool restart_ready = false;
         bool cancel_available = false;
+        bool show_percent = true;
+        bool progress_active = false;
         float progress = 0.0f;
+        float activity_phase = 0.0f;
         std::string title{ "Update Epoch" };
         std::string status{};
         std::string progress_label{ "Update" };
         std::string progress_status{ "waiting" };
         std::string action_label{ "Update Epoch" };
+        Choice action_choice = Choice::UpdateLatest;
     };
 
     struct EditorCommandDescriptor {
@@ -158,7 +166,7 @@ export namespace epochnamespace::menu
         std::size_t inputGuardFrames = 0;
 
         static constexpr int ExpectedColumns = 4;
-        static constexpr float LayoutSpacing = 32.f;
+        static constexpr float LayoutSpacing = 24.f;
 
         int maxColumns = ExpectedColumns;
 
@@ -170,11 +178,11 @@ export namespace epochnamespace::menu
         LauncherUpdatePanelState updatePanel{};
 
         static constexpr std::array kLauncherChoices = {
-            ChoiceDescriptor{ Choice::ProjectTwoDStudio, "2D Studio", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Settings, "Switch Context", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::UpdateLatest, "Update Epoch", { 256.0f, 96.0f } },
-            ChoiceDescriptor{ Choice::Exit, "Quit", { 256.0f, 96.0f } }
+            ChoiceDescriptor{ Choice::ProjectTwoDStudio, "2D Studio", { 220.0f, 74.0f } },
+            ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 220.0f, 74.0f } },
+            ChoiceDescriptor{ Choice::Settings, "Switch Context", { 220.0f, 74.0f } },
+            ChoiceDescriptor{ Choice::UpdateLatest, "Update Epoch", { 220.0f, 74.0f } },
+            ChoiceDescriptor{ Choice::Exit, "Quit", { 220.0f, 74.0f } }
         };
 
         static constexpr std::array kUpdaterShellChoices = {
@@ -245,6 +253,7 @@ export namespace epochnamespace::menu
                 || updatePanel.restart_ready != state.restart_ready
                 || updatePanel.cancel_available != state.cancel_available
                 || updatePanel.action_visible != state.action_visible
+                || updatePanel.action_accepts_enter != state.action_accepts_enter
                 || updatePanel.action_label != state.action_label;
             updatePanel = std::move(state);
             if (layoutModeChanged)
@@ -332,7 +341,8 @@ export namespace epochnamespace::menu
             for (float h : rowHeights) totalHeight += h;
 
             layoutOriginX = (std::max)(0.f, (cachedWidth - totalWidth) * 0.5f);
-            layoutOriginY = (std::max)(0.f, (cachedHeight - totalHeight) * 0.5f);
+            const float verticalBias = core::cli::updater_shell_requested ? 0.5f : 0.38f;
+            layoutOriginY = (std::max)(0.f, (cachedHeight - totalHeight) * verticalBias);
             layoutWidth = totalWidth;
             layoutHeight = totalHeight;
 
@@ -593,7 +603,9 @@ export namespace epochnamespace::menu
                     .panel_size = { (std::max)(460.0f, (std::min)(frameSize.x - 96.0f, 760.0f)), 340.0f },
                     .dim_background = false,
                     .capture_input = true,
-                    .show_percent = true,
+                    .show_percent = updatePanel.show_percent,
+                    .activity = updatePanel.progress_active,
+                    .activity_phase = updatePanel.activity_phase,
                     .reserve_action_row = updatePanel.action_visible
                 });
 
@@ -611,9 +623,16 @@ export namespace epochnamespace::menu
 
                 std::optional<Choice> chosen{};
                 if (!inputGuarded && updatePanel.action_visible && updatePanel.action_enabled && clicked)
-                    chosen = Choice::UpdateLatest;
-                else if (!inputGuarded && updatePanel.action_visible && updatePanel.action_enabled && enterPressed && !prevEnter)
-                    chosen = Choice::UpdateLatest;
+                    chosen = updatePanel.action_choice;
+                else if (!inputGuarded
+                    && updatePanel.action_visible
+                    && updatePanel.action_enabled
+                    && updatePanel.action_accepts_enter
+                    && enterPressed
+                    && !prevEnter)
+                {
+                    chosen = updatePanel.action_choice;
+                }
 
                 prevEnter = enterPressed;
                 return chosen;
@@ -729,12 +748,18 @@ export namespace epochnamespace::menu
 
             gui::set_cursor({ contentX, framePosition.y + 48.0f });
             const float descriptionHeight = gui::wrapped_text_height(updater_shell_description(), textWidth);
+            const float statusHeight = statusLine.empty()
+                ? 0.0f
+                : gui::wrapped_text_height(statusLine, textWidth);
+            const float statusGap = statusLine.empty() ? 0.0f : 18.0f;
             const float stackHeight =
                 lineHeight +
                 18.0f +
                 lineHeight +
                 26.0f +
                 descriptionHeight +
+                statusGap +
+                statusHeight +
                 32.0f +
                 buttonHeight;
             const float contentY = framePosition.y + (std::max)(32.0f, (frameSize.y - stackHeight) * 0.5f);
@@ -748,7 +773,15 @@ export namespace epochnamespace::menu
             gui::set_cursor({ contentX + textInset, contentY + lineHeight * 2.0f + 44.0f });
             gui::wrapped_label(updater_shell_description(), textWidth);
 
-            gui::set_cursor({ contentX, contentY + lineHeight * 2.0f + 76.0f + descriptionHeight });
+            float buttonY = contentY + lineHeight * 2.0f + 76.0f + descriptionHeight;
+            if (!statusLine.empty())
+            {
+                gui::set_cursor({ contentX + textInset, buttonY + statusGap });
+                gui::wrapped_label(statusLine, textWidth);
+                buttonY += statusGap + statusHeight;
+            }
+
+            gui::set_cursor({ contentX, buttonY });
             const bool clicked = gui::button("Update To Current Epoch", { buttonWidth, buttonHeight });
 
             gui::end_window();

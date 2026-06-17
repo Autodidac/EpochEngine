@@ -5079,7 +5079,9 @@ namespace epochnamespace::gui
         const gui_lib::ProgressBarLayout& layout,
         std::string_view label,
         std::string_view status,
-        bool show_percent) noexcept
+        bool show_percent,
+        bool activity,
+        float activity_phase) noexcept
     {
         if (!g_frame.ctx)
             return;
@@ -5103,6 +5105,22 @@ namespace epochnamespace::gui
                 layout.fill.position.y,
                 layout.fill.size.x,
                 layout.fill.size.y);
+        }
+
+        if (activity && layout.inner.size.x > 8.0f && layout.inner.size.y > 4.0f)
+        {
+            const float normalizedPhase = activity_phase - std::floor(activity_phase);
+            const float stripeWidth = std::clamp(layout.inner.size.x * 0.18f, 24.0f, 96.0f);
+            const float travel = layout.inner.size.x + stripeWidth;
+            const float stripeX = layout.inner.position.x + normalizedPhase * travel - stripeWidth;
+            ContentClipScope progressClip(
+                { layout.inner.position.x, layout.inner.position.y },
+                { layout.inner.position.x + layout.inner.size.x, layout.inner.position.y + layout.inner.size.y });
+            draw_sprite(palette.buttonHover,
+                stripeX,
+                layout.inner.position.y,
+                stripeWidth,
+                layout.inner.size.y);
         }
 
         draw_sprite(palette.buttonHover,
@@ -5189,7 +5207,13 @@ namespace epochnamespace::gui
         ContentClipScope localClip(
             { drawPos.x, drawPos.y },
             { drawPos.x + width, drawPos.y + height });
-        draw_progress_bar_layout(layout, options.label, options.status, options.show_percent);
+        draw_progress_bar_layout(
+            layout,
+            options.label,
+            options.status,
+            options.show_percent,
+            options.activity,
+            options.activity_phase);
 
         advance_cursor({ 0.0f, height + kContentPadding });
     }
@@ -5290,7 +5314,9 @@ namespace epochnamespace::gui
             layout.progress,
             options.progress_label,
             options.progress_status,
-            options.show_percent);
+            options.show_percent,
+            options.activity,
+            options.activity_phase);
 
         if (!options.progress_status.empty())
             draw_text_line(options.progress_status, layout.status.position.x, layout.status.position.y, statusScale);

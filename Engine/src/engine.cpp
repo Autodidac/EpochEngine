@@ -55,6 +55,12 @@
 #  if defined(_DEBUG)
 #    include <crtdbg.h>
 #  endif
+#else
+
+        void append_launcher_cancel_breadcrumb_noexcept(const std::string_view) noexcept
+        {
+        }
+
 #endif
 
 // -----------------------------
@@ -67,6 +73,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <future>
@@ -2999,6 +3006,157 @@ namespace epochnamespace::core
         constexpr std::string_view kEngineLog = "Engine.Runtime";
         constexpr std::string_view kEditorLog = "Engine.Editor";
 
+#if defined(_WIN32)
+        LONG WINAPI log_unhandled_windows_exception(EXCEPTION_POINTERS* exception_info) noexcept
+        {
+            try
+            {
+                const auto* record = exception_info ? exception_info->ExceptionRecord : nullptr;
+                const unsigned long code = record ? record->ExceptionCode : 0ul;
+                const auto address = reinterpret_cast<std::uintptr_t>(record ? record->ExceptionAddress : nullptr);
+                logger::get(kEditorLog).logf(
+                    logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Unhandled Windows exception reached the editor process: code=0x{:08X} address=0x{:016X}",
+                    code,
+                    static_cast<unsigned long long>(address));
+            }
+            catch (...)
+            {
+            }
+
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
+
+        void install_windows_crash_breadcrumbs() noexcept
+        {
+            ::SetUnhandledExceptionFilter(log_unhandled_windows_exception);
+        }
+
+        [[nodiscard]] bool current_module_directory_noexcept(std::wstring& directory) noexcept
+        {
+            try
+            {
+                wchar_t module_path[32768]{};
+                const DWORD length = ::GetModuleFileNameW(
+                    nullptr,
+                    module_path,
+                    static_cast<DWORD>(std::size(module_path)));
+                if (length == 0u || length >= static_cast<DWORD>(std::size(module_path)))
+                    return false;
+
+                wchar_t* slash = nullptr;
+                for (wchar_t* cursor = module_path; *cursor != L'\0'; ++cursor)
+                {
+                    if (*cursor == L'\\' || *cursor == L'/')
+                        slash = cursor;
+                }
+                if (slash == nullptr)
+                    return false;
+
+                *(slash + 1) = L'\0';
+                directory.assign(module_path);
+                return true;
+            }
+            catch (...)
+            {
+                directory.clear();
+                return false;
+            }
+        }
+
+        [[nodiscard]] bool current_log_directory_noexcept(std::wstring& directory) noexcept
+        {
+            try
+            {
+                std::wstring module_directory;
+                if (!current_module_directory_noexcept(module_directory))
+                    return false;
+
+                directory = module_directory;
+                directory += L"logs";
+                if (::CreateDirectoryW(directory.c_str(), nullptr) == FALSE)
+                {
+                    const DWORD error = ::GetLastError();
+                    if (error != ERROR_ALREADY_EXISTS)
+                        return false;
+                }
+
+                const DWORD attributes = ::GetFileAttributesW(directory.c_str());
+                if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0u)
+                    return false;
+
+                directory += L"\\";
+                return true;
+            }
+            catch (...)
+            {
+                directory.clear();
+                return false;
+            }
+        }
+
+        void append_raw_text_file_noexcept(const std::wstring& path, const std::string_view text) noexcept
+        {
+            HANDLE file = ::CreateFileW(
+                path.c_str(),
+                FILE_APPEND_DATA,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr,
+                OPEN_ALWAYS,
+                FILE_ATTRIBUTE_NORMAL,
+                nullptr);
+            if (file == INVALID_HANDLE_VALUE)
+                return;
+
+            DWORD written = 0u;
+            (void)::WriteFile(
+                file,
+                text.data(),
+                static_cast<DWORD>(text.size()),
+                &written,
+                nullptr);
+            ::CloseHandle(file);
+        }
+
+        void append_launcher_cancel_breadcrumb_noexcept(const std::string_view text) noexcept
+        {
+            try
+            {
+                std::wstring log_directory;
+                if (!current_log_directory_noexcept(log_directory))
+                    return;
+
+                SYSTEMTIME now{};
+                ::GetLocalTime(&now);
+                char prefix[96]{};
+                const int prefix_length = ::wsprintfA(
+                    prefix,
+                    "%04u-%02u-%02u %02u:%02u:%02u.%03u [launcher-cancel] ",
+                    static_cast<unsigned>(now.wYear),
+                    static_cast<unsigned>(now.wMonth),
+                    static_cast<unsigned>(now.wDay),
+                    static_cast<unsigned>(now.wHour),
+                    static_cast<unsigned>(now.wMinute),
+                    static_cast<unsigned>(now.wSecond),
+                    static_cast<unsigned>(now.wMilliseconds));
+                if (prefix_length <= 0)
+                    return;
+
+                std::wstring path = log_directory;
+                path += L"epoch_launcher_update_cancel.log";
+
+                append_raw_text_file_noexcept(path, std::string_view{ prefix, static_cast<std::size_t>(prefix_length) });
+                append_raw_text_file_noexcept(path, text);
+                append_raw_text_file_noexcept(path, "\r\n");
+            }
+            catch (...)
+            {
+            }
+        }
+
+#endif
+
         [[nodiscard]] std::unique_ptr<epochnamespace::scene::Scene> make_scene_from_id(std::string_view scene_id);
         [[nodiscard]] bool launch_project_child_process(std::string_view launch_argument);
 
@@ -4029,6 +4187,7 @@ namespace epochnamespace::core
             bool routed_gui_upload_refreshed{ false };
             std::optional<std::string> pending_editor_project_id{};
             std::uint32_t launcher_loading_frames{ 0 };
+            std::uint32_t launcher_loading_total_frames{ 0 };
         };
 
         struct PreviewLookState
@@ -4727,6 +4886,9 @@ namespace epochnamespace::core
             case Choice::ProjectTwoDStudio:
             case Choice::About:
             case Choice::UpdateLatest:
+            case Choice::UpdatePanelCancel:
+            case Choice::UpdatePanelDismiss:
+            case Choice::UpdatePanelRestart:
             case Choice::Exit:
             default:
                 return {};
@@ -4932,6 +5094,7 @@ namespace epochnamespace::core
                 auto editorSnapshot = std::move(pendingIt->snapshot);
                 Context* const sourceContext = pendingIt->source_context;
                 const bool closeSourceOnRestore = pendingIt->close_source_on_restore;
+                const bool routedPanelRestore = !guiRoute.empty();
                 pendingEditorSwitchSnapshots.erase(pendingIt);
 
                 auto fail_restore = [&](std::string_view reason) -> PendingEditorRestoreStatus
@@ -4964,6 +5127,18 @@ namespace epochnamespace::core
                 targetCtx->clear_scene_viewport();
                 targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
 
+                if (routedPanelRestore)
+                {
+                    if (sourceContext && sourceContext != targetCtx.get())
+                    {
+                        epochnamespace::editor_set_context_selection_status(
+                            sourceContext,
+                            std::string{ "Detached " } + std::string{ guiRoute }
+                                + " panel cloned editor state; source editor remains active.");
+                    }
+                    return PendingEditorRestoreStatus::restored;
+                }
+
                 if (closeSourceOnRestore
                     && sourceContext
                     && sourceContext != targetCtx.get())
@@ -4972,6 +5147,25 @@ namespace epochnamespace::core
                         sourceContext,
                         "source editor context handed off after replacement restore");
                 }
+                else if (!closeSourceOnRestore
+                    && sourceContext
+                    && sourceContext != targetCtx.get())
+                {
+                    if (auto sourceIt = sessions.find(sourceContext); sourceIt != sessions.end())
+                    {
+                        unload_active_scene(sourceIt->second);
+                        sourceIt->second.menu.cleanup();
+                        sourceIt->second.mode = SessionMode::Menu;
+                        sourceIt->second.return_mode = SessionMode::Menu;
+                    }
+                    sourceContext->clear_scene_viewport();
+                    sourceContext->set_scene_preview_mode(core::ScenePreviewMode::None);
+                    epochnamespace::editor_set_context_selection_status(
+                        sourceContext,
+                        std::string{ "Editor session parked after handoff to " }
+                            + std::string{ context_type_label(targetCtx->type) }
+                            + "; source context stayed alive to avoid backend teardown during switch.");
+                }
                 return PendingEditorRestoreStatus::restored;
             };
 
@@ -4979,17 +5173,29 @@ namespace epochnamespace::core
             {
                 if (frame_count++ >= smoke_max_frames)
                 {
+                    logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
+                        logger::LogLevel::INFO,
+                        "Context session loop ended after the bounded smoke frame budget.",
+                        std::source_location::current());
                     running = false;
                     break;
                 }
                 if (!pump())
                 {
+                    logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
+                        logger::LogLevel::INFO,
+                        "Context session loop ended because the platform event pump requested shutdown.",
+                        std::source_location::current());
                     running = false;
                     break;
                 }
 
                 if (!mgr.IsRunning())
                 {
+                    logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
+                        logger::LogLevel::INFO,
+                        "Context session loop ended because the context manager stopped running.",
+                        std::source_location::current());
                     running = false;
                     break;
                 }
@@ -5020,6 +5226,10 @@ namespace epochnamespace::core
 
                 if (!has_live_native_window)
                 {
+                    logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
+                        logger::LogLevel::WARN,
+                        "Context session loop ended because no live native window remained.",
+                        std::source_location::current());
                     mgr.StopRunning();
                     running = false;
                     break;
@@ -5058,11 +5268,16 @@ namespace epochnamespace::core
                     if (!targetCtx)
                         return;
 
+                    epochnamespace::input::keyPressed.reset();
+                    epochnamespace::input::mousePressed.reset();
+                    epochnamespace::input::mouseWheel.store(0, std::memory_order_relaxed);
+
                     unload_active_scene(targetSession);
                     targetSession.menu.cleanup();
                     targetSession.mode = SessionMode::Editor;
                     targetSession.return_mode = SessionMode::Menu;
 
+                    epochnamespace::editor_suppress_startup_update_check(targetCtx);
                     if (!project_id.empty())
                         epochnamespace::editor_load_project(targetCtx, project_id);
                     else
@@ -5284,7 +5499,7 @@ namespace epochnamespace::core
                             return;
                         }
 
-                        if (!stash_editor_switch_snapshot(targetType, sourceCtx, {}, true))
+                        if (!stash_editor_switch_snapshot(targetType, sourceCtx, {}, false))
                         {
                             epochnamespace::editor_set_context_selection_status(
                                 sourceCtx.get(),
@@ -5333,7 +5548,7 @@ namespace epochnamespace::core
                         epochnamespace::editor_set_context_selection_status(
                             sourceCtx.get(),
                             std::string{ "Switching editor to new " } + std::string{ context_type_label(targetType) }
-                                + " context; source context will close after restore.");
+                                + " context; source context will park after restore.");
                         logger::get(kEditorLog).logf(
                             logger::LogLevel::INFO,
                             std::source_location::current(),
@@ -5853,7 +6068,9 @@ namespace epochnamespace::core
                             switch (editor_frame.command)
                             {
                             case epochnamespace::EditorCommand::OpenLauncher:
-                                session.launcher_loading_frames = (std::max)(session.launcher_loading_frames, std::uint32_t{ 1 });
+                                session.launcher_loading_frames = (std::max)(session.launcher_loading_frames, std::uint32_t{ 18 });
+                                session.launcher_loading_total_frames =
+                                    (std::max)(session.launcher_loading_total_frames, session.launcher_loading_frames);
                                 reset_to_menu(session, ctx);
                                 ctx_running = true;
                                 break;
@@ -6068,6 +6285,49 @@ namespace epochnamespace::core
 
                                 return false;
                             };
+                            auto launcher_update_blocks_mode_switch = [&]() -> bool
+                            {
+                                if (launcherUpdate.has_pending_work())
+                                {
+                                    publish_launcher_update_status(
+                                        "Update is still checking or staging. Wait for the update panel before opening another mode.");
+                                    session.menu.guard_next_input_frames(8u);
+                                    return true;
+                                }
+
+                                if (launcherUpdate.source_worker_running)
+                                {
+                                    launcherUpdate.set_status(
+                                        launcherUpdate.source_cancel_pending()
+                                            ? "Source update cancellation is still settling. Wait for the update panel before opening another mode."
+                                            : "Source update is still running. Wait for restart-ready, cancel, or failure evidence before opening another mode.");
+                                    publish_current_launcher_update_status();
+                                    session.menu.guard_next_input_frames(8u);
+                                    return true;
+                                }
+
+                                if (const int recentCancelWait =
+                                    epochnamespace::updater::source_update_recent_cancel_seconds_remaining(
+                                        launcher_update::kCancelRetryCooldownSeconds);
+                                    recentCancelWait > 0)
+                                {
+                                    launcherUpdate.show_retry_wait_for_seconds(recentCancelWait);
+                                    publish_current_launcher_update_status();
+                                    session.menu.guard_next_input_frames(8u);
+                                    return false;
+                                }
+
+                                if (epochnamespace::updater::source_update_worker_active())
+                                {
+                                    launcherUpdate.observe_existing_source_worker(
+                                        epochnamespace::updater::source_update_cancel_requested());
+                                    publish_current_launcher_update_status();
+                                    session.menu.guard_next_input_frames(8u);
+                                    return true;
+                                }
+
+                                return false;
+                            };
                             if (launcherUpdate.pending_ready())
                             {
                                 try
@@ -6132,6 +6392,13 @@ namespace epochnamespace::core
                             std::optional<std::string> pendingEditorProject{};
                             const int transitionWidth = (std::max)(1, ctx ? ctx->get_width_safe() : (win ? win->width : 1));
                             const int transitionHeight = (std::max)(1, ctx ? ctx->get_height_safe() : (win ? win->height : 1));
+                            if (session.pending_editor_project_id && session.launcher_loading_frames == 0)
+                            {
+                                session.launcher_loading_frames = 18;
+                                session.launcher_loading_total_frames = 18;
+                            }
+                            if (session.launcher_loading_frames > 0 && session.launcher_loading_total_frames == 0)
+                                session.launcher_loading_total_frames = session.launcher_loading_frames;
                             const bool draw_transition_loading =
                                 session.launcher_loading_frames > 0
                                 || session.pending_editor_project_id.has_value();
@@ -6146,6 +6413,21 @@ namespace epochnamespace::core
                                     ? std::string{ "Preparing editor workspace for " } + projectLabel + "."
                                     : std::string{ "Returning to the project launcher." };
                                 const std::string transitionLabel = loadingEditor ? "Editor loading" : "Launcher loading";
+                                const double activitySeconds = std::chrono::duration<double>(
+                                    std::chrono::steady_clock::now().time_since_epoch()).count();
+                                const float activityPhase = static_cast<float>(std::fmod(activitySeconds * 0.35, 1.0));
+                                const float remainingFrames = static_cast<float>(session.launcher_loading_frames);
+                                const float totalFrames = static_cast<float>((std::max)(std::uint32_t{ 1 }, session.launcher_loading_total_frames));
+                                const float finishHoldFrames = (std::min)(1.0f, totalFrames);
+                                const float activeFrames = (std::max)(1.0f, totalFrames - finishHoldFrames);
+                                const float activeRemaining = (std::max)(0.0f, remainingFrames - finishHoldFrames);
+                                const float completedFraction = std::clamp(1.0f - activeRemaining / activeFrames, 0.0f, 1.0f);
+                                const float transitionProgress = std::clamp(0.12f + completedFraction * 0.88f, 0.12f, 1.0f);
+                                const std::string transitionStatus = completedFraction < 0.34f
+                                    ? std::string{ "preparing" }
+                                    : completedFraction < 0.92f
+                                        ? std::string{ "loading" }
+                                        : std::string{ "ready" };
                                 gui::push_theme(gui::ThemeVariant::ClassicLauncher);
                                 gui::begin_window("", { 0.0f, 0.0f }, {
                                     static_cast<float>(transitionWidth),
@@ -6155,8 +6437,8 @@ namespace epochnamespace::core
                                     .title = transitionTitle,
                                     .message = transitionMessage,
                                     .progress_label = transitionLabel,
-                                    .progress_status = "ready",
-                                    .progress = 0.92f,
+                                    .progress_status = transitionStatus,
+                                    .progress = transitionProgress,
                                     .viewport_position = { 0.0f, 0.0f },
                                     .viewport_size = {
                                         static_cast<float>(transitionWidth),
@@ -6169,6 +6451,8 @@ namespace epochnamespace::core
                                     .dim_background = false,
                                     .capture_input = true,
                                     .show_percent = true,
+                                    .activity = true,
+                                    .activity_phase = activityPhase,
                                     .reserve_action_row = false
                                 });
                                 gui::end_window();
@@ -6176,7 +6460,9 @@ namespace epochnamespace::core
 
                                 if (session.launcher_loading_frames > 0)
                                     --session.launcher_loading_frames;
-                                if (session.pending_editor_project_id)
+                                if (session.launcher_loading_frames == 0)
+                                    session.launcher_loading_total_frames = 0;
+                                if (session.pending_editor_project_id && session.launcher_loading_frames == 0)
                                 {
                                     pendingEditorProject = std::move(session.pending_editor_project_id);
                                     session.pending_editor_project_id.reset();
@@ -6207,6 +6493,18 @@ namespace epochnamespace::core
 
                             if (choice)
                             {
+                                const bool updatePanelChoice =
+                                    *choice == epochnamespace::menu::Choice::UpdatePanelCancel
+                                    || *choice == epochnamespace::menu::Choice::UpdatePanelDismiss
+                                    || *choice == epochnamespace::menu::Choice::UpdatePanelRestart;
+                                if (updatePanelChoice)
+                                {
+                                    epochnamespace::input::keyPressed.reset();
+                                    epochnamespace::input::mousePressed.reset();
+                                    epochnamespace::input::mouseWheel.store(0, std::memory_order_relaxed);
+                                    session.menu.guard_next_input_frames(8u);
+                                }
+
                                 if (*choice == epochnamespace::menu::Choice::Exit)
                                 {
                                     suppress_menu_present = true;
@@ -6214,25 +6512,103 @@ namespace epochnamespace::core
                                     ctx_running = false;
                                     win->running = false;
                                 }
+                                else if (*choice == epochnamespace::menu::Choice::UpdatePanelRestart)
+                                {
+                                    if (launcherUpdate.packaged_restart_ready || launcherUpdate.source_restart_ready)
+                                    {
+                                        (void)finish_launcher_update_restart();
+                                    }
+                                    else
+                                    {
+                                        publish_launcher_update_status("No staged update is ready to restart.");
+                                        session.menu.guard_next_input_frames(8u);
+                                    }
+                                }
+                                else if (*choice == epochnamespace::menu::Choice::UpdatePanelDismiss)
+                                {
+                                    launcherUpdate.dismiss_result();
+                                    publish_current_launcher_update_status();
+                                    session.menu.set_update_panel_state({});
+                                    session.menu.guard_next_input_frames(8u);
+                                }
+                                else if (*choice == epochnamespace::menu::Choice::UpdatePanelCancel)
+                                {
+                                    if (launcherUpdate.source_worker_running && !launcherUpdate.source_cancel_pending())
+                                    {
+                                        append_launcher_cancel_breadcrumb_noexcept("cancel action accepted");
+#if defined(_WIN32)
+                                        const bool markerWritten = epochnamespace::updater::request_source_update_cancel();
+                                        append_launcher_cancel_breadcrumb_noexcept(
+                                            markerWritten
+                                                ? "source update cancel marker written"
+                                                : "source update cancel marker write failed");
+#else
+                                        std::thread([] {
+                                            (void)epochnamespace::updater::request_source_update_cancel();
+                                        }).detach();
+                                        const bool markerWritten = true;
+#endif
+                                        launcherUpdate.request_source_cancel(markerWritten);
+                                        append_launcher_cancel_breadcrumb_noexcept(
+                                            markerWritten
+                                                ? "launcher update state marked cancel-pending"
+                                                : "launcher update state left retryable after cancel-marker failure");
+                                    }
+                                    else if (launcherUpdate.source_cancel_pending())
+                                    {
+                                        publish_launcher_update_status("Source rebuild cancellation is already pending. Waiting for worker cleanup before retry.");
+                                    }
+                                    else
+                                    {
+                                        publish_launcher_update_status("No source update is currently running.");
+                                    }
+                                    append_launcher_cancel_breadcrumb_noexcept("publishing cancel panel state");
+                                    publish_current_launcher_update_status();
+                                    append_launcher_cancel_breadcrumb_noexcept("cancel panel state published");
+                                    session.menu.guard_next_input_frames(8u);
+                                    append_launcher_cancel_breadcrumb_noexcept("cancel input guard armed");
+                                }
                                 else if (*choice == epochnamespace::menu::Choice::UpdateLatest)
                                 {
                                     if (launcherUpdate.has_pending_work())
                                     {
                                         publish_launcher_update_status("Update is already checking or staging. Keep this launcher open.");
                                     }
-                                    else if (launcherUpdate.packaged_restart_ready)
-                                    {
-                                        (void)finish_launcher_update_restart();
-                                    }
-                                    else if (launcherUpdate.source_restart_ready)
-                                    {
-                                        (void)finish_launcher_update_restart();
-                                    }
                                     else if (launcherUpdate.source_worker_running)
                                     {
-                                        launcherUpdate.request_source_cancel(
-                                            epochnamespace::updater::request_source_update_cancel());
+                                        publish_launcher_update_status(
+                                            launcherUpdate.source_cancel_pending()
+                                                ? "Source rebuild cancellation is already pending. Waiting for worker cleanup before retry."
+                                                : "Source update is already running. Use Cancel Update in the update panel.");
                                         publish_current_launcher_update_status();
+                                        session.menu.guard_next_input_frames(8u);
+                                    }
+                                    else if (const int recentCancelWait =
+                                        epochnamespace::updater::source_update_recent_cancel_seconds_remaining(
+                                            launcher_update::kCancelRetryCooldownSeconds);
+                                        recentCancelWait > 0)
+                                    {
+                                        launcherUpdate.show_retry_wait_for_seconds(recentCancelWait);
+                                        publish_current_launcher_update_status();
+                                        session.menu.guard_next_input_frames(8u);
+                                    }
+                                    else if (epochnamespace::updater::source_update_worker_active())
+                                    {
+                                        launcherUpdate.observe_existing_source_worker(
+                                            epochnamespace::updater::source_update_cancel_requested());
+                                        publish_current_launcher_update_status();
+                                    }
+                                    else if (launcherUpdate.has_visible_result())
+                                    {
+                                        launcherUpdate.dismiss_result();
+                                        publish_current_launcher_update_status();
+                                        session.menu.guard_next_input_frames(8u);
+                                    }
+                                    else if (launcherUpdate.update_check_throttled())
+                                    {
+                                        launcherUpdate.show_retry_wait();
+                                        publish_current_launcher_update_status();
+                                        session.menu.guard_next_input_frames(8u);
                                     }
                                     else
                                     {
@@ -6240,25 +6616,66 @@ namespace epochnamespace::core
                                             logger::LogLevel::INFO,
                                             "Launcher update requested in-place; keeping the window open while the updater reports evidence.",
                                             std::source_location::current());
-                                        launcherUpdate.begin_update_check(std::async(std::launch::async, [] {
-                                            return epochnamespace::updater::run_update_command(
-                                                default_update_channel(),
-                                                true,
-                                                false,
-                                                epochnamespace::updater::UpdateHandoffMode::StageForRestart);
-                                        }));
+                                        try
+                                        {
+                                            auto updateFuture = std::async(std::launch::async, [] {
+                                                logger::get(kEditorLog).log(
+                                                    logger::LogLevel::INFO,
+                                                    "Launcher update worker entered run_update_command.",
+                                                    std::source_location::current());
+                                                return epochnamespace::updater::run_update_command(
+                                                    default_update_channel(),
+                                                    true,
+                                                    false,
+                                                    epochnamespace::updater::UpdateHandoffMode::StageForRestart);
+                                            });
+                                            launcherUpdate.begin_update_check(std::move(updateFuture));
+                                        }
+                                        catch (const std::exception& ex)
+                                        {
+                                            launcherUpdate.mark_update_start_failed(
+                                                std::string{ "Update could not start: " } + ex.what());
+                                            logger::get(kEditorLog).logf(
+                                                logger::LogLevel::Error,
+                                                std::source_location::current(),
+                                                "Launcher update worker failed to start: {}",
+                                                ex.what());
+                                        }
+                                        catch (...)
+                                        {
+                                            launcherUpdate.mark_update_start_failed(
+                                                "Update could not start because the update worker threw an unknown startup error.");
+                                            logger::get(kEditorLog).log(
+                                                logger::LogLevel::Error,
+                                                "Launcher update worker failed to start with an unknown error.",
+                                                std::source_location::current());
+                                        }
                                         publish_current_launcher_update_status();
                                     }
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::OpenEditor)
                                 {
-                                    session.pending_editor_project_id = "projectlauncher";
-                                    session.menu.guard_next_input_frames(3u);
+                                    if (!launcher_update_blocks_mode_switch())
+                                    {
+                                        launcherUpdate.clear_inactive_surface();
+                                        session.menu.set_update_panel_state({});
+                                        session.pending_editor_project_id = "projectlauncher";
+                                        session.launcher_loading_frames = 18;
+                                        session.launcher_loading_total_frames = 18;
+                                        session.menu.guard_next_input_frames(3u);
+                                    }
                                 }
                                 else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
                                 {
-                                    session.pending_editor_project_id = project_id;
-                                    session.menu.guard_next_input_frames(3u);
+                                    if (!launcher_update_blocks_mode_switch())
+                                    {
+                                        launcherUpdate.clear_inactive_surface();
+                                        session.menu.set_update_panel_state({});
+                                        session.pending_editor_project_id = project_id;
+                                        session.launcher_loading_frames = 18;
+                                        session.launcher_loading_total_frames = 18;
+                                        session.menu.guard_next_input_frames(3u);
+                                    }
                                 }
                                 else if (*choice == epochnamespace::menu::Choice::Settings)
                                 {
@@ -6356,6 +6773,10 @@ namespace epochnamespace::core
 
                 if (!any_context_alive)
                 {
+                    logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
+                        logger::LogLevel::WARN,
+                        "Context session loop ended because no live rendering context remained.",
+                        std::source_location::current());
                     running = false;
                 }
 
@@ -6815,6 +7236,7 @@ namespace
     void configure_unattended_windows_error_mode()
     {
         ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+        epochnamespace::core::engine::install_windows_crash_breadcrumbs();
 
 #if defined(_DEBUG)
         if (::IsDebuggerPresent() == FALSE)

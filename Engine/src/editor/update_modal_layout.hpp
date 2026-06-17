@@ -20,6 +20,9 @@ namespace epochnamespace::editor_update_modal
         bool sourceWorkerRunning = false;
         bool updateRunning = false;
         bool restartReady = false;
+        bool installableUpdate = false;
+        bool projectSourceDownload = false;
+        bool sourceCancelAvailable = false;
     };
 
     struct ActionStrip
@@ -96,10 +99,62 @@ namespace epochnamespace::editor_update_modal
         return out;
     }
 
+    [[nodiscard]] inline std::string soft_wrap_status_lines(
+        const std::string_view text,
+        const std::size_t targetLineLength = 112u)
+    {
+        if (text.empty())
+            return {};
+
+        std::string out;
+        out.reserve(text.size() + 16u);
+
+        std::size_t pos = 0u;
+        bool firstOutputLine = true;
+        while (pos < text.size())
+        {
+            const std::size_t lineEnd = text.find_first_of("\r\n", pos);
+            const std::size_t end = lineEnd == std::string_view::npos ? text.size() : lineEnd;
+            std::string_view line = text.substr(pos, end - pos);
+
+            while (line.size() > targetLineLength)
+            {
+                std::size_t wrap = line.rfind(' ', targetLineLength);
+                if (wrap == std::string_view::npos || wrap < targetLineLength / 2u)
+                    wrap = line.find(' ', targetLineLength);
+                if (wrap == std::string_view::npos)
+                    break;
+
+                if (!firstOutputLine)
+                    out.push_back('\n');
+                out.append(line.substr(0u, wrap));
+                firstOutputLine = false;
+
+                line.remove_prefix((std::min)(wrap + 1u, line.size()));
+                while (!line.empty() && line.front() == ' ')
+                    line.remove_prefix(1u);
+            }
+
+            if (!firstOutputLine)
+                out.push_back('\n');
+            out.append(line);
+            firstOutputLine = false;
+
+            if (lineEnd == std::string_view::npos)
+                break;
+
+            pos = lineEnd + 1u;
+            while (pos < text.size() && (text[pos] == '\n' || text[pos] == '\r'))
+                ++pos;
+        }
+
+        return out;
+    }
+
     [[nodiscard]] inline std::string trim_status(std::string_view text)
     {
-        std::string formatted = format_status_markers(text);
-        constexpr std::size_t kMaxModalStatus = 176u;
+        std::string formatted = soft_wrap_status_lines(format_status_markers(text));
+        constexpr std::size_t kMaxModalStatus = 520u;
         if (formatted.size() <= kMaxModalStatus)
             return formatted;
         return formatted.substr(0u, kMaxModalStatus - 3u) + "...";
@@ -107,6 +162,12 @@ namespace epochnamespace::editor_update_modal
 
     [[nodiscard]] inline std::string_view intro_text(const UpdateFlags flags) noexcept
     {
+        if (flags.projectSourceDownload)
+            return "Project source code is downloading into Epoch's project source cache.";
+
+        if (!flags.installableUpdate && !flags.updateRunning && !flags.restartReady && !flags.sourceWorkerRunning)
+            return "Epoch is already current for this packaged runtime. Project source code download remains available as a separate cached project snapshot.";
+
         return flags.sourceOnlyUpdate
             ? "No packaged runtime was found for this platform, so Epoch is using the source rebuild lane."
             : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and prepare the replacement.";
@@ -114,6 +175,12 @@ namespace epochnamespace::editor_update_modal
 
     [[nodiscard]] inline std::string_view cache_text(const UpdateFlags flags) noexcept
     {
+        if (flags.projectSourceDownload)
+            return "This cache lane does not update, rebuild, restart, or replace the running Epoch runtime.";
+
+        if (!flags.installableUpdate && !flags.updateRunning && !flags.restartReady && !flags.sourceWorkerRunning)
+            return "Smart Update checked packaged releases first; no newer compatible packaged runtime is available.";
+
         return flags.sourceOnlyUpdate
             ? "Smart Update checked packaged releases first; source rebuild is the available lane for this platform."
             : "Cached packages are checked before use; stale or broken downloads are replaced.";
@@ -121,25 +188,35 @@ namespace epochnamespace::editor_update_modal
 
     [[nodiscard]] inline std::string action_text(const UpdateFlags flags)
     {
+        if (flags.projectSourceDownload)
+            return "Keep Epoch open while the source archive downloads and extracts into the project cache.";
+
         if (flags.restartReady)
             return "The update is staged. Press Restart when you are ready to close Epoch and finish the hidden runtime replacement.";
 
         if (flags.sourceWorkerRunning)
-            return "Keep Epoch open while the source worker runs. Cancel stops at the next safe checkpoint.";
+        {
+            return flags.sourceCancelAvailable
+                ? "Keep Epoch open while the source worker runs. Cancel stops at the next safe checkpoint."
+                : "Keep Epoch open while the source worker reaches its first safe checkpoint. Cancel appears after startup is armed.";
+        }
 
         if (flags.sourceOnlyUpdate)
             return "Use Update From Source to build the newer source locally, or Cancel to stay on this build.";
 
-        return "Install Release is recommended. Advanced Source is only for intentionally building latest main locally.";
+        if (!flags.installableUpdate)
+            return "Use Project Source Code Download only if you want a source snapshot in the project cache.";
+
+        return "Install Release is recommended for runtime updates. Project Source Code Download only caches the source as project material.";
     }
 
     [[nodiscard]] inline std::string_view source_line(std::size_t index) noexcept
     {
         constexpr std::array<std::string_view, 4> kLines{
-            "Advanced Source skips the packaged runtime and rebuilds the latest main source locally.",
-            "This is slower and riskier than Install Release. It is for source testing, not the default update path.",
-            "Epoch overwrites stale source snapshots before downloading, restores dependencies, rebuilds, and records restart evidence.",
-            "For normal users, press Back and choose Install Release."
+            "Project Source Code Download stores the latest source snapshot as cached project material.",
+            "It does not update, rebuild, restart, or replace the running Epoch runtime.",
+            "Epoch overwrites stale project-source downloads inside the project source cache before extracting the new snapshot.",
+            "Use the normal Update Epoch button when you want to update the packaged runtime."
         };
         return index < kLines.size() ? kLines[index] : std::string_view{};
     }
@@ -173,8 +250,13 @@ namespace epochnamespace::editor_update_modal
         const float cancelButtonWidth = flags.sourceWorkerRunning ? 148.0f : 120.0f;
         const float primaryButtonWidth = (std::min)(220.0f, (std::max)(160.0f, contentWidth * 0.34f));
         const float advancedButtonWidth = (std::min)(190.0f, (std::max)(156.0f, contentWidth * 0.28f));
-        const bool showCancelButton = flags.sourceWorkerRunning || (!flags.updateRunning && !flags.restartReady);
-        const bool showPrimaryButton = !flags.updateRunning;
+        const bool showCancelButton =
+            flags.sourceWorkerRunning
+                ? flags.sourceCancelAvailable
+                : (!flags.updateRunning && !flags.restartReady);
+        const bool showPrimaryButton =
+            !flags.updateRunning
+            && (flags.installableUpdate || flags.restartReady || flags.sourceWorkerRunning);
         const bool showAdvancedSourceButton = !flags.updateRunning && !flags.restartReady;
 
         if (showCancelButton)
@@ -194,7 +276,7 @@ namespace epochnamespace::editor_update_modal
     [[nodiscard]] inline ActionStrip source_action_strip(const float contentWidth) noexcept
     {
         ActionStrip strip{};
-        strip.widths = { 120.0f, 120.0f, 176.0f };
+        strip.widths = { 120.0f, 120.0f, 220.0f };
         strip.count = strip.widths.size();
         strip.height = action_strip_height(strip.widths, strip.count, contentWidth);
         strip.stacked = strip.height > kButtonHeight + 0.5f;
@@ -209,7 +291,8 @@ namespace epochnamespace::editor_update_modal
         MeasureWrappedText measure_wrapped_text)
     {
         ModalLayout layout{};
-        layout.size.x = fit_modal_size({ viewport.x, viewport.y }, { 760.0f, 1.0f }, { 660.0f, 1.0f }).x;
+        const float desiredWidth = (std::min)(1040.0f, (std::max)(760.0f, viewport.x * 0.70f));
+        layout.size.x = fit_modal_size({ viewport.x, viewport.y }, { desiredWidth, 1.0f }, { 720.0f, 1.0f }).x;
         layout.contentWidth = (std::max)(1.0f, layout.size.x - 2.0f * kUpdateContentInset);
         layout.actions = update_action_strip(flags, layout.contentWidth);
 
@@ -225,7 +308,7 @@ namespace epochnamespace::editor_update_modal
         desiredHeight += layout.actions.height + kButtonBottomPad;
 
         const float minHeight = flags.sourceWorkerRunning ? 278.0f : flags.restartReady ? 258.0f : 286.0f;
-        layout.size = fit_modal_size({ viewport.x, viewport.y }, { layout.size.x, desiredHeight }, { 660.0f, minHeight });
+        layout.size = fit_modal_size({ viewport.x, viewport.y }, { layout.size.x, desiredHeight }, { 720.0f, minHeight });
         return layout;
     }
 
