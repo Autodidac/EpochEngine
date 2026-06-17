@@ -132,6 +132,9 @@ contracts instead of drift.
   log/filesystem exceptions into visible update failure states, and the legacy
   CWD-relative `REPO-main` cleanup path is disabled in favor of executable-local
   tokenized update work roots.
+- Source checkpoint: `main` is advanced to v0.87.45 after the v0.87.44
+  Windows/Linux updater crash repair release while the published stable runtime
+  remains v0.87.44.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

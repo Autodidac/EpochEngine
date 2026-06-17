@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.87.45]
+- Advanced the source line after the `v0.87.44` updater cancel/retry stability
+  release while keeping the published stable runtime release on `v0.87.44`.
+
 ## [v0.87.44]
 - Hardened updater cancel/retry paths for the launcher and editor: recent
   source-update cancellation now blocks launcher mode switches, active source
