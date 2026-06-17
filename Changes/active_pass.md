@@ -125,6 +125,13 @@ contracts instead of drift.
 - Source checkpoint: `main` is advanced to v0.87.43 after the refreshed
   v0.87.42 Windows/Linux packaged-updater release while the published stable
   runtime remains v0.87.42.
+- Release checkpoint: `v0.87.44` hardens updater cancel/retry behavior after
+  the same-session crash reports: recent source-update cancellation now blocks
+  launcher mode switches, active source rebuilds are reported as source attempts
+  to editor state machines, launcher/editor source-worker evidence pumps catch
+  log/filesystem exceptions into visible update failure states, and the legacy
+  CWD-relative `REPO-main` cleanup path is disabled in favor of executable-local
+  tokenized update work roots.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

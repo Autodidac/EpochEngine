@@ -6314,7 +6314,7 @@ namespace epochnamespace::core
                                     launcherUpdate.show_retry_wait_for_seconds(recentCancelWait);
                                     publish_current_launcher_update_status();
                                     session.menu.guard_next_input_frames(8u);
-                                    return false;
+                                    return true;
                                 }
 
                                 if (epochnamespace::updater::source_update_worker_active())
@@ -6359,7 +6359,29 @@ namespace epochnamespace::core
                                         std::source_location::current());
                                 }
                             }
-                            launcherUpdate.pump_source_worker();
+                            try
+                            {
+                                launcherUpdate.pump_source_worker();
+                            }
+                            catch (const std::exception& ex)
+                            {
+                                launcherUpdate.mark_source_monitor_failed(
+                                    std::string{ "Source update monitor failed: " } + ex.what());
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::Error,
+                                    std::source_location::current(),
+                                    "Launcher source update monitor failed: {}",
+                                    ex.what());
+                            }
+                            catch (...)
+                            {
+                                launcherUpdate.mark_source_monitor_failed(
+                                    "Source update monitor failed with an unknown error.");
+                                logger::get(kEditorLog).log(
+                                    logger::LogLevel::Error,
+                                    "Launcher source update monitor failed with an unknown error.",
+                                    std::source_location::current());
+                            }
                             publish_current_launcher_update_status();
                             session.menu.set_update_panel_state(launcherUpdate.panel_state());
                             if (launcherUpdate.is_restart_ready() && launcherUpdate.restart_countdown_expired())

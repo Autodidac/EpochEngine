@@ -208,6 +208,24 @@ export namespace epochnamespace::launcher_update
                 status = "Update failed before the updater worker could start.";
         }
 
+        void mark_source_monitor_failed(std::string message)
+        {
+            surface_active = true;
+            packaged_restart_ready = false;
+            source_worker_running = false;
+            source_restart_ready = false;
+            cancel_requested = false;
+            result_visible = true;
+            source_progress = 0.0f;
+            operation_started_at = {};
+            cancel_requested_at = {};
+            clear_restart_countdown();
+            update_check_retry_after = std::chrono::steady_clock::now() + std::chrono::seconds{ 15 };
+            status = std::move(message);
+            if (status.empty())
+                status = "Source update monitor failed while reading worker evidence. Check updater logs beside EpochEditor.exe.";
+        }
+
         void clear_inactive_surface()
         {
             if (pending.has_value() || source_worker_running || is_restart_ready())

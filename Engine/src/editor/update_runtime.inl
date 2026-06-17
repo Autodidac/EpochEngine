@@ -1022,7 +1022,7 @@
             }
         }
 
-        void pump_editor_source_update_worker(EditorState& editor)
+        void pump_editor_source_update_worker_unchecked(EditorState& editor)
         {
             if (editor.updateState != EditorUpdateState::SourceWorkerRunning)
                 return;
@@ -1137,6 +1137,42 @@
             if (!lastLine.empty())
                 editor.updateStatus = std::string{ "Source rebuild running. Latest evidence:\n" }
                     + editor_update_modal::format_status_markers(lastLine);
+        }
+
+        void pump_editor_source_update_worker(EditorState& editor)
+        {
+            try
+            {
+                pump_editor_source_update_worker_unchecked(editor);
+            }
+            catch (const std::exception& ex)
+            {
+                editor.updateState = EditorUpdateState::Failed;
+                editor.updateInstallPending = false;
+                editor.updateSourceInstallPending = false;
+                editor.updateProjectSourceDownloadPending = false;
+                editor.updateSourceCancelRequested = false;
+                editor.updateOperationStartedAt = {};
+                editor.showUpdateConfirmModal = true;
+                clear_editor_update_restart_countdown(editor);
+                arm_editor_update_retry_wait(editor);
+                editor.updateStatus = std::string{ "Source update monitor failed: " } + ex.what();
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+            }
+            catch (...)
+            {
+                editor.updateState = EditorUpdateState::Failed;
+                editor.updateInstallPending = false;
+                editor.updateSourceInstallPending = false;
+                editor.updateProjectSourceDownloadPending = false;
+                editor.updateSourceCancelRequested = false;
+                editor.updateOperationStartedAt = {};
+                editor.showUpdateConfirmModal = true;
+                clear_editor_update_restart_countdown(editor);
+                arm_editor_update_retry_wait(editor);
+                editor.updateStatus = "Source update monitor failed with an unknown error.";
+                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+            }
         }
 
         void request_editor_source_update_cancel(EditorState& editor)

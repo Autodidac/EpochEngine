@@ -4505,19 +4505,13 @@ namespace epochnamespace::updater
 
     export void cleanup_previous_update_artifacts()
     {
-        namespace fs = std::filesystem;
-
         if (!LEAVE_NO_FILES_ALWAYS_REDOWNLOAD)
             return;
 
-        std::vector<fs::path> targets;
-        targets.emplace_back(std::string{ REPO } + "-main");
-
-        for (const auto& target : targets)
-        {
-            std::error_code ec;
-            fs::remove_all(target, ec);
-        }
+        // Source updater runs now use executable-local, tokenized cache roots.
+        // The old REPO-main cleanup was relative to the process working
+        // directory, which can be a source checkout, launcher directory, or
+        // packaged runtime folder depending on how Epoch was started.
     }
 
     bool replace_binary_from_script(
@@ -5883,6 +5877,7 @@ namespace epochnamespace::updater
             result.update_available = true;
             result.source_update_available = true;
             result.source_update_performed = true;
+            result.source_fallback_attempted = true;
             result.status_message =
                 "Source rebuild is already active. Keep Epoch open until the existing worker reports restart-ready, cancel, or failure evidence.";
             system_detail::append_log_line(
