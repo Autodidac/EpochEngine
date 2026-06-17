@@ -6328,6 +6328,16 @@ namespace epochnamespace::core
 
                                 return false;
                             };
+                            if (!launcherUpdate.has_pending_work()
+                                && !launcherUpdate.source_worker_running
+                                && !launcherUpdate.is_restart_ready()
+                                && epochnamespace::updater::source_update_worker_active())
+                            {
+                                launcherUpdate.observe_existing_source_worker(
+                                    epochnamespace::updater::source_update_cancel_requested());
+                                publish_current_launcher_update_status();
+                            }
+
                             if (launcherUpdate.pending_ready())
                             {
                                 try

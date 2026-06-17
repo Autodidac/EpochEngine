@@ -5874,9 +5874,27 @@ namespace epochnamespace::updater
         const bool honor_env_silent = true,
         const UpdateHandoffMode packaged_handoff_mode = UpdateHandoffMode::LaunchImmediately)
     {
+        UpdateCommandResult result{};
+        const auto target_binary = system_detail::current_binary_path();
+
+#if defined(_WIN32)
+        if (system_detail::source_update_session_active(target_binary))
+        {
+            result.update_available = true;
+            result.source_update_available = true;
+            result.source_update_performed = true;
+            result.status_message =
+                "Source rebuild is already active. Keep Epoch open until the existing worker reports restart-ready, cancel, or failure evidence.";
+            system_detail::append_log_line(
+                system_detail::update_handoff_log_path_for(target_binary),
+                "[WARN] Update request ignored because a source rebuild is already active.");
+            system_detail::log_info("Update request ignored because an existing source-update session is still active.");
+            return result;
+        }
+#endif
+
         cleanup_previous_update_artifacts();
 
-        UpdateCommandResult result{};
         const std::string local_packaged_version =
             system_detail::extract_version_string(PROJECT_PACKAGED_VERSION);
         const std::string local_source_version =
