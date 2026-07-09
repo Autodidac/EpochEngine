@@ -541,7 +541,7 @@ target_include_directories(epoch_renderer_smoke PRIVATE
 find_program(GLSLANG_VALIDATOR glslangValidator)
 set(EPOCH_VULKAN_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/vulkan)
 set(EPOCH_VULKAN_SHADER_DIR ${EPOCH_VULKAN_ASSET_DIR}/shaders)
-set(EPOCH_FONT_ASSET_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/examples/ConsoleApplication1/assets/fonts)
+set(EPOCH_FONT_ASSET_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts)
 set(EPOCH_FONT_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/fonts)
 
 file(MAKE_DIRECTORY ${EPOCH_VULKAN_SHADER_DIR})

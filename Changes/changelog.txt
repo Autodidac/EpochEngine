@@ -14,6 +14,10 @@
 - Added a build-safe atlas snapshot contract so Linux and Windows package
   checks prove mutated atlas CPU storage cannot invalidate an in-flight upload
   buffer.
+- Fixed Linux release asset staging so packaged builds ship the tracked
+  `Engine/assets/fonts/Roboto-Regular.ttf` GUI font instead of an empty
+  build-output font directory, and added a Linux staging script that verifies
+  the font, executable bit, version, and contract self-test before upload.
 
 ## [v0.87.49]
 - Advanced the source line after the `v0.87.48` Windows/Linux packaged release
