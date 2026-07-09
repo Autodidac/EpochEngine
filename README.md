@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.52-1F7A4C?style=for-the-badge" alt="Current development source v0.87.52" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.53-1F7A4C?style=for-the-badge" alt="Current development source v0.87.53" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.52-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.52" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the `v0.87.52` release source line.
+- Source is currently the active development line at `v0.87.53`.
 - The latest published stable runtime release is `v0.87.52`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
@@ -106,8 +106,9 @@ For engine/tooling developers:
   concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.
 - Release checkpoint: `v0.87.52` carries the Linux GLAD lifetime repair and
-  keeps the incompatible static Raylib lane out of Linux packages. The source
-  line advances to the next revision only after this stable package is tagged.
+  keeps the incompatible static Raylib lane out of Linux packages. `main` is
+  advanced to `v0.87.53` for source-update testing while stable remains
+  `v0.87.52`.
 - The editor has a toolbar scene-mode selector for 3D scene construction versus
   2D game/UI construction, launcher/editor handoff and update progress use the
   shared EpochGui loading-screen primitive, OpenGL owns the first visible

@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.87.53]
+- Advanced `main` after the `v0.87.52` stable release so packaged installs can
+  detect the newer source-update line without changing the stable payload.
+
 ## [v0.87.52]
 - Repaired the Linux release startup crash by serializing process-global GLAD
   initialization across render threads.
