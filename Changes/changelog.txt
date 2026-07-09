@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.87.47]
+- Advanced the source line after the `v0.87.46` Windows/Linux packaged release
+  while keeping the published stable runtime release on `v0.87.46`.
+
 ## [v0.87.46]
 - Restored clean source-update Release builds by making `ConsoleApplication1`
   depend on `EpochGui` after the mirror moved from `Engine/lib/EpochGui` to
