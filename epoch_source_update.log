@@ -1,0 +1,150 @@
+[INFO] Source update build started
+[INFO] Source root: /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src
+[INFO] Manifest root: /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine
+[INFO] Build script: /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/build.sh
+[INFO] Linux source build attempt started with compiler 'clang'.
+[build.sh] Proceeding without vcpkg integration; system-installed dependencies will be used.
+-- The C compiler identification is Clang 18.1.3
+-- The CXX compiler identification is Clang 18.1.3
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/clang-18 - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - failed
+-- Check for working CXX compiler: /usr/bin/clang++-18
+-- Check for working CXX compiler: /usr/bin/clang++-18 - broken
+CMake Error at /usr/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:60 (message):
+  The C++ compiler
+
+    "/usr/bin/clang++-18"
+
+  is not able to compile a simple test program.
+
+  It fails with the following output:
+
+    Change Dir: '/home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/Bin/Clang-Release/CMakeFiles/CMakeScratch/TryCompile-SvIu07'
+    
+    Run Build Command(s): /usr/bin/ninja -v cmTC_8bbec
+    [1/4] "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/clang++-18   -std=c++23 -x c++ /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/Bin/Clang-Release/CMakeFiles/CMakeScratch/TryCompile-SvIu07/testCXXCompiler.cxx -c -o CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o -MT CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi -MD -MF CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi.d > CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi.tmp && mv CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi.tmp CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi
+    FAILED: CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi 
+    "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/clang++-18   -std=c++23 -x c++ /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/Bin/Clang-Release/CMakeFiles/CMakeScratch/TryCompile-SvIu07/testCXXCompiler.cxx -c -o CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o -MT CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi -MD -MF CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi.d > CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi.tmp && mv CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi.tmp CMakeFiles/cmTC_8bbec.dir/testCXXCompiler.cxx.o.ddi
+    /bin/sh: 1: CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND: not found
+    ninja: build stopped: subcommand failed.
+    
+    
+
+  
+
+  CMake will not be able to correctly generate this project.
+Call Stack (most recent call first):
+  CMakeLists.txt:15 (project)
+
+
+-- Configuring incomplete, errors occurred!
+[WARN] Linux source build with compiler 'clang' exited with code 1.
+[INFO] Linux source build attempt started with compiler 'gcc'.
+GCC 14+ is required for the module-based Linux build. Install a newer GCC or use clang.
+[WARN] Linux source build with compiler 'gcc' exited with code 1.
+[ERROR] Linux source build failed.
+[INFO] Source update build started
+[INFO] Source root: /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src
+[INFO] Manifest root: /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine
+[INFO] Build script: /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/build.sh
+[INFO] Linux source build attempt started with compiler 'clang'.
+[build.sh] Proceeding without vcpkg integration; system-installed dependencies will be used.
+-- The C compiler identification is Clang 18.1.3
+-- The CXX compiler identification is Clang 18.1.3
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/clang-18 - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - failed
+-- Check for working CXX compiler: /usr/bin/clang++-18
+-- Check for working CXX compiler: /usr/bin/clang++-18 - broken
+CMake Error at /usr/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:60 (message):
+  The C++ compiler
+
+    "/usr/bin/clang++-18"
+
+  is not able to compile a simple test program.
+
+  It fails with the following output:
+
+    Change Dir: '/home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/Bin/Clang-Release/CMakeFiles/CMakeScratch/TryCompile-7pNqJ4'
+    
+    Run Build Command(s): /usr/bin/ninja -v cmTC_7e768
+    [1/4] "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/clang++-18   -std=c++23 -x c++ /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/Bin/Clang-Release/CMakeFiles/CMakeScratch/TryCompile-7pNqJ4/testCXXCompiler.cxx -c -o CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o -MT CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi -MD -MF CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi.d > CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi.tmp && mv CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi.tmp CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi
+    FAILED: CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi 
+    "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/clang++-18   -std=c++23 -x c++ /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/Bin/Clang-Release/CMakeFiles/CMakeScratch/TryCompile-7pNqJ4/testCXXCompiler.cxx -c -o CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o -MT CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi -MD -MF CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi.d > CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi.tmp && mv CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi.tmp CMakeFiles/cmTC_7e768.dir/testCXXCompiler.cxx.o.ddi
+    /bin/sh: 1: CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND: not found
+    ninja: build stopped: subcommand failed.
+    
+    
+
+  
+
+  CMake will not be able to correctly generate this project.
+Call Stack (most recent call first):
+  CMakeLists.txt:15 (project)
+
+
+-- Configuring incomplete, errors occurred!
+[WARN] Linux source build with compiler 'clang' exited with code 1.
+[INFO] Linux source build attempt started with compiler 'gcc'.
+GCC 14+ is required for the module-based Linux build. Install a newer GCC or use clang.
+[WARN] Linux source build with compiler 'gcc' exited with code 1.
+[ERROR] Linux source build failed.
+[INFO] Source update build started
+[INFO] Source root: /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src
+[INFO] Manifest root: /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine
+[INFO] Build script: /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/build.sh
+[INFO] Linux source build attempt started with compiler 'clang'.
+[build.sh] Proceeding without vcpkg integration; system-installed dependencies will be used.
+-- The C compiler identification is Clang 18.1.3
+-- The CXX compiler identification is Clang 18.1.3
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/clang-18 - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - failed
+-- Check for working CXX compiler: /usr/bin/clang++-18
+-- Check for working CXX compiler: /usr/bin/clang++-18 - broken
+CMake Error at /usr/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:60 (message):
+  The C++ compiler
+
+    "/usr/bin/clang++-18"
+
+  is not able to compile a simple test program.
+
+  It fails with the following output:
+
+    Change Dir: '/home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/Bin/Clang-Release/CMakeFiles/CMakeScratch/TryCompile-2ebgJd'
+    
+    Run Build Command(s): /usr/bin/ninja -v cmTC_13cc4
+    [1/4] "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/clang++-18   -std=c++23 -x c++ /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/Bin/Clang-Release/CMakeFiles/CMakeScratch/TryCompile-2ebgJd/testCXXCompiler.cxx -c -o CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o -MT CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi -MD -MF CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi.d > CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi.tmp && mv CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi.tmp CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi
+    FAILED: CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi 
+    "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND" -format=p1689 -- /usr/bin/clang++-18   -std=c++23 -x c++ /home/dude/Downloads/epoch_linux_x64_v0.87.46/cache/updates/work/epoch_linux_x64_v0_87_46/src/Engine/Bin/Clang-Release/CMakeFiles/CMakeScratch/TryCompile-2ebgJd/testCXXCompiler.cxx -c -o CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o -MT CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi -MD -MF CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi.d > CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi.tmp && mv CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi.tmp CMakeFiles/cmTC_13cc4.dir/testCXXCompiler.cxx.o.ddi
+    /bin/sh: 1: CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND: not found
+    ninja: build stopped: subcommand failed.
+    
+    
+
+  
+
+  CMake will not be able to correctly generate this project.
+Call Stack (most recent call first):
+  CMakeLists.txt:15 (project)
+
+
+-- Configuring incomplete, errors occurred!
+[WARN] Linux source build with compiler 'clang' exited with code 1.
+[INFO] Linux source build attempt started with compiler 'gcc'.
+GCC 14+ is required for the module-based Linux build. Install a newer GCC or use clang.
+[WARN] Linux source build with compiler 'gcc' exited with code 1.
+[ERROR] Linux source build failed.
