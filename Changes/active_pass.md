@@ -150,6 +150,9 @@ contracts instead of drift.
   perform a real upload instead of returning a synthetic handle, marking the
   Raylib frame active before queued GUI uploads drain, and packaging the
   tracked GUI font from `Engine/assets/fonts` into the Linux release payload.
+- Source checkpoint: `main` is advanced to `v0.87.51` after the refreshed
+  `v0.87.50` Windows/Linux Raylib atlas release while the published stable
+  runtime remains `v0.87.50`.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30
