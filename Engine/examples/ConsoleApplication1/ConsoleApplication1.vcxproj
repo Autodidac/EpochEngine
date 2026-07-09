@@ -25,11 +25,11 @@
     <ResourceCompile Include="..\..\resource\WinResource.rc" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\lib\EpochGui\EpochGui.vcxproj">
-      <Project>{7b41a9b2-4b7e-4b5d-9b39-68d2408bca90}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\StaticLib1\StaticLib1.vcxproj">
       <Project>{bba639b7-2b54-4e38-90ac-667fc3303475}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\dep\EpochGui\EpochGui.vcxproj">
+      <Project>{7b41a9b2-4b7e-4b5d-9b39-68d2408bca90}</Project>
     </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -116,9 +116,10 @@
     <VcpkgManifestInstall>true</VcpkgManifestInstall>
     <VcpkgManifestRoot>$(SolutionDir)Engine\</VcpkgManifestRoot>
     <VcpkgInstalledDir>$(SolutionDir)Engine\vcpkg_installed\</VcpkgInstalledDir>
+    <VcpkgAutoBootstrap>false</VcpkgAutoBootstrap>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')">true</VcpkgUseStatic>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
-    <VcpkgApplocalDeps Condition="'$(VcpkgUseStatic)'=='true'">false</VcpkgApplocalDeps>
+    <VcpkgApplocalDeps>false</VcpkgApplocalDeps>
     <EpochRaylibDllDefine Condition="'$(VcpkgUseStatic)'!='true'">RAYLIB_DLL;</EpochRaylibDllDefine>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -187,6 +188,7 @@
       <AdditionalModuleDependencies>%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <DisableSpecificWarnings>4251;4275;4834;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <CallingConvention>Cdecl</CallingConvention>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
@@ -214,6 +216,7 @@
       <AdditionalModuleDependencies>%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <DisableSpecificWarnings>4251;4275;4834;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <CallingConvention>StdCall</CallingConvention>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>

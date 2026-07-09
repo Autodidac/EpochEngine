@@ -280,8 +280,8 @@ Do not split files only for aesthetics. The safe code split is:
    split complete.
 
 `EpochGui` is now a real linkable static-library target for backend-neutral
-layout primitives under `Engine/include/epoch/gui` and `Engine/src/epochgui`, with
-standalone mirror metadata in `Engine/lib/EpochGui` for `Autodidac/EpochGui`.
+layout primitives under `Engine/include/gui` and `Engine/src/epochgui`, with
+standalone mirror metadata in `Engine/dep/EpochGui` for `Autodidac/EpochGui`.
 Keep `engine.gui` as the engine module/API adapter around rendering, input,
 theme, text, and atlas/backend replay; keep portable math/control state in
 `EpochGui` first.

@@ -191,7 +191,7 @@ export namespace epochnamespace::menu
 
         static constexpr std::string_view updater_shell_description() noexcept
         {
-            return "Checks the newest packaged GitHub release first. If main is still newer after restart, run Update again to continue from source.";
+            return "Checks GitHub once, then builds current main source locally when that source is newer. Packaged releases are used only when no newer source lane is available.";
         }
 
         [[nodiscard]] static bool updater_shell_auto_update_requested() noexcept

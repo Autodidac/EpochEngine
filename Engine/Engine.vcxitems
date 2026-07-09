@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -25,26 +25,35 @@
     <ProjectCapability Include="SourceItemsFromImports" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\context.vulkan.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.config.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\framework.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\app_api.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.api_types.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.common.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch\core\cpp_feature_probe.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.script_api.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\main.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\dockable_window.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\dock_layout.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\floating_window.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\layout_primitives.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\panel_host.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\popup_layout.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\version.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\_epoch.stl_types.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)modules\sfml.compat.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_model.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_service.hpp" />
-      <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_response.hpp" />
-      <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\core\core_context_backends.hpp" />
-      <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx_context_detail.hpp" />
-      <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_response.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\context.vulkan.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\cpp_feature_probe.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.api_types.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.common.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\framework.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\main.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\passive_context_scoring.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\core\core_context_backends.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx_context_detail.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl_context_detail.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.hpp" />
@@ -84,7 +93,14 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\a2048like.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\almondshell.ixx">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.input.ixx" />
@@ -285,6 +301,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.visibility.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.systems.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\runtime.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log.headless.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.dispatch_storage.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\image.stb.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context-texture.cpp">
@@ -304,12 +321,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.platform.descriptors.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>

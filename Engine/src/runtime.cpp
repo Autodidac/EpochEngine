@@ -32,7 +32,7 @@ module;
 
 #include "../include/epoch.runtime_bridge.hpp"
 #include "../include/app_api.h"
-#include "../include/epoch.api_types.hpp"
+#include "../src/epoch.api_types.hpp"
 #include "../include/_epoch.stl_types.hpp"
 
 #include <algorithm>
@@ -45,7 +45,7 @@ module;
 
 module runtime;
 
-import engine.cli;
+//import engine.cli;
 import core.logger;
 import engine.platform;
 
@@ -57,6 +57,7 @@ import platform.context;
 import platform.runtime;
 import platform.window;
 import epoch.systems;
+import core.commandline;
 
 extern "C"
 {

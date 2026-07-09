@@ -40,7 +40,7 @@
 //#include "pch.h"
 
 #include "../include/engine.config.hpp"
-#include "../include/epoch.api_types.hpp"
+#include "../src/epoch.api_types.hpp"
 #include "../include/engine.hpp"
 #include "../include/epoch.runtime_bridge.hpp"
 
@@ -7056,8 +7056,8 @@ namespace epochnamespace::core
                 "RunEngine terminated with code {}",
                 result);
 #else
-        logger::get(engine::kEngineLog).log(
-            logger::LogLevel::Error,
+        epochnamespace::logger::get(epochnamespace::core::engine::kEngineLog).log(
+            epochnamespace::logger::LogLevel::Error,
             "RunEngine is not implemented for this platform yet.",
             std::source_location::current());
 #endif
@@ -7435,8 +7435,8 @@ int main(int argc, char** argv)
     }
     catch (const std::exception& ex)
     {
-        logger::get(engine::kEngineLog).log(
-            logger::LogLevel::Error,
+        epochnamespace::logger::get(epochnamespace::core::engine::kEngineLog).log(
+            epochnamespace::logger::LogLevel::Error,
             ex.what(),
             std::source_location::current());
         return -1;

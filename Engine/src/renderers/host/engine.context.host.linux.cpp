@@ -1,10 +1,10 @@
 /************************************************
- *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦+  Â¦Â¦+   *
- *  Â¦Â¦+----+Â¦Â¦+--Â¦Â¦+Â¦Â¦+---Â¦Â¦+Â¦Â¦+----+Â¦Â¦Â¦  Â¦Â¦Â¦   *
- *  Â¦Â¦Â¦Â¦Â¦+  Â¦Â¦Â¦Â¦Â¦Â¦++Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦   *
- *  Â¦Â¦+--+  Â¦Â¦+---+ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦     Â¦Â¦+--Â¦Â¦Â¦   *
- *  Â¦Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦     +Â¦Â¦Â¦Â¦Â¦Â¦+++Â¦Â¦Â¦Â¦Â¦Â¦+Â¦Â¦Â¦  Â¦Â¦Â¦   *
- *  +------++-+      +-----+  +-----++-+  +-+   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -28,15 +28,13 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 // context.multiplexer.linux.cpp
-
 module;
-
-#if defined(__linux__)
 
 // Feature flags (defines EPOCH_USING_*)
 #include <include/engine.config.hpp> // for EPOCH_USING Macros
+
+#if defined(__linux__)
 
 // If GLAD is enabled on Linux, it must come before the GLX headers.
 #if (defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)) || defined(EPOCH_USING_SDL)
@@ -73,7 +71,10 @@ module;
 #include <utility>
 #include <vector>
 
+#endif // __linux__
+
 module context.multiplexer;
+#if defined(__linux__)
 
 // ---- engine interfaces/types (modules you already own) ----
 import core.context;          // Context, InitializeAllContexts(), CloneContext(), g_backends, etc.

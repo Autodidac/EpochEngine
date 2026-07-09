@@ -1,7 +1,7 @@
 #pragma once
 
-#include "epoch/gui/dockable_window.hpp"
-#include "epoch/gui/popup_layout.hpp"
+#include "dockable_window.hpp"
+#include "popup_layout.hpp"
 
 #include <cstdint>
 #include <string_view>

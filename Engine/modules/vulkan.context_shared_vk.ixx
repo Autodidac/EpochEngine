@@ -54,7 +54,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/context.vulkan.hpp>
+#include <../src/context.vulkan.hpp>
 
 #if defined(EPOCH_VULKAN_STANDALONE)
 #   ifndef GLFW_INCLUDE_VULKAN

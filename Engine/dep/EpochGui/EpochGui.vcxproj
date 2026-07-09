@@ -69,14 +69,21 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>false</VcpkgEnableManifest>
+    <VcpkgManifestInstall>false</VcpkgManifestInstall>
+    <VcpkgEnabled>false</VcpkgEnabled>
+    <VcpkgAutoLink>false</VcpkgAutoLink>
+    <VcpkgApplocalDeps>false</VcpkgApplocalDeps>
+  </PropertyGroup>
   <PropertyGroup>
     <TargetName>EpochGui</TargetName>
     <OutDir Condition="'$(SolutionPath)'!='' and '$(SolutionPath)'!='*Undefined*'">$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <OutDir Condition="'$(SolutionPath)'=='' or '$(SolutionPath)'=='*Undefined*'">$(ProjectDir)build\msvc\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Label="EpochGuiSourceRoot">
-    <EpochGuiSourceRoot Condition="'$(EpochGuiSourceRoot)'=='' and Exists('$(ProjectDir)..\..\include\epoch\gui\floating_window.hpp')">$(ProjectDir)..\..\</EpochGuiSourceRoot>
-    <EpochGuiSourceRoot Condition="'$(EpochGuiSourceRoot)'=='' and Exists('$(ProjectDir)include\epoch\gui\floating_window.hpp')">$(ProjectDir)</EpochGuiSourceRoot>
+    <EpochGuiSourceRoot Condition="'$(EpochGuiSourceRoot)'=='' and Exists('$(ProjectDir)..\..\include\gui\floating_window.hpp')">$(ProjectDir)..\..\</EpochGuiSourceRoot>
+    <EpochGuiSourceRoot Condition="'$(EpochGuiSourceRoot)'=='' and Exists('$(ProjectDir)include\gui\floating_window.hpp')">$(ProjectDir)</EpochGuiSourceRoot>
   </PropertyGroup>
   <PropertyGroup Label="EpochGuiModuleRoot">
     <EpochGuiModuleRoot Condition="'$(EpochGuiModuleRoot)'=='' and Exists('$(ProjectDir)modules\epoch.gui.ixx')">$(ProjectDir)</EpochGuiModuleRoot>
@@ -90,7 +97,7 @@
     <IntDir Condition="'$(SolutionPath)'=='' or '$(SolutionPath)'=='*Undefined*'">$(ProjectDir)build\msvc-int\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <Target Name="ValidateEpochGuiSourceRoot" BeforeTargets="PrepareForBuild">
-    <Error Condition="'$(EpochGuiSourceRoot)'==''" Text="EpochGui could not find include\epoch\gui and src\epochgui. Keep this project in Engine\lib\EpochGui, place include and src beside the project in a standalone mirror, or pass /p:EpochGuiSourceRoot=&lt;path-with-trailing-slash&gt;." />
+    <Error Condition="'$(EpochGuiSourceRoot)'==''" Text="EpochGui could not find include\gui and src\epochgui. Keep this project in Engine\dep\EpochGui, place include and src beside the project in a standalone mirror, or pass /p:EpochGuiSourceRoot=&lt;path-with-trailing-slash&gt;." />
     <Error Condition="'$(EpochGuiModuleRoot)'==''" Text="EpochGui could not find modules\epoch.gui.ixx. Keep modules beside EpochGui.vcxproj or pass /p:EpochGuiModuleRoot=&lt;path-with-trailing-slash&gt;." />
   </Target>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -127,6 +134,7 @@
       <AdditionalIncludeDirectories>$(EpochGuiSourceRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -141,26 +149,25 @@
       <AdditionalIncludeDirectories>$(EpochGuiSourceRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="$(EpochGuiSourceRoot)include\epoch\gui\dockable_window.hpp" />
-    <ClInclude Include="$(EpochGuiSourceRoot)include\epoch\gui\dock_layout.hpp" />
-    <ClInclude Include="$(EpochGuiSourceRoot)include\epoch\gui\floating_window.hpp" />
-    <ClInclude Include="$(EpochGuiSourceRoot)include\epoch\gui\layout_primitives.hpp" />
-    <ClInclude Include="$(EpochGuiSourceRoot)include\epoch\gui\panel_host.hpp" />
-    <ClInclude Include="$(EpochGuiSourceRoot)include\epoch\gui\popup_layout.hpp" />
-    <ClInclude Include="$(EpochGuiSourceRoot)include\epoch\gui\version.hpp" />
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.ixx" />
+    <ClCompile Include="..\..\src\epochgui\dockable_window.cpp" />
+    <ClCompile Include="..\..\src\epochgui\dock_layout.cpp" />
+    <ClCompile Include="..\..\src\epochgui\floating_window.cpp" />
+    <ClCompile Include="..\..\src\epochgui\panel_host.cpp" />
+    <ClCompile Include="..\..\src\epochgui\popup_layout.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dockable_window.cpp" />
-    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dock_layout.cpp" />
-    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\floating_window.cpp" />
-    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\panel_host.cpp" />
-    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\popup_layout.cpp" />
+    <ClInclude Include="..\..\include\gui\dockable_window.hpp" />
+    <ClInclude Include="..\..\include\gui\dock_layout.hpp" />
+    <ClInclude Include="..\..\include\gui\floating_window.hpp" />
+    <ClInclude Include="..\..\include\gui\layout_primitives.hpp" />
+    <ClInclude Include="..\..\include\gui\panel_host.hpp" />
+    <ClInclude Include="..\..\include\gui\popup_layout.hpp" />
+    <ClInclude Include="..\..\include\gui\version.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

@@ -3,7 +3,7 @@ module;
 #include <include/engine.config.hpp>
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
-#include "framework.hpp"
+#include "../src/framework.hpp"
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #endif

@@ -60,7 +60,7 @@ module;
 #   endif
 
     // Optional: if you still need your framework helpers, include it AFTER windows.h
-#   include <include/framework.hpp>
+#   include <../src/framework.hpp>
 #   ifdef min
 #       undef min
 #   endif

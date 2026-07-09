@@ -8,7 +8,7 @@ module;
 
 #if defined(_WIN32)
 #   ifdef EPOCH_USING_WINMAIN
-#       include "../include/framework.hpp"
+#       include "../src/framework.hpp"
 #   endif
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN

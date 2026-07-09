@@ -35,7 +35,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/context.vulkan.hpp>
+#include <../src/context.vulkan.hpp>
 
 #include <cstdlib>
 
@@ -51,7 +51,7 @@ module;
 #define _WINSOCKAPI_
 #endif
 
-#include <include/framework.hpp>  // include Windows headers
+#include <../src/framework.hpp>  // include Windows headers
 #else
 #include <dlfcn.h>
 #endif

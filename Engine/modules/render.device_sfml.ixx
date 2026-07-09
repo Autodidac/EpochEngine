@@ -7,7 +7,7 @@ module;
 
 #include "../include/engine.config.hpp"
 #include "../include/epoch.config.hpp"
-#include "../include/epoch.common.hpp"
+#include "../src/epoch.common.hpp"
 #include <memory>
 #include <string>
 #include <vector>
@@ -81,9 +81,9 @@ export namespace epoch
                 return;
 
             if (sf::RenderWindow* const window = active_window())
-                window->setActive(false);
+               auto is_window_active = window->setActive(false);
 
-            record->target->setActive(true);
+            auto is_record_active = record->target->setActive(true);
             m_render_pass_open = true;
             m_render_target = render_target;
             m_last_width = record->width;
@@ -108,12 +108,11 @@ export namespace epoch
             if (record && record->target)
             {
                 record->target->display();
-                record->target->setActive(false);
+                auto is_record_active = record->target->setActive(false);
             }
 
             if (sf::RenderWindow* const window = active_window())
-                window->setActive(true);
-
+                auto is_window_active = window->setActive(true);
             m_render_pass_open = false;
             m_render_target = {};
         }

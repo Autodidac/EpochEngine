@@ -678,6 +678,103 @@ namespace epochnamespace::updater
             return {};
         }
 
+        [[nodiscard]] inline std::filesystem::path validated_vcpkg_executable_in_root(
+            const std::filesystem::path& root)
+        {
+            if (root.empty())
+                return {};
+
+            std::error_code ec;
+            const auto normalized_root = std::filesystem::absolute(root, ec).lexically_normal();
+            if (ec)
+                return {};
+
+            const auto executable = normalized_root / VCPKG_EXECUTABLE_NAME();
+            if (!std::filesystem::exists(executable, ec))
+                return {};
+            ec.clear();
+
+            if (!std::filesystem::exists(normalized_root / "ports", ec))
+                return {};
+            ec.clear();
+
+            if (!std::filesystem::exists(normalized_root / "versions", ec))
+                return {};
+            ec.clear();
+
+            if (!std::filesystem::exists(
+                normalized_root / "scripts" / "buildsystems" / "vcpkg.cmake",
+                ec))
+            {
+                return {};
+            }
+
+            return executable;
+        }
+
+        inline void append_unique_vcpkg_candidate(
+            std::vector<std::filesystem::path>& candidates,
+            const std::filesystem::path& candidate)
+        {
+            if (candidate.empty())
+                return;
+
+            std::error_code ec;
+            auto normalized = std::filesystem::absolute(candidate, ec).lexically_normal();
+            if (ec)
+                normalized = candidate.lexically_normal();
+
+            for (const auto& existing : candidates)
+            {
+                if (lower_ascii(existing.string()) == lower_ascii(normalized.string()))
+                    return;
+            }
+
+            candidates.push_back(std::move(normalized));
+        }
+
+        [[nodiscard]] inline std::filesystem::path find_installed_vcpkg(
+            const std::filesystem::path& log_path)
+        {
+#if defined(_WIN32)
+            std::vector<std::filesystem::path> candidates;
+
+            const auto configured_exe = env_path("VCPKG_EXE_PATH");
+            if (!configured_exe.empty())
+                append_unique_vcpkg_candidate(candidates, configured_exe.parent_path());
+
+            append_unique_vcpkg_candidate(candidates, env_path("EPOCH_UPDATER_VCPKG_ROOT"));
+            append_unique_vcpkg_candidate(candidates, env_path("VCPKG_ROOT"));
+
+            const auto from_path = find_executable_on_path(VCPKG_EXECUTABLE_NAME());
+            if (!from_path.empty())
+                append_unique_vcpkg_candidate(candidates, from_path.parent_path());
+
+            const auto user_profile = env_path("USERPROFILE");
+            if (!user_profile.empty())
+            {
+                append_unique_vcpkg_candidate(candidates, user_profile / "source" / "repos" / "vcpkg");
+                append_unique_vcpkg_candidate(candidates, user_profile / "vcpkg");
+            }
+
+            for (const auto& candidate : candidates)
+            {
+                const auto executable = validated_vcpkg_executable_in_root(candidate);
+                if (!executable.empty())
+                {
+                    append_log_line(log_path, "[INFO] Using installed vcpkg: " + candidate.string());
+                    log_info("Using installed vcpkg toolchain.");
+                    return executable;
+                }
+
+                append_log_line(log_path, "[WARN] Ignoring unusable vcpkg root: " + candidate.string());
+            }
+#else
+            (void)log_path;
+#endif
+            return {};
+        }
+
         [[nodiscard]] inline std::string unescape_json_string_basic(std::string text)
         {
             std::string out;
@@ -1502,6 +1599,12 @@ namespace epochnamespace::updater
             const std::filesystem::path& log_path)
         {
 #if defined(_WIN32)
+            if (const auto installed = find_installed_vcpkg(log_path);
+                !installed.empty())
+            {
+                return installed;
+            }
+
             const std::string baseline =
                 read_manifest_builtin_baseline(manifest_root);
             const std::string resolved_ref =
@@ -1873,10 +1976,18 @@ namespace epochnamespace::updater
             }
 
             bool staged_any = false;
-            constexpr std::array<std::string_view, 3> k_policy_ports{
+            constexpr std::array<std::string_view, 11> k_policy_ports{
+                "freetype",
                 "glad",
+                "glfw3",
                 "libogg",
-                "libvorbis"
+                "libvorbis",
+                "raylib",
+                "sdl3",
+                "sfml",
+                "shaderc",
+                "spirv-tools",
+                "zlib"
             };
 
             for (const auto port_name : k_policy_ports)
@@ -2966,13 +3077,6 @@ namespace epochnamespace::updater
             const auto active_marker_path = source_active_run_path(target_binary);
             if (!run_exists)
             {
-                if (file_recently_modified(active_marker_path, std::chrono::seconds{ 45 }))
-                {
-                    if (active_run_out)
-                        *active_run_out = marker->run_dir;
-                    return true;
-                }
-
                 remove_update_cache_path_best_effort(active_marker_path);
                 if (!source_update_recent_pending_log_evidence(target_binary, std::chrono::seconds{ 20 }))
                     remove_update_cache_path_best_effort(source_cancel_path(target_binary));
@@ -2980,10 +3084,15 @@ namespace epochnamespace::updater
             }
 
             const bool old_marker_recent =
-                file_recently_modified(active_marker_path, std::chrono::minutes{ 3 })
+                file_recently_modified(active_marker_path, std::chrono::seconds{ 15 })
                 || source_update_recent_pending_log_evidence(target_binary, std::chrono::minutes{ 3 });
             if (!old_marker_recent)
+            {
+                remove_update_cache_path_best_effort(active_marker_path);
+                if (!source_update_recent_pending_log_evidence(target_binary, std::chrono::seconds{ 20 }))
+                    remove_update_cache_path_best_effort(source_cancel_path(target_binary));
                 return false;
+            }
 
             if (active_run_out)
                 *active_run_out = marker->run_dir;
@@ -3326,13 +3435,22 @@ namespace epochnamespace::updater
                 + SOURCE_BUILD_PLATFORM()
                 + " (runtime may currently be Debug).");
 
-            if (!prepare_manifest_for_managed_vcpkg_registry(
-                manifest_root,
-                vcpkg_root,
-                build_log))
+            const bool using_managed_vcpkg =
+                path_is_inside(managed_tools_root(), vcpkg_root);
+            if (using_managed_vcpkg
+                && !prepare_manifest_for_managed_vcpkg_registry(
+                    manifest_root,
+                    vcpkg_root,
+                    build_log))
             {
                 log_error("Could not prepare the source snapshot for managed vcpkg.");
                 return false;
+            }
+            if (!using_managed_vcpkg)
+            {
+                append_log_line(
+                    build_log,
+                    "[INFO] Using installed vcpkg registry; source manifest baseline left intact.");
             }
 
             const auto overlay_ports = prepare_vcpkg_overlay_ports(vcpkg_root, build_log);
@@ -4113,8 +4231,52 @@ namespace epochnamespace::updater
             << "  }\n"
             << "  throw 'Managed git extraction did not produce git.exe.'\n"
             << "}\n"
+            << "function Test-VcpkgRoot([string]$Root) {\n"
+            << "  if ([string]::IsNullOrWhiteSpace($Root)) { return $false }\n"
+            << "  try { $fullRoot = [System.IO.Path]::GetFullPath($Root) } catch { return $false }\n"
+            << "  if (-not (Test-Path -LiteralPath (Join-Path $fullRoot $vcpkgExeName))) { return $false }\n"
+            << "  if (-not (Test-Path -LiteralPath (Join-Path $fullRoot 'ports'))) { return $false }\n"
+            << "  if (-not (Test-Path -LiteralPath (Join-Path $fullRoot 'versions'))) { return $false }\n"
+            << "  if (-not (Test-Path -LiteralPath (Join-Path $fullRoot 'scripts\\buildsystems\\vcpkg.cmake'))) { return $false }\n"
+            << "  return $true\n"
+            << "}\n"
+            << "function Resolve-InstalledVcpkgExe {\n"
+            << "  $candidates = @()\n"
+            << "  if (-not [string]::IsNullOrWhiteSpace($env:VCPKG_EXE_PATH) -and (Test-Path -LiteralPath $env:VCPKG_EXE_PATH)) {\n"
+            << "    $candidates += (Split-Path -Parent $env:VCPKG_EXE_PATH)\n"
+            << "  }\n"
+            << "  if (-not [string]::IsNullOrWhiteSpace($env:EPOCH_UPDATER_VCPKG_ROOT)) { $candidates += $env:EPOCH_UPDATER_VCPKG_ROOT }\n"
+            << "  if (-not [string]::IsNullOrWhiteSpace($env:VCPKG_ROOT)) { $candidates += $env:VCPKG_ROOT }\n"
+            << "  $vcpkgCommand = Get-Command $vcpkgExeName -ErrorAction SilentlyContinue\n"
+            << "  if ($null -ne $vcpkgCommand -and -not [string]::IsNullOrWhiteSpace($vcpkgCommand.Source)) {\n"
+            << "    $candidates += (Split-Path -Parent $vcpkgCommand.Source)\n"
+            << "  }\n"
+            << "  if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {\n"
+            << "    $candidates += (Join-Path $env:USERPROFILE 'source\\repos\\vcpkg')\n"
+            << "    $candidates += (Join-Path $env:USERPROFILE 'vcpkg')\n"
+            << "  }\n"
+            << "  $seen = @{}\n"
+            << "  foreach ($candidate in $candidates) {\n"
+            << "    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }\n"
+            << "    try { $fullCandidate = [System.IO.Path]::GetFullPath($candidate) } catch { continue }\n"
+            << "    $key = $fullCandidate.ToLowerInvariant()\n"
+            << "    if ($seen.ContainsKey($key)) { continue }\n"
+            << "    $seen[$key] = $true\n"
+            << "    if (Test-VcpkgRoot $fullCandidate) {\n"
+            << "      Write-Step 'INFO' ('Using installed vcpkg: ' + $fullCandidate)\n"
+            << "      Write-Handoff 'INFO' 'Using installed vcpkg toolchain.'\n"
+            << "      return (Join-Path $fullCandidate $vcpkgExeName)\n"
+            << "    }\n"
+            << "    Write-Step 'WARN' ('Ignoring unusable vcpkg root: ' + $fullCandidate)\n"
+            << "  }\n"
+            << "  return ''\n"
+            << "}\n"
             << "function Resolve-VcpkgExe {\n"
             << "  Test-Cancel\n"
+            << "  $installedVcpkgExe = Resolve-InstalledVcpkgExe\n"
+            << "  if (-not [string]::IsNullOrWhiteSpace($installedVcpkgExe) -and (Test-Path -LiteralPath $installedVcpkgExe)) {\n"
+            << "    return $installedVcpkgExe\n"
+            << "  }\n"
             << "  $vcpkgRef = Get-VcpkgRef\n"
             << "  $safeRef = Get-ShortToken $vcpkgRef\n"
             << "  $managedVcpkgRoot = Join-Path $managedToolsRoot ('v-' + $safeRef)\n"
@@ -4307,11 +4469,11 @@ namespace epochnamespace::updater
             << "  Write-Step 'INFO' ('Prepared a ' + $PortName + ' overlay port for modern CMake policy handling.')\n"
             << "  return $true\n"
             << "}\n"
-            << "function Prepare-GladOverlay([string]$VcpkgRoot) {\n"
+            << "function Prepare-CMakePolicyOverlay([string]$VcpkgRoot) {\n"
             << "  $overlayRoot = Join-Path $managedToolsRoot 'ov'\n"
             << "  New-Item -ItemType Directory -Path $overlayRoot -Force | Out-Null\n"
             << "  $stagedAny = $false\n"
-            << "  foreach ($portName in @('glad', 'libogg', 'libvorbis')) {\n"
+            << "  foreach ($portName in @('freetype', 'glad', 'glfw3', 'libogg', 'libvorbis', 'raylib', 'sdl3', 'sfml', 'shaderc', 'spirv-tools', 'zlib')) {\n"
             << "    $stagedPort = Stage-CMakePolicyOverlayPort $VcpkgRoot $overlayRoot $portName\n"
             << "    if ($stagedPort -eq $true) {\n"
             << "      $stagedAny = $true\n"
@@ -4385,18 +4547,25 @@ namespace epochnamespace::updater
             << "Write-Handoff 'INFO' 'Source snapshot downloaded and extracted.'\n"
             << "Test-Cancel\n"
             << "if (-not [string]::IsNullOrWhiteSpace($env:VCPKG_ROOT)) {\n"
-            << "  Write-Step 'INFO' ('Ignoring inherited VCPKG_ROOT: ' + $env:VCPKG_ROOT)\n"
+            << "  Write-Step 'INFO' ('Checking inherited VCPKG_ROOT: ' + $env:VCPKG_ROOT)\n"
             << "}\n"
-            << "Remove-Item Env:VCPKG_ROOT -Force -ErrorAction SilentlyContinue\n"
             << "$vcpkgExe = Resolve-VcpkgExe\n"
             << "Test-Cancel\n"
             << "$vcpkgRoot = Split-Path -Parent $vcpkgExe\n"
             << "$managedInstallRoot = Join-Path $manifestRoot 'vcpkg_installed'\n"
+            << "Remove-Item Env:VCPKG_ROOT -Force -ErrorAction SilentlyContinue\n"
             << "$env:VCPKG_ROOT = $vcpkgRoot\n"
-            << "Write-Step 'INFO' ('Pinned worker-local VCPKG_ROOT to managed toolchain: ' + $vcpkgRoot)\n"
-            << "Prepare-ManifestForManagedVcpkg $manifestRoot $vcpkgRoot\n"
+            << "Write-Step 'INFO' ('Pinned worker-local VCPKG_ROOT to selected toolchain: ' + $vcpkgRoot)\n"
+            << "$managedToolsFull = [System.IO.Path]::GetFullPath($managedToolsRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)\n"
+            << "$vcpkgRootFull = [System.IO.Path]::GetFullPath($vcpkgRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)\n"
+            << "$usingManagedVcpkg = [string]::Equals($vcpkgRootFull, $managedToolsFull, [System.StringComparison]::OrdinalIgnoreCase) -or $vcpkgRootFull.StartsWith($managedToolsFull + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -or $vcpkgRootFull.StartsWith($managedToolsFull + [System.IO.Path]::AltDirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)\n"
+            << "if ($usingManagedVcpkg) {\n"
+            << "  Prepare-ManifestForManagedVcpkg $manifestRoot $vcpkgRoot\n"
+            << "} else {\n"
+            << "  Write-Step 'INFO' 'Using installed vcpkg registry; source manifest baseline left intact.'\n"
+            << "}\n"
             << "Test-Cancel\n"
-            << "$overlayRoot = Prepare-GladOverlay $vcpkgRoot\n"
+            << "$overlayRoot = Prepare-CMakePolicyOverlay $vcpkgRoot\n"
             << "Write-Step 'INFO' 'Restoring source dependencies with vcpkg.'\n"
             << "Write-Handoff 'INFO' 'Restoring source dependencies with vcpkg.'\n"
             << "$vcpkgArgs = @('install', '--triplet', $triplet, ('--x-manifest-root=' + $manifestRoot), ('--x-builtin-ports-root=' + (Join-Path $vcpkgRoot 'ports')), ('--x-builtin-registry-versions-dir=' + (Join-Path $vcpkgRoot 'versions')))\n"
@@ -6018,6 +6187,59 @@ namespace epochnamespace::updater
 
             if (build_status.ok && !build_status.job_name.empty())
                 system_detail::log_info("Update platform build gate passed: " + build_status.job_name);
+        }
+
+        const bool source_should_drive_update =
+            source_status.ok
+            && source_status.update_available
+            && (!packaged_status.update_available
+                || packaged_status.remote.empty()
+                || source_status.remote.empty()
+                || system_detail::compare_versions(source_status.remote, packaged_status.remote) >= 0);
+
+        if (source_should_drive_update)
+        {
+            result.update_available = true;
+            result.source_update_available = true;
+
+            const std::string source = source_status.remote.empty()
+                ? std::string{ "main source" }
+                : std::string{ "main source " } + source_status.remote;
+            const std::string packaged = packaged_status.remote.empty()
+                ? std::string{ "packaged runtime" }
+                : std::string{ "packaged runtime " } + packaged_status.remote;
+
+            if (packaged_status.update_available)
+            {
+                result.packaged_release_reason =
+                    packaged + " is available, but " + source
+                    + " is the selected update lane so Cancel/progress remain available while the local source rebuild runs.";
+                system_detail::log_info(
+                    "Source update selected ahead of packaged runtime because main source is current or newer.");
+            }
+
+            if (!force)
+            {
+                result.force_required = true;
+                result.status_message = "Source update available: " + source
+                    + ". Update will build current main source locally.";
+                if (packaged_status.update_available)
+                    result.status_message += " " + result.packaged_release_reason;
+                return result;
+            }
+
+            result.source_fallback_attempted = true;
+            const std::string source_message = packaged_status.update_available
+                ? result.packaged_release_reason + " Starting source update from main."
+                : "No newer packaged runtime is selected. Starting source update from main.";
+            system_detail::log_info(source_message);
+            const bool worker_launched = run_source_update_command(channel, false, false, honor_env_silent);
+            result.update_performed = false;
+            result.source_update_performed = worker_launched;
+            result.status_message = worker_launched
+                ? "Source rebuild worker started. Keep Epoch open until the worker reports restart-ready evidence, then restart from the update panel."
+                : "Source update failed to start. Check logs/epoch_source_update.log and logs/epoch_update_handoff.log beside the executable.";
+            return result;
         }
 
         if (packaged_status.update_available)

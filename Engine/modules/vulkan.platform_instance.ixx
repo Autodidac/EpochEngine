@@ -47,7 +47,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/context.vulkan.hpp>
+#include <../src/context.vulkan.hpp>
 
 export module vulkan.platform_instance;
 

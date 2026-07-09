@@ -233,8 +233,8 @@ add_library(epoch_gui STATIC
 
 target_sources(epoch_gui PUBLIC
     FILE_SET epoch_gui_modules TYPE CXX_MODULES
-        BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/lib/EpochGui/modules
-        FILES ${CMAKE_CURRENT_SOURCE_DIR}/lib/EpochGui/modules/epoch.gui.ixx
+        BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules
+        FILES ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.ixx
 )
 
 target_include_directories(epoch_gui PUBLIC
@@ -336,6 +336,13 @@ else()
 endif()
 
 if(MSVC)
+    set_target_properties(epoch epoch_ci_headless epoch_gui PROPERTIES
+        VS_GLOBAL_VcpkgApplocalDeps "false"
+        VS_GLOBAL_VcpkgAutoBootstrap "false"
+    )
+
+    target_compile_options(epoch PRIVATE /wd4251 /wd4275 /wd4834)
+
     set_source_files_properties(
         src/renderers/core/engine.context.cpp
         src/renderers/software/context_software.cpp
@@ -813,7 +820,6 @@ if(EPOCH_VULKAN_ACTIVE)
         target_sources(epoch PRIVATE
             src/image.stb.cpp
             src/renderers/vulkan/vulkan.platform.context.cpp
-            src/vulkan.platform.descriptors.cpp
             src/vulkan.dispatch_storage.cpp
             modules/vulkan.context_api_unit.ixx
         )
@@ -965,7 +971,6 @@ target_sources(epoch PRIVATE
 )
 
 target_compile_definitions(epoch PRIVATE
-    EPOCH_MAIN_IN_MAIN_CPP=1
     $<$<BOOL:${EPOCH_UPDATER_SHELL_BUILD}>:EPOCH_UPDATER_SHELL_BUILD=1>
     $<$<BOOL:${EPOCH_RAYLIB_ACTIVE}>:EPOCH_FORCE_ENABLE_RAYLIB>
     $<$<NOT:$<BOOL:${EPOCH_RAYLIB_ACTIVE}>>:EPOCH_FORCE_DISABLE_RAYLIB>

@@ -1,8 +1,29 @@
 # Epoch Changelog
 
+## [v0.87.46]
+- Restored clean source-update Release builds by making `ConsoleApplication1`
+  depend on `EpochGui` after the mirror moved from `Engine/lib/EpochGui` to
+  `Engine/dep/EpochGui`.
+- Updated CMake, MSVC, standalone EpochGui, and docs metadata for the
+  `Engine/dep/EpochGui` and `Engine/include/gui` source shape.
+- Hardened source rebuild dependency restore so update workers prefer a
+  validated installed vcpkg checkout, then fall back to managed vcpkg with
+  broader CMake-policy overlay coverage for renderer/media ports.
+- Compacted the hot roadmap contract and recorded Raylib, SFML, and SDL
+  multicontext handoff as guarded mission-cache work.
+
 ## [v0.87.45]
 - Advanced the source line after the `v0.87.44` updater cancel/retry stability
   release while keeping the published stable runtime release on `v0.87.44`.
+- Restored the normal launcher/editor Update path to source-preferred behavior:
+  newer main source launches the cancelable source rebuild worker instead of
+  staging a quick packaged restart with no visible version advance.
+- Tightened stale updater-session detection so an old source worker marker or
+  old handoff log cannot make the next Update press jump straight to Restart
+  without a live worker or fresh pending evidence.
+- Cleaned MSVC and CMake build warning noise around vcpkg project imports,
+  generated applocal probing, EpochGui manifest discovery, and Vulkan-Hpp
+  nodiscard teardown warnings.
 
 ## [v0.87.44]
 - Hardened updater cancel/retry paths for the launcher and editor: recent

@@ -7,7 +7,7 @@ module;
 
 #include "../include/engine.config.hpp"
 #include "../include/epoch.config.hpp"
-#include "../include/epoch.common.hpp"
+#include "../src/epoch.common.hpp"
 #include <string>
 #include <vector>
 

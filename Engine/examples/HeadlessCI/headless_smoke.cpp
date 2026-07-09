@@ -1,5 +1,5 @@
 #include "engine.config.hpp"
-#include "epoch/core/cpp_feature_probe.hpp"
+#include "../src/cpp_feature_probe.hpp"
 #include "epoch.runtime_bridge.hpp"
 #include "epoch.script_api.h"
 

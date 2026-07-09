@@ -34,5 +34,5 @@
  **************************************************************/
 // Engine/src/epoch.headers.cpp
 #include "../include/epoch.config.hpp"
-#include "../include/epoch.common.hpp"
+#include "../src/epoch.common.hpp"
 // Intentionally empty.

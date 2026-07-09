@@ -58,11 +58,6 @@
   <ImportGroup Label="Shared">
     <Import Project="..\..\Engine.vcxitems" Label="Shared" />
   </ImportGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\lib\EpochGui\EpochGui.vcxproj">
-      <Project>{7b41a9b2-4b7e-4b5d-9b39-68d2408bca90}</Project>
-    </ProjectReference>
-  </ItemGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -109,6 +104,7 @@
     <VcpkgManifestRoot>$(SolutionDir)Engine\</VcpkgManifestRoot>
     <VcpkgInstalledDir>$(SolutionDir)Engine\vcpkg_installed\</VcpkgInstalledDir>
     <VcpkgEnabled>true</VcpkgEnabled>
+    <VcpkgAutoBootstrap>false</VcpkgAutoBootstrap>
     <VcpkgAutoLink>false</VcpkgAutoLink>
     <VcpkgApplocalDeps>false</VcpkgApplocalDeps>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')">true</VcpkgUseStatic>
@@ -179,7 +175,9 @@
       </AdditionalModuleDependencies>
       <ProgramDataBaseFileName>$(IntDir)$(TargetName).pdb</ProgramDataBaseFileName>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <DisableSpecificWarnings>4251;4275;4834;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -208,8 +206,10 @@
       </AdditionalModuleDependencies>
       <ProgramDataBaseFileName>$(IntDir)$(TargetName).pdb</ProgramDataBaseFileName>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <DisableSpecificWarnings>4251;4275;4834;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -365,10 +365,7 @@
     </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Target Name="EpochRestoreVcpkgBeforeModuleScan"
-          BeforeTargets="SetModuleDependencies"
-          DependsOnTargets="VcpkgInstallManifestDependencies"
-          Condition="'$(VcpkgEnabled)'=='true' And '$(VcpkgEnableManifest)'=='true' And '$(VcpkgManifestInstall)'=='true'" />
+  <Target Name="EpochRestoreVcpkgBeforeModuleScan" BeforeTargets="SetModuleDependencies" DependsOnTargets="VcpkgInstallManifestDependencies" Condition="'$(VcpkgEnabled)'=='true' And '$(VcpkgEnableManifest)'=='true' And '$(VcpkgManifestInstall)'=='true'" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

@@ -80,6 +80,18 @@ after choosing the current source gate from `Changes/active_pass.md`.
   reason. Its owner-thread native window/context path needs explicit
   save/restore, focus, GUI resource refresh, and source-context shutdown proof
   before Raylib becomes a normal toolbar handoff target.
+- SDL editor context handoff and multicontext ownership need a dedicated
+  stabilization pass. SDL must not spawn an extra top-level window, steal focus,
+  or leave an orphaned context during toolbar switches, routed pane redocking,
+  or diagnostic-grid teardown. Re-enable SDL as a normal editor handoff target
+  only after backend-owned save/restore, GUI resource refresh, focus, and
+  source-context shutdown proof pass in build-safe and operator-approved
+  runtime evidence.
+- Raylib, SFML, and SDL multicontext grids are diagnostic evidence only until
+  each backend can prove clean parent/child ownership, redock/close teardown,
+  context switch restore, and no stale background rendering. Do not feed those
+  concurrent-grid results into passive context scoring or default-context
+  recommendations.
 - Context implementation work should be split by source ownership when using
   agents: one lane for session/window host code, one for editor route/UI
   integration, one for backend capability truth, one for reusable GUI library
@@ -97,7 +109,7 @@ after choosing the current source gate from `Changes/active_pass.md`.
   scoring because concurrent panes distort FPS, timing, memory, input latency,
   and backend contention; they remain diagnostics only, not data for automatic
   default-context choice.
-- `Engine/include/epoch/context/passive_context_scoring.hpp` owns the portable
+- `Engine/src/passive_context_scoring.hpp` owns the portable
   passive scoring model. Samples must be explicitly single-context before they
   can score; multicontext, diagnostic-grid, and runtime-probe evidence is
   rejected at the API boundary so automated default-context advice cannot learn

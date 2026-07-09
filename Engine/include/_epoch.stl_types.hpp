@@ -29,7 +29,8 @@
  *                                              *
  ***********************************************/
 #pragma once
-#include "epoch.api_types.hpp"
+
+#include "../src/epoch.api_types.hpp"
 
 // Centralized STL includes for header-importing translation units.
 // Modules should STILL include what they use in their global module fragment.

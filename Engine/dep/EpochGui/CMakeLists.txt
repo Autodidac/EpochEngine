@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.87.42 LANGUAGES CXX)
+project(EpochGui VERSION 0.87.46 LANGUAGES CXX)
 
-set(EPOCHGUI_SOURCE_ROOT "" CACHE PATH "Directory containing include/epoch/gui and src/epochgui.")
+set(EPOCHGUI_SOURCE_ROOT "" CACHE PATH "Directory containing include/gui and src/epochgui.")
 
 set(_epochgui_source_root_candidates)
 if(EPOCHGUI_SOURCE_ROOT)
@@ -19,7 +19,7 @@ list(APPEND _epochgui_source_root_candidates
 set(_epochgui_resolved_source_root "")
 foreach(_epochgui_candidate IN LISTS _epochgui_source_root_candidates)
     get_filename_component(_epochgui_candidate_abs "${_epochgui_candidate}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-    if(EXISTS "${_epochgui_candidate_abs}/include/epoch/gui/floating_window.hpp"
+    if(EXISTS "${_epochgui_candidate_abs}/include/gui/floating_window.hpp"
         AND EXISTS "${_epochgui_candidate_abs}/src/epochgui/floating_window.cpp")
         set(_epochgui_resolved_source_root "${_epochgui_candidate_abs}")
         break()
@@ -28,12 +28,12 @@ endforeach()
 
 if(NOT _epochgui_resolved_source_root)
     message(FATAL_ERROR
-        "EpochGui could not find its source root. Expected include/epoch/gui and "
+        "EpochGui could not find its source root. Expected include/gui and "
         "src/epochgui either beside this CMakeLists.txt or two directories above it. "
         "Pass -DEPOCHGUI_SOURCE_ROOT=<path> to select another source root.")
 endif()
 
-set(EPOCHGUI_SOURCE_ROOT "${_epochgui_resolved_source_root}" CACHE PATH "Directory containing include/epoch/gui and src/epochgui." FORCE)
+set(EPOCHGUI_SOURCE_ROOT "${_epochgui_resolved_source_root}" CACHE PATH "Directory containing include/gui and src/epochgui." FORCE)
 
 set(EPOCHGUI_MODULE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "Directory containing modules/epoch.gui.ixx." FORCE)
 
@@ -42,13 +42,13 @@ set(EPOCHGUI_MODULES
 )
 
 set(EPOCHGUI_PUBLIC_HEADERS
-    "${EPOCHGUI_SOURCE_ROOT}/include/epoch/gui/dockable_window.hpp"
-    "${EPOCHGUI_SOURCE_ROOT}/include/epoch/gui/dock_layout.hpp"
-    "${EPOCHGUI_SOURCE_ROOT}/include/epoch/gui/floating_window.hpp"
-    "${EPOCHGUI_SOURCE_ROOT}/include/epoch/gui/layout_primitives.hpp"
-    "${EPOCHGUI_SOURCE_ROOT}/include/epoch/gui/panel_host.hpp"
-    "${EPOCHGUI_SOURCE_ROOT}/include/epoch/gui/popup_layout.hpp"
-    "${EPOCHGUI_SOURCE_ROOT}/include/epoch/gui/version.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/dockable_window.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/dock_layout.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/floating_window.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/layout_primitives.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/panel_host.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/popup_layout.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/version.hpp"
 )
 
 set(EPOCHGUI_SOURCES
@@ -80,6 +80,8 @@ target_include_directories(EpochGui PUBLIC
 target_compile_features(EpochGui PUBLIC cxx_std_23)
 
 set_target_properties(EpochGui PROPERTIES
+    CXX_STANDARD 23
+    CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS OFF
     EXPORT_NAME EpochGui
     OUTPUT_NAME EpochGui

@@ -30,53 +30,64 @@
  ***********************************************/
 #pragma once
 
-#include <memory>
+#if defined(__has_include)
+#  if __has_include(<version>)
+#    include <version>
+#  endif
+#  if __has_include(<execution>)
+#    include <execution>
+#  endif
+#  if __has_include(<expected>)
+#    include <expected>
+#  endif
+#  if __has_include(<stacktrace>)
+#    include <stacktrace>
+#  endif
+#endif
 
-namespace epochnamespace::core
+#if defined(__cpp_contracts) && (__cpp_contracts > 0)
+#  define EPOCH_HAS_CONTRACTS 1
+#else
+#  define EPOCH_HAS_CONTRACTS 0
+#endif
+
+#if (defined(__cpp_static_reflection) && (__cpp_static_reflection > 0)) || \
+    (defined(__cpp_reflection) && (__cpp_reflection > 0))
+#  define EPOCH_HAS_STATIC_REFLECTION 1
+#else
+#  define EPOCH_HAS_STATIC_REFLECTION 0
+#endif
+
+#if defined(__cpp_lib_execution) && (__cpp_lib_execution >= 201603L)
+#  define EPOCH_HAS_STD_EXECUTION 1
+#else
+#  define EPOCH_HAS_STD_EXECUTION 0
+#endif
+
+#if defined(__cpp_lib_expected) && (__cpp_lib_expected >= 202202L)
+#  define EPOCH_HAS_EXPECTED 1
+#else
+#  define EPOCH_HAS_EXPECTED 0
+#endif
+
+#if defined(__cpp_lib_stacktrace) && (__cpp_lib_stacktrace >= 202011L)
+#  define EPOCH_HAS_STACKTRACE 1
+#else
+#  define EPOCH_HAS_STACKTRACE 0
+#endif
+
+#if defined(__cpp_lib_print) && (__cpp_lib_print >= 202207L)
+#  define EPOCH_HAS_STD_PRINT 1
+#else
+#  define EPOCH_HAS_STD_PRINT 0
+#endif
+
+namespace epoch::core
 {
-    class Context;
-
-    namespace detail
-    {
-#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-        void register_opengl_backend();
-#endif
-#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-        void register_sfml_backend();
-#endif
-#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-        extern "C" void epoch_register_raylib_backend();
-#endif
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-        void register_sdl_backend();
-#endif
-    }
+    inline constexpr bool has_contracts = EPOCH_HAS_CONTRACTS != 0;
+    inline constexpr bool has_static_reflection = EPOCH_HAS_STATIC_REFLECTION != 0;
+    inline constexpr bool has_std_execution = EPOCH_HAS_STD_EXECUTION != 0;
+    inline constexpr bool has_expected = EPOCH_HAS_EXPECTED != 0;
+    inline constexpr bool has_stacktrace = EPOCH_HAS_STACKTRACE != 0;
+    inline constexpr bool has_std_print = EPOCH_HAS_STD_PRINT != 0;
 }
-
-#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-namespace epochnamespace::openglbackend
-{
-    void configure(const std::shared_ptr<epochnamespace::core::Context>& ctx);
-}
-#endif
-
-#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-namespace epochnamespace::sfmlbackend
-{
-    void configure(const std::shared_ptr<epochnamespace::core::Context>& ctx);
-}
-#endif
-
-#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-namespace epochnamespace::raylibbackend
-{
-    void configure(const std::shared_ptr<epochnamespace::core::Context>& ctx);
-}
-#endif
-
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-namespace epochnamespace::sdlbackend
-{
-    void configure(const std::shared_ptr<epochnamespace::core::Context>& ctx);
-}
-#endif

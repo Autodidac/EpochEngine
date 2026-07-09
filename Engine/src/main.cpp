@@ -28,7 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
+/*
 #include "../include/engine.config.hpp"
 
 #include <exception>
@@ -114,7 +114,7 @@ namespace
                 reinterpret_cast<SetProcessDpiAwarenessFn>(
                     ::GetProcAddress(shcore, "SetProcessDpiAwareness")))
             {
-                (void)setAwareness(2 /* PROCESS_PER_MONITOR_DPI_AWARE */);
+                (void)setAwareness(2 );// PROCESS_PER_MONITOR_DPI_AWARE );
             }
             ::FreeLibrary(shcore);
         }
@@ -184,3 +184,4 @@ int main(int argc, char** argv)
         return -1;
     }
 }
+*/

@@ -169,7 +169,7 @@ namespace epochnamespace::editor_update_modal
             return "Epoch is already current for this packaged runtime. Project source code download remains available as a separate cached project snapshot.";
 
         return flags.sourceOnlyUpdate
-            ? "No packaged runtime was found for this platform, so Epoch is using the source rebuild lane."
+            ? "A newer main source build is available. Epoch will build it locally and keep progress, Cancel, and restart evidence visible."
             : "A newer packaged Epoch runtime is available. Epoch will download, verify, stage, and prepare the replacement.";
     }
 
@@ -182,7 +182,7 @@ namespace epochnamespace::editor_update_modal
             return "Smart Update checked packaged releases first; no newer compatible packaged runtime is available.";
 
         return flags.sourceOnlyUpdate
-            ? "Smart Update checked packaged releases first; source rebuild is the available lane for this platform."
+            ? "Smart Update selected the source rebuild lane for this version, so it does not jump straight to packaged restart."
             : "Cached packages are checked before use; stale or broken downloads are replaced.";
     }
 

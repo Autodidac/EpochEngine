@@ -525,12 +525,12 @@ export namespace epochnamespace::sfmlcontext
         if (!sfmlcontext.glContext)
         {
             logger::error("SFML", "Failed to get OpenGL context");
-            sfmlcontext.window->setActive(false);
+            auto is_sfml_context_window_active = sfmlcontext.window->setActive(false);
             return false;
         }
 
         // Detach for now; render thread will reactivate per-frame.
-        sfmlcontext.window->setActive(false);
+        auto is_sfml_context_window_active = sfmlcontext.window->setActive(false);
 
                 if (sfmlcontext.parent)
         {

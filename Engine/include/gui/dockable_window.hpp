@@ -1,6 +1,6 @@
 #pragma once
 
-#include "epoch/gui/dock_layout.hpp"
+#include "dock_layout.hpp"
 
 #include <cstdint>
 #include <string_view>

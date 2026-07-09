@@ -51,7 +51,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/context.vulkan.hpp>
+#include <../src/context.vulkan.hpp>
 
 #if defined(EPOCH_VULKAN_STANDALONE)
 #   include <GLFW/glfw3.h>
@@ -65,7 +65,7 @@ module;
 #       define NOMINMAX
 #   endif
 #   include <windows.h> // for LoadLibrary/GetProcAddress
-#   include <include/framework.hpp>
+#   include <../src/framework.hpp>
 #else
 #   include <dlfcn.h> // dlopen/dlsym
 #endif

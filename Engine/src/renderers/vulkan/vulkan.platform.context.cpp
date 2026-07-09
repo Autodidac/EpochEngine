@@ -52,7 +52,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/context.vulkan.hpp>
+#include <../src/context.vulkan.hpp>
 
 #if defined(_WIN32)
 #   ifndef VK_USE_PLATFORM_WIN32_KHR

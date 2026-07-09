@@ -104,9 +104,6 @@ module;
 #  ifndef WGL_CONTEXT_CORE_PROFILE_BIT_ARB
 #    define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
 #  endif
-#  ifndef PFNWGLCREATECONTEXTATTRIBSARBPROC
-using PFNWGLCREATECONTEXTATTRIBSARBPROC = HGLRC(WINAPI*)(HDC, HGLRC, const int*);
-#  endif
 #endif
 
 #elif defined(__linux__)
@@ -124,6 +121,9 @@ using PFNWGLCREATECONTEXTATTRIBSARBPROC = HGLRC(WINAPI*)(HDC, HGLRC, const int*)
 
 module opengl.context;
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+#if defined(_WIN32) && !defined(EPOCH_HAS_WGL_EXTENSION_HEADERS)
+using PFNWGLCREATECONTEXTATTRIBSARBPROC = HGLRC(WINAPI*)(HDC, HGLRC, const int*);
+#endif
 // ------------------------------------------------------------
 // Core engine modules
 // ------------------------------------------------------------

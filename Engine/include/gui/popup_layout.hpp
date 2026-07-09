@@ -1,6 +1,6 @@
 #pragma once
 
-#include "epoch/gui/floating_window.hpp"
+#include "floating_window.hpp"
 
 #include <cstdint>
 

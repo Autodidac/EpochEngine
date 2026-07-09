@@ -67,8 +67,8 @@ module;
 #include <vector>
 
 #include "editor/update_modal_layout.hpp"
-#include "epoch/core/cpp_feature_probe.hpp"
-#include "epoch/context/passive_context_scoring.hpp"
+#include "cpp_feature_probe.hpp"
+#include "passive_context_scoring.hpp"
 
 module editor;
 
@@ -4904,23 +4904,101 @@ namespace epochnamespace
             return { false, "child executable is current" };
         }
 
+        bool clear_completed_project_build(EditorState& editor, std::string_view source)
+        {
+            if (!editor.projectBuildPending
+                || editor.projectBuildPending->wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
+            {
+                return false;
+            }
+
+            try
+            {
+                const auto build = editor.projectBuildPending->get();
+                editor.projectBuildStatus = build.summary.empty()
+                    ? std::string{ "Project build completed." }
+                    : build.summary;
+                push_editor_log(editor,
+                    std::string("[project] Cleared completed build before ")
+                    + std::string(source)
+                    + ": "
+                    + editor.projectBuildStatus);
+            }
+            catch (const std::exception& ex)
+            {
+                editor.projectBuildStatus = std::string{ "Project build handle completed with an exception: " } + ex.what();
+                push_editor_log(editor, std::string{ "[project] " } + editor.projectBuildStatus);
+            }
+            catch (...)
+            {
+                editor.projectBuildStatus = "Project build handle completed with an unknown exception.";
+                push_editor_log(editor, std::string{ "[project] " } + editor.projectBuildStatus);
+            }
+
+            editor.projectBuildPending.reset();
+            editor.projectBuildRunAfterBuild = false;
+            editor.projectBuildRunScene.clear();
+            editor.projectBuildOutputPath.clear();
+            editor.projectBuildRunBackend.clear();
+            editor.projectBuildRunFrameLimitFps = editor.projectRunFrameLimitFps;
+            editor.projectBuildRunCameraMode = editor.projectCameraMode;
+            editor.projectBuildRunInputProfile = editor.inputProfilePreset;
+            return true;
+        }
+
+        bool clear_completed_ai_build(EditorState& editor, std::string_view source)
+        {
+            if (!editor.aiContinuousBuildPending
+                || editor.aiContinuousBuildPending->wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
+            {
+                return false;
+            }
+
+            try
+            {
+                const auto build = editor.aiContinuousBuildPending->get();
+                ++editor.aiContinuousBuildRunCount;
+                editor.projectBuildStatus = build.summary.empty()
+                    ? std::string{ "Self-iteration build completed." }
+                    : build.summary;
+                editor.aiContinuousBuildStatus = build.succeeded
+                    ? "Last build passed; packet staging pending."
+                    : "Last build failed; inspect the build log before promotion.";
+                editor.aiContinuousBuildStageOnNextFrame = build.succeeded;
+                push_editor_log(editor,
+                    std::string("[ai-build] Cleared completed self-iteration build before ")
+                    + std::string(source)
+                    + ": "
+                    + editor.projectBuildStatus);
+                if (!build.output_path.empty())
+                    push_editor_log(editor, "[ai-build] Output: " + build.output_path);
+                if (!build.log_path.empty())
+                    push_editor_log(editor, "[ai-build] Log: " + build.log_path);
+            }
+            catch (const std::exception& ex)
+            {
+                editor.aiContinuousBuildStatus = std::string{ "Build threw: " } + ex.what();
+                push_editor_log(editor, "[ai-build] " + editor.aiContinuousBuildStatus);
+            }
+            catch (...)
+            {
+                editor.aiContinuousBuildStatus = "Build threw an unknown exception.";
+                push_editor_log(editor, "[ai-build] " + editor.aiContinuousBuildStatus);
+            }
+
+            editor.aiContinuousBuildPending.reset();
+            return true;
+        }
+
+        void clear_completed_editor_builds(EditorState& editor, std::string_view source)
+        {
+            (void)clear_completed_project_build(editor, source);
+            (void)clear_completed_ai_build(editor, source);
+        }
+
         void start_project_build(EditorState& editor, bool runAfterBuild, std::string_view reason)
         {
-            if (editor.projectBuildPending
-                && editor.projectBuildPending->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
-            {
-                try
-                {
-                    (void)editor.projectBuildPending->get();
-                }
-                catch (...)
-                {
-                    push_editor_log(editor, "[project] Cleared completed build handle before queuing the next run request.");
-                }
-
-                editor.projectBuildPending.reset();
-                editor.projectBuildRunAfterBuild = false;
-            }
+            clear_completed_editor_builds(editor, "project build request");
 
             if (editor.projectBuildPending)
             {
@@ -5327,7 +5405,7 @@ namespace epochnamespace
             return;
 
         auto& editor = editor_state_for(ctx);
-        editor.autoUpdateCheckQueued = false;
+        editor.autoUpdateCheckQueued = true;
         if (editor.updateCheckPending.has_value()
             || editor.updateState == EditorUpdateState::SourceWorkerRunning
             || editor.updateState == EditorUpdateState::RestartReady)
@@ -5589,7 +5667,7 @@ namespace epochnamespace
         editor.updateStatus = "Updates have not been checked.";
         editor.updateCheckPending.reset();
         editor.lastUpdateCheck = {};
-        editor.autoUpdateCheckQueued = false;
+        editor.autoUpdateCheckQueued = true;
         editor.updateInstallPending = false;
         editor.updateSourceInstallPending = false;
         editor.updateSourceCancelRequested = false;
@@ -5873,8 +5951,7 @@ namespace epochnamespace
         if (editor.autoUpdateCheckQueued)
         {
             editor.autoUpdateCheckQueued = false;
-            if (try_claim_editor_startup_update_check())
-                start_editor_update_check(editor);
+            start_editor_update_check(editor, true);
         }
         pump_editor_update_check(editor);
         pump_editor_source_update_worker(editor);
@@ -6186,6 +6263,20 @@ namespace epochnamespace
 
         auto launch_active_project_context = [&]()
         {
+            clear_completed_editor_builds(editor, "run request");
+            if (editor.projectBuildPending)
+            {
+                editor.projectBuildStatus = "Project build already running; wait for the current build before pressing Run again.";
+                push_editor_log(editor, "[project] Run request ignored because a project build is still running.");
+                return;
+            }
+            if (editor.aiContinuousBuildPending)
+            {
+                editor.projectBuildStatus = "Self-iteration build is already running; wait before launching a project build.";
+                push_editor_log(editor, "[project] Run request blocked while AI self-iteration build is still running.");
+                return;
+            }
+
             const bool selectedScriptAsset = !editor.selectedAssetPath.empty()
                 && std::filesystem::path{ editor.selectedAssetPath }.filename().string().ends_with(".ascript.cpp");
             if (editor.workspaceTab == EditorWorkspaceTab::Scripts

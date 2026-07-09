@@ -1,3 +1,33 @@
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 #pragma once
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
@@ -88,11 +118,13 @@ namespace epochnamespace::directxcontext::detail
 
     D3D11_VIEWPORT full_window_viewport(const DirectXState& state) noexcept;
     D3D11_VIEWPORT scene_viewport_for(const core::Context& ctx, const DirectXState& state) noexcept;
+
     void build_preview_geometry(
         const core::Context& ctx,
         const DirectXState& state,
         std::vector<DirectXVertex>& solid,
         std::vector<DirectXVertex>& lines);
+
     void draw_vertices(
         DirectXState& state,
         const std::vector<DirectXVertex>& vertices,

@@ -24,117 +24,65 @@ disconnected experiments.
 - Packages, servers, model weights, and generated projects are opt-in,
   reviewable, license-aware, cache-local, and never hidden bypass channels.
 
-## Current Spine Goal
+## Current Working Contract
 
-Build a truthful renderer-resource spine where OpenGL proves each reusable
-feature first, OpenGL-derived contexts share the same contract without fake
-parallel paths, Vulkan/DirectX keep clean equivalent contracts, and System Info
-reports real per-backend capability states.
+The hot path is updater/source-shape stability for the next release pair:
+`v0.87.46` as the packaged runtime release and `v0.87.47` as the post-release
+source checkpoint used by update checks. Do not advance versions casually while
+the operator is testing a release path.
 
-## Current Push Order
+The current source shape is:
 
-1. Finish backend-native sampled render-to-texture for OpenGL-derived contexts.
-2. Tighten capability reporting so contract-only work is `Partial`, not
-   `Present`.
-3. Keep GUI/modal/command-menu flicker protected while renderer work lands.
-4. Preserve stable push points before broad context, GUI, package, or AI churn.
+- reusable GUI module metadata: `Engine/dep/EpochGui`
+- reusable GUI public headers: `Engine/include/gui`
+- reusable GUI implementation: `Engine/src/epochgui`
+- renderer/context implementation folders: `Engine/src/renderers/<backend>`
+- internal engine headers that were moved out of public include stay under
+  `Engine/src`
+
+The current updater contract is:
+
+- normal update remains binary-first and platform-build-gated
+- source rebuild remains explicit or fallback-only when no compatible package
+  exists
+- every update path uses executable-local cache for downloaded packages,
+  source snapshots, worker scripts, handoff logs, and managed tools
+- source rebuild prefers a validated installed vcpkg checkout when present,
+  then falls back to updater-managed vcpkg with CMake-policy overlay ports
+- the editor/launcher must keep visible progress, cancel, failure, and restart
+  evidence instead of closing or reporting success because a worker merely
+  started
+
+The current context contract is conservative: the normal editor owns one live
+context, and context switching must be real session handoff with state
+capture/restore evidence. Multicontext grids are diagnostics only. Raylib, SFML,
+and SDL multicontext handoff problems are tracked in mission cache until each
+backend has backend-owned proof for save/restore, focus, GUI resource refresh,
+and teardown.
 
 ## High-Output Source Strategy
 
-The current operator preference is implementation throughput with build proof.
-Agents should spend less time restating goals and more time landing bounded
-source slices that move one of the mission spines forward. The default shape of
-a productive pass is:
+Productive passes should land bounded source slices with build evidence, then
+record only the changed contract. Use subagents only for independent sidecar
+lanes that do not touch the same files: backend audits, MSVC/CMake metadata,
+standalone `EpochGui` mirror checks, docs consistency, or release packaging
+verification. The operator's throughput target remains roughly 9.2k useful
+source/docs/test lines per day, but fake UI, placeholders, or unverified churn
+do not count.
 
-Production-rate target: sustained high-output passes should aim at roughly
-9.2k lines of useful source/docs/test delta per day, every day, while still
-preserving buildability, ownership boundaries, and reviewable evidence. The
-number is a throughput floor for real implementation flesh, not permission for
-placeholder churn or unverified rewrites.
+Current split lanes:
 
-1. Read `AGENTS.md` and `Changes/active_pass.md`.
-2. Inspect status/branch/remotes and preserve unrelated work.
-3. Pick one concrete source slice tied to the active gate or an explicit
-   operator mission.
-4. Use subagents only for independent sidecar lanes that can finish in
-   parallel, such as backend-specific capability audits, MSVC/CMake metadata,
-   standalone `EpochGui` mirror updates, or doc/source consistency checks.
-5. Implement the blocking path locally in production C++.
-6. Build Debug and Release, or the safest matching target from `AGENTS.md`.
-7. Update docs/changelog with only the changed contract and the evidence.
-8. Commit the focused batch when the operator wants the checkpoint preserved.
-
-The high-output lanes that should be split across agents when they are active
-and independent are:
-
-- renderer resource spine: OpenGL-derived sampled RTT, graph binding,
-  capability truth, and backend-native resource devices
-- context host/session spine: toolbar backend handoff, editor snapshot
-  restore, routed GUI windows, focus ownership, teardown, and optional host
-  exclusion for non-editor products
-- reusable GUI spine: `EpochGui` portable controllers, `engine.gui` adapter
-  rendering/input/theme work, editor composition, modals, menus, text controls,
-  and standalone `Autodidac/EpochGui` metadata
-- updater/release spine: platform-build gating, binary-first handoff, source
-  fallback evidence, launcher/editor update button parity, cache hygiene, and
-  packaged asset identity
-- package/project spine: reviewable package activation, generated project
-  build/run parity, scene persistence, and cache/package boundaries
-- OS AI spine: selected external model control, packet evidence, verifier/gate
-  contracts, and no hidden autonomy
-
-Normal editor context selection is now expected to become real source behavior,
-not a fake selector: choosing a backend should focus a live context of that
-type, or create a new editor context of that type and restore the captured
-editor state when the host supports it. Unsupported products should exclude the
-desktop host route instead of carrying hidden shells.
-
-Capability truth also needs source flesh, not only docs. The next renderer
-capability slice should replace boolean overclaiming with status/proof layers:
-descriptor contract, build graph proof, hook readiness, live native allocation
-readiness, and presentation proof. System Info should consume the selected/live
-context's capability report, not only static backend-family defaults. OpenGL
-family sampled RTT must separate hook-factory readiness from real GPU allocation
-inside a registered live context. SDL3/SFML3/Raylib no-runtime refusal proves
-the guard, not feature support. Explicit DirectX/Vulkan sampled-RTT claims
-remain `Partial` or `Missing` until real backend-native `render.device_*`
-implementations and build proof exist.
-
-Current evidence: OpenGL's real native sampled-RTT hook factory is now wired
-into the engine contract harness, SDL3/SFML3/Raylib sampled-RTT capability
-reporting is runtime-availability-gated instead of always-on, and the render
-graph now refuses `render_surface` material bindings unless they reference a
-sampled render-texture asset. Engine Arcade now uses a two-pass proof shape:
-one pass renders a small scene model into `engine_arcade.screen`, and the next
-pass samples that surface onto the cabinet material. Generated game shells that
-include Engine Arcade now seed a cabinet assembly instead of a single
-placeholder box. The graph now also records the sampled RTT sampler as a
-first-class resource and ties its lifetime to the owning RTT asset instead of
-ordinary sampler teardown. `ConsoleApplication1|Debug|x64` builds with MSVC after
-the harness update. The graph-level proof now also requires an explicit
-`engine_arcade.screen` sampler in the cabinet material slot and rejects
-mismatched render-surface sampler resources. Raylib3 now keeps its logical
-OpenGL-derived identity in the OpenGL-family render device, and the build-only
-graph/cabinet/fake-native/requirements harnesses cover OpenGL, SDL3-over-GL,
-SFML-over-GL, and Raylib-over-GL without claiming live native allocation.
-
-Latest stabilization: `v0.87.11` keeps the operator-approved GUI baseline and
-fixes the release blockers around it: update/source modals now use measured
-editor-owned layout, runtime, and view fragments under `Engine/src/editor/`,
-action buttons stack inside their fitted content lane on narrow surfaces,
-SFML/SDL/Vulkan API drift is repaired for the
-manifest-restored Windows dependency set, SFML 2/3 compatibility restores the
-hosted Linux `linux-clang-engine` lane, and MSVC plus Linux Clang editor builds
-pass with staged Windows/Linux package `--version` checks.
-
-Previous stabilization: Video is treated as a scene-backed workspace again so the
-timeline strip remains visible, update/package modals use matched body and input
-capture geometry to protect top-layer z-order, shared GUI progress bars clamp to
-their owning content lane, the update modal now sizes itself from wrapped live
-status/action text with a bounded height and full-width in-modal progress lane
-instead of reserving a stale empty lower body or detached action row, and
-single-context Run resolves existing generated child executables before rejecting
-launch.
+- updater/release: vcpkg restore, binary/source handoff, cache hygiene,
+  launcher/editor parity, release asset identity
+- GUI: `EpochGui` portable controllers, `engine.gui` adapter rendering/input,
+  themes, modal/menu/top-layer behavior, docking/floating hosts
+- context/session: single-context handoff, snapshot restore, routed pane
+  ownership, backend shutdown, focus evidence
+- renderer resource truth: sampled RTT, graph binding, resource devices,
+  capability status/proof layers
+- package/project: package activation, generated project parity, scene
+  persistence, cache/package boundaries
+- OS AI: selected external model control, evidence gates, no hidden autonomy
 
 ## Acceptance Gates
 

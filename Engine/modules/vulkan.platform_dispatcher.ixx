@@ -43,12 +43,12 @@ module;
 #include <compare>
 #include <vulkan/vulkan.h>
 
-#include <include/framework.hpp>
+#include <../src/framework.hpp>
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <include/context.vulkan.hpp>
+#include <../src/context.vulkan.hpp>
 
 export module vulkan.platform_dispatcher;
 

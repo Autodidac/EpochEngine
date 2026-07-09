@@ -19,7 +19,7 @@ module;
 #       define NOMINMAX
 #   endif
 #   ifdef EPOCH_USING_WINMAIN
-#       include "../include/framework.hpp"
+#       include "../src/framework.hpp"
 #   endif
 #endif
 

@@ -178,6 +178,65 @@
                 && !result.packaged_handoff_staged;
         }
 
+        [[nodiscard]] std::mutex& editor_update_discovery_cache_mutex()
+        {
+            static std::mutex mutex{};
+            return mutex;
+        }
+
+        [[nodiscard]] std::optional<updater::UpdateCommandResult>& editor_update_discovery_cache()
+        {
+            static std::optional<updater::UpdateCommandResult> cache{};
+            return cache;
+        }
+
+        [[nodiscard]] bool editor_update_result_is_discovery_only(
+            const updater::UpdateCommandResult& result) noexcept
+        {
+            return !result.update_performed
+                && !result.packaged_update_performed
+                && !result.source_update_performed
+                && !result.packaged_handoff_staged
+                && !result.source_fallback_attempted;
+        }
+
+        void remember_editor_update_discovery(const updater::UpdateCommandResult& result)
+        {
+            if (!editor_update_result_is_discovery_only(result))
+                return;
+
+            std::scoped_lock lock{ editor_update_discovery_cache_mutex() };
+            editor_update_discovery_cache() = result;
+        }
+
+        void apply_editor_update_discovery(EditorState& editor, const updater::UpdateCommandResult& result)
+        {
+            editor.lastUpdateCheck = result;
+            editor.updateCheckPending.reset();
+            editor.updateInstallPending = false;
+            editor.updateSourceInstallPending = false;
+            editor.updateProjectSourceDownloadPending = false;
+            editor.updateSourceCancelRequested = false;
+            editor.updateOperationStartedAt = {};
+
+            if (editor.lastUpdateCheck.update_available || editor.lastUpdateCheck.force_required)
+                editor.updateState = EditorUpdateState::Available;
+            else
+                editor.updateState = EditorUpdateState::Idle;
+
+            editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+        }
+
+        [[nodiscard]] bool apply_cached_editor_update_discovery(EditorState& editor)
+        {
+            std::scoped_lock lock{ editor_update_discovery_cache_mutex() };
+            if (!editor_update_discovery_cache().has_value())
+                return false;
+
+            apply_editor_update_discovery(editor, *editor_update_discovery_cache());
+            return true;
+        }
+
         [[nodiscard]] updater::UpdateCommandResult make_editor_update_failure_result(
             std::string message,
             const bool sourceAttempted = false)
@@ -543,21 +602,6 @@
             return text.find(needle) != std::string_view::npos;
         }
 
-        [[nodiscard]] std::atomic<bool>& editor_startup_update_check_claimed() noexcept
-        {
-            static std::atomic<bool> claimed{ false };
-            return claimed;
-        }
-
-        [[nodiscard]] bool try_claim_editor_startup_update_check() noexcept
-        {
-            bool expected = false;
-            return editor_startup_update_check_claimed().compare_exchange_strong(
-                expected,
-                true,
-                std::memory_order_acq_rel);
-        }
-
         [[nodiscard]] std::atomic<bool>& editor_update_operation_running() noexcept
         {
             static std::atomic<bool> running{ false };
@@ -590,7 +634,7 @@
         void start_editor_source_update_install(EditorState& editor);
         void start_editor_project_source_code_download(EditorState& editor);
 
-        void start_editor_update_check(EditorState& editor)
+        void start_editor_update_check(EditorState& editor, const bool passive = false)
         {
             if (guard_editor_update_retry_wait(editor))
                 return;
@@ -598,6 +642,15 @@
             if (editor.updateCheckPending.has_value())
             {
                 push_editor_log(editor, "[update] Update check is already running.");
+                return;
+            }
+
+            if (editor.updateState != EditorUpdateState::RestartReady
+                && editor.updateState != EditorUpdateState::SourceWorkerRunning
+                && apply_cached_editor_update_discovery(editor))
+            {
+                if (!passive)
+                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
 
@@ -612,8 +665,10 @@
 
             if (!try_claim_editor_update_operation())
             {
+                editor.autoUpdateCheckQueued = true;
                 editor.updateStatus = "Another editor pane is already checking or installing updates.";
-                push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                if (!passive)
+                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                 return;
             }
 
@@ -708,7 +763,7 @@
             }
 
             editor.updateState = EditorUpdateState::Checking;
-            editor.updateStatus = "Installing the best available update. Epoch checks packaged releases first, then falls back to source only when no newer package exists.";
+            editor.updateStatus = "Installing the best available update. If main source is newer, Epoch builds it locally; packaged releases are used only when no newer source lane is available.";
             editor.updateInstallPending = true;
             editor.updateSourceInstallPending = false;
             editor.updateProjectSourceDownloadPending = false;
@@ -716,7 +771,7 @@
             clear_editor_update_retry_wait(editor);
             clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
-            push_editor_log(editor, "[update] Installing through the binary-first update gate.");
+            push_editor_log(editor, "[update] Installing through the source-preferred update gate.");
 
             try
             {
@@ -914,6 +969,8 @@
             try
             {
                 updater::UpdateCommandResult completedUpdateCheck = editor.updateCheckPending->get();
+                if (!installPending && !projectSourceDownloadPending)
+                    remember_editor_update_discovery(completedUpdateCheck);
                 editor.lastUpdateCheck = completedUpdateCheck;
                 editor.updateCheckPending.reset();
                 const bool sourceWorkerRunning =

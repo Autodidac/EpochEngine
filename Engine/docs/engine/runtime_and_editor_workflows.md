@@ -22,28 +22,30 @@ the same engine-owned path.
 - packaged Linux releases should follow that same main-runtime rule: the normal
   packaged `epoch` entry is the product path, while updater-shell mode remains
   an explicit bootstrap build instead of the default Linux release identity
-- packaged updates stay binary-first: the updater shell should pull the newest
-  named runtime package first, and only continue to source when the packaged
-  runtime is already version-equal or newer
+- packaged updates use the source-preferred modern lane: when main source is
+  newer than the running build, Update launches the local source rebuild worker
+  so progress and Cancel remain visible. Versioned packaged runtime archives are
+  used only when no newer source lane is available or when an explicit
+  bootstrap/package-only flow owns that choice.
 - the active packaged asset contract is versioned runtime archives such as
   `epoch_win10_x64_vX.Y.Z.zip` and `epoch_linux_x64_vX.Y.Z.tar.gz`
 - the updater extracts the packaged version directly from the archive name
 - WSL is treated as Linux for runtime package selection and should consume the
   same `epoch_linux_x64_vX.Y.Z.tar.gz` asset unless a future package layout
   proves a separate WSL asset is necessary
-- source checkout installs still use the same binary-first rule; only after
-  packaged parity or absence of a newer package should they rebuild from the
-  GitHub source snapshot using the platform build path
+- source checkout installs use the same source-preferred rule: a newer main
+  source snapshot drives the update worker directly, while packaged archives
+  remain a verified fallback when source is not newer.
 - editor update checks must also prove the matching hosted build lane before
   surfacing an update: Windows waits for `windows-msvc`, Linux waits for
   `linux-clang-engine`, and pending/failing/missing job evidence withholds the
   update affordance
 - editor update checks are automatic after the editor has loaded. The modal is
   shown only for a newer current-platform update path. The smart/default path is
-  binary-first: it downloads and verifies the packaged runtime when one exists,
-  otherwise it reports the absence of a compatible package and uses the source
-  update lane. `Advanced Source` remains a clearly marked source rebuild path
-  for deliberate source testing.
+  source-preferred: if main source is newer, it launches the source rebuild
+  worker and keeps Cancel/progress visible; if source is not newer, it may use a
+  verified packaged runtime archive. Project Source Code Download remains a
+  cache-only source snapshot action and does not update or restart Epoch.
 - update work must stay visible while it runs. During checking, packaged
   install, and source rebuild, the toolbar/modal/output evidence should report
   elapsed time, current lane, and completion/failure state instead of leaving a
@@ -564,7 +566,7 @@ Current source ownership:
 | Editor state capture/restore for handoff | `Engine/src/editor.cpp` |
 | Session loop, live context discovery, handoff fallback | `Engine/src/engine.cpp` |
 | Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context.multiplexer.ixx`, `Engine/modules/context.window.ixx`, `Engine/src/renderers/host/engine.context.host.*.cpp` |
-| Reusable GUI layout state | `Engine/include/epoch/gui`, `Engine/src/epochgui`, `Engine/lib/EpochGui` |
+| Reusable GUI layout state | `Engine/include/gui`, `Engine/src/epochgui`, `Engine/dep/EpochGui` |
 | Engine GUI adapter/render/input bridge | `Engine/modules/engine.gui.ixx`, `Engine/src/engine.gui.cpp` |
 
 Context switching acceptance:

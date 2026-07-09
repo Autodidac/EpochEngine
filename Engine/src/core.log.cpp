@@ -31,16 +31,21 @@
 module;
 
 #include "../include/_epoch.stl_types.hpp"
+#include "../src/cpp_feature_probe.hpp"
 
 #include <chrono>
 #include <cstdint>
 #include <cstdio>        // FILE, fopen/fclose/fwrite/fflush
 #include <functional>    // std::hash
+#include <iostream>
 #include <mutex>
-#include <print>
 #include <string>
 #include <string_view>
 #include <thread>
+
+#if EPOCH_HAS_STD_PRINT
+#  include <print>
+#endif
 
 #if defined(_WIN32)
 #  define WIN32_LEAN_AND_MEAN
@@ -102,8 +107,13 @@ namespace epoch::core::log
             // Convert once; std::println wants std::string_view.
             const std::string_view sv = epoch::to_std(line);
 
+#if EPOCH_HAS_STD_PRINT
             if (g_console)
                 std::println("{}", sv);
+#else
+            if (g_console)
+                std::cout << sv << '\n';
+#endif
 
             if (g_file)
             {

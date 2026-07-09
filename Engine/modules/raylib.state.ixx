@@ -44,7 +44,7 @@ module;
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 #if defined(_WIN32)
 #   ifdef EPOCH_USING_WINMAIN
-#       include <include/framework.hpp>
+#       include <../src/framework.hpp>
 #   endif
 #endif
 #endif
