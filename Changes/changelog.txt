@@ -1,5 +1,12 @@
 # Epoch Changelog
 
+## [v0.87.50]
+- Fixed a Linux Raylib atlas crash by moving Raylib texture backend storage out
+  of `Context::native_drawable`, leaving native display/drawable ownership with
+  the renderer context layer.
+- Added a build-safe engine contract check that proves Raylib texture storage
+  does not write through context-native windowing fields.
+
 ## [v0.87.49]
 - Advanced the source line after the `v0.87.48` Windows/Linux packaged release
   while keeping the published stable runtime release on `v0.87.48`.

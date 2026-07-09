@@ -27,9 +27,9 @@ disconnected experiments.
 ## Current Working Contract
 
 The hot path is Linux/updater source-shape stability for the next release pair:
-`v0.87.48` as the packaged runtime release and `v0.87.49` as the post-release
-source checkpoint used by update checks. Do not advance versions casually while
-the operator is testing a release path.
+`v0.87.50` as the packaged runtime repair release and `v0.87.51` as the
+post-release source checkpoint used by update checks. Do not advance versions
+casually while the operator is testing a release path.
 
 The current source shape is:
 

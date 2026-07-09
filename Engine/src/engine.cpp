@@ -181,6 +181,7 @@ import sfml.context;
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 import raylib.context;
 import raylib.state;
+import raylib.textures;
 #endif
 
 namespace input = epochnamespace::input;
@@ -1715,6 +1716,26 @@ namespace epochnamespace::core
 #endif
     }
 
+    [[nodiscard]] inline bool raylib_texture_storage_contract_ready()
+    {
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+        auto previous = epochnamespace::core::get_current_render_context();
+        auto ctx = std::make_shared<epochnamespace::core::Context>();
+        ctx->type = epochnamespace::core::ContextType::RayLib;
+        ctx->native_drawable = nullptr;
+
+        epochnamespace::core::set_current_render_context(ctx);
+        const bool ready =
+            epochnamespace::raylibtextures::backend_storage_is_separate_from_context_native_drawable()
+            && ctx->native_drawable == nullptr;
+        epochnamespace::core::set_current_render_context(std::move(previous));
+
+        return ready;
+#else
+        return true;
+#endif
+    }
+
     [[nodiscard]] inline int run_engine_contract_self_test()
     {
         bool failed = false;
@@ -1802,6 +1823,7 @@ namespace epochnamespace::core
         check("render.sdl_arcade_cabinet_graph", sdl_arcade_cabinet_graph_contract_ready());
         check("render.sfml_arcade_cabinet_graph", sfml_arcade_cabinet_graph_contract_ready());
         check("render.raylib_arcade_cabinet_graph", raylib_arcade_cabinet_graph_contract_ready());
+        check("render.raylib_texture_storage", raylib_texture_storage_contract_ready());
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;

@@ -109,23 +109,43 @@ namespace epochnamespace::raylibtextures
         std::mutex gpuMutex;
     };
 
+    inline BackendData& raylib_backend_storage() noexcept
+    {
+        static BackendData backend{};
+        return backend;
+    }
+
     inline BackendData& get_raylib_backend()
     {
         auto ctx = epochnamespace::core::get_current_render_context();
-        if (!ctx)
+        if (!ctx || ctx->type != epochnamespace::core::ContextType::RayLib)
             throw std::runtime_error("[RaylibTextures] No current render context");
 
-        if (!ctx->native_drawable)
-            ctx->native_drawable = new BackendData();
+        return raylib_backend_storage();
+    }
 
-        return *static_cast<BackendData*>(ctx->native_drawable);
+    export inline bool backend_storage_is_separate_from_context_native_drawable() noexcept
+    {
+        try
+        {
+            auto ctx = epochnamespace::core::get_current_render_context();
+            if (!ctx || ctx->type != epochnamespace::core::ContextType::RayLib)
+                return false;
+
+            auto& backend = get_raylib_backend();
+            return static_cast<const void*>(&backend) != ctx->native_drawable;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     export inline void shutdown_current_context_backend() noexcept
     {
         try
         {
-            auto& backend = get_raylib_backend();
+            auto& backend = raylib_backend_storage();
 
             // Move textures out under lock, destroy them unlocked.
             std::vector<epochnamespace::raylib_api::Texture2D> to_free;
@@ -142,12 +162,6 @@ namespace epochnamespace::raylibtextures
 
             for (auto& t : to_free)
                 epochnamespace::raylib_api::unload_texture(t);
-
-            if (auto ctx = epochnamespace::core::get_current_render_context(); ctx && ctx->native_drawable)
-            {
-                delete static_cast<BackendData*>(ctx->native_drawable);
-                ctx->native_drawable = nullptr;
-            }
         }
         catch (...) {}
     }
@@ -353,7 +367,7 @@ namespace epochnamespace::raylibtextures
     {
         try
         {
-            auto& backend = get_raylib_backend();
+            auto& backend = raylib_backend_storage();
 
             std::vector<epochnamespace::raylib_api::Texture2D> to_free;
             {
