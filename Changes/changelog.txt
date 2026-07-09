@@ -4,8 +4,16 @@
 - Fixed a Linux Raylib atlas crash by moving Raylib texture backend storage out
   of `Context::native_drawable`, leaving native display/drawable ownership with
   the renderer context layer.
+- Hardened Raylib atlas uploads again after the first replacement candidate:
+  uploads now consume immutable CPU pixel snapshots/version pairs, Raylib
+  context atlas hooks perform a real upload instead of returning a synthetic
+  handle, and the Raylib frame path marks the active drawing scope before GUI
+  upload queues drain.
 - Added a build-safe engine contract check that proves Raylib texture storage
   does not write through context-native windowing fields.
+- Added a build-safe atlas snapshot contract so Linux and Windows package
+  checks prove mutated atlas CPU storage cannot invalidate an in-flight upload
+  buffer.
 
 ## [v0.87.49]
 - Advanced the source line after the `v0.87.48` Windows/Linux packaged release

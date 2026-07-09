@@ -38,6 +38,7 @@ module;
 #include <iostream>
 #include <mutex>
 #include <source_location>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -109,6 +110,14 @@ namespace epochnamespace::raylibtextures
         std::mutex gpuMutex;
     };
 
+    struct UploadedTexture
+    {
+        epochnamespace::raylib_api::Texture2D texture{};
+        u64 version{ 0 };
+        u32 width{ 0 };
+        u32 height{ 0 };
+    };
+
     inline BackendData& raylib_backend_storage() noexcept
     {
         static BackendData backend{};
@@ -146,16 +155,23 @@ namespace epochnamespace::raylibtextures
         try
         {
             auto& backend = raylib_backend_storage();
+            const auto& state = epochnamespace::raylibstate::s_raylibstate;
+            const bool canUnload =
+                (state.running || state.renderingActive || state.frameActive)
+                && epochnamespace::raylib_api::is_window_ready();
 
             // Move textures out under lock, destroy them unlocked.
             std::vector<epochnamespace::raylib_api::Texture2D> to_free;
             {
                 std::scoped_lock lock(backend.gpuMutex);
-                to_free.reserve(backend.gpu_atlases.size());
-                for (auto& [_, gpu] : backend.gpu_atlases)
+                if (canUnload)
                 {
-                    if (gpu.texture.id != 0)
-                        to_free.push_back(gpu.texture);
+                    to_free.reserve(backend.gpu_atlases.size());
+                    for (auto& [_, gpu] : backend.gpu_atlases)
+                    {
+                        if (gpu.texture.id != 0)
+                            to_free.push_back(gpu.texture);
+                    }
                 }
                 backend.gpu_atlases.clear();
             }
@@ -198,20 +214,25 @@ namespace epochnamespace::raylibtextures
     }
 
     // ---- Core rule: no raylib calls while holding gpuMutex ----
-    inline epochnamespace::raylib_api::Texture2D upload_texture_raylib(const TextureAtlas& atlas)
+    inline UploadedTexture upload_texture_raylib(const TextureAtlas& atlas)
     {
-        // Ensure pixels exist (may rebuild CPU-side).
-        if (atlas.pixel_data.empty())
-            const_cast<TextureAtlas&>(atlas).rebuild_pixels();
+        const AtlasPixelSnapshot snapshot = atlas.snapshot_pixels();
+        if (snapshot.width == 0 || snapshot.height == 0 || snapshot.pixels.empty())
+            throw std::runtime_error("[RaylibTextures] Atlas '" + atlas.name + "' has no pixel snapshot to upload");
 
         epochnamespace::raylib_api::Image img{};
-        img.data = const_cast<unsigned char*>(atlas.pixel_data.data());
-        img.width = atlas.width;
-        img.height = atlas.height;
+        img.data = const_cast<unsigned char*>(snapshot.pixels.data());
+        img.width = snapshot.width;
+        img.height = snapshot.height;
         img.mipmaps = 1;
         img.format = epochnamespace::raylib_api::pixelformat_rgba8;
 
-        return epochnamespace::raylib_api::load_texture_from_image(img);
+        return UploadedTexture{
+            .texture = epochnamespace::raylib_api::load_texture_from_image(img),
+            .version = snapshot.version,
+            .width = snapshot.width,
+            .height = snapshot.height
+        };
     }
 
     // Fast check: only attempt upload when the current context is a raylib context.
@@ -248,21 +269,23 @@ namespace epochnamespace::raylibtextures
         ensure_raylib_context_current();
 
         auto& backend = get_raylib_backend();
+        const u64 requestedVersion = atlas.current_version();
 
         // 1) Cheap read under lock: do we already have the right version?
         {
             std::scoped_lock lock(backend.gpuMutex);
             AtlasGPU& gpu = backend.gpu_atlases[&atlas];
-            if (gpu.version == atlas.version && gpu.texture.id != 0)
+            if (gpu.version >= requestedVersion && gpu.texture.id != 0)
                 return;
-            if (gpu.uploading && gpu.uploadingVersion == atlas.version)
+            if (gpu.uploading && gpu.uploadingVersion >= requestedVersion)
                 return;
             gpu.uploading = true;
-            gpu.uploadingVersion = atlas.version;
+            gpu.uploadingVersion = requestedVersion;
         }
 
         // 2) Upload unlocked (raylib/GL work).
-        epochnamespace::raylib_api::Texture2D newTex = upload_texture_raylib(atlas);
+        UploadedTexture uploaded = upload_texture_raylib(atlas);
+        epochnamespace::raylib_api::Texture2D newTex = uploaded.texture;
 
         if (newTex.id == 0)
         {
@@ -272,7 +295,7 @@ namespace epochnamespace::raylibtextures
                 std::source_location::current(),
                 "Upload failed for atlas '{}' (version {})",
                 atlas.name,
-                atlas.version);
+                uploaded.version);
             {
                 std::scoped_lock lock(backend.gpuMutex);
                 auto it = backend.gpu_atlases.find(&atlas);
@@ -298,7 +321,7 @@ namespace epochnamespace::raylibtextures
             gpu.uploadingVersion = static_cast<u64>(-1);
 
             // If another thread beat us to it with same/newer version, drop ours.
-            if (gpu.texture.id != 0 && gpu.version >= atlas.version)
+            if (gpu.texture.id != 0 && gpu.version >= uploaded.version)
             {
                 // Keep existing; delete our newly created texture.
                 oldTex = newTex;
@@ -314,9 +337,9 @@ namespace epochnamespace::raylibtextures
                 }
 
                 gpu.texture = newTex;
-                gpu.version = atlas.version;
-                gpu.width = static_cast<u32>(atlas.width);
-                gpu.height = static_cast<u32>(atlas.height);
+                gpu.version = uploaded.version;
+                gpu.width = uploaded.width;
+                gpu.height = uploaded.height;
                 committedUpload = true;
                 committedTextureId = gpu.texture.id;
 
@@ -336,7 +359,7 @@ namespace epochnamespace::raylibtextures
                 "Uploaded atlas '{}' (tex id {}, version {})",
                 atlas.name,
                 committedTextureId,
-                atlas.version);
+                uploaded.version);
         }
 #endif
     }
@@ -368,16 +391,23 @@ namespace epochnamespace::raylibtextures
         try
         {
             auto& backend = raylib_backend_storage();
+            const auto& state = epochnamespace::raylibstate::s_raylibstate;
+            const bool canUnload =
+                (state.running || state.renderingActive || state.frameActive)
+                && epochnamespace::raylib_api::is_window_ready();
 
             std::vector<epochnamespace::raylib_api::Texture2D> to_free;
             {
                 std::scoped_lock lock(backend.gpuMutex);
-                to_free.reserve(backend.gpu_atlases.size());
-
-                for (auto& [_, gpu] : backend.gpu_atlases)
+                if (canUnload)
                 {
-                    if (gpu.texture.id != 0)
-                        to_free.push_back(gpu.texture);
+                    to_free.reserve(backend.gpu_atlases.size());
+
+                    for (auto& [_, gpu] : backend.gpu_atlases)
+                    {
+                        if (gpu.texture.id != 0)
+                            to_free.push_back(gpu.texture);
+                    }
                 }
 
                 backend.gpu_atlases.clear();
@@ -401,7 +431,7 @@ namespace epochnamespace::raylibtextures
 
     export inline Handle load_atlas(const TextureAtlas& atlas, int atlasIndex = -1)
     {
-        atlasmanager::ensure_uploaded(atlas);
+        ensure_uploaded(atlas);
         const int resolvedIndex = (atlasIndex >= 0) ? atlasIndex : atlas.get_index();
         return make_handle(resolvedIndex, 0);
     }
@@ -420,7 +450,7 @@ namespace epochnamespace::raylibtextures
         if (!addedOpt)
             throw std::runtime_error("atlas_add_texture: Failed to add texture: " + id);
 
-        atlasmanager::ensure_uploaded(atlas);
+        ensure_uploaded(atlas);
         return make_handle(atlas.get_index(), addedOpt->index);
     }
 }

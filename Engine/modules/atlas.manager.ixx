@@ -251,7 +251,7 @@ namespace epochnamespace::atlasmanager
 
         inline void enqueue_locked(BackendUploadState& state, const TextureAtlas& atlas)
         {
-            const u64 version = atlas.version;
+            const u64 version = atlas.current_version();
 
             auto [it, inserted] = state.pendingVersions.emplace(&atlas, version);
             if (!inserted && it->second >= version)
@@ -392,7 +392,7 @@ namespace epochnamespace::atlasmanager
                 if (!atlas)
                     continue;
 
-                u64 version = atlas->version;
+                u64 version = atlas->current_version();
                 if (auto pend = state.pendingVersions.find(atlas); pend != state.pendingVersions.end())
                 {
                     version = pend->second;
@@ -472,4 +472,3 @@ namespace epochnamespace::atlasmanager
             process_pending_uploads(*detail::activeBackend);
     }
 } // namespace epochnamespace::atlasmanager
-

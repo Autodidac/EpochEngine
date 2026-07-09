@@ -134,6 +134,14 @@ export namespace epochnamespace
         int index{ 0 };
     };
 
+    struct AtlasPixelSnapshot
+    {
+        u32 width{ 0 };
+        u32 height{ 0 };
+        u64 version{ 0 };
+        std::vector<u8> pixels{};
+    };
+
     // ────────────────────────────────────────────────────────
     // TEXTURE ATLAS
     // ────────────────────────────────────────────────────────
@@ -233,6 +241,8 @@ export namespace epochnamespace
         }
 
         [[nodiscard]] int get_index() const noexcept { return index; }
+        [[nodiscard]] u64 current_version() const;
+        [[nodiscard]] AtlasPixelSnapshot snapshot_pixels() const;
 
         std::optional<AtlasEntry> add_entry(const std::string& id, const Texture& tex);
         std::optional<AtlasEntry> add_slice_entry(const std::string& id, int x, int y, int w, int h);
@@ -310,6 +320,31 @@ namespace epochnamespace
         logger::infof_loc("Epoch.Atlas", std::source_location::current(), "Added '{}' at ({}, {}) EntryIndex={}", id, x, y, entryIndex);
 #endif
         return entry;
+    }
+
+    inline u64 TextureAtlas::current_version() const
+    {
+        std::lock_guard lock(entriesMutex);
+        return version;
+    }
+
+    inline AtlasPixelSnapshot TextureAtlas::snapshot_pixels() const
+    {
+        std::unique_lock<std::recursive_mutex> lock(entriesMutex);
+
+        const size_t requiredSize = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+        if (requiredSize == 0)
+            return {};
+
+        if (pixel_data.size() != requiredSize)
+            rebuild_pixels();
+
+        return AtlasPixelSnapshot{
+            .width = width,
+            .height = height,
+            .version = version,
+            .pixels = pixel_data
+        };
     }
 
     inline std::optional<AtlasEntry> TextureAtlas::add_slice_entry(

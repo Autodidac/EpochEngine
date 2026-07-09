@@ -16,6 +16,7 @@ import raylib.api;
 import raylib.context;
 import raylib.renderer;
 import raylib.state;
+import raylib.textures;
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 namespace
@@ -30,8 +31,17 @@ namespace
 
     std::uint32_t default_add_atlas(const epochnamespace::TextureAtlas& atlas) noexcept
     {
-        const int idx = atlas.get_index();
-        return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
+        try
+        {
+            const std::uint32_t handle = epochnamespace::raylibtextures::load_atlas(atlas);
+            if (handle != 0u)
+                return handle;
+        }
+        catch (...)
+        {
+        }
+
+        return 0u;
     }
 
     int default_add_model(const char*, const char* path) noexcept
@@ -106,6 +116,8 @@ namespace epochnamespace::core::detail
             st.frameInTextureMode = false;
 
             epochnamespace::raylib_api::begin_drawing();
+            st.frameActive = true;
+            st.frameInTextureMode = false;
             epochnamespace::raylib_api::clear_background({ 0, 0, 0, 255 });
             (void)queue.drain();
             epochnamespace::raylibcontext::raylib_render_scene_preview(current);

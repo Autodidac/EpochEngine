@@ -149,6 +149,8 @@ import render.device_raylib;
 import render.arcade;
 import render.graph;
 import render.preview_grid;
+import atlas.texture;
+import texture;
 
 import scene;
 
@@ -1736,6 +1738,61 @@ namespace epochnamespace::core
 #endif
     }
 
+    [[nodiscard]] inline bool atlas_snapshot_upload_contract_ready()
+    {
+        epochnamespace::TextureAtlas atlas{};
+        if (!atlas.init(epochnamespace::AtlasConfig{
+                .name = "contract.atlas_snapshot_upload",
+                .width = 16u,
+                .height = 16u,
+                .generate_mipmaps = false }))
+        {
+            return false;
+        }
+
+        auto makeTexture = [](std::string name, std::uint8_t red, std::uint8_t green, std::uint8_t blue)
+        {
+            epochnamespace::Texture texture{};
+            texture.name = std::move(name);
+            texture.width = 4u;
+            texture.height = 4u;
+            texture.channels = 4u;
+            texture.pixels.resize(static_cast<std::size_t>(texture.width) * texture.height * texture.channels);
+            for (std::size_t i = 0; i + 3u < texture.pixels.size(); i += 4u)
+            {
+                texture.pixels[i + 0u] = red;
+                texture.pixels[i + 1u] = green;
+                texture.pixels[i + 2u] = blue;
+                texture.pixels[i + 3u] = 255u;
+            }
+            return texture;
+        };
+
+        const auto red = makeTexture("snapshot.red", 255u, 0u, 0u);
+        if (!atlas.add_entry("snapshot.red", red))
+            return false;
+
+        const auto first = atlas.snapshot_pixels();
+        if (first.width != 16u
+            || first.height != 16u
+            || first.version == 0u
+            || first.pixels.size() != 16u * 16u * 4u)
+        {
+            return false;
+        }
+
+        const auto green = makeTexture("snapshot.green", 0u, 255u, 0u);
+        if (!atlas.add_entry("snapshot.green", green))
+            return false;
+
+        const auto second = atlas.snapshot_pixels();
+        return second.width == first.width
+            && second.height == first.height
+            && second.pixels.size() == first.pixels.size()
+            && second.version > first.version
+            && second.pixels != first.pixels;
+    }
+
     [[nodiscard]] inline int run_engine_contract_self_test()
     {
         bool failed = false;
@@ -1824,6 +1881,7 @@ namespace epochnamespace::core
         check("render.sfml_arcade_cabinet_graph", sfml_arcade_cabinet_graph_contract_ready());
         check("render.raylib_arcade_cabinet_graph", raylib_arcade_cabinet_graph_contract_ready());
         check("render.raylib_texture_storage", raylib_texture_storage_contract_ready());
+        check("render.atlas_snapshot_upload", atlas_snapshot_upload_contract_ready());
 
         epoch::saveload::StreamingSaveConfig saveConfig{};
         saveConfig.enabled = true;

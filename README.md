@@ -105,13 +105,17 @@ For engine/tooling developers:
 - Phase 1 and Phase 2 of the active roadmap are complete. Current work is
   concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.
-- Latest source checkpoint: the editor has a toolbar scene-mode selector for
-  3D scene construction versus 2D game/UI construction, launcher/editor handoff
-  and update progress use the shared EpochGui loading-screen primitive, OpenGL
-  owns the first visible sampled render-surface preview proof for Engine
-  Arcade, SDL context handoff stays docked in the parent grid, and the
-  Linux/Clang full-engine lane remains the module-sensitive CI lane that must
-  stay green before calling a source checkpoint sealed.
+- Latest source checkpoint: the Linux Raylib atlas crash repair is refreshed as
+  `v0.87.50`; Raylib atlas uploads now use immutable pixel snapshots, backend
+  texture storage stays outside context-native windowing state, and the Raylib
+  frame path marks its active drawing scope before queued GUI uploads drain.
+- The editor has a toolbar scene-mode selector for 3D scene construction versus
+  2D game/UI construction, launcher/editor handoff and update progress use the
+  shared EpochGui loading-screen primitive, OpenGL owns the first visible
+  sampled render-surface preview proof for Engine Arcade, SDL context handoff
+  stays docked in the parent grid, and the Linux/Clang full-engine lane remains
+  the module-sensitive CI lane that must stay green before calling a source
+  checkpoint sealed.
 
 OS AI model, tooling, and evidence rules live with the AI assets in
 `Engine/ai/README.md` and the engine policy docs.

@@ -145,9 +145,10 @@ contracts instead of drift.
   Windows/Linux updater release while the published stable runtime remains
   v0.87.48.
 - Release checkpoint: `v0.87.50` repairs the Linux Raylib atlas lane by moving
-  Raylib texture backend storage out of `Context::native_drawable`, so the
-  second-atlas path no longer reinterprets native display/drawable state as
-  texture-cache memory.
+  Raylib texture backend storage out of `Context::native_drawable`, uploading
+  from immutable atlas pixel snapshots, making the Raylib context atlas hook
+  perform a real upload instead of returning a synthetic handle, and marking
+  the Raylib frame active before queued GUI uploads drain.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30
