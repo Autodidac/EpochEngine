@@ -1,5 +1,9 @@
 # Epoch Changelog
 
+## [v0.87.49]
+- Advanced the source line after the `v0.87.48` Windows/Linux packaged release
+  while keeping the published stable runtime release on `v0.87.48`.
+
 ## [v0.87.48]
 - Restored the normal Linux/WSL vcpkg build and source-updater rebuild lane:
   `build.sh` now validates stale vcpkg baselines, resolves

@@ -141,6 +141,9 @@ contracts instead of drift.
   keeps SDL3/SFML/Raylib vcpkg feature sets release-safe without making vcpkg
   Windows-only, and repairs static Raylib GLAD/cgltf ownership plus SDL module
   backend registration.
+- Source checkpoint: `main` is advanced to v0.87.49 after the v0.87.48
+  Windows/Linux updater release while the published stable runtime remains
+  v0.87.48.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30
