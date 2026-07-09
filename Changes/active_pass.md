@@ -153,6 +153,12 @@ contracts instead of drift.
 - Source checkpoint: `main` is advanced to `v0.87.51` after the refreshed
   `v0.87.50` Windows/Linux Raylib atlas release while the published stable
   runtime remains `v0.87.50`.
+- Release checkpoint: `v0.87.52` serializes Linux GLAD initialization before
+  render threads can use its process-global loader state. The current static
+  Raylib package exports an incompatible GLAD ABI, so Linux release/source
+  builds leave Raylib disabled while retaining vcpkg-backed OpenGL, SDL, and
+  software lanes. The package includes the tracked `assets/fonts/Roboto-Regular.ttf`
+  and passed bounded isolated editor startup checks for every active Linux lane.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

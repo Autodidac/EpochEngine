@@ -1,6 +1,6 @@
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [string]$Version = '0.87.51',
+    [string]$Version = '0.87.52',
     [string]$OutputRoot = "C:\tmp\epoch_release_v$Version"
 )
 
@@ -38,6 +38,7 @@ $stageName = "epoch_win10_x64_v$Version"
 $stage = Join-Path $OutputRoot $stageName
 $zip = Join-Path $OutputRoot "$stageName.zip"
 $checksumFile = Join-Path $OutputRoot "v$Version`_checksums.txt"
+$verifyLogs = Join-Path $OutputRoot "verify_$stageName`_logs"
 
 Require-Path -Path $repo -Label 'Repo root'
 Require-Path -Path $releaseOutput -Label 'Release output'
@@ -73,15 +74,24 @@ $versionOut = Join-Path $OutputRoot "epoch_release_v$Version`_windows_version_st
 $versionErr = Join-Path $OutputRoot "epoch_release_v$Version`_windows_version_stderr.txt"
 Remove-Item -LiteralPath $versionOut -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $versionErr -Force -ErrorAction SilentlyContinue
-$versionProcess = Start-Process `
-    -FilePath (Join-Path $stage 'EpochEditor.exe') `
-    -ArgumentList '--version' `
-    -WorkingDirectory $stage `
-    -NoNewWindow `
-    -Wait `
-    -PassThru `
-    -RedirectStandardOutput $versionOut `
-    -RedirectStandardError $versionErr
+Remove-Item -LiteralPath $verifyLogs -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $verifyLogs -Force | Out-Null
+$previousLogDir = $env:EPOCH_LOG_DIR
+$env:EPOCH_LOG_DIR = $verifyLogs
+try {
+    $versionProcess = Start-Process `
+        -FilePath (Join-Path $stage 'EpochEditor.exe') `
+        -ArgumentList '--version' `
+        -WorkingDirectory $stage `
+        -NoNewWindow `
+        -Wait `
+        -PassThru `
+        -RedirectStandardOutput $versionOut `
+        -RedirectStandardError $versionErr
+}
+finally {
+    $env:EPOCH_LOG_DIR = $previousLogDir
+}
 if ($versionProcess.ExitCode -ne 0) {
     throw "Staged Windows package version check exited with code $($versionProcess.ExitCode)."
 }
@@ -98,6 +108,9 @@ if ($versionText -notmatch [regex]::Escape("Epoch v$Version")) {
     throw "Staged Windows package reports the wrong version. Expected Epoch v$Version."
 }
 
+Remove-Item -LiteralPath $verifyLogs -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $stage 'logs') -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $stage 'cache') -Recurse -Force -ErrorAction SilentlyContinue
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
 
 $verifyRoot = Join-Path $OutputRoot "verify_$stageName"
@@ -105,6 +118,9 @@ Remove-Item -LiteralPath $verifyRoot -Recurse -Force -ErrorAction SilentlyContin
 New-Item -ItemType Directory -Path $verifyRoot -Force | Out-Null
 Expand-Archive -LiteralPath $zip -DestinationPath $verifyRoot -Force
 Require-Path -Path (Join-Path $verifyRoot 'EpochEditor.exe') -Label 'Flat release archive executable'
+if ((Test-Path -LiteralPath (Join-Path $verifyRoot 'logs')) -or (Test-Path -LiteralPath (Join-Path $verifyRoot 'cache'))) {
+    throw 'Release archive must not include generated logs or runtime cache.'
+}
 Remove-Item -LiteralPath $verifyRoot -Recurse -Force -ErrorAction SilentlyContinue
 
 $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $zip

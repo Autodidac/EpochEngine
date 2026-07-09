@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.87.52]
+- Repaired the Linux release startup crash by serializing process-global GLAD
+  initialization across render threads.
+- Disabled the current static Linux Raylib configuration because its GLAD 2 ABI
+  conflicts with Epoch's GLAD 1 integration and could crash every launch lane.
+- Kept Linux release builds on the vcpkg Clang path with OpenGL, SDL, and
+  software validation, and verified the staged font asset remains present.
+
 ## [v0.87.51]
 - Advanced the source line after the refreshed `v0.87.50` Windows/Linux Raylib
   atlas release while keeping the published stable runtime release on

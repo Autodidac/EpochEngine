@@ -206,6 +206,11 @@ after choosing the current source gate from `Changes/active_pass.md`.
   GLAD and cgltf implementation, so Epoch must avoid linking a second GLAD
   provider into that target and must keep any embedded cgltf implementation
   symbol-prefixed.
+- Linux static Raylib is currently disabled for release and normal source
+  builds: Raylib 6's GLAD 2 exports collide with Epoch's GLAD 1 symbols and
+  signatures, which can crash unrelated OpenGL, SDL, or software launch lanes.
+  Re-enable it only after a dynamic, namespaced, or otherwise ABI-compatible
+  Raylib packaging lane is build- and runtime-proven.
 - Linux/WSL defaults to single-context OpenGL proof. DirectX is disabled, Vulkan
   is explicit validation only, and software remains a debug fallback.
 - Continue small build-proven file moves into owned folders. Public headers move

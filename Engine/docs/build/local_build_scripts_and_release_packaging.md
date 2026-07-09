@@ -275,6 +275,9 @@ Before publishing a Linux/WSL2 asset:
 - verify `./epoch --version` from the staged package directory
 - smoke the no-args packaged entry locally under Linux/WSLg or a real Linux
   desktop before calling the release runtime-ready
+- when static Raylib is unavailable because of the Linux GLAD ABI boundary,
+  prove the active OpenGL, SDL, and software editor lanes instead; do not ship
+  a Raylib-linked archive that crashes other renderer selections at startup
 - keep the packaged versioned Linux runtime asset, for example
   `epoch_linux_x64_vX.Y.Z.tar.gz`, and the GitHub source snapshot aligned
   to the same commit, not just the same version string

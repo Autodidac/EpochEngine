@@ -633,7 +633,19 @@ if(WIN32)
     set(EPOCH_DEFAULT_ENABLE_DIRECTX ON)
 endif()
 
-epoch_option(ENABLE_RAYLIB ON "Enable the Raylib backend")
+set(EPOCH_DEFAULT_ENABLE_RAYLIB ON)
+if(UNIX AND NOT APPLE)
+    # vcpkg's static Raylib carries an incompatible GLAD ABI on Linux. Keep
+    # the supported Linux release lanes on Epoch's single GLAD provider until
+    # Raylib is isolated behind a compatible dynamic or renamed-loader build.
+    set(EPOCH_DEFAULT_ENABLE_RAYLIB OFF)
+endif()
+
+epoch_option(ENABLE_RAYLIB ${EPOCH_DEFAULT_ENABLE_RAYLIB} "Enable the Raylib backend")
+if(UNIX AND NOT APPLE AND EPOCH_ENABLE_RAYLIB)
+    message(STATUS "Linux Raylib is disabled: the current static package exports an incompatible GLAD ABI.")
+    set(EPOCH_ENABLE_RAYLIB OFF CACHE BOOL "Enable the Raylib backend" FORCE)
+endif()
 epoch_option(ENABLE_SDL ON "Enable the SDL backend")
 epoch_option(ENABLE_SFML ON "Enable the SFML backend")
 epoch_option(ENABLE_VULKAN ${EPOCH_DEFAULT_ENABLE_VULKAN} "Enable the Vulkan backend")

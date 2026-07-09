@@ -24,6 +24,9 @@ full renderer feature.
   resource layers are intentionally promoted and validated.
 - The software renderer is a safe-launch/debug GUI and headless-validation
   fallback, not the long-term Windows production renderer target.
+- Linux packages currently omit Raylib. Its static vcpkg build exports a GLAD 2
+  ABI that collides with Epoch's GLAD 1 integration; OpenGL, SDL, and software
+  remain the supported Linux editor/runtime lanes until Raylib is isolated.
 - The abstraction should follow the Vulkan/D3D model: explicit buffers,
   textures, samplers, pipelines, bindings, command submission, render targets,
   synchronization, and debug/profiling hooks. OpenGL should emulate that model
@@ -72,7 +75,7 @@ is missing, the row stays `Partial`, `Missing`, or `Deferred`.
 
 | Feature family | Current Epoch status | Notes |
 | --- | --- | --- |
-| Window/context bootstrap | Present | OpenGL, Raylib, SDL, SFML, Vulkan, DirectX/D3D11, software fallback, and noop/headless paths exist. Normal editor use is converging toward explicit first-class context panes with inactive backends torn down rather than hidden. D3D12 is planned, not active. |
+| Window/context bootstrap | Present | OpenGL, Raylib, SDL, SFML, Vulkan, DirectX/D3D11, software fallback, and noop/headless paths exist. Linux packages currently exclude static Raylib because of its GLAD ABI conflict. Normal editor use is converging toward explicit first-class context panes with inactive backends torn down rather than hidden. D3D12 is planned, not active. |
 | Frame begin / clear / present | Partial | Core paths exist, but OpenGL composition, GUI replay, resize, modal z-order, and backend parity remain regression-sensitive and must stay in smoke coverage. |
 | Basic primitives | Present | Triangles, quads, grid/marker primitives, cubes, lights, Canvas2D, and editor helper geometry exist. DirectX/D3D11 now clips preview lines and triangles as complete primitives so one clipped endpoint cannot corrupt later line-list pairs. |
 | Shader pipeline | Partial | OpenGL shader setup, Vulkan SPIR-V assets, and DirectX/D3D11 first-pass HLSL preview shaders exist. Formal cross-backend shader/pipeline ownership remains backlog. |

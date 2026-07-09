@@ -166,6 +166,12 @@ namespace
         std::once_flag g_xlibInitFlag;
         bool g_xlibInitialized = false;
 
+        // GLAD owns process-global loader tables. Concurrent render-thread
+        // startup must not open, populate, and close its temporary libGL
+        // handle at the same time.
+        std::mutex g_gladInitializationMutex;
+        std::atomic<bool> g_gladInitialized{ false };
+
         inline ::Window to_xwindow(HWND handle) noexcept
         {
             return static_cast<::Window>(reinterpret_cast<uintptr_t>(handle));
@@ -1631,37 +1637,40 @@ namespace
             glXMakeCurrent(localDisplay, xwin, glxCtx);
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) || defined(EPOCH_USING_SDL)
-            static std::atomic<bool> gladInitialized{ false };
-            if (!gladInitialized.load(std::memory_order_acquire))
+            if (!g_gladInitialized.load(std::memory_order_acquire))
             {
-                epochnamespace::openglcontext::PlatformGL::PlatformGLContext finalCtx{};
-                finalCtx.display = localDisplay;
-                finalCtx.drawable = xwin;
-                finalCtx.context = glxCtx;
+                std::scoped_lock gladLock(g_gladInitializationMutex);
+                if (!g_gladInitialized.load(std::memory_order_relaxed))
+                {
+                    epochnamespace::openglcontext::PlatformGL::PlatformGLContext finalCtx{};
+                    finalCtx.display = localDisplay;
+                    finalCtx.drawable = xwin;
+                    finalCtx.context = glxCtx;
 
-                epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard{ finalCtx };
-                if (!contextGuard.ok())
-                {
-                    epochnamespace::logger::get(kLogSys).log(
-                        epochnamespace::logger::LogLevel::Error,
-                        "PlatformGL::make_current(final) failed on Linux",
-                        std::source_location::current());
-                }
+                    epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard{ finalCtx };
+                    if (!contextGuard.ok())
+                    {
+                        epochnamespace::logger::get(kLogSys).log(
+                            epochnamespace::logger::LogLevel::Error,
+                            "PlatformGL::make_current(final) failed on Linux",
+                            std::source_location::current());
+                    }
 #if defined(EPOCH_FORCE_ENABLE_RAYLIB)
-                else if (gladLoadGL())
+                    else if (gladLoadGL())
 #else
-                else if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(
-                    epochnamespace::openglcontext::PlatformGL::get_proc_address)))
+                    else if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(
+                        epochnamespace::openglcontext::PlatformGL::get_proc_address)))
 #endif
-                {
-                    gladInitialized.store(true, std::memory_order_release);
-                }
-                else
-                {
-                    epochnamespace::logger::get(kLogSys).log(
-                        epochnamespace::logger::LogLevel::Error,
-                        "Failed to load OpenGL functions via GLAD on Linux",
-                        std::source_location::current());
+                    {
+                        g_gladInitialized.store(true, std::memory_order_release);
+                    }
+                    else
+                    {
+                        epochnamespace::logger::get(kLogSys).log(
+                            epochnamespace::logger::LogLevel::Error,
+                            "Failed to load OpenGL functions via GLAD on Linux",
+                            std::source_location::current());
+                    }
                 }
             }
 #endif

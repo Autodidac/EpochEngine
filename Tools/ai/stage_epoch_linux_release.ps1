@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.87.51',
+    [string]$Version = '0.87.52',
     [string]$Configuration = 'Clang-Release',
     [string]$OutputRoot = "C:\tmp\epoch_release_v$Version"
 )
@@ -52,11 +52,13 @@ $tarball = Join-Path $resolvedOutput "$stageName.tar.gz"
 $checksum = Join-Path $resolvedOutput "v$Version`_checksums.txt"
 $windowsZipName = "epoch_win10_x64_v$Version.zip"
 $windowsZip = Join-Path $resolvedOutput $windowsZipName
+$verifyLogs = Join-Path $resolvedOutput "verify_$stageName`_logs"
 
 Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $tarball -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $stage 'logs') -Force | Out-Null
+Remove-Item -LiteralPath $verifyLogs -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $verifyLogs -Force | Out-Null
 
 Copy-Item -LiteralPath $binary -Destination (Join-Path $stage 'epoch') -Force
 Copy-Item -LiteralPath $assets -Destination (Join-Path $stage 'assets') -Recurse -Force
@@ -66,8 +68,17 @@ Copy-Item -LiteralPath $readme -Destination (Join-Path $stage 'README.md') -Forc
 $stageWsl = To-WslPath $stage
 $outWsl = To-WslPath $resolvedOutput
 $tarWsl = To-WslPath $tarball
+$verifyLogsWsl = To-WslPath $verifyLogs
 
-wsl bash -lc "set -euo pipefail; chmod 755 '$stageWsl/epoch'; test -f '$stageWsl/assets/fonts/Roboto-Regular.ttf'; cd '$stageWsl'; ./epoch --version | grep -F 'Epoch v$Version' >/dev/null; ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null; tar -C '$outWsl' -czf '$tarWsl' '$stageName'; tar -tzvf '$tarWsl' '$stageName/epoch' '$stageName/assets/fonts/Roboto-Regular.ttf'"
+wsl bash -lc "set -euo pipefail; chmod 755 '$stageWsl/epoch'; test -f '$stageWsl/assets/fonts/Roboto-Regular.ttf'; cd '$stageWsl'; EPOCH_LOG_DIR='$verifyLogsWsl' ./epoch --version | grep -F 'Epoch v$Version' >/dev/null; EPOCH_LOG_DIR='$verifyLogsWsl' ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null"
+
+# Validation paths can still create executable-local runtime artifacts before
+# their environment override is consumed. Public packages never carry them.
+Remove-Item -LiteralPath (Join-Path $stage 'logs') -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $stage 'cache') -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $verifyLogs -Recurse -Force -ErrorAction SilentlyContinue
+
+wsl bash -lc "set -euo pipefail; tar -C '$outWsl' -czf '$tarWsl' '$stageName'; tar -tzvf '$tarWsl' '$stageName/epoch' '$stageName/assets/fonts/Roboto-Regular.ttf'; if tar -tzf '$tarWsl' | grep -E '/(logs|cache)/'; then echo 'Release archive must not include generated logs or runtime cache.' >&2; exit 1; fi"
 
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $tarball).Hash.ToLowerInvariant()
 $lines = @()
