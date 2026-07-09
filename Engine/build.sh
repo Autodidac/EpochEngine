@@ -117,6 +117,92 @@ compiler_version() {
   fi
 }
 
+resolve_clang_scan_deps() {
+  local compiler=$1
+  local compiler_major
+  local configured="${CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS:-}"
+
+  if [[ -n "${configured}" ]]; then
+    if [[ -x "${configured}" ]]; then
+      printf '%s\n' "${configured}"
+      return 0
+    fi
+
+    if command -v "${configured}" >/dev/null 2>&1; then
+      command -v "${configured}"
+      return 0
+    fi
+  fi
+
+  compiler_major="$(compiler_version "${compiler}" | cut -d. -f1)"
+  if [[ -n "${compiler_major}" ]]; then
+    if resolve_first_program "clang-scan-deps-${compiler_major}"; then
+      return 0
+    fi
+  fi
+
+  resolve_first_program \
+    clang-scan-deps-20 \
+    clang-scan-deps-19 \
+    clang-scan-deps-18 \
+    clang-scan-deps-17 \
+    clang-scan-deps-16 \
+    clang-scan-deps-15 \
+    clang-scan-deps-14 \
+    clang-scan-deps
+}
+
+read_vcpkg_manifest_baseline() {
+  local manifest="${SCRIPT_DIR}/vcpkg.json"
+
+  if [[ ! -f "${manifest}" ]]; then
+    return 0
+  fi
+
+  sed -n 's/.*"builtin-baseline"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${manifest}" | head -n1
+}
+
+ensure_vcpkg_baseline_available() {
+  local baseline=$1
+  local remote
+
+  if [[ -z "${baseline}" ]]; then
+    return 0
+  fi
+
+  if git -C "${VCPKG_ROOT}" show "${baseline}:versions/baseline.json" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ ! -d "${VCPKG_ROOT}/.git" ]]; then
+    echo "vcpkg checkout '${VCPKG_ROOT}' cannot resolve builtin-baseline '${baseline}' and is not a Git checkout." >&2
+    echo "Use a full vcpkg Git checkout, run 'git -C ${VCPKG_ROOT} fetch --tags --prune', or set VCPKG_ROOT to a checkout that contains the baseline." >&2
+    exit 1
+  fi
+
+  if ! command -v git >/dev/null 2>&1; then
+    echo "vcpkg checkout '${VCPKG_ROOT}' is missing builtin-baseline '${baseline}', but git is not available to fetch it." >&2
+    exit 1
+  fi
+
+  remote="$(git -C "${VCPKG_ROOT}" remote 2>/dev/null | head -n1 || true)"
+  if [[ -z "${remote}" ]]; then
+    echo "vcpkg checkout '${VCPKG_ROOT}' has no Git remote and cannot fetch builtin-baseline '${baseline}'." >&2
+    exit 1
+  fi
+
+  echo "[build.sh] Fetching vcpkg builtin-baseline ${baseline} from ${remote}." >&2
+  git -C "${VCPKG_ROOT}" fetch --tags --prune "${remote}" "${baseline}" >/dev/null 2>&1 \
+    || git -C "${VCPKG_ROOT}" fetch --tags --prune "${remote}" >/dev/null 2>&1 \
+    || true
+
+  if ! git -C "${VCPKG_ROOT}" show "${baseline}:versions/baseline.json" >/dev/null 2>&1; then
+    echo "vcpkg checkout '${VCPKG_ROOT}' still cannot resolve builtin-baseline '${baseline}' after fetch." >&2
+    echo "Run 'git -C ${VCPKG_ROOT} fetch --tags --prune ${remote}' and retry, or update VCPKG_ROOT." >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-vcpkg)
@@ -194,6 +280,12 @@ case "$COMPILER_CHOICE" in
 
     if ! version_at_least "$(compiler_version "${COMPILER_CXX}")" "18.0.0"; then
       echo "Clang 18+ is required for the module-based Linux build. Install a newer Clang toolchain." >&2
+      exit 1
+    fi
+
+    if ! CLANG_SCAN_DEPS="$(resolve_clang_scan_deps "${COMPILER_CXX}")"; then
+      echo "Unable to locate clang-scan-deps for ${COMPILER_CXX}." >&2
+      echo "Install the matching clang-tools package, such as clang-tools-18 for clang++-18, or set CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS." >&2
       exit 1
     fi
 
@@ -289,6 +381,10 @@ cmake_args=(
   -DEPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_REVISION=
 )
 
+if [[ "$COMPILER_CHOICE" == "clang" ]]; then
+  cmake_args+=(-DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="$CLANG_SCAN_DEPS")
+fi
+
 if [[ "$(uname -s)" == "Linux" ]]; then
   cmake_args+=(-DEPOCH_ENABLE_VULKAN=OFF)
   cmake_args+=(-DEPOCH_ENABLE_SFML=OFF)
@@ -366,6 +462,8 @@ if [[ $USE_VCPKG -ne 0 ]]; then
     echo "Unable to locate vcpkg toolchain file at '${VCPKG_TOOLCHAIN_FILE}'." >&2
     exit 1
   fi
+
+  ensure_vcpkg_baseline_available "$(read_vcpkg_manifest_baseline)"
 
   if [[ -z "${VCPKG_FEATURE_FLAGS:-}" ]]; then
     export VCPKG_FEATURE_FLAGS=manifests

@@ -47,6 +47,7 @@ export module sdl.renderer;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import core.context;
 import core.logger;
+import context.type;
 import sdl.state;
 
 export namespace epochnamespace::sdlcontext

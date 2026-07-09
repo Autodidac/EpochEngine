@@ -195,6 +195,17 @@ after choosing the current source gate from `Changes/active_pass.md`.
   no compatible package exists. It must show visible modal/progress/cancel/
   restart evidence, use executable-local cache, and never self-close before
   verified handoff.
+- Linux and WSL source-updater rebuilds use the same vcpkg-backed `build.sh`
+  lane as normal Linux release builds. Do not convert Linux to `--no-vcpkg`
+  unless the operator explicitly asks for a diagnostic/system-package pass.
+- Linux Clang full-engine builds need `clang-scan-deps` from the matching
+  clang-tools package, a module-aware generator such as Ninja, and a vcpkg clone
+  that contains the manifest builtin baseline. Build scripts should fail early
+  with actionable evidence when those are missing.
+- Linux static third-party ownership stays explicit: Raylib can bring its own
+  GLAD and cgltf implementation, so Epoch must avoid linking a second GLAD
+  provider into that target and must keep any embedded cgltf implementation
+  symbol-prefixed.
 - Linux/WSL defaults to single-context OpenGL proof. DirectX is disabled, Vulkan
   is explicit validation only, and software remains a debug fallback.
 - Continue small build-proven file moves into owned folders. Public headers move

@@ -8,6 +8,8 @@
 import engine.gui;
 import engine.input;
 import atlas.texture;
+import context.commandqueue;
+import context.type;
 import core.context;
 import image.loader;
 import raylib.api;

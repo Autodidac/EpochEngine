@@ -12,8 +12,12 @@ sudo apt install -y \
   clang-18 clang-tools-18 \
   ninja-build cmake git curl zip unzip tar pkg-config \
   libasio-dev libcurl4-openssl-dev libgl1-mesa-dev libsfml-dev \
-  libx11-dev libxi-dev libxrandr-dev libxrender-dev
+  libx11-dev libxi-dev libxrandr-dev libxrender-dev \
+  libxext-dev libxft-dev libxcursor-dev libxinerama-dev libxtst-dev
 ```
+
+`clang-tools-18` provides `clang-scan-deps-18`, which is required for the
+Clang full-engine C++23 module build.
 
 ## 2. Bootstrap vcpkg
 
@@ -30,6 +34,11 @@ cmake -S Engine -B build \
   -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
 ```
 
+The normal Epoch Linux/WSL build uses vcpkg. `Engine/build.sh` discovers
+`VCPKG_ROOT`, validates that the manifest builtin baseline is available in the
+local vcpkg clone, and fetches the missing baseline when the clone is stale.
+Use `--no-vcpkg` only when deliberately testing a system-package lane.
+
 ## 3. Use a module-capable compiler
 
 - Clang 18 plus `clang-scan-deps-18` for the current full-engine Linux module build
@@ -42,6 +51,13 @@ Clean the build directory when switching compilers or module settings.
 ## 4. Configure and build
 
 Full engine with Clang:
+
+```bash
+cd Engine
+./build.sh clang Release
+```
+
+Repo-root preset path:
 
 ```bash
 cmake --preset ninja-clang-debug
@@ -63,10 +79,18 @@ ctest --preset ninja-gcc-debug --output-on-failure
 ./vcpkg/vcpkg install sdl3 sdl3-image raylib sfml
 ```
 
+The checked-in manifest keeps the default Linux runtime package set lean:
+SDL3 is built without its optional Linux desktop integration feature stack,
+SFML uses graphics/window/system, and Raylib is built without optional audio.
+If a future backend pass enables the full SDL3 X11 integration feature set,
+keep `libxtst-dev` and the related X11 development packages installed first.
+
 ## Notes
 
 - Use the repo-root `CMakePresets.json` for shared Linux/CI truth. The
   engine-local presets remain available for legacy local workflows.
+- Full-engine C++23 module builds require Ninja or another module-aware
+  generator. Do not use raw Unix Makefiles for the full engine.
 - Use Clang for Linux full-engine rendering builds today. Use GCC presets for
   headless validation unless you are explicitly investigating the GNU module path.
 - `v0.84.35` revalidated the repo-root `ninja-clang-debug` path from WSL with

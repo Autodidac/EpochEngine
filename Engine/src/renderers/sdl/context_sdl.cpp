@@ -1,3 +1,5 @@
+module;
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -22,9 +24,8 @@
 #include <SDL3/SDL_video.h>
 #endif
 
-#include "../core/core_context_backends.hpp"
+module core.context;
 
-import core.context;
 import context.multiplexer;
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
@@ -33,6 +34,7 @@ import engine.input;
 import atlas.manager;
 import atlas.texture;
 import context.commandqueue;
+import context.type;
 import core.logger;
 import image.loader;
 import render.preview_grid;
@@ -476,6 +478,7 @@ namespace
             ctx->onResize(s_width, s_height);
         if (ctx->windowData)
         {
+#if defined(_WIN32)
             HWND previousHwnd = ctx->windowData->hwnd;
             HDC previousHdc = ctx->windowData->hdc;
             if (previousHwnd && previousHwnd != s_childWindow)
@@ -491,7 +494,6 @@ namespace
                     threads.erase(it);
                 }
             }
-#if defined(_WIN32)
             ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
             ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;

@@ -135,6 +135,12 @@ contracts instead of drift.
 - Source checkpoint: `main` is advanced to v0.87.45 after the v0.87.44
   Windows/Linux updater crash repair release while the published stable runtime
   remains v0.87.44.
+- Release checkpoint: `v0.87.48` restores the Linux/WSL vcpkg source-update
+  lane. Linux `build.sh` now validates stale vcpkg baselines, resolves
+  `clang-scan-deps`, rejects unsupported full-engine Unix Makefiles early,
+  keeps SDL3/SFML/Raylib vcpkg feature sets release-safe without making vcpkg
+  Windows-only, and repairs static Raylib GLAD/cgltf ownership plus SDL module
+  backend registration.
 - Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
   CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
   CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30

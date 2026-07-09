@@ -49,7 +49,7 @@ module;
 #include <vector>
 
 // configuration
-#include "..\\include\\engine.config.hpp"
+#include <include/engine.config.hpp>
 
 //#include "aplatform.hpp"
 //#include "aengineconfig.hpp"

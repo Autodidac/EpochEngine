@@ -301,7 +301,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.visibility.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.systems.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\runtime.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log.headless.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.dispatch_storage.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\image.stb.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context-texture.cpp">

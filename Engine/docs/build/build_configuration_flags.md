@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.87.10`
+Current source version: `v0.87.48`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -96,7 +96,8 @@ override them locally in `engine.config.hpp`.
   units, but renderer-resource/material/depth parity remains experimental.
 - Linux/WSL builds: DirectX must remain disabled. Use Clang full-engine presets
   for Linux renderer validation and GCC headless presets unless intentionally
-  testing the experimental GNU module path.
+  testing the experimental GNU module path. The normal Linux and WSL lanes use
+  vcpkg; `--no-vcpkg` is only an explicit system-package/diagnostic path.
 - Renderer-less builds: disabling both OpenGL and software rendering leaves the
   atlas/texture path without a supported submission backend.
 
@@ -106,6 +107,10 @@ override them locally in `engine.config.hpp`.
 - SDL builds require SDL3, and SDL image support where texture ingestion needs it.
 - Raylib-only configurations still rely on the expected GL loader plumbing on
   desktop platforms.
+- Linux vcpkg defaults intentionally keep optional desktop/audio dependency
+  stacks small: SDL3 is core-only by default, SFML uses graphics/window/system,
+  and Raylib is built without optional audio. Expanding those feature sets is a
+  backend ownership decision and must update Linux package prerequisites.
 - GLAD is single-owner per target. `EPOCH_GLAD_PROVIDER=auto` prefers vcpkg
   `glad::glad` and falls back to Epoch's checked-in loader. Use `vcpkg` to
   require the package target or `bundled` to force the checked-in loader. Do
@@ -128,12 +133,11 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.87.10` is the current source line for the protected GUI/release baseline.
-  It keeps modal/dropdown/progress lanes inside the shared GUI containment
-  model, preserves the scene-backed Video timeline, and uses the production
-  Windows runtime package shape: `EpochEditor.exe`, root `assets/`, public
-  README/LICENSE files, required app-local DLLs, and no source-shaped output
-  folders.
+- `v0.87.48` is the current Linux/updater build repair line. It keeps Linux and
+  WSL on the vcpkg-backed build/update path, resolves Clang module scanning
+  explicitly, rejects unsupported full-engine generators early, and avoids
+  duplicate GLAD/cgltf ownership when static Raylib participates in the
+  full-engine Linux link.
 - `v0.84.57` kept the focused editor GUI and Forest Factory stabilization pass.
   It preserved the protected OpenGL draw model while fixing the Asset
   command-menu hit region, clipping Package Manager details inside a shared GUI

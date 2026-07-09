@@ -1647,8 +1647,12 @@ namespace
                         "PlatformGL::make_current(final) failed on Linux",
                         std::source_location::current());
                 }
+#if defined(EPOCH_FORCE_ENABLE_RAYLIB)
+                else if (gladLoadGL())
+#else
                 else if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(
                     epochnamespace::openglcontext::PlatformGL::get_proc_address)))
+#endif
                 {
                     gladInitialized.store(true, std::memory_order_release);
                 }

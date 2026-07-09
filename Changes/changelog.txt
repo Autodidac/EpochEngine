@@ -1,5 +1,16 @@
 # Epoch Changelog
 
+## [v0.87.48]
+- Restored the normal Linux/WSL vcpkg build and source-updater rebuild lane:
+  `build.sh` now validates stale vcpkg baselines, resolves
+  `clang-scan-deps`, and fails early for unsupported full-engine generators.
+- Kept Linux vcpkg dependency features release-safe by trimming optional SDL3,
+  SFML, and Raylib stacks without making vcpkg Windows-only.
+- Fixed Linux full-engine Clang link ownership for static Raylib by avoiding
+  duplicate GLAD linkage and symbol-prefixing Epoch's embedded cgltf parser.
+- Repaired Linux SDL module/backend registration and imports so SDL builds as a
+  `core.context` backend without leaking Win32-only ownership into Linux.
+
 ## [v0.87.47]
 - Advanced the source line after the `v0.87.46` Windows/Linux packaged release
   while keeping the published stable runtime release on `v0.87.46`.

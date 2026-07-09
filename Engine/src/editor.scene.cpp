@@ -66,8 +66,47 @@ module;
 #endif
 
 #if EPOCH_HAS_CGLTF
+#  define cgltf_parse epoch_cgltf_parse
+#  define cgltf_parse_file epoch_cgltf_parse_file
+#  define cgltf_load_buffers epoch_cgltf_load_buffers
+#  define cgltf_load_buffer_base64 epoch_cgltf_load_buffer_base64
+#  define cgltf_decode_string epoch_cgltf_decode_string
+#  define cgltf_decode_uri epoch_cgltf_decode_uri
+#  define cgltf_validate epoch_cgltf_validate
+#  define cgltf_free epoch_cgltf_free
+#  define cgltf_node_transform_local epoch_cgltf_node_transform_local
+#  define cgltf_node_transform_world epoch_cgltf_node_transform_world
+#  define cgltf_buffer_view_data epoch_cgltf_buffer_view_data
+#  define cgltf_find_accessor epoch_cgltf_find_accessor
+#  define cgltf_accessor_read_float epoch_cgltf_accessor_read_float
+#  define cgltf_accessor_read_uint epoch_cgltf_accessor_read_uint
+#  define cgltf_accessor_read_index epoch_cgltf_accessor_read_index
+#  define cgltf_num_components epoch_cgltf_num_components
+#  define cgltf_component_size epoch_cgltf_component_size
+#  define cgltf_calc_size epoch_cgltf_calc_size
+#  define cgltf_accessor_unpack_floats epoch_cgltf_accessor_unpack_floats
+#  define cgltf_accessor_unpack_indices epoch_cgltf_accessor_unpack_indices
+#  define cgltf_copy_extras_json epoch_cgltf_copy_extras_json
+#  define cgltf_mesh_index epoch_cgltf_mesh_index
+#  define cgltf_material_index epoch_cgltf_material_index
+#  define cgltf_accessor_index epoch_cgltf_accessor_index
+#  define cgltf_buffer_view_index epoch_cgltf_buffer_view_index
+#  define cgltf_buffer_index epoch_cgltf_buffer_index
+#  define cgltf_image_index epoch_cgltf_image_index
+#  define cgltf_texture_index epoch_cgltf_texture_index
+#  define cgltf_sampler_index epoch_cgltf_sampler_index
+#  define cgltf_skin_index epoch_cgltf_skin_index
+#  define cgltf_camera_index epoch_cgltf_camera_index
+#  define cgltf_light_index epoch_cgltf_light_index
+#  define cgltf_node_index epoch_cgltf_node_index
+#  define cgltf_scene_index epoch_cgltf_scene_index
+#  define cgltf_animation_index epoch_cgltf_animation_index
+#  define cgltf_animation_sampler_index epoch_cgltf_animation_sampler_index
+#  define cgltf_animation_channel_index epoch_cgltf_animation_channel_index
+#  define cgltf_parse_json epoch_cgltf_parse_json
 #  define CGLTF_IMPLEMENTATION
 #  include <cgltf.h>
+#  undef CGLTF_IMPLEMENTATION
 #endif
 
 #if defined(_MSC_VER)

@@ -42,6 +42,34 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT WIN32 AND NOT EPOCH_CI_HEADLESS_
     set(EPOCH_CI_HEADLESS_ONLY ON CACHE BOOL "Configure only the portable hosted-CI smoke target." FORCE)
 endif()
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND NOT WIN32
+    AND NOT EPOCH_CI_HEADLESS_ONLY
+    AND EPOCH_ALLOW_GCC_MODULE_ENGINE
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14.0)
+    message(FATAL_ERROR
+        "GCC ${CMAKE_CXX_COMPILER_VERSION} cannot build Epoch's full C++23 module engine. "
+        "Use Clang 18+ with the Ninja generator, install GCC 14+, or leave "
+        "EPOCH_ALLOW_GCC_MODULE_ENGINE=OFF for the GCC headless validation lane.")
+endif()
+
+set(EPOCH_GENERATOR_SUPPORTS_MODULES OFF)
+if(CMAKE_GENERATOR MATCHES "Ninja|Visual Studio")
+    set(EPOCH_GENERATOR_SUPPORTS_MODULES ON)
+endif()
+
+set(EPOCH_CONFIGURES_MODULE_TARGETS ON)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT WIN32 AND EPOCH_CI_HEADLESS_ONLY AND NOT EPOCH_ALLOW_GCC_MODULE_ENGINE)
+    set(EPOCH_CONFIGURES_MODULE_TARGETS OFF)
+endif()
+
+if(EPOCH_CONFIGURES_MODULE_TARGETS AND NOT EPOCH_GENERATOR_SUPPORTS_MODULES)
+    message(FATAL_ERROR
+        "Epoch's C++23 module targets require the Ninja, Ninja Multi-Config, or "
+        "Visual Studio generator. Reconfigure with build.sh, a repo preset, or "
+        "`cmake -G Ninja ...`; do not use Unix Makefiles for the full engine.")
+endif()
+
 function(epoch_is_msvc_frontend out_var)
     if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
         set(${out_var} TRUE PARENT_SCOPE)
@@ -842,6 +870,13 @@ endif()
 set(EPOCH_GLAD_SHOULD_LINK OFF)
 if(EPOCH_OPENGL_ACTIVE OR EPOCH_SDL_ACTIVE)
     set(EPOCH_GLAD_SHOULD_LINK ON)
+endif()
+
+if(UNIX AND NOT APPLE AND EPOCH_RAYLIB_ACTIVE)
+    # vcpkg's static Linux raylib package already carries GLAD loader symbols.
+    # Keep GLAD headers visible for Epoch's OpenGL code, but do not link a
+    # second GLAD implementation into the same executable.
+    set(EPOCH_GLAD_SHOULD_LINK OFF)
 endif()
 
 if(EPOCH_GLAD_NEED_HEADERS)

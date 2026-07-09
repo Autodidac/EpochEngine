@@ -17,8 +17,15 @@ What it does:
 - configures from the `Engine/` source root
 - builds into out-of-tree locations under `Engine/Bin/`
 - enables module scanning flags
-- attempts to discover `VCPKG_ROOT` unless `--no-vcpkg` is used
+- uses vcpkg by default on Windows, Linux, and WSL when `VCPKG_ROOT` or a
+  normal local vcpkg checkout can be found
+- verifies that the manifest builtin baseline exists in the local vcpkg clone
+  and fetches it before configure when the clone is stale
+- resolves `clang-scan-deps` for Clang module builds and passes it to CMake
 - generates docs when Doxygen is available
+
+`--no-vcpkg` is an explicit diagnostic/system-package escape hatch. It is not
+the normal Linux updater or release lane.
 
 Examples:
 
@@ -28,6 +35,10 @@ cd Engine
 ./build.sh gcc Debug -- -DEPOCH_CI_HEADLESS_ONLY=ON
 ./build.sh --no-vcpkg clang Debug -- -DEPOCH_ENABLE_RAYLIB=OFF
 ```
+
+Use Ninja or Visual Studio generators for full-engine C++23 module builds.
+Unix Makefiles are intentionally rejected for full-engine targets because they
+do not provide the module dependency flow Epoch needs.
 
 ## `run.sh`
 
@@ -251,8 +262,13 @@ Before publishing a Windows packaged runtime zip:
 Before publishing a Linux/WSL2 asset:
 
 - rebuild from the same bumped source commit that will be tagged
-- use the validated Clang full-engine path for the package build unless a later
-  release pass proves another Linux compiler path
+- use the validated Clang full-engine path for the package build, through
+  `Engine/build.sh clang Release`, unless a later release pass proves another
+  Linux compiler path
+- keep vcpkg enabled for the normal Linux release and updater-source rebuild
+  lanes; `--no-vcpkg` is not the default package/update path
+- ensure `clang-scan-deps` is installed, normally from `clang-tools-18` when
+  building with Clang 18
 - do not publish the Linux package while the hosted `linux-clang-engine` build
   lane is failing
 - verify the Linux package reports the same version as the tag/source archive

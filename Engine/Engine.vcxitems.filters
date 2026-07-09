@@ -1091,9 +1091,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx">
       <Filter>Module Files\epoch\voxel</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log.headless.cpp">
-      <Filter>Source Files\core</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.ixx">
       <Filter>Header Files\gui</Filter>
     </ClCompile>

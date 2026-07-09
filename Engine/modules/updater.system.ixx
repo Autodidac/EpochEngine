@@ -3591,7 +3591,6 @@ namespace epochnamespace::updater
                         std::filesystem::path{ "/bin/bash" },
                         {
                             build_script.string(),
-                            "--no-vcpkg",
                             compiler_choice,
                             SOURCE_BUILD_CONFIGURATION()
                         },

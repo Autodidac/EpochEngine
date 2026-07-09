@@ -1,6 +1,6 @@
 {
   "name": "epoch-engine",
-  "version-string": "0.87.47",
+  "version-string": "0.87.48",
   "builtin-baseline": "02e9f067ac87b992659929b7d587069b42f112e9",
   "dependencies": [
     "asio",
@@ -13,9 +13,26 @@
     "shaderc",
     "spirv-tools",
 
-    "sdl3",
-    "sfml",
-    "raylib",
+    {
+      "name": "sdl3",
+      "platform": "linux",
+      "default-features": false
+    },
+    {
+      "name": "sdl3",
+      "platform": "!linux"
+    },
+    {
+      "name": "sfml",
+      "default-features": false,
+      "features": [
+        "graphics"
+      ]
+    },
+    {
+      "name": "raylib",
+      "default-features": false
+    },
 
     "zlib"
   ]
