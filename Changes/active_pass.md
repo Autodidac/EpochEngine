@@ -159,6 +159,13 @@ contracts instead of drift.
   builds leave Raylib disabled while retaining vcpkg-backed OpenGL, SDL, and
   software lanes. The package includes the tracked `assets/fonts/Roboto-Regular.ttf`
   and passed bounded isolated editor startup checks for every active Linux lane.
+- Release repair checkpoint: the refreshed `v0.87.52` source-update lane now
+  resolves or bootstraps vcpkg on Linux, passes its exact vcpkg root and policy
+  overlay to `build.sh`, and uses the supported Clang full-engine path without
+  falling back to GCC modules. The tracked Linux manifest now uses a public
+  baseline shared by the Windows and Linux toolchains, keeps incompatible
+  Linux Vulkan/SFML/Raylib packages out of the install, and preserves the
+  operator-verified Linux SDL, OpenGL, and software context policy.
 - Source checkpoint: `main` is advanced to `v0.87.53` after the `v0.87.52`
   stable Windows/Linux release so packaged installs can exercise source-update
   detection while published stable remains `v0.87.52`.

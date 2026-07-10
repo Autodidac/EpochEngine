@@ -736,7 +736,6 @@ namespace epochnamespace::updater
         [[nodiscard]] inline std::filesystem::path find_installed_vcpkg(
             const std::filesystem::path& log_path)
         {
-#if defined(_WIN32)
             std::vector<std::filesystem::path> candidates;
 
             const auto configured_exe = env_path("VCPKG_EXE_PATH");
@@ -750,12 +749,22 @@ namespace epochnamespace::updater
             if (!from_path.empty())
                 append_unique_vcpkg_candidate(candidates, from_path.parent_path());
 
+#if defined(_WIN32)
             const auto user_profile = env_path("USERPROFILE");
             if (!user_profile.empty())
             {
                 append_unique_vcpkg_candidate(candidates, user_profile / "source" / "repos" / "vcpkg");
                 append_unique_vcpkg_candidate(candidates, user_profile / "vcpkg");
             }
+#else
+            const auto home = env_path("HOME");
+            if (!home.empty())
+            {
+                append_unique_vcpkg_candidate(candidates, home / "vcpkg");
+                append_unique_vcpkg_candidate(candidates, home / "Documents" / "repos" / "vcpkg");
+                append_unique_vcpkg_candidate(candidates, home / "source" / "repos" / "vcpkg");
+            }
+#endif
 
             for (const auto& candidate : candidates)
             {
@@ -769,9 +778,6 @@ namespace epochnamespace::updater
 
                 append_log_line(log_path, "[WARN] Ignoring unusable vcpkg root: " + candidate.string());
             }
-#else
-            (void)log_path;
-#endif
             return {};
         }
 
@@ -1598,7 +1604,6 @@ namespace epochnamespace::updater
             const std::filesystem::path& manifest_root,
             const std::filesystem::path& log_path)
         {
-#if defined(_WIN32)
             if (const auto installed = find_installed_vcpkg(log_path);
                 !installed.empty())
             {
@@ -1615,11 +1620,12 @@ namespace epochnamespace::updater
             const auto managed_root = tools_root / ("v-" + safe_ref);
             const auto managed_exe = managed_root / VCPKG_EXECUTABLE_NAME();
 
-            if (std::filesystem::exists(managed_exe))
+            if (const auto prepared_vcpkg = validated_vcpkg_executable_in_root(managed_root);
+                !prepared_vcpkg.empty())
             {
                 log_info("Using managed vcpkg toolchain.");
                 append_log_line(log_path, "[INFO] Using managed vcpkg: " + managed_root.string());
-                return managed_exe;
+                return prepared_vcpkg;
             }
 
             std::error_code ec;
@@ -1688,7 +1694,7 @@ namespace epochnamespace::updater
 
             if (bootstrap_candidate.empty())
             {
-                append_log_line(log_path, "[ERROR] Managed vcpkg archive did not contain bootstrap-vcpkg.bat.");
+                append_log_line(log_path, "[ERROR] Managed vcpkg archive did not contain " + VCPKG_BOOTSTRAP_SCRIPT_NAME() + ".");
                 std::filesystem::remove(archive_path, ec);
                 std::filesystem::remove_all(staging_dir, ec);
                 return {};
@@ -1777,13 +1783,16 @@ namespace epochnamespace::updater
                 return {};
             }
 
+#if defined(_WIN32)
             auto cmd = env_path("ComSpec");
             if (cmd.empty())
                 cmd = std::filesystem::path{ "C:\\Windows\\System32\\cmd.exe" };
+#endif
 
             int bootstrap_exit = -1;
             append_log_line(log_path, "[INFO] Bootstrapping managed vcpkg.");
 
+#if defined(_WIN32)
             if (!run_process_hidden(
                 cmd,
                 {
@@ -1795,6 +1804,18 @@ namespace epochnamespace::updater
                 log_path,
                 true,
                 &bootstrap_exit) || bootstrap_exit != 0)
+#else
+            if (!run_process_hidden(
+                std::filesystem::path{ "/bin/bash" },
+                {
+                    bootstrap_script.string(),
+                    "-disableMetrics"
+                },
+                managed_root,
+                log_path,
+                true,
+                &bootstrap_exit) || bootstrap_exit != 0)
+#endif
             {
                 append_log_line(
                     log_path,
@@ -1812,11 +1833,6 @@ namespace epochnamespace::updater
             append_log_line(log_path, "[INFO] Managed vcpkg ready at: " + managed_exe.string());
             log_info("Managed vcpkg ready.");
             return managed_exe;
-#else
-            (void)manifest_root;
-            (void)log_path;
-            return {};
-#endif
         }
 
         [[nodiscard]] inline bool prepare_manifest_for_managed_vcpkg_registry(
@@ -3579,6 +3595,37 @@ namespace epochnamespace::updater
             append_log_line(build_log, "[INFO] Manifest root: " + manifest_root.string());
             append_log_line(build_log, "[INFO] Build script: " + build_script.string());
 
+            const auto vcpkg_exe = find_or_prepare_vcpkg(manifest_root, build_log);
+            if (vcpkg_exe.empty())
+            {
+                append_log_line(build_log, "[ERROR] Could not locate or prepare vcpkg for the Linux source update.");
+                log_error("Could not prepare vcpkg for the Linux source update.");
+                return false;
+            }
+
+            const auto vcpkg_root = vcpkg_exe.parent_path();
+            const bool using_managed_vcpkg = path_is_inside(managed_tools_root(), vcpkg_root);
+            append_log_line(build_log, "[INFO] Linux source update vcpkg root: " + vcpkg_root.string());
+
+            if (using_managed_vcpkg
+                && !prepare_manifest_for_managed_vcpkg_registry(
+                    manifest_root,
+                    vcpkg_root,
+                    build_log))
+            {
+                append_log_line(build_log, "[ERROR] Could not prepare the Linux source snapshot for managed vcpkg.");
+                log_error("Could not prepare the Linux source snapshot for managed vcpkg.");
+                return false;
+            }
+
+            if (!using_managed_vcpkg)
+            {
+                append_log_line(
+                    build_log,
+                    "[INFO] Using installed vcpkg registry for the Linux source update.");
+            }
+
+            const auto overlay_ports = prepare_vcpkg_overlay_ports(vcpkg_root, build_log);
             const auto run_linux_build =
                 [&](const std::string& compiler_choice, const std::filesystem::path& expected_dir) -> bool
                 {
@@ -3586,14 +3633,23 @@ namespace epochnamespace::updater
                         build_log,
                         "[INFO] Linux source build attempt started with compiler '" + compiler_choice + "'.");
 
+                    std::vector<std::string> build_args{
+                        build_script.string(),
+                        "--vcpkg-root",
+                        vcpkg_root.string()
+                    };
+                    if (!overlay_ports.empty())
+                    {
+                        build_args.push_back("--vcpkg-overlay-ports");
+                        build_args.push_back(overlay_ports.string());
+                    }
+                    build_args.push_back(compiler_choice);
+                    build_args.push_back(SOURCE_BUILD_CONFIGURATION());
+
                     int build_exit = -1;
                     const bool launched = run_process_hidden(
                         std::filesystem::path{ "/bin/bash" },
-                        {
-                            build_script.string(),
-                            compiler_choice,
-                            SOURCE_BUILD_CONFIGURATION()
-                        },
+                        build_args,
                         manifest_root,
                         build_log,
                         true,
@@ -3632,14 +3688,14 @@ namespace epochnamespace::updater
                     return true;
                 };
 
-            const bool clang_ok = run_linux_build(
+            const bool build_ok = run_linux_build(
                 "clang",
                 manifest_root / "Bin" / "Clang-Release");
-            const bool build_ok = clang_ok
-                ? true
-                : run_linux_build(
-                    "gcc",
-                    manifest_root / "Bin" / "GCC-Release");
+
+            if (!build_ok)
+            {
+                append_log_line(build_log, "[WARN] Linux source updater does not fall back to GCC after a Clang full-engine build failure.");
+            }
 
             if (!build_ok)
             {

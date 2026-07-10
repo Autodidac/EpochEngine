@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.87.53',
+    [string]$Version = '0.87.52',
     [string]$Configuration = 'Clang-Release',
     [string]$OutputRoot = "C:\tmp\epoch_release_v$Version"
 )

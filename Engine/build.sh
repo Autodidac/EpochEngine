@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: ./build.sh [--no-vcpkg] [--updater-shell] [gcc|clang] [Debug|Release] [-- cmake args]
+# Usage: ./build.sh [--no-vcpkg] [--updater-shell] [--vcpkg-root <path>] [--vcpkg-overlay-ports <paths>] [gcc|clang] [Debug|Release] [-- cmake args]
 
 set -euo pipefail
 
@@ -8,6 +8,8 @@ MINIMUM_CMAKE_VERSION="3.28.0"
 
 USE_VCPKG=1
 UPDATER_SHELL_BUILD=0
+VCPKG_ROOT_OVERRIDE=""
+VCPKG_OVERLAY_PORTS_OVERRIDE=""
 
 version_at_least() {
   local actual=$1
@@ -213,8 +215,24 @@ while [[ $# -gt 0 ]]; do
       UPDATER_SHELL_BUILD=1
       shift
       ;;
+    --vcpkg-root)
+      if [[ $# -lt 2 ]]; then
+        echo "--vcpkg-root requires a vcpkg checkout path." >&2
+        exit 1
+      fi
+      VCPKG_ROOT_OVERRIDE=$2
+      shift 2
+      ;;
+    --vcpkg-overlay-ports)
+      if [[ $# -lt 2 ]]; then
+        echo "--vcpkg-overlay-ports requires an overlay-port path list." >&2
+        exit 1
+      fi
+      VCPKG_OVERLAY_PORTS_OVERRIDE=$2
+      shift 2
+      ;;
     --help|-h)
-      echo "Usage: $0 [--no-vcpkg] [--updater-shell] [gcc|clang] [Debug|Release] [-- cmake args]" >&2
+      echo "Usage: $0 [--no-vcpkg] [--updater-shell] [--vcpkg-root <path>] [--vcpkg-overlay-ports <paths>] [gcc|clang] [Debug|Release] [-- cmake args]" >&2
       exit 0
       ;;
     gcc|clang)
@@ -227,7 +245,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 [--no-vcpkg] [--updater-shell] [gcc|clang] [Debug|Release] [-- cmake args]" >&2
+  echo "Usage: $0 [--no-vcpkg] [--updater-shell] [--vcpkg-root <path>] [--vcpkg-overlay-ports <paths>] [gcc|clang] [Debug|Release] [-- cmake args]" >&2
   exit 1
 fi
 
@@ -416,12 +434,28 @@ fi
 
 if [[ $USE_VCPKG -ne 0 ]]; then
   detect_vcpkg_root() {
+    if [[ -n "${VCPKG_ROOT_OVERRIDE}" && -f "${VCPKG_ROOT_OVERRIDE}/scripts/buildsystems/vcpkg.cmake" ]]; then
+      printf '%s\n' "${VCPKG_ROOT_OVERRIDE}"
+      return 0
+    fi
+
+    if [[ -n "${EPOCH_VCPKG_ROOT:-}" && -f "${EPOCH_VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" ]]; then
+      printf '%s\n' "${EPOCH_VCPKG_ROOT}"
+      return 0
+    fi
+
     if [[ -n "${VCPKG_ROOT:-}" && -f "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" ]]; then
       printf '%s\n' "${VCPKG_ROOT}"
       return 0
     fi
 
     local candidate
+
+    candidate="${SCRIPT_DIR}/../vcpkg"
+    if [[ -f "${candidate}/scripts/buildsystems/vcpkg.cmake" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
 
     candidate="${SCRIPT_DIR}/../../vcpkg"
     if [[ -f "${candidate}/scripts/buildsystems/vcpkg.cmake" ]]; then
@@ -451,7 +485,10 @@ if [[ $USE_VCPKG -ne 0 ]]; then
 
   if ! VCPKG_ROOT="$(detect_vcpkg_root)"; then
     echo "vcpkg installation not found." >&2
-    echo "Set VCPKG_ROOT to the root of your vcpkg checkout, install vcpkg and ensure it is on your PATH, or rerun with --no-vcpkg to rely on system packages." >&2
+    if [[ -n "${VCPKG_ROOT_OVERRIDE}" ]]; then
+      echo "The explicit --vcpkg-root path is not a usable vcpkg checkout: ${VCPKG_ROOT_OVERRIDE}" >&2
+    fi
+    echo "Set VCPKG_ROOT or EPOCH_VCPKG_ROOT to the root of your vcpkg checkout, install vcpkg and ensure it is on your PATH, or rerun with --no-vcpkg to rely on system packages." >&2
     exit 1
   fi
 
@@ -470,6 +507,9 @@ if [[ $USE_VCPKG -ne 0 ]]; then
   fi
 
   cmake_args+=(-DCMAKE_TOOLCHAIN_FILE="$VCPKG_TOOLCHAIN_FILE")
+  if [[ -n "${VCPKG_OVERLAY_PORTS_OVERRIDE}" ]]; then
+    cmake_args+=(-DVCPKG_OVERLAY_PORTS="$VCPKG_OVERLAY_PORTS_OVERRIDE")
+  fi
 else
   echo "[build.sh] Proceeding without vcpkg integration; system-installed dependencies will be used." >&2
 fi

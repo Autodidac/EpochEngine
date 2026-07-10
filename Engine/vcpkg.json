@@ -1,17 +1,32 @@
 {
   "name": "epoch-engine",
-  "version-string": "0.87.53",
-  "builtin-baseline": "02e9f067ac87b992659929b7d587069b42f112e9",
+  "version-string": "0.87.52",
+  "builtin-baseline": "79b39cc61b25a8ff6593a775b77e9c7af8500ce6",
   "dependencies": [
     "asio",
     "glad",
     "glm",
 
-    "vulkan-headers",
-    "vulkan-loader",
-    "volk",
-    "shaderc",
-    "spirv-tools",
+    {
+      "name": "vulkan-headers",
+      "platform": "!linux"
+    },
+    {
+      "name": "vulkan-loader",
+      "platform": "!linux"
+    },
+    {
+      "name": "volk",
+      "platform": "!linux"
+    },
+    {
+      "name": "shaderc",
+      "platform": "!linux"
+    },
+    {
+      "name": "spirv-tools",
+      "platform": "!linux"
+    },
 
     {
       "name": "sdl3",
@@ -27,11 +42,13 @@
       "default-features": false,
       "features": [
         "graphics"
-      ]
+      ],
+      "platform": "!linux"
     },
     {
       "name": "raylib",
-      "default-features": false
+      "default-features": false,
+      "platform": "!linux"
     },
 
     "zlib"

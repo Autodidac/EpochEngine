@@ -1,5 +1,25 @@
 # Epoch Changelog
 
+## [v0.87.52] - Linux updater repair
+
+- Repaired Linux source updates so packaged installs resolve an installed vcpkg
+  checkout first and otherwise bootstrap a validated executable-local managed
+  vcpkg checkout before invoking the source build.
+- The Linux source build now receives its selected vcpkg root and policy overlay
+  explicitly, refreshes stale/partial managed tool caches, and stays on the
+  supported Clang full-engine lane instead of falling back into experimental GCC
+  module builds after a Clang failure.
+- Repaired Engine CMake Tools metadata: tracked preset toolchain discovery,
+  C++23 IntelliSense, no malformed kit path, and no stale script-debug launch
+  target. Empty or missing `VCPKG_ROOT` values now produce a direct setup
+  error instead of the misleading `/scripts/buildsystems/vcpkg.cmake` path.
+- Replaced the local-only vcpkg merge baseline with a verified upstream registry
+  commit shared by the Windows and Linux toolchains, and excludes the
+  currently unsupported Linux Vulkan, SFML, and Raylib package lanes from
+  Linux source-update installs while retaining the existing Linux SDL package
+  policy and runtime context selection. The supported Linux release remains
+  Clang, OpenGL, SDL, and software.
+
 ## [v0.87.53]
 - Advanced `main` after the `v0.87.52` stable release so packaged installs can
   detect the newer source-update line without changing the stable payload.

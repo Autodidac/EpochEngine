@@ -52,7 +52,9 @@
   ],
 
 
-  "cmake.toolchain": "${workspaceFolder}/../vcpkg/scripts/buildsystems/vcpkg.cmake",
+  "cmake.useCMakePresets": "always",
+  "cmake.sourceDirectory": "${workspaceFolder}",
+  "cmake.configureOnOpen": false,
   "cmake.configureSettings": {
     "VCPKG_FEATURE_FLAGS": "manifests",
     "VCPKG_INSTALLATION_ROOT": "${workspaceFolder}/vcpkg_installed",

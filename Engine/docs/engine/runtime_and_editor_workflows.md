@@ -72,6 +72,12 @@ the same engine-owned path.
 - managed-vcpkg source updates stage disposable overlay ports under
   `cache/updates/` when old dependency ports need modern CMake policy options;
   do not mutate the user's vcpkg checkout or mask restore failures.
+- Linux source updates resolve an installed vcpkg checkout first and otherwise
+  bootstrap one under the executable-local update tools cache. The worker passes
+  that exact root to `build.sh`, rewrites only its disposable source snapshot to
+  the managed registry revision, and builds the supported Clang full-engine
+  lane. Linux renderer availability remains runtime-evidence-driven; package
+  feature metadata must not override an operator-verified context.
 - runtime-created update/package/cache data is app-local: updater work,
   temporary probes, extraction folders, and helper tools live under
   `cache/updates/`; downloaded release/source packages live under
