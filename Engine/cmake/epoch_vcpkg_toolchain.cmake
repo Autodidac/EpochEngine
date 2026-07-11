@@ -48,22 +48,27 @@ set(VCPKG_FEATURE_FLAGS "manifests" CACHE STRING "vcpkg feature flags" FORCE)
 set(ENV{VCPKG_FEATURE_FLAGS} "manifests")
 
 if(UNIX AND NOT APPLE)
+    set(VCPKG_TARGET_TRIPLET "x64-linux-epoch" CACHE STRING "Epoch Linux vcpkg triplet" FORCE)
+    set(VCPKG_OVERLAY_TRIPLETS "${_epoch_engine_root}/cmake/triplets" CACHE PATH "Epoch vcpkg overlay triplets" FORCE)
+
     if(NOT DEFINED CMAKE_C_COMPILER OR "${CMAKE_C_COMPILER}" STREQUAL "")
-        find_program(_epoch_clang_c NAMES clang-20 clang-19 clang-18 clang)
+        find_program(_epoch_clang_c NAMES clang-22 clang)
         if(_epoch_clang_c)
             set(CMAKE_C_COMPILER "${_epoch_clang_c}" CACHE FILEPATH "Epoch Linux C compiler" FORCE)
         endif()
     endif()
 
     if(NOT DEFINED CMAKE_CXX_COMPILER OR "${CMAKE_CXX_COMPILER}" STREQUAL "")
-        find_program(_epoch_clang_cxx NAMES clang++-20 clang++-19 clang++-18 clang++)
+        find_program(_epoch_clang_cxx NAMES clang++-22 clang++)
         if(_epoch_clang_cxx)
             set(CMAKE_CXX_COMPILER "${_epoch_clang_cxx}" CACHE FILEPATH "Epoch Linux C++ compiler" FORCE)
         endif()
     endif()
 
     if(NOT DEFINED CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS OR "${CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS}" STREQUAL "")
-        find_program(_epoch_clang_scan_deps NAMES clang-scan-deps-20 clang-scan-deps-19 clang-scan-deps-18 clang-scan-deps)
+        find_program(_epoch_clang_scan_deps
+            NAMES clang-scan-deps-22 clang-scan-deps
+            PATHS /usr/lib/llvm-22/bin /usr/local/lib/llvm-22/bin /opt/llvm-22/bin)
         if(_epoch_clang_scan_deps)
             set(CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS "${_epoch_clang_scan_deps}" CACHE FILEPATH "Epoch Clang module scanner" FORCE)
         endif()

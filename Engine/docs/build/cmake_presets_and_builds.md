@@ -8,11 +8,9 @@ should be kept synchronized through the root wrapper.
 ## Prerequisites
 
 - `VCPKG_ROOT` should point to a valid vcpkg checkout when you rely on manifest mode.
-- Use a module-capable toolchain and a recent CMake version.
-- The current module-driven CMake path needs `3.28+`. If you are on an older
-  baseline such as `3.22.1`, do not assume the CMake path is compatible yet;
-  use the checked-in Visual Studio/MSBuild solution until the lower-floor
-  compatibility pass is finished.
+- Use the locked current Linux toolchain: CMake 4.4.0, LLVM/Clang 22.1.8 with
+  matching `clang-scan-deps`, and Ninja 1.13.2. `Engine/build.sh
+  --bootstrap-current-toolchain` can prepare a verified cache-local copy.
 
 ## Windows (MSVC)
 
@@ -41,8 +39,8 @@ cmake --preset ninja-gcc-debug
 cmake --build --preset ninja-gcc-debug
 ```
 
-The GCC presets intentionally route to `epoch_ci_headless` by default because
-GCC 14 can ICE while writing full-engine C++ module BMIs. Only opt into the
+The GCC 16.1 presets intentionally route to `epoch_ci_headless` by default
+while the full GNU module lane remains experimental. Only opt into the
 full GNU module build with `-DEPOCH_ALLOW_GCC_MODULE_ENGINE=ON` when you are
 testing compiler/module behavior locally. In the default GCC headless lane,
 `epoch_ci_headless` is intentionally module-free and uses a small C ABI logger

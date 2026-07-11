@@ -60,6 +60,7 @@ export module vulkan.context:commands;
 
 import :shared_vk;
 import core.context;
+import context.type;
 import atlas.texture;
 import render.preview_grid;
 

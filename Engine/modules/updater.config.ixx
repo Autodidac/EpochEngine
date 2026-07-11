@@ -414,7 +414,7 @@ namespace epochnamespace::updater
     // LLVM configuration
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    export inline constexpr std::string_view LLVM_VERSION = "20.1.0";
+    export inline constexpr std::string_view LLVM_VERSION = "22.1.8";
 
 #if defined(_WIN32)
 
@@ -441,13 +441,13 @@ namespace epochnamespace::updater
     export inline std::string NINJA_ZIP_URL()
     {
         return std::string{ GITHUB_BASE }
-        + "ninja-build/ninja/releases/latest/download/ninja-win.zip";
+        + "ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip";
     }
 
     export inline std::string NINJA_EXE_URL()
     {
         return std::string{ GITHUB_BASE }
-        + "ninja-build/ninja/releases/latest/download/ninja-win.zip";
+        + "ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip";
     }
 
 #elif defined(__linux__)
@@ -467,7 +467,7 @@ namespace epochnamespace::updater
     export inline std::string NINJA_ZIP_URL()
     {
         return std::string{ GITHUB_BASE }
-        + "ninja-build/ninja/releases/latest/download/ninja-linux.zip";
+        + "ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip";
     }
 
 #elif defined(__APPLE__)
@@ -487,7 +487,7 @@ namespace epochnamespace::updater
     export inline std::string NINJA_ZIP_URL()
     {
         return std::string{ GITHUB_BASE }
-        + "ninja-build/ninja/releases/latest/download/ninja-mac.zip";
+        + "ninja-build/ninja/releases/download/v1.13.2/ninja-mac.zip";
     }
 
 #endif

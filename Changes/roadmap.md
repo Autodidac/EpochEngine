@@ -26,10 +26,10 @@ disconnected experiments.
 
 ## Current Working Contract
 
-The hot path is Linux/updater source-shape stability for the next release pair:
-`v0.87.50` as the packaged runtime repair release and `v0.87.51` as the
-post-release source checkpoint used by update checks. Do not advance versions
-casually while the operator is testing a release path.
+The hot path is Linux/updater source-shape stability for the next release pair.
+The stable package must be built before the source line advances one revision
+for update checks; do not advance versions casually while a package is being
+validated.
 
 The current source shape is:
 
@@ -220,15 +220,17 @@ does not claim renderer, editor, atlas, or source-tree migration work is done.
 
 - Support MSVC, clang-cl, Clang, and GCC where practical.
 - Support Visual Studio, Ninja, and Unix Makefiles where practical.
-- Linux/GCC is currently a headless validation lane by default because GCC 14
-  can ICE while writing full-engine C++ module BMIs; full Linux editor/runtime
+- Linux/GCC 16.1 is currently a headless validation lane by default while the
+  full GNU C++ module path remains experimental; full Linux editor/runtime
   builds should use Clang until GCC module support stabilizes.
 - The GCC headless lane must stay module-free unless
   `EPOCH_ALLOW_GCC_MODULE_ENGINE=ON` is explicitly enabled. `epoch_ci_headless`
   uses a dedicated logger shim in that lane so hosted GCC can configure, build,
   and run the smoke contract without CMake C++ module dependency scanning.
-- Linux/Clang 18 is the current full-engine Linux rendering build lane, with
-  single-context OpenGL as the WSL-proven editor/runtime path. Do not auto-fall
+- Linux/Clang 22.1.8 is the current full-engine Linux rendering build lane,
+  paired with CMake 4.4.0 and Ninja 1.13.2. Single-context OpenGL remains the
+  default WSL proof path, while SDL, SFML, Raylib, Vulkan, and software are
+  build-required Linux contexts. Do not auto-fall
   back to Vulkan in WSL; Vulkan remains explicit validation work on Linux/WSL
   until it is proven locally. DirectX remains explicitly Windows-only and must
   stay disabled for Linux/WSL presets.

@@ -2457,7 +2457,7 @@ namespace
             "}\n";
 
         const std::string cmakeText =
-            "cmake_minimum_required(VERSION 3.28)\n\n"
+            "cmake_minimum_required(VERSION 4.4)\n\n"
             "# Import this fragment from a generated project when embedding Epoch.\n"
             "set(EPOCH_REPO_ROOT \"" + json_escape(repoRoot.generic_string()) + "\" CACHE PATH \"Path to the repo-local Epoch checkout\")\n\n"
             "function(epoch_configure_embedded_project target)\n"
@@ -2471,7 +2471,7 @@ namespace
             "endfunction()\n";
 
         const std::string cmakeListsText =
-            "cmake_minimum_required(VERSION 3.28)\n"
+            "cmake_minimum_required(VERSION 4.4)\n"
             "project(" + spec.project_name + " LANGUAGES CXX)\n\n"
             "include(\"${CMAKE_CURRENT_LIST_DIR}/epoch.project.cmake\")\n"
             "add_executable(${PROJECT_NAME} source/main.cpp)\n"

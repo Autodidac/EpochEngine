@@ -243,9 +243,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\app_api.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_upload_bridge.hpp">
-      <Filter>Header Files\engine\context\opengl</Filter>
-    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.hpp">
       <Filter>Header Files\engine\context\opengl</Filter>
     </ClInclude>
@@ -1068,9 +1065,6 @@
       <Filter>Source Files\core\crossplatform\backends\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.cpp">
-      <Filter>Source Files\core\crossplatform\backends\opengl</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_upload_bridge.cpp">
       <Filter>Source Files\core\crossplatform\backends\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderer_smoke_harness.cpp">

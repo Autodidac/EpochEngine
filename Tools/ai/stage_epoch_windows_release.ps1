@@ -1,6 +1,6 @@
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [string]$Version = '0.87.53',
+    [string]$Version = '0.87.54',
     [string]$OutputRoot = "C:\tmp\epoch_release_v$Version"
 )
 
@@ -46,6 +46,10 @@ Require-Path -Path (Join-Path $releaseOutput 'EpochEditor.exe') -Label 'Release 
 Require-Path -Path $assets -Label 'Runtime assets'
 Require-Path -Path (Join-Path $repo 'README.md') -Label 'README'
 Require-Path -Path (Join-Path $repo 'LICENSE') -Label 'LICENSE'
+$noticeScript = Join-Path $repo 'Tools\ai\collect_third_party_notices.ps1'
+$vcpkgInstalled = Join-Path $repo 'Engine\vcpkg_installed\x64-windows'
+Require-Path -Path $noticeScript -Label 'Third-party notice collector'
+Require-Path -Path $vcpkgInstalled -Label 'Windows vcpkg installed tree'
 
 $crtRoot = 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC'
 Require-Path -Path $crtRoot -Label 'VC redistributable root'
@@ -69,6 +73,7 @@ Copy-FileSet -Source $crtPayload -Destination $stage
 Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination $stage -Force
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $stage -Force
 Copy-Item -LiteralPath $assets -Destination (Join-Path $stage 'assets') -Recurse -Force
+& $noticeScript -RepoRoot $repo -VcpkgInstalledRoot $vcpkgInstalled -Destination $stage
 
 $versionOut = Join-Path $OutputRoot "epoch_release_v$Version`_windows_version_stdout.txt"
 $versionErr = Join-Path $OutputRoot "epoch_release_v$Version`_windows_version_stderr.txt"
@@ -118,6 +123,8 @@ Remove-Item -LiteralPath $verifyRoot -Recurse -Force -ErrorAction SilentlyContin
 New-Item -ItemType Directory -Path $verifyRoot -Force | Out-Null
 Expand-Archive -LiteralPath $zip -DestinationPath $verifyRoot -Force
 Require-Path -Path (Join-Path $verifyRoot 'EpochEditor.exe') -Label 'Flat release archive executable'
+Require-Path -Path (Join-Path $verifyRoot 'THIRD_PARTY_NOTICES.txt') -Label 'Third-party notices'
+Require-Path -Path (Join-Path $verifyRoot 'THIRD_PARTY_COMPONENTS.json') -Label 'Third-party component manifest'
 if ((Test-Path -LiteralPath (Join-Path $verifyRoot 'logs')) -or (Test-Path -LiteralPath (Join-Path $verifyRoot 'cache'))) {
     throw 'Release archive must not include generated logs or runtime cache.'
 }

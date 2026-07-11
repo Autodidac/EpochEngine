@@ -109,13 +109,13 @@
   ctest --preset ninja-clang-debug
   ```
 
-- Linux/GCC is headless validation by default because GCC 14 can ICE while
-  writing full-engine C++ module BMIs. Use `ninja-gcc-debug` for headless
+- Linux/GCC 16.1 is headless validation by default while its full module lane
+  remains experimental. Use `ninja-gcc-debug` for headless
   validation unless intentionally testing the experimental full GNU module path.
 - `Engine/` Linux helpers:
 
   ```bash
-  ./build.sh [--no-vcpkg] [--updater-shell] [gcc|clang] [Debug|Release] [-- <extra cmake args>]
+  ./build.sh [--no-vcpkg] [--updater-shell] [--bootstrap-current-toolchain] [--tool-cache-root <path>] [gcc|clang] [Debug|Release] [-- <extra cmake args>]
   ./run.sh [gcc|clang] [Debug|Release] [-- <runtime args>]
   ./install.sh [gcc|clang] [Debug|Release]
   ./clean.sh

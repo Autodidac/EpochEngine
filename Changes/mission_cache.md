@@ -202,15 +202,14 @@ after choosing the current source gate from `Changes/active_pass.md`.
   clang-tools package, a module-aware generator such as Ninja, and a vcpkg clone
   that contains the manifest builtin baseline. Build scripts should fail early
   with actionable evidence when those are missing.
-- Linux static third-party ownership stays explicit: Raylib can bring its own
-  GLAD and cgltf implementation, so Epoch must avoid linking a second GLAD
-  provider into that target and must keep any embedded cgltf implementation
-  symbol-prefixed.
-- Linux static Raylib is currently disabled for release and normal source
-  builds: Raylib 6's GLAD 2 exports collide with Epoch's GLAD 1 symbols and
-  signatures, which can crash unrelated OpenGL, SDL, or software launch lanes.
-  Re-enable it only after a dynamic, namespaced, or otherwise ABI-compatible
-  Raylib packaging lane is build- and runtime-proven.
+- Linux static third-party ownership stays explicit. Current vcpkg Raylib 6 is
+  built with external GLFW and de-vendored cgltf/STB, allowing Epoch's one GLAD
+  provider to remain authoritative; any future port change must re-prove that
+  ownership before release.
+- Linux normal and updater builds require OpenGL, SDL, SFML, Raylib, Vulkan,
+  and software dependencies through vcpkg. SDL is intentionally limited to
+  X11 and Vulkan features so editor input/window support does not pull the
+  unrelated D-Bus/IBus/systemd build chain into source updates.
 - Linux/WSL defaults to single-context OpenGL proof. DirectX is disabled, Vulkan
   is explicit validation only, and software remains a debug fallback.
 - Continue small build-proven file moves into owned folders. Public headers move

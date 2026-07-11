@@ -1,13 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
-
-if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
-    set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
-endif()
-
-if(CMAKE_VERSION VERSION_LESS 3.29)
-    # CMake 3.27-3.28 require the experimental dyndep scanner to emit BMI rules.
-    set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP 1)
-endif()
+cmake_minimum_required(VERSION 4.4)
 
 # Keep module scanning enabled across all supported generators/toolchains.
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
@@ -35,8 +26,8 @@ endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT WIN32 AND NOT EPOCH_CI_HEADLESS_ONLY AND NOT EPOCH_ALLOW_GCC_MODULE_ENGINE)
     message(STATUS
-        "Linux/GCC full-engine C++ module builds are disabled by default because GCC 14 "
-        "currently ICEs while writing module locations. Configuring the portable "
+        "Linux/GCC full-engine C++ module builds remain opt-in while the current GCC 16 "
+        "module lane is validated. Configuring the portable "
         "headless validation target instead. Use Clang for full Linux engine builds or "
         "set EPOCH_ALLOW_GCC_MODULE_ENGINE=ON to experiment.")
     set(EPOCH_CI_HEADLESS_ONLY ON CACHE BOOL "Configure only the portable hosted-CI smoke target." FORCE)
@@ -46,10 +37,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     AND NOT WIN32
     AND NOT EPOCH_CI_HEADLESS_ONLY
     AND EPOCH_ALLOW_GCC_MODULE_ENGINE
-    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14.0)
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16.1)
     message(FATAL_ERROR
         "GCC ${CMAKE_CXX_COMPILER_VERSION} cannot build Epoch's full C++23 module engine. "
-        "Use Clang 18+ with the Ninja generator, install GCC 14+, or leave "
+        "Use current Clang with the Ninja generator, install GCC 16.1+, or leave "
         "EPOCH_ALLOW_GCC_MODULE_ENGINE=OFF for the GCC headless validation lane.")
 endif()
 
@@ -306,7 +297,6 @@ set(EPOCH_SOURCES
     src/renderers/opengl/opengl_context_detail.cpp
     src/opengl_preview_bridge.cpp
     src/opengl_process_impl.cpp
-    src/opengl_upload_bridge.cpp
     src/renderers/software/software.context.cpp
     src/renderers/software/software.context_capture.cpp
     src/renderers/software/software.context_draw.cpp
@@ -406,7 +396,6 @@ if(MSVC)
         src/renderers/opengl/opengl_context_detail.cpp
         src/opengl_preview_bridge.cpp
         src/opengl_process_impl.cpp
-        src/opengl_upload_bridge.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj;/Zm2000;/Od;/Ob0;/GL-"
     )
@@ -600,7 +589,7 @@ epoch_apply_warnings(epoch)
 epoch_apply_sanitizers(epoch)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    # GCC 14+ requires the Modules TS flag so the dyn-dep scanner emits
+    # GCC 16 requires the Modules TS flag so the dyn-dep scanner emits
     # BMI build rules correctly when paired with Ninja or Makefiles.
     target_compile_options(epoch PRIVATE -fmodules-ts)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -623,29 +612,14 @@ function(epoch_option suffix default_value help_text)
 endfunction()
 
 set(EPOCH_DEFAULT_ENABLE_VULKAN ON)
-if(UNIX AND NOT APPLE)
-    # Keep the Linux path on the stable backends until the Vulkan module graph
-    # is fully mirrored to the working Windows implementation.
-    set(EPOCH_DEFAULT_ENABLE_VULKAN OFF)
-endif()
 set(EPOCH_DEFAULT_ENABLE_DIRECTX OFF)
 if(WIN32)
     set(EPOCH_DEFAULT_ENABLE_DIRECTX ON)
 endif()
 
 set(EPOCH_DEFAULT_ENABLE_RAYLIB ON)
-if(UNIX AND NOT APPLE)
-    # vcpkg's static Raylib carries an incompatible GLAD ABI on Linux. Keep
-    # the supported Linux release lanes on Epoch's single GLAD provider until
-    # Raylib is isolated behind a compatible dynamic or renamed-loader build.
-    set(EPOCH_DEFAULT_ENABLE_RAYLIB OFF)
-endif()
 
 epoch_option(ENABLE_RAYLIB ${EPOCH_DEFAULT_ENABLE_RAYLIB} "Enable the Raylib backend")
-if(UNIX AND NOT APPLE AND EPOCH_ENABLE_RAYLIB)
-    message(STATUS "Linux Raylib is disabled: the current static package exports an incompatible GLAD ABI.")
-    set(EPOCH_ENABLE_RAYLIB OFF CACHE BOOL "Enable the Raylib backend" FORCE)
-endif()
 epoch_option(ENABLE_SDL ON "Enable the SDL backend")
 epoch_option(ENABLE_SFML ON "Enable the SFML backend")
 epoch_option(ENABLE_VULKAN ${EPOCH_DEFAULT_ENABLE_VULKAN} "Enable the Vulkan backend")
@@ -773,9 +747,39 @@ if(EPOCH_SDL_ACTIVE)
 endif()
 
 if(EPOCH_SFML_ACTIVE)
-    find_package(SFML 3.0 COMPONENTS graphics window system QUIET)
+    find_package(SFML 3.0 COMPONENTS Graphics Window System QUIET)
     if(SFML_FOUND)
-        target_link_libraries(epoch PRIVATE sfml-graphics sfml-window sfml-system)
+        if(TARGET SFML::Graphics)
+            target_link_libraries(epoch PRIVATE SFML::Graphics SFML::Window SFML::System)
+            set(_epoch_sfml_targets SFML::Graphics SFML::Window SFML::System)
+        else()
+            target_link_libraries(epoch PRIVATE sfml-graphics sfml-window sfml-system)
+            set(_epoch_sfml_targets sfml-graphics sfml-window sfml-system)
+        endif()
+
+        if(UNIX AND NOT APPLE)
+            foreach(_epoch_sfml_target IN LISTS _epoch_sfml_targets)
+                get_target_property(_epoch_sfml_target_type ${_epoch_sfml_target} TYPE)
+                if(_epoch_sfml_target_type STREQUAL "STATIC_LIBRARY")
+                    message(FATAL_ERROR
+                        "Linux multicontext builds require Epoch's x64-linux-epoch vcpkg triplet so "
+                        "SFML remains shared and does not collide with Raylib's embedded STB symbols.")
+                endif()
+            endforeach()
+
+            set_target_properties(epoch PROPERTIES BUILD_RPATH "\$ORIGIN/lib")
+            add_custom_command(TARGET epoch POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:epoch>/lib")
+            foreach(_epoch_sfml_target IN LISTS _epoch_sfml_targets)
+                add_custom_command(TARGET epoch POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "$<TARGET_FILE:${_epoch_sfml_target}>"
+                        "$<TARGET_FILE_DIR:epoch>/lib/$<TARGET_FILE_NAME:${_epoch_sfml_target}>"
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "$<TARGET_SONAME_FILE:${_epoch_sfml_target}>"
+                        "$<TARGET_FILE_DIR:epoch>/lib/$<TARGET_SONAME_FILE_NAME:${_epoch_sfml_target}>")
+            endforeach()
+        endif()
     elseif(PkgConfig_FOUND)
         pkg_check_modules(SFML QUIET sfml-graphics sfml-window sfml-system)
         if(SFML_FOUND)
@@ -861,7 +865,6 @@ if(EPOCH_VULKAN_ACTIVE)
             src/image.stb.cpp
             src/renderers/vulkan/vulkan.platform.context.cpp
             src/vulkan.dispatch_storage.cpp
-            modules/vulkan.context_api_unit.ixx
         )
     endif()
 endif()
@@ -882,13 +885,6 @@ endif()
 set(EPOCH_GLAD_SHOULD_LINK OFF)
 if(EPOCH_OPENGL_ACTIVE OR EPOCH_SDL_ACTIVE)
     set(EPOCH_GLAD_SHOULD_LINK ON)
-endif()
-
-if(UNIX AND NOT APPLE AND EPOCH_RAYLIB_ACTIVE)
-    # vcpkg's static Linux raylib package already carries GLAD loader symbols.
-    # Keep GLAD headers visible for Epoch's OpenGL code, but do not link a
-    # second GLAD implementation into the same executable.
-    set(EPOCH_GLAD_SHOULD_LINK OFF)
 endif()
 
 if(EPOCH_GLAD_NEED_HEADERS)
@@ -958,7 +954,6 @@ if(NOT EPOCH_DIRECTX_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])directx\.]])
 endif()
 
-epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])vulkan\.context_api_unit\.ixx$]])
 epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])almondshell\.ixx$]])
 
 if(NOT EPOCH_OPENGL_ACTIVE)

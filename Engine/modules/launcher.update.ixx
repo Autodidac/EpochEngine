@@ -773,7 +773,31 @@ export namespace epochnamespace::launcher_update
                         || update_log_contains(handoff_text, needle);
                 };
 
+            const auto explicit_progress = [](const std::string_view text) noexcept
+                {
+                    constexpr std::string_view marker = "[EPOCH_PROGRESS] ";
+                    const auto markerPos = text.rfind(marker);
+                    if (markerPos == std::string_view::npos)
+                        return 0.0f;
+
+                    std::size_t cursor = markerPos + marker.size();
+                    int percent = 0;
+                    bool foundDigit = false;
+                    while (cursor < text.size() && text[cursor] >= '0' && text[cursor] <= '9')
+                    {
+                        foundDigit = true;
+                        percent = percent * 10 + static_cast<int>(text[cursor] - '0');
+                        ++cursor;
+                    }
+                    if (!foundDigit || cursor >= text.size() || text[cursor] != '%')
+                        return 0.0f;
+
+                    return std::clamp(static_cast<float>(percent) / 100.0f, 0.0f, 1.0f);
+                };
+
             float progress = (std::max)(previous, 0.08f);
+            progress = (std::max)(progress, explicit_progress(source_text));
+            progress = (std::max)(progress, explicit_progress(handoff_text));
             if (has("Downloading latest") || has("Source snapshot download URL"))
                 progress = (std::max)(progress, 0.16f);
             if (has("downloaded successfully") || has("Source snapshot downloaded and extracted"))

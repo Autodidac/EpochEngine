@@ -4,14 +4,15 @@ module;
 #include "opengl_capture_bridge.hpp"
 #include "opengl_process_impl.hpp"
 #include "opengl_preview_bridge.hpp"
-#include "opengl_upload_bridge.hpp"
 
 module opengl.context;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+import atlas.manager;
 import core.context;
 import context.commandqueue;
 import context.multiplexer;
+import context.type;
 import engine.gui;
 
 namespace epochnamespace::openglcontext
@@ -26,7 +27,7 @@ namespace epochnamespace::openglcontext
         if (!ctx)
             return;
 
-        openglbridge::process_pending_uploads();
+        atlasmanager::process_pending_uploads(core::ContextType::OpenGL);
         const auto previousContext = core::MultiContextManager::GetCurrent();
         core::MultiContextManager::SetCurrent(ctx);
 

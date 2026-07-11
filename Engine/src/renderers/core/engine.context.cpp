@@ -71,7 +71,7 @@ namespace epochnamespace::core::detail
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
     void register_sdl_backend();
 #endif
-#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
     void register_vulkan_backend();
 #endif
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
@@ -223,7 +223,7 @@ namespace epochnamespace::core
         detail::epoch_register_raylib_backend();
 #endif
 
-#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
         detail::register_vulkan_backend();
 #endif
 

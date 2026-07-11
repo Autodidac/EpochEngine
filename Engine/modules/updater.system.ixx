@@ -3635,6 +3635,11 @@ namespace epochnamespace::updater
 
                     std::vector<std::string> build_args{
                         build_script.string(),
+                        "--bootstrap-current-toolchain",
+                        "--tool-cache-root",
+                        managed_tools_root().string(),
+                        "--cancel-file",
+                        source_cancel_path(target_binary).string(),
                         "--vcpkg-root",
                         vcpkg_root.string()
                     };
@@ -5803,7 +5808,6 @@ namespace epochnamespace::updater
 
     export bool source_update_cancel_requested()
     {
-#if defined(_WIN32)
         try
         {
             return system_detail::source_update_cancellation_pending(system_detail::current_binary_path());
@@ -5818,9 +5822,6 @@ namespace epochnamespace::updater
             system_detail::log_error("Source update cancel-state check failed with an unknown exception.");
             return false;
         }
-#else
-        return false;
-#endif
     }
 
     export bool launch_staged_update_handoff()
@@ -5934,7 +5935,53 @@ namespace epochnamespace::updater
             return false;
         }
 #else
-        return false;
+        try
+        {
+            const auto target_binary = system_detail::current_binary_path();
+            const auto cancel_path = system_detail::source_cancel_path(target_binary);
+
+            std::error_code dir_ec;
+            std::filesystem::create_directories(cancel_path.parent_path(), dir_ec);
+            if (dir_ec)
+            {
+                system_detail::log_error(
+                    "Source update cancel failed to prepare marker directory: "
+                    + cancel_path.parent_path().string());
+                return false;
+            }
+
+            std::ofstream marker(cancel_path, std::ios::binary | std::ios::trunc);
+            marker << "cancel requested by runtime ui\n";
+            marker.flush();
+            const bool wrote_marker = static_cast<bool>(marker);
+            marker.close();
+
+            if (wrote_marker)
+            {
+                system_detail::append_log_line(
+                    system_detail::source_update_log_path_for(target_binary),
+                    "[WARN] Source rebuild cancellation requested from runtime UI.");
+                system_detail::append_log_line(
+                    system_detail::update_handoff_log_path_for(target_binary),
+                    "[WARN] Source rebuild cancellation requested from runtime UI.");
+            }
+            else
+            {
+                system_detail::log_error("Source update cancel marker write failed.");
+            }
+
+            return wrote_marker;
+        }
+        catch (const std::exception& e)
+        {
+            system_detail::log_error(std::string{ "Source update cancel failed: " } + e.what());
+            return false;
+        }
+        catch (...)
+        {
+            system_detail::log_error("Source update cancel failed with an unknown exception.");
+            return false;
+        }
 #endif
     }
 

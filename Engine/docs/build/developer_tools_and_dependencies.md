@@ -5,9 +5,10 @@ This is the minimum tooling picture for working on Epoch locally.
 ## Required
 
 - Git
-- CMake 3.28+ for the current module-aware CMake build
-- A C++23 compiler with module support
-- A supported generator: Ninja, Visual Studio/MSBuild, or a compatible GCC/Clang setup
+- CMake 4.4.0+ for the current module-aware CMake build
+- LLVM/Clang 22.1.8 with matching `clang-scan-deps`, or GCC 16.1 for its
+  supported validation lane
+- Ninja 1.13.2+ or Visual Studio 2022/MSBuild
 - vcpkg when relying on manifest-managed dependencies
 
 ## Recommended
@@ -25,10 +26,10 @@ This is the minimum tooling picture for working on Epoch locally.
 See `cmake_presets_and_builds.md` and
 `../engine/runtime_and_editor_workflows.md` for workflow details.
 
-## Tooling floor note
+## Tooling lock
 
-Epoch should stay honest about older baseline environments. Right now the
-module-aware CMake path still expects `3.28+`; older setups around `3.22.1`
-should use the checked-in solution/build scripts until the lower-floor
-compatibility pass lands. Do not silently raise the floor in docs or CI without
-writing that change down.
+`Engine/unix/current_toolchain.env` owns the Linux build-tool versions, upstream
+URLs, sizes, and SHA-256 hashes. `Engine/build.sh --bootstrap-current-toolchain`
+installs those tools into a disposable cache and records their provenance; it
+does not replace system packages. MSVC remains the supported Visual Studio 2022
+exception to the current-version Linux tool lock.

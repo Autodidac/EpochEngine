@@ -51,6 +51,13 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
+#if defined(__linux__)
+#   ifndef VK_USE_PLATFORM_XLIB_KHR
+#       define VK_USE_PLATFORM_XLIB_KHR 1
+#   endif
+#   include <X11/Xlib.h>
+#endif
+
 #include <../src/context.vulkan.hpp>
 
 #if defined(EPOCH_VULKAN_STANDALONE)
@@ -212,6 +219,8 @@ export namespace epochnamespace::vulkancontext
         extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 #   if defined(_WIN32)
         extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#   elif defined(__linux__)
+        extensions.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
 #   endif
 #endif
 
@@ -293,6 +302,27 @@ export namespace epochnamespace::vulkancontext
         auto [sr, s] = instance->createWin32SurfaceKHRUnique(sci);
         if (sr != vk::Result::eSuccess)
             throw std::runtime_error("Failed to create Win32 Vulkan surface.");
+
+        surface = std::move(s);
+#elif defined(__linux__)
+        const auto boundContext = context.lock();
+        auto* display = boundContext
+            ? reinterpret_cast<Display*>(boundContext->hdc)
+            : nullptr;
+        const auto xwindow = boundContext
+            ? static_cast<::Window>(reinterpret_cast<std::uintptr_t>(boundContext->hwnd))
+            : ::Window{};
+        if (!display || xwindow == 0)
+            throw std::runtime_error("No X11 display/window handle available for Vulkan surface.");
+
+        vk::XlibSurfaceCreateInfoKHR sci{};
+        sci.flags = {};
+        sci.dpy = display;
+        sci.window = xwindow;
+
+        auto [sr, s] = instance->createXlibSurfaceKHRUnique(sci);
+        if (sr != vk::Result::eSuccess)
+            throw std::runtime_error("Failed to create Xlib Vulkan surface.");
 
         surface = std::move(s);
 #else

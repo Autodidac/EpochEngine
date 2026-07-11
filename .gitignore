@@ -79,6 +79,7 @@ Engine/Bin/
 Engine/docs/api/
 
 *.cmake
+!Engine/cmake/triplets/x64-linux-epoch.cmake
 *.bin
 
 project_snapshot.zip

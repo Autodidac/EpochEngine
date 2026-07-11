@@ -32,7 +32,7 @@ module;
 
 module core.context;
 
-#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) && !defined(__linux__)
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
 import engine.input;
 import atlas.manager;
 import core.logger;

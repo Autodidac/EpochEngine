@@ -108,9 +108,10 @@ override them locally in `engine.config.hpp`.
 - Raylib-only configurations still rely on the expected GL loader plumbing on
   desktop platforms.
 - Linux vcpkg defaults intentionally keep optional desktop/audio dependency
-  stacks small: SDL3 is core-only by default, SFML uses graphics/window/system,
-  and Raylib is built without optional audio. Expanding those feature sets is a
-  backend ownership decision and must update Linux package prerequisites.
+  stacks small: SDL3 uses X11 and Vulkan without D-Bus/IBus/Wayland/audio,
+  SFML uses graphics/window/system, and Raylib is built without optional audio.
+  Expanding those feature sets is a backend ownership decision and must update
+  Linux package prerequisites.
 - GLAD is single-owner per target. `EPOCH_GLAD_PROVIDER=auto` prefers vcpkg
   `glad::glad` and falls back to Epoch's checked-in loader. Use `vcpkg` to
   require the package target or `bundled` to force the checked-in loader. Do
@@ -133,11 +134,10 @@ override them locally in `engine.config.hpp`.
 
 ## Current release note
 
-- `v0.87.48` is the current Linux/updater build repair line. It keeps Linux and
-  WSL on the vcpkg-backed build/update path, resolves Clang module scanning
-  explicitly, rejects unsupported full-engine generators early, and avoids
-  duplicate GLAD/cgltf ownership when static Raylib participates in the
-  full-engine Linux link.
+- The current Linux/updater line keeps Linux and WSL on the vcpkg-backed
+  build/update path, pins current CMake/LLVM/Ninja tools with hashes and
+  provenance, requires a matching Clang module scanner, and builds every
+  non-DirectX context dependency through the shared manifest.
 - `v0.84.57` kept the focused editor GUI and Forest Factory stabilization pass.
   It preserved the protected OpenGL draw model while fixing the Asset
   command-menu hit region, clipping Package Manager details inside a shared GUI

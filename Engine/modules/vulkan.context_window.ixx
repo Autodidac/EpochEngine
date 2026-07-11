@@ -57,7 +57,7 @@ namespace epochnamespace::vulkancontext {
     //};
 
 #if defined(EPOCH_VULKAN_STANDALONE)
-    export void Application::mouseCallback(GLFWwindow* window, double xpos, double ypos) {
+    void Application::mouseCallback(GLFWwindow* window, double xpos, double ypos) {
         auto* app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
         if (app) {
             app->processMouseInput(xpos, ypos);

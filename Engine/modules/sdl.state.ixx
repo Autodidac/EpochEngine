@@ -34,6 +34,7 @@ module;
 #include <array>
 #include <bitset>
 #include <functional>
+#include <mutex>
 #include <SDL3/SDL.h>
 
 #include <include/engine.config.hpp> // for EPOCH_USING_RAYLIB

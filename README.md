@@ -4,8 +4,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.53-1F7A4C?style=for-the-badge" alt="Current development source v0.87.53" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.52-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.52" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.54-1F7A4C?style=for-the-badge" alt="Current development source v0.87.54" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.54-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.54" />
 </p>
 
 <p align="center">
@@ -75,8 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Source is currently the active development line at `v0.87.53`.
-- The latest published stable runtime release is `v0.87.52`.
+- Source and the latest published stable runtime release are `v0.87.54`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
@@ -105,10 +104,9 @@ For engine/tooling developers:
 - Phase 1 and Phase 2 of the active roadmap are complete. Current work is
   concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.
-- Release checkpoint: `v0.87.52` repairs Linux source-update vcpkg provisioning
-  and keeps the incompatible static Raylib lane out of Linux packages. `main`
-  is advanced to `v0.87.53` for source-update detection while stable remains
-  `v0.87.52`.
+- Release checkpoint: `v0.87.54` repairs Linux source-update toolchain and
+  vcpkg provisioning, builds every supported Linux renderer together, and
+  packages the shared SFML runtime required for safe Raylib coexistence.
 - The editor has a toolbar scene-mode selector for 3D scene construction versus
   2D game/UI construction, launcher/editor handoff and update progress use the
   shared EpochGui loading-screen primitive, OpenGL owns the first visible

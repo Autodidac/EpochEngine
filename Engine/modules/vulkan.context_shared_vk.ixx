@@ -71,10 +71,6 @@ module;
 
 export module vulkan.context:shared_vk;
 
-#if !defined(EPOCH_VULKAN_STANDALONE)
-struct GLFWwindow; // engine-owned window integration: don't drag GLFW into the BMI
-#endif
-
 import :shared_context;
 
 import context.commandqueue;
@@ -83,6 +79,10 @@ import engine.input;
 import vulkan.camera;
 import atlas.texture;
 import spritehandle;
+
+#if !defined(EPOCH_VULKAN_STANDALONE)
+struct GLFWwindow; // engine-owned window integration: don't drag GLFW into the BMI
+#endif
 
 namespace epochnamespace::vulkancontext
 {

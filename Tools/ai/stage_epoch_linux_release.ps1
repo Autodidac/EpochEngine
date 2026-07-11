@@ -1,6 +1,8 @@
 param(
-    [string]$Version = '0.87.53',
+    [string]$Version = '0.87.54',
     [string]$Configuration = 'Clang-Release',
+    [string]$BinaryRoot = '',
+    [string]$VcpkgInstalledRoot = '',
     [string]$OutputRoot = "C:\tmp\epoch_release_v$Version"
 )
 
@@ -28,18 +30,32 @@ function To-WslPath {
 
 $repo = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $engine = Join-Path $repo 'Engine'
-$binaryRoot = Join-Path $engine "Bin\$Configuration"
+if ([string]::IsNullOrWhiteSpace($BinaryRoot)) {
+    $binaryRoot = Join-Path $engine "Bin\$Configuration"
+}
+else {
+    $binaryRoot = $BinaryRoot
+}
 $binary = Join-Path $binaryRoot 'epoch'
 $assets = Join-Path $engine 'assets'
 $font = Join-Path $assets 'fonts\Roboto-Regular.ttf'
 $license = Join-Path $repo 'LICENSE'
 $readme = Join-Path $repo 'README.md'
+$noticeScript = Join-Path $repo 'Tools\ai\collect_third_party_notices.ps1'
+if ([string]::IsNullOrWhiteSpace($VcpkgInstalledRoot)) {
+    $vcpkgInstalled = Join-Path $binaryRoot 'vcpkg_installed\x64-linux-epoch'
+}
+else {
+    $vcpkgInstalled = $VcpkgInstalledRoot
+}
 
 Require-Path -Path $binary -Label 'Linux epoch binary'
 Require-Path -Path $assets -Label 'Runtime assets'
 Require-Path -Path $font -Label 'Runtime GUI font'
 Require-Path -Path $license -Label 'License'
 Require-Path -Path $readme -Label 'README'
+Require-Path -Path $noticeScript -Label 'Third-party notice collector'
+Require-Path -Path $vcpkgInstalled -Label 'Linux vcpkg installed tree'
 
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputRoot)
 if (-not $resolvedOutput.StartsWith('C:\tmp\epoch_release_v', [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -61,9 +77,13 @@ Remove-Item -LiteralPath $verifyLogs -Recurse -Force -ErrorAction SilentlyContin
 New-Item -ItemType Directory -Path $verifyLogs -Force | Out-Null
 
 Copy-Item -LiteralPath $binary -Destination (Join-Path $stage 'epoch') -Force
+if (Test-Path -LiteralPath (Join-Path $binaryRoot 'lib')) {
+    Copy-Item -LiteralPath (Join-Path $binaryRoot 'lib') -Destination (Join-Path $stage 'lib') -Recurse -Force
+}
 Copy-Item -LiteralPath $assets -Destination (Join-Path $stage 'assets') -Recurse -Force
 Copy-Item -LiteralPath $license -Destination (Join-Path $stage 'LICENSE') -Force
 Copy-Item -LiteralPath $readme -Destination (Join-Path $stage 'README.md') -Force
+& $noticeScript -RepoRoot $repo -VcpkgInstalledRoot $vcpkgInstalled -Destination $stage
 
 $stageWsl = To-WslPath $stage
 $outWsl = To-WslPath $resolvedOutput
@@ -78,7 +98,7 @@ Remove-Item -LiteralPath (Join-Path $stage 'logs') -Recurse -Force -ErrorAction 
 Remove-Item -LiteralPath (Join-Path $stage 'cache') -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $verifyLogs -Recurse -Force -ErrorAction SilentlyContinue
 
-wsl bash -lc "set -euo pipefail; tar -C '$outWsl' -czf '$tarWsl' '$stageName'; tar -tzvf '$tarWsl' '$stageName/epoch' '$stageName/assets/fonts/Roboto-Regular.ttf'; if tar -tzf '$tarWsl' | grep -E '/(logs|cache)/'; then echo 'Release archive must not include generated logs or runtime cache.' >&2; exit 1; fi"
+wsl bash -lc "set -euo pipefail; tar -C '$outWsl' -czf '$tarWsl' '$stageName'; tar -tzvf '$tarWsl' '$stageName/epoch' '$stageName/assets/fonts/Roboto-Regular.ttf' '$stageName/THIRD_PARTY_NOTICES.txt' '$stageName/THIRD_PARTY_COMPONENTS.json'; if tar -tzf '$tarWsl' | grep -E '/(logs|cache)/'; then echo 'Release archive must not include generated logs or runtime cache.' >&2; exit 1; fi"
 
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $tarball).Hash.ToLowerInvariant()
 $lines = @()

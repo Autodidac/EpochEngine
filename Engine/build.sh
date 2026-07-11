@@ -1,20 +1,325 @@
 #!/bin/bash
-# Usage: ./build.sh [--no-vcpkg] [--updater-shell] [--vcpkg-root <path>] [--vcpkg-overlay-ports <paths>] [gcc|clang] [Debug|Release] [-- cmake args]
+# Usage: ./build.sh [options] [gcc|clang] [Debug|Release] [-- cmake args]
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MINIMUM_CMAKE_VERSION="3.28.0"
+TOOLCHAIN_LOCK="${SCRIPT_DIR}/unix/current_toolchain.env"
+if [[ ! -f "${TOOLCHAIN_LOCK}" ]]; then
+  echo "Epoch toolchain lock is missing: ${TOOLCHAIN_LOCK}" >&2
+  exit 1
+fi
+# shellcheck source=unix/current_toolchain.env
+source "${TOOLCHAIN_LOCK}"
+
+MINIMUM_CMAKE_VERSION="${EPOCH_CMAKE_VERSION}"
 
 USE_VCPKG=1
 UPDATER_SHELL_BUILD=0
 VCPKG_ROOT_OVERRIDE=""
 VCPKG_OVERLAY_PORTS_OVERRIDE=""
+BOOTSTRAP_CURRENT_TOOLCHAIN=0
+TOOL_CACHE_ROOT_OVERRIDE=""
+CHECK_TOOLCHAIN_ONLY=0
+CANCEL_FILE=""
 
 version_at_least() {
   local actual=$1
   local required=$2
   [[ "$(printf '%s\n%s\n' "$required" "$actual" | sort -V | head -n1)" == "$required" ]]
+}
+
+tool_cache_root() {
+  printf '%s\n' "${TOOL_CACHE_ROOT_OVERRIDE:-${XDG_CACHE_HOME:-${HOME}/.cache}/epoch/tools}"
+}
+
+sha256_file() {
+  local path=$1
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "${path}" | awk '{ print $1 }'
+    return 0
+  fi
+
+  if command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha256 "${path}" | awk '{ print $NF }'
+    return 0
+  fi
+
+  return 1
+}
+
+verify_sha256() {
+  local path=$1
+  local expected=$2
+  local actual
+
+  actual="$(sha256_file "${path}" 2>/dev/null || true)"
+  [[ -n "${actual}" && "${actual,,}" == "${expected,,}" ]]
+}
+
+download_verified() {
+  local url=$1
+  local destination=$2
+  local expected_sha=$3
+  local expected_size=$4
+  local progress_start=$5
+  local progress_span=$6
+  local label=$7
+  local partial="${destination}.part"
+  local downloader_pid
+  local downloaded
+  local stage_progress
+  local exit_code
+
+  mkdir -p "$(dirname "${destination}")"
+  if [[ -f "${destination}" ]] && verify_sha256 "${destination}" "${expected_sha}"; then
+    echo "[EPOCH_PROGRESS] $((progress_start + progress_span))% ${label} ready from verified cache." >&2
+    printf '%s\n' "${destination}"
+    return 0
+  fi
+
+  rm -f "${destination}"
+  if [[ -f "${partial}" ]] && (( $(wc -c < "${partial}") > expected_size )); then
+    rm -f "${partial}"
+  fi
+  echo "[build.sh] Downloading ${url}" >&2
+  if command -v curl >/dev/null 2>&1; then
+    curl --fail --location --retry 3 --retry-delay 2 --continue-at - --output "${partial}" "${url}" &
+    downloader_pid=$!
+  elif command -v wget >/dev/null 2>&1; then
+    wget --continue --output-document="${partial}" "${url}" &
+    downloader_pid=$!
+  else
+    echo "curl or wget is required to prepare the managed build toolchain." >&2
+    return 1
+  fi
+
+  while kill -0 "${downloader_pid}" >/dev/null 2>&1; do
+    if [[ -n "${CANCEL_FILE}" && -f "${CANCEL_FILE}" ]]; then
+      kill "${downloader_pid}" >/dev/null 2>&1 || true
+      wait "${downloader_pid}" 2>/dev/null || true
+      rm -f "${partial}"
+      echo "[build.sh] Current toolchain download canceled before build replacement." >&2
+      return 130
+    fi
+
+    downloaded=0
+    if [[ -f "${partial}" ]]; then
+      downloaded=$(wc -c < "${partial}")
+    fi
+    if (( expected_size > 0 )); then
+      stage_progress=$((progress_start + (downloaded * progress_span / expected_size)))
+      if (( stage_progress > progress_start + progress_span )); then
+        stage_progress=$((progress_start + progress_span))
+      fi
+      echo "[EPOCH_PROGRESS] ${stage_progress}% ${label} (${downloaded}/${expected_size} bytes)." >&2
+    fi
+    sleep 2
+  done
+
+  set +e
+  wait "${downloader_pid}"
+  exit_code=$?
+  set -e
+  if (( exit_code != 0 )); then
+    if command -v curl >/dev/null 2>&1; then
+      rm -f "${partial}"
+      curl --fail --location --retry 3 --retry-delay 2 --output "${partial}" "${url}"
+    else
+      return "${exit_code}"
+    fi
+  fi
+
+  if ! verify_sha256 "${partial}" "${expected_sha}"; then
+    echo "Checksum verification failed for ${url}." >&2
+    rm -f "${partial}"
+    return 1
+  fi
+
+  mv -f "${partial}" "${destination}"
+  echo "[EPOCH_PROGRESS] $((progress_start + progress_span))% ${label} downloaded and verified." >&2
+  printf '%s\n' "${destination}"
+}
+
+run_cancellable() {
+  local child_pid
+  local exit_code
+
+  if [[ -z "${CANCEL_FILE}" ]]; then
+    "$@"
+    return $?
+  fi
+
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "$@" &
+  else
+    "$@" &
+  fi
+  child_pid=$!
+
+  while kill -0 "${child_pid}" >/dev/null 2>&1; do
+    if [[ -f "${CANCEL_FILE}" ]]; then
+      kill -- "-${child_pid}" >/dev/null 2>&1 || kill "${child_pid}" >/dev/null 2>&1 || true
+      wait "${child_pid}" 2>/dev/null || true
+      echo "[build.sh] Build canceled before runtime replacement." >&2
+      return 130
+    fi
+    sleep 1
+  done
+
+  set +e
+  wait "${child_pid}"
+  exit_code=$?
+  set -e
+  return "${exit_code}"
+}
+
+write_tool_provenance() {
+  local destination=$1
+  local component=$2
+  local version=$3
+  local url=$4
+  local sha=$5
+
+  {
+    printf 'Component: %s\n' "${component}"
+    printf 'Version: %s\n' "${version}"
+    printf 'Source: %s\n' "${url}"
+    printf 'SHA-256: %s\n' "${sha}"
+    printf 'Prepared by: Engine/build.sh\n'
+  } > "${destination}/EPOCH_TOOL_PROVENANCE.txt"
+}
+
+bootstrap_cmake() {
+  local cache_root
+  local install_root
+  local archive
+  local staging
+  local extracted
+
+  cache_root="$(tool_cache_root)"
+  install_root="${cache_root}/cmake-${EPOCH_CMAKE_VERSION}"
+  if [[ -x "${install_root}/bin/cmake" && -f "${install_root}/LICENSE.rst" ]]; then
+    printf '%s\n' "${install_root}/bin/cmake"
+    return 0
+  fi
+
+  archive="$(download_verified \
+    "${EPOCH_CMAKE_LINUX_X64_URL}" \
+    "${cache_root}/downloads/cmake-${EPOCH_CMAKE_VERSION}-linux-x86_64.tar.gz" \
+    "${EPOCH_CMAKE_LINUX_X64_SHA256}" \
+    "${EPOCH_CMAKE_LINUX_X64_SIZE}" 34 4 "Managed CMake ${EPOCH_CMAKE_VERSION}")" || return $?
+  staging="${cache_root}/staging/cmake-${EPOCH_CMAKE_VERSION}"
+  rm -rf "${staging}"
+  mkdir -p "${staging}"
+  tar -xzf "${archive}" -C "${staging}"
+  extracted="$(find "${staging}" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+  if [[ -z "${extracted}" || ! -x "${extracted}/bin/cmake" ]]; then
+    echo "The verified CMake archive did not contain bin/cmake." >&2
+    return 1
+  fi
+  if [[ ! -f "${extracted}/doc/cmake/LICENSE.rst" ]]; then
+    echo "The verified CMake archive is missing its license; refusing the managed tool." >&2
+    return 1
+  fi
+  cp "${extracted}/doc/cmake/LICENSE.rst" "${extracted}/LICENSE.rst"
+
+  rm -rf "${install_root}"
+  mv "${extracted}" "${install_root}"
+  rm -rf "${staging}"
+  write_tool_provenance "${install_root}" "CMake" "${EPOCH_CMAKE_VERSION}" \
+    "${EPOCH_CMAKE_LINUX_X64_URL}" "${EPOCH_CMAKE_LINUX_X64_SHA256}"
+  printf '%s\n' "${install_root}/bin/cmake"
+}
+
+bootstrap_ninja() {
+  local cache_root
+  local install_root
+  local archive
+  local license
+
+  cache_root="$(tool_cache_root)"
+  install_root="${cache_root}/ninja-${EPOCH_NINJA_VERSION}"
+  if [[ -x "${install_root}/ninja" && -f "${install_root}/COPYING" ]]; then
+    printf '%s\n' "${install_root}/ninja"
+    return 0
+  fi
+
+  archive="$(download_verified \
+    "${EPOCH_NINJA_LINUX_X64_URL}" \
+    "${cache_root}/downloads/ninja-${EPOCH_NINJA_VERSION}-linux.zip" \
+    "${EPOCH_NINJA_LINUX_X64_SHA256}" \
+    "${EPOCH_NINJA_LINUX_X64_SIZE}" 38 1 "Managed Ninja ${EPOCH_NINJA_VERSION}")" || return $?
+  license="$(download_verified \
+    "${EPOCH_NINJA_LICENSE_URL}" \
+    "${cache_root}/downloads/ninja-${EPOCH_NINJA_VERSION}-COPYING" \
+    "${EPOCH_NINJA_LICENSE_SHA256}" \
+    "${EPOCH_NINJA_LICENSE_SIZE}" 39 0 "Ninja ${EPOCH_NINJA_VERSION} license")" || return $?
+  rm -rf "${install_root}"
+  mkdir -p "${install_root}"
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q "${archive}" -d "${install_root}"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -m zipfile -e "${archive}" "${install_root}"
+  else
+    echo "unzip or python3 is required to extract the managed Ninja archive." >&2
+    return 1
+  fi
+  chmod 755 "${install_root}/ninja"
+  cp "${license}" "${install_root}/COPYING"
+  write_tool_provenance "${install_root}" "Ninja" "${EPOCH_NINJA_VERSION}" \
+    "${EPOCH_NINJA_LINUX_X64_URL}" "${EPOCH_NINJA_LINUX_X64_SHA256}"
+  printf '%s\n' "${install_root}/ninja"
+}
+
+bootstrap_llvm_toolchain() {
+  local cache_root
+  local install_root
+  local archive
+  local staging
+  local clang_path
+  local extracted
+
+  cache_root="$(tool_cache_root)"
+  install_root="${cache_root}/llvm-${EPOCH_LLVM_VERSION}"
+  if [[ -x "${install_root}/bin/clang" \
+    && -x "${install_root}/bin/clang++" \
+    && -x "${install_root}/bin/clang-scan-deps" ]]; then
+    printf '%s\n' "${install_root}"
+    return 0
+  fi
+
+  archive="$(download_verified \
+    "${EPOCH_LLVM_LINUX_X64_URL}" \
+    "${cache_root}/downloads/LLVM-${EPOCH_LLVM_VERSION}-Linux-X64.tar.xz" \
+    "${EPOCH_LLVM_LINUX_X64_SHA256}" \
+    "${EPOCH_LLVM_LINUX_X64_SIZE}" 39 17 "Managed LLVM ${EPOCH_LLVM_VERSION}")" || return $?
+  staging="${cache_root}/staging/llvm-${EPOCH_LLVM_VERSION}"
+  rm -rf "${staging}"
+  mkdir -p "${staging}"
+  echo "[build.sh] Extracting LLVM ${EPOCH_LLVM_VERSION} into the executable-local tool cache." >&2
+  tar -xJf "${archive}" -C "${staging}"
+  clang_path="$(find "${staging}" -mindepth 2 -maxdepth 3 -path '*/bin/clang' -print -quit)"
+  if [[ -z "${clang_path}" ]]; then
+    echo "The verified LLVM archive did not contain bin/clang." >&2
+    return 1
+  fi
+  extracted="$(dirname "$(dirname "${clang_path}")")"
+  if [[ ! -f "${extracted}/LICENSE.TXT" && -f "${extracted}/include/llvm/Support/LICENSE.TXT" ]]; then
+    cp "${extracted}/include/llvm/Support/LICENSE.TXT" "${extracted}/LICENSE.TXT"
+  fi
+  if [[ ! -f "${extracted}/LICENSE.TXT" ]]; then
+    echo "The verified LLVM archive is missing LICENSE.TXT; refusing the managed toolchain." >&2
+    return 1
+  fi
+
+  rm -rf "${install_root}"
+  mv "${extracted}" "${install_root}"
+  rm -rf "${staging}"
+  write_tool_provenance "${install_root}" "LLVM/Clang" "${EPOCH_LLVM_VERSION}" \
+    "${EPOCH_LLVM_LINUX_X64_URL}" "${EPOCH_LLVM_LINUX_X64_SHA256}"
+  printf '%s\n' "${install_root}"
 }
 
 resolve_cmake() {
@@ -54,6 +359,11 @@ resolve_cmake() {
     fi
   done
 
+  if [[ ${BOOTSTRAP_CURRENT_TOOLCHAIN} -ne 0 ]]; then
+    bootstrap_cmake
+    return $?
+  fi
+
   return 1
 }
 
@@ -88,11 +398,16 @@ resolve_ninja() {
       continue
     fi
 
-    if version_at_least "${candidate_version}" "1.11.0"; then
+    if version_at_least "${candidate_version}" "${EPOCH_NINJA_VERSION}"; then
       printf '%s\n' "${candidate}"
       return 0
     fi
   done
+
+  if [[ ${BOOTSTRAP_CURRENT_TOOLCHAIN} -ne 0 ]]; then
+    bootstrap_ninja
+    return $?
+  fi
 
   return 1
 }
@@ -102,6 +417,18 @@ resolve_first_program() {
   for candidate in "$@"; do
     if command -v "${candidate}" >/dev/null 2>&1; then
       command -v "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+resolve_first_executable_path() {
+  local candidate
+  for candidate in "$@"; do
+    if [[ -n "${candidate}" && -x "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
       return 0
     fi
   done
@@ -122,6 +449,10 @@ compiler_version() {
 resolve_clang_scan_deps() {
   local compiler=$1
   local compiler_major
+  local compiler_path
+  local compiler_dir
+  local llvm_bindir
+  local package_path
   local configured="${CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS:-}"
 
   if [[ -n "${configured}" ]]; then
@@ -137,21 +468,95 @@ resolve_clang_scan_deps() {
   fi
 
   compiler_major="$(compiler_version "${compiler}" | cut -d. -f1)"
-  if [[ -n "${compiler_major}" ]]; then
-    if resolve_first_program "clang-scan-deps-${compiler_major}"; then
+  if [[ -z "${compiler_major}" ]]; then
+    return 1
+  fi
+
+  compiler_path="${compiler}"
+  if command -v "${compiler}" >/dev/null 2>&1; then
+    compiler_path="$(command -v "${compiler}")"
+  fi
+  if command -v readlink >/dev/null 2>&1; then
+    compiler_path="$(readlink -f "${compiler_path}" 2>/dev/null || printf '%s' "${compiler_path}")"
+  fi
+  compiler_dir="$(cd "$(dirname "${compiler_path}")" && pwd)"
+
+  if resolve_first_executable_path \
+    "${compiler_dir}/clang-scan-deps-${compiler_major}" \
+    "${compiler_dir}/clang-scan-deps" \
+    "/usr/lib/llvm-${compiler_major}/bin/clang-scan-deps-${compiler_major}" \
+    "/usr/lib/llvm-${compiler_major}/bin/clang-scan-deps" \
+    "/usr/local/lib/llvm-${compiler_major}/bin/clang-scan-deps-${compiler_major}" \
+    "/usr/local/lib/llvm-${compiler_major}/bin/clang-scan-deps" \
+    "/opt/llvm-${compiler_major}/bin/clang-scan-deps-${compiler_major}" \
+    "/opt/llvm-${compiler_major}/bin/clang-scan-deps" \
+    "/opt/llvm/bin/clang-scan-deps"; then
+    return 0
+  fi
+
+  if [[ -n "${TOOL_CACHE_ROOT_OVERRIDE}" ]]; then
+    if package_path="$(find "${TOOL_CACHE_ROOT_OVERRIDE}" -type f -path "*/bin/clang-scan-deps" -perm -u+x -print -quit 2>/dev/null)" \
+      && [[ -n "${package_path}" ]]; then
+      printf '%s\n' "${package_path}"
       return 0
     fi
   fi
 
-  resolve_first_program \
-    clang-scan-deps-20 \
-    clang-scan-deps-19 \
-    clang-scan-deps-18 \
-    clang-scan-deps-17 \
-    clang-scan-deps-16 \
-    clang-scan-deps-15 \
-    clang-scan-deps-14 \
-    clang-scan-deps
+  if command -v "llvm-config-${compiler_major}" >/dev/null 2>&1; then
+    llvm_bindir="$("llvm-config-${compiler_major}" --bindir 2>/dev/null || true)"
+    if resolve_first_executable_path \
+      "${llvm_bindir}/clang-scan-deps-${compiler_major}" \
+      "${llvm_bindir}/clang-scan-deps"; then
+      return 0
+    fi
+  fi
+
+  if command -v dpkg-query >/dev/null 2>&1; then
+    package_path="$(dpkg-query -L "clang-tools-${compiler_major}" 2>/dev/null \
+      | awk '/\/clang-scan-deps(-[0-9]+)?$/ { print; exit }')"
+    if resolve_first_executable_path "${package_path}"; then
+      return 0
+    fi
+  fi
+
+  resolve_first_program "clang-scan-deps-${compiler_major}" clang-scan-deps
+}
+
+select_clang_toolchain() {
+  local candidate_c
+  local candidate_cxx
+  local candidate_scanner
+  local managed_root
+
+  candidate_c="$(resolve_first_program "clang-${EPOCH_LLVM_MAJOR}" clang || true)"
+  candidate_cxx="$(resolve_first_program "clang++-${EPOCH_LLVM_MAJOR}" clang++ || true)"
+
+  if [[ -n "${candidate_c}" && -n "${candidate_cxx}" ]] \
+    && [[ "$(compiler_version "${candidate_c}" | cut -d. -f1)" == "$(compiler_version "${candidate_cxx}" | cut -d. -f1)" ]] \
+    && version_at_least "$(compiler_version "${candidate_cxx}")" "${EPOCH_LLVM_VERSION}"; then
+    candidate_scanner="$(resolve_clang_scan_deps "${candidate_cxx}" || true)"
+    if [[ -n "${candidate_scanner}" ]]; then
+      COMPILER_C="${candidate_c}"
+      COMPILER_CXX="${candidate_cxx}"
+      CLANG_SCAN_DEPS="${candidate_scanner}"
+      return 0
+    fi
+  fi
+
+  if [[ ${BOOTSTRAP_CURRENT_TOOLCHAIN} -ne 0 ]]; then
+    managed_root="$(bootstrap_llvm_toolchain || true)"
+    if [[ -n "${managed_root}" \
+      && -x "${managed_root}/bin/clang" \
+      && -x "${managed_root}/bin/clang++" \
+      && -x "${managed_root}/bin/clang-scan-deps" ]]; then
+      COMPILER_C="${managed_root}/bin/clang"
+      COMPILER_CXX="${managed_root}/bin/clang++"
+      CLANG_SCAN_DEPS="${managed_root}/bin/clang-scan-deps"
+      return 0
+    fi
+  fi
+
+  return 1
 }
 
 read_vcpkg_manifest_baseline() {
@@ -231,8 +636,32 @@ while [[ $# -gt 0 ]]; do
       VCPKG_OVERLAY_PORTS_OVERRIDE=$2
       shift 2
       ;;
+    --bootstrap-current-toolchain)
+      BOOTSTRAP_CURRENT_TOOLCHAIN=1
+      shift
+      ;;
+    --tool-cache-root)
+      if [[ $# -lt 2 ]]; then
+        echo "--tool-cache-root requires a writable cache path." >&2
+        exit 1
+      fi
+      TOOL_CACHE_ROOT_OVERRIDE=$2
+      shift 2
+      ;;
+    --check-toolchain)
+      CHECK_TOOLCHAIN_ONLY=1
+      shift
+      ;;
+    --cancel-file)
+      if [[ $# -lt 2 ]]; then
+        echo "--cancel-file requires a marker path." >&2
+        exit 1
+      fi
+      CANCEL_FILE=$2
+      shift 2
+      ;;
     --help|-h)
-      echo "Usage: $0 [--no-vcpkg] [--updater-shell] [--vcpkg-root <path>] [--vcpkg-overlay-ports <paths>] [gcc|clang] [Debug|Release] [-- cmake args]" >&2
+      echo "Usage: $0 [--no-vcpkg] [--updater-shell] [--bootstrap-current-toolchain] [--tool-cache-root <path>] [--cancel-file <path>] [--check-toolchain] [--vcpkg-root <path>] [--vcpkg-overlay-ports <paths>] [gcc|clang] [Debug|Release] [-- cmake args]" >&2
       exit 0
       ;;
     gcc|clang)
@@ -245,7 +674,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 [--no-vcpkg] [--updater-shell] [--vcpkg-root <path>] [--vcpkg-overlay-ports <paths>] [gcc|clang] [Debug|Release] [-- cmake args]" >&2
+  echo "Usage: $0 [--no-vcpkg] [--updater-shell] [--bootstrap-current-toolchain] [--tool-cache-root <path>] [--cancel-file <path>] [--check-toolchain] [--vcpkg-root <path>] [--vcpkg-overlay-ports <paths>] [gcc|clang] [Debug|Release] [-- cmake args]" >&2
   exit 1
 fi
 
@@ -268,45 +697,31 @@ fi
 
 case "$COMPILER_CHOICE" in
   gcc)
-    if ! COMPILER_C="$(resolve_first_program gcc-14 gcc-13 gcc-12 gcc)"; then
+    if ! COMPILER_C="$(resolve_first_program "gcc-${EPOCH_GCC_MAJOR}" gcc)"; then
       echo "Unable to locate a GCC compiler." >&2
       exit 1
     fi
 
-    if ! COMPILER_CXX="$(resolve_first_program g++-14 g++-13 g++-12 g++)"; then
+    if ! COMPILER_CXX="$(resolve_first_program "g++-${EPOCH_GCC_MAJOR}" g++)"; then
       echo "Unable to locate a G++ compiler." >&2
       exit 1
     fi
 
-    if ! version_at_least "$(compiler_version "${COMPILER_CXX}")" "14.0.0"; then
-      echo "GCC 14+ is required for the module-based Linux build. Install a newer GCC or use clang." >&2
+    if ! version_at_least "$(compiler_version "${COMPILER_CXX}")" "${EPOCH_GCC_VERSION}"; then
+      echo "GCC ${EPOCH_GCC_VERSION}+ is required by the current Epoch toolchain lock. Install current GCC or use Clang ${EPOCH_LLVM_VERSION}." >&2
       exit 1
     fi
 
     COMPILER_NAME="GCC"
     ;;
   clang)
-    if ! COMPILER_C="$(resolve_first_program clang-20 clang-19 clang-18 clang-17 clang-16 clang-15 clang-14 clang)"; then
-      echo "Unable to locate a Clang compiler." >&2
+    if ! select_clang_toolchain; then
+      echo "Unable to locate the current LLVM ${EPOCH_LLVM_VERSION} toolchain with clang, clang++, and matching clang-scan-deps." >&2
+      echo "Install Clang ${EPOCH_LLVM_MAJOR} and clang-tools-${EPOCH_LLVM_MAJOR}, or use --bootstrap-current-toolchain with a writable tool cache." >&2
       exit 1
     fi
 
-    if ! COMPILER_CXX="$(resolve_first_program clang++-20 clang++-19 clang++-18 clang++-17 clang++-16 clang++-15 clang++-14 clang++)"; then
-      echo "Unable to locate a Clang++ compiler." >&2
-      exit 1
-    fi
-
-    if ! version_at_least "$(compiler_version "${COMPILER_CXX}")" "18.0.0"; then
-      echo "Clang 18+ is required for the module-based Linux build. Install a newer Clang toolchain." >&2
-      exit 1
-    fi
-
-    if ! CLANG_SCAN_DEPS="$(resolve_clang_scan_deps "${COMPILER_CXX}")"; then
-      echo "Unable to locate clang-scan-deps for ${COMPILER_CXX}." >&2
-      echo "Install the matching clang-tools package, such as clang-tools-18 for clang++-18, or set CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS." >&2
-      exit 1
-    fi
-
+    echo "[build.sh] Clang toolchain: ${COMPILER_CXX}; module scanner: ${CLANG_SCAN_DEPS}." >&2
     COMPILER_NAME="Clang"
     ;;
   *)
@@ -368,7 +783,8 @@ if [[ $HAS_VERSION_OVERRIDES -ne 0 ]]; then
   fi
 fi
 
-BUILD_DIR="${SCRIPT_DIR}/Bin/${COMPILER_NAME}-${BUILD_TYPE}${BUILD_VARIANT_SUFFIX}${BUILD_VERSION_SUFFIX}"
+BUILD_ROOT="${EPOCH_BUILD_ROOT:-${SCRIPT_DIR}/Bin}"
+BUILD_DIR="${BUILD_ROOT%/}/${COMPILER_NAME}-${BUILD_TYPE}${BUILD_VARIANT_SUFFIX}${BUILD_VERSION_SUFFIX}"
 GENERATOR_NAME="${EPOCH_CMAKE_GENERATOR:-Ninja}"
 
 if ! CMAKE_BIN="$(resolve_cmake)"; then
@@ -399,13 +815,15 @@ cmake_args=(
   -DEPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_REVISION=
 )
 
-if [[ "$COMPILER_CHOICE" == "clang" ]]; then
-  cmake_args+=(-DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="$CLANG_SCAN_DEPS")
+if [[ "$(uname -s)" == "Linux" ]]; then
+  cmake_args+=(
+    -DVCPKG_TARGET_TRIPLET=x64-linux-epoch
+    -DVCPKG_OVERLAY_TRIPLETS="${SCRIPT_DIR}/cmake/triplets"
+  )
 fi
 
-if [[ "$(uname -s)" == "Linux" ]]; then
-  cmake_args+=(-DEPOCH_ENABLE_VULKAN=OFF)
-  cmake_args+=(-DEPOCH_ENABLE_SFML=OFF)
+if [[ "$COMPILER_CHOICE" == "clang" ]]; then
+  cmake_args+=(-DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="$CLANG_SCAN_DEPS")
 fi
 
 if [[ $UPDATER_SHELL_BUILD -ne 0 ]]; then
@@ -424,13 +842,25 @@ fi
 
 if [[ "${GENERATOR_NAME}" == "Ninja" ]]; then
   if ! NINJA_BIN="$(resolve_ninja)"; then
-    echo "Ninja 1.11+ is required when using the Ninja generator with C++ modules." >&2
+    echo "Ninja ${EPOCH_NINJA_VERSION}+ is required when using the Ninja generator with C++ modules." >&2
     echo "Install a newer Ninja in WSL, add it to PATH, or set EPOCH_NINJA to its full path." >&2
     exit 1
   fi
 
   cmake_args+=(-DCMAKE_MAKE_PROGRAM="$NINJA_BIN")
 fi
+
+# Keep vcpkg's port builds on the same verified tools as the engine build.
+# Current vcpkg otherwise downloads its own older CMake even when a newer
+# project CMake and Ninja were selected above.
+tool_path_prefix="$(dirname "$CMAKE_BIN"):$(dirname "$COMPILER_CXX")"
+if [[ "${GENERATOR_NAME}" == "Ninja" ]]; then
+  tool_path_prefix="${tool_path_prefix}:$(dirname "$NINJA_BIN")"
+fi
+export PATH="${tool_path_prefix}:${PATH}"
+export VCPKG_FORCE_SYSTEM_BINARIES=1
+export CC="${COMPILER_C}"
+export CXX="${COMPILER_CXX}"
 
 if [[ $USE_VCPKG -ne 0 ]]; then
   detect_vcpkg_root() {
@@ -514,11 +944,24 @@ else
   echo "[build.sh] Proceeding without vcpkg integration; system-installed dependencies will be used." >&2
 fi
 
+if [[ ${CHECK_TOOLCHAIN_ONLY} -ne 0 ]]; then
+  if [[ "${GENERATOR_NAME}" == "Ninja" ]]; then
+    echo "[build.sh] Toolchain check passed: ${COMPILER_NAME} ${BUILD_TYPE}; CMake ${CMAKE_BIN}; Ninja ${NINJA_BIN}." >&2
+  else
+    echo "[build.sh] Toolchain check passed: ${COMPILER_NAME} ${BUILD_TYPE}; CMake ${CMAKE_BIN}; generator ${GENERATOR_NAME}." >&2
+  fi
+  exit 0
+fi
+
 cmake_args+=("${EXTRA_CMAKE_ARGS[@]}")
 
-"$CMAKE_BIN" "${cmake_args[@]}"
+echo "[EPOCH_PROGRESS] 58% Linux CMake configure started." >&2
+run_cancellable "$CMAKE_BIN" "${cmake_args[@]}"
+echo "[EPOCH_PROGRESS] 62% Linux CMake configure completed." >&2
 
-"$CMAKE_BIN" --build "$BUILD_DIR" --verbose
+echo "[EPOCH_PROGRESS] 64% Linux full-engine build started." >&2
+run_cancellable "$CMAKE_BIN" --build "$BUILD_DIR" --verbose
+echo "[EPOCH_PROGRESS] 86% Linux full-engine build completed." >&2
 
 if "$CMAKE_BIN" -LA -N "$BUILD_DIR" | grep -q "DOXYGEN_FOUND:BOOL=1"; then
   echo "Generating Epoch API documentation..."

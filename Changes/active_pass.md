@@ -285,3 +285,12 @@ Do not broaden scope to compensate.
 Durable cross-pass mission memory lives in `Changes/mission_cache.md`. Keep this
 file focused on the current gate; do not widen a source pass because the cache
 contains broader roadmap work.
+
+## v0.87.54 Release Gate
+
+- Linux full-engine Release builds with current Clang 22.1.8, CMake 4.4.0,
+  Ninja 1.13.2, and vcpkg 2026.06.24.
+- OpenGL, Vulkan, SDL, SFML, Raylib, and Software configure and link together;
+  SFML is the only shared vcpkg component and is staged under `lib/`.
+- Linux CTest and the build-safe engine contract pass from an asset-bearing
+  output. Windows MSVC 2022 Release and the same contract also pass.

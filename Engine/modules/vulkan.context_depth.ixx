@@ -39,6 +39,9 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
+#include <../src/context.vulkan.hpp>
+#include <compare>
+#include <vulkan/vulkan.hpp>
 #include <stdexcept>
 
 export module vulkan.context:depth;
@@ -49,7 +52,7 @@ namespace epochnamespace::vulkancontext {
 
     // NOTE: your Vulkan-Hpp config apparently does NOT have vk::FormatFeatureFlags.
     // Use vk::Flags<vk::FormatFeatureFlagBits> instead.
-    export vk::Format Application::findSupportedFormat(
+    vk::Format Application::findSupportedFormat(
         const std::vector<vk::Format>& candidates,
         vk::ImageTiling tiling,
         vk::Flags<vk::FormatFeatureFlagBits> requiredFeatures)
@@ -72,7 +75,7 @@ namespace epochnamespace::vulkancontext {
         throw std::runtime_error("Failed to find supported format!");
     }
 
-    export vk::Format Application::findDepthFormat()
+    vk::Format Application::findDepthFormat()
     {
         return findSupportedFormat(
             { vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint },
@@ -81,7 +84,7 @@ namespace epochnamespace::vulkancontext {
         );
     }
 
-    export void Application::createDepthResources()
+    void Application::createDepthResources()
     {
         const vk::Format depthFormat = findDepthFormat();
 
@@ -125,7 +128,7 @@ namespace epochnamespace::vulkancontext {
         depthImageView = createImageViewUnique(*depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
     }
 
-    export void Application::createFramebuffers()
+    void Application::createFramebuffers()
     {
         framebuffers.resize(swapChainImageViews.size());
 

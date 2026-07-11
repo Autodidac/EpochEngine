@@ -61,7 +61,7 @@ import core.path;
 
 namespace epochnamespace::vulkancontext
 {
-    export void Application::createRenderPass()
+    void Application::createRenderPass()
     {
         vk::AttachmentDescription colorAttachment{};
         colorAttachment.format = swapChainImageFormat;

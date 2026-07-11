@@ -9,19 +9,25 @@ docs flow to stay predictable.
 Run from `Engine/`:
 
 ```bash
-./build.sh [--no-vcpkg] [--updater-shell] [gcc|clang] [Debug|Release] [-- <extra cmake args>]
+./build.sh [--no-vcpkg] [--updater-shell] [--bootstrap-current-toolchain] [--tool-cache-root <path>] [gcc|clang] [Debug|Release] [-- <extra cmake args>]
 ```
 
 What it does:
 
 - configures from the `Engine/` source root
-- builds into out-of-tree locations under `Engine/Bin/`
+- builds into out-of-tree locations under `Engine/Bin/`, or under
+  `EPOCH_BUILD_ROOT` when a native-filesystem build root is required
 - enables module scanning flags
 - uses vcpkg by default on Windows, Linux, and WSL when `VCPKG_ROOT` or a
   normal local vcpkg checkout can be found
 - verifies that the manifest builtin baseline exists in the local vcpkg clone
   and fetches it before configure when the clone is stale
 - resolves `clang-scan-deps` for Clang module builds and passes it to CMake
+- verifies or bootstraps the pinned CMake, LLVM/Clang, and Ninja toolchain,
+  then keeps vcpkg port builds on that same compiler/tool set
+- selects the tracked `x64-linux-epoch` triplet on Linux; the graph remains
+  static except for SFML so SFML and Raylib can coexist without duplicate STB
+  ownership
 - generates docs when Doxygen is available
 
 `--no-vcpkg` is an explicit diagnostic/system-package escape hatch. It is not
@@ -107,8 +113,8 @@ GitHub CI/workflow discipline:
   exists
 - do not depend on GUI launch, desktop focus, or screenshot capture in CI
 - keep the Linux Clang engine lane as build-only graphics coverage: it should
-  build the real `epoch` target with runner-safe OpenGL/software/SFML
-  dependencies, then run headless CTest without opening windows
+  build the real `epoch` target with OpenGL, Vulkan, SDL, SFML, Raylib, and
+  software dependencies, then run headless CTest without opening windows
 - `v0.84.35` Windows proof adds DirectX/D3D11 to the local multicontext screenshot
   matrix. DirectX is Windows-only and should be disabled automatically for Linux
   packages and hosted Linux lanes.
@@ -267,8 +273,8 @@ Before publishing a Linux/WSL2 asset:
   Linux compiler path
 - keep vcpkg enabled for the normal Linux release and updater-source rebuild
   lanes; `--no-vcpkg` is not the default package/update path
-- ensure `clang-scan-deps` is installed, normally from `clang-tools-18` when
-  building with Clang 18
+- use the pinned Clang 22.1.8 toolchain and matching `clang-scan-deps`, normally
+  through `--bootstrap-current-toolchain`
 - do not publish the Linux package while the hosted `linux-clang-engine` build
   lane is failing
 - verify the Linux package reports the same version as the tag/source archive

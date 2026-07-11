@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.87.54] - Current Linux toolchain and multicontext release
+
+- Pinned and checksum-verified CMake 4.4.0, LLVM/Clang 22.1.8 with its matching
+  module scanner, Ninja 1.13.2, and the vcpkg 2026.06.24 registry for Linux
+  source updates.
+- Restored the full Linux renderer build with OpenGL, Vulkan, SDL, SFML,
+  Raylib, and Software enabled together under C++23 modules.
+- Added the `x64-linux-epoch` vcpkg triplet: dependencies remain static except
+  SFML, preventing its embedded STB implementation from colliding with
+  Raylib's while retaining a compact package.
+- Fixed strict Clang module ownership in Vulkan partitions and made the command
+  queue own construction of its mutex-bearing state across module boundaries.
+- Added verified third-party notices and tool-license provenance to release
+  staging, plus real updater progress evidence from the Linux build script.
+
 ## [v0.87.52] - Linux updater repair
 
 - Repaired Linux source updates so packaged installs resolve an installed vcpkg

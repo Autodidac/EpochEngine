@@ -57,7 +57,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl_context_detail.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_upload_bridge.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)..\Changes\roadmap.md">
@@ -353,9 +352,6 @@
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.cpp">
-      <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_upload_bridge.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl.backend.cpp">
