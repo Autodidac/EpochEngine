@@ -12,7 +12,7 @@ sudo apt install -y \
   git curl zip unzip tar pkg-config autoconf automake libtool \
   libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev \
   libx11-dev libxi-dev libxrandr-dev libxrender-dev \
-  libxext-dev libxft-dev libxcursor-dev libxinerama-dev libxtst-dev
+  libudev-dev libxext-dev libxft-dev libxcursor-dev libxinerama-dev libxtst-dev
 ```
 
 Install LLVM/Clang 22.1.8 plus its matching `clang-scan-deps`, CMake 4.4.0,

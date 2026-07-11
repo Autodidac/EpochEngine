@@ -211,6 +211,7 @@ jobs:
             libgl1-mesa-dev \
             libvulkan-dev \
             libsfml-dev \
+            libudev-dev \
             libx11-dev \
             libxcursor-dev \
             libxext-dev \
