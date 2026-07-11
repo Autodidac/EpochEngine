@@ -114,8 +114,40 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      - name: Install modern CMake and Ninja
-        run: python -m pip install cmake==4.4.0 ninja==1.13.2
+      - name: Install modern CMake
+        run: python -m pip install cmake==4.4.0
+
+      - name: Install current Ninja (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'ninja-win.zip'
+          $installRoot = Join-Path $env:RUNNER_TEMP 'ninja-1.13.2'
+          Invoke-WebRequest `
+            -Uri 'https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip' `
+            -OutFile $archive
+          $actualHash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          $expectedHash = '07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65'
+          if ($actualHash -ne $expectedHash) {
+            throw "Ninja archive checksum mismatch: expected $expectedHash, got $actualHash"
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $installRoot -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $installRoot
+
+      - name: Install current Ninja (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/ninja-linux.zip"
+          install_root="$RUNNER_TEMP/ninja-1.13.2"
+          curl --fail --location --retry 3 \
+            https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip \
+            --output "$archive"
+          echo "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6  $archive" | sha256sum --check --strict
+          mkdir -p "$install_root"
+          unzip -q -o "$archive" -d "$install_root"
+          chmod 755 "$install_root/ninja"
+          echo "$install_root" >> "$GITHUB_PATH"
 
       - name: Install current LLVM
         if: runner.os == 'Linux' && matrix.install_llvm_current == true
