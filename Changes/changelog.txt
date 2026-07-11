@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.87.55] - Post-release source checkpoint
+
+- Advanced `main` after the verified `v0.87.54` Windows and Linux release so
+  packaged installs can detect the newer source-update line while stable
+  package metadata remains pinned to `v0.87.54`.
+
 ## [v0.87.54] - Current Linux toolchain and multicontext release
 
 - Pinned and checksum-verified CMake 4.4.0, LLVM/Clang 22.1.8 with its matching
