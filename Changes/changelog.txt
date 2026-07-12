@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.87.63] - Post-release source checkpoint
+
+- Advanced `main` after the verified `v0.87.62` Windows/Linux runtime release
+  to exercise the fresh contents-API source discovery path from packaged
+  installs without changing the packaged stable version.
+
 ## [v0.87.62] - Fresh source discovery release
 
 - Moved source-version discovery from GitHub's eventually consistent raw
