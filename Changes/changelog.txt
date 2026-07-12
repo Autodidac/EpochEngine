@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.87.62] - Fresh source discovery release
+
+- Moved source-version discovery from GitHub's eventually consistent raw
+  branch endpoint to the contents API with explicit raw-media and no-cache
+  headers, so a newly advanced source checkpoint is visible immediately.
+- Preserved the v0.87.60 Linux process lock, isolated update runs, prerequisite
+  gate, and rebuilt runtime-library handoff in the replacement packages.
+
 ## [v0.87.61] - Post-release source checkpoint
 
 - Advanced `main` after the verified `v0.87.60` Windows/Linux runtime release

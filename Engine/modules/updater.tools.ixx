@@ -344,13 +344,17 @@ namespace epochnamespace::updater
         const std::string command =
             "\"curl.exe\" -L --fail --silent --show-error "
             "-A \"EpochUpdater\" "
-            "-H \"Accept: application/octet-stream, application/vnd.github+json\" "
+            "-H \"Accept: application/vnd.github.raw+json, application/octet-stream, application/vnd.github+json\" "
             "-H \"X-GitHub-Api-Version: 2022-11-28\" "
+            "-H \"Cache-Control: no-cache\" "
             "-o " + detail::quote_shell_arg(output_path) + " "
             + detail::quote_shell_arg(url);
 #else
         const std::string command =
             "wget --quiet --show-progress "
+            "--header=\"Accept: application/vnd.github.raw+json\" "
+            "--header=\"X-GitHub-Api-Version: 2022-11-28\" "
+            "--header=\"Cache-Control: no-cache\" "
             "--output-document=" + detail::quote_shell_arg(output_path) + " "
             + detail::quote_shell_arg(url);
 #endif

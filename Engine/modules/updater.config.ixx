@@ -170,10 +170,11 @@ namespace epochnamespace::updater
 
     export inline std::string PROJECT_SOURCE_VERSION_URL()
     {
-        return std::string{ GITHUB_RAW_BASE }
+        return std::string{ GITHUB_API_BASE }
             + std::string{ OWNER } + "/"
-            + std::string{ REPO } + "/"
-            + std::string{ BRANCH } + "/Engine/modules/engine.version.ixx";
+            + std::string{ REPO }
+            + "/contents/Engine/modules/engine.version.ixx?ref="
+            + std::string{ BRANCH };
     }
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()
