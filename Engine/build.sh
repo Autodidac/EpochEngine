@@ -571,43 +571,139 @@ read_vcpkg_manifest_baseline() {
 
 ensure_vcpkg_baseline_available() {
   local baseline=$1
-  local remote
 
   if [[ -z "${baseline}" ]]; then
     return 0
   fi
 
-  if git -C "${VCPKG_ROOT}" show "${baseline}:versions/baseline.json" >/dev/null 2>&1; then
+  if [[ -e "${VCPKG_ROOT}/.git" ]] \
+    && git -C "${VCPKG_ROOT}" cat-file -e "${baseline}^{commit}" >/dev/null 2>&1 \
+    && git -C "${VCPKG_ROOT}" merge-base --is-ancestor "${baseline}" HEAD >/dev/null 2>&1 \
+    && [[ -f "${VCPKG_ROOT}/versions/baseline.json" ]]; then
     return 0
   fi
 
-  if [[ ! -d "${VCPKG_ROOT}/.git" ]]; then
-    echo "vcpkg checkout '${VCPKG_ROOT}' cannot resolve builtin-baseline '${baseline}' and is not a Git checkout." >&2
-    echo "Use a full vcpkg Git checkout, run 'git -C ${VCPKG_ROOT} fetch --tags --prune', or set VCPKG_ROOT to a checkout that contains the baseline." >&2
-    exit 1
-  fi
+  echo "[build.sh] vcpkg registry at '${VCPKG_ROOT}' is older than manifest baseline '${baseline}'." >&2
+  return 1
+}
 
+prepare_managed_vcpkg_baseline() {
+  local baseline=$1
+  local cache_root
+  local short_baseline
+  local install_root
+  local staging_root
+  local bootstrap_script
+
+  if [[ -z "${baseline}" || ${BOOTSTRAP_CURRENT_TOOLCHAIN} -eq 0 ]]; then
+    return 1
+  fi
   if ! command -v git >/dev/null 2>&1; then
-    echo "vcpkg checkout '${VCPKG_ROOT}' is missing builtin-baseline '${baseline}', but git is not available to fetch it." >&2
-    exit 1
+    echo "git is required to prepare the managed vcpkg baseline." >&2
+    return 1
   fi
 
-  remote="$(git -C "${VCPKG_ROOT}" remote 2>/dev/null | head -n1 || true)"
-  if [[ -z "${remote}" ]]; then
-    echo "vcpkg checkout '${VCPKG_ROOT}' has no Git remote and cannot fetch builtin-baseline '${baseline}'." >&2
-    exit 1
+  cache_root="$(tool_cache_root)"
+  short_baseline="${baseline:0:12}"
+  install_root="${cache_root}/vcpkg-${short_baseline}"
+  staging_root="${cache_root}/staging/vcpkg-${short_baseline}-$$"
+
+  if [[ -x "${install_root}/vcpkg" \
+    && -f "${install_root}/scripts/buildsystems/vcpkg.cmake" \
+    && -f "${install_root}/versions/baseline.json" \
+    && -d "${install_root}/.git" \
+    && "$(git -C "${install_root}" rev-parse HEAD 2>/dev/null || true)" == "${baseline}" ]]; then
+    printf '%s\n' "${install_root}"
+    return 0
   fi
 
-  echo "[build.sh] Fetching vcpkg builtin-baseline ${baseline} from ${remote}." >&2
-  git -C "${VCPKG_ROOT}" fetch --tags --prune "${remote}" "${baseline}" >/dev/null 2>&1 \
-    || git -C "${VCPKG_ROOT}" fetch --tags --prune "${remote}" >/dev/null 2>&1 \
-    || true
+  mkdir -p "${cache_root}/staging"
+  rm -rf "${staging_root}"
+  echo "[build.sh] Preparing managed vcpkg baseline ${baseline} in the updater tool cache." >&2
+  run_cancellable git init -q "${staging_root}" || return $?
+  run_cancellable git -C "${staging_root}" remote add origin https://github.com/microsoft/vcpkg.git || return $?
+  run_cancellable git -C "${staging_root}" fetch --depth 1 origin "${baseline}" || return $?
+  run_cancellable git -C "${staging_root}" checkout --detach -q FETCH_HEAD || return $?
 
-  if ! git -C "${VCPKG_ROOT}" show "${baseline}:versions/baseline.json" >/dev/null 2>&1; then
-    echo "vcpkg checkout '${VCPKG_ROOT}' still cannot resolve builtin-baseline '${baseline}' after fetch." >&2
-    echo "Run 'git -C ${VCPKG_ROOT} fetch --tags --prune ${remote}' and retry, or update VCPKG_ROOT." >&2
-    exit 1
+  bootstrap_script="${staging_root}/bootstrap-vcpkg.sh"
+  if [[ ! -x "${bootstrap_script}" ]]; then
+    echo "Managed vcpkg baseline did not contain bootstrap-vcpkg.sh." >&2
+    rm -rf "${staging_root}"
+    return 1
   fi
+  if [[ ! -f "${staging_root}/LICENSE.txt" && ! -f "${staging_root}/LICENSE" ]]; then
+    echo "Managed vcpkg baseline is missing its license; refusing the managed tool." >&2
+    rm -rf "${staging_root}"
+    return 1
+  fi
+
+  (cd "${staging_root}" && run_cancellable ./bootstrap-vcpkg.sh -disableMetrics) || return $?
+  if [[ ! -x "${staging_root}/vcpkg" ]]; then
+    echo "Managed vcpkg bootstrap completed without producing the vcpkg executable." >&2
+    rm -rf "${staging_root}"
+    return 1
+  fi
+
+  rm -rf "${install_root}"
+  mv "${staging_root}" "${install_root}"
+  {
+    printf 'Component: vcpkg\n'
+    printf 'Release: %s\n' "${EPOCH_VCPKG_RELEASE}"
+    printf 'Git commit: %s\n' "${baseline}"
+    printf 'Source: https://github.com/microsoft/vcpkg.git\n'
+    printf 'Prepared by: Engine/build.sh\n'
+  } > "${install_root}/EPOCH_TOOL_PROVENANCE.txt"
+  printf '%s\n' "${install_root}"
+}
+
+prepare_vcpkg_policy_overlays() {
+  local root=$1
+  local baseline=$2
+  local overlay_root
+  local port
+  local source_port
+  local overlay_port
+  local portfile
+  local staged_any=0
+
+  overlay_root="$(tool_cache_root)/vcpkg-overlays-${baseline:0:12}"
+  rm -rf "${overlay_root}"
+  mkdir -p "${overlay_root}"
+
+  for port in freetype glad glfw3 libogg libvorbis raylib sdl3 sfml shaderc spirv-tools zlib; do
+    source_port="${root}/ports/${port}"
+    [[ -d "${source_port}" ]] || continue
+    overlay_port="${overlay_root}/${port}"
+    cp -R "${source_port}" "${overlay_port}"
+    portfile="${overlay_port}/portfile.cmake"
+    [[ -f "${portfile}" ]] || continue
+
+    if ! grep -q 'CMAKE_POLICY_VERSION_MINIMUM=3.5' "${portfile}"; then
+      awk '
+        BEGIN { inserted = 0 }
+        {
+          print
+          if (!inserted && $0 ~ /^[[:space:]]*OPTIONS[[:space:]]*$/) {
+            print "        -DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+            inserted = 1
+          } else if (!inserted && $0 ~ /vcpkg_cmake_configure\(/) {
+            print "    OPTIONS"
+            print "        -DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+            inserted = 1
+          }
+        }
+      ' "${portfile}" > "${portfile}.tmp"
+      mv "${portfile}.tmp" "${portfile}"
+    fi
+    staged_any=1
+  done
+
+  if [[ ${staged_any} -eq 0 ]]; then
+    rm -rf "${overlay_root}"
+    return 1
+  fi
+
+  printf '%s\n' "${overlay_root}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -922,6 +1018,29 @@ if [[ $USE_VCPKG -ne 0 ]]; then
     exit 1
   fi
 
+  manifest_baseline="$(read_vcpkg_manifest_baseline)"
+  if ! ensure_vcpkg_baseline_available "${manifest_baseline}"; then
+    if [[ ${BOOTSTRAP_CURRENT_TOOLCHAIN} -eq 0 ]]; then
+      echo "Update the selected vcpkg checkout so its working registry contains the manifest baseline, or use --bootstrap-current-toolchain." >&2
+      exit 1
+    fi
+
+    if ! VCPKG_ROOT="$(prepare_managed_vcpkg_baseline "${manifest_baseline}")"; then
+      echo "Failed to prepare a managed vcpkg registry for manifest baseline '${manifest_baseline}'." >&2
+      exit 1
+    fi
+    echo "[build.sh] Using managed vcpkg registry: ${VCPKG_ROOT}" >&2
+
+    if managed_overlays="$(prepare_vcpkg_policy_overlays "${VCPKG_ROOT}" "${manifest_baseline}" || true)" \
+      && [[ -n "${managed_overlays}" ]]; then
+      VCPKG_OVERLAY_PORTS_OVERRIDE="${managed_overlays}"
+      echo "[build.sh] Rebuilt updater policy overlays from the managed vcpkg registry." >&2
+    else
+      VCPKG_OVERLAY_PORTS_OVERRIDE=""
+      echo "[build.sh] Managed vcpkg registry did not require policy overlays." >&2
+    fi
+  fi
+
   export VCPKG_ROOT
 
   VCPKG_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
@@ -929,8 +1048,6 @@ if [[ $USE_VCPKG -ne 0 ]]; then
     echo "Unable to locate vcpkg toolchain file at '${VCPKG_TOOLCHAIN_FILE}'." >&2
     exit 1
   fi
-
-  ensure_vcpkg_baseline_available "$(read_vcpkg_manifest_baseline)"
 
   if [[ -z "${VCPKG_FEATURE_FLAGS:-}" ]]; then
     export VCPKG_FEATURE_FLAGS=manifests

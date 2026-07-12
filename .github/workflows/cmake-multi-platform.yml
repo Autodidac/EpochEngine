@@ -223,6 +223,11 @@ jobs:
             libxtst-dev \
             libwayland-dev libxkbcommon-dev wayland-protocols
 
+      - name: Install Linux release smoke display
+        if: runner.os == 'Linux' && matrix.name == 'linux-clang-engine'
+        shell: bash
+        run: sudo apt-get install -y xvfb xauth
+
       - name: Configure (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -252,3 +257,60 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: ${{ matrix.test_command }}
+
+      - name: Stage Linux release package
+        if: runner.os == 'Linux' && matrix.name == 'linux-clang-engine'
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision="$(sed -n 's/^#  define EPOCH_VERSION_REVISION_VALUE \([0-9][0-9]*\)$/\1/p' "$GITHUB_WORKSPACE/Engine/modules/engine.version.ixx")"
+          test -n "$revision"
+          version="0.87.$revision"
+          binary_root="$GITHUB_WORKSPACE/Engine/Bin/Clang-Release"
+          artifact_root="$RUNNER_TEMP/epoch-release"
+          stage_name="epoch_linux_x64_v$version"
+          stage="$artifact_root/$stage_name"
+
+          rm -rf "$artifact_root"
+          mkdir -p "$stage"
+          cp "$binary_root/epoch" "$stage/epoch"
+          cp -a "$GITHUB_WORKSPACE/Engine/assets" "$stage/assets"
+          cp "$GITHUB_WORKSPACE/README.md" "$stage/README.md"
+          cp "$GITHUB_WORKSPACE/LICENSE" "$stage/LICENSE"
+          if [[ -d "$binary_root/lib" ]]; then
+            cp -a "$binary_root/lib" "$stage/lib"
+          fi
+
+          pwsh -NoProfile -File "$GITHUB_WORKSPACE/Tools/ai/collect_third_party_notices.ps1" \
+            -RepoRoot "$GITHUB_WORKSPACE" \
+            -VcpkgInstalledRoot "$binary_root/vcpkg_installed/x64-linux-epoch" \
+            -Destination "$stage"
+
+          chmod 755 "$stage/epoch"
+          cd "$stage"
+          test -f assets/fonts/Roboto-Regular.ttf
+          test -f THIRD_PARTY_NOTICES.txt
+          test -f THIRD_PARTY_COMPONENTS.json
+          test "$(readelf -d ./epoch | sed -n 's/.*RUNPATH.*\[\(.*\)\].*/\1/p')" = '$ORIGIN/lib'
+          ! ldd ./epoch | grep -F 'not found'
+          ! ldd ./epoch | grep -E 'vcpkg_installed|/home/runner/work/'
+          ./epoch --version | grep -F "Epoch v$version"
+          ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass'
+          timeout --signal=INT --kill-after=3s 30s \
+            xvfb-run -a ./epoch --editor --renderer opengl --smoke
+
+          rm -rf logs cache
+          cd "$artifact_root"
+          tar -czf "$stage_name.tar.gz" "$stage_name"
+          ! tar -tzf "$stage_name.tar.gz" | grep -E '/(logs|cache)/'
+          sha256sum "$stage_name.tar.gz" > "v$version"_checksums.txt
+
+      - name: Upload Linux release package
+        if: runner.os == 'Linux' && matrix.name == 'linux-clang-engine'
+        uses: actions/upload-artifact@v4
+        with:
+          name: epoch-linux-release
+          path: |
+            ${{ runner.temp }}/epoch-release/epoch_linux_x64_v*.tar.gz
+            ${{ runner.temp }}/epoch-release/v*_checksums.txt
+          if-no-files-found: error

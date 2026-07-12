@@ -513,6 +513,9 @@ namespace epochnamespace::updater
             const bool wait_for_exit,
             int* const exit_code);
 
+        [[nodiscard]] inline std::filesystem::path find_or_prepare_git(
+            const std::filesystem::path& log_path);
+
         [[nodiscard]] inline std::filesystem::path make_temp_download_path(
             const std::string_view stem);
 
@@ -712,6 +715,61 @@ namespace epochnamespace::updater
             return executable;
         }
 
+        [[nodiscard]] inline bool vcpkg_registry_supports_manifest(
+            const std::filesystem::path& root,
+            const std::filesystem::path& manifest_root,
+            const std::filesystem::path& log_path)
+        {
+            const std::string baseline = read_manifest_builtin_baseline(manifest_root);
+            if (baseline.empty())
+                return true;
+
+            std::error_code ec;
+            if (!std::filesystem::exists(root / ".git", ec)
+                || !std::filesystem::exists(root / "versions" / "baseline.json", ec))
+            {
+                append_log_line(
+                    log_path,
+                    "[WARN] Installed vcpkg cannot prove registry compatibility with manifest baseline "
+                    + baseline + ": " + root.string());
+                return false;
+            }
+
+            const auto git_exe = find_or_prepare_git(log_path);
+            if (git_exe.empty())
+            {
+                append_log_line(
+                    log_path,
+                    "[WARN] Git is unavailable, so the installed vcpkg registry cannot be validated: "
+                    + root.string());
+                return false;
+            }
+
+            int ancestry_exit = -1;
+            const bool launched = run_process_hidden(
+                git_exe,
+                {
+                    "-C",
+                    root.string(),
+                    "merge-base",
+                    "--is-ancestor",
+                    baseline,
+                    "HEAD"
+                },
+                root,
+                {},
+                true,
+                &ancestry_exit);
+            if (launched && ancestry_exit == 0)
+                return true;
+
+            append_log_line(
+                log_path,
+                "[WARN] Installed vcpkg registry is older than manifest baseline "
+                + baseline + "; using managed vcpkg instead: " + root.string());
+            return false;
+        }
+
         inline void append_unique_vcpkg_candidate(
             std::vector<std::filesystem::path>& candidates,
             const std::filesystem::path& candidate)
@@ -734,6 +792,7 @@ namespace epochnamespace::updater
         }
 
         [[nodiscard]] inline std::filesystem::path find_installed_vcpkg(
+            const std::filesystem::path& manifest_root,
             const std::filesystem::path& log_path)
         {
             std::vector<std::filesystem::path> candidates;
@@ -769,14 +828,18 @@ namespace epochnamespace::updater
             for (const auto& candidate : candidates)
             {
                 const auto executable = validated_vcpkg_executable_in_root(candidate);
-                if (!executable.empty())
+                if (executable.empty())
+                {
+                    append_log_line(log_path, "[WARN] Ignoring unusable vcpkg root: " + candidate.string());
+                    continue;
+                }
+
+                if (vcpkg_registry_supports_manifest(candidate, manifest_root, log_path))
                 {
                     append_log_line(log_path, "[INFO] Using installed vcpkg: " + candidate.string());
                     log_info("Using installed vcpkg toolchain.");
                     return executable;
                 }
-
-                append_log_line(log_path, "[WARN] Ignoring unusable vcpkg root: " + candidate.string());
             }
             return {};
         }
@@ -1604,7 +1667,7 @@ namespace epochnamespace::updater
             const std::filesystem::path& manifest_root,
             const std::filesystem::path& log_path)
         {
-            if (const auto installed = find_installed_vcpkg(log_path);
+            if (const auto installed = find_installed_vcpkg(manifest_root, log_path);
                 !installed.empty())
             {
                 return installed;

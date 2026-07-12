@@ -1,5 +1,18 @@
 # Epoch Changelog
 
+## [v0.87.56] - Linux updater registry repair
+
+- Reject installed vcpkg checkouts whose working registry predates the source
+  manifest baseline instead of treating a fetched but unselected commit as a
+  usable version database.
+- Updater-driven Linux builds now prepare an exact-baseline vcpkg checkout in
+  the executable-local tool cache and regenerate CMake-policy overlays from
+  that same registry. Existing packaged updaters can recover through the new
+  source `build.sh`; newly compiled updaters reject stale roots before staging
+  overlays.
+- Defaulted `CommandQueue` construction inside its module class definition so
+  MSVC does not emit a duplicate constructor symbol from importing modules.
+
 ## [v0.87.55] - Post-release source checkpoint
 
 - Advanced `main` after the corrected `v0.87.54` release so packaged installs

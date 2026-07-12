@@ -70,7 +70,7 @@ export namespace epochnamespace::core
     {
         using RenderCommand = std::function<void()>;
 
-        CommandQueue() noexcept;
+        CommandQueue() noexcept = default;
 
         // Push a command (thread-safe)
         void enqueue(RenderCommand cmd)
@@ -176,6 +176,4 @@ export namespace epochnamespace::core
         std::atomic_size_t depth_{ 0 };
         std::uint8_t render_flags_{ 0 };
     };
-
-    CommandQueue::CommandQueue() noexcept = default;
 }

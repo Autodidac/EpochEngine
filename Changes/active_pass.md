@@ -304,3 +304,13 @@ contains broader roadmap work.
 - SFML and Vulkan runtime libraries are packaged under `lib/`.
 - Release staging must pass the contract test and a bounded OpenGL editor
   startup smoke from the isolated package directory.
+
+## v0.87.56 Linux Updater Registry Gate
+
+- Installed vcpkg candidates are accepted only when their checked-out registry
+  contains the source manifest baseline in its ancestry.
+- An updater that hands `build.sh` a stale checkout must recover through an
+  exact-baseline managed checkout under the updater tool cache and rebuild its
+  policy overlays from that checkout.
+- Direct developer builds fail early with a clear stale-registry message unless
+  managed toolchain bootstrap was explicitly requested.
