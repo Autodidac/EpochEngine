@@ -1,10 +1,9 @@
 # Epoch Changelog
 
-## [v0.87.63] - Post-release source checkpoint
+## [v0.87.64] - Clean Linux source-build release
 
-- Advanced `main` after the verified `v0.87.62` Windows/Linux runtime release
-  to exercise the fresh contents-API source discovery path from packaged
-  installs without changing the packaged stable version.
+- Preserved fresh contents-API source discovery so packaged installs can see a
+  newly advanced source checkpoint without stale raw-branch responses.
 - Made the scripting compiler module explicitly include `<algorithm>` so clean
   Clang 22 module builds resolve `std::find` without relying on transitive
   standard-library imports.
