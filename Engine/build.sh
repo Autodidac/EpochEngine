@@ -57,6 +57,38 @@ prepare_tool_cache_root() {
   echo "[build.sh] Managed tool cache ready: ${root}" >&2
 }
 
+check_linux_graphics_build_prerequisites() {
+  local -a required_modules=(x11 xi xrandr xcursor xinerama libudev gl)
+  local -a missing_modules=()
+  local module
+
+  if [[ "$(uname -s)" != "Linux" || ${USE_VCPKG} -eq 0 || ${UPDATER_SHELL_BUILD} -ne 0 ]]; then
+    return 0
+  fi
+
+  if ! command -v pkg-config >/dev/null 2>&1; then
+    echo "pkg-config is required to validate Linux renderer build prerequisites." >&2
+    echo "Ubuntu/Debian: sudo apt install pkg-config libgl1-mesa-dev libudev-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev" >&2
+    return 1
+  fi
+
+  for module in "${required_modules[@]}"; do
+    if ! pkg-config --exists "${module}"; then
+      missing_modules+=("${module}")
+    fi
+  done
+
+  if (( ${#missing_modules[@]} == 0 )); then
+    echo "[build.sh] Linux renderer development prerequisites ready." >&2
+    return 0
+  fi
+
+  echo "Missing Linux renderer development modules: ${missing_modules[*]}" >&2
+  echo "Epoch packages runtime libraries, but a source update also needs host development headers." >&2
+  echo "Ubuntu/Debian: sudo apt install pkg-config libgl1-mesa-dev libudev-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev" >&2
+  return 1
+}
+
 sha256_file() {
   local path=$1
 
@@ -818,6 +850,8 @@ fi
 if [[ ${BOOTSTRAP_CURRENT_TOOLCHAIN} -ne 0 ]]; then
   prepare_tool_cache_root
 fi
+
+check_linux_graphics_build_prerequisites
 
 case "$COMPILER_CHOICE" in
   gcc)

@@ -4,6 +4,16 @@
 
 - Promoted the Linux cancel/progress, managed registry, tool-cache diagnostics,
   and Clang 22 CI workaround into a replacement Windows/Linux runtime release.
+- Linux source updates now use a lifetime-held kernel file lock in the shared
+  updater cache plus per-run source directories, preventing a console update
+  from deleting a GUI update's live LLVM extraction or source tree. Crashes
+  release ownership automatically, so stale status files cannot block retries.
+- Linux full-engine source builds now fail early with the exact graphics
+  development modules and Ubuntu/Debian install command required by SFML,
+  X11, and OpenGL instead of failing late inside vcpkg.
+- Linux source handoff now installs the rebuilt `lib/` payload beside the
+  executable so SFML, Vulkan, and other packaged runtime libraries advance with
+  the source-built binary instead of leaving stale release libraries behind.
 
 ## [v0.87.59] - Post-release source checkpoint
 

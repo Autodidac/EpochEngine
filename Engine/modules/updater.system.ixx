@@ -59,6 +59,11 @@ module;
 #endif
 #include <Windows.h>
 #else
+#include <cerrno>
+#include <csignal>
+#include <fcntl.h>
+#include <sys/file.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -2726,6 +2731,13 @@ namespace epochnamespace::updater
             return target_binary.parent_path() / "epoch_source_update.active";
         }
 
+#if !defined(_WIN32)
+        [[nodiscard]] inline std::filesystem::path linux_source_update_lock_path()
+        {
+            return updater_cache_root() / "epoch_source_update.lock";
+        }
+#endif
+
         [[nodiscard]] inline std::filesystem::path update_handoff_log_path_for(
             const std::filesystem::path& target_binary);
 
@@ -3016,9 +3028,107 @@ namespace epochnamespace::updater
             CloseHandle(process);
             return running;
 #else
-            return false;
+            const int result = ::kill(static_cast<pid_t>(process_id), 0);
+            return result == 0 || errno == EPERM;
 #endif
         }
+
+#if !defined(_WIN32)
+        struct ScopedLinuxSourceUpdateLock final
+        {
+            int descriptor{ -1 };
+            bool acquired{ false };
+            bool already_locked{ false };
+
+            explicit ScopedLinuxSourceUpdateLock(const std::filesystem::path& lock_path)
+            {
+                descriptor = ::open(lock_path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+                if (descriptor < 0)
+                    return;
+
+                if (::flock(descriptor, LOCK_EX | LOCK_NB) == 0)
+                {
+                    acquired = true;
+                    return;
+                }
+
+                already_locked = errno == EWOULDBLOCK || errno == EAGAIN;
+                ::close(descriptor);
+                descriptor = -1;
+            }
+
+            ScopedLinuxSourceUpdateLock(const ScopedLinuxSourceUpdateLock&) = delete;
+            ScopedLinuxSourceUpdateLock& operator=(const ScopedLinuxSourceUpdateLock&) = delete;
+
+            ~ScopedLinuxSourceUpdateLock()
+            {
+                if (descriptor < 0)
+                    return;
+
+                if (acquired)
+                    ::flock(descriptor, LOCK_UN);
+                ::close(descriptor);
+            }
+        };
+
+        [[nodiscard]] inline bool linux_source_update_lock_held()
+        {
+            ScopedLinuxSourceUpdateLock probe{ linux_source_update_lock_path() };
+            return !probe.acquired && probe.already_locked;
+        }
+
+        [[nodiscard]] inline bool write_linux_source_active_marker(
+            const std::filesystem::path& marker_path,
+            const std::filesystem::path& run_dir)
+        {
+            const int descriptor = ::open(
+                marker_path.c_str(),
+                O_WRONLY | O_CREAT | O_TRUNC,
+                S_IRUSR | S_IWUSR);
+            if (descriptor < 0)
+                return false;
+
+            const std::string marker =
+                run_dir.string() + "\npid="
+                + std::to_string(static_cast<unsigned long>(::getpid())) + "\n";
+            std::size_t written = 0u;
+            while (written < marker.size())
+            {
+                const auto count = ::write(
+                    descriptor,
+                    marker.data() + written,
+                    marker.size() - written);
+                if (count < 0 && errno == EINTR)
+                    continue;
+                if (count <= 0)
+                    break;
+                written += static_cast<std::size_t>(count);
+            }
+
+            const bool closed = ::close(descriptor) == 0;
+            if (written == marker.size() && closed)
+                return true;
+
+            std::error_code ec;
+            std::filesystem::remove(marker_path, ec);
+            return false;
+        }
+#endif
+
+        struct ScopedSourceActiveMarkerCleanup final
+        {
+            std::filesystem::path marker_path{};
+            bool owns_marker{ false };
+
+            ~ScopedSourceActiveMarkerCleanup()
+            {
+                if (!owns_marker)
+                    return;
+
+                std::error_code ec;
+                std::filesystem::remove(marker_path, ec);
+            }
+        };
 
         [[nodiscard]] inline bool file_recently_modified(
             const std::filesystem::path& path,
@@ -3193,6 +3303,20 @@ namespace epochnamespace::updater
             std::filesystem::path* active_run_out = nullptr)
         {
             const auto marker = read_source_active_marker(target_binary);
+#if !defined(_WIN32)
+            const bool lock_held = linux_source_update_lock_held();
+            if (lock_held)
+            {
+                if (marker && active_run_out)
+                    *active_run_out = marker->run_dir;
+                return true;
+            }
+
+            remove_update_cache_path_best_effort(source_active_run_path(target_binary));
+            if (!source_update_recent_pending_log_evidence(target_binary, std::chrono::seconds{ 20 }))
+                remove_update_cache_path_best_effort(source_cancel_path(target_binary));
+            return false;
+#else
             if (!marker)
                 return false;
 
@@ -3237,6 +3361,7 @@ namespace epochnamespace::updater
             if (active_run_out)
                 *active_run_out = marker->run_dir;
             return true;
+#endif
         }
 
         [[nodiscard]] inline bool source_update_session_active(
@@ -5389,6 +5514,13 @@ namespace epochnamespace::updater
             << "fi\n"
             << "chmod +x \"$TARGETEXE\" 2>/dev/null || true\n"
             << "find \"$BUILTDIR\" -maxdepth 1 -type f \\( -name '*.so' -o -name '*.so.*' -o -name '*.dll' -o -name '*.manifest' \\) -exec cp -f {} \"$TARGETDIR\" \\; 2>/dev/null || true\n"
+            << "if [ -d \"$BUILTDIR/lib\" ]; then\n"
+            << "  mkdir -p \"$TARGETDIR/lib\"\n"
+            << "  if ! cp -R \"$BUILTDIR/lib/.\" \"$TARGETDIR/lib/\"; then\n"
+            << "    echo \"[ERROR] Failed to copy rebuilt Linux runtime libraries.\" >> \"$LOG\"\n"
+            << "    exit 1\n"
+            << "  fi\n"
+            << "fi\n"
             << "if [ -d \"$SRCASSETS\" ]; then\n"
             << "  mkdir -p \"$DSTASSETS\"\n"
             << "  cp -R \"$SRCASSETS/.\" \"$DSTASSETS/\" 2>/dev/null || true\n"
@@ -5909,7 +6041,8 @@ namespace epochnamespace::updater
             return false;
         }
 #else
-        return system_detail::in_process_source_update_active().load(std::memory_order_acquire);
+        return system_detail::in_process_source_update_active().load(std::memory_order_acquire)
+            || system_detail::source_update_session_active(system_detail::current_binary_path());
 #endif
     }
 
@@ -6180,9 +6313,54 @@ namespace epochnamespace::updater
             return true;
         }
 
-        const auto archive_path = system_detail::source_archive_path(target_binary, channel.source_url);
-        const auto staging_dir = system_detail::source_staging_dir(target_binary);
-        const auto final_dir = system_detail::source_final_dir(target_binary);
+        system_detail::ScopedLinuxSourceUpdateLock source_lock{
+            system_detail::linux_source_update_lock_path()
+        };
+        if (!source_lock.acquired)
+        {
+            if (source_lock.already_locked)
+            {
+                system_detail::log_info(
+                    "Source update request is already covered by another Epoch process.");
+                return true;
+            }
+
+            system_detail::log_error(
+                "Linux source updater lock could not be acquired: "
+                + system_detail::linux_source_update_lock_path().string());
+            return false;
+        }
+
+        const auto run_token = system_detail::make_source_update_run_token();
+        const auto run_dir = system_detail::source_run_dir(target_binary, run_token);
+        const auto archive_path = system_detail::source_archive_path(
+            target_binary,
+            channel.source_url,
+            run_token);
+        const auto staging_dir = system_detail::source_staging_dir(target_binary, run_token);
+        const auto final_dir = system_detail::source_final_dir(target_binary, run_token);
+        const auto active_marker_path = system_detail::source_active_run_path(target_binary);
+        system_detail::ScopedSourceActiveMarkerCleanup active_marker{
+            .marker_path = active_marker_path
+        };
+
+        std::error_code marker_ec;
+        std::filesystem::create_directories(run_dir, marker_ec);
+        if (marker_ec)
+        {
+            system_detail::log_error("Failed to prepare Linux source update run directory: " + run_dir.string());
+            return false;
+        }
+        std::filesystem::create_directories(active_marker_path.parent_path(), marker_ec);
+        if (marker_ec
+            || !system_detail::write_linux_source_active_marker(active_marker_path, run_dir))
+        {
+            system_detail::log_error(
+                "The Linux source updater status marker could not be written: "
+                + active_marker_path.string());
+            return false;
+        }
+        active_marker.owns_marker = true;
 
         if (recheck_source_version && !channel.source_version_url.empty())
         {
@@ -6199,12 +6377,7 @@ namespace epochnamespace::updater
         }
 
         std::error_code ec;
-        std::filesystem::remove_all(staging_dir, ec);
-        ec.clear();
-        std::filesystem::remove_all(final_dir, ec);
-        ec.clear();
-        std::filesystem::remove(archive_path, ec);
-        ec.clear();
+        system_detail::cleanup_stale_source_update_runs(target_binary, run_dir);
 
         system_detail::log_info(
             "Downloading latest "
@@ -6292,7 +6465,6 @@ namespace epochnamespace::updater
         UpdateCommandResult result{};
         const auto target_binary = system_detail::current_binary_path();
 
-#if defined(_WIN32)
         if (system_detail::source_update_session_active(target_binary))
         {
             result.update_available = true;
@@ -6307,7 +6479,6 @@ namespace epochnamespace::updater
             system_detail::log_info("Update request ignored because an existing source-update session is still active.");
             return result;
         }
-#endif
 
         cleanup_previous_update_artifacts();
 
