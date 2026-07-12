@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.55-1F7A4C?style=for-the-badge" alt="Current development source v0.87.55" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.54-1F7A4C?style=for-the-badge" alt="Current development source v0.87.54" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.54-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.54" />
 </p>
 
@@ -75,8 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Current source is `v0.87.55`; the latest published stable runtime release is
-  `v0.87.54`.
+- Current source and the latest published stable runtime release are `v0.87.54`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
@@ -105,9 +104,9 @@ For engine/tooling developers:
 - Phase 1 and Phase 2 of the active roadmap are complete. Current work is
   concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.
-- Release checkpoint: `v0.87.54` repairs Linux source-update toolchain and
-  vcpkg provisioning, builds every supported Linux renderer together, and
-  packages the shared SFML runtime required for safe Raylib coexistence.
+- Release checkpoint: `v0.87.54` repairs the Linux Raylib/GLAD loader ABI,
+  removes build-machine RPATH leakage, packages Vulkan and SFML runtimes, and
+  requires an isolated OpenGL editor startup smoke before release staging.
 - The editor has a toolbar scene-mode selector for 3D scene construction versus
   2D game/UI construction, launcher/editor handoff and update progress use the
   shared EpochGui loading-screen primitive, OpenGL owns the first visible

@@ -591,7 +591,10 @@ namespace epochnamespace::openglcontext
         if (!contextGuard.ok())
             throw std::runtime_error("[ OpenGL ] - glXMakeCurrent failed");
 
-#if defined(EPOCH_FORCE_ENABLE_RAYLIB)
+#if defined(EPOCH_FORCE_ENABLE_RAYLIB) && defined(__linux__)
+        if (!PlatformGL::load_raylib_gl_functions())
+            throw std::runtime_error("[ OpenGL ] - Raylib GLAD loader failed");
+#elif defined(EPOCH_FORCE_ENABLE_RAYLIB)
         if (!gladLoadGL())
             throw std::runtime_error("[ OpenGL ] - gladLoadGL failed");
 #else

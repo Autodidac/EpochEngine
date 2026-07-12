@@ -294,3 +294,13 @@ contains broader roadmap work.
   SFML is the only shared vcpkg component and is staged under `lib/`.
 - Linux CTest and the build-safe engine contract pass from an asset-bearing
   output. Windows MSVC 2022 Release and the same contract also pass.
+
+## v0.87.54 Replacement Linux Startup Gate
+
+- Raylib's embedded GLAD 2 loader is invoked through its actual resolver ABI;
+  Linux OpenGL startup must not call it through GLAD 1's zero-argument API.
+- The packaged executable RUNPATH is exactly `$ORIGIN/lib`, and staged dynamic
+  dependencies must not resolve through vcpkg or build-machine paths.
+- SFML and Vulkan runtime libraries are packaged under `lib/`.
+- Release staging must pass the contract test and a bounded OpenGL editor
+  startup smoke from the isolated package directory.

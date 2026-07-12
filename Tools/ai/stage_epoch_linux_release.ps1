@@ -28,6 +28,20 @@ function To-WslPath {
     return "/mnt/$drive$tail"
 }
 
+function Invoke-WslScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$Script,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $normalized = $Script.Replace("`r", '')
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($normalized))
+    & wsl.exe bash -lc "printf '%s' '$encoded' | base64 --decode | bash"
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Label failed with exit code $LASTEXITCODE."
+    }
+}
+
 $repo = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $engine = Join-Path $repo 'Engine'
 if ([string]::IsNullOrWhiteSpace($BinaryRoot)) {
@@ -85,12 +99,48 @@ Copy-Item -LiteralPath $license -Destination (Join-Path $stage 'LICENSE') -Force
 Copy-Item -LiteralPath $readme -Destination (Join-Path $stage 'README.md') -Force
 & $noticeScript -RepoRoot $repo -VcpkgInstalledRoot $vcpkgInstalled -Destination $stage
 
+Require-Path -Path (Join-Path $stage 'lib\libsfml-graphics.so.3.0') -Label 'Packaged SFML graphics runtime'
+Require-Path -Path (Join-Path $stage 'lib\libsfml-window.so.3.0') -Label 'Packaged SFML window runtime'
+Require-Path -Path (Join-Path $stage 'lib\libsfml-system.so.3.0') -Label 'Packaged SFML system runtime'
+Require-Path -Path (Join-Path $stage 'lib\libvulkan.so.1') -Label 'Packaged Vulkan loader'
+
 $stageWsl = To-WslPath $stage
 $outWsl = To-WslPath $resolvedOutput
 $tarWsl = To-WslPath $tarball
 $verifyLogsWsl = To-WslPath $verifyLogs
 
-wsl bash -lc "set -euo pipefail; chmod 755 '$stageWsl/epoch'; test -f '$stageWsl/assets/fonts/Roboto-Regular.ttf'; cd '$stageWsl'; EPOCH_LOG_DIR='$verifyLogsWsl' ./epoch --version | grep -F 'Epoch v$Version' >/dev/null; EPOCH_LOG_DIR='$verifyLogsWsl' ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null"
+$validationScript = @'
+set -euo pipefail
+chmod 755 '__STAGE__/epoch'
+test -f '__STAGE__/assets/fonts/Roboto-Regular.ttf'
+cd '__STAGE__'
+
+runpath="$(readelf -d ./epoch | sed -n 's/.*RUNPATH.*\[\(.*\)\].*/\1/p')"
+test "$runpath" = '$ORIGIN/lib'
+
+ldd_output="$(ldd ./epoch)"
+if grep -F 'not found' <<<"$ldd_output"; then
+    echo 'Packaged Linux binary has unresolved shared libraries.' >&2
+    exit 1
+fi
+if grep -E 'vcpkg_installed|/home/|/Users/|/work/' <<<"$ldd_output"; then
+    echo 'Packaged Linux binary resolved a dependency from a build-machine path.' >&2
+    exit 1
+fi
+vulkan_path="$(awk '/libvulkan\.so\.1 =>/ { print $3; exit }' <<<"$ldd_output")"
+test -n "$vulkan_path"
+test "$(readlink -f "$vulkan_path")" = "$(readlink -f ./lib/libvulkan.so.1)"
+
+EPOCH_LOG_DIR='__LOGS__' ./epoch --version | grep -F 'Epoch v__VERSION__' >/dev/null
+EPOCH_LOG_DIR='__LOGS__' ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null
+EPOCH_LOG_DIR='__LOGS__' timeout --signal=INT --kill-after=3s 30s \
+    ./epoch --editor --renderer opengl --smoke
+'@
+$validationScript = $validationScript.Replace('__STAGE__', $stageWsl)
+$validationScript = $validationScript.Replace('__LOGS__', $verifyLogsWsl)
+$validationScript = $validationScript.Replace('__VERSION__', $Version)
+
+Invoke-WslScript -Script $validationScript -Label 'Linux staged-package validation'
 
 # Validation paths can still create executable-local runtime artifacts before
 # their environment override is consumed. Public packages never carry them.
@@ -98,7 +148,8 @@ Remove-Item -LiteralPath (Join-Path $stage 'logs') -Recurse -Force -ErrorAction 
 Remove-Item -LiteralPath (Join-Path $stage 'cache') -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $verifyLogs -Recurse -Force -ErrorAction SilentlyContinue
 
-wsl bash -lc "set -euo pipefail; tar -C '$outWsl' -czf '$tarWsl' '$stageName'; tar -tzvf '$tarWsl' '$stageName/epoch' '$stageName/assets/fonts/Roboto-Regular.ttf' '$stageName/THIRD_PARTY_NOTICES.txt' '$stageName/THIRD_PARTY_COMPONENTS.json'; if tar -tzf '$tarWsl' | grep -E '/(logs|cache)/'; then echo 'Release archive must not include generated logs or runtime cache.' >&2; exit 1; fi"
+$archiveScript = "set -euo pipefail; tar -C '$outWsl' -czf '$tarWsl' '$stageName'; tar -tzvf '$tarWsl' '$stageName/epoch' '$stageName/assets/fonts/Roboto-Regular.ttf' '$stageName/THIRD_PARTY_NOTICES.txt' '$stageName/THIRD_PARTY_COMPONENTS.json'; if tar -tzf '$tarWsl' | grep -E '/(logs|cache)/'; then echo 'Release archive must not include generated logs or runtime cache.' >&2; exit 1; fi"
+Invoke-WslScript -Script $archiveScript -Label 'Linux release archive validation'
 
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $tarball).Hash.ToLowerInvariant()
 $lines = @()

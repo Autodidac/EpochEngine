@@ -1656,7 +1656,7 @@ namespace
                             std::source_location::current());
                     }
 #if defined(EPOCH_FORCE_ENABLE_RAYLIB)
-                    else if (gladLoadGL())
+                    else if (epochnamespace::openglcontext::PlatformGL::load_raylib_gl_functions())
 #else
                     else if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(
                         epochnamespace::openglcontext::PlatformGL::get_proc_address)))

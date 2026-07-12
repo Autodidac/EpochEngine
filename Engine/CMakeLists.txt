@@ -350,7 +350,11 @@ add_executable(epoch ${EPOCH_SOURCES})
 if(WIN32)
     set_target_properties(epoch PROPERTIES OUTPUT_NAME EpochEditor)
 else()
-    set_target_properties(epoch PROPERTIES OUTPUT_NAME epoch)
+    set_target_properties(epoch PROPERTIES
+        OUTPUT_NAME epoch
+        BUILD_RPATH_USE_ORIGIN TRUE
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "\$ORIGIN/lib")
 endif()
 
 if(MSVC)
@@ -767,7 +771,6 @@ if(EPOCH_SFML_ACTIVE)
                 endif()
             endforeach()
 
-            set_target_properties(epoch PROPERTIES BUILD_RPATH "\$ORIGIN/lib")
             add_custom_command(TARGET epoch POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:epoch>/lib")
             foreach(_epoch_sfml_target IN LISTS _epoch_sfml_targets)
@@ -811,6 +814,24 @@ if(EPOCH_VULKAN_ACTIVE)
     find_package(Vulkan QUIET)
     if(Vulkan_FOUND)
         target_link_libraries(epoch PRIVATE Vulkan::Vulkan)
+
+        if(UNIX AND NOT APPLE)
+            get_filename_component(_epoch_vulkan_library_dir "${Vulkan_LIBRARY}" DIRECTORY)
+            file(GLOB _epoch_vulkan_runtime_libraries
+                "${_epoch_vulkan_library_dir}/libvulkan.so*")
+            if(_epoch_vulkan_runtime_libraries)
+                add_custom_command(TARGET epoch POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:epoch>/lib")
+                foreach(_epoch_vulkan_runtime_library IN LISTS _epoch_vulkan_runtime_libraries)
+                    get_filename_component(_epoch_vulkan_runtime_name
+                        "${_epoch_vulkan_runtime_library}" NAME)
+                    add_custom_command(TARGET epoch POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            "${_epoch_vulkan_runtime_library}"
+                            "$<TARGET_FILE_DIR:epoch>/lib/${_epoch_vulkan_runtime_name}")
+                endforeach()
+            endif()
+        endif()
     else()
         find_library(VULKAN_LIBRARY NAMES vulkan vulkan-1)
         find_path(VULKAN_INCLUDE_DIR vulkan/vulkan.h)

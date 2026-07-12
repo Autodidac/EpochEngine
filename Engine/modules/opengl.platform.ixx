@@ -81,6 +81,19 @@ export module opengl.platform;
 
 export namespace epochnamespace::openglcontext::PlatformGL
 {
+#if defined(__linux__) && defined(EPOCH_FORCE_ENABLE_RAYLIB)
+    namespace detail
+    {
+        using RaylibGladApiProc = void (*)();
+        using RaylibGladLoadProc = RaylibGladApiProc (*)(const char*);
+
+        // Raylib 6 embeds GLAD 2, whose gladLoadGL takes a resolver argument.
+        // Epoch's public GLAD 1 header declares a zero-argument symbol with the
+        // same C name, so call the Raylib-owned symbol through its real ABI.
+        extern "C" int raylib_glad_load_gl(RaylibGladLoadProc) __asm__("gladLoadGL");
+    }
+#endif
+
     struct PlatformGLContext
     {
 #if defined(_WIN32)
@@ -223,6 +236,19 @@ export namespace epochnamespace::openglcontext::PlatformGL
 
 #else
         return nullptr;
+#endif
+    }
+
+    [[nodiscard]] inline bool load_raylib_gl_functions() noexcept
+    {
+#if defined(__linux__) && defined(EPOCH_FORCE_ENABLE_RAYLIB)
+        const auto resolve = [](const char* name) noexcept -> detail::RaylibGladApiProc
+            {
+                return reinterpret_cast<detail::RaylibGladApiProc>(get_proc_address(name));
+            };
+        return detail::raylib_glad_load_gl(resolve) != 0;
+#else
+        return false;
 #endif
     }
 

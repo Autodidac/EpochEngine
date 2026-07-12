@@ -1,12 +1,14 @@
 # Epoch Changelog
 
-## [v0.87.55] - Post-release source checkpoint
+## [v0.87.54] - Replacement Linux startup and portable runtime repair
 
-- Advanced `main` after the verified `v0.87.54` Windows and Linux release so
-  packaged installs can detect the newer source-update line while stable
-  package metadata remains pinned to `v0.87.54`.
-
-## [v0.87.54] - Current Linux toolchain and multicontext release
+- Fixed the Linux OpenGL startup SIGSEGV caused by calling Raylib 6's embedded
+  GLAD 2 `gladLoadGL` symbol through GLAD 1's incompatible zero-argument ABI.
+- Linux binaries now use only `$ORIGIN/lib`, stage the Vulkan loader beside the
+  existing SFML runtimes, and reject dependencies resolved from build caches.
+- Linux release staging now launches an isolated, bounded OpenGL editor smoke
+  after version and contract checks, so atlas/renderer startup must pass before
+  an archive can be produced.
 
 - Pinned and checksum-verified CMake 4.4.0, LLVM/Clang 22.1.8 with its matching
   module scanner, Ninja 1.13.2, and the vcpkg 2026.06.24 registry for Linux
