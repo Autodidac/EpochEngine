@@ -4,8 +4,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.64-1F7A4C?style=for-the-badge" alt="Current development source v0.87.64" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.62-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.62" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.65-1F7A4C?style=for-the-badge" alt="Current development source v0.87.65" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.64-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.64" />
 </p>
 
 <p align="center">
@@ -75,7 +75,8 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Current source is `v0.87.64`; the latest stable runtime line is `v0.87.64`.
+- Current source is `v0.87.65`; the latest published stable runtime release is
+  `v0.87.64`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
@@ -101,6 +102,11 @@ For engine/tooling developers:
 - Source updates now clear stale handoff/cancel evidence before launching a new
   worker and verify `Engine/vcpkg.json` after extraction before vcpkg/MSBuild is
   allowed to run.
+
+<p align="center">
+  <a href="Images/readme/update-storage-footprint-v08764.png"><img src="Images/readme/update-storage-footprint-v08764.png" alt="Epoch v0.87.64 updater and source-build storage footprint" width="1200" /></a>
+</p>
+
 - Phase 1 and Phase 2 of the active roadmap are complete. Current work is
   concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
   maturity.
@@ -116,6 +122,9 @@ For engine/tooling developers:
 - Release checkpoint: `v0.87.60` makes the Linux in-process updater cancellable,
   reports live source/registry/build evidence, validates its managed tool cache,
   and avoids the hosted Clang 22 command-line-module optimizer crash.
+- Release checkpoint: `v0.87.64` preserves isolated Linux update runs and
+  managed dependencies while repairing clean Clang 22 module compilation for
+  the source updater.
 - The editor has a toolbar scene-mode selector for 3D scene construction versus
   2D game/UI construction, launcher/editor handoff and update progress use the
   shared EpochGui loading-screen primitive, OpenGL owns the first visible
