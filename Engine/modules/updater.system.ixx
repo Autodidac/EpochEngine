@@ -5575,7 +5575,17 @@ namespace epochnamespace::updater
         std::error_code ec;
         std::filesystem::remove(tmp, ec);
 
-        if (!download_file(url, tmp.string()))
+        std::string request_url = url;
+        if (request_url.find("api.github.com/repos/") != std::string::npos
+            && request_url.find("/contents/") != std::string::npos)
+        {
+            request_url += request_url.find('?') == std::string::npos ? '?' : '&';
+            request_url += "epoch_cache_bust="
+                + std::to_string(static_cast<unsigned long long>(
+                    std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+        }
+
+        if (!download_file(request_url, tmp.string()))
             return result;
 
         const std::string downloaded = system_detail::read_text_file(tmp);

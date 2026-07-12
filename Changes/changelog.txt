@@ -4,7 +4,8 @@
 
 - Moved source-version discovery from GitHub's eventually consistent raw
   branch endpoint to the contents API with explicit raw-media and no-cache
-  headers, so a newly advanced source checkpoint is visible immediately.
+  headers and a once-per-run cache key, so a newly advanced source checkpoint
+  is visible immediately.
 - Preserved the v0.87.60 Linux process lock, isolated update runs, prerequisite
   gate, and rebuilt runtime-library handoff in the replacement packages.
 
