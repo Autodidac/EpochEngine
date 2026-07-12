@@ -1,5 +1,10 @@
 # Epoch Changelog
 
+## [v0.87.55] - Post-release source checkpoint
+
+- Advanced `main` after the corrected `v0.87.54` release so packaged installs
+  can detect and exercise the repaired Linux source-update lane.
+
 ## [v0.87.54] - Replacement Linux startup and portable runtime repair
 
 - Fixed the Linux OpenGL startup SIGSEGV caused by calling Raylib 6's embedded

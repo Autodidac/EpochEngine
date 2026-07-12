@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.54-1F7A4C?style=for-the-badge" alt="Current development source v0.87.54" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.55-1F7A4C?style=for-the-badge" alt="Current development source v0.87.55" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.54-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.54" />
 </p>
 
@@ -75,7 +75,8 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Current source and the latest published stable runtime release are `v0.87.54`.
+- Current source is `v0.87.55`; the latest published stable runtime release is
+  `v0.87.54`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
