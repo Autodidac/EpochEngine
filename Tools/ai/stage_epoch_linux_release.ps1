@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.87.56',
+    [string]$Version = '0.87.58',
     [string]$Configuration = 'Clang-Release',
     [string]$BinaryRoot = '',
     [string]$VcpkgInstalledRoot = '',

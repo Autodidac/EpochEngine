@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.87.58] - Linux managed-vcpkg updater completion
+
+- Enabled updater subprocess-output capture on Linux so managed vcpkg archive
+  snapshots can resolve the local Git revision required by manifest mode.
+- Canonicalized and validated the managed registry `.git` path before accepting
+  its revision, with explicit probe diagnostics retained in the update log.
+- Kept the manifest-compatible managed vcpkg root pinned into `build.sh`, which
+  prevents a stale user checkout from resolving newer ports against an older
+  version database.
+
 ## [v0.87.57] - Post-release source checkpoint
 
 - Advanced `main` after v0.87.56 so packaged installs can exercise the repaired

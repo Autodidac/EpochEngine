@@ -1256,7 +1256,6 @@ namespace epochnamespace::updater
             const std::filesystem::path& working_directory,
             int* const exit_code = nullptr)
         {
-#if defined(_WIN32)
             const auto temp_output =
                 make_temp_download_path("proc_capture").replace_extension(".log");
 
@@ -1277,14 +1276,6 @@ namespace epochnamespace::updater
                 *exit_code = launched ? local_exit_code : -1;
 
             return launched ? output : std::string{};
-#else
-            (void)executable;
-            (void)args;
-            (void)working_directory;
-            if (exit_code != nullptr)
-                *exit_code = -1;
-            return {};
-#endif
         }
 
         [[nodiscard]] inline std::string query_latest_github_asset_url(
@@ -1513,7 +1504,6 @@ namespace epochnamespace::updater
                 if (!std::filesystem::exists(local_git_dir))
                     return {};
 
-                std::error_code git_dir_ec;
                 const auto resolved_git_dir = trim_ascii(capture_process_output(
                     git_exe,
                     { "rev-parse", "--absolute-git-dir" },
@@ -1521,20 +1511,31 @@ namespace epochnamespace::updater
                     &git_exit));
 
                 if (git_exit != 0 || resolved_git_dir.empty())
-                    return {};
-
-                if (!std::filesystem::equivalent(
-                    local_git_dir,
-                    std::filesystem::path{ resolved_git_dir },
-                    git_dir_ec))
                 {
-                    if (!git_dir_ec)
-                    {
-                        append_log_line(
-                            log_path,
-                            "[WARN] Managed vcpkg git resolution escaped the sandboxed repo: "
-                            + resolved_git_dir);
-                    }
+                    append_log_line(
+                        log_path,
+                        "[WARN] Managed vcpkg git-dir probe failed with exit code "
+                        + std::to_string(git_exit) + ".");
+                    return {};
+                }
+
+                std::error_code local_ec;
+                const auto normalized_local_git_dir =
+                    std::filesystem::weakly_canonical(local_git_dir, local_ec);
+
+                std::error_code resolved_ec;
+                const auto normalized_resolved_git_dir =
+                    std::filesystem::weakly_canonical(
+                        std::filesystem::path{ resolved_git_dir },
+                        resolved_ec);
+
+                if (local_ec || resolved_ec
+                    || normalized_local_git_dir != normalized_resolved_git_dir)
+                {
+                    append_log_line(
+                        log_path,
+                        "[WARN] Managed vcpkg git resolution escaped the sandboxed repo: "
+                        + resolved_git_dir);
 
                     return {};
                 }
@@ -1553,6 +1554,11 @@ namespace epochnamespace::updater
 
                 if (git_exit == 0 && !local_head.empty())
                     return lower_ascii(trim_ascii(std::move(local_head)));
+
+                append_log_line(
+                    log_path,
+                    "[WARN] Managed vcpkg HEAD probe failed with exit code "
+                    + std::to_string(git_exit) + ".");
 
                 return {};
             };
