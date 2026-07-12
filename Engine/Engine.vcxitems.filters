@@ -791,6 +791,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\engine.context.cpp">
       <Filter>Source Files\core\context</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\context_commandqueue.cpp">
+      <Filter>Source Files\core\context</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_buffers.cpp">
       <Filter>Source Files\core\context\vulkan</Filter>
     </ClCompile>

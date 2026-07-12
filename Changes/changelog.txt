@@ -10,8 +10,8 @@
   that same registry. Existing packaged updaters can recover through the new
   source `build.sh`; newly compiled updaters reject stale roots before staging
   overlays.
-- Defaulted `CommandQueue` construction inside its module class definition so
-  MSVC does not emit a duplicate constructor symbol from importing modules.
+- Moved `CommandQueue` construction into one module implementation unit so
+  MSVC does not emit duplicates and Clang links mutex-bearing SDL/SFML state.
 
 ## [v0.87.55] - Post-release source checkpoint
 

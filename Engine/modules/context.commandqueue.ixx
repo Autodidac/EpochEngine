@@ -70,7 +70,7 @@ export namespace epochnamespace::core
     {
         using RenderCommand = std::function<void()>;
 
-        CommandQueue() noexcept = default;
+        CommandQueue() noexcept;
 
         // Push a command (thread-safe)
         void enqueue(RenderCommand cmd)

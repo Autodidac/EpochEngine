@@ -279,6 +279,7 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override pac
 
 set(EPOCH_SOURCES
     src/engine.cpp
+    src/renderers/core/context_commandqueue.cpp
     src/renderers/core/engine.context.cpp
     src/renderers/directx/context_directx.cpp
     src/renderers/software/context_software.cpp
