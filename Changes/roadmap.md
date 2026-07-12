@@ -70,6 +70,14 @@ verification. The operator's throughput target remains roughly 9.2k useful
 source/docs/test lines per day, but fake UI, placeholders, or unverified churn
 do not count.
 
+Optimize for completed missions per validation cycle, not edit count. For each
+failure cluster: preserve the full transcript, identify the first causal error,
+apply the smallest production fix that covers all repeated symptoms, run the
+closest local release/updater lane, and use hosted CI as confirmation and
+artifact production. A repeated release for the same undiscovered local build
+failure is a process failure and must tighten the local gate before the next
+candidate.
+
 Current split lanes:
 
 - updater/release: vcpkg restore, binary/source handoff, cache hygiene,
@@ -143,6 +151,10 @@ Current split lanes:
 - Update availability is also platform-build-gated: Windows checks the
   `windows-msvc` Actions job, Linux checks `linux-clang-engine`, and
   queued/running/failing/missing build evidence withholds update UI/actions.
+- Source update archives must converge from mutable branch URLs to the exact
+  commit revision approved by the matching platform CI job. Until that pin is
+  implemented and proven, the platform-build gate is necessary but not a full
+  time-of-check/time-of-use security boundary.
 - The editor auto-checks updates after startup, but the visible modal appears
   only when the current platform has newer, build-proven update evidence. The
   normal smart-update path is binary-first: it downloads/verifies the matching

@@ -9,6 +9,8 @@
 - Kept the manifest-compatible managed vcpkg root pinned into `build.sh`, which
   prevents a stale user checkout from resolving newer ports against an older
   version database.
+- Updater/bootstrap Linux builds now configure CMake fresh so a compiler or
+  vcpkg-root change cannot reconfigure against stale system-package cache data.
 
 ## [v0.87.57] - Post-release source checkpoint
 

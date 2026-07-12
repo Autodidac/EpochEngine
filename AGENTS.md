@@ -33,6 +33,18 @@
 
 - Sync before substantive work: inspect branch, dirty state, remotes, and
   upstream before editing project files.
+- Diagnose from the complete failing transcript before editing. Group repeated
+  dependency/compiler messages under their earliest causal error, repair that
+  cause once, and rerun the closest production command instead of iterating on
+  downstream symptoms.
+- Prefer the fastest faithful local proof before waiting on hosted CI. Linux
+  updater/release work uses `build.sh --bootstrap-current-toolchain` locally
+  with the same Clang, vcpkg root, overlays, and Release configuration that the
+  updater passes; GitHub Actions confirms that result and produces artifacts.
+- Minimize release churn: complete source repair, local production build,
+  contract checks, and package staging as one bounded pass before pushing the
+  candidate. Do not advance/tag repeatedly to discover errors a local lane can
+  expose.
 - Preserve unrelated dirty work. Never clean, delete, revert, or stage files the
   operator did not ask you to touch.
 - GPU/runtime launches are approval-only. Do not run GUI `EpochEditor.exe`
@@ -119,6 +131,13 @@
   ./run.sh [gcc|clang] [Debug|Release] [-- <runtime args>]
   ./install.sh [gcc|clang] [Debug|Release]
   ./clean.sh
+  ```
+
+  For updater-equivalent local release proof, use a writable disposable tool
+  cache and let the script bootstrap the pinned current toolchain:
+
+  ```bash
+  ./build.sh --bootstrap-current-toolchain --tool-cache-root /tmp/epoch-update-tools clang Release
   ```
 
 ## 4. Source Ownership Rules

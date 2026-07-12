@@ -911,6 +911,13 @@ cmake_args=(
   -DEPOCH_LINUX_PACKAGED_VERSION_OVERRIDE_REVISION=
 )
 
+# Updater/bootstrap builds can change compiler and vcpkg roots between runs.
+# A stale CMake cache may otherwise trigger a second configure that silently
+# drops the selected toolchain and resolves unrelated system packages.
+if [[ ${BOOTSTRAP_CURRENT_TOOLCHAIN} -ne 0 ]]; then
+  cmake_args=(--fresh "${cmake_args[@]}")
+fi
+
 if [[ "$(uname -s)" == "Linux" ]]; then
   cmake_args+=(
     -DVCPKG_TARGET_TRIPLET=x64-linux-epoch
