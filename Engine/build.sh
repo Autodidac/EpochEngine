@@ -33,6 +33,30 @@ tool_cache_root() {
   printf '%s\n' "${TOOL_CACHE_ROOT_OVERRIDE:-${XDG_CACHE_HOME:-${HOME}/.cache}/epoch/tools}"
 }
 
+prepare_tool_cache_root() {
+  local root
+  local probe
+
+  root="$(tool_cache_root)"
+  if [[ -e "${root}" && ! -d "${root}" ]]; then
+    echo "Managed tool cache path exists but is not a directory: ${root}" >&2
+    return 1
+  fi
+
+  if ! mkdir -p "${root}/downloads" "${root}/staging"; then
+    echo "Unable to create managed tool cache directories under: ${root}" >&2
+    return 1
+  fi
+
+  probe="${root}/.epoch-write-test-$$"
+  if ! printf 'epoch tool cache probe\n' > "${probe}"; then
+    echo "Managed tool cache is not writable: ${root}" >&2
+    return 1
+  fi
+  rm -f "${probe}"
+  echo "[build.sh] Managed tool cache ready: ${root}" >&2
+}
+
 sha256_file() {
   local path=$1
 
@@ -789,6 +813,10 @@ if [[ $# -gt 0 && $1 == "--" ]]; then
   EXTRA_CMAKE_ARGS=("$@")
 else
   EXTRA_CMAKE_ARGS=()
+fi
+
+if [[ ${BOOTSTRAP_CURRENT_TOOLCHAIN} -ne 0 ]]; then
+  prepare_tool_cache_root
 fi
 
 case "$COMPILER_CHOICE" in

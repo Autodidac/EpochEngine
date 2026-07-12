@@ -7,7 +7,9 @@
             const bool sourceOnlyUpdate =
                 editor.lastUpdateCheck.source_update_available
                 && !editor.lastUpdateCheck.packaged_update_available;
-            const bool sourceWorkerRunning = editor.updateState == EditorUpdateState::SourceWorkerRunning;
+            const bool sourceWorkerRunning =
+                editor.updateState == EditorUpdateState::SourceWorkerRunning
+                || (editor.updateSourceInstallPending && updater::source_update_worker_active());
             const bool sourceCancelRequested = editor.updateSourceCancelRequested;
             const bool sourceCancelAvailable = sourceWorkerRunning && editor_source_cancel_available(editor);
             const bool updateRunning = editor.updateCheckPending.has_value() || sourceWorkerRunning;

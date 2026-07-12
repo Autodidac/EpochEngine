@@ -1613,7 +1613,12 @@ namespace epochnamespace::updater
                     "--git-dir=" + local_git_dir.string(),
                     "--work-tree=" + vcpkg_root.string(),
                     "add",
-                    "--all"
+                    "--",
+                    "ports",
+                    "versions",
+                    "scripts",
+                    "triplets",
+                    ".vcpkg-root"
                 }
             };
 
@@ -1634,6 +1639,7 @@ namespace epochnamespace::updater
             }
 
             int commit_exit = -1;
+            log_info("Committing managed vcpkg registry snapshot.");
             if (!run_process_hidden(
                 git_exe,
                 {
@@ -1663,7 +1669,10 @@ namespace epochnamespace::updater
             }
 
             if (head = resolve_local_head(); !head.empty())
+            {
+                log_info("Managed vcpkg registry snapshot ready.");
                 return head;
+            }
 
             append_log_line(log_path, "[ERROR] Failed to resolve the managed vcpkg git HEAD revision.");
             return {};
@@ -2717,6 +2726,9 @@ namespace epochnamespace::updater
             return target_binary.parent_path() / "epoch_source_update.active";
         }
 
+        [[nodiscard]] inline std::filesystem::path update_handoff_log_path_for(
+            const std::filesystem::path& target_binary);
+
         struct SourceActiveMarker
         {
             std::filesystem::path run_dir{};
@@ -2728,6 +2740,49 @@ namespace epochnamespace::updater
         {
             std::error_code ec;
             return std::filesystem::exists(source_cancel_path(target_binary), ec) && !ec;
+        }
+
+        [[nodiscard]] inline std::atomic_bool& in_process_source_update_active() noexcept
+        {
+            static std::atomic_bool active{ false };
+            return active;
+        }
+
+        struct ScopedInProcessSourceUpdate final
+        {
+            bool acquired{ false };
+
+            ScopedInProcessSourceUpdate() noexcept
+            {
+                bool expected = false;
+                acquired = in_process_source_update_active().compare_exchange_strong(
+                    expected,
+                    true,
+                    std::memory_order_acq_rel);
+            }
+
+            ~ScopedInProcessSourceUpdate()
+            {
+                if (acquired)
+                    in_process_source_update_active().store(false, std::memory_order_release);
+            }
+        };
+
+        [[nodiscard]] inline bool stop_source_update_if_canceled(
+            const std::filesystem::path& target_binary,
+            const std::filesystem::path& log_path,
+            const std::string_view checkpoint)
+        {
+            if (!source_cancel_requested(target_binary))
+                return false;
+
+            const std::string message =
+                "[WARN] Source update canceled by operator at "
+                + std::string{ checkpoint } + ".";
+            append_log_line(log_path, message);
+            append_log_line(update_handoff_log_path_for(target_binary), message);
+            log_info("Source update cancel reached " + std::string{ checkpoint } + ".");
+            return true;
         }
 
         [[nodiscard]] inline std::string normalized_absolute_path_string(
@@ -3664,6 +3719,9 @@ namespace epochnamespace::updater
             append_log_line(build_log, "[INFO] Manifest root: " + manifest_root.string());
             append_log_line(build_log, "[INFO] Build script: " + build_script.string());
 
+            if (stop_source_update_if_canceled(target_binary, build_log, "Linux dependency preparation"))
+                return false;
+
             const auto vcpkg_exe = find_or_prepare_vcpkg(manifest_root, build_log);
             if (vcpkg_exe.empty())
             {
@@ -3676,6 +3734,9 @@ namespace epochnamespace::updater
             const bool using_managed_vcpkg = path_is_inside(managed_tools_root(), vcpkg_root);
             append_log_line(build_log, "[INFO] Linux source update vcpkg root: " + vcpkg_root.string());
 
+            if (stop_source_update_if_canceled(target_binary, build_log, "managed vcpkg selection"))
+                return false;
+
             if (using_managed_vcpkg
                 && !prepare_manifest_for_managed_vcpkg_registry(
                     manifest_root,
@@ -3687,6 +3748,9 @@ namespace epochnamespace::updater
                 return false;
             }
 
+            if (stop_source_update_if_canceled(target_binary, build_log, "managed vcpkg registry preparation"))
+                return false;
+
             if (!using_managed_vcpkg)
             {
                 append_log_line(
@@ -3695,6 +3759,8 @@ namespace epochnamespace::updater
             }
 
             const auto overlay_ports = prepare_vcpkg_overlay_ports(vcpkg_root, build_log);
+            if (stop_source_update_if_canceled(target_binary, build_log, "vcpkg overlay preparation"))
+                return false;
             const auto run_linux_build =
                 [&](const std::string& compiler_choice, const std::filesystem::path& expected_dir) -> bool
                 {
@@ -5843,7 +5909,7 @@ namespace epochnamespace::updater
             return false;
         }
 #else
-        return false;
+        return system_detail::in_process_source_update_active().load(std::memory_order_acquire);
 #endif
     }
 
@@ -6107,6 +6173,13 @@ namespace epochnamespace::updater
         system_detail::log_info("Source update worker launched. Keep using Epoch while it builds; close and restart after the worker reports replacement evidence.");
         return true;
 #else
+        system_detail::ScopedInProcessSourceUpdate active_update{};
+        if (!active_update.acquired)
+        {
+            system_detail::log_info("Source update request is already covered by the active Linux worker.");
+            return true;
+        }
+
         const auto archive_path = system_detail::source_archive_path(target_binary, channel.source_url);
         const auto staging_dir = system_detail::source_staging_dir(target_binary);
         const auto final_dir = system_detail::source_final_dir(target_binary);
@@ -6184,6 +6257,14 @@ namespace epochnamespace::updater
         std::filesystem::remove_all(staging_dir, ec);
 
         system_detail::log_info("Source snapshot ready at: " + final_dir.string());
+
+        if (system_detail::stop_source_update_if_canceled(
+                target_binary,
+                system_detail::source_update_log_path_for(target_binary),
+                "source extraction"))
+        {
+            return false;
+        }
 
         if (!system_detail::build_runtime_from_source(final_dir, target_binary))
             return false;

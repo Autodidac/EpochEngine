@@ -482,7 +482,10 @@
 
         [[nodiscard]] bool editor_source_cancel_available(const EditorState& editor)
         {
-            if (editor.updateState != EditorUpdateState::SourceWorkerRunning
+            const bool sourceWorkActive =
+                editor.updateState == EditorUpdateState::SourceWorkerRunning
+                || editor.updateSourceInstallPending;
+            if (!sourceWorkActive
                 || editor.updateSourceCancelRequested
                 || editor.updateOperationStartedAt == std::chrono::steady_clock::time_point{})
             {
@@ -509,7 +512,8 @@
 
         [[nodiscard]] float editor_update_progress_value(const EditorState& editor)
         {
-            if (editor.updateState == EditorUpdateState::SourceWorkerRunning)
+            if (editor.updateState == EditorUpdateState::SourceWorkerRunning
+                || (editor.updateSourceInstallPending && updater::source_update_worker_active()))
             {
                 return editor_source_worker_progress_value(editor);
             }
@@ -957,7 +961,19 @@
 
             if (editor.updateCheckPending->wait_for(0s) != std::future_status::ready)
             {
-                editor.updateStatus = editor_update_running_status(editor);
+                if (editor.updateSourceInstallPending && updater::source_update_worker_active())
+                {
+                    const std::string sourceTail = read_update_log_tail(updater::source_update_log_path());
+                    const std::string handoffTail = read_update_log_tail(updater::update_handoff_log_path());
+                    const std::string evidence = visible_update_evidence_line(sourceTail, handoffTail);
+                    editor.updateStatus = evidence.empty()
+                        ? editor_update_running_status(editor)
+                        : evidence;
+                }
+                else
+                {
+                    editor.updateStatus = editor_update_running_status(editor);
+                }
                 return;
             }
 
