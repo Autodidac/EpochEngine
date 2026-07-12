@@ -10,8 +10,8 @@ export namespace epochnamespace::gui_lib
     inline constexpr std::string_view library_name = "EpochGui";
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 87;
-    inline constexpr int version_revision = 56;
-    inline constexpr std::string_view version_string = "0.87.56";
+    inline constexpr int version_revision = 57;
+    inline constexpr std::string_view version_string = "0.87.57";
 
     struct Vec2
     {

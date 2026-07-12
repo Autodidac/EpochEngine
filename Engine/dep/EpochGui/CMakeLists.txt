@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.87.56 LANGUAGES CXX)
+project(EpochGui VERSION 0.87.57 LANGUAGES CXX)
 
 set(EPOCHGUI_SOURCE_ROOT "" CACHE PATH "Directory containing include/gui and src/epochgui.")
 
