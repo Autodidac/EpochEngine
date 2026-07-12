@@ -191,6 +191,14 @@ after choosing the current source gate from `Changes/active_pass.md`.
 
 ## Updater, Linux, And Source Shape
 
+- Pin source-update archives to the exact commit revision approved by the
+  matching platform CI job instead of downloading mutable branch archives
+  after the build-status check. Keep archive identity and selected commit in
+  updater logs and reject mismatches before executing CMake/build entrypoints.
+- Move Linux source-update build orchestration toward an updater-owned helper
+  under the proper tools boundary. Until then, execute `Engine/build.sh` only
+  from the validated disposable source snapshot with explicit compiler,
+  vcpkg-root, overlay, cache, cancellation, and Release arguments.
 - Updater is binary-first, platform-build-gated, and source-fallback only when
   no compatible package exists. It must show visible modal/progress/cancel/
   restart evidence, use executable-local cache, and never self-close before
