@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.87.60`
+Current source version: `v0.87.61`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility

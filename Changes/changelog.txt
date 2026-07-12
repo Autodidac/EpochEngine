@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.87.61] - Post-release source checkpoint
+
+- Advanced `main` after the verified `v0.87.60` Windows/Linux runtime release
+  so packaged installs can exercise the repaired source-update path against a
+  genuinely newer source revision.
+
 ## [v0.87.60] - Linux updater visibility and toolchain repair
 
 - Promoted the Linux cancel/progress, managed registry, tool-cache diagnostics,
