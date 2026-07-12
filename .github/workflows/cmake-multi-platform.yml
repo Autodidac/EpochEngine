@@ -294,8 +294,8 @@ jobs:
           test "$(readelf -d ./epoch | sed -n 's/.*RUNPATH.*\[\(.*\)\].*/\1/p')" = '$ORIGIN/lib'
           ! ldd ./epoch | grep -F 'not found'
           ! ldd ./epoch | grep -E 'vcpkg_installed|/home/runner/work/'
-          ./epoch --version | grep -F "Epoch v$version"
-          ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass'
+          xvfb-run -a ./epoch --version | grep -F "Epoch v$version"
+          xvfb-run -a ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass'
           timeout --signal=INT --kill-after=3s 30s \
             xvfb-run -a ./epoch --editor --renderer opengl --smoke
 
