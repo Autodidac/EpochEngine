@@ -7,6 +7,6 @@ namespace epochnamespace::gui_lib
     inline constexpr std::string_view library_name = "EpochGui";
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 87;
-    inline constexpr int version_revision = 66;
-    inline constexpr std::string_view version_string = "0.87.66";
+    inline constexpr int version_revision = 67;
+    inline constexpr std::string_view version_string = "0.87.67";
 }

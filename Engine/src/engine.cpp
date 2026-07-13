@@ -4965,6 +4965,7 @@ namespace epochnamespace::core
             case Choice::OpenEditor:
             case Choice::ProjectTwoDStudio:
             case Choice::About:
+            case Choice::CheckUpdates:
             case Choice::UpdateLatest:
             case Choice::UpdatePanelCancel:
             case Choice::UpdatePanelDismiss:
@@ -6680,8 +6681,11 @@ namespace epochnamespace::core
                                     session.menu.guard_next_input_frames(8u);
                                     append_launcher_cancel_breadcrumb_noexcept("cancel input guard armed");
                                 }
-                                else if (*choice == epochnamespace::menu::Choice::UpdateLatest)
+                                else if (*choice == epochnamespace::menu::Choice::UpdateLatest
+                                    || *choice == epochnamespace::menu::Choice::CheckUpdates)
                                 {
+                                    const bool installRequested =
+                                        *choice == epochnamespace::menu::Choice::UpdateLatest;
                                     if (launcherUpdate.has_pending_work())
                                     {
                                         publish_launcher_update_status("Update is already checking or staging. Keep this launcher open.");
@@ -6730,14 +6734,16 @@ namespace epochnamespace::core
                                             std::source_location::current());
                                         try
                                         {
-                                            auto updateFuture = std::async(std::launch::async, [] {
+                                            auto updateFuture = std::async(std::launch::async, [installRequested] {
                                                 logger::get(kEditorLog).log(
                                                     logger::LogLevel::INFO,
-                                                    "Launcher update worker entered run_update_command.",
+                                                    installRequested
+                                                        ? "Launcher update worker entered the confirmed source-update path."
+                                                        : "Launcher startup update check entered the availability-only path.",
                                                     std::source_location::current());
                                                 return epochnamespace::updater::run_update_command(
                                                     default_update_channel(),
-                                                    true,
+                                                    installRequested,
                                                     false,
                                                     epochnamespace::updater::UpdateHandoffMode::StageForRestart);
                                             });

@@ -505,14 +505,17 @@ epoch_apply_version_overrides(epoch_renderer_smoke)
 
 set(EPOCH_MODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
 
-# LLVM 22.1.8 can crash in the O3 CGSCC pipeline while compiling this C++23
-# module on constrained Linux CI runners. Command-line parsing is not hot-path
-# code, so keep the workaround source-local instead of lowering engine-wide
-# Release optimization.
+# LLVM 22.1.8 can crash in optimization passes while compiling these C++23
+# modules on Linux. Neither surface is render hot-path code, so keep the
+# workaround source-local instead of lowering engine-wide Release optimization.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND UNIX AND NOT APPLE)
     set_source_files_properties(
         "${EPOCH_MODULE_DIR}/core.commandline.ixx"
         PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O1>"
+    )
+    set_source_files_properties(
+        "${EPOCH_MODULE_DIR}/net.ixx"
+        PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0>"
     )
 endif()
 file(GLOB EPOCH_MODULE_FILES ${EPOCH_MODULE_DIR}/*.ixx)

@@ -5537,7 +5537,7 @@ namespace epochnamespace::updater
             << "rm -f \"$ARCHIVE\"\n"
             << "cd \"$TARGETDIR\"\n"
             << "unset EPOCH_UPDATER_SHELL_AUTO_COMMAND EPOCH_EDITOR_AUTO_COMMAND || true\n"
-            << "\"$TARGETEXE\" >/dev/null 2>&1 &\n"
+            << "env -u EPOCH_UPDATER_SHELL_AUTO_COMMAND -u EPOCH_EDITOR_AUTO_COMMAND \"$TARGETEXE\" >/dev/null 2>&1 &\n"
             << "if [ $? -ne 0 ]; then\n"
             << "  echo \"[ERROR] Failed to restart updated runtime.\" >> \"$LOG\"\n"
             << "  exit 1\n"

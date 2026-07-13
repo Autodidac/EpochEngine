@@ -4,6 +4,13 @@ The helper scripts under `Engine/` are optional, but they are still the fastest
 repeatable path for local builds when you want the tree, output folders, and
 docs flow to stay predictable.
 
+Epoch has one CMake-owned build graph. Visual Studio/MSBuild on Windows,
+CMake presets, VS Code/Codium CMake Tools, direct command-line configure/build
+commands, native Linux scripts, and Windows-hosted WSL builds are entry points
+into that graph rather than separate platform projects. A fix to target source,
+features, module ownership, or compile policy belongs in CMake first; helper
+scripts select and validate the matching toolchain and cache layout.
+
 ## `build.sh`
 
 Run from `Engine/`:
@@ -32,6 +39,12 @@ What it does:
 
 `--no-vcpkg` is an explicit diagnostic/system-package escape hatch. It is not
 the normal Linux updater or release lane.
+
+Release optimization remains target-owned by CMake. Current Clang Release
+builds use `-O3` generally, with narrowly documented source-file overrides only
+for reproducible compiler defects. LLVM 22.1.8 currently requires `net.ixx` at
+`-O0` because its `globalopt` pass crashes on that module; this does not disable
+optimization for updater, editor, runtime, renderer, or other engine code.
 
 Examples:
 

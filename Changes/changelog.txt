@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.87.67] - Restart check/install intent separation
+
+- Split launcher update availability checks from confirmed installs so a
+  restart automation token can recheck GitHub without downloading or building
+  source.
+- Keep the visible Update Epoch action as the only launcher path that forces a
+  source update.
+- Clear updater automation tokens after reading them and launch the rebuilt
+  Linux runtime through an explicit environment scrub.
+- Keep LLVM 22.1.8 Linux Release builds stable by disabling optimization only
+  for the package-gated network module, avoiding a reproducible compiler
+  `globalopt` crash without lowering optimization for the engine/render hot
+  paths.
+
 ## [v0.87.66] - Source restart loop repair
 
 - Consume launcher/editor automation environment commands once, before update

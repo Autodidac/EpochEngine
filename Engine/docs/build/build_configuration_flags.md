@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.87.66`
+Current source version: `v0.87.67`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -22,6 +22,11 @@ building during the migration.
 | `EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES` | Off | Turn missing optional backend deps into configure errors. |
 
 ## Entry points
+
+All supported entry points consume the same CMake target graph. Visual Studio,
+CMake presets, VS Code/Codium, native Linux command lines, and WSL-hosted Linux
+builds differ in generator/toolchain selection, not in source ownership or
+backend capability definitions.
 
 | Macro | Default | Purpose | Notes |
 | --- | --- | --- | --- |
@@ -118,6 +123,10 @@ override them locally in `engine.config.hpp`.
   not link both loaders, add random system fallbacks, or hide duplicate symbols
   with `/FORCE:MULTIPLE`.
 - Module-aware builds should keep `CMAKE_CXX_SCAN_FOR_MODULES=ON` enabled.
+- LLVM 22.1.8 Linux Release builds keep the engine at `-O3` while compiling
+  only `modules/net.ixx` at `-O0` to avoid a reproducible LLVM `globalopt`
+  crash. This is a source-local compiler workaround, not a reduced Linux,
+  updater, renderer, or context build.
 - The normal MSVC x64 multicontext editor target uses the dynamic vcpkg lane
   (`x64-windows`, `/MD`, `RAYLIB_DLL`) so Raylib, SFML, SDL3, GLAD, and DirectX
   can coexist without third-party static duplicate-symbol conflicts. DLLs beside

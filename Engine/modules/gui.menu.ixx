@@ -95,6 +95,7 @@ export namespace epochnamespace::menu
     }
 
     enum class Choice {
+        CheckUpdates,
         UpdateLatest,
         UpdatePanelCancel,
         UpdatePanelDismiss,
@@ -194,7 +195,7 @@ export namespace epochnamespace::menu
             return "Checks GitHub once, then builds current main source locally when that source is newer. Packaged releases are used only when no newer source lane is available.";
         }
 
-        [[nodiscard]] static bool updater_shell_auto_update_requested() noexcept
+        [[nodiscard]] static bool updater_shell_automatic_check_requested() noexcept
         {
             std::string value;
 
@@ -214,14 +215,11 @@ export namespace epochnamespace::menu
 #endif
 
             const bool requested = value == "smart-update";
-            if (requested)
-            {
 #if defined(_WIN32)
-                (void)_putenv_s("EPOCH_UPDATER_SHELL_AUTO_COMMAND", "");
+            (void)_putenv_s("EPOCH_UPDATER_SHELL_AUTO_COMMAND", "");
 #else
-                (void)::unsetenv("EPOCH_UPDATER_SHELL_AUTO_COMMAND");
+            (void)::unsetenv("EPOCH_UPDATER_SHELL_AUTO_COMMAND");
 #endif
-            }
             return requested;
         }
 
@@ -799,10 +797,10 @@ export namespace epochnamespace::menu
             std::optional<Choice> chosen{};
             if (clicked)
                 chosen = Choice::UpdateLatest;
-            else if (updater_shell_auto_update_requested() && !autoCommandConsumed)
+            else if (updater_shell_automatic_check_requested() && !autoCommandConsumed)
             {
                 autoCommandConsumed = true;
-                chosen = Choice::UpdateLatest;
+                chosen = Choice::CheckUpdates;
             }
             else if (core::cli::smoke_requested && !autoCommandConsumed)
             {
