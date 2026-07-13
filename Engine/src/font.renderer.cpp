@@ -36,6 +36,7 @@ module;
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <mutex>

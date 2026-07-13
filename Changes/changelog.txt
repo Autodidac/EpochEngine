@@ -7,6 +7,8 @@
   path against a genuinely newer source revision.
 - Aligned EpochGui's exported numeric and string version constants at
   `0.87.65` for both header and C++23 module consumers.
+- Made the font renderer explicitly include `<format>` so updater-equivalent
+  clean Clang 22 builds do not depend on transitive standard-library imports.
 
 ## [v0.87.64] - Clean Linux source-build release
 
