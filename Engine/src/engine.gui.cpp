@@ -40,6 +40,7 @@ module;
 #include <cstring>
 #include <cmath>
 #include <filesystem>
+#include <format>
 #include <iterator>
 #include <limits>
 #include <memory>

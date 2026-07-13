@@ -9,6 +9,9 @@
   `0.87.65` for both header and C++23 module consumers.
 - Made the font renderer explicitly include `<format>` so updater-equivalent
   clean Clang 22 builds do not depend on transitive standard-library imports.
+- Made every remaining `std::format` consumer own `<format>`, including SDL,
+  software rendering, and the GUI implementation, so fresh updater source
+  trees cannot inherit formatting declarations from cached module state.
 
 ## [v0.87.64] - Clean Linux source-build release
 

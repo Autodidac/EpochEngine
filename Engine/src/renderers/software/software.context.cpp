@@ -2,6 +2,7 @@ module;
 
 #include <algorithm>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <iostream>
 #include <memory>
