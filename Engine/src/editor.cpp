@@ -1574,10 +1574,25 @@ namespace epochnamespace
                 return EditorAutomationCommand::None;
 #endif
 
+            const auto consume = []() noexcept
+                {
+#if defined(_WIN32)
+                    (void)_putenv_s("EPOCH_EDITOR_AUTO_COMMAND", "");
+#else
+                    (void)::unsetenv("EPOCH_EDITOR_AUTO_COMMAND");
+#endif
+                };
+
             if (value == "smart-update")
+            {
+                consume();
                 return EditorAutomationCommand::SmartUpdate;
+            }
             if (value == "source-update")
+            {
+                consume();
                 return EditorAutomationCommand::SourceUpdate;
+            }
 
             return EditorAutomationCommand::None;
         }

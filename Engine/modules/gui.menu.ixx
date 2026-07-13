@@ -213,7 +213,16 @@ export namespace epochnamespace::menu
                 return false;
 #endif
 
-            return value == "smart-update";
+            const bool requested = value == "smart-update";
+            if (requested)
+            {
+#if defined(_WIN32)
+                (void)_putenv_s("EPOCH_UPDATER_SHELL_AUTO_COMMAND", "");
+#else
+                (void)::unsetenv("EPOCH_UPDATER_SHELL_AUTO_COMMAND");
+#endif
+            }
+            return requested;
         }
 
         static constexpr std::string_view launcher_title() noexcept

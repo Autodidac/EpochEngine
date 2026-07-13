@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.87.66] - Source restart loop repair
+
+- Consume launcher/editor automation environment commands once, before update
+  workers can inherit them, and clear those commands again in every source
+  runtime handoff before relaunch.
+- Prevent a successfully source-updated runtime from automatically starting the
+  same update again when it opens the launcher after restart.
+
 ## [v0.87.65] - Post-release source checkpoint
 
 - Advanced `main` after the verified `v0.87.64` Windows/Linux runtime release
