@@ -3042,9 +3042,22 @@ namespace epochnamespace::updater
 
             explicit ScopedLinuxSourceUpdateLock(const std::filesystem::path& lock_path)
             {
-                descriptor = ::open(lock_path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+                int open_flags = O_RDWR | O_CREAT;
+#if defined(O_CLOEXEC)
+                open_flags |= O_CLOEXEC;
+#endif
+                descriptor = ::open(lock_path.c_str(), open_flags, S_IRUSR | S_IWUSR);
                 if (descriptor < 0)
                     return;
+
+                const int descriptor_flags = ::fcntl(descriptor, F_GETFD);
+                if (descriptor_flags < 0
+                    || ::fcntl(descriptor, F_SETFD, descriptor_flags | FD_CLOEXEC) < 0)
+                {
+                    ::close(descriptor);
+                    descriptor = -1;
+                    return;
+                }
 
                 if (::flock(descriptor, LOCK_EX | LOCK_NB) == 0)
                 {
@@ -3070,6 +3083,51 @@ namespace epochnamespace::updater
                 ::close(descriptor);
             }
         };
+
+        inline void close_inherited_linux_source_update_lock() noexcept
+        {
+#if defined(__linux__)
+            try
+            {
+                const std::string expected_lock =
+                    normalized_absolute_path_string(linux_source_update_lock_path());
+                std::error_code ec;
+                for (std::filesystem::directory_iterator it{ "/proc/self/fd", ec }, end;
+                    it != end;
+                    it.increment(ec))
+                {
+                    if (ec)
+                    {
+                        ec.clear();
+                        continue;
+                    }
+
+                    const std::string descriptor_text = it->path().filename().string();
+                    int descriptor = -1;
+                    const auto [ptr, parse_ec] = std::from_chars(
+                        descriptor_text.data(),
+                        descriptor_text.data() + descriptor_text.size(),
+                        descriptor);
+                    if (parse_ec != std::errc{}
+                        || ptr != descriptor_text.data() + descriptor_text.size()
+                        || descriptor <= 2)
+                    {
+                        continue;
+                    }
+
+                    ec.clear();
+                    const auto linked_path = std::filesystem::read_symlink(it->path(), ec);
+                    if (ec || normalized_absolute_path_string(linked_path) != expected_lock)
+                        continue;
+
+                    ::close(descriptor);
+                }
+            }
+            catch (...)
+            {
+            }
+#endif
+        }
 
         [[nodiscard]] inline bool linux_source_update_lock_held()
         {
@@ -3304,12 +3362,37 @@ namespace epochnamespace::updater
         {
             const auto marker = read_source_active_marker(target_binary);
 #if !defined(_WIN32)
+            const std::string source_log = read_text_file_tail(source_update_log_path_for(target_binary));
+            const std::string handoff_log = read_text_file_tail(update_handoff_log_path_for(target_binary));
+            const bool completed_handoff = source_update_terminal_evidence(source_log, handoff_log);
+            if (completed_handoff
+                && !in_process_source_update_active().load(std::memory_order_acquire))
+            {
+                close_inherited_linux_source_update_lock();
+                remove_update_cache_path_best_effort(source_active_run_path(target_binary));
+                remove_update_cache_path_best_effort(source_cancel_path(target_binary));
+                return false;
+            }
+
             const bool lock_held = linux_source_update_lock_held();
             if (lock_held)
             {
-                if (marker && active_run_out)
-                    *active_run_out = marker->run_dir;
-                return true;
+                const bool marker_owner_live = marker
+                    && marker->has_process_id
+                    && process_is_running(marker->process_id);
+                const bool legacy_marker_live = marker
+                    && !marker->has_process_id
+                    && source_update_recent_pending_log_evidence(
+                        target_binary,
+                        std::chrono::seconds{ 20 });
+                if (marker_owner_live || legacy_marker_live)
+                {
+                    if (active_run_out)
+                        *active_run_out = marker->run_dir;
+                    return true;
+                }
+
+                close_inherited_linux_source_update_lock();
             }
 
             remove_update_cache_path_best_effort(source_active_run_path(target_binary));
@@ -5471,6 +5554,8 @@ namespace epochnamespace::updater
         const auto source_assets_dir = built_runtime_dir / "assets";
         const auto source_repo_assets_dir = system_detail::source_manifest_root(source_root) / "assets";
         const auto target_assets_dir = target_dir / "assets";
+        const auto active_marker_path = system_detail::source_active_run_path(target_binary);
+        const auto cancel_marker_path = system_detail::source_cancel_path(target_binary);
 
         std::ofstream sh(script_path, std::ios::binary);
         if (!sh)
@@ -5491,6 +5576,8 @@ namespace epochnamespace::updater
             << "SRCASSETS=" << system_detail::quote_shell_arg(source_assets_dir.string()) << "\n"
             << "REPOASSETS=" << system_detail::quote_shell_arg(source_repo_assets_dir.string()) << "\n"
             << "DSTASSETS=" << system_detail::quote_shell_arg(target_assets_dir.string()) << "\n"
+            << "ACTIVE=" << system_detail::quote_shell_arg(active_marker_path.string()) << "\n"
+            << "CANCEL=" << system_detail::quote_shell_arg(cancel_marker_path.string()) << "\n"
             << "LOG=" << system_detail::quote_shell_arg(handoff_log.string()) << "\n"
             << ": > \"$LOG\"\n"
             << "echo \"[INFO] Source runtime replacement started\" >> \"$LOG\"\n"
@@ -5535,6 +5622,7 @@ namespace epochnamespace::updater
             << "fi\n"
             << "echo \"[INFO] Source runtime files copied successfully.\" >> \"$LOG\"\n"
             << "rm -f \"$ARCHIVE\"\n"
+            << "rm -f \"$ACTIVE\" \"$CANCEL\"\n"
             << "cd \"$TARGETDIR\"\n"
             << "unset EPOCH_UPDATER_SHELL_AUTO_COMMAND EPOCH_EDITOR_AUTO_COMMAND || true\n"
             << "env -u EPOCH_UPDATER_SHELL_AUTO_COMMAND -u EPOCH_EDITOR_AUTO_COMMAND \"$TARGETEXE\" >/dev/null 2>&1 &\n"

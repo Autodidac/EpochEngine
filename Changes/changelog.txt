@@ -1,5 +1,15 @@
 # Epoch Changelog
 
+## [v0.87.68] - Linux source handoff ownership repair
+
+- Mark the process-wide Linux source-update lock close-on-exec so replacement
+  shells and restarted editor processes cannot inherit updater ownership.
+- Remove active and cancel markers before the rebuilt runtime starts, rather
+  than relying on C++ scope cleanup after the intentional updater exit.
+- Let a newly rebuilt runtime recognize terminal handoff evidence, close the
+  lock descriptor inherited from older updaters, and discard their stale
+  markers without reopening the update surface.
+
 ## [v0.87.67] - Restart check/install intent separation
 
 - Split launcher update availability checks from confirmed installs so a
