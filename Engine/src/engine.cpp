@@ -1153,6 +1153,16 @@ namespace epochnamespace::core
             && opengl.presentation_proof == partial
             && opengl.sampled_render_targets == partial;
 
+        const auto sdlLivePathReady = [present, partial](const epoch::RendererCapabilityReport& report) noexcept
+        {
+            return report.descriptor_contract == present
+                && report.build_graph_proof == present
+                && report.hook_readiness == present
+                && report.live_native_allocation == partial
+                && report.presentation_proof == partial
+                && report.sampled_render_targets == partial;
+        };
+
         const auto runtimeGuardedReady = [present, partial, missing](const epoch::RendererCapabilityReport& report) noexcept
         {
             return report.descriptor_contract == present
@@ -1210,11 +1220,15 @@ namespace epochnamespace::core
         {
             epoch::SdlRenderDevice device{};
             const epoch::RendererCapabilities caps = device.capabilities();
+            epoch::RenderTextureAssetHandles noRuntimeHandles{};
+            if (!device.runtime_renderer_available())
+                noRuntimeHandles = device.create_render_texture_asset(epoch::render_arcade::make_screen_render_texture_desc());
             runtimeGuardCapsReady = runtimeGuardCapsReady
                 && epoch::renderer_supports_sampled_render_targets(caps)
                 && epoch::renderer_supports_sampled_rtt_hooks(caps)
                 && (epoch::renderer_supports_live_sampled_rtt_allocation(caps) == device.runtime_renderer_available())
-                && (epoch::renderer_supports_native_sampled_render_targets(caps) == device.runtime_renderer_available());
+                && (epoch::renderer_supports_native_sampled_render_targets(caps) == device.runtime_renderer_available())
+                && (device.runtime_renderer_available() || (!noRuntimeHandles.texture && !noRuntimeHandles.sampler && !noRuntimeHandles.render_target && device.render_texture_count() == 0u));
         }
 #endif
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
@@ -1241,7 +1255,7 @@ namespace epochnamespace::core
 #endif
 
         return openglReady
-            && runtimeGuardedReady(sdl)
+            && sdlLivePathReady(sdl)
             && runtimeGuardedReady(sfml)
             && runtimeGuardedReady(raylib)
             && futureNativeReady(vulkan)
