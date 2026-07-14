@@ -38,6 +38,7 @@ import context.type;
 import core.logger;
 import image.loader;
 import render.preview_grid;
+import package.registry;
 import sdl.renderer;
 import sdl.state;
 import sdl.textures;
@@ -113,6 +114,180 @@ namespace
         return true;
     }
 
+
+
+    struct SdlArcadeScreenPreviewTarget
+    {
+        SDL_Texture* texture = nullptr;
+        int width = 0;
+        int height = 0;
+        std::uint64_t frame = 0;
+    };
+
+    SdlArcadeScreenPreviewTarget& arcade_screen_preview_target() noexcept
+    {
+        static SdlArcadeScreenPreviewTarget target{};
+        return target;
+    }
+
+    void destroy_arcade_screen_preview_target() noexcept
+    {
+        SdlArcadeScreenPreviewTarget& target = arcade_screen_preview_target();
+        if (target.texture)
+            SDL_DestroyTexture(target.texture);
+        target = {};
+    }
+
+    bool ensure_arcade_screen_preview_target(SDL_Renderer* renderer) noexcept
+    {
+        if (!renderer)
+            return false;
+
+        SdlArcadeScreenPreviewTarget& target = arcade_screen_preview_target();
+        const int width = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_width());
+        const int height = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_height());
+        if (width <= 0 || height <= 0)
+            return false;
+
+        if (target.texture && target.width == width && target.height == height)
+            return true;
+
+        destroy_arcade_screen_preview_target();
+        target.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
+        if (!target.texture)
+        {
+            epochnamespace::sdlcontext::check_sdl_error("SDL_CreateTexture engine_arcade.screen");
+            return false;
+        }
+
+        (void)SDL_SetTextureBlendMode(target.texture, SDL_BLENDMODE_BLEND);
+        (void)SDL_SetTextureScaleMode(target.texture, SDL_SCALEMODE_NEAREST);
+        target.width = width;
+        target.height = height;
+        return true;
+    }
+
+    void fill_arcade_preview_rect(SDL_Renderer* renderer, int x, int y, int width, int height, Uint8 r, Uint8 g, Uint8 b) noexcept
+    {
+        if (!renderer || width <= 0 || height <= 0)
+            return;
+        const SDL_FRect rect{ static_cast<float>(x), static_cast<float>(y), static_cast<float>(width), static_cast<float>(height) };
+        (void)SDL_SetRenderDrawColor(renderer, r, g, b, 255u);
+        (void)SDL_RenderFillRect(renderer, &rect);
+    }
+
+    void render_arcade_attract_pattern(SDL_Renderer* renderer) noexcept
+    {
+        SdlArcadeScreenPreviewTarget& target = arcade_screen_preview_target();
+        if (!renderer || !target.texture || target.width <= 0 || target.height <= 0)
+            return;
+
+        SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer);
+        if (!SDL_SetRenderTarget(renderer, target.texture))
+        {
+            epochnamespace::sdlcontext::check_sdl_error("SDL_SetRenderTarget engine_arcade.screen");
+            epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+            return;
+        }
+
+        const int width = target.width;
+        const int height = target.height;
+        (void)SDL_SetRenderDrawColor(renderer, 4u, 6u, 11u, 255u);
+        (void)SDL_RenderClear(renderer);
+        fill_arcade_preview_rect(renderer, 18, 18, width - 36, height - 36, 6u, 19u, 23u);
+        fill_arcade_preview_rect(renderer, 24, 24, width - 48, 6, 18u, 242u, 158u);
+        fill_arcade_preview_rect(renderer, 24, height - 30, width - 48, 6, 18u, 242u, 158u);
+        fill_arcade_preview_rect(renderer, 24, 24, 6, height - 48, 18u, 242u, 158u);
+        fill_arcade_preview_rect(renderer, width - 30, 24, 6, height - 48, 18u, 242u, 158u);
+        for (int y = 52; y < height - 52; y += 32)
+        {
+            const Uint8 tone = ((y / 32) % 2 == 0) ? 13u : 9u;
+            fill_arcade_preview_rect(renderer, 44, y, width - 88, 3, tone, static_cast<Uint8>(tone + 9u), static_cast<Uint8>(tone + 17u));
+        }
+        const int cell = (std::max)(14, width / 24);
+        const int playLeft = 72;
+        const int playBottom = 92;
+        const int playWidth = width - 144;
+        const int playHeight = height - 184;
+        const int frame = static_cast<int>(target.frame++ % 240u);
+        const int phase = frame / 12;
+        const int headColumn = phase % (std::max)(1, playWidth / cell);
+        const int lane = (phase / 5) % 6;
+        const int headY = playBottom + lane * cell;
+        for (int i = 0; i < 9; ++i)
+        {
+            const int segment = (std::max)(0, headColumn - i);
+            const int sx = playLeft + segment * cell;
+            const int sy = headY - ((i / 5) * cell);
+            const Uint8 green = static_cast<Uint8>((std::max)(51, 230 - i * 17));
+            fill_arcade_preview_rect(renderer, sx, sy, cell - 3, cell - 3, 20u, green, 122u);
+        }
+        const int fruitX = playLeft + ((phase * 5 + 7) % (std::max)(1, playWidth / cell)) * cell;
+        const int fruitY = playBottom + ((phase * 3 + 2) % (std::max)(1, playHeight / cell)) * cell;
+        fill_arcade_preview_rect(renderer, fruitX, fruitY, cell, cell, 245u, 71u, 51u);
+        fill_arcade_preview_rect(renderer, fruitX + 3, fruitY + 3, cell - 6, cell - 6, 255u, 209u, 64u);
+        const int pulse = 16 + (frame % 48);
+        fill_arcade_preview_rect(renderer, width / 2 - 112, height - 82, 224, 10, 26u, 89u, 184u);
+        fill_arcade_preview_rect(renderer, width / 2 - 112, height - 82, (std::min)(224, pulse * 5), 10, 66u, 209u, 255u);
+
+        if (!SDL_SetRenderTarget(renderer, previousTarget))
+        {
+            epochnamespace::sdlcontext::check_sdl_error("SDL_SetRenderTarget engine_arcade.screen restore");
+            epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+        }
+    }
+
+    void render_engine_arcade_sampled_surface_preview(
+        const std::shared_ptr<epochnamespace::core::Context>& ctx,
+        const epochnamespace::previewgrid::Mat4& mvp,
+        const epochnamespace::core::RenderViewport& viewport) noexcept
+    {
+        if (!ctx || !s_renderer)
+            return;
+        const auto markers = epochnamespace::previewgrid::sampled_render_surface_markers_for(ctx.get());
+        if (markers.empty() || !ensure_arcade_screen_preview_target(s_renderer))
+            return;
+
+        render_arcade_attract_pattern(s_renderer);
+        SdlArcadeScreenPreviewTarget& target = arcade_screen_preview_target();
+        for (const auto& marker : markers)
+        {
+            const float halfX = (std::max)(std::abs(marker.scale.x) * 0.5f, 0.25f);
+            const float halfY = (std::max)(std::abs(marker.scale.y) * 0.5f, 0.18f);
+            const float z = marker.position.z - (std::max)(std::abs(marker.scale.z) * 0.5f, 0.018f) - 0.012f;
+            const epochnamespace::previewgrid::Vec3 world[4]{
+                { marker.position.x - halfX, marker.position.y - halfY, z },
+                { marker.position.x + halfX, marker.position.y - halfY, z },
+                { marker.position.x + halfX, marker.position.y + halfY, z },
+                { marker.position.x - halfX, marker.position.y + halfY, z }
+            };
+            SDL_Vertex vertices[4]{};
+            const SDL_FPoint uvs[4]{ {0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, {0.0f, 0.0f} };
+            bool visible = true;
+            for (int i = 0; i < 4; ++i)
+            {
+                float x = 0.0f;
+                float y = 0.0f;
+                if (!project_preview_vertex(mvp, world[i], viewport, x, y))
+                {
+                    visible = false;
+                    break;
+                }
+                vertices[i].position = SDL_FPoint{ x, y };
+                vertices[i].color = SDL_FColor{ 1.0f, 1.0f, 1.0f, 1.0f };
+                vertices[i].tex_coord = uvs[i];
+            }
+            if (!visible)
+                continue;
+            const int indices[6]{ 0, 1, 2, 0, 2, 3 };
+            if (!SDL_RenderGeometry(s_renderer, target.texture, vertices, 4, indices, 6))
+            {
+                epochnamespace::sdlcontext::check_sdl_error("SDL_RenderGeometry engine_arcade.screen");
+                epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+                return;
+            }
+        }
+    }
     void render_scene_preview(const std::shared_ptr<epochnamespace::core::Context>& ctx)
     {
         if (!ctx || !s_renderer)
@@ -185,6 +360,8 @@ namespace
 
             draw_projected_line(vertices[firstIndex], vertices[secondIndex]);
         }
+
+        render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport);
 
         const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
         const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get());
@@ -567,6 +744,8 @@ namespace
         if (s_hostWindow && s_hostWindow != s_childWindow && ::IsWindow(s_hostWindow) != FALSE)
             ::ShowWindow(s_hostWindow, SW_HIDE);
 #endif
+        destroy_arcade_screen_preview_target();
+
         if (s_renderer)
         {
             SDL_DestroyRenderer(s_renderer);

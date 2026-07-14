@@ -605,6 +605,14 @@ export namespace epoch
             report.mesh_model_resources = RendererCapabilityStatus::partial;
             break;
         case RendererBackendKind::sdl3:
+            report.descriptor_contract = RendererCapabilityStatus::present;
+            report.build_graph_proof = RendererCapabilityStatus::present;
+            report.hook_readiness = RendererCapabilityStatus::present;
+            report.live_native_allocation = RendererCapabilityStatus::partial;
+            report.presentation_proof = RendererCapabilityStatus::partial;
+            report.sampled_render_targets = RendererCapabilityStatus::partial;
+            report.mesh_model_resources = RendererCapabilityStatus::partial;
+            break;
         case RendererBackendKind::sfml3:
         case RendererBackendKind::raylib3:
             report.descriptor_contract = RendererCapabilityStatus::present;
