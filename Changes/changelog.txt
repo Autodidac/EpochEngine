@@ -6,6 +6,10 @@
   so packaged installs can detect and build a genuinely newer source revision.
 - Keep the published `v0.87.69` updater and release contract sealed while
   aligning EpochGui's exported C++23 module/header metadata at `0.87.70`.
+- Fast-forward `multicontext-base-stable` to the verified source checkpoint,
+  mirror the portable text-control slice to `Autodidac/EpochGui`, and align
+  `Autodidac/EpochEngineExtensions` compatibility metadata with the same
+  stable/source pair.
 
 ## [v0.87.69] - SDL sampled RTT and portable text controls
 
