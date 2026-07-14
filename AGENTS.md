@@ -132,7 +132,7 @@
 - `Engine/` Linux helpers:
 
   ```bash
-  ./build.sh [--no-vcpkg] [--updater-shell] [--bootstrap-current-toolchain] [--tool-cache-root <path>] [gcc|clang] [Debug|Release] [-- <extra cmake args>]
+  ./build.sh [--no-vcpkg] [--updater-shell] [--bootstrap-current-toolchain] [--tool-cache-root <path>] [--check-toolchain] [gcc|clang] [Debug|Release] [-- <extra cmake args>]
   ./run.sh [gcc|clang] [Debug|Release] [-- <runtime args>]
   ./install.sh [gcc|clang] [Debug|Release]
   ./clean.sh
@@ -144,6 +144,21 @@
   ```bash
   ./build.sh --bootstrap-current-toolchain --tool-cache-root /tmp/epoch-update-tools clang Release
   ```
+
+  Add `--check-toolchain` before `clang Release` to validate the selected
+  compiler, module scanner, CMake, Ninja, and vcpkg registry without configuring
+  or building the engine.
+
+- When the operator explicitly requests Linux release staging, use the tracked
+  packaging command from the repo root:
+
+  ```powershell
+  pwsh -NoProfile -File .\Tools\ai\stage_epoch_linux_release.ps1 -Version <version> -Configuration Clang-Release
+  ```
+
+  This command performs the approval-only staged OpenGL smoke in addition to
+  checking notices, `$ORIGIN/lib`, shared-library resolution, version and
+  contract output, archive cleanliness, and the release checksum.
 
 ## 4. Source Ownership Rules
 
