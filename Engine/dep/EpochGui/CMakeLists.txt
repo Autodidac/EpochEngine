@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.87.68 LANGUAGES CXX)
+project(EpochGui VERSION 0.87.69 LANGUAGES CXX)
 
 set(EPOCHGUI_SOURCE_ROOT "" CACHE PATH "Directory containing include/gui and src/epochgui.")
 
@@ -48,6 +48,7 @@ set(EPOCHGUI_PUBLIC_HEADERS
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/layout_primitives.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/panel_host.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/popup_layout.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/text_control.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/version.hpp"
 )
 
@@ -57,6 +58,7 @@ set(EPOCHGUI_SOURCES
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/floating_window.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/panel_host.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/popup_layout.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/text_control.cpp"
 )
 
 add_library(EpochGui STATIC
@@ -94,3 +96,18 @@ endif()
 source_group(TREE "${EPOCHGUI_SOURCE_ROOT}/include" PREFIX "Header Files" FILES ${EPOCHGUI_PUBLIC_HEADERS})
 source_group(TREE "${EPOCHGUI_SOURCE_ROOT}/src" PREFIX "Source Files" FILES ${EPOCHGUI_SOURCES})
 source_group(TREE "${EPOCHGUI_MODULE_ROOT}/modules" PREFIX "Module Files" FILES ${EPOCHGUI_MODULES})
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(EpochGuiTextControlTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/text_control_tests.cpp"
+    )
+    target_link_libraries(EpochGuiTextControlTests PRIVATE EpochGui)
+    target_compile_features(EpochGuiTextControlTests PRIVATE cxx_std_23)
+    set_target_properties(EpochGuiTextControlTests PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+    add_test(NAME EpochGui.TextControl COMMAND EpochGuiTextControlTests)
+endif()

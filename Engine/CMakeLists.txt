@@ -248,6 +248,7 @@ add_library(epoch_gui STATIC
     src/epochgui/floating_window.cpp
     src/epochgui/panel_host.cpp
     src/epochgui/popup_layout.cpp
+    src/epochgui/text_control.cpp
 )
 
 target_sources(epoch_gui PUBLIC

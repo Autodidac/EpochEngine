@@ -4,8 +4,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.68-1F7A4C?style=for-the-badge" alt="Current development source v0.87.68" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.64-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.64" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.87.69-1F7A4C?style=for-the-badge" alt="Current development source v0.87.69" />
+  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.87.69-2C6A8A?style=for-the-badge" alt="Published stable release v0.87.69" />
 </p>
 
 <p align="center">
@@ -75,8 +75,8 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Current source is `v0.87.68`; the latest published stable runtime release is
-  `v0.87.64`.
+- Current source is `v0.87.69`; the latest published stable runtime release is
+  `v0.87.69`.
 - Windows and Linux runtime packages use the production package
   layout: one editor/runtime executable, a root `assets/` folder, and public
   README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
@@ -125,13 +125,21 @@ For engine/tooling developers:
 - Release checkpoint: `v0.87.64` preserves isolated Linux update runs and
   managed dependencies while repairing clean Clang 22 module compilation for
   the source updater.
+- Release checkpoint: `v0.87.69` carries SDL3 sampled render-to-texture,
+  repairs the Windows source-updater build after that integration, and adds the
+  first portable EpochGui text-control slice without changing Linux updater
+  ownership.
+- The `v0.87.69` runtime/updater is now a sealed baseline. Current development
+  does not modify updater behavior, packaging, tags, or release assets unless
+  that gate is explicitly reopened.
 - The editor has a toolbar scene-mode selector for 3D scene construction versus
   2D game/UI construction, launcher/editor handoff and update progress use the
   shared EpochGui loading-screen primitive, OpenGL owns the first visible
-  sampled render-surface preview proof for Engine Arcade, SDL context handoff
-  stays docked in the parent grid, and the Linux/Clang full-engine lane remains
-  the module-sensitive CI lane that must stay green before calling a source
-  checkpoint sealed.
+  sampled render-surface preview proof for Engine Arcade, SDL3 now owns a live
+  target-texture presentation path, EpochGui owns portable UTF-8 text-edit state,
+  SDL context handoff stays docked in the parent grid, and the Linux/Clang
+  full-engine lane remains the module-sensitive CI lane that must stay green
+  before calling a source checkpoint sealed.
 
 OS AI model, tooling, and evidence rules live with the AI assets in
 `Engine/ai/README.md` and the engine policy docs.

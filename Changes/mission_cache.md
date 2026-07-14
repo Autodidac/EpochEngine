@@ -120,14 +120,20 @@ after choosing the current source gate from `Changes/active_pass.md`.
 
 ## GUI And Editor Workflow
 
-- Build reusable GUI primitives in `engine.gui` first: selectable/editable text,
-  right-click context menus, copy/paste, word wrap, scroll bounds, modal focus,
-  progress bars, list rows, tabs, docking chrome, theme tables, and floating
-  windows.
+- Build backend-neutral reusable GUI state in `EpochGui` first, then render and
+  route it through `engine.gui`: selectable/editable text, right-click context
+  menus, copy/paste, word wrap, scroll bounds, modal focus, progress bars, list
+  rows, tabs, docking chrome, theme tables, and floating windows.
 - `EpochGui` is the portable C++23 module/static-library layer. It owns OOP
   layout/state controllers and backend-neutral data. It must not require native
   popout windows, editor project state, renderer contexts, or OS-specific host
   code.
+- Completed portable text slice: `TextControlController` owns UTF-8-safe byte
+  boundaries, caret/anchor selection, document/line/word/multiline movement,
+  insertion and deletion, copy/cut/paste intent, read-only policy, byte limits,
+  newline/tab filtering, and metric-driven scroll visibility. Platform clipboard
+  calls, font measurement, event translation, drawing, wrapping, and context-menu
+  presentation remain adapter work.
 - `engine.gui` is the engine adapter. It owns input translation, theme/font
   state, clipping, deferred GUI batches, top-layer replay, and renderer-facing
   widget drawing.
@@ -189,7 +195,13 @@ after choosing the current source gate from `Changes/active_pass.md`.
   silently fall back to stale defaults.
 - Hidden model reasoning must not surface in chat or become training data.
 
-## Updater, Linux, And Source Shape
+## Sealed Updater, Release, Linux, And Source Shape
+
+- The published `v0.87.69` runtime and updater are completed, accepted, and
+  untouchable unless the operator explicitly reopens the gate. The remaining
+  bullets preserve the proven contract and historical source-shape rules; they
+  are not permission to schedule updater, packaging, handoff-script, tag, or
+  release-asset changes.
 
 - Pin source-update archives to the exact commit revision approved by the
   matching platform CI job instead of downloading mutable branch archives

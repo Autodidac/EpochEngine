@@ -151,6 +151,11 @@ export namespace epochnamespace::sdlcontext
 
     inline SDLState sdlcontext{};
 
+    namespace detail
+    {
+        inline void destroy_arcade_screen_preview_target() noexcept;
+    }
+
     inline void refresh_dimensions(const std::shared_ptr<core::Context>& ctx) noexcept
     {
         int logicalW = (std::max)(1, sdlcontext.width);

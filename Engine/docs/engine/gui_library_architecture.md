@@ -288,12 +288,17 @@ theme, text, and atlas/backend replay; keep portable math/control state in
 
 The current reusable payload includes floating-window layout, popup/dropdown
 layout, dock-layout math, dockable-window host/action state, splitters,
-progress-bar layout, and selectable-list row math. The current production
-editor route uses real pane title bars for detach requests; old generic
-Floating GUI proof routes are infrastructure only. The next safe conversion
-batch is native routed GUI pane redock, modal sizing/action rows, closable
-panels with scroll bodies, and Package Manager action rows before touching
-top-layer menu composition.
+progress-bar layout, selectable-list row math, and portable text-control state.
+`TextControlController` provides UTF-8-safe caret boundaries, anchor/range
+selection, line/document/word/multiline navigation, edit and clipboard intent,
+read-only and maximum-byte policy, and metric-driven scrolling. The adapter
+still owns native clipboard calls, glyph measurement, wrapping, rendering, and
+input-event translation. The current production editor route uses real pane
+title bars for detach requests; old generic Floating GUI proof routes are
+infrastructure only. The next safe conversion batch is native routed GUI pane
+redock, modal sizing/action rows, closable panels with scroll bodies, text
+adapter integration, and Package Manager action rows before touching top-layer
+menu composition.
 
 Floating/native GUI hosts are optional integration features, not required
 `EpochGui` payload. Games, mobile apps, console targets, headless tools, and

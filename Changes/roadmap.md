@@ -23,13 +23,15 @@ disconnected experiments.
   EpochBot, hidden autonomy, learner/watcher language, or silent fallback.
 - Packages, servers, model weights, and generated projects are opt-in,
   reviewable, license-aware, cache-local, and never hidden bypass channels.
+- The published `v0.87.69` runtime and updater are sealed. Source missions do
+  not edit updater/release code, scripts, packaging, tags, or assets unless the
+  operator explicitly reopens that gate.
 
 ## Current Working Contract
 
-The hot path is Linux/updater source-shape stability for the next release pair.
-The stable package must be built before the source line advances one revision
-for update checks; do not advance versions casually while a package is being
-validated.
+The hot path is renderer-resource truth plus reusable source-library growth.
+The published runtime stays at `v0.87.69`; development source may advance
+independently without reopening or changing the sealed updater/release lane.
 
 The current source shape is:
 
@@ -40,7 +42,7 @@ The current source shape is:
 - internal engine headers that were moved out of public include stay under
   `Engine/src`
 
-The current updater contract is:
+The sealed updater contract is retained as read-only behavior documentation:
 
 - normal update remains binary-first and platform-build-gated
 - source rebuild remains explicit or fallback-only when no compatible package
@@ -52,6 +54,8 @@ The current updater contract is:
 - the editor/launcher must keep visible progress, cancel, failure, and restart
   evidence instead of closing or reporting success because a worker merely
   started
+- no active mission may modify this lane until the operator explicitly reopens
+  it
 
 The current context contract is conservative: the normal editor owns one live
 context, and context switching must be real session handoff with state
@@ -73,15 +77,13 @@ do not count.
 Optimize for completed missions per validation cycle, not edit count. For each
 failure cluster: preserve the full transcript, identify the first causal error,
 apply the smallest production fix that covers all repeated symptoms, run the
-closest local release/updater lane, and use hosted CI as confirmation and
-artifact production. A repeated release for the same undiscovered local build
-failure is a process failure and must tighten the local gate before the next
-candidate.
+closest local production build/contract lane, and use hosted CI as confirmation.
+Release/updater validation remains dormant while that baseline is sealed.
 
 Current split lanes:
 
-- updater/release: vcpkg restore, binary/source handoff, cache hygiene,
-  launcher/editor parity, release asset identity
+- updater/release: sealed at `v0.87.69`; documentation reference only until the
+  operator explicitly reopens it
 - GUI: `EpochGui` portable controllers, `engine.gui` adapter rendering/input,
   themes, modal/menu/top-layer behavior, docking/floating hosts
 - context/session: single-context handoff, snapshot restore, routed pane

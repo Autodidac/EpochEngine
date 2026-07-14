@@ -4,6 +4,14 @@
 
 Backend-native sampled render-to-texture for OpenGL-derived contexts.
 
+## Sealed Baseline
+
+The published `v0.87.69` runtime release and updater are accepted and frozen.
+This pass must not edit updater behavior, updater UI, worker/handoff scripts,
+packaging, release metadata, tags, or release assets unless the operator
+explicitly reopens that gate. Development-source version metadata may advance
+without changing the packaged baseline.
+
 ## Why This Gate Matters
 
 This is the first vertical proof of Epoch's renderer-resource spine. It
@@ -44,8 +52,12 @@ contracts instead of drift.
 - Engine Arcade now stages an actual cabinet preview assembly in both the
   editor package preview and generated game-shell scene files instead of a
   single placeholder box: base/body/control deck plus screen/marquee entities.
-- SDL3, SFML3, and Raylib sampled-RTT capability reporting remains
-  runtime-availability-gated; contract-only paths are still `Partial`.
+- SDL3 now owns the first live non-OpenGL sampled-RTT presentation path: its
+  registered renderer allocates an SDL target texture, renders the deterministic
+  Engine Arcade attract pass into it, then samples it onto the staged screen
+  marker. The no-renderer path still fails closed, so SDL3 remains `Partial`
+  rather than claiming unconditional support. SFML3 and Raylib remain
+  runtime-availability-gated without equivalent presentation proof.
 - Raylib3 now keeps its logical backend identity inside the shared
   OpenGL-family device, so the build-only `engine_arcade.screen` graph,
   cabinet material/model, fake-native hook, and descriptor/work-order contracts
@@ -67,8 +79,13 @@ contracts instead of drift.
 - System Info and the contract harness now report sampled RTT as layered
   evidence instead of a single support claim: descriptor contract, graph proof,
   hook/adaptor readiness, live native allocation, presentation proof, and the
-  sampled-RTT rollup are distinct. SDL3/SFML3/Raylib remain missing for
-  presentation proof until a live runtime allocation and display path is proven.
+  sampled-RTT rollup are distinct. SDL3 presentation is now `Partial`; SFML3
+  and Raylib remain `Missing` until a live allocation and display path is proven.
+- EpochGui now owns a backend-neutral `TextControlController` with UTF-8-safe
+  caret boundaries, ranged selection, multiline and word navigation,
+  insert/delete/copy/cut/paste intent, read-only behavior, and measured scroll
+  visibility. Native clipboard access, glyph measurement, rendering, and input
+  translation remain engine-adapter responsibilities.
 - The editor toolbar now exposes 3D scene construction and 2D game/UI
   construction through one scene-mode selector, so Canvas2D work is an explicit
   mode switch instead of a second wide workspace tab.
@@ -253,6 +270,8 @@ keeps the integration path and final build proof.
 - OS AI/model/tooling changes
 - Unrelated source-shape cleanup
 - Documentation-only pass
+- Updater/release code, UI, scripts, packaging, tags, or assets unless the
+  operator explicitly reopens the sealed `v0.87.69` baseline
 
 ## Acceptance
 

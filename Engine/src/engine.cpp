@@ -1228,7 +1228,7 @@ namespace epochnamespace::core
                 && epoch::renderer_supports_sampled_rtt_hooks(caps)
                 && (epoch::renderer_supports_live_sampled_rtt_allocation(caps) == device.runtime_renderer_available())
                 && (epoch::renderer_supports_native_sampled_render_targets(caps) == device.runtime_renderer_available())
-                && (device.runtime_renderer_available() || (!noRuntimeHandles.texture && !noRuntimeHandles.sampler && !noRuntimeHandles.render_target && device.render_texture_count() == 0u));
+                && (device.runtime_renderer_available() || (!noRuntimeHandles.color_texture && !noRuntimeHandles.sampler && !noRuntimeHandles.render_target && device.render_texture_count() == 0u));
         }
 #endif
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)

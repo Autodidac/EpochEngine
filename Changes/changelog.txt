@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.87.69] - SDL sampled RTT and portable text controls
+
+- Add SDL3's first live sampled render-to-texture presentation path for the
+  Engine Arcade screen while retaining fail-closed no-renderer behavior and
+  layered `Partial` capability reporting.
+- Repair the merged SDL module declaration order and sampled texture handle
+  contract defects caught by the local MSVC editor build, then pass the
+  build-safe engine contract test.
+- Add EpochGui's backend-neutral C++23 `TextControlController` with UTF-8-safe
+  caret/selection editing, multiline navigation, clipboard intent, read-only
+  policy, byte limits, and metric-driven scrolling, plus focused tests and
+  complete CMake/MSVC/module metadata.
+- Publish the repaired Windows/Linux runtime pair as `v0.87.69`, then reseal
+  updater and release behavior after package validation.
+
 ## [v0.87.68] - Linux source handoff ownership repair
 
 - Mark the process-wide Linux source-update lock close-on-exec so replacement
