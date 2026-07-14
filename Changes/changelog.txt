@@ -1,5 +1,12 @@
 # Epoch Changelog
 
+## [v0.87.70] - Post-release source checkpoint
+
+- Advance `main` after the verified `v0.87.69` Windows/Linux runtime release
+  so packaged installs can detect and build a genuinely newer source revision.
+- Keep the published `v0.87.69` updater and release contract sealed while
+  aligning EpochGui's exported C++23 module/header metadata at `0.87.70`.
+
 ## [v0.87.69] - SDL sampled RTT and portable text controls
 
 - Add SDL3's first live sampled render-to-texture presentation path for the
