@@ -97,8 +97,11 @@ contracts instead of drift.
   recover through the source backend; SDL/SFML/Raylib thread ownership and
   backend-child shutdown stay tied to the stable host, manager-host destruction
   waits for renderer cleanup, and Linux partial initialization is cleaned before
-  fallback. This is the `v0.87.71` build-proven source checkpoint, while runtime
-  acceptance remains pending the operator-approved repeated-switch matrix.
+  fallback. The operator accepted SDL, SFML, OpenGL, Vulkan, DirectX, and
+  software replacement behavior from the `v0.87.71` build. The `v0.87.72`
+  source makes Raylib readiness depend on a successful owner-thread GL bind and
+  completed first present, and still needs the focused Raylib eye test before
+  runtime acceptance.
 - Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
   launcher window until packaged handoff is staged or source worker handoff
   evidence is ready. Packaged runtime installs can still distinguish stable

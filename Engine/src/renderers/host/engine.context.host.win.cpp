@@ -2417,7 +2417,9 @@ namespace epochnamespace::core
         winPtr->titleNarrow = epochnamespace::text::narrow_utf8(title);
         winPtr->guiRoute = request.gui_route;
         winPtr->isFloating = !startDocked;
-        winPtr->firstPresentComplete.store(request.type != ContextType::OpenGL, std::memory_order_release);
+        winPtr->firstPresentComplete.store(
+            request.type != ContextType::OpenGL && request.type != ContextType::RayLib,
+            std::memory_order_release);
         ctx->windowData = winPtr.get();
 
         RECT rc{};
@@ -3131,7 +3133,9 @@ namespace epochnamespace::core
         winPtr->running = true;
         winPtr->onResize = std::move(onResize);
         winPtr->context = ctx;
-        winPtr->firstPresentComplete.store(type != ContextType::OpenGL, std::memory_order_release);
+        winPtr->firstPresentComplete.store(
+            type != ContextType::OpenGL && type != ContextType::RayLib,
+            std::memory_order_release);
         ctx->windowData = winPtr.get();
 
         RECT rc{};
@@ -3764,13 +3768,20 @@ namespace epochnamespace::core
             return;
         }
 
-        win.set_backend_lifecycle(BackendLifecycleState::ready);
-        epochnamespace::logger::get(kLogSys).logf(
-            epochnamespace::logger::LogLevel::INFO,
-            std::source_location::current(),
-            "Backend {} reached render-ready state for hwnd={}.",
-            ctx->backendName,
-            static_cast<void*>(win.hwnd));
+        const bool requiresFirstPresent = ctx->type == ContextType::RayLib;
+        const auto publishRenderReady = [&]()
+        {
+            win.set_backend_lifecycle(BackendLifecycleState::ready);
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Backend {} reached render-ready state for hwnd={}.",
+                ctx->backendName,
+                static_cast<void*>(win.hwnd));
+        };
+
+        if (!requiresFirstPresent)
+            publishRenderReady();
 
         epoch::perf::frame_limiter coreFrameLimiter{};
         double activeCoreFrameLimit = -1.0;
@@ -3808,8 +3819,27 @@ namespace epochnamespace::core
 
             if (!keepRunning)
             {
+                if (requiresFirstPresent
+                    && win.backend_lifecycle() == BackendLifecycleState::initializing
+                    && !win.get_should_close()
+                    && running.load(std::memory_order_acquire))
+                {
+                    epochnamespace::logger::get(kLogSys).logf(
+                        epochnamespace::logger::LogLevel::Error,
+                        std::source_location::current(),
+                        "Backend {} stopped before its first present. Rejecting the replacement window.",
+                        ctx->backendName);
+                    win.set_backend_lifecycle(BackendLifecycleState::failed);
+                }
                 win.running = false;
                 break;
+            }
+
+            if (requiresFirstPresent
+                && win.backend_lifecycle() == BackendLifecycleState::initializing
+                && win.firstPresentComplete.load(std::memory_order_acquire))
+            {
+                publishRenderReady();
             }
 
             record_native_title_frame(this, win);

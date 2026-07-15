@@ -63,7 +63,10 @@ native resources, then creates one docked replacement in the same host and
 restores that state. Multicontext grids are diagnostics only. Windows source now
 routes Raylib, SFML, SDL, OpenGL, Vulkan, DirectX, and Software through this
 transaction; runtime acceptance still requires repeated switch proof for state,
-focus, GUI/font refresh, and teardown before release work resumes.
+focus, GUI/font refresh, and teardown before release work resumes. The operator
+has accepted SDL, SFML, OpenGL, Vulkan, DirectX, and software switching from the
+`v0.87.71` source. Raylib's `v0.87.72` gate now requires a completed first
+present before state restore and remains the only focused runtime recheck.
 
 ## High-Output Source Strategy
 

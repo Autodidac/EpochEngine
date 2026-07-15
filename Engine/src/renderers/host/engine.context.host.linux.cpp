@@ -1784,7 +1784,20 @@ namespace
             return;
         }
 
-        win.set_backend_lifecycle(BackendLifecycleState::ready);
+        const bool requiresFirstPresent = ctx->type == ContextType::RayLib;
+        const auto publishRenderReady = [&]()
+        {
+            win.set_backend_lifecycle(BackendLifecycleState::ready);
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Backend {} reached render-ready state for hwnd={}.",
+                ctx->backendName,
+                win.hwnd);
+        };
+
+        if (!requiresFirstPresent)
+            publishRenderReady();
 
         epoch::perf::frame_limiter coreFrameLimiter{};
         double activeCoreFrameLimit = -1.0;
@@ -1825,8 +1838,26 @@ namespace
 
             if (!keepRunning)
             {
+                if (requiresFirstPresent
+                    && win.backend_lifecycle() == BackendLifecycleState::initializing
+                    && running.load(std::memory_order_acquire))
+                {
+                    epochnamespace::logger::get(kLogSys).logf(
+                        epochnamespace::logger::LogLevel::Error,
+                        std::source_location::current(),
+                        "Backend {} stopped before its first present. Rejecting the context window.",
+                        ctx->backendName);
+                    win.set_backend_lifecycle(BackendLifecycleState::failed);
+                }
                 win.running = false;
                 break;
+            }
+
+            if (requiresFirstPresent
+                && win.backend_lifecycle() == BackendLifecycleState::initializing
+                && win.firstPresentComplete.load(std::memory_order_acquire))
+            {
+                publishRenderReady();
             }
 
             record_native_title_frame(localDisplay, xwin, win);

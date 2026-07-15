@@ -76,7 +76,7 @@ namespace epochnamespace::core::detail
             if (!current)
                 return;
 
-            (void)epochnamespace::raylibcontext::raylib_initialize(
+            current->init_failed = !epochnamespace::raylibcontext::raylib_initialize(
                 current,
                 current->get_hwnd(),
                 static_cast<unsigned>((std::max)(1, current->width)),
@@ -103,7 +103,10 @@ namespace epochnamespace::core::detail
                 return false;
             }
 
-            epochnamespace::raylibcontext::raylib_process();
+            const bool frameReady = epochnamespace::raylibcontext::raylib_process();
+            if (!frameReady)
+                return epochnamespace::raylibcontext::raylib_is_running();
+
             if (!epochnamespace::raylibcontext::raylib_is_running())
                 return false;
 
@@ -126,6 +129,8 @@ namespace epochnamespace::core::detail
             epochnamespace::raylib_api::end_drawing();
 
             st.frameActive = false;
+            if (current->windowData)
+                current->windowData->firstPresentComplete.store(true, std::memory_order_release);
             return !epochnamespace::raylib_api::window_should_close();
         };
         ctx->clear = nullptr;

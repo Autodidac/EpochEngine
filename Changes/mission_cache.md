@@ -83,10 +83,12 @@ after choosing the current source gate from `Changes/active_pass.md`.
   stable manager host, backend-owned child windows are destroyed by their
   render thread instead of cross-thread `WM_CLOSE`, manager-owned hosts are
   destroyed only after that thread finishes cleanup, and failed Linux thread
-  initialization runs backend cleanup before fallback. This is build-proven
-  `v0.87.71` source, not runtime acceptance: each backend still needs the
-  operator-approved switch matrix for state restore, first-frame GUI/font
-  validity, focus, and repeated round-trip teardown before a release claim.
+  initialization runs backend cleanup before fallback. SDL, SFML, OpenGL,
+  Vulkan, DirectX, and software passed the operator's `v0.87.71` switch check.
+  Raylib's `v0.87.72` source now withholds backend readiness until its owner
+  thread completes a real present and never enters drawing after a failed GL
+  activation; focused Raylib state/font/focus/repeated-switch acceptance remains
+  required before a release claim.
 - Raylib, SFML, and SDL multicontext grids are diagnostic evidence only until
   each backend can prove clean parent/child ownership, redock/close teardown,
   context switch restore, and no stale background rendering. Do not feed those

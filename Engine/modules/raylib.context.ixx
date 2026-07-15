@@ -561,10 +561,23 @@ namespace epochnamespace::raylibcontext
         if (!title.empty())
             title_storage() = std::move(title);
 
-        // Prevent re-initializing raylib (it initializes global state once).
+        // Raylib is process-global. Re-entry is valid only for the exact owner
+        // that initialized the still-live native window on this render thread.
         if (st.running)
         {
-            return true;
+            const bool sameOwner = ctx && st.owner_ctx == ctx.get();
+#if defined(_WIN32)
+            const bool sameThread = st.owner_thread_id == detail::current_thread_token();
+#else
+            const bool sameThread = st.owner_thread == detail::current_thread_token();
+#endif
+            if (sameOwner && sameThread && epochnamespace::raylib_api::is_window_ready())
+                return true;
+
+            logger::warn(
+                "Raylib",
+                "Rejected initialization while another Raylib context or owner thread is still active.");
+            return false;
         }
 
 #if defined(_WIN32)
@@ -572,6 +585,21 @@ namespace epochnamespace::raylibcontext
         const HDC   previousDC = detail::current_dc();
         const HGLRC previousContext = detail::current_context();
 #endif
+
+        const auto fail_initialization = [&](const char* message) -> bool
+        {
+            logger::warn("Raylib", message);
+            if (epochnamespace::raylib_api::is_window_ready())
+                epochnamespace::raylib_api::close_window();
+#if defined(_WIN32)
+            if (previousDC && previousContext)
+                (void)detail::make_current(previousDC, previousContext);
+            else
+                detail::clear_current();
+#endif
+            st = {};
+            return false;
+        };
 
         st.owner_ctx = ctx.get();
 #if defined(_WIN32)
@@ -614,17 +642,15 @@ namespace epochnamespace::raylibcontext
             static_cast<int>(st.height),
             title_storage().c_str());
 
+        if (!epochnamespace::raylib_api::is_window_ready())
+            return fail_initialization("Raylib did not create a ready native window.");
+
 #if defined(_WIN32)
         // Raylib creates its own OpenGL context. Capture it now so we bind the right rc later.
         st.hdc = detail::current_dc();
         st.hglrc = detail::current_context();
         if (!st.hglrc)
-        {
-            logger::warn("Raylib", "Failed to capture Raylib OpenGL context after initialization.");
-            st.running = false;
-            st.cleanupIssued = false;
-            return false;
-        }
+            return fail_initialization("Failed to capture Raylib OpenGL context after initialization.");
 #if defined(_DEBUG) && EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
         logger::info(
             "Raylib",
@@ -650,15 +676,10 @@ namespace epochnamespace::raylibcontext
         }
         else if (parentHwnd)
         {
-            logger::warn("Raylib", "Failed to acquire Raylib window handle for docking.");
+            return fail_initialization("Failed to acquire Raylib window handle for docking.");
         }
         if (!st.hdc)
-        {
-            logger::warn("Raylib", "Failed to capture Raylib window DC after initialization.");
-            st.running = false;
-            st.cleanupIssued = false;
-            return false;
-        }
+            return fail_initialization("Failed to capture Raylib window DC after initialization.");
 
         if (ctx && ctx->windowData)
         {
@@ -826,16 +847,16 @@ namespace epochnamespace::raylibcontext
         void raylib_cleanup_owner_thread(epochnamespace::core::Context* ctx);
     }
 
-    export inline void raylib_process()
+    export inline bool raylib_process()
     {
         auto& st = epochnamespace::raylibstate::s_raylibstate;
         if (st.cleanupRequested)
         {
             detail::raylib_cleanup_owner_thread(st.owner_ctx);
-            return;
+            return false;
         }
         if (!st.running)
-            return;
+            return false;
 
         const std::uintptr_t windowId = st.hwnd
             ? reinterpret_cast<std::uintptr_t>(st.hwnd)
@@ -862,7 +883,7 @@ namespace epochnamespace::raylibcontext
             if (windowClosing)
             {
                 st.running = false;
-                return;
+                return false;
             }
 
             ++st.currentFailureStreak;
@@ -880,7 +901,7 @@ namespace epochnamespace::raylibcontext
                     "Raylib context could not be recovered after repeated attempts; shutting down.");
                 st.running = false;
             }
-            return;
+            return false;
         }
         st.currentFailureStreak = 0;
         st.currentFailureWarned = false;
@@ -907,7 +928,7 @@ namespace epochnamespace::raylibcontext
                     st.cleanupRequested = true;
             }
 
-            return;
+            return false;
         }
 
 #if defined(_WIN32)
@@ -916,6 +937,7 @@ namespace epochnamespace::raylibcontext
 #endif
 
         frameTimer.finish();
+        return true;
     }
 
     export inline void raylib_idle_frame()
@@ -1085,6 +1107,13 @@ namespace epochnamespace::raylibcontext
     export inline void raylib_cleanup(std::shared_ptr<core::Context> ctx)
     {
         auto& st = epochnamespace::raylibstate::s_raylibstate;
+        if (!st.running
+            && !st.owner_ctx
+            && !st.cleanupRequested
+            && !epochnamespace::raylib_api::is_window_ready())
+        {
+            return;
+        }
         if (st.cleanupIssued)
             return;
 
