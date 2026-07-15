@@ -112,9 +112,14 @@ contracts instead of drift.
   so first switches could work while a second switch stopped during source
   close; it also released hardware replacements before the manager finalized
   the transaction. The `v0.87.76` source queues retirement to the next manager
-  frame boundary and holds only the exact replacement at its activation gate
-  through readiness and transaction completion. Focused all-backend repeated-
-  switch testing remains required before runtime acceptance.
+  frame boundary, but a fresh operator trace proved its replacement-only render
+  pause could deadlock after native readiness and its manual session restore
+  still overlapped backend initialization. The `v0.87.77` source removes that
+  pause and restores editor state through the normal session path only after
+  readiness, while retaining exact-context ownership, frame-boundary source
+  retirement, Raylib first-present proof, owner-thread Raylib layout, and
+  failed-backend recovery. Focused all-backend repeated-switch testing remains
+  required before runtime acceptance.
 - Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
   launcher window until packaged handoff is staged or source worker handoff
   evidence is ready. Packaged runtime installs can still distinguish stable

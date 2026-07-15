@@ -2429,9 +2429,6 @@ namespace epochnamespace::core
         winPtr->firstPresentComplete.store(
             request.type != ContextType::OpenGL && request.type != ContextType::RayLib,
             std::memory_order_release);
-        winPtr->replacementSessionAdoptionPending.store(
-            ContextReplacementInProgress() && request.gui_route.empty(),
-            std::memory_order_release);
         ctx->windowData = winPtr.get();
 
         RECT rc{};
@@ -3858,17 +3855,6 @@ namespace epochnamespace::core
 
         while (running.load(std::memory_order_acquire) && win.running && !win.get_should_close())
         {
-            if (win.replacementSessionAdoptionPending.load(std::memory_order_acquire)
-                && win.backend_lifecycle() == BackendLifecycleState::ready)
-            {
-                // The dropdown replacement transaction owns this exact context
-                // until its editor session has been adopted. Other windows remain
-                // live under the multicontext manager. Raylib is allowed to reach
-                // its required first present before entering this gate.
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                continue;
-            }
-
             bool keepRunning = true;
 
             {

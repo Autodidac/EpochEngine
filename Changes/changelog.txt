@@ -1,5 +1,18 @@
 # Epoch Changelog
 
+## [v0.87.77] - Render-ready editor session restoration repair
+
+- Remove the replacement-only render-thread pause that could deadlock the
+  editor host after Raylib, DirectX, or Vulkan completed native startup.
+- Restore editor state through the normal session path only after the selected
+  backend publishes render-ready evidence; initialization and GUI/font/project
+  restoration no longer overlap.
+- Keep the exact replacement context returned by the manager, next-frame source
+  retirement, Raylib first-present readiness, owner-thread Raylib docking, and
+  failed-backend recovery while making repeated choices use one lifecycle path.
+- Add a build-safe contract assertion that editor sessions are never restored
+  for pending, initializing, failed, or stopped backends.
+
 ## [v0.87.76] - Frame-boundary context replacement repair
 
 - Queue toolbar context changes until the active editor frame has finished its

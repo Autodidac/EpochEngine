@@ -1807,6 +1807,12 @@ namespace epochnamespace::core
             && second.pixels != first.pixels;
     }
 
+    [[nodiscard]] constexpr bool editor_session_restore_allowed(
+        epochnamespace::core::BackendLifecycleState lifecycle) noexcept
+    {
+        return lifecycle == epochnamespace::core::BackendLifecycleState::ready;
+    }
+
     [[nodiscard]] inline int run_engine_contract_self_test()
     {
         bool failed = false;
@@ -1821,6 +1827,14 @@ namespace epochnamespace::core
         };
 
         log_editor_self_test_line("engine_contract_self_test.start=forest_package_timeline_snapshot");
+
+        check(
+            "context.session_restore_readiness",
+            !editor_session_restore_allowed(epochnamespace::core::BackendLifecycleState::pending)
+            && !editor_session_restore_allowed(epochnamespace::core::BackendLifecycleState::initializing)
+            && editor_session_restore_allowed(epochnamespace::core::BackendLifecycleState::ready)
+            && !editor_session_restore_allowed(epochnamespace::core::BackendLifecycleState::failed)
+            && !editor_session_restore_allowed(epochnamespace::core::BackendLifecycleState::stopped));
 
         auto forestProfile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
         forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;
@@ -5400,58 +5414,17 @@ namespace epochnamespace::core
                             return false;
                         }
 
-                        auto* replacementWindow = mgr.findWindowByContext(replacement.active_context);
-                        if (!replacementWindow)
+                        if (!mgr.findWindowByContext(replacement.active_context))
                         {
                             eraseReplacementSnapshot(type);
                             return false;
-                        }
-
-                        if (auto existingSession = sessions.find(replacement.active_context.get());
-                            existingSession != sessions.end())
-                        {
-                            unload_active_scene(existingSession->second);
-                            existingSession->second.menu.cleanup();
-                            sessions.erase(existingSession);
-                        }
-
-                        auto sessionIt = sessions.try_emplace(replacement.active_context.get()).first;
-                        auto& replacementSession = sessionIt->second;
-                        replacementSession.mode = startup_mode;
-                        replacementSession.return_mode = startup_mode;
-                        replacementSession.menu.set_max_columns(epochnamespace::core::cli::menu_columns);
-
-                        const auto restoreStatus = restore_pending_editor_switch_snapshot(
-                            replacement.active_context,
-                            replacementSession,
-                            replacementWindow->guiRoute);
-                        if (restoreStatus != PendingEditorRestoreStatus::restored)
-                        {
-                            replacementWindow->replacementSessionAdoptionPending.store(
-                                false,
-                                std::memory_order_release);
-                            unload_active_scene(replacementSession);
-                            replacementSession.menu.cleanup();
-                            sessions.erase(sessionIt);
-                            request_context_window_close(
-                                replacement.active_context.get(),
-                                restoreStatus == PendingEditorRestoreStatus::failed
-                                    ? "retiring replacement after editor session restore failure"
-                                    : "retiring replacement because no editor session snapshot was queued");
-                            replacement.phase = EditorContextReplacementPhase::retiring_failed_backend;
-                            logger::get(kEditorLog).logf(
-                                logger::LogLevel::Error,
-                                std::source_location::current(),
-                                "Editor host could not adopt the {} replacement session before backend activation.",
-                                context_type_label(type));
-                            return true;
                         }
 
                         replacement.phase = EditorContextReplacementPhase::awaiting_backend;
                         logger::get(kEditorLog).logf(
                             logger::LogLevel::INFO,
                             std::source_location::current(),
-                            "Restored editor state into the new {} context; waiting for backend readiness.",
+                            "Created the new {} context; waiting for backend readiness before restoring editor state.",
                             context_type_label(type));
                         return true;
                     };
@@ -5552,19 +5525,16 @@ namespace epochnamespace::core
                             && window->running.load(std::memory_order_acquire)
                             && !window->get_should_close();
 
-                        if (lifecycle == epochnamespace::core::BackendLifecycleState::ready
+                        if (editor_session_restore_allowed(lifecycle)
                             && backendIsLive)
                         {
                             const auto readyType = replacement.active_type;
-                            window->replacementSessionAdoptionPending.store(
-                                false,
-                                std::memory_order_release);
                             mgr.EndContextReplacement();
                             pendingEditorContextReplacement.reset();
                             logger::get(kEditorLog).logf(
                                 logger::LogLevel::INFO,
                                 std::source_location::current(),
-                                "Editor host completed the single-window context replacement with render-ready {}.",
+                                "Editor host completed the single-window context replacement with render-ready {}; the normal session path will restore editor state.",
                                 context_type_label(readyType));
                         }
                         else if (lifecycle == epochnamespace::core::BackendLifecycleState::failed
@@ -5574,9 +5544,6 @@ namespace epochnamespace::core
                             eraseReplacementSnapshot(replacement.active_type);
                             if (window)
                             {
-                                window->replacementSessionAdoptionPending.store(
-                                    false,
-                                    std::memory_order_release);
                                 request_context_window_close(
                                     replacement.active_context.get(),
                                     "retiring failed replacement backend before recovery");
@@ -6032,20 +5999,6 @@ namespace epochnamespace::core
                     {
                         if (!ctx) continue;
 
-#if defined(_WIN32)
-                        if (pendingEditorContextReplacement
-                            && pendingEditorContextReplacement->active_context
-                            && pendingEditorContextReplacement->active_context.get() == ctx.get())
-                        {
-                            // The dropdown transaction owns adoption, readiness,
-                            // and fallback for this one context. The generic
-                            // multicontext loop continues servicing every other
-                            // live context without racing the replacement.
-                            backend_has_live_context = true;
-                            continue;
-                        }
-#endif
-
                         auto* win = mgr.findWindowByContext(ctx);
                         if (!win)
                         {
@@ -6090,15 +6043,13 @@ namespace epochnamespace::core
                         }
 
                         const auto backendLifecycle = win->backend_lifecycle();
-                        if (backendLifecycle == epochnamespace::core::BackendLifecycleState::pending
-                            || backendLifecycle == epochnamespace::core::BackendLifecycleState::initializing)
+                        if (!editor_session_restore_allowed(backendLifecycle))
                         {
-                            backend_has_live_context = true;
-                            continue;
-                        }
-                        if (backendLifecycle == epochnamespace::core::BackendLifecycleState::failed
-                            || backendLifecycle == epochnamespace::core::BackendLifecycleState::stopped)
-                        {
+                            if (backendLifecycle == epochnamespace::core::BackendLifecycleState::pending
+                                || backendLifecycle == epochnamespace::core::BackendLifecycleState::initializing)
+                            {
+                                backend_has_live_context = true;
+                            }
                             continue;
                         }
 

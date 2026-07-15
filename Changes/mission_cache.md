@@ -96,7 +96,13 @@ after choosing the current source gate from `Changes/active_pass.md`.
   switch lifetime race because the dropdown retired the source inside its
   active editor frame, plus early activation of some hardware replacements.
   `v0.87.76` defers source retirement to the next manager frame boundary and
-  keeps only the exact target gated until readiness completes the transaction.
+  keeps only the exact target gated until readiness completes the transaction,
+  but fresh Windows evidence recorded an `AppHangTransient` after Raylib reached
+  render-ready and showed DirectX/Vulkan stopping during the same adoption
+  window. `v0.87.77` removes the replacement render-thread pause and the
+  pre-readiness manual restore, returning editor adoption to the normal session
+  path after native readiness while preserving exact target identity and the
+  next-frame retirement boundary.
   Focused all-backend state/font/focus/repeated-switch acceptance remains
   required before a release claim.
 - Raylib, SFML, and SDL multicontext grids are diagnostic evidence only until

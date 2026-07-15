@@ -149,7 +149,6 @@ namespace epochnamespace::core
         bool isFloating = false;
         std::atomic_bool routedRedockRequested = false;
         std::atomic_bool firstPresentComplete = false;
-        std::atomic_bool replacementSessionAdoptionPending = false;
         std::atomic_uint64_t resizeGeneration{ 0 };
 
         std::function<void(int, int)> onResize{};

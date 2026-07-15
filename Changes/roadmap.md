@@ -74,8 +74,10 @@ has accepted SDL, SFML, OpenGL, Vulkan, DirectX, and software switching from the
   only for unrelated windows until replacement completion. Operator testing
   exposed source retirement inside the still-active editor frame and early
   target activation; `v0.87.76` moves retirement to the next manager frame
-  boundary and holds the exact target until readiness completes the transaction.
-  All backends require focused repeated-switch rechecks.
+  boundary, but the replacement render pause and pre-readiness manual restore
+  still produced hardware hangs. `v0.87.77` keeps the frame boundary and exact
+  target while returning state adoption to the proven normal session path after
+  native readiness. All backends require focused repeated-switch rechecks.
 
 ## High-Output Source Strategy
 
