@@ -24,7 +24,8 @@ geometry and layout helpers exported by `epoch.gui`:
 - `gui/dock_layout.hpp` plus `src/epochgui/dock_layout.cpp`
 - `gui/dockable_window.hpp` plus `src/epochgui/dockable_window.cpp`
 - `gui/text_control.hpp` plus `src/epochgui/text_control.cpp`
-- `tests/text_control_tests.cpp` for portable edit/navigation/scroll contracts
+- `tests/text_control_tests.cpp` for portable edit/navigation/scroll and
+  segmented-selection geometry contracts
 - `epoch.gui` for the library name and `0.87.70` version constants
 
 The public namespace is `epochnamespace::gui_lib`. New integrations should
@@ -38,8 +39,10 @@ Compatibility headers remain for the current engine adapter while call sites
 move over. The implementation is module-owned and includes OOP controllers such
 as `FloatingWindowController`, `PopupLayoutController`,
 `LayoutPrimitiveController`, `DockLayoutController`, and
-`DockableWindowController`, plus `TextControlController`, all deriving from
-`LayoutController`. It does not
+`DockableWindowController`, plus `TextControlController` and
+`SelectionControlController`, all deriving from `LayoutController`.
+`SelectionControlController` supplies backend-neutral segmented-control bounds,
+gap-aware item placement, and hit testing for compact mode selectors. It does not
 include `editor.cpp`, `engine.cpp`, context sources, renderer backends, runtime
 assets, generated output, or `Engine/src/engine.gui.cpp`.
 

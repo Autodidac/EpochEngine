@@ -4764,19 +4764,33 @@ namespace epochnamespace::gui
 
         const Vec2 rowStart = g_frame.cursor;
         std::optional<std::size_t> clicked{};
-        float x = rowStart.x;
+        static thread_local std::vector<float> itemWidths;
+        itemWidths.clear();
+        itemWidths.reserve(items.size());
+        for (const auto& item : items)
+            itemWidths.push_back(item.width);
+
+        const gui_lib::SegmentedControlLayoutOptions layoutOptions{
+            .position = to_lib(rowStart),
+            .item_widths = std::span<const float>{ itemWidths.data(), itemWidths.size() },
+            .height = height,
+            .gap = gap
+        };
+        const auto layout = gui_lib::make_segmented_control_layout(layoutOptions);
 
         for (std::size_t i = 0; i < items.size(); ++i)
         {
             const auto& item = items[i];
-            set_cursor({ x, rowStart.y });
-            if (button_with_state(item.label, { item.width, height }, item.active))
+            const auto itemLayout = gui_lib::segmented_control_item_layout(
+                layoutOptions,
+                static_cast<std::uint32_t>(i));
+            set_cursor(from_lib(itemLayout.position));
+            if (button_with_state(item.label, from_lib(itemLayout.size), item.active))
                 clicked = i;
-            x += (std::max)(1.0f, item.width) + gap;
         }
 
         set_cursor(rowStart);
-        advance_cursor({ 0.0f, (std::max)(1.0f, height) + kContentPadding });
+        advance_cursor({ 0.0f, layout.height + kContentPadding });
         return clicked;
     }
 

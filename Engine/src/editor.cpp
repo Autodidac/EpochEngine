@@ -588,7 +588,7 @@ namespace epochnamespace
             case EditorMainSurface::Timeline:
                 return "Video";
             case EditorMainSurface::AISandbox:
-                return "Intelligence";
+                return "AI";
             case EditorMainSurface::Systems:
                 return "System Info";
             default:
@@ -6895,7 +6895,7 @@ namespace epochnamespace
         const std::string forest_tab = "Plant Lab";
         const std::string timeline_tab = "Video";
         const std::string project_tab = "Project";
-        const std::string ai_control_tab = "Intelligence";
+        const std::string ai_control_tab = "AI";
         const std::string systems_tab = "System Info";
 
         const std::array<std::string_view, 2> sceneModeLabels{ "3D Scene", "2D Scene/UI" };
@@ -6903,30 +6903,19 @@ namespace epochnamespace
             EditorMainSurface::Scene,
             EditorMainSurface::Game2D
         };
-        std::string_view selectedSceneMode{};
-        if (editor.mainSurface == EditorMainSurface::Scene)
-            selectedSceneMode = sceneModeLabels[0];
-        else if (editor.mainSurface == EditorMainSurface::Game2D)
-            selectedSceneMode = sceneModeLabels[1];
-
+        const std::array sceneModeButtons{
+            gui::SegmentedButtonSpec{ sceneModeLabels[0], 92.0f, editor.mainSurface == EditorMainSurface::Scene },
+            gui::SegmentedButtonSpec{ sceneModeLabels[1], 116.0f, editor.mainSurface == EditorMainSurface::Game2D }
+        };
         gui::set_cursor({ tab_x, tab_y });
-        const auto sceneModeSelect = gui::select_box(gui::SelectBoxOptions{
-            .id = "editor-scene-mode-select",
-            .placeholder = "Scene Mode",
-            .selected = selectedSceneMode,
-            .options = std::span<const std::string_view>{ sceneModeLabels.data(), sceneModeLabels.size() },
-            .size = { 166.0f, tab_h },
-            .row_height = 28.0f,
-            .max_visible_options = 2
-        });
-        if (sceneModeSelect.changed
+        const auto selectedSceneMode = gui::segmented_button_row(sceneModeButtons, tab_h, 2.0f);
+        if (selectedSceneMode
             && !toolbarControlsBlockedByMenu
-            && sceneModeSelect.selected_index
-            && *sceneModeSelect.selected_index < sceneModeSurfaces.size())
+            && *selectedSceneMode < sceneModeSurfaces.size())
         {
-            open_editor_surface(sceneModeSurfaces[*sceneModeSelect.selected_index], "scene mode selector");
+            open_editor_surface(sceneModeSurfaces[*selectedSceneMode], "scene mode selector");
         }
-        tab_x += 166.0f + tab_gap;
+        tab_x += 210.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button_selected(assets_tab, { 104.0f, tab_h }, editor.mainSurface == EditorMainSurface::Assets)
@@ -6953,10 +6942,10 @@ namespace epochnamespace
         tab_x += 112.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(ai_control_tab, { 142.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox)
+        if (gui::button_selected(ai_control_tab, { 68.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox)
             && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::AISandbox, "toolbar");
-        tab_x += 142.0f + tab_gap;
+        tab_x += 68.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button_selected(systems_tab, { 132.0f, tab_h }, editor.mainSurface == EditorMainSurface::Systems)
@@ -7954,7 +7943,7 @@ namespace epochnamespace
                 gui::property_row("[assets] Model path", modelSummary.resolved_path.empty() ? std::string("(unresolved)") : modelSummary.resolved_path, 120.0f);
                 gui::property_row("[assets] Model parsed", modelSummary.parsed ? "true" : "false", 120.0f);
                 gui::wrapped_label(
-                    "This surface is the project asset browser: scenes, models, images, text, and script files as normal project assets. Self-iteration controls stay in Intelligence and are only for engine work.",
+                    "This surface is the project asset browser: scenes, models, images, text, and script files as normal project assets. Self-iteration controls stay in AI and are only for engine work.",
                     centerWidth);
 
                 const auto assetEntries = collect_asset_browser_entries(editor);
@@ -8962,7 +8951,7 @@ namespace epochnamespace
             const std::string loopStage = ai_control_loop_stage(gateStatus);
 
             // Bottom Dock > AI stays diagnostic-only. Controls and model
-            // selection live in the central Intelligence and Inspector panes.
+            // selection live in the central AI and Inspector panes.
 
             const auto currentIterationPacket = [&]() {
                 std::vector<std::string> evidencePaths;
@@ -9098,7 +9087,7 @@ namespace epochnamespace
                 dockLine("[ai-tool] Status", editor.aiToolHarnessStatus),
                 dockLine("[ai] Build log", display_project_path(buildLog)),
                 dockLine("[ai] Output", display_project_path(outputExe)),
-                "[ai] Controls and model selection live in Intelligence and Inspector; Bottom Dock is status-only."
+                "[ai] Controls and model selection live in AI and Inspector; Bottom Dock is status-only."
             };
             renderDockStatusPanel("ai", dockLines);
             break;

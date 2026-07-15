@@ -156,24 +156,23 @@ namespace epochnamespace::raylibcontext
             if (!isChild && !parent)
                 return;
 
-            RECT rc{};
-            ::GetWindowRect(hwnd, &rc);
+            ::ShowWindow(hwnd, SW_HIDE);
 
             // Detach from any parent and restore overlapped style.
             ::SetParent(hwnd, nullptr);
 
             LONG_PTR newStyle = style;
-            newStyle &= ~static_cast<LONG_PTR>(WS_CHILD);
-            newStyle |= static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+            newStyle &= ~static_cast<LONG_PTR>(WS_CHILD | WS_VISIBLE);
+            newStyle |= static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
 
             ::SetWindowLongPtrW(hwnd, GWL_STYLE, newStyle);
             ::SetWindowPos(hwnd,
-                HWND_TOP,
-                rc.left,
-                rc.top,
-                (std::max)(1, static_cast<int>(rc.right - rc.left)),
-                (std::max)(1, static_cast<int>(rc.bottom - rc.top)),
-                SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                nullptr,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_HIDEWINDOW);
         }
 
         inline void adopt_raylib_window(

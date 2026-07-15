@@ -87,11 +87,14 @@ contracts instead of drift.
   visibility. Native clipboard access, glyph measurement, rendering, and input
   translation remain engine-adapter responsibilities.
 - The editor toolbar now exposes 3D scene construction and 2D game/UI
-  construction through one scene-mode selector, so Canvas2D work is an explicit
-  mode switch instead of a second wide workspace tab.
-- Source checkpoint: the SDL editor context switch fix is paired with a
-  toolbar-equivalent smoke hook, keeping build/source validation aligned with
-  the product toolbar handoff path.
+  construction through an EpochGui-backed segmented scene-mode control, so
+  Canvas2D work is an explicit compact mode switch instead of a second wide tab
+  or a transient dropdown.
+- Windows source now performs editor context selection as an exclusive
+  replacement transaction: capture state, retire and clean the source backend,
+  create one docked replacement in the same host, and restore state. SFML,
+  Raylib, and SDL are no longer source-guarded, while runtime acceptance remains
+  pending the operator-approved repeated-switch matrix.
 - Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
   launcher window until packaged handoff is staged or source worker handoff
   evidence is ready. Packaged runtime installs can still distinguish stable

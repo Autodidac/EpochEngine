@@ -57,12 +57,13 @@ The sealed updater contract is retained as read-only behavior documentation:
 - no active mission may modify this lane until the operator explicitly reopens
   it
 
-The current context contract is conservative: the normal editor owns one live
-context, and context switching must be real session handoff with state
-capture/restore evidence. Multicontext grids are diagnostics only. Raylib, SFML,
-and SDL multicontext handoff problems are tracked in mission cache until each
-backend has backend-owned proof for save/restore, focus, GUI resource refresh,
-and teardown.
+The current context contract is exclusive: the normal editor owns one live
+backend, captures state before a switch, fully retires the old render thread and
+native resources, then creates one docked replacement in the same host and
+restores that state. Multicontext grids are diagnostics only. Windows source now
+routes Raylib, SFML, SDL, OpenGL, Vulkan, DirectX, and Software through this
+transaction; runtime acceptance still requires repeated switch proof for state,
+focus, GUI/font refresh, and teardown before release work resumes.
 
 ## High-Output Source Strategy
 

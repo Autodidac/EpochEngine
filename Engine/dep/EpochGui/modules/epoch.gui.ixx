@@ -3,6 +3,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -260,6 +261,116 @@ export namespace epochnamespace::gui_lib
         Vec2 mouse_position,
         bool selected = false) noexcept;
     [[nodiscard]] std::uint32_t selectable_row_index_at(const SelectableListLayoutOptions& options, Vec2 point) noexcept;
+
+    struct SegmentedControlLayoutOptions
+    {
+        Vec2 position{};
+        std::span<const float> item_widths{};
+        float height{ 26.0f };
+        float gap{ 2.0f };
+    };
+
+    struct SegmentedControlLayout
+    {
+        Rect bounds{};
+        std::uint32_t item_count{};
+        float height{};
+        float gap{};
+        bool valid{};
+    };
+
+    class SelectionControlController final : public LayoutController
+    {
+    public:
+        [[nodiscard]] std::string_view name() const noexcept override
+        {
+            return "Selection controls";
+        }
+
+        [[nodiscard]] SegmentedControlLayout make_segmented_control(
+            const SegmentedControlLayoutOptions& options) const noexcept
+        {
+            const float height = options.height > 1.0f ? options.height : 1.0f;
+            const float gap = options.gap > 0.0f ? options.gap : 0.0f;
+            float width = 0.0f;
+            for (const float requestedWidth : options.item_widths)
+                width += requestedWidth > 1.0f ? requestedWidth : 1.0f;
+            if (options.item_widths.size() > 1)
+                width += gap * static_cast<float>(options.item_widths.size() - 1);
+
+            return SegmentedControlLayout{
+                .bounds = Rect{ options.position, Vec2{ width, height } },
+                .item_count = static_cast<std::uint32_t>(options.item_widths.size()),
+                .height = height,
+                .gap = gap,
+                .valid = !options.item_widths.empty()
+            };
+        }
+
+        [[nodiscard]] Rect segmented_item(
+            const SegmentedControlLayoutOptions& options,
+            std::uint32_t index) const noexcept
+        {
+            const SegmentedControlLayout layout = make_segmented_control(options);
+            if (!layout.valid || index >= layout.item_count)
+                return {};
+
+            float x = options.position.x;
+            for (std::uint32_t current = 0; current < index; ++current)
+            {
+                const float requestedWidth = options.item_widths[current];
+                x += (requestedWidth > 1.0f ? requestedWidth : 1.0f) + layout.gap;
+            }
+
+            const float requestedWidth = options.item_widths[index];
+            return Rect{
+                .position = Vec2{ x, options.position.y },
+                .size = Vec2{ requestedWidth > 1.0f ? requestedWidth : 1.0f, layout.height }
+            };
+        }
+
+        [[nodiscard]] std::uint32_t segmented_item_at(
+            const SegmentedControlLayoutOptions& options,
+            Vec2 point) const noexcept
+        {
+            const SegmentedControlLayout layout = make_segmented_control(options);
+            if (!layout.valid || !contains(layout.bounds, point))
+                return invalid_selectable_row_index;
+
+            for (std::uint32_t index = 0; index < layout.item_count; ++index)
+            {
+                if (contains(segmented_item(options, index), point))
+                    return index;
+            }
+            return invalid_selectable_row_index;
+        }
+    };
+
+    [[nodiscard]] inline const SelectionControlController& selection_control_controller() noexcept
+    {
+        static const SelectionControlController controller{};
+        return controller;
+    }
+
+    [[nodiscard]] inline SegmentedControlLayout make_segmented_control_layout(
+        const SegmentedControlLayoutOptions& options) noexcept
+    {
+        return selection_control_controller().make_segmented_control(options);
+    }
+
+    [[nodiscard]] inline Rect segmented_control_item_layout(
+        const SegmentedControlLayoutOptions& options,
+        std::uint32_t index) noexcept
+    {
+        return selection_control_controller().segmented_item(options, index);
+    }
+
+    [[nodiscard]] inline std::uint32_t segmented_control_item_at(
+        const SegmentedControlLayoutOptions& options,
+        Vec2 point) noexcept
+    {
+        return selection_control_controller().segmented_item_at(options, point);
+    }
 
     enum class PopupPlacement : std::uint8_t
     {

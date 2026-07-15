@@ -3306,18 +3306,6 @@ namespace epochnamespace::core
             }
         }
 
-        [[nodiscard]] bool context_driver_handoff_guarded(epochnamespace::core::ContextType type) noexcept
-        {
-            switch (type)
-            {
-            case epochnamespace::core::ContextType::SFML:
-            case epochnamespace::core::ContextType::RayLib:
-                return true;
-            default:
-                return false;
-            }
-        }
-
         struct DetachedPanelRouteMetadata
         {
             std::string_view title{};
@@ -5057,6 +5045,18 @@ namespace epochnamespace::core
             epochnamespace::EditorContextSnapshot snapshot{};
         };
 
+#if defined(_WIN32)
+        struct PendingEditorContextReplacement
+        {
+            epochnamespace::core::ContextType target_type{ epochnamespace::core::ContextType::None };
+            epochnamespace::core::ContextType fallback_type{ epochnamespace::core::ContextType::None };
+            std::shared_ptr<Context> source_context{};
+            int width{ 1280 };
+            int height{ 720 };
+            epochnamespace::EditorContextSnapshot snapshot{};
+        };
+#endif
+
         using LauncherUpdateState = epochnamespace::launcher_update::Flow;
 
         template <typename PumpFunc>
@@ -5064,6 +5064,9 @@ namespace epochnamespace::core
         {
             std::unordered_map<Context*, ContextSession> sessions;
             std::vector<PendingEditorContextSnapshot> pendingEditorSwitchSnapshots;
+#if defined(_WIN32)
+            std::optional<PendingEditorContextReplacement> pendingEditorContextReplacement;
+#endif
             bool running = true;
             LauncherUpdateState launcherUpdate{};
             bool smoke_capture_taken = false;
@@ -5127,6 +5130,31 @@ namespace epochnamespace::core
                 });
                 return true;
             };
+#if defined(_WIN32)
+            auto queue_editor_switch_snapshot = [&] (
+                epochnamespace::core::ContextType targetType,
+                Context* sourceContext,
+                const epochnamespace::EditorContextSnapshot& editorSnapshot,
+                bool closeSourceOnRestore)
+            {
+                pendingEditorSwitchSnapshots.erase(
+                    std::remove_if(
+                        pendingEditorSwitchSnapshots.begin(),
+                        pendingEditorSwitchSnapshots.end(),
+                        [targetType](const auto& item) noexcept
+                        {
+                            return item.target_type == targetType && item.gui_route.empty();
+                        }),
+                    pendingEditorSwitchSnapshots.end());
+                pendingEditorSwitchSnapshots.push_back(PendingEditorContextSnapshot{
+                    .target_type = targetType,
+                    .gui_route = {},
+                    .source_context = sourceContext,
+                    .close_source_on_restore = closeSourceOnRestore,
+                    .snapshot = editorSnapshot
+                });
+            };
+#endif
             enum class PendingEditorRestoreStatus : unsigned char
             {
                 none = 0,
@@ -5194,18 +5222,10 @@ namespace epochnamespace::core
 
                 auto fail_restore = [&](std::string_view reason) -> PendingEditorRestoreStatus
                 {
-                    if (closeSourceOnRestore
-                        && targetCtx
-                        && targetCtx.get() != sourceContext)
-                    {
-                        epochnamespace::editor_set_context_selection_status(
-                            targetCtx.get(),
-                            std::string{ "Context switch failed: " } + std::string{ reason }
-                                + "; closing replacement and keeping the original editor active.");
-                        unload_active_scene(targetSession);
-                        targetSession.menu.cleanup();
-                        request_context_window_close(targetCtx.get(), reason);
-                    }
+                    epochnamespace::editor_set_context_selection_status(
+                        targetCtx.get(),
+                        std::string{ "Context switch state restore failed: " } + std::string{ reason }
+                            + "; the replacement backend remains active for recovery.");
                     return PendingEditorRestoreStatus::failed;
                 };
 
@@ -5261,6 +5281,12 @@ namespace epochnamespace::core
                             + std::string{ context_type_label(targetCtx->type) }
                             + "; source context stayed alive to avoid backend teardown during switch.");
                 }
+
+                epochnamespace::editor_set_context_selection_status(
+                    targetCtx.get(),
+                    std::string{ "Editor context switched to " }
+                        + std::string{ context_type_label(targetCtx->type) }
+                        + "; project, layout, selection, camera, and timeline state restored.");
                 return PendingEditorRestoreStatus::restored;
             };
 
@@ -5298,6 +5324,79 @@ namespace epochnamespace::core
                 mgr.CleanupFinishedWindows();
 
 #if defined(_WIN32)
+                if (pendingEditorContextReplacement
+                    && mgr.IsContextRetired(pendingEditorContextReplacement->source_context.get()))
+                {
+                    PendingEditorContextReplacement replacement =
+                        std::move(*pendingEditorContextReplacement);
+                    pendingEditorContextReplacement.reset();
+
+                    auto openReplacement = [&](epochnamespace::core::ContextType type) -> bool
+                    {
+                        queue_editor_switch_snapshot(
+                            type,
+                            replacement.source_context.get(),
+                            replacement.snapshot,
+                            true);
+                        return mgr.OpenReplacementContextWindow(
+                            epochnamespace::core::DetachedContextWindowRequest{
+                                .type = type,
+                                .title = std::string{ "Epoch Editor | " } + std::string{ context_type_label(type) },
+                                .gui_route = {},
+                                .width = replacement.width,
+                                .height = replacement.height,
+                                .start_docked = true
+                            });
+                    };
+
+                    bool opened = openReplacement(replacement.target_type);
+                    epochnamespace::core::ContextType openedType = replacement.target_type;
+                    if (!opened)
+                    {
+                        pendingEditorSwitchSnapshots.erase(
+                            std::remove_if(
+                                pendingEditorSwitchSnapshots.begin(),
+                                pendingEditorSwitchSnapshots.end(),
+                                [&](const auto& item) noexcept
+                                {
+                                    return item.target_type == replacement.target_type && item.gui_route.empty();
+                                }),
+                            pendingEditorSwitchSnapshots.end());
+                        openedType = replacement.fallback_type;
+                        opened = openReplacement(openedType);
+                    }
+
+                    mgr.EndContextReplacement();
+                    if (opened)
+                    {
+                        logger::get(kEditorLog).logf(
+                            logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Editor host completed the single-window context replacement with {}.",
+                            context_type_label(openedType));
+                    }
+                    else
+                    {
+                        logger::get(kEditorLog).logf(
+                            logger::LogLevel::Error,
+                            std::source_location::current(),
+                            "Editor host could not create either the requested {} context or the {} recovery context.",
+                            context_type_label(replacement.target_type),
+                            context_type_label(replacement.fallback_type));
+                        pendingEditorSwitchSnapshots.erase(
+                            std::remove_if(
+                                pendingEditorSwitchSnapshots.begin(),
+                                pendingEditorSwitchSnapshots.end(),
+                                [](const auto& item) noexcept
+                                {
+                                    return item.gui_route.empty() && item.close_source_on_restore;
+                                }),
+                            pendingEditorSwitchSnapshots.end());
+                    }
+                }
+#endif
+
+#if defined(_WIN32)
                 bool has_live_native_window = false;
                 for (const auto& win : mgr.GetWindows())
                 {
@@ -5319,7 +5418,7 @@ namespace epochnamespace::core
                     }
                 }
 
-                if (!has_live_native_window)
+                if (!has_live_native_window && !mgr.ContextReplacementInProgress())
                 {
                     logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
                         logger::LogLevel::WARN,
@@ -5533,30 +5632,6 @@ namespace epochnamespace::core
                             "Context switch failed: requested backend is not an editor context candidate.");
                         return;
                     }
-                    const auto guardedHandoffType =
-                        (sourceCtx
-                            && context_driver_handoff_guarded(sourceCtx->type)
-                            && targetType != sourceCtx->type)
-                        ? sourceCtx->type
-                        : (context_driver_handoff_guarded(targetType)
-                            && (!sourceCtx || sourceCtx->type != targetType))
-                            ? targetType
-                            : epochnamespace::core::ContextType::None;
-                    if (guardedHandoffType != epochnamespace::core::ContextType::None)
-                    {
-                        const std::string guardedLabel{ context_type_label(guardedHandoffType) };
-                        const std::string warning =
-                            guardedLabel
-                            + " editor context handoff is disabled for this build because its native context crashes during backend switching. Use it as a diagnostic/runtime context until the handoff path is stabilized.";
-                        if (sourceCtx)
-                            epochnamespace::editor_set_context_selection_status(sourceCtx.get(), warning);
-                        logger::get(kEditorLog).log(
-                            logger::LogLevel::WARN,
-                            warning,
-                            std::source_location::current());
-                        return;
-                    }
-
                     std::shared_ptr<Context> targetCtx;
                     if (sourceCtx && sourceCtx->type == targetType && mgr.findWindowByContext(sourceCtx))
                     {
@@ -5594,7 +5669,25 @@ namespace epochnamespace::core
                             return;
                         }
 
-                        if (!stash_editor_switch_snapshot(targetType, sourceCtx, {}, false))
+#if defined(_WIN32)
+                        if (pendingEditorContextReplacement)
+                        {
+                            epochnamespace::editor_set_context_selection_status(
+                                sourceCtx.get(),
+                                "Context switch is already retiring the previous backend. Wait for the replacement frame.");
+                            return;
+                        }
+
+                        if (!mgr.GetParentWindow() || ::IsWindow(mgr.GetParentWindow()) == FALSE)
+                        {
+                            epochnamespace::editor_set_context_selection_status(
+                                sourceCtx.get(),
+                                "Context switch requires the single-window editor host; standalone backend windows are not replaced in place.");
+                            return;
+                        }
+
+                        auto editorSnapshot = epochnamespace::editor_capture_context_snapshot(sourceCtx.get());
+                        if (!editorSnapshot.valid)
                         {
                             epochnamespace::editor_set_context_selection_status(
                                 sourceCtx.get(),
@@ -5603,7 +5696,7 @@ namespace epochnamespace::core
                             logger::get(kEditorLog).logf(
                                 logger::LogLevel::Error,
                                 std::source_location::current(),
-                                "Context selector could not capture editor state before creating the {} replacement context.",
+                                "Context selector could not capture editor state before replacing the active context with {}.",
                                 context_type_label(targetType));
                             return;
                         }
@@ -5616,40 +5709,50 @@ namespace epochnamespace::core
                             replacementHeight = (std::max)(replacementHeight, sourceWin->height);
                         }
 
-                        const bool opened = mgr.OpenDetachedContextWindow(
-                            epochnamespace::core::DetachedContextWindowRequest{
-                                .type = targetType,
-                                .title = std::string{ "Epoch Editor | " } + std::string{ context_type_label(targetType) },
-                                .gui_route = {},
-                                .width = (std::max)(720, replacementWidth),
-                                .height = (std::max)(440, replacementHeight),
-                                .start_docked = true
-                            });
+                        mgr.BeginContextReplacement();
+                        pendingEditorContextReplacement = PendingEditorContextReplacement{
+                            .target_type = targetType,
+                            .fallback_type = sourceCtx->type,
+                            .source_context = sourceCtx,
+                            .width = (std::max)(720, replacementWidth),
+                            .height = (std::max)(440, replacementHeight),
+                            .snapshot = std::move(editorSnapshot)
+                        };
 
-                        if (!opened)
+                        if (!request_context_window_close(
+                            sourceCtx.get(),
+                            "retiring source backend before single-window context replacement"))
                         {
+                            pendingEditorContextReplacement.reset();
+                            mgr.EndContextReplacement();
                             epochnamespace::editor_set_context_selection_status(
                                 sourceCtx.get(),
                                 std::string{ "Context switch to " } + std::string{ context_type_label(targetType) }
-                                    + " failed: replacement context could not be created.");
+                                    + " failed: source context could not enter the replacement transaction.");
                             logger::get(kEditorLog).logf(
                                 logger::LogLevel::Error,
                                 std::source_location::current(),
-                                "Context selector failed to create a replacement {} editor context.",
+                                "Context selector failed to retire the source context before replacing it with {}.",
                                 context_type_label(targetType));
                             return;
                         }
 
                         epochnamespace::editor_set_context_selection_status(
                             sourceCtx.get(),
-                            std::string{ "Switching editor to new " } + std::string{ context_type_label(targetType) }
-                                + " context; source context will park after restore.");
+                            std::string{ "Switching editor to " } + std::string{ context_type_label(targetType) }
+                                + "; preserving editor state while the previous backend is fully retired.");
                         logger::get(kEditorLog).logf(
                             logger::LogLevel::INFO,
                             std::source_location::current(),
-                            "Context selector created a replacement {} editor context for single-context switching.",
+                            "Context selector began a single-window replacement transaction for {}.",
                             context_type_label(targetType));
                         return;
+#else
+                        epochnamespace::editor_set_context_selection_status(
+                            sourceCtx.get(),
+                            "Context switching is unavailable in this platform host; the active editor context was kept.");
+                        return;
+#endif
                     }
 
                     auto [targetIt, insertedForTarget] = sessions.try_emplace(targetCtx.get());
@@ -6903,7 +7006,11 @@ namespace epochnamespace::core
                         any_context_alive = true;
                 }
 
-                if (!any_context_alive)
+                if (!any_context_alive
+#if defined(_WIN32)
+                    && !mgr.ContextReplacementInProgress()
+#endif
+                    )
                 {
                     logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
                         logger::LogLevel::WARN,

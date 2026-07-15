@@ -40,8 +40,9 @@ after choosing the current source gate from `Changes/active_pass.md`.
   - focus and restore an already-live context of the selected backend when it
     exists
   - create a replacement single editor context when the selected backend is
-    compiled but not live, restore the captured editor state into it, then close
-    the old source context after restore instead of opening a side editor shell
+    compiled but not live: capture state, retire and fully clean the old source
+    backend, create one docked replacement in the same native host, then restore
+    the snapshot instead of opening a side editor shell
   - fail closed with visible status when no selected backend can be created or
     restored
   - capture current editor state before handoff and restore it into the target
@@ -71,22 +72,16 @@ after choosing the current source gate from `Changes/active_pass.md`.
   windows and MSVC/Unreal-style guide zones so panes can redock into explicit
   left/right/top/bottom/center slots, with the cloned routed context closing
   cleanly after the original docked pane is restored.
-- SFML editor context handoff needs a dedicated stabilization pass. The toolbar
-  switch path is currently guarded because SFML proxy/native ownership can crash
-  during backend switching; future work should make SFML save/restore, GUI
-  resource refresh, proxy host/child lifetime, and focus/redock ownership safe
-  before re-enabling SFML as a normal editor handoff target.
-- Raylib editor context handoff is guarded for the same release-stability
-  reason. Its owner-thread native window/context path needs explicit
-  save/restore, focus, GUI resource refresh, and source-context shutdown proof
-  before Raylib becomes a normal toolbar handoff target.
-- SDL editor context handoff and multicontext ownership need a dedicated
-  stabilization pass. SDL must not spawn an extra top-level window, steal focus,
-  or leave an orphaned context during toolbar switches, routed pane redocking,
-  or diagnostic-grid teardown. Re-enable SDL as a normal editor handoff target
-  only after backend-owned save/restore, GUI resource refresh, focus, and
-  source-context shutdown proof pass in build-safe and operator-approved
-  runtime evidence.
+- Windows source now routes SFML, Raylib, SDL, OpenGL, Vulkan, DirectX, and
+  Software through one exclusive replacement transaction. The manager keeps the
+  native host alive while no renderer exists, waits until the source render
+  thread and deferred native cleanup are finished, then creates the selected
+  backend as one docked replacement and restores the captured editor snapshot.
+  Raylib teardown hides its child before the required top-level detach/close so
+  cleanup cannot flash a temporary editor window. This is build-proven source,
+  not runtime acceptance: each backend still needs the operator-approved switch
+  matrix for state restore, first-frame GUI/font validity, focus, and repeated
+  round-trip teardown before a release claim.
 - Raylib, SFML, and SDL multicontext grids are diagnostic evidence only until
   each backend can prove clean parent/child ownership, redock/close teardown,
   context switch restore, and no stale background rendering. Do not feed those
@@ -134,6 +129,10 @@ after choosing the current source gate from `Changes/active_pass.md`.
   newline/tab filtering, and metric-driven scroll visibility. Platform clipboard
   calls, font measurement, event translation, drawing, wrapping, and context-menu
   presentation remain adapter work.
+- Completed portable scene-mode control slice: `SelectionControlController`
+  owns C++23 module/static-library segmented-control bounds, item placement, gap
+  handling, and hit testing. The editor's 3D/2D mode switch uses that EpochGui
+  geometry through `engine.gui`; renderer drawing and input remain adapter work.
 - `engine.gui` is the engine adapter. It owns input translation, theme/font
   state, clipping, deferred GUI batches, top-layer replay, and renderer-facing
   widget drawing.

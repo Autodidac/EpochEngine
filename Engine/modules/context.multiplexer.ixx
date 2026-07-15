@@ -163,6 +163,11 @@ namespace epochnamespace::core
         void HandleResize(HWND hwnd, int width, int height);
         void StartRenderThreads();
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest& request);
+        bool OpenReplacementContextWindow(const DetachedContextWindowRequest& request);
+        void BeginContextReplacement() noexcept;
+        void EndContextReplacement() noexcept;
+        [[nodiscard]] bool ContextReplacementInProgress() const noexcept;
+        [[nodiscard]] bool IsContextRetired(const Context* context) const noexcept;
 
         HWND GetParentWindow() const { return parent; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return windows; }
@@ -191,6 +196,7 @@ namespace epochnamespace::core
     private:
         std::vector<std::unique_ptr<WindowData>> windows;
         std::atomic<bool> running{ false };
+        std::atomic<std::uint32_t> contextReplacementHolds{ 0 };
         mutable std::recursive_mutex windowsMutex;
         DWORD uiThreadId = 0;
 
@@ -244,6 +250,7 @@ namespace epochnamespace::core
         void HandleResize(HWND hwnd, int width, int height);
         void StartRenderThreads();
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest&) { return false; }
+        bool OpenReplacementContextWindow(const DetachedContextWindowRequest&) { return false; }
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return windows; }
@@ -307,6 +314,7 @@ namespace epochnamespace::core
         void StartRenderThreads() {}
         void HandleResize(HWND, int, int) {}
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest&) { return false; }
+        bool OpenReplacementContextWindow(const DetachedContextWindowRequest&) { return false; }
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return s_emptyWindows; }

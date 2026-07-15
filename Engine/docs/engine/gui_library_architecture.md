@@ -114,10 +114,10 @@ replay pass.
 ## New Control Rule
 
 Every new editor control starts as a reusable GUI primitive unless it is truly
-domain-specific. The first reusable dropdown/select-box is the local AI model
-selector; package selection, backend selection, project settings, asset
-selection, and script selection should follow that same path instead of adding
-new one-off rows of buttons.
+domain-specific. Dropdown/select-box state and segmented-selection geometry
+belong in EpochGui controllers; the local AI model selector, scene-mode switch,
+package selection, backend selection, project settings, asset selection, and
+script selection should reuse those paths instead of adding one-off controls.
 
 Before a control is considered ready, it needs:
 
@@ -185,7 +185,7 @@ belong in proper GUI windows:
 - System Info graphs belong in the System Info workspace. Shared `core.time` controls,
   timeline graphing, streaming-save cadence, and video-authoring controls belong
   in Video or the bottom scene timeline strip.
-- Intelligence controls belong in the Intelligence workspace and Inspector, with compact
+- AI controls belong in the AI workspace and Inspector, with compact
   status mirrored in the dock only when useful. The World Outliner may expose an
   `OS AI` tab with compact model/loop state, chat transcript, prompt entry,
   and plan controls because that keeps the selected AI model attached to normal editor chrome
@@ -288,7 +288,10 @@ theme, text, and atlas/backend replay; keep portable math/control state in
 
 The current reusable payload includes floating-window layout, popup/dropdown
 layout, dock-layout math, dockable-window host/action state, splitters,
-progress-bar layout, selectable-list row math, and portable text-control state.
+progress-bar layout, selectable-list row math, segmented-selection geometry,
+and portable text-control state. `SelectionControlController` owns clamped
+segment sizing, gap-aware item placement, aggregate bounds, and hit testing;
+`engine.gui` supplies rendering, theme, font, focus, and translated input.
 `TextControlController` provides UTF-8-safe caret boundaries, anchor/range
 selection, line/document/word/multiline navigation, edit and clipboard intent,
 read-only and maximum-byte policy, and metric-driven scrolling. The adapter

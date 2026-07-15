@@ -1,3 +1,4 @@
+#include <array>
 #include <cstddef>
 #include <string>
 
@@ -140,6 +141,42 @@ namespace
         EPOCHGUI_CHECK(state.scroll.y == 58.0f);
         return 0;
     }
+
+    int segmented_control_geometry()
+    {
+        const std::array<float, 3> widths{ 80.0f, 120.0f, 60.0f };
+        const SegmentedControlLayoutOptions options{
+            .position = { 10.0f, 20.0f },
+            .item_widths = widths,
+            .height = 30.0f,
+            .gap = 4.0f
+        };
+
+        const SegmentedControlLayout layout = make_segmented_control_layout(options);
+        EPOCHGUI_CHECK(layout.valid);
+        EPOCHGUI_CHECK(layout.item_count == 3);
+        EPOCHGUI_CHECK(layout.bounds.position.x == 10.0f);
+        EPOCHGUI_CHECK(layout.bounds.position.y == 20.0f);
+        EPOCHGUI_CHECK(layout.bounds.size.x == 268.0f);
+        EPOCHGUI_CHECK(layout.bounds.size.y == 30.0f);
+
+        const Rect second = segmented_control_item_layout(options, 1);
+        EPOCHGUI_CHECK(second.position.x == 94.0f);
+        EPOCHGUI_CHECK(second.position.y == 20.0f);
+        EPOCHGUI_CHECK(second.size.x == 120.0f);
+        EPOCHGUI_CHECK(second.size.y == 30.0f);
+
+        EPOCHGUI_CHECK(segmented_control_item_at(options, { 10.0f, 20.0f }) == 0);
+        EPOCHGUI_CHECK(segmented_control_item_at(options, { 95.0f, 25.0f }) == 1);
+        EPOCHGUI_CHECK(segmented_control_item_at(options, { 220.0f, 25.0f }) == 2);
+        EPOCHGUI_CHECK(
+            segmented_control_item_at(options, { 91.0f, 25.0f })
+            == invalid_selectable_row_index);
+        EPOCHGUI_CHECK(
+            segmented_control_item_at(options, { 500.0f, 25.0f })
+            == invalid_selectable_row_index);
+        return 0;
+    }
 }
 
 int main()
@@ -150,5 +187,7 @@ int main()
         return result;
     if (const int result = navigation_and_selection(); result != 0)
         return result;
-    return filtering_read_only_and_scroll();
+    if (const int result = filtering_read_only_and_scroll(); result != 0)
+        return result;
+    return segmented_control_geometry();
 }

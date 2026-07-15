@@ -2059,6 +2059,76 @@ namespace epochnamespace::core
         return running.load(std::memory_order_acquire);
     }
 
+    void MultiContextManager::BeginContextReplacement() noexcept
+    {
+        contextReplacementHolds.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    void MultiContextManager::EndContextReplacement() noexcept
+    {
+        std::uint32_t previous = contextReplacementHolds.load(std::memory_order_acquire);
+        while (previous != 0
+            && !contextReplacementHolds.compare_exchange_weak(
+                previous,
+                previous - 1,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire))
+        {
+        }
+
+        if (previous == 0)
+            return;
+
+        if (previous != 1)
+            return;
+
+        bool noWindows = false;
+        {
+            std::scoped_lock lock(windowsMutex);
+            noWindows = windows.empty();
+        }
+        if (!noWindows)
+            return;
+
+        running.store(false, std::memory_order_release);
+        if (uiThreadId != 0 && uiThreadId != ::GetCurrentThreadId())
+            ::PostThreadMessageW(uiThreadId, WM_QUIT, 0, 0);
+        else
+            ::PostQuitMessage(0);
+    }
+
+    bool MultiContextManager::ContextReplacementInProgress() const noexcept
+    {
+        return contextReplacementHolds.load(std::memory_order_acquire) > 0;
+    }
+
+    bool MultiContextManager::IsContextRetired(const Context* context) const noexcept
+    {
+        if (!context)
+            return true;
+
+        {
+            std::scoped_lock lock(windowsMutex);
+            const bool stillOwned = std::ranges::any_of(
+                windows,
+                [context](const std::unique_ptr<WindowData>& window)
+                {
+                    const auto liveContext = window ? typed_context(window->context) : nullptr;
+                    return liveContext && liveContext.get() == context;
+                });
+            if (stillOwned)
+                return false;
+        }
+
+        return std::ranges::none_of(
+            g_pendingCleanups,
+            [context](const PendingWindowCleanup& pending)
+            {
+                const auto liveContext = pending.window ? typed_context(pending.window->context) : nullptr;
+                return liveContext && liveContext.get() == context;
+            });
+    }
+
     void MultiContextManager::StopRunning() noexcept
     {
         running.store(false, std::memory_order_release);
@@ -2110,6 +2180,22 @@ namespace epochnamespace::core
         }
 
         return true;
+    }
+
+    bool MultiContextManager::OpenReplacementContextWindow(const DetachedContextWindowRequest& request)
+    {
+        if (!ContextReplacementInProgress()
+            || !parent
+            || ::IsWindow(parent) == FALSE
+            || uiThreadId == 0
+            || ::GetCurrentThreadId() != uiThreadId)
+        {
+            return false;
+        }
+
+        DetachedContextWindowRequest dockedRequest = request;
+        dockedRequest.start_docked = true;
+        return CreateDetachedContextWindowOnOwnerThread(dockedRequest);
     }
 
     // ------------------------------------------------------------
@@ -3213,7 +3299,8 @@ namespace epochnamespace::core
 
             removed = std::move(*it);
             windows.erase(it);
-            should_quit = windows.empty();
+            should_quit = windows.empty()
+                && contextReplacementHolds.load(std::memory_order_acquire) == 0;
         }
 
         forget_native_title_frame_source(removed.get());
