@@ -3536,6 +3536,48 @@ namespace epochnamespace::core
             if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
                 continue;
 
+            const bool raylibOwnerThreadWindow =
+                backend_requires_owner_thread_dock_commands(&win)
+                && win.hwndChild
+                && liveHwnd == win.hwndChild
+                && win.host_hwnd
+                && win.host_hwnd != liveHwnd;
+            if (raylibOwnerThreadWindow)
+            {
+                const bool placementMatches = child_window_matches_parent_slot(
+                    liveHwnd,
+                    parent,
+                    slotX,
+                    slotY,
+                    cw,
+                    ch);
+                if (!placementMatches || win.width != cw || win.height != ch)
+                {
+                    // Raylib owns this GLFW HWND on the render thread. Calling
+                    // SetWindowPos here while windowsMutex is held can deadlock
+                    // against the subclass input path when the user clicks the
+                    // pane. Queue the complete layout mutation for its owner.
+                    if (post_owner_thread_dock_command(
+                        &win,
+                        ProxyDockCmd::Redock,
+                        parent,
+                        slotScreen.x,
+                        slotScreen.y,
+                        cw,
+                        ch))
+                    {
+                        HandleResize(liveHwnd, cw, ch);
+                    }
+                }
+
+                if (::IsWindow(win.host_hwnd) != FALSE
+                    && ::GetParent(win.host_hwnd) == parent)
+                {
+                    ::ShowWindow(win.host_hwnd, SW_HIDE);
+                }
+                continue;
+            }
+
             const bool usingHiddenHostPlaceholder =
                 win.host_hwnd
                 && liveHwnd == win.host_hwnd

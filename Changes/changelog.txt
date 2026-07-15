@@ -1,5 +1,16 @@
 # Epoch Changelog
 
+## [v0.87.73] - Raylib owner-thread dock layout repair
+
+- Route adopted Raylib GLFW child layout through its render-thread command
+  queue instead of calling `SetWindowPos` from the editor UI thread while the
+  context manager window lock is held.
+- Prevent the Raylib input subclass from locking against a synchronous
+  cross-thread layout call when the user clicks or drags the pane, while keeping
+  the stable host placeholder hidden and resize callbacks on the owner thread.
+- Keep the published `v0.87.69` runtime/updater sealed; this is a source-only
+  repair for focused operator update testing.
+
 ## [v0.87.72] - Raylib first-present context repair
 
 - Keep Raylib replacement contexts in `initializing` until their owner thread

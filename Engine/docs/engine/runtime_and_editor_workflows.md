@@ -164,7 +164,10 @@ the same engine-owned path.
   only then restores project, layout, selection, camera, timeline, GUI, and font
   state. Raylib readiness additionally requires a successful owner-thread GL
   activation and completed first present; a failed activation skips drawing so
-  `BeginDrawing` never runs against another backend's context. The replacement
+  `BeginDrawing` never runs against another backend's context. Once adopted,
+  Raylib's GLFW child is also reparented and resized through the render-thread
+  command queue so UI-thread layout never blocks its input subclass while the
+  manager window lock is held. The replacement
   is never a second editor shell, and unavailable or failed targets remain
   visible failures rather than persisted fake selections.
 - normal editor switching owns one live backend at a time. The host keeps its

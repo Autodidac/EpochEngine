@@ -66,7 +66,9 @@ transaction; runtime acceptance still requires repeated switch proof for state,
 focus, GUI/font refresh, and teardown before release work resumes. The operator
 has accepted SDL, SFML, OpenGL, Vulkan, DirectX, and software switching from the
 `v0.87.71` source. Raylib's `v0.87.72` gate now requires a completed first
-present before state restore and remains the only focused runtime recheck.
+present before state restore, and `v0.87.73` moves adopted GLFW child layout to
+the Raylib owner thread to remove the click-time lock inversion. Raylib remains
+the only focused runtime recheck.
 
 ## High-Output Source Strategy
 

@@ -100,8 +100,10 @@ contracts instead of drift.
   fallback. The operator accepted SDL, SFML, OpenGL, Vulkan, DirectX, and
   software replacement behavior from the `v0.87.71` build. The `v0.87.72`
   source makes Raylib readiness depend on a successful owner-thread GL bind and
-  completed first present, and still needs the focused Raylib eye test before
-  runtime acceptance.
+  completed first present. The `v0.87.73` source additionally routes adopted
+  GLFW child layout through Raylib's render-thread queue to remove the remaining
+  click-time UI/render lock inversion; focused Raylib testing remains required
+  before runtime acceptance.
 - Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
   launcher window until packaged handoff is staged or source worker handoff
   evidence is ready. Packaged runtime installs can still distinguish stable
