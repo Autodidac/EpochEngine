@@ -170,6 +170,10 @@ the same engine-owned path.
   manager window lock is held. The replacement
   is never a second editor shell, and unavailable or failed targets remain
   visible failures rather than persisted fake selections.
+- a replacement render thread holds at a one-time session gate after publishing
+  readiness. The editor restores project, layout, camera, preview, GUI, and font
+  state before releasing normal frames; Raylib may complete its required first
+  present before waiting at that same gate.
 - normal editor switching owns one live backend at a time. The host keeps its
   parent window alive during the rendererless replacement gap, does not start
   the target until deferred source cleanup is complete, keeps the replacement

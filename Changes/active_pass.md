@@ -102,8 +102,11 @@ contracts instead of drift.
   source makes Raylib readiness depend on a successful owner-thread GL bind and
   completed first present. The `v0.87.73` source additionally routes adopted
   GLFW child layout through Raylib's render-thread queue to remove the remaining
-  click-time UI/render lock inversion; focused Raylib testing remains required
-  before runtime acceptance.
+  click-time UI/render lock inversion. The `v0.87.74` source holds every new
+  replacement renderer at a one-time session gate after backend readiness so
+  the editor can restore camera/preview/GUI state before fast hardware frames
+  consume it; focused all-backend testing remains required before runtime
+  acceptance.
 - Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
   launcher window until packaged handoff is staged or source worker handoff
   evidence is ready. Packaged runtime installs can still distinguish stable

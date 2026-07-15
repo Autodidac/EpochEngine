@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.87.74] - Hardware replacement session handoff repair
+
+- Hold a newly initialized replacement renderer at a one-time session gate
+  until the editor snapshot has restored project, layout, camera, preview, GUI,
+  and font state.
+- Prevent fast hardware render threads from consuming shared camera/preview
+  state while the editor thread is writing the replacement snapshot. Raylib may
+  complete its required first present before entering the same gate.
+- Restore consistent switching across OpenGL, Vulkan, DirectX, SDL, SFML,
+  Raylib, and Software without changing backend draw order or the sealed
+  packaged updater baseline.
+
 ## [v0.87.73] - Raylib owner-thread dock layout repair
 
 - Route adopted Raylib GLFW child layout through its render-thread command

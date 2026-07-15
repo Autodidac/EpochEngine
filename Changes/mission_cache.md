@@ -89,8 +89,10 @@ after choosing the current source gate from `Changes/active_pass.md`.
   thread completes a real present and never enters drawing after a failed GL
   activation. The `v0.87.73` source also keeps adopted GLFW layout on the
   Raylib owner thread so input cannot lock against UI-thread window placement;
-  focused Raylib state/font/focus/repeated-switch acceptance remains required
-  before a release claim.
+  `v0.87.74` adds a one-time replacement session gate so camera, preview, GUI,
+  and font state restore before hardware render threads resume normal frames.
+  Focused all-backend state/font/focus/repeated-switch acceptance remains
+  required before a release claim.
 - Raylib, SFML, and SDL multicontext grids are diagnostic evidence only until
   each backend can prove clean parent/child ownership, redock/close teardown,
   context switch restore, and no stale background rendering. Do not feed those

@@ -2420,6 +2420,9 @@ namespace epochnamespace::core
         winPtr->firstPresentComplete.store(
             request.type != ContextType::OpenGL && request.type != ContextType::RayLib,
             std::memory_order_release);
+        winPtr->sessionRestorePending.store(
+            ContextReplacementInProgress() && request.gui_route.empty(),
+            std::memory_order_release);
         ctx->windowData = winPtr.get();
 
         RECT rc{};
@@ -3844,6 +3847,18 @@ namespace epochnamespace::core
 
         while (running.load(std::memory_order_acquire) && win.running && !win.get_should_close())
         {
+            if (win.sessionRestorePending.load(std::memory_order_acquire)
+                && win.backend_lifecycle() == BackendLifecycleState::ready)
+            {
+                // A replacement backend is initialized, but the editor thread
+                // still owns the one-time state handoff. Do not let a fast GPU
+                // reader race or starve the camera/preview writers used by that
+                // restore. Raylib is allowed to reach its required first present
+                // before entering this gate.
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+
             bool keepRunning = true;
 
             {

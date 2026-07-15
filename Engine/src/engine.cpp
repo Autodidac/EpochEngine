@@ -6070,6 +6070,8 @@ namespace epochnamespace::core
                             }
 
                             const auto pendingRestoreStatus = restore_pending_editor_switch_snapshot(ctx, session, win->guiRoute);
+                            const bool releasedReplacementRenderer =
+                                win->sessionRestorePending.exchange(false, std::memory_order_acq_rel);
                             if (pendingRestoreStatus == PendingEditorRestoreStatus::restored)
                             {
                                 logger::get(kEditorLog).logf(
@@ -6084,6 +6086,14 @@ namespace epochnamespace::core
                                     logger::LogLevel::Error,
                                     std::source_location::current(),
                                     "New {} context entered the session loop, but editor state restore failed.",
+                                    context_type_label(ctx->type));
+                            }
+                            else if (releasedReplacementRenderer)
+                            {
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::WARN,
+                                    std::source_location::current(),
+                                    "New {} replacement context had no queued editor snapshot; released its render gate with default session state.",
                                     context_type_label(ctx->type));
                             }
                         }
