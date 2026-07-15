@@ -107,8 +107,14 @@ contracts instead of drift.
   continued to work. The `v0.87.75` source makes the dropdown transaction adopt
   the exact context returned by the multicontext manager, restores editor state
   before normal backend activation, and excludes only that target from generic
-  multicontext enumeration until render-ready. Focused all-backend testing
-  remains required before runtime acceptance.
+  multicontext enumeration until render-ready. Operator testing showed that
+  `v0.87.75` still retired the source backend inside the editor frame using it,
+  so first switches could work while a second switch stopped during source
+  close; it also released hardware replacements before the manager finalized
+  the transaction. The `v0.87.76` source queues retirement to the next manager
+  frame boundary and holds only the exact replacement at its activation gate
+  through readiness and transaction completion. Focused all-backend repeated-
+  switch testing remains required before runtime acceptance.
 - Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
   launcher window until packaged handoff is staged or source worker handoff
   evidence is ready. Packaged runtime installs can still distinguish stable

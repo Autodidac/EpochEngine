@@ -92,9 +92,13 @@ after choosing the current source gate from `Changes/active_pass.md`.
   The `v0.87.74` post-readiness gate stalled threaded hardware replacements;
   `v0.87.75` instead makes the dropdown transaction adopt the manager's exact
   target and restore its session before normal backend activation while other
-  multicontext windows keep running. Focused all-backend
-  state/font/focus/repeated-switch acceptance remains required before a release
-  claim.
+  multicontext windows keep running. Operator testing then exposed a repeated-
+  switch lifetime race because the dropdown retired the source inside its
+  active editor frame, plus early activation of some hardware replacements.
+  `v0.87.76` defers source retirement to the next manager frame boundary and
+  keeps only the exact target gated until readiness completes the transaction.
+  Focused all-backend state/font/focus/repeated-switch acceptance remains
+  required before a release claim.
 - Raylib, SFML, and SDL multicontext grids are diagnostic evidence only until
   each backend can prove clean parent/child ownership, redock/close teardown,
   context switch restore, and no stale background rendering. Do not feed those

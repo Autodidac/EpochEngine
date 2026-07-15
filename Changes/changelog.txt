@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.87.76] - Frame-boundary context replacement repair
+
+- Queue toolbar context changes until the active editor frame has finished its
+  GUI and present work, then retire the source backend from the next manager
+  frame boundary instead of tearing it down inside the frame still using it.
+- Keep the exact replacement render thread at its transaction-owned activation
+  gate after editor state restoration until the manager observes native backend
+  readiness and completes the handoff.
+- Preserve normal processing for every unrelated multicontext window while
+  removing the repeated-switch lifetime race and the early hardware-target
+  activation left by `v0.87.75`.
+
 ## [v0.87.75] - Dropdown replacement transaction ownership repair
 
 - Make the editor context dropdown adopt the exact replacement context returned

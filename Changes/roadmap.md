@@ -71,8 +71,11 @@ has accepted SDL, SFML, OpenGL, Vulkan, DirectX, and software switching from the
   `v0.87.74` post-readiness pause stalled threaded hardware targets; `v0.87.75`
   moves exact-target session adoption into the dropdown transaction before
   normal backend activation and leaves the generic multicontext loop responsible
-  only for unrelated windows until replacement completion. All backends require
-  one focused runtime recheck.
+  only for unrelated windows until replacement completion. Operator testing
+  exposed source retirement inside the still-active editor frame and early
+  target activation; `v0.87.76` moves retirement to the next manager frame
+  boundary and holds the exact target until readiness completes the transaction.
+  All backends require focused repeated-switch rechecks.
 
 ## High-Output Source Strategy
 

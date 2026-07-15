@@ -5048,7 +5048,8 @@ namespace epochnamespace::core
 #if defined(_WIN32)
         enum class EditorContextReplacementPhase : unsigned char
         {
-            retiring_source = 0,
+            retire_requested = 0,
+            retiring_source,
             awaiting_backend,
             retiring_failed_backend
         };
@@ -5063,7 +5064,7 @@ namespace epochnamespace::core
             int width{ 1280 };
             int height{ 720 };
             epochnamespace::EditorContextSnapshot snapshot{};
-            EditorContextReplacementPhase phase{ EditorContextReplacementPhase::retiring_source };
+            EditorContextReplacementPhase phase{ EditorContextReplacementPhase::retire_requested };
             bool fallback_attempted{ false };
         };
 #endif
@@ -5424,12 +5425,11 @@ namespace epochnamespace::core
                             replacement.active_context,
                             replacementSession,
                             replacementWindow->guiRoute);
-                        replacementWindow->replacementSessionAdoptionPending.store(
-                            false,
-                            std::memory_order_release);
-
                         if (restoreStatus != PendingEditorRestoreStatus::restored)
                         {
+                            replacementWindow->replacementSessionAdoptionPending.store(
+                                false,
+                                std::memory_order_release);
                             unload_active_scene(replacementSession);
                             replacementSession.menu.cleanup();
                             sessions.erase(sessionIt);
@@ -5499,7 +5499,41 @@ namespace epochnamespace::core
                     };
 
                     auto& replacement = *pendingEditorContextReplacement;
-                    if (replacement.phase == EditorContextReplacementPhase::retiring_source)
+                    if (replacement.phase == EditorContextReplacementPhase::retire_requested)
+                    {
+                        epochnamespace::editor_set_context_selection_status(
+                            replacement.source_context.get(),
+                            std::string{ "Switching editor to " } + std::string{ context_type_label(replacement.target_type) }
+                                + "; preserving editor state while the previous backend is fully retired.");
+
+                        if (!request_context_window_close(
+                            replacement.source_context.get(),
+                            "retiring source backend at the frame boundary before single-window context replacement"))
+                        {
+                            const auto targetType = replacement.target_type;
+                            epochnamespace::editor_set_context_selection_status(
+                                replacement.source_context.get(),
+                                std::string{ "Context switch to " } + std::string{ context_type_label(targetType) }
+                                    + " failed: source context could not enter the replacement transaction.");
+                            logger::get(kEditorLog).logf(
+                                logger::LogLevel::Error,
+                                std::source_location::current(),
+                                "Context selector failed to retire the source context before replacing it with {}.",
+                                context_type_label(targetType));
+                            mgr.EndContextReplacement();
+                            pendingEditorContextReplacement.reset();
+                        }
+                        else
+                        {
+                            replacement.phase = EditorContextReplacementPhase::retiring_source;
+                            logger::get(kEditorLog).logf(
+                                logger::LogLevel::INFO,
+                                std::source_location::current(),
+                                "Context selector began a frame-boundary single-window replacement transaction for {}.",
+                                context_type_label(replacement.target_type));
+                        }
+                    }
+                    else if (replacement.phase == EditorContextReplacementPhase::retiring_source)
                     {
                         if (mgr.IsContextRetired(replacement.source_context.get())
                             && !openReplacement(replacement.target_type))
@@ -5522,6 +5556,9 @@ namespace epochnamespace::core
                             && backendIsLive)
                         {
                             const auto readyType = replacement.active_type;
+                            window->replacementSessionAdoptionPending.store(
+                                false,
+                                std::memory_order_release);
                             mgr.EndContextReplacement();
                             pendingEditorContextReplacement.reset();
                             logger::get(kEditorLog).logf(
@@ -5537,6 +5574,9 @@ namespace epochnamespace::core
                             eraseReplacementSnapshot(replacement.active_type);
                             if (window)
                             {
+                                window->replacementSessionAdoptionPending.store(
+                                    false,
+                                    std::memory_order_release);
                                 request_context_window_close(
                                     replacement.active_context.get(),
                                     "retiring failed replacement backend before recovery");
@@ -5875,32 +5915,14 @@ namespace epochnamespace::core
                             .snapshot = std::move(editorSnapshot)
                         };
 
-                        if (!request_context_window_close(
-                            sourceCtx.get(),
-                            "retiring source backend before single-window context replacement"))
-                        {
-                            pendingEditorContextReplacement.reset();
-                            mgr.EndContextReplacement();
-                            epochnamespace::editor_set_context_selection_status(
-                                sourceCtx.get(),
-                                std::string{ "Context switch to " } + std::string{ context_type_label(targetType) }
-                                    + " failed: source context could not enter the replacement transaction.");
-                            logger::get(kEditorLog).logf(
-                                logger::LogLevel::Error,
-                                std::source_location::current(),
-                                "Context selector failed to retire the source context before replacing it with {}.",
-                                context_type_label(targetType));
-                            return;
-                        }
-
                         epochnamespace::editor_set_context_selection_status(
                             sourceCtx.get(),
-                            std::string{ "Switching editor to " } + std::string{ context_type_label(targetType) }
-                                + "; preserving editor state while the previous backend is fully retired.");
+                            std::string{ "Queued editor switch to " } + std::string{ context_type_label(targetType) }
+                                + "; the current frame will finish before backend retirement begins.");
                         logger::get(kEditorLog).logf(
                             logger::LogLevel::INFO,
                             std::source_location::current(),
-                            "Context selector began a single-window replacement transaction for {}.",
+                            "Context selector queued a frame-boundary single-window replacement transaction for {}.",
                             context_type_label(targetType));
                         return;
 #else
