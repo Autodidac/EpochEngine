@@ -163,7 +163,9 @@ namespace epochnamespace::core
         void HandleResize(HWND hwnd, int width, int height);
         void StartRenderThreads();
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest& request);
-        bool OpenReplacementContextWindow(const DetachedContextWindowRequest& request);
+        bool OpenReplacementContextWindow(
+            const DetachedContextWindowRequest& request,
+            std::shared_ptr<Context>* createdContext = nullptr);
         void BeginContextReplacement() noexcept;
         void EndContextReplacement() noexcept;
         [[nodiscard]] bool ContextReplacementInProgress() const noexcept;
@@ -207,7 +209,9 @@ namespace epochnamespace::core
         void SetupPixelFormat(HDC hdc);
         HGLRC CreateSharedGLContext(HDC hdc);
         int get_title_bar_thickness(const HWND window_handle);
-        bool CreateDetachedContextWindowOnOwnerThread(const DetachedContextWindowRequest& request);
+        bool CreateDetachedContextWindowOnOwnerThread(
+            const DetachedContextWindowRequest& request,
+            std::shared_ptr<Context>* createdContext = nullptr);
 
         inline static MultiContextManager* s_activeInstance = nullptr;
 
@@ -250,7 +254,14 @@ namespace epochnamespace::core
         void HandleResize(HWND hwnd, int width, int height);
         void StartRenderThreads();
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest&) { return false; }
-        bool OpenReplacementContextWindow(const DetachedContextWindowRequest&) { return false; }
+        bool OpenReplacementContextWindow(
+            const DetachedContextWindowRequest&,
+            std::shared_ptr<Context>* createdContext = nullptr)
+        {
+            if (createdContext)
+                createdContext->reset();
+            return false;
+        }
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return windows; }
@@ -314,7 +325,14 @@ namespace epochnamespace::core
         void StartRenderThreads() {}
         void HandleResize(HWND, int, int) {}
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest&) { return false; }
-        bool OpenReplacementContextWindow(const DetachedContextWindowRequest&) { return false; }
+        bool OpenReplacementContextWindow(
+            const DetachedContextWindowRequest&,
+            std::shared_ptr<Context>* createdContext = nullptr)
+        {
+            if (createdContext)
+                createdContext->reset();
+            return false;
+        }
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return s_emptyWindows; }

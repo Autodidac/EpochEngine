@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.87.75] - Dropdown replacement transaction ownership repair
+
+- Make the editor context dropdown adopt the exact replacement context returned
+  by `MultiContextManager` instead of rediscovering it by backend type.
+- Restore the dropdown's editor session immediately after window creation, keep
+  that target out of generic multicontext enumeration until it is render-ready,
+  and continue servicing every unrelated live context normally.
+- Narrow the replacement render gate to session adoption. This supersedes the
+  `v0.87.74` post-readiness restore ordering that stalled threaded hardware
+  backends while Software continued to work; Raylib retains its required first
+  present and the existing retirement, readiness, cleanup, and fallback gates.
+
 ## [v0.87.74] - Hardware replacement session handoff repair
 
 - Hold a newly initialized replacement renderer at a one-time session gate

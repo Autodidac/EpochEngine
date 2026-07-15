@@ -2,7 +2,7 @@
 
 EpochGui is the C++23 module/static-library surface for the reusable Epoch GUI
 layout library. The current mirror metadata tracks the EpochEngine `v0.87.69`
-stable release and `v0.87.74` source line. The canonical EpochEngine source
+stable release and `v0.87.75` source line. The canonical EpochEngine source
 still lives in the engine tree:
 
 - `Engine/dep/EpochGui/modules/epoch.gui.ixx`
@@ -26,7 +26,7 @@ geometry and layout helpers exported by `epoch.gui`:
 - `gui/text_control.hpp` plus `src/epochgui/text_control.cpp`
 - `tests/text_control_tests.cpp` for portable edit/navigation/scroll and
   segmented-selection geometry contracts
-- `epoch.gui` for the library name and `0.87.74` version constants
+- `epoch.gui` for the library name and `0.87.75` version constants
 
 The public namespace is `epochnamespace::gui_lib`. New integrations should
 prefer:
@@ -85,7 +85,7 @@ cmake --build build --target EpochGui --config Debug
 The CMake target is `EpochGui`. Compatibility aliases are also provided as
 `epoch_gui` and `Autodidac::EpochGui`.
 
-The CMake project version is `0.87.74`, matching the engine source line that
+The CMake project version is `0.87.75`, matching the engine source line that
 keeps reusable GUI layout state separate from editor/runtime context ownership
 while the packaged-release updater reports runtime payload handoff evidence
 without owning launcher-specific behavior.

@@ -2216,8 +2216,13 @@ namespace epochnamespace::core
         return true;
     }
 
-    bool MultiContextManager::OpenReplacementContextWindow(const DetachedContextWindowRequest& request)
+    bool MultiContextManager::OpenReplacementContextWindow(
+        const DetachedContextWindowRequest& request,
+        std::shared_ptr<Context>* createdContext)
     {
+        if (createdContext)
+            createdContext->reset();
+
         if (!ContextReplacementInProgress()
             || !parent
             || ::IsWindow(parent) == FALSE
@@ -2229,7 +2234,7 @@ namespace epochnamespace::core
 
         DetachedContextWindowRequest dockedRequest = request;
         dockedRequest.start_docked = true;
-        return CreateDetachedContextWindowOnOwnerThread(dockedRequest);
+        return CreateDetachedContextWindowOnOwnerThread(dockedRequest, createdContext);
     }
 
     // ------------------------------------------------------------
@@ -2248,8 +2253,12 @@ namespace epochnamespace::core
     }
 
     bool MultiContextManager::CreateDetachedContextWindowOnOwnerThread(
-        const DetachedContextWindowRequest& request)
+        const DetachedContextWindowRequest& request,
+        std::shared_ptr<Context>* createdContext)
     {
+        if (createdContext)
+            createdContext->reset();
+
         if (!running.load(std::memory_order_acquire))
             return false;
 
@@ -2420,7 +2429,7 @@ namespace epochnamespace::core
         winPtr->firstPresentComplete.store(
             request.type != ContextType::OpenGL && request.type != ContextType::RayLib,
             std::memory_order_release);
-        winPtr->sessionRestorePending.store(
+        winPtr->replacementSessionAdoptionPending.store(
             ContextReplacementInProgress() && request.gui_route.empty(),
             std::memory_order_release);
         ctx->windowData = winPtr.get();
@@ -2459,6 +2468,8 @@ namespace epochnamespace::core
         }
         if (startDocked)
             ArrangeDockedWindowsGrid();
+        if (createdContext)
+            *createdContext = ctx;
         return true;
     }
 
@@ -3847,14 +3858,13 @@ namespace epochnamespace::core
 
         while (running.load(std::memory_order_acquire) && win.running && !win.get_should_close())
         {
-            if (win.sessionRestorePending.load(std::memory_order_acquire)
+            if (win.replacementSessionAdoptionPending.load(std::memory_order_acquire)
                 && win.backend_lifecycle() == BackendLifecycleState::ready)
             {
-                // A replacement backend is initialized, but the editor thread
-                // still owns the one-time state handoff. Do not let a fast GPU
-                // reader race or starve the camera/preview writers used by that
-                // restore. Raylib is allowed to reach its required first present
-                // before entering this gate.
+                // The dropdown replacement transaction owns this exact context
+                // until its editor session has been adopted. Other windows remain
+                // live under the multicontext manager. Raylib is allowed to reach
+                // its required first present before entering this gate.
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             }

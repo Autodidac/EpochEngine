@@ -1,6 +1,6 @@
 {
   "name": "epoch-engine",
-  "version-string": "0.87.74",
+  "version-string": "0.87.75",
   "builtin-baseline": "cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3",
   "dependencies": [
     "asio",

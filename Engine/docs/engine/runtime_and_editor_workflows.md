@@ -160,9 +160,11 @@ the same engine-owned path.
   active backend each frame. When the selected backend is compiled but not
   live, the Windows single-window host captures editor state, retires and fully
   cleans the old native backend, creates one docked replacement in the same
-  host, waits for its render thread to publish backend-specific readiness, and
-  only then restores project, layout, selection, camera, timeline, GUI, and font
-  state. Raylib readiness additionally requires a successful owner-thread GL
+  host, adopts that exact manager-created context, and restores project, layout,
+  selection, camera, timeline, GUI, and font state before normal backend
+  activation. The transaction remains held until the render thread publishes
+  backend-specific readiness. Raylib readiness additionally requires a
+  successful owner-thread GL
   activation and completed first present; a failed activation skips drawing so
   `BeginDrawing` never runs against another backend's context. Once adopted,
   Raylib's GLFW child is also reparented and resized through the render-thread
@@ -170,10 +172,11 @@ the same engine-owned path.
   manager window lock is held. The replacement
   is never a second editor shell, and unavailable or failed targets remain
   visible failures rather than persisted fake selections.
-- a replacement render thread holds at a one-time session gate after publishing
-  readiness. The editor restores project, layout, camera, preview, GUI, and font
-  state before releasing normal frames; Raylib may complete its required first
-  present before waiting at that same gate.
+- the dropdown transaction, not the generic multicontext scan, owns replacement
+  session adoption. Only that exact target is gated and excluded from generic
+  enumeration until its editor state is restored and the backend is ready;
+  unrelated multicontext windows continue normally. Raylib may complete its
+  required first present before waiting at the adoption gate.
 - normal editor switching owns one live backend at a time. The host keeps its
   parent window alive during the rendererless replacement gap, does not start
   the target until deferred source cleanup is complete, keeps the replacement

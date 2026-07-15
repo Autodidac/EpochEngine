@@ -92,8 +92,8 @@ contracts instead of drift.
   or a transient dropdown.
 - Windows source now performs editor context selection as an exclusive
   replacement transaction: capture state, retire and clean the source backend,
-  create one docked replacement in the same host, wait for native backend
-  readiness, and only then restore editor/GUI state. Failed targets retire and
+  create one docked replacement in the same host, adopt and restore its editor
+  session, and hold the transaction until native backend readiness. Failed targets retire and
   recover through the source backend; SDL/SFML/Raylib thread ownership and
   backend-child shutdown stay tied to the stable host, manager-host destruction
   waits for renderer cleanup, and Linux partial initialization is cleaned before
@@ -102,11 +102,13 @@ contracts instead of drift.
   source makes Raylib readiness depend on a successful owner-thread GL bind and
   completed first present. The `v0.87.73` source additionally routes adopted
   GLFW child layout through Raylib's render-thread queue to remove the remaining
-  click-time UI/render lock inversion. The `v0.87.74` source holds every new
-  replacement renderer at a one-time session gate after backend readiness so
-  the editor can restore camera/preview/GUI state before fast hardware frames
-  consume it; focused all-backend testing remains required before runtime
-  acceptance.
+  click-time UI/render lock inversion. The `v0.87.74` post-readiness session
+  gate was too broad and stalled threaded hardware replacements while Software
+  continued to work. The `v0.87.75` source makes the dropdown transaction adopt
+  the exact context returned by the multicontext manager, restores editor state
+  before normal backend activation, and excludes only that target from generic
+  multicontext enumeration until render-ready. Focused all-backend testing
+  remains required before runtime acceptance.
 - Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
   launcher window until packaged handoff is staged or source worker handoff
   evidence is ready. Packaged runtime installs can still distinguish stable

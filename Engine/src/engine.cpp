@@ -5365,27 +5365,6 @@ namespace epochnamespace::core
                             pendingEditorSwitchSnapshots.end());
                     };
 
-                    auto findReplacementContext = [&](epochnamespace::core::ContextType type)
-                        -> std::shared_ptr<Context>
-                    {
-                        for (const auto& window : mgr.GetWindows())
-                        {
-                            if (!window
-                                || !window->context
-                                || !window->guiRoute.empty())
-                            {
-                                continue;
-                            }
-
-                            auto candidate = std::reinterpret_pointer_cast<Context>(window->context);
-                            if (candidate && candidate->type == type)
-                            {
-                                return candidate;
-                            }
-                        }
-                        return {};
-                    };
-
                     auto openReplacement = [&](epochnamespace::core::ContextType type) -> bool
                     {
                         auto& replacement = *pendingEditorContextReplacement;
@@ -5396,6 +5375,7 @@ namespace epochnamespace::core
                             replacement.snapshot,
                             true);
 
+                        std::shared_ptr<Context> createdContext{};
                         if (!mgr.OpenReplacementContextWindow(
                             epochnamespace::core::DetachedContextWindowRequest{
                                 .type = type,
@@ -5404,25 +5384,74 @@ namespace epochnamespace::core
                                 .width = replacement.width,
                                 .height = replacement.height,
                                 .start_docked = true
-                            }))
+                            },
+                            &createdContext))
                         {
                             eraseReplacementSnapshot(type);
                             return false;
                         }
 
                         replacement.active_type = type;
-                        replacement.active_context = findReplacementContext(type);
+                        replacement.active_context = std::move(createdContext);
                         if (!replacement.active_context)
                         {
                             eraseReplacementSnapshot(type);
                             return false;
                         }
 
+                        auto* replacementWindow = mgr.findWindowByContext(replacement.active_context);
+                        if (!replacementWindow)
+                        {
+                            eraseReplacementSnapshot(type);
+                            return false;
+                        }
+
+                        if (auto existingSession = sessions.find(replacement.active_context.get());
+                            existingSession != sessions.end())
+                        {
+                            unload_active_scene(existingSession->second);
+                            existingSession->second.menu.cleanup();
+                            sessions.erase(existingSession);
+                        }
+
+                        auto sessionIt = sessions.try_emplace(replacement.active_context.get()).first;
+                        auto& replacementSession = sessionIt->second;
+                        replacementSession.mode = startup_mode;
+                        replacementSession.return_mode = startup_mode;
+                        replacementSession.menu.set_max_columns(epochnamespace::core::cli::menu_columns);
+
+                        const auto restoreStatus = restore_pending_editor_switch_snapshot(
+                            replacement.active_context,
+                            replacementSession,
+                            replacementWindow->guiRoute);
+                        replacementWindow->replacementSessionAdoptionPending.store(
+                            false,
+                            std::memory_order_release);
+
+                        if (restoreStatus != PendingEditorRestoreStatus::restored)
+                        {
+                            unload_active_scene(replacementSession);
+                            replacementSession.menu.cleanup();
+                            sessions.erase(sessionIt);
+                            request_context_window_close(
+                                replacement.active_context.get(),
+                                restoreStatus == PendingEditorRestoreStatus::failed
+                                    ? "retiring replacement after editor session restore failure"
+                                    : "retiring replacement because no editor session snapshot was queued");
+                            replacement.phase = EditorContextReplacementPhase::retiring_failed_backend;
+                            logger::get(kEditorLog).logf(
+                                logger::LogLevel::Error,
+                                std::source_location::current(),
+                                "Editor host could not adopt the {} replacement session before backend activation.",
+                                context_type_label(type));
+                            return true;
+                        }
+
                         replacement.phase = EditorContextReplacementPhase::awaiting_backend;
                         logger::get(kEditorLog).logf(
                             logger::LogLevel::INFO,
                             std::source_location::current(),
-                            "Editor host created the {} replacement and is waiting for backend readiness.",
+                            "Restored editor state into the new {} context; waiting for backend readiness.",
                             context_type_label(type));
                         return true;
                     };
@@ -5981,6 +6010,20 @@ namespace epochnamespace::core
                     {
                         if (!ctx) continue;
 
+#if defined(_WIN32)
+                        if (pendingEditorContextReplacement
+                            && pendingEditorContextReplacement->active_context
+                            && pendingEditorContextReplacement->active_context.get() == ctx.get())
+                        {
+                            // The dropdown transaction owns adoption, readiness,
+                            // and fallback for this one context. The generic
+                            // multicontext loop continues servicing every other
+                            // live context without racing the replacement.
+                            backend_has_live_context = true;
+                            continue;
+                        }
+#endif
+
                         auto* win = mgr.findWindowByContext(ctx);
                         if (!win)
                         {
@@ -6070,8 +6113,6 @@ namespace epochnamespace::core
                             }
 
                             const auto pendingRestoreStatus = restore_pending_editor_switch_snapshot(ctx, session, win->guiRoute);
-                            const bool releasedReplacementRenderer =
-                                win->sessionRestorePending.exchange(false, std::memory_order_acq_rel);
                             if (pendingRestoreStatus == PendingEditorRestoreStatus::restored)
                             {
                                 logger::get(kEditorLog).logf(
@@ -6086,14 +6127,6 @@ namespace epochnamespace::core
                                     logger::LogLevel::Error,
                                     std::source_location::current(),
                                     "New {} context entered the session loop, but editor state restore failed.",
-                                    context_type_label(ctx->type));
-                            }
-                            else if (releasedReplacementRenderer)
-                            {
-                                logger::get(kEditorLog).logf(
-                                    logger::LogLevel::WARN,
-                                    std::source_location::current(),
-                                    "New {} replacement context had no queued editor snapshot; released its render gate with default session state.",
                                     context_type_label(ctx->type));
                             }
                         }

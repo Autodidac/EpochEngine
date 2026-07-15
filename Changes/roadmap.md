@@ -66,11 +66,13 @@ transaction; runtime acceptance still requires repeated switch proof for state,
 focus, GUI/font refresh, and teardown before release work resumes. The operator
 has accepted SDL, SFML, OpenGL, Vulkan, DirectX, and software switching from the
   `v0.87.71` source. Raylib's `v0.87.72` gate now requires a completed first
-  present before state restore, and `v0.87.73` moves adopted GLFW child layout to
-  the Raylib owner thread to remove the click-time lock inversion. `v0.87.74`
-  pauses each ready replacement renderer until the editor session snapshot is
-  restored, closing the hardware-reader/state-writer race observed outside the
-  Software lane. All backends require one focused runtime recheck.
+  present before backend readiness, and `v0.87.73` moves adopted GLFW child layout to
+  the Raylib owner thread to remove the click-time lock inversion. The
+  `v0.87.74` post-readiness pause stalled threaded hardware targets; `v0.87.75`
+  moves exact-target session adoption into the dropdown transaction before
+  normal backend activation and leaves the generic multicontext loop responsible
+  only for unrelated windows until replacement completion. All backends require
+  one focused runtime recheck.
 
 ## High-Output Source Strategy
 
