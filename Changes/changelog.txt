@@ -1,5 +1,20 @@
 # Epoch Changelog
 
+## [v0.87.71] - Context replacement lifecycle repair
+
+- Keep single-editor context replacement held until the selected renderer has
+  completed native initialization, then restore editor/GUI state only after the
+  backend publishes render-ready evidence.
+- Recover through the source renderer when a replacement fails instead of
+  exiting after the last live context disappears, and preserve reusable backend
+  callbacks across failed initialization attempts.
+- Give `WindowData` atomic lifecycle/close state and explicit native DC/GL
+  ownership, keep SDL/SFML/Raylib render threads keyed to their stable host
+  windows, defer manager-host destruction until renderer cleanup completes,
+  and clean partial Linux backend initialization before recovery.
+- Align the embedded EpochGui C++23 metadata with the `v0.87.71` source line;
+  the published `v0.87.69` release and updater remain sealed.
+
 ## [v0.87.70] - Post-release source checkpoint
 
 - Advance `main` after the verified `v0.87.69` Windows/Linux runtime release

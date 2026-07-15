@@ -258,6 +258,14 @@ namespace epochnamespace::openglcontext
         auto& backend = epochnamespace::opengltextures::get_opengl_backend();
         auto& glState = backend.glState;
 
+#if defined(_WIN32)
+        if (glState.ownsWindow || glState.ownsDc || glState.ownsContext)
+            opengl_cleanup({});
+#elif defined(__linux__)
+        if (glState.ownsDisplay || glState.ownsWindow || glState.ownsContext || glState.ownsColormap)
+            opengl_cleanup({});
+#endif
+
         glState.width = w;
         glState.height = h;
         auto* glStatePtr = &glState;
@@ -285,6 +293,9 @@ namespace epochnamespace::openglcontext
             throw std::runtime_error("[ OpenGL ] - No parent HWND available");
 
         bool usingExternalContext = false;
+        glState.ownsWindow = false;
+        glState.ownsDc = false;
+        glState.ownsContext = false;
 
         // IMPORTANT: match your WindowData naming (your working header used glContext).
         if (ctx->windowData && ctx->windowData->hwnd && ctx->windowData->hdc && ctx->windowData->glContext)
@@ -322,11 +333,13 @@ namespace epochnamespace::openglcontext
 
                 if (!glState.hwnd)
                     throw std::runtime_error("[ OpenGL ] - CreateWindowExW failed for child GL window");
+                glState.ownsWindow = true;
             }
 
             glState.hdc = ::GetDC(glState.hwnd);
             if (!glState.hdc)
                 throw std::runtime_error("[ OpenGL ] - GetDC failed");
+            glState.ownsDc = true;
 
             // SetPixelFormat is one-time per HDC.
             if (::GetPixelFormat(glState.hdc) == 0)
@@ -408,6 +421,7 @@ namespace epochnamespace::openglcontext
                 glState.hglrc = tmp;
                 tmp = nullptr;
             }
+            glState.ownsContext = true;
         }
 
         // Publish through PlatformGL (so the rest of the engine uses the same path).

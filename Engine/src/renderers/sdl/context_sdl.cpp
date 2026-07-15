@@ -660,21 +660,16 @@ namespace
             HDC previousHdc = ctx->windowData->hdc;
             if (previousHwnd && previousHwnd != s_childWindow)
             {
+                ctx->windowData->ownsNativeDc = false;
                 if (previousHdc)
                     ::ReleaseDC(previousHwnd, previousHdc);
-
-                auto& threads = epochnamespace::core::Threads();
-                auto it = threads.find(previousHwnd);
-                if (it != threads.end())
-                {
-                    threads.emplace(s_childWindow, std::move(it->second));
-                    threads.erase(it);
-                }
             }
             ctx->windowData->hwnd = s_childWindow ? s_childWindow : s_hostWindow;
             ctx->windowData->host_hwnd = s_hostWindow;
             ctx->windowData->hwndChild = s_childWindow;
             ctx->windowData->hdc = nullptr;
+            ctx->windowData->ownsNativeDc = false;
+            ctx->windowData->ownsNativeGlContext = false;
 #endif
             ctx->windowData->sdl_window = s_window;
             ctx->windowData->set_size(s_width, s_height);

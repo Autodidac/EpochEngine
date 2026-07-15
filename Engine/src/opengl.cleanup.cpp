@@ -201,11 +201,16 @@ namespace epochnamespace::openglcontext
         }
         PlatformGL::clear_current();
 
-        if (glState.hglrc) { ::wglDeleteContext(glState.hglrc); glState.hglrc = nullptr; }
-        if (glState.hdc && glState.hwnd) { ::ReleaseDC(glState.hwnd, glState.hdc); }
+        if (glState.ownsContext && glState.hglrc) { ::wglDeleteContext(glState.hglrc); }
+        glState.hglrc = nullptr;
+        glState.ownsContext = false;
+        if (glState.ownsDc && glState.hdc && glState.hwnd) { ::ReleaseDC(glState.hwnd, glState.hdc); }
         glState.hdc = nullptr;
+        glState.ownsDc = false;
 
-        if (glState.hwnd) { ::DestroyWindow(glState.hwnd); glState.hwnd = nullptr; }
+        if (glState.ownsWindow && glState.hwnd) { ::DestroyWindow(glState.hwnd); }
+        glState.hwnd = nullptr;
+        glState.ownsWindow = false;
         glState.parent = nullptr;
 
 #elif defined(__linux__)

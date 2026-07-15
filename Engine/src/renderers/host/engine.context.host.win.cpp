@@ -1695,14 +1695,19 @@ namespace
 
     inline void cleanup_window_resources(std::unique_ptr<epochnamespace::core::WindowData>& window) noexcept
     {
+        if (!window)
+            return;
+
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-        if (window && window->glContext)
+        if (window->ownsNativeGlContext && window->glContext)
         {
             ::wglMakeCurrent(nullptr, nullptr);
             ::wglDeleteContext(window->glContext);
+            window->glContext = nullptr;
+            window->ownsNativeGlContext = false;
         }
 #endif
-        if (window && window->hdc)
+        if (window->ownsNativeDc && window->hdc)
         {
             HWND releaseTarget = nullptr;
             if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
@@ -1714,7 +1719,29 @@ namespace
 
             if (releaseTarget)
                 ::ReleaseDC(releaseTarget, window->hdc);
+            window->hdc = nullptr;
+            window->ownsNativeDc = false;
         }
+
+        if (auto context = typed_context(window->context);
+            context && context->windowData == window.get())
+        {
+            context->windowData = nullptr;
+            context->hwnd = nullptr;
+            context->hdc = nullptr;
+            context->hglrc = nullptr;
+            context->native_window = nullptr;
+            context->native_drawable = nullptr;
+            context->native_gl_context = nullptr;
+        }
+
+        const HWND host = window->host_hwnd ? window->host_hwnd : window->hwnd;
+        if (host && ::IsWindow(host) != FALSE)
+            ::DestroyWindow(host);
+
+        window->host_hwnd = nullptr;
+        window->hwnd = nullptr;
+        window->hwndChild = nullptr;
     }
 
     [[nodiscard]] inline HWND primary_window_handle(const epochnamespace::core::WindowData* window) noexcept
@@ -1729,6 +1756,13 @@ namespace
         if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
             return window->host_hwnd;
         return window->hwnd ? window->hwnd : (window->hwndChild ? window->hwndChild : window->host_hwnd);
+    }
+
+    [[nodiscard]] inline HWND render_thread_key(const epochnamespace::core::WindowData* window) noexcept
+    {
+        if (!window)
+            return nullptr;
+        return window->host_hwnd ? window->host_hwnd : window->hwnd;
     }
 
     [[nodiscard]] inline HWND dock_slot_handle(
@@ -3217,7 +3251,7 @@ namespace epochnamespace::core
             std::scoped_lock lock(windowsMutex);
             hwnds.reserve(windows.size());
             for (const auto& w : windows)
-                if (w && w->hwnd) hwnds.push_back(w->hwnd);
+                if (const HWND key = render_thread_key(w.get())) hwnds.push_back(key);
         }
 
         auto& threads = Threads();
@@ -3252,7 +3286,10 @@ namespace epochnamespace::core
                     {
                         std::scoped_lock lock(windowsMutex);
                         auto it = std::find_if(windows.begin(), windows.end(),
-                            [hwnd](const std::unique_ptr<WindowData>& w) { return w && w->hwnd == hwnd; });
+                            [hwnd](const std::unique_ptr<WindowData>& w)
+                            {
+                                return render_thread_key(w.get()) == hwnd;
+                            });
                         if (it != windows.end()) win = it->get();
                     }
 
@@ -3280,22 +3317,8 @@ namespace epochnamespace::core
             if (!layoutParent && (*it)->hwnd && ::IsWindow((*it)->hwnd) != FALSE)
                 layoutParent = ::GetParent((*it)->hwnd);
 
+            (*it)->set_should_close(true);
             (*it)->running = false;
-
-            if ((*it)->context)
-            {
-                auto ctx = typed_context((*it)->context);
-                if (ctx->windowData == it->get()) ctx->windowData = nullptr;
-                if (ctx->hwnd == hwnd
-                    || ctx->hwnd == (*it)->hwnd
-                    || ctx->hwnd == (*it)->hwndChild
-                    || ctx->hwnd == (*it)->host_hwnd)
-                {
-                    ctx->hwnd = nullptr;
-                    ctx->hdc = nullptr;
-                    ctx->hglrc = nullptr;
-                }
-            }
 
             removed = std::move(*it);
             windows.erase(it);
@@ -3647,17 +3670,21 @@ namespace epochnamespace::core
         if (!ctx)
         {
             win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::failed);
             return;
         }
 
         ctx->windowData = &win;
         MultiContextManager::SetCurrent(ctx);
+        win.set_backend_lifecycle(BackendLifecycleState::initializing);
+        ctx->init_failed = false;
 
         struct ResetGuard { ~ResetGuard() { MultiContextManager::SetCurrent(nullptr); } } resetGuard;
 
         if (!running.load(std::memory_order_acquire) || win.get_should_close())
         {
             win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::stopped);
             return;
         }
 
@@ -3684,6 +3711,8 @@ namespace epochnamespace::core
             if (!initialized)
             {
                 win.running = false;
+                win.set_backend_lifecycle(BackendLifecycleState::failed);
+                epochnamespace::raylibcontext::raylib_cleanup(ctx);
                 return;
             }
         }
@@ -3699,7 +3728,12 @@ namespace epochnamespace::core
         if (!skipGenericInit)
         {
             if (ctx->initialize) ctx->initialize_safe();
-            else { win.running = false; return; }
+            else
+            {
+                win.running = false;
+                win.set_backend_lifecycle(BackendLifecycleState::failed);
+                return;
+            }
         }
 
         if (ctx->init_failed)
@@ -3707,10 +3741,36 @@ namespace epochnamespace::core
             epochnamespace::logger::get(kLogSys).logf(
                 epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
-                "Backend init failed for {}. Keeping window alive with no-op process.",
+                "Backend init failed for {}. Rejecting the replacement window.",
                 ctx->backendName);
-            ctx->process = nullptr;
+            win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::failed);
+            if (ctx->cleanup)
+                ctx->cleanup_safe();
+            return;
         }
+
+        if (!ctx->process)
+        {
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::Error,
+                std::source_location::current(),
+                "Backend {} has no frame processor. Rejecting the replacement window.",
+                ctx->backendName);
+            win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::failed);
+            if (ctx->cleanup)
+                ctx->cleanup_safe();
+            return;
+        }
+
+        win.set_backend_lifecycle(BackendLifecycleState::ready);
+        epochnamespace::logger::get(kLogSys).logf(
+            epochnamespace::logger::LogLevel::INFO,
+            std::source_location::current(),
+            "Backend {} reached render-ready state for hwnd={}.",
+            ctx->backendName,
+            static_cast<void*>(win.hwnd));
 
         epoch::perf::frame_limiter coreFrameLimiter{};
         double activeCoreFrameLimit = -1.0;
@@ -3744,8 +3804,7 @@ namespace epochnamespace::core
                     });
             }
 
-            if (ctx->process) keepRunning = ctx->process_safe(ctx, win.commandQueue);
-            else win.commandQueue.drain();
+            keepRunning = ctx->process_safe(ctx, win.commandQueue);
 
             if (!keepRunning)
             {
@@ -3770,6 +3829,8 @@ namespace epochnamespace::core
             win.commandQueue.clear();
 
         if (ctx->cleanup) ctx->cleanup_safe();
+        if (win.backend_lifecycle() != BackendLifecycleState::failed)
+            win.set_backend_lifecycle(BackendLifecycleState::stopped);
     }
 
     void MultiContextManager::HandleDropFiles(HWND, HDROP hDrop)
@@ -3862,8 +3923,7 @@ namespace epochnamespace::core
 
                     HWND closeTarget = nullptr;
                     if (win->host_hwnd
-                        && ::IsWindow(win->host_hwnd) != FALSE
-                        && ::GetParent(win->host_hwnd) == nullptr)
+                        && ::IsWindow(win->host_hwnd) != FALSE)
                     {
                         closeTarget = win->host_hwnd;
                     }
@@ -3900,7 +3960,8 @@ namespace epochnamespace::core
             }
 
             mgr->parent = nullptr;
-            ::DestroyWindow(hwnd);
+            if (auto* mgr = s_activeInstance)
+                mgr->RemoveWindow(hwnd);
             return 0;
         }
 

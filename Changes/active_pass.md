@@ -92,9 +92,13 @@ contracts instead of drift.
   or a transient dropdown.
 - Windows source now performs editor context selection as an exclusive
   replacement transaction: capture state, retire and clean the source backend,
-  create one docked replacement in the same host, and restore state. SFML,
-  Raylib, and SDL are no longer source-guarded, while runtime acceptance remains
-  pending the operator-approved repeated-switch matrix.
+  create one docked replacement in the same host, wait for native backend
+  readiness, and only then restore editor/GUI state. Failed targets retire and
+  recover through the source backend; SDL/SFML/Raylib thread ownership and
+  backend-child shutdown stay tied to the stable host, manager-host destruction
+  waits for renderer cleanup, and Linux partial initialization is cleaned before
+  fallback. This is the `v0.87.71` build-proven source checkpoint, while runtime
+  acceptance remains pending the operator-approved repeated-switch matrix.
 - Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
   launcher window until packaged handoff is staged or source worker handoff
   evidence is ready. Packaged runtime installs can still distinguish stable

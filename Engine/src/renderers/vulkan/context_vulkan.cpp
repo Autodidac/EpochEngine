@@ -101,7 +101,7 @@ namespace
         ctx->init_failed = false;
         try
         {
-            (void)epochnamespace::vulkancontext::vulkan_initialize(ctx, native, w, h, ctx->onResize);
+            ctx->init_failed = !epochnamespace::vulkancontext::vulkan_initialize(ctx, native, w, h, ctx->onResize);
         }
         catch (const std::exception& e)
         {

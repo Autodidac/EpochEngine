@@ -86,7 +86,7 @@ namespace epochnamespace::openglbackend
             current->init_failed = false;
             try
             {
-                (void)openglcontext::opengl_initialize(current, native, w, h, current->onResize);
+                current->init_failed = !openglcontext::opengl_initialize(current, native, w, h, current->onResize);
             }
             catch (const std::exception& e)
             {

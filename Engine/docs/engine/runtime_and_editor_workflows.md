@@ -160,14 +160,21 @@ the same engine-owned path.
   active backend each frame. When the selected backend is compiled but not
   live, the Windows single-window host captures editor state, retires and fully
   cleans the old native backend, creates one docked replacement in the same
-  host, and restores project, layout, selection, camera, and timeline state.
-  The replacement is never a second editor shell, and unavailable or failed
-  targets remain visible failures rather than persisted fake selections.
+  host, waits for its render thread to publish native-initialization readiness,
+  and only then restores project, layout, selection, camera, timeline, GUI, and
+  font state. The replacement is never a second editor shell, and unavailable
+  or failed targets remain visible failures rather than persisted fake
+  selections.
 - normal editor switching owns one live backend at a time. The host keeps its
   parent window alive during the rendererless replacement gap, does not start
-  the target until deferred source cleanup is complete, and recreates the
-  source backend from the same snapshot when target-window creation fails.
-  Mixed-backend grids remain explicit diagnostics and are not this workflow.
+  the target until deferred source cleanup is complete, keeps the replacement
+  transaction held through target initialization, and recreates the source
+  backend from the same snapshot when target creation or initialization fails.
+  Backend-owned child HWNDs are closed by their renderer cleanup; the stable
+  manager host remains the UI-thread lifetime control and is destroyed only
+  after its renderer thread finishes cleanup. Failed Linux thread initialization
+  also runs backend cleanup before fallback. Mixed-backend grids remain explicit
+  diagnostics and are not this workflow.
 - launcher context switching is not another editor or driver shell; it only
   focuses another registered live dock and reports when none exists
 - `editor.scene.cpp` should own project profiles, script profiles, runtime

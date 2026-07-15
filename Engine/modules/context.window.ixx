@@ -31,6 +31,7 @@
 module;
 
 #include <atomic>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <stdexcept>
@@ -89,6 +90,15 @@ namespace epochnamespace::core
     export using OpaqueContextHandle = std::shared_ptr<void>;
     export using ThreadInitializeCallback = std::function<bool(const OpaqueContextHandle&)>;
 
+    export enum class BackendLifecycleState : std::uint8_t
+    {
+        pending = 0,
+        initializing,
+        ready,
+        failed,
+        stopped
+    };
+
     export struct WindowData final
     {
 #if defined(_WIN32)
@@ -121,8 +131,10 @@ namespace epochnamespace::core
         core::CommandQueue          commandQueue{};
         ThreadInitializeCallback    threadInitialize{};
 
-        bool running = false;
+        std::atomic_bool running{ false };
         bool usesSharedContext = false;
+        bool ownsNativeDc = false;
+        bool ownsNativeGlContext = false;
 
         core::ContextType type = core::ContextType::Custom;
 
@@ -132,7 +144,8 @@ namespace epochnamespace::core
 
         int  width = DEFAULT_WINDOW_WIDTH;
         int  height = DEFAULT_WINDOW_HEIGHT;
-        bool should_close = false;
+        std::atomic_bool should_close{ false };
+        std::atomic<BackendLifecycleState> backendLifecycle{ BackendLifecycleState::pending };
         bool isFloating = false;
         std::atomic_bool routedRedockRequested = false;
         std::atomic_bool firstPresentComplete = false;
@@ -162,6 +175,8 @@ namespace epochnamespace::core
             , hdc(inHdc)
             , glrc(inGlrc)
             , usesSharedContext(inUsesShared)
+            , ownsNativeDc(inHdc != nullptr)
+            , ownsNativeGlContext(inGlrc != nullptr)
             , type(inType)
         {
         }
@@ -171,6 +186,8 @@ namespace epochnamespace::core
             , hdc(inHdc)
             , glContext(inGlrc)
             , usesSharedContext(inUsesShared)
+            , ownsNativeDc(inHdc != nullptr)
+            , ownsNativeGlContext(inGlrc != nullptr)
             , type(inType)
         {
         }
@@ -211,8 +228,23 @@ namespace epochnamespace::core
         [[nodiscard]] int  get_width()  const noexcept { return width; }
         [[nodiscard]] int  get_height() const noexcept { return height; }
 
-        void set_should_close(bool v) noexcept { should_close = v; }
-        [[nodiscard]] bool get_should_close() const noexcept { return should_close; }
+        void set_should_close(bool v) noexcept { should_close.store(v, std::memory_order_release); }
+        [[nodiscard]] bool get_should_close() const noexcept { return should_close.load(std::memory_order_acquire); }
+
+        void set_backend_lifecycle(BackendLifecycleState state) noexcept
+        {
+            backendLifecycle.store(state, std::memory_order_release);
+        }
+
+        [[nodiscard]] BackendLifecycleState backend_lifecycle() const noexcept
+        {
+            return backendLifecycle.load(std::memory_order_acquire);
+        }
+
+        [[nodiscard]] bool backend_ready() const noexcept
+        {
+            return backend_lifecycle() == BackendLifecycleState::ready;
+        }
 
         void set_window_title(std::string_view title) noexcept
         {

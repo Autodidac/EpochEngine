@@ -1334,20 +1334,14 @@ namespace
 
             if (it == windows.end()) return;
 
-            // IMPORTANT: do NOT write (*it)->running=false here from this thread.
-            // It's a plain bool and would race the render thread -> possible infinite join.
             removed = std::move(*it);
             windows.erase(it);
         }
 
-        // Ask the render thread to stop itself (no cross-thread data race).
         if (removed)
         {
-            WindowData* raw = removed.get();
-            raw->EnqueueCommand([raw]()
-                {
-                    raw->running = false;
-                });
+            removed->running.store(false, std::memory_order_release);
+            removed->set_should_close(true);
         }
 
         ::Window xwin = to_xwindow(hwnd);
@@ -1625,8 +1619,12 @@ namespace
         if (!ctx)
         {
             win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::failed);
             return;
         }
+
+        win.set_backend_lifecycle(BackendLifecycleState::initializing);
+        ctx->init_failed = false;
 
         Display* localDisplay = to_display(win.hdc);
         ::Window xwin = to_xwindow(win.hwnd);
@@ -1699,9 +1697,36 @@ namespace
             win.threadInitialize = nullptr;
             initializedOnThread = true;
 
-            if (!init || !init(ctx))
+            bool threadInitSucceeded = false;
+            try
             {
+                threadInitSucceeded = init && init(ctx);
+            }
+            catch (const std::exception& error)
+            {
+                epochnamespace::logger::get(kLogSys).logf(
+                    epochnamespace::logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Backend thread initialization for {} raised an exception: {}",
+                    ctx->backendName,
+                    error.what());
+            }
+            catch (...)
+            {
+                epochnamespace::logger::get(kLogSys).logf(
+                    epochnamespace::logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Backend thread initialization for {} raised an unknown exception.",
+                    ctx->backendName);
+            }
+
+            if (!threadInitSucceeded)
+            {
+                ctx->init_failed = true;
                 win.running = false;
+                win.set_backend_lifecycle(BackendLifecycleState::failed);
+                if (ctx->cleanup)
+                    ctx->cleanup_safe();
                 return;
             }
         }
@@ -1726,6 +1751,7 @@ namespace
             else
             {
                 win.running = false;
+                win.set_backend_lifecycle(BackendLifecycleState::failed);
                 return;
             }
         }
@@ -1735,10 +1761,30 @@ namespace
             epochnamespace::logger::get(kLogSys).logf(
                 epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
-                "Backend init failed for {}. Keeping window alive with no-op process.",
+                "Backend init failed for {}. Rejecting the context window.",
                 ctx->backendName);
-            ctx->process = nullptr;
+            win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::failed);
+            if (ctx->cleanup)
+                ctx->cleanup_safe();
+            return;
         }
+
+        if (!ctx->process)
+        {
+            epochnamespace::logger::get(kLogSys).logf(
+                epochnamespace::logger::LogLevel::Error,
+                std::source_location::current(),
+                "Backend {} has no frame processor. Rejecting the context window.",
+                ctx->backendName);
+            win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::failed);
+            if (ctx->cleanup)
+                ctx->cleanup_safe();
+            return;
+        }
+
+        win.set_backend_lifecycle(BackendLifecycleState::ready);
 
         epoch::perf::frame_limiter coreFrameLimiter{};
         double activeCoreFrameLimit = -1.0;
@@ -1775,10 +1821,7 @@ namespace
                     });
             }
 
-            if (ctx->process)
-                keepRunning = ctx->process_safe(ctx, win.commandQueue);
-            else
-                win.commandQueue.drain();
+            keepRunning = ctx->process_safe(ctx, win.commandQueue);
 
             if (!keepRunning)
             {
@@ -1801,6 +1844,8 @@ namespace
 
         if (ctx->cleanup)
             ctx->cleanup_safe();
+        if (win.backend_lifecycle() != BackendLifecycleState::failed)
+            win.set_backend_lifecycle(BackendLifecycleState::stopped);
     }
 
 } // namespace epochnamespace::core

@@ -76,12 +76,17 @@ after choosing the current source gate from `Changes/active_pass.md`.
   Software through one exclusive replacement transaction. The manager keeps the
   native host alive while no renderer exists, waits until the source render
   thread and deferred native cleanup are finished, then creates the selected
-  backend as one docked replacement and restores the captured editor snapshot.
-  Raylib teardown hides its child before the required top-level detach/close so
-  cleanup cannot flash a temporary editor window. This is build-proven source,
-  not runtime acceptance: each backend still needs the operator-approved switch
-  matrix for state restore, first-frame GUI/font validity, focus, and repeated
-  round-trip teardown before a release claim.
+  backend as one docked replacement. Native initialization must publish
+  `ready` before the editor creates a session or restores GUI/font/project
+  state. Failed targets retire before the source backend is recreated from the
+  same snapshot. SDL, SFML, and Raylib keep their render thread keyed to the
+  stable manager host, backend-owned child windows are destroyed by their
+  render thread instead of cross-thread `WM_CLOSE`, manager-owned hosts are
+  destroyed only after that thread finishes cleanup, and failed Linux thread
+  initialization runs backend cleanup before fallback. This is build-proven
+  `v0.87.71` source, not runtime acceptance: each backend still needs the
+  operator-approved switch matrix for state restore, first-frame GUI/font
+  validity, focus, and repeated round-trip teardown before a release claim.
 - Raylib, SFML, and SDL multicontext grids are diagnostic evidence only until
   each backend can prove clean parent/child ownership, redock/close teardown,
   context switch restore, and no stale background rendering. Do not feed those

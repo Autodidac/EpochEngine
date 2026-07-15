@@ -239,9 +239,20 @@ namespace epochnamespace::raylibcontext
                 if (ctx->windowData)
                 {
                     const HWND previousHost = ctx->windowData->hwnd;
+                    const HDC previousDc = ctx->windowData->hdc;
+                    if (previousHost
+                        && previousHost != raylibHwnd
+                        && previousDc
+                        && ctx->windowData->ownsNativeDc)
+                    {
+                        ::ReleaseDC(previousHost, previousDc);
+                    }
                     ctx->windowData->hwnd = raylibHwnd;
                     ctx->windowData->host_hwnd = previousHost ? previousHost : parent;
                     ctx->windowData->hwndChild = raylibHwnd;
+                    ctx->windowData->hdc = nullptr;
+                    ctx->windowData->ownsNativeDc = false;
+                    ctx->windowData->ownsNativeGlContext = false;
                     ctx->windowData->set_size(static_cast<int>(st.width), static_cast<int>(st.height));
                 }
             }
@@ -654,6 +665,8 @@ namespace epochnamespace::raylibcontext
             ctx->windowData->hdc = st.hdc;
             ctx->windowData->glContext = st.hglrc;
             ctx->windowData->usesSharedContext = false;
+            ctx->windowData->ownsNativeDc = false;
+            ctx->windowData->ownsNativeGlContext = false;
         }
 
 #endif

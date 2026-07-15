@@ -5046,14 +5046,25 @@ namespace epochnamespace::core
         };
 
 #if defined(_WIN32)
+        enum class EditorContextReplacementPhase : unsigned char
+        {
+            retiring_source = 0,
+            awaiting_backend,
+            retiring_failed_backend
+        };
+
         struct PendingEditorContextReplacement
         {
             epochnamespace::core::ContextType target_type{ epochnamespace::core::ContextType::None };
             epochnamespace::core::ContextType fallback_type{ epochnamespace::core::ContextType::None };
+            epochnamespace::core::ContextType active_type{ epochnamespace::core::ContextType::None };
             std::shared_ptr<Context> source_context{};
+            std::shared_ptr<Context> active_context{};
             int width{ 1280 };
             int height{ 720 };
             epochnamespace::EditorContextSnapshot snapshot{};
+            EditorContextReplacementPhase phase{ EditorContextReplacementPhase::retiring_source };
+            bool fallback_attempted{ false };
         };
 #endif
 
@@ -5161,6 +5172,26 @@ namespace epochnamespace::core
                 restored,
                 failed
             };
+            auto post_context_window_close = [](epochnamespace::core::WindowData* window)
+            {
+#if defined(_WIN32)
+                if (!window)
+                    return;
+
+                HWND closeTarget = nullptr;
+                if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+                    closeTarget = window->host_hwnd;
+                else if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+                    closeTarget = window->hwnd;
+                else if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+                    closeTarget = window->hwndChild;
+
+                if (closeTarget)
+                    ::PostMessageW(closeTarget, WM_CLOSE, 0, 0);
+#else
+                (void)window;
+#endif
+            };
             auto request_context_window_close = [&](Context* context, std::string_view reason) -> bool
             {
                 if (!context)
@@ -5177,14 +5208,7 @@ namespace epochnamespace::core
 
                     window->running = false;
                     window->set_should_close(true);
-#if defined(_WIN32)
-                    if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
-                        ::PostMessageW(window->hwnd, WM_CLOSE, 0, 0);
-                    if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
-                        ::PostMessageW(window->hwndChild, WM_CLOSE, 0, 0);
-                    if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
-                        ::PostMessageW(window->host_hwnd, WM_CLOSE, 0, 0);
-#endif
+                    post_context_window_close(window.get());
                     logger::get(kEditorLog).logf(
                         logger::LogLevel::INFO,
                         std::source_location::current(),
@@ -5324,21 +5348,55 @@ namespace epochnamespace::core
                 mgr.CleanupFinishedWindows();
 
 #if defined(_WIN32)
-                if (pendingEditorContextReplacement
-                    && mgr.IsContextRetired(pendingEditorContextReplacement->source_context.get()))
+                if (pendingEditorContextReplacement)
                 {
-                    PendingEditorContextReplacement replacement =
-                        std::move(*pendingEditorContextReplacement);
-                    pendingEditorContextReplacement.reset();
+                    auto eraseReplacementSnapshot = [&](epochnamespace::core::ContextType type)
+                    {
+                        pendingEditorSwitchSnapshots.erase(
+                            std::remove_if(
+                                pendingEditorSwitchSnapshots.begin(),
+                                pendingEditorSwitchSnapshots.end(),
+                                [type](const auto& item) noexcept
+                                {
+                                    return item.target_type == type
+                                        && item.gui_route.empty()
+                                        && item.close_source_on_restore;
+                                }),
+                            pendingEditorSwitchSnapshots.end());
+                    };
+
+                    auto findReplacementContext = [&](epochnamespace::core::ContextType type)
+                        -> std::shared_ptr<Context>
+                    {
+                        for (const auto& window : mgr.GetWindows())
+                        {
+                            if (!window
+                                || !window->context
+                                || !window->guiRoute.empty())
+                            {
+                                continue;
+                            }
+
+                            auto candidate = std::reinterpret_pointer_cast<Context>(window->context);
+                            if (candidate && candidate->type == type)
+                            {
+                                return candidate;
+                            }
+                        }
+                        return {};
+                    };
 
                     auto openReplacement = [&](epochnamespace::core::ContextType type) -> bool
                     {
+                        auto& replacement = *pendingEditorContextReplacement;
+                        eraseReplacementSnapshot(type);
                         queue_editor_switch_snapshot(
                             type,
                             replacement.source_context.get(),
                             replacement.snapshot,
                             true);
-                        return mgr.OpenReplacementContextWindow(
+
+                        if (!mgr.OpenReplacementContextWindow(
                             epochnamespace::core::DetachedContextWindowRequest{
                                 .type = type,
                                 .title = std::string{ "Epoch Editor | " } + std::string{ context_type_label(type) },
@@ -5346,43 +5404,31 @@ namespace epochnamespace::core
                                 .width = replacement.width,
                                 .height = replacement.height,
                                 .start_docked = true
-                            });
-                    };
+                            }))
+                        {
+                            eraseReplacementSnapshot(type);
+                            return false;
+                        }
 
-                    bool opened = openReplacement(replacement.target_type);
-                    epochnamespace::core::ContextType openedType = replacement.target_type;
-                    if (!opened)
-                    {
-                        pendingEditorSwitchSnapshots.erase(
-                            std::remove_if(
-                                pendingEditorSwitchSnapshots.begin(),
-                                pendingEditorSwitchSnapshots.end(),
-                                [&](const auto& item) noexcept
-                                {
-                                    return item.target_type == replacement.target_type && item.gui_route.empty();
-                                }),
-                            pendingEditorSwitchSnapshots.end());
-                        openedType = replacement.fallback_type;
-                        opened = openReplacement(openedType);
-                    }
+                        replacement.active_type = type;
+                        replacement.active_context = findReplacementContext(type);
+                        if (!replacement.active_context)
+                        {
+                            eraseReplacementSnapshot(type);
+                            return false;
+                        }
 
-                    mgr.EndContextReplacement();
-                    if (opened)
-                    {
+                        replacement.phase = EditorContextReplacementPhase::awaiting_backend;
                         logger::get(kEditorLog).logf(
                             logger::LogLevel::INFO,
                             std::source_location::current(),
-                            "Editor host completed the single-window context replacement with {}.",
-                            context_type_label(openedType));
-                    }
-                    else
+                            "Editor host created the {} replacement and is waiting for backend readiness.",
+                            context_type_label(type));
+                        return true;
+                    };
+
+                    auto failReplacement = [&]()
                     {
-                        logger::get(kEditorLog).logf(
-                            logger::LogLevel::Error,
-                            std::source_location::current(),
-                            "Editor host could not create either the requested {} context or the {} recovery context.",
-                            context_type_label(replacement.target_type),
-                            context_type_label(replacement.fallback_type));
                         pendingEditorSwitchSnapshots.erase(
                             std::remove_if(
                                 pendingEditorSwitchSnapshots.begin(),
@@ -5392,6 +5438,87 @@ namespace epochnamespace::core
                                     return item.gui_route.empty() && item.close_source_on_restore;
                                 }),
                             pendingEditorSwitchSnapshots.end());
+                        logger::get(kEditorLog).logf(
+                            logger::LogLevel::Error,
+                            std::source_location::current(),
+                            "Editor host could not create either the requested {} context or the {} recovery context.",
+                            context_type_label(pendingEditorContextReplacement->target_type),
+                            context_type_label(pendingEditorContextReplacement->fallback_type));
+                        mgr.EndContextReplacement();
+                        pendingEditorContextReplacement.reset();
+                    };
+
+                    auto openFallbackOrFail = [&]()
+                    {
+                        auto& replacement = *pendingEditorContextReplacement;
+                        if (!replacement.fallback_attempted
+                            && replacement.fallback_type != epochnamespace::core::ContextType::None)
+                        {
+                            replacement.fallback_attempted = true;
+                            if (openReplacement(replacement.fallback_type))
+                            {
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::WARN,
+                                    std::source_location::current(),
+                                    "Requested {} backend failed; restoring the editor through the {} recovery backend.",
+                                    context_type_label(replacement.target_type),
+                                    context_type_label(replacement.fallback_type));
+                                return;
+                            }
+                        }
+                        failReplacement();
+                    };
+
+                    auto& replacement = *pendingEditorContextReplacement;
+                    if (replacement.phase == EditorContextReplacementPhase::retiring_source)
+                    {
+                        if (mgr.IsContextRetired(replacement.source_context.get())
+                            && !openReplacement(replacement.target_type))
+                        {
+                            openFallbackOrFail();
+                        }
+                    }
+                    else if (replacement.phase == EditorContextReplacementPhase::awaiting_backend)
+                    {
+                        auto* window = mgr.findWindowByContext(replacement.active_context);
+                        const auto lifecycle = window
+                            ? window->backend_lifecycle()
+                            : epochnamespace::core::BackendLifecycleState::stopped;
+
+                        const bool backendIsLive = window
+                            && window->running.load(std::memory_order_acquire)
+                            && !window->get_should_close();
+
+                        if (lifecycle == epochnamespace::core::BackendLifecycleState::ready
+                            && backendIsLive)
+                        {
+                            const auto readyType = replacement.active_type;
+                            mgr.EndContextReplacement();
+                            pendingEditorContextReplacement.reset();
+                            logger::get(kEditorLog).logf(
+                                logger::LogLevel::INFO,
+                                std::source_location::current(),
+                                "Editor host completed the single-window context replacement with render-ready {}.",
+                                context_type_label(readyType));
+                        }
+                        else if (lifecycle == epochnamespace::core::BackendLifecycleState::failed
+                            || lifecycle == epochnamespace::core::BackendLifecycleState::stopped
+                            || (window && !backendIsLive))
+                        {
+                            eraseReplacementSnapshot(replacement.active_type);
+                            if (window)
+                            {
+                                request_context_window_close(
+                                    replacement.active_context.get(),
+                                    "retiring failed replacement backend before recovery");
+                            }
+                            replacement.phase = EditorContextReplacementPhase::retiring_failed_backend;
+                        }
+                    }
+                    else if (replacement.phase == EditorContextReplacementPhase::retiring_failed_backend
+                        && mgr.IsContextRetired(replacement.active_context.get()))
+                    {
+                        openFallbackOrFail();
                     }
                 }
 #endif
@@ -5875,14 +6002,7 @@ namespace epochnamespace::core
                                 epochnamespace::editor_notify_context_panel_closed(win->guiRoute);
                             win->running = false;
                             win->set_should_close(true);
-#if defined(_WIN32)
-                            if (win->hwnd && ::IsWindow(win->hwnd) != FALSE)
-                                ::PostMessageW(win->hwnd, WM_CLOSE, 0, 0);
-                            if (win->hwndChild && ::IsWindow(win->hwndChild) != FALSE)
-                                ::PostMessageW(win->hwndChild, WM_CLOSE, 0, 0);
-                            if (win->host_hwnd && ::IsWindow(win->host_hwnd) != FALSE)
-                                ::PostMessageW(win->host_hwnd, WM_CLOSE, 0, 0);
-#endif
+                            post_context_window_close(win);
                         }
 
                         if (!win->running || win->get_should_close())
@@ -5901,6 +6021,19 @@ namespace epochnamespace::core
                             epochnamespace::gui::cleanup_context(ctx.get());
                             epochnamespace::cleanup_chat_context(ctx.get());
                             g_preview_look_states.erase(ctx.get());
+                            continue;
+                        }
+
+                        const auto backendLifecycle = win->backend_lifecycle();
+                        if (backendLifecycle == epochnamespace::core::BackendLifecycleState::pending
+                            || backendLifecycle == epochnamespace::core::BackendLifecycleState::initializing)
+                        {
+                            backend_has_live_context = true;
+                            continue;
+                        }
+                        if (backendLifecycle == epochnamespace::core::BackendLifecycleState::failed
+                            || backendLifecycle == epochnamespace::core::BackendLifecycleState::stopped)
+                        {
                             continue;
                         }
 
@@ -6075,10 +6208,7 @@ namespace epochnamespace::core
                                     ctx_running = false;
                                     win->running = false;
                                     win->set_should_close(true);
-#if defined(_WIN32)
-                                    if (win->hwnd && ::IsWindow(win->hwnd) != FALSE)
-                                        ::PostMessageW(win->hwnd, WM_CLOSE, 0, 0);
-#endif
+                                    post_context_window_close(win);
                                 }
                                 else if (ctx_running)
                                 {
@@ -6091,10 +6221,7 @@ namespace epochnamespace::core
                                 ctx_running = false;
                                 win->running = false;
                                 win->set_should_close(true);
-#if defined(_WIN32)
-                                if (win->hwnd && ::IsWindow(win->hwnd) != FALSE)
-                                    ::PostMessageW(win->hwnd, WM_CLOSE, 0, 0);
-#endif
+                                post_context_window_close(win);
                             }
                             else if (ctx_running)
                             {

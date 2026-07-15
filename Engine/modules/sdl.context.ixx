@@ -720,20 +720,14 @@ export namespace epochnamespace::sdlcontext
                 ctx->windowData->host_hwnd = hostWnd;
                 ctx->windowData->hwndChild = sdlcontext.hwnd;
                 ctx->windowData->hdc = nullptr;
+                ctx->windowData->ownsNativeDc = false;
+                ctx->windowData->ownsNativeGlContext = false;
                 ctx->hdc = nullptr;
 
                 if (hostWnd && previousHwnd && previousHwnd != sdlcontext.hwnd)
                 {
                     if (previousHdc)
                         ::ReleaseDC(previousHwnd, previousHdc);
-
-                    auto& threads = core::Threads();
-                    auto it = threads.find(previousHwnd);
-                    if (it != threads.end())
-                    {
-                        threads.emplace(sdlcontext.hwnd, std::move(it->second));
-                        threads.erase(it);
-                    }
                 }
             }
         }

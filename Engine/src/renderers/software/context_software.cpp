@@ -64,9 +64,10 @@ namespace
         if (!ctx)
             return;
 
+        ctx->init_failed = false;
         try
         {
-            (void)epochnamespace::anativecontext::softrenderer_initialize(
+            ctx->init_failed = !epochnamespace::anativecontext::softrenderer_initialize(
                 ctx,
                 ctx->get_hwnd(),
                 static_cast<unsigned>((std::max)(1, ctx->width)),
@@ -75,6 +76,7 @@ namespace
         }
         catch (const std::exception& e)
         {
+            ctx->init_failed = true;
             epochnamespace::logger::get(kLogSoftRenderer).logf(
                 epochnamespace::logger::LogLevel::Error,
                 std::source_location::current(),
@@ -83,6 +85,7 @@ namespace
         }
         catch (...)
         {
+            ctx->init_failed = true;
             epochnamespace::logger::get(kLogSoftRenderer).log(
                 epochnamespace::logger::LogLevel::Error,
                 "init unknown exception",
