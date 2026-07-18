@@ -213,8 +213,8 @@ namespace epochnamespace::core
         // -----------------------------------------------------------------
         // Lifecycle
         // -----------------------------------------------------------------
-        void initialize_safe() const noexcept { if (initialize) initialize(); }
-        void cleanup_safe()    const noexcept { if (cleanup) cleanup(); }
+        void initialize_safe() noexcept;
+        void cleanup_safe() noexcept;
 
         // Keep as your existing out-of-line implementation.
         bool process_safe(std::shared_ptr<Context> ctx, core::CommandQueue& queue);

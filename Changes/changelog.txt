@@ -1,5 +1,92 @@
 # Epoch Changelog
 
+## [v0.88.01] - Raylib native surface and renderer retirement repair
+
+- Make Win32 renderer-owned context retirement one-shot and marshal the final
+  ownership transfer to the manager UI thread without retaining an unlocked raw
+  window pointer.
+- Retire a whole-editor replacement synchronously on the manager UI thread:
+  keep the Windows message pump alive, join the exact old renderer, release its
+  native resources, and only then allow construction of the new backend.
+- Keep editor GUI, chat, and session state alive until the context manager
+  proves retirement, and join all remaining renderer threads before final
+  context-state cleanup.
+- Separate Raylib owner-thread native work from draw commands. GLFW child
+  reparenting and resize callbacks now drain before `BeginDrawing`, while the
+  ordinary render queue remains inside the frame for actual drawing.
+- Replace Raylib's reusable runtime resize closure with one stable backend
+  callback. Reused contexts and multicontext windows can no longer feed the
+  previous Raylib callback back into itself, and the render thread no longer
+  races the UI thread by rewriting `Context::onResize`.
+- Initialize logical and framebuffer dimensions together. A completed Raylib
+  `EndDrawing()` now publishes first-present readiness directly; Win32
+  visibility/parent heuristics no longer suppress editor-session creation after
+  a real frame has presented. Resize also avoids redundant `SetWindowSize`
+  calls and never revokes successful presentation evidence before the same
+  frame can republish it.
+- Dispose the retired editor scene, GUI/font, chat, preview, and menu session
+  immediately after its renderer joins and before a replacement backend starts.
+  Replacement snapshots no longer retain a retired source pointer for a second
+  close after restore.
+- Restore the shared Raylib frame loop after a switch-specific surface
+  synchronization experiment throttled multicontext Raylib rendering. Switch
+  readiness remains manager/session-owned rather than changing Raylib drawing.
+- Keep a docked Raylib placeholder hidden until the GLFW-owned child replaces
+  it, preventing the manager thread from raising an empty host over a valid
+  rendered pane.
+- Publish Raylib's complete native HWND/DC/GL-context bundle when the GLFW child
+  is adopted, and keep logical window dimensions distinct from live framebuffer
+  dimensions during resize and frame processing.
+- Leave viewport and projection rebuilding under Raylib's framebuffer-resize
+  callback. The frame loop no longer forces logical dimensions through
+  `SetWindowSize` or a raw `rlViewport` override on every present.
+- Copy Raylib texture descriptors while atlas storage is locked instead of
+  returning pointers into unlocked hash-map storage.
+- Replace the optimized core log bridge's `std::println` and raw `FILE*` writes
+  with checked native-console output and an RAII file stream.
+- Add build-safe contracts for replacement ownership and restored-frame
+  acknowledgement. MSVC Debug/Release editor and StaticLib consumers build,
+  and both build-safe editor contract runs pass.
+
+## [v0.87.78] - Replacement transaction ownership repair
+
+- Publish backend readiness only after the renderer completes a successful
+  frame, then keep the exact replacement transaction-owned through ordinary
+  GUI, font, project, and editor-state restoration plus a render-thread
+  acknowledgement of the first restored frame.
+- Leave the backend render thread running throughout adoption. A failed first
+  frame or failed state restore retires the replacement before the preserved
+  snapshot is offered to the recovery backend.
+- Exclude routed and floating panel contexts from whole-editor target discovery
+  and require existing targets to be live and ready, so a context switch cannot
+  adopt a popout or dying context as the primary editor surface.
+- Reject every additional switch request while replacement adoption is active,
+  including requests that could otherwise find another existing context.
+- Add a build-safe ownership contract that distinguishes the active replacement
+  context from unrelated live contexts.
+- Keep Linux Clang Release optimization at `-O3` generally while compiling only
+  `core.commandline.ixx` and `net.ixx` at `-O0`, avoiding reproducible LLVM
+  22.1.8 optimizer crashes without reducing renderer or engine hot-path builds.
+- Serialize active-window, render-thread, and deferred-cleanup ownership during
+  replacement. A Win32 close now retires the tracked window first, joins its
+  renderer cleanup, and destroys the native host afterward instead of allowing
+  Release builds to race an HWND/swapchain against unsynchronized containers.
+- Preserve the docking grid's assigned Raylib child position during resize,
+  clear Raylib's destroyed GLFW OpenGL context during teardown, and forward
+  keyboard/text input from adopted backend children into the shared GUI path.
+- Contain backend initialization and cleanup exceptions inside the context
+  lifecycle boundary. Failed SDL/Vulkan/other startup now records a failed
+  backend and visible log evidence instead of escaping a `noexcept` wrapper and
+  terminating the optimized editor process.
+- Marshal backend-owned Win32 surface retirement onto the manager UI thread.
+  Renderer-window procedures may stop their own loop, but they no longer erase
+  active context storage while the editor session thread is reading it.
+- Place an adopted Raylib child synchronously on its GLFW owner thread and do
+  not accept its first-present evidence until the native surface is visible,
+  has a usable client area, and is parented to the selected dock. Raylib also
+  clears with the shared editor background color instead of an unrelated black
+  surface.
+
 ## [v0.87.77] - Render-ready editor session restoration repair
 
 - Remove the replacement-only render-thread pause that could deadlock the

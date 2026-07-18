@@ -200,15 +200,24 @@ namespace epochnamespace::raylibcontext
 
             if (st.parent && st.parent != raylibHwnd)
             {
-                if (::GetParent(raylibHwnd) != st.parent)
-                {
-                    ::SetParent(raylibHwnd, st.parent);
-                }
-
                 LONG_PTR style = ::GetWindowLongPtrW(raylibHwnd, GWL_STYLE);
-                style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
+                style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW | WS_POPUP);
                 style |= (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
                 ::SetWindowLongPtrW(raylibHwnd, GWL_STYLE, style);
+
+                LONG_PTR exStyle = ::GetWindowLongPtrW(raylibHwnd, GWL_EXSTYLE);
+                exStyle &= ~static_cast<LONG_PTR>(
+                    WS_EX_APPWINDOW
+                    | WS_EX_TOOLWINDOW
+                    | WS_EX_TOPMOST
+                    | WS_EX_WINDOWEDGE
+                    | WS_EX_CLIENTEDGE
+                    | WS_EX_DLGMODALFRAME);
+                exStyle |= WS_EX_NOPARENTNOTIFY;
+                ::SetWindowLongPtrW(raylibHwnd, GWL_EXSTYLE, exStyle);
+
+                if (::GetParent(raylibHwnd) != st.parent)
+                    ::SetParent(raylibHwnd, st.parent);
 
                 RECT client{};
                 const HWND sizeSource = parent ? parent : st.parent;
@@ -224,6 +233,8 @@ namespace epochnamespace::raylibcontext
                     width,
                     height,
                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                ::ShowWindow(raylibHwnd, SW_SHOWNA);
+                ::UpdateWindow(raylibHwnd);
 
                 epochnamespace::core::MakeDockable(raylibHwnd, st.parent);
                 ::SetFocus(raylibHwnd);
@@ -234,8 +245,16 @@ namespace epochnamespace::raylibcontext
 
             if (ctx)
             {
+                ctx->width = static_cast<int>(st.width);
+                ctx->height = static_cast<int>(st.height);
+                ctx->framebufferWidth = (std::max)(1, epochnamespace::raylib_api::get_render_width());
+                ctx->framebufferHeight = (std::max)(1, epochnamespace::raylib_api::get_render_height());
                 ctx->hwnd = raylibHwnd;
+                ctx->hdc = st.hdc;
+                ctx->hglrc = st.hglrc;
                 ctx->native_window = raylibHwnd;
+                ctx->native_drawable = st.hdc;
+                ctx->native_gl_context = st.hglrc;
                 if (ctx->windowData)
                 {
                     const HWND previousHost = ctx->windowData->hwnd;
@@ -250,7 +269,9 @@ namespace epochnamespace::raylibcontext
                     ctx->windowData->hwnd = raylibHwnd;
                     ctx->windowData->host_hwnd = previousHost ? previousHost : parent;
                     ctx->windowData->hwndChild = raylibHwnd;
-                    ctx->windowData->hdc = nullptr;
+                    ctx->windowData->hdc = st.hdc;
+                    ctx->windowData->glContext = st.hglrc;
+                    ctx->windowData->usesSharedContext = false;
                     ctx->windowData->ownsNativeDc = false;
                     ctx->windowData->ownsNativeGlContext = false;
                     ctx->windowData->set_size(static_cast<int>(st.width), static_cast<int>(st.height));
@@ -418,7 +439,6 @@ namespace epochnamespace::raylibcontext
                     static_cast<std::uint8_t>((std::clamp)(clearColor[2], 0.0f, 1.0f) * 255.0f),
                     static_cast<std::uint8_t>((std::clamp)(clearColor[3], 0.0f, 1.0f) * 255.0f)
                 });
-
             const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx.get());
             if (epochnamespace::raylib_api::has_loaded_models()
                 && cameraMode != epochnamespace::previewgrid::CameraMode::Canvas2D)
@@ -542,6 +562,52 @@ namespace epochnamespace::raylibcontext
 
     }
 
+    export inline void raylib_resize(int w, int h)
+    {
+        auto& state = epochnamespace::raylibstate::s_raylibstate;
+        const int clampedW = (std::max)(1, w);
+        const int clampedH = (std::max)(1, h);
+        int framebufferW = clampedW;
+        int framebufferH = clampedH;
+        state.width = static_cast<unsigned>(clampedW);
+        state.height = static_cast<unsigned>(clampedH);
+
+        if (epochnamespace::raylib_api::is_window_ready())
+        {
+            const int renderWidth = epochnamespace::raylib_api::get_render_width();
+            const int renderHeight = epochnamespace::raylib_api::get_render_height();
+            if (renderWidth != clampedW || renderHeight != clampedH)
+                epochnamespace::raylib_api::set_window_size(clampedW, clampedH);
+
+            framebufferW = (std::max)(1, epochnamespace::raylib_api::get_render_width());
+            framebufferH = (std::max)(1, epochnamespace::raylib_api::get_render_height());
+        }
+
+#if defined(_WIN32)
+        if (state.hwnd && ::IsWindow(state.hwnd) != FALSE)
+        {
+            const HWND liveParent = ::GetParent(state.hwnd);
+            state.dockedChildWindow =
+                state.parent
+                && ::IsWindow(state.parent) != FALSE
+                && liveParent == state.parent;
+        }
+#endif
+
+        if (state.owner_ctx)
+        {
+            state.owner_ctx->width = clampedW;
+            state.owner_ctx->height = clampedH;
+            state.owner_ctx->framebufferWidth = framebufferW;
+            state.owner_ctx->framebufferHeight = framebufferH;
+            if (state.owner_ctx->windowData)
+                state.owner_ctx->windowData->set_size(clampedW, clampedH);
+        }
+
+        if (state.userResize)
+            state.userResize(clampedW, clampedH);
+    }
+
     export inline bool raylib_initialize(
         std::shared_ptr<core::Context> ctx,
         NativeWindowHandle parent = nullptr,
@@ -608,6 +674,15 @@ namespace epochnamespace::raylibcontext
         st.owner_thread = detail::current_thread_token();
 #endif
         st.userResize = std::move(resizeCallback);
+
+        if (const auto backendResize =
+                st.userResize.target<void(*)(int, int)>();
+            backendResize && *backendResize == &raylib_resize)
+        {
+            // A reused Context may still expose the stable backend callback.
+            // It is not an external callback and must never call itself.
+            st.userResize = {};
+        }
 
 #if defined(_WIN32)
         st.hwnd = static_cast<HWND>(parent ? parent : (ctx ? ctx->hwnd : nullptr));
@@ -681,115 +756,11 @@ namespace epochnamespace::raylibcontext
         if (!st.hdc)
             return fail_initialization("Failed to capture Raylib window DC after initialization.");
 
-        if (ctx && ctx->windowData)
-        {
-            ctx->windowData->hdc = st.hdc;
-            ctx->windowData->glContext = st.hglrc;
-            ctx->windowData->usesSharedContext = false;
-            ctx->windowData->ownsNativeDc = false;
-            ctx->windowData->ownsNativeGlContext = false;
-        }
-
 #endif
 
         epochnamespace::raylib_api::set_target_fps(0);
 
-        st.onResize = [](int w, int h)
-            {
-                auto& state = epochnamespace::raylibstate::s_raylibstate;
-                const int clampedW = (std::max)(1, w);
-                const int clampedH = (std::max)(1, h);
-                state.width = static_cast<unsigned>(clampedW);
-                state.height = static_cast<unsigned>(clampedH);
-
-                epochnamespace::raylib_api::set_window_size(clampedW, clampedH);
-
-#if defined(_WIN32)
-                if (state.hwnd && ::IsWindow(state.hwnd) != FALSE)
-                {
-                    const HWND liveParent = ::GetParent(state.hwnd);
-                    if (state.parent
-                        && ::IsWindow(state.parent) != FALSE
-                        && liveParent == state.parent)
-                    {
-                        state.dockedChildWindow = true;
-                    }
-                    else if (!liveParent
-                        || (state.parent
-                            && ::IsWindow(state.parent) != FALSE
-                            && liveParent != state.parent))
-                    {
-                        state.dockedChildWindow = false;
-                    }
-
-                    if (state.dockedChildWindow
-                        && state.parent
-                        && ::IsWindow(state.parent) != FALSE
-                        && liveParent != state.parent)
-                    {
-                        ::SetParent(state.hwnd, state.parent);
-                    }
-
-                    if (state.dockedChildWindow
-                        && state.parent && ::IsWindow(state.parent) != FALSE)
-                    {
-                        LONG_PTR style = ::GetWindowLongPtrW(state.hwnd, GWL_STYLE);
-                        style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW | WS_POPUP);
-                        style |= (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
-                        ::SetWindowLongPtrW(state.hwnd, GWL_STYLE, style);
-
-                        LONG_PTR exStyle = ::GetWindowLongPtrW(state.hwnd, GWL_EXSTYLE);
-                        exStyle &= ~static_cast<LONG_PTR>(
-                            WS_EX_APPWINDOW
-                            | WS_EX_WINDOWEDGE
-                            | WS_EX_CLIENTEDGE
-                            | WS_EX_DLGMODALFRAME
-                            | WS_EX_TOPMOST);
-                        exStyle |= WS_EX_NOPARENTNOTIFY;
-                        ::SetWindowLongPtrW(state.hwnd, GWL_EXSTYLE, exStyle);
-                    }
-                    else
-                    {
-                        LONG_PTR style = ::GetWindowLongPtrW(state.hwnd, GWL_STYLE);
-                        style &= ~static_cast<LONG_PTR>(WS_CHILD);
-                        style |= static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW | WS_VISIBLE);
-                        ::SetWindowLongPtrW(state.hwnd, GWL_STYLE, style);
-                    }
-
-                    ::SetWindowPos(
-                        state.hwnd,
-                        nullptr,
-                        0,
-                        0,
-                        clampedW,
-                        clampedH,
-                        SWP_NOZORDER | SWP_NOACTIVATE | ((state.dockedChildWindow && state.parent && ::IsWindow(state.parent) != FALSE) ? 0 : SWP_NOMOVE) | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-
-                    if (state.dockedChildWindow
-                        && state.parent
-                        && ::IsWindow(state.parent) != FALSE
-                        && state.owner_ctx
-                        && state.owner_ctx->windowData
-                        && state.owner_ctx->windowData->host_hwnd
-                        && ::IsWindow(state.owner_ctx->windowData->host_hwnd) != FALSE
-                        && ::GetParent(state.owner_ctx->windowData->host_hwnd) == state.parent)
-                    {
-                        ::ShowWindow(state.owner_ctx->windowData->host_hwnd, SW_HIDE);
-                    }
-                }
-#endif
-                if (state.owner_ctx)
-                {
-                    state.owner_ctx->width = clampedW;
-                    state.owner_ctx->height = clampedH;
-                    state.owner_ctx->framebufferWidth = clampedW;
-                    state.owner_ctx->framebufferHeight = clampedH;
-                    if (state.owner_ctx->windowData)
-                        state.owner_ctx->windowData->set_size(clampedW, clampedH);
-                }
-                if (state.userResize)
-                    state.userResize(clampedW, clampedH);
-            };
+        st.onResize = raylib_resize;
 
 #if defined(_WIN32)
         // Restore previous GL binding for the dock/multiplexer host.
@@ -801,9 +772,6 @@ namespace epochnamespace::raylibcontext
                 detail::clear_current();
         }
 #endif
-
-        if (ctx)
-            ctx->onResize = st.onResize;
 
         st.running = true;
         st.renderingActive = true;
@@ -1051,6 +1019,8 @@ namespace epochnamespace::raylibcontext
 #if defined(_WIN32)
             const HDC   previousDC = detail::current_dc();
             const HGLRC previousContext = detail::current_context();
+            const bool previousWasRaylib =
+                detail::contexts_match(previousDC, previousContext, st.hdc, st.hglrc);
             const bool window_alive = (st.hwnd != nullptr) && (::IsWindow(st.hwnd) != FALSE);
 #endif
 
@@ -1091,13 +1061,12 @@ namespace epochnamespace::raylibcontext
             if (st.ownsDC && st.hdc && st.hwnd)
                 ::ReleaseDC(st.hwnd, st.hdc);
 
-            if (!detail::contexts_match(previousDC, previousContext, st.hdc, st.hglrc))
-            {
-                if (previousDC && previousContext)
-                    (void)detail::make_current(previousDC, previousContext);
-                else
-                    detail::clear_current();
-            }
+            // CloseWindow destroys raylib's GLFW context. Never leave that
+            // deleted HGLRC current on the render thread or restore it as the
+            // previous binding during a later backend replacement.
+            detail::clear_current();
+            if (!previousWasRaylib && previousDC && previousContext)
+                (void)detail::make_current(previousDC, previousContext);
 #endif
 
             st = {};

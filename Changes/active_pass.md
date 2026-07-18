@@ -114,12 +114,64 @@ contracts instead of drift.
   the transaction. The `v0.87.76` source queues retirement to the next manager
   frame boundary, but a fresh operator trace proved its replacement-only render
   pause could deadlock after native readiness and its manual session restore
-  still overlapped backend initialization. The `v0.87.77` source removes that
-  pause and restores editor state through the normal session path only after
-  readiness, while retaining exact-context ownership, frame-boundary source
-  retirement, Raylib first-present proof, owner-thread Raylib layout, and
-  failed-backend recovery. Focused all-backend repeated-switch testing remains
-  required before runtime acceptance.
+  still overlapped backend initialization. The `v0.87.77` source removed that
+  pause, but fresh all-backend traces showed the generic session loop could
+  observe readiness later in the same frame and race the still-active
+  transaction. The `v0.87.78` source publishes readiness only after a successful
+  backend frame, keeps the exact replacement excluded until then, and retains
+  transaction ownership through normal-path state restoration and a
+  render-thread acknowledgement of the first restored editor frame. A failed
+  frame or restore retires the replacement before fallback, repeat requests are
+  rejected while adoption is active, and routed/floating or non-ready contexts
+  cannot be mistaken for the whole editor. Focused all-backend repeated-switch
+  testing remains required before runtime acceptance. The same source line now
+  serializes active-window, render-thread, and deferred-cleanup ownership so a
+  Win32 surface remains alive until its renderer has released native resources
+  and joined. Raylib resize no longer overwrites the grid-assigned child
+  position, its destroyed GLFW context is explicitly cleared during teardown,
+  and adopted backend children forward keyboard/text events into EpochGui.
+  Fresh Release traces then exposed two remaining native lifecycle gaps:
+  backend initialization/cleanup exceptions could escape `noexcept`, and a
+  backend-owned HWND procedure could erase active context storage from its
+  renderer thread. The current source catches and reports lifecycle exceptions,
+  marshals that ownership transfer to the manager UI thread, synchronously
+  docks Raylib on its GLFW owner thread, and requires a visible, parented,
+  non-empty Raylib surface before first-present readiness. MSVC Debug and
+  Release editor builds plus both build-safe contract runs pass; focused
+  operator Raylib visibility and repeated Release switching remain the runtime
+  acceptance gate. The `v0.88.01` source additionally keeps GUI/session state
+  alive until renderer retirement is proven, makes native retirement
+  notification one-shot, and synchronously joins the old renderer during a
+  whole-editor replacement before the new backend is constructed. A
+  switch-specific Raylib surface synchronization experiment was removed after
+  the live multicontext lane showed Raylib falling to 16 FPS while the other
+  contexts held near 120 FPS; shared Raylib drawing remains unchanged.
+  The current repair separates Raylib native owner-thread work from its draw
+  queue, so GLFW docking and resize mutations finish before `BeginDrawing`.
+  Raylib now exposes one stable backend resize callback rather than installing
+  a runtime closure into reusable context state and tracks logical window and
+  live framebuffer dimensions separately. Successful `EndDrawing()` is again the
+  first-present boundary: native visibility and parenting heuristics cannot
+  leave the editor session uninitialized after Raylib has presented a frame,
+  and no-op resize requests are filtered before reaching GLFW. The docked
+  placeholder remains hidden until the GLFW child takes over, adoption publishes
+  the complete HWND/DC/GL-context bundle, and the frame loop leaves viewport and
+  projection rebuilds to Raylib's framebuffer callback. Raylib texture lookup
+  copies the descriptor while atlas
+  storage is locked, and the optimized core log bridge no longer writes through
+  `std::println` or a raw `FILE*` during replacement. These changes preserve the
+  existing frame and queue order while repairing the two concrete failures from
+  the latest operator traces. Whole-editor
+  replacement also destroys the retired
+  GUI/font/chat/scene session immediately after renderer join and never stores
+  the retired source pointer in the restore record. MSVC Debug/Release editor
+  and StaticLib builds plus both build-safe contract runs pass. Focused operator
+  Raylib visibility, multicontext rendering, and repeated optimized switching
+  remain the runtime acceptance gate.
+- Hosted `v0.87.77` full-engine Clang proof exposed an LLVM 22.1.8 CGSCC crash
+  in `core.commandline.ixx` at the previous source-local `-O1` workaround. The
+  `v0.87.78` lane compiles only `core.commandline.ixx` and `net.ixx` at `-O0`;
+  renderer and other engine Release code remain at `-O3`.
 - Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
   launcher window until packaged handoff is staged or source worker handoff
   evidence is ready. Packaged runtime installs can still distinguish stable

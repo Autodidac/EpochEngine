@@ -364,7 +364,9 @@ namespace epochnamespace::raylibtextures
 #endif
     }
 
-    export inline const epochnamespace::raylib_api::Texture2D* try_get_texture(const TextureAtlas& atlas) noexcept
+    export inline bool try_copy_texture(
+        const TextureAtlas& atlas,
+        epochnamespace::raylib_api::Texture2D& texture) noexcept
     {
         try
         {
@@ -373,16 +375,18 @@ namespace epochnamespace::raylibtextures
 
             auto it = backend.gpu_atlases.find(&atlas);
             if (it == backend.gpu_atlases.end())
-                return nullptr;
+                return false;
 
             if (it->second.texture.id == 0)
-                return nullptr;
+                return false;
 
-            return &it->second.texture;
+            texture = it->second.texture;
+            return true;
         }
         catch (...)
         {
-            return nullptr;
+            texture = {};
+            return false;
         }
     }
 

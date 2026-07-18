@@ -42,9 +42,10 @@ the normal Linux updater or release lane.
 
 Release optimization remains target-owned by CMake. Current Clang Release
 builds use `-O3` generally, with narrowly documented source-file overrides only
-for reproducible compiler defects. LLVM 22.1.8 currently requires `net.ixx` at
-`-O0` because its `globalopt` pass crashes on that module; this does not disable
-optimization for updater, editor, runtime, renderer, or other engine code.
+for reproducible compiler defects. LLVM 22.1.8 currently requires
+`core.commandline.ixx` and `net.ixx` at `-O0` because its CGSCC/inliner and
+`globalopt` passes crash on those modules; this does not disable optimization
+for updater, editor, runtime, renderer, or other engine code.
 
 Examples:
 

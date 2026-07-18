@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -81,7 +83,9 @@ namespace epochnamespace::core::detail
                 current->get_hwnd(),
                 static_cast<unsigned>((std::max)(1, current->width)),
                 static_cast<unsigned>((std::max)(1, current->height)),
-                current->onResize,
+                current->windowData
+                    ? current->windowData->onResize
+                    : std::function<void(int, int)>{},
                 current->backendName);
         };
         ctx->cleanup = []()
@@ -113,15 +117,25 @@ namespace epochnamespace::core::detail
             auto& st = epochnamespace::raylibstate::s_raylibstate;
             st.running = true;
             st.owner_ctx = current.get();
-            st.width = static_cast<unsigned>((std::max)(1, epochnamespace::raylib_api::get_render_width()));
-            st.height = static_cast<unsigned>((std::max)(1, epochnamespace::raylib_api::get_render_height()));
             st.frameActive = false;
             st.frameInTextureMode = false;
+
+            const int frameWidth = (std::max)(1, epochnamespace::raylib_api::get_render_width());
+            const int frameHeight = (std::max)(1, epochnamespace::raylib_api::get_render_height());
+            current->framebufferWidth = frameWidth;
+            current->framebufferHeight = frameHeight;
 
             epochnamespace::raylib_api::begin_drawing();
             st.frameActive = true;
             st.frameInTextureMode = false;
-            epochnamespace::raylib_api::clear_background({ 0, 0, 0, 255 });
+
+            const auto clearColor = clear_color_for_context(ContextType::RayLib);
+            epochnamespace::raylib_api::clear_background({
+                static_cast<std::uint8_t>((std::clamp)(clearColor[0], 0.0f, 1.0f) * 255.0f),
+                static_cast<std::uint8_t>((std::clamp)(clearColor[1], 0.0f, 1.0f) * 255.0f),
+                static_cast<std::uint8_t>((std::clamp)(clearColor[2], 0.0f, 1.0f) * 255.0f),
+                static_cast<std::uint8_t>((std::clamp)(clearColor[3], 0.0f, 1.0f) * 255.0f)
+            });
             (void)queue.drain();
             epochnamespace::raylibcontext::raylib_render_scene_preview(current);
             (void)epochnamespace::gui::render_deferred_batch(current.get());
@@ -130,7 +144,9 @@ namespace epochnamespace::core::detail
 
             st.frameActive = false;
             if (current->windowData)
-                current->windowData->firstPresentComplete.store(true, std::memory_order_release);
+                current->windowData->firstPresentComplete.store(
+                    true,
+                    std::memory_order_release);
             return !epochnamespace::raylib_api::window_should_close();
         };
         ctx->clear = nullptr;
@@ -144,6 +160,7 @@ namespace epochnamespace::core::detail
             return default_add_atlas(atlas);
         };
         ctx->add_model = &default_add_model;
+        ctx->onResize = &epochnamespace::raylibcontext::raylib_resize;
         bind_default_input(ctx);
         AddContextForBackend(ContextType::RayLib, std::move(ctx));
     }

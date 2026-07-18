@@ -129,6 +129,7 @@ namespace epochnamespace::core
 
         OpaqueContextHandle          context{};
         core::CommandQueue          commandQueue{};
+        core::CommandQueue          ownerThreadCommandQueue{};
         ThreadInitializeCallback    threadInitialize{};
 
         std::atomic_bool running{ false };
@@ -148,7 +149,11 @@ namespace epochnamespace::core
         std::atomic<BackendLifecycleState> backendLifecycle{ BackendLifecycleState::pending };
         bool isFloating = false;
         std::atomic_bool routedRedockRequested = false;
+        std::atomic_bool retirementQueued = false;
         std::atomic_bool firstPresentComplete = false;
+        std::atomic_uint64_t successfulFrameGeneration{ 0 };
+        std::atomic_bool editorSessionRestoreAckQueued{ false };
+        std::atomic_uint64_t editorSessionRestoreAckGeneration{ 0 };
         std::atomic_uint64_t resizeGeneration{ 0 };
 
         std::function<void(int, int)> onResize{};

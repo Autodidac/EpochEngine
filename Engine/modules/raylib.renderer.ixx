@@ -88,14 +88,13 @@ namespace epochnamespace::raylibrenderer
         // Upload (this will no-op if cached + correct version).
         epochnamespace::raylibtextures::ensure_uploaded(*atlas);
 
-        const auto* texPtr = epochnamespace::raylibtextures::try_get_texture(*atlas);
-        if (!texPtr || texPtr->id == 0)
+        epochnamespace::raylib_api::Texture2D tex{};
+        if (!epochnamespace::raylibtextures::try_copy_texture(*atlas, tex)
+            || tex.id == 0)
             return;
 
         if (!st.frameActive)
             return;
-
-        const auto& tex = *texPtr;
 
         const epochnamespace::raylib_api::Rectangle src{
             static_cast<float>(r.x),

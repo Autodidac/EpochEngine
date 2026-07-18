@@ -99,10 +99,27 @@ after choosing the current source gate from `Changes/active_pass.md`.
   keeps only the exact target gated until readiness completes the transaction,
   but fresh Windows evidence recorded an `AppHangTransient` after Raylib reached
   render-ready and showed DirectX/Vulkan stopping during the same adoption
-  window. `v0.87.77` removes the replacement render-thread pause and the
-  pre-readiness manual restore, returning editor adoption to the normal session
-  path after native readiness while preserving exact target identity and the
-  next-frame retirement boundary.
+  window. `v0.87.77` removed the replacement render-thread pause and the
+  pre-readiness manual restore, but the generic session loop could still adopt
+  the target later in the same frame before the transaction acknowledged
+  readiness. `v0.87.78` publishes readiness after the first successful backend
+  frame, keeps only that exact target excluded while its renderer continues,
+  and retains the transaction until normal-path editor restoration and the
+  first restored render frame both succeed. Failed frames/restores remain
+  recoverable, repeat requests are rejected during adoption, and routed,
+  floating, closing, or non-ready contexts are not eligible as whole-editor
+  switch targets. Active windows, render threads, and deferred cleanup entries
+  move between ownership containers under one serialized retirement boundary;
+  native hosts are destroyed only after renderer cleanup joins. Raylib resize
+  preserves the parent grid's assigned position and teardown clears the deleted
+  GLFW GL binding, while adopted Raylib/SDL/SFML children route keyboard and
+  text events through the shared GUI input path. Fresh optimized-build evidence
+  requires one further ownership rule: backend-owned HWND procedures may stop
+  their renderer, but active-window retirement is marshaled to the manager UI
+  thread. Backend lifecycle exceptions are logged and converted to failed
+  replacement evidence instead of escaping `noexcept`. Raylib redocking is
+  synchronous on its GLFW owner thread, and first-present readiness requires a
+  visible, parented child with a usable client area.
   Focused all-backend state/font/focus/repeated-switch acceptance remains
   required before a release claim.
 - Raylib, SFML, and SDL multicontext grids are diagnostic evidence only until

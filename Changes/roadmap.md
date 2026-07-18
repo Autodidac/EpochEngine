@@ -77,7 +77,16 @@ has accepted SDL, SFML, OpenGL, Vulkan, DirectX, and software switching from the
   boundary, but the replacement render pause and pre-readiness manual restore
   still produced hardware hangs. `v0.87.77` keeps the frame boundary and exact
   target while returning state adoption to the proven normal session path after
-  native readiness. All backends require focused repeated-switch rechecks.
+  native readiness. Fresh traces showed that path could still run later in the
+  same frame before transaction completion; `v0.87.78` publishes readiness only
+  after a successful backend frame, defers only the exact replacement while its
+  renderer remains active, and commits only after normal-path state restoration
+  plus the first restored render-frame acknowledgement. Repeat requests are
+  blocked during adoption, and routed/floating/non-ready contexts are excluded
+  from primary-editor adoption. Win32 retirement now transfers window and
+  render-thread ownership atomically, joins renderer cleanup before native host
+  destruction, preserves Raylib's grid position across resize, and clears its
+  deleted GLFW GL binding. All backends require focused repeated-switch rechecks.
 
 ## High-Output Source Strategy
 

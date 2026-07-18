@@ -512,7 +512,7 @@ set(EPOCH_MODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND UNIX AND NOT APPLE)
     set_source_files_properties(
         "${EPOCH_MODULE_DIR}/core.commandline.ixx"
-        PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O1>"
+        PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0>"
     )
     set_source_files_properties(
         "${EPOCH_MODULE_DIR}/net.ixx"

@@ -317,7 +317,9 @@ namespace
             if (!liveContext->onResize && win.onResize)
                 liveContext->onResize = win.onResize;
 
-            if (!win.onResize && liveContext->onResize)
+            if (liveContext->type != ContextType::RayLib
+                && !win.onResize
+                && liveContext->onResize)
                 win.onResize = liveContext->onResize;
         }
 
@@ -1500,7 +1502,12 @@ namespace
 
         if (window)
         {
-            window->commandQueue.enqueue([cb = std::move(resizeCallback),
+            const bool ownerThreadResize =
+                window->type == core::ContextType::RayLib;
+            auto& resizeQueue = ownerThreadResize
+                ? window->ownerThreadCommandQueue
+                : window->commandQueue;
+            resizeQueue.enqueue([cb = std::move(resizeCallback),
                 contextType,
                 windowId,
                 clampedWidth, clampedHeight]() mutable
@@ -1784,7 +1791,9 @@ namespace
             return;
         }
 
-        const bool requiresFirstPresent = ctx->type == ContextType::RayLib;
+        const bool requiresFirstPresent =
+            ctx->type == ContextType::OpenGL
+            || ctx->type == ContextType::RayLib;
         const auto publishRenderReady = [&]()
         {
             win.set_backend_lifecycle(BackendLifecycleState::ready);
@@ -1795,9 +1804,6 @@ namespace
                 ctx->backendName,
                 win.hwnd);
         };
-
-        if (!requiresFirstPresent)
-            publishRenderReady();
 
         epoch::perf::frame_limiter coreFrameLimiter{};
         double activeCoreFrameLimit = -1.0;
@@ -1818,6 +1824,8 @@ namespace
 
         while (running.load(std::memory_order_acquire) && win.running)
         {
+            win.ownerThreadCommandQueue.drain();
+
             bool keepRunning = true;
 
             {
@@ -1838,14 +1846,13 @@ namespace
 
             if (!keepRunning)
             {
-                if (requiresFirstPresent
-                    && win.backend_lifecycle() == BackendLifecycleState::initializing
+                if (win.backend_lifecycle() == BackendLifecycleState::initializing
                     && running.load(std::memory_order_acquire))
                 {
                     epochnamespace::logger::get(kLogSys).logf(
                         epochnamespace::logger::LogLevel::Error,
                         std::source_location::current(),
-                        "Backend {} stopped before its first present. Rejecting the context window.",
+                        "Backend {} stopped before its first successful frame. Rejecting the context window.",
                         ctx->backendName);
                     win.set_backend_lifecycle(BackendLifecycleState::failed);
                 }
@@ -1853,9 +1860,10 @@ namespace
                 break;
             }
 
-            if (requiresFirstPresent
-                && win.backend_lifecycle() == BackendLifecycleState::initializing
-                && win.firstPresentComplete.load(std::memory_order_acquire))
+            win.successfulFrameGeneration.fetch_add(1, std::memory_order_acq_rel);
+            if (win.backend_lifecycle() == BackendLifecycleState::initializing
+                && (!requiresFirstPresent
+                    || win.firstPresentComplete.load(std::memory_order_acquire)))
             {
                 publishRenderReady();
             }
@@ -1871,6 +1879,7 @@ namespace
             coreFrameLimiter.wait_for_next_frame();
         }
 
+        win.ownerThreadCommandQueue.clear();
         win.commandQueue.drain();
 
         if (ctx->cleanup)

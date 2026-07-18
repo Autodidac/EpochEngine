@@ -36,6 +36,7 @@ module;
 
 #include <algorithm>
 #include <cstdint>
+#include <exception>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -125,6 +126,66 @@ namespace epochnamespace::core
 
         if (!backendState.master) backendState.master = std::move(context);
         else backendState.duplicates.emplace_back(std::move(context));
+    }
+
+    void Context::initialize_safe() noexcept
+    {
+        init_failed = false;
+        if (!initialize)
+        {
+            init_failed = true;
+            logger::get("Context").log(
+                logger::LogLevel::Error,
+                "Backend has no initializer.",
+                std::source_location::current());
+            return;
+        }
+
+        try
+        {
+            initialize();
+        }
+        catch (const std::exception& e)
+        {
+            init_failed = true;
+            logger::get("Context").log(
+                logger::LogLevel::Error,
+                std::string("Exception during backend initialization: ") + e.what(),
+                std::source_location::current());
+        }
+        catch (...)
+        {
+            init_failed = true;
+            logger::get("Context").log(
+                logger::LogLevel::Error,
+                "Unknown exception during backend initialization.",
+                std::source_location::current());
+        }
+    }
+
+    void Context::cleanup_safe() noexcept
+    {
+        if (!cleanup)
+            return;
+
+        try
+        {
+            cleanup();
+        }
+        catch (const std::exception& e)
+        {
+            logger::get("Context").log(
+                logger::LogLevel::Error,
+                std::string("Exception during backend cleanup: ") + e.what(),
+                std::source_location::current());
+        }
+        catch (...)
+        {
+            logger::get("Context").log(
+                logger::LogLevel::Error,
+                "Unknown exception during backend cleanup.",
+                std::source_location::current());
+        }
     }
 
     bool core::Context::process_safe(std::shared_ptr<core::Context> ctx, CommandQueue& queue)

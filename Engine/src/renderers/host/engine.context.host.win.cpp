@@ -208,6 +208,7 @@ namespace
 
     // TU-owned globals.
     std::unordered_map<HWND, std::thread> g_threads;
+    std::mutex g_threadStateMutex;
     epochnamespace::core::DragState       g_drag;
     epochnamespace::core::MultiContextManager* g_activeManager = nullptr;
     struct PendingWindowCleanup
@@ -554,7 +555,8 @@ namespace
         int desiredScreenX,
         int desiredScreenY,
         int clientW,
-        int clientH) noexcept
+        int clientH,
+        bool asynchronous = true) noexcept
     {
         if (!hwnd || !parent || ::IsWindow(parent) == FALSE)
             return;
@@ -596,6 +598,13 @@ namespace
         clientPos.x = (std::clamp)(static_cast<int>(clientPos.x), 0, maxX);
         clientPos.y = (std::clamp)(static_cast<int>(clientPos.y), 0, maxY);
 
+        UINT flags = SWP_NOZORDER
+            | SWP_NOACTIVATE
+            | (needsChildStyle || currentParent != parent ? SWP_FRAMECHANGED : 0)
+            | SWP_SHOWWINDOW;
+        if (asynchronous)
+            flags |= SWP_ASYNCWINDOWPOS;
+
         ::SetWindowPos(
             hwnd,
             nullptr,
@@ -603,11 +612,7 @@ namespace
             clientPos.y,
             clientW,
             clientH,
-            SWP_NOZORDER
-            | SWP_NOACTIVATE
-            | SWP_ASYNCWINDOWPOS
-            | (needsChildStyle || currentParent != parent ? SWP_FRAMECHANGED : 0)
-            | SWP_SHOWWINDOW);
+            flags);
     }
 
     inline void request_routed_panel_redock_close(epochnamespace::core::WindowData* window) noexcept
@@ -669,6 +674,7 @@ namespace
     constexpr UINT WM_EPOCH_LAYOUT = WM_APP + 0x4A12;
     constexpr UINT WM_EPOCH_PROXY_DOCKCMD = WM_APP + 0x4A13;
     constexpr UINT WM_EPOCH_OPEN_DETACHED_CONTEXT = WM_APP + 0x4A14;
+    constexpr UINT WM_EPOCH_RETIRE_CONTEXT_WINDOW = WM_APP + 0x4A15;
     constexpr wchar_t kEpochLayoutPendingProp[] = L"EpochLayoutPending";
     constexpr wchar_t kEpochBackendBridgeProp[] = L"EpochBackendInputBridge";
     enum class DockCmd : WPARAM
@@ -900,6 +906,11 @@ namespace
     {
         return type == epochnamespace::core::ContextType::SDL
             || type == epochnamespace::core::ContextType::SFML;
+    }
+
+    [[nodiscard]] inline bool backend_adopts_native_child(epochnamespace::core::ContextType type) noexcept
+    {
+        return type == epochnamespace::core::ContextType::RayLib;
     }
 
     [[nodiscard]] inline bool is_proxy_host_hwnd(
@@ -1358,7 +1369,8 @@ namespace
             return false;
         }
 
-        window->commandQueue.enqueue([window, target, command, parent, x, y, width, height]()
+        window->firstPresentComplete.store(false, std::memory_order_release);
+        window->ownerThreadCommandQueue.enqueue([window, target, command, parent, x, y, width, height]()
             {
                 if (!window || !target || ::IsWindow(target) == FALSE)
                     return;
@@ -1379,9 +1391,12 @@ namespace
 
                 case ProxyDockCmd::Redock:
                     window->isFloating = false;
-                    dock_host_window_to_parent(target, parent, x, y, width, height);
+                    // This command already runs on the Raylib/GLFW owner thread.
+                    // Place it synchronously before accepting the next present.
+                    dock_host_window_to_parent(target, parent, x, y, width, height, false);
                     hide_associated_host_window(window, target, parent);
                     ::ShowWindow(target, SW_SHOWNA);
+                    ::UpdateWindow(target);
                     ::SetFocus(target);
                     break;
                 }
@@ -1590,10 +1605,12 @@ namespace
 
         case WM_CHAR:
         case WM_SYSCHAR:
-            return DefSubclassProc(hwnd, msg, wp, lp);
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return 0;
 
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
+            forward_gui_input_message(hwnd, msg, wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
         }
 
@@ -1607,6 +1624,7 @@ namespace
     constexpr UINT WM_EPOCH_LAYOUT = WM_APP + 0x4A12;
     constexpr UINT WM_EPOCH_PROXY_DOCKCMD = WM_APP + 0x4A13;
     constexpr UINT WM_EPOCH_OPEN_DETACHED_CONTEXT = WM_APP + 0x4A14;
+    constexpr UINT WM_EPOCH_RETIRE_CONTEXT_WINDOW = WM_APP + 0x4A15;
 
     enum class ProxyDockCmd : WPARAM
     {
@@ -1664,6 +1682,7 @@ namespace
     [[nodiscard]] inline bool is_sfml_proxy_detached(const epochnamespace::core::WindowData*) noexcept { return false; }
     [[nodiscard]] inline bool is_proxy_child_directly_docked(const epochnamespace::core::WindowData*, HWND = nullptr) noexcept { return false; }
     [[nodiscard]] inline bool backend_uses_proxy_child(epochnamespace::core::ContextType) noexcept { return false; }
+    [[nodiscard]] inline bool backend_adopts_native_child(epochnamespace::core::ContextType) noexcept { return false; }
     [[nodiscard]] inline HWND proxy_drag_frame(const epochnamespace::core::WindowData*, HWND, HWND fallback) noexcept { return fallback; }
 
     [[nodiscard]] inline POINT force_proxy_shell_outside_parent(
@@ -1697,6 +1716,9 @@ namespace
     {
         if (!window)
             return;
+
+        window->ownerThreadCommandQueue.clear();
+        window->commandQueue.clear();
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         if (window->ownsNativeGlContext && window->glContext)
@@ -2141,18 +2163,16 @@ namespace epochnamespace::core
         if (!context)
             return true;
 
-        {
-            std::scoped_lock lock(windowsMutex);
-            const bool stillOwned = std::ranges::any_of(
-                windows,
-                [context](const std::unique_ptr<WindowData>& window)
-                {
-                    const auto liveContext = window ? typed_context(window->context) : nullptr;
-                    return liveContext && liveContext.get() == context;
-                });
-            if (stillOwned)
-                return false;
-        }
+        std::scoped_lock lock(windowsMutex, g_threadStateMutex);
+        const bool stillOwned = std::ranges::any_of(
+            windows,
+            [context](const std::unique_ptr<WindowData>& window)
+            {
+                const auto liveContext = window ? typed_context(window->context) : nullptr;
+                return liveContext && liveContext.get() == context;
+            });
+        if (stillOwned)
+            return false;
 
         return std::ranges::none_of(
             g_pendingCleanups,
@@ -2283,16 +2303,18 @@ namespace epochnamespace::core
         }
 
         const bool proxyChildBackend = backend_uses_proxy_child(request.type);
+        const bool adoptedChildBackend = backend_adopts_native_child(request.type);
+        const bool delayedPlaceholderVisibility = proxyChildBackend || adoptedChildBackend;
         const bool hasValidParent =
             parent
             && ::IsWindow(parent) != FALSE;
 
-        if (request.start_docked && proxyChildBackend && !hasValidParent)
+        if (request.start_docked && delayedPlaceholderVisibility && !hasValidParent)
         {
             epochnamespace::logger::get(kLogSys).logf(
                 logger::LogLevel::Error,
                 std::source_location::current(),
-                "Refusing start-docked proxy-child context '{}' because no valid parent host exists.",
+                "Refusing start-docked native-child context '{}' because no valid parent host exists.",
                 request.title);
             return false;
         }
@@ -2304,7 +2326,7 @@ namespace epochnamespace::core
         const DWORD childStyle = WS_CHILD
             | WS_CLIPSIBLINGS
             | WS_CLIPCHILDREN
-            | (proxyChildBackend ? 0u : WS_VISIBLE);
+            | (delayedPlaceholderVisibility ? 0u : WS_VISIBLE);
         const DWORD floatingStyle = WS_OVERLAPPEDWINDOW
             | WS_VISIBLE
             | WS_CLIPSIBLINGS
@@ -2435,6 +2457,8 @@ namespace epochnamespace::core
         ::GetClientRect(hwnd, &rc);
         ctx->width = clamp_positive(static_cast<int>(rc.right - rc.left));
         ctx->height = clamp_positive(static_cast<int>(rc.bottom - rc.top));
+        ctx->framebufferWidth = ctx->width;
+        ctx->framebufferHeight = ctx->height;
         winPtr->width = ctx->width;
         winPtr->height = ctx->height;
         if (!ctx->onResize && winPtr->onResize)
@@ -2446,17 +2470,22 @@ namespace epochnamespace::core
             windows.emplace_back(std::move(winPtr));
         }
 
-        auto& threads = Threads();
-        if (!threads.contains(hwnd) && rawWin)
+        if (rawWin)
         {
-            threads[hwnd] = std::thread([this, rawWin]()
-                {
-                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                    RenderLoop(*rawWin);
-                });
+            std::scoped_lock lock(g_threadStateMutex);
+            if (!g_threads.contains(hwnd))
+            {
+                g_threads.emplace(
+                    hwnd,
+                    std::thread([this, rawWin]()
+                    {
+                        epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                        RenderLoop(*rawWin);
+                    }));
+            }
         }
 
-        if (!startDocked || !proxyChildBackend)
+        if (!startDocked || !delayedPlaceholderVisibility)
         {
             ::ShowWindow(hwnd, SW_SHOWNORMAL);
             ::BringWindowToTop(hwnd);
@@ -2903,6 +2932,8 @@ namespace epochnamespace::core
                     backend::ResolveClientSize(hwnd, width, height);
                     ctx->width = width;
                     ctx->height = height;
+                    ctx->framebufferWidth = width;
+                    ctx->framebufferHeight = height;
 
                     std::string narrowTitle;
                     if (w)
@@ -3153,11 +3184,15 @@ namespace epochnamespace::core
         ::GetClientRect(hwnd, &rc);
         ctx->width = clamp_positive(static_cast<int>(rc.right - rc.left));
         ctx->height = clamp_positive(static_cast<int>(rc.bottom - rc.top));
+        ctx->framebufferWidth = ctx->width;
+        ctx->framebufferHeight = ctx->height;
         winPtr->width = ctx->width;
         winPtr->height = ctx->height;
 
         if (!ctx->onResize && winPtr->onResize) ctx->onResize = winPtr->onResize;
-        if (!winPtr->onResize && ctx->onResize) winPtr->onResize = ctx->onResize;
+        if (type != ContextType::RayLib
+            && !winPtr->onResize && ctx->onResize)
+            winPtr->onResize = ctx->onResize;
 
         WindowData* rawWin = winPtr.get();
         {
@@ -3165,13 +3200,20 @@ namespace epochnamespace::core
             windows.emplace_back(std::move(winPtr));
         }
 
-        auto& threads = Threads();
-        if (!threads.contains(hwnd) && rawWin)
-            threads[hwnd] = std::thread([this, rawWin]()
-                {
-                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
-                    RenderLoop(*rawWin);
-                });
+        if (rawWin)
+        {
+            std::scoped_lock lock(g_threadStateMutex);
+            if (!g_threads.contains(hwnd))
+            {
+                g_threads.emplace(
+                    hwnd,
+                    std::thread([this, rawWin]()
+                    {
+                        epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                        RenderLoop(*rawWin);
+                    }));
+            }
+        }
 
         ArrangeDockedWindowsGrid();
     }
@@ -3228,7 +3270,15 @@ namespace epochnamespace::core
 
         if (window)
         {
-            window->commandQueue.enqueue([
+            const bool ownerThreadResize =
+                backend_requires_owner_thread_dock_commands(window);
+            if (ownerThreadResize)
+                window->firstPresentComplete.store(false, std::memory_order_release);
+
+            auto& resizeQueue = ownerThreadResize
+                ? window->ownerThreadCommandQueue
+                : window->commandQueue;
+            resizeQueue.enqueue([
                 cb = std::move(resizeCallback),
                 contextType,
                 windowId,
@@ -3269,18 +3319,18 @@ namespace epochnamespace::core
                 if (const HWND key = render_thread_key(w.get())) hwnds.push_back(key);
         }
 
-        auto& threads = Threads();
-
         std::size_t launchIndex = 0;
         for (HWND hwnd : hwnds)
         {
-            if (threads.contains(hwnd)) continue;
-
             const auto startupDelay =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
                     kRenderThreadStartupStepDelay * static_cast<int>(launchIndex++));
 
-            threads[hwnd] = std::thread([this, hwnd, startupDelay]()
+            std::scoped_lock lock(g_threadStateMutex);
+            if (g_threads.contains(hwnd))
+                continue;
+
+            g_threads.emplace(hwnd, std::thread([this, hwnd, startupDelay]()
                 {
                     epoch::systems::threading::ScopedThreadActivity threadActivity{};
                     if (startupDelay.count() > 0)
@@ -3309,18 +3359,92 @@ namespace epochnamespace::core
                     }
 
                     if (win) RenderLoop(*win);
-                });
+                }));
         }
     }
 
     void MultiContextManager::RemoveWindow(HWND hwnd)
     {
         std::unique_ptr<WindowData> removed;
+        PendingWindowCleanup replacementCleanup{};
+        bool hasReplacementCleanup = false;
         bool should_quit = false;
         HWND layoutParent = nullptr;
+        const bool synchronousReplacementRetirement =
+            contextReplacementHolds.load(std::memory_order_acquire) > 0;
 
+        // StopAll owns every active WindowData until its render thread has
+        // joined. Native destruction during that phase must not transfer the
+        // same object into the ordinary deferred-cleanup lane.
+        if (!running.load(std::memory_order_acquire))
         {
             std::scoped_lock lock(windowsMutex);
+            auto it = std::find_if(windows.begin(), windows.end(),
+                [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+            if (it != windows.end())
+            {
+                (*it)->set_should_close(true);
+                (*it)->running = false;
+            }
+            return;
+        }
+
+        // Backend-owned HWND procedures execute on renderer threads. The
+        // session/event loop reads the active window vector on uiThreadId, so
+        // renderer threads may only mark retirement and queue the ownership
+        // transfer back to that thread. Mutating the vector here was a Release
+        // heap race during rapid context replacement.
+        if (uiThreadId != 0 && ::GetCurrentThreadId() != uiThreadId)
+        {
+            HWND retirementHost = nullptr;
+            {
+                std::scoped_lock lock(windowsMutex);
+                auto it = std::find_if(windows.begin(), windows.end(),
+                    [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+                if (it == windows.end())
+                    return;
+
+                (*it)->set_should_close(true);
+                (*it)->running = false;
+                if ((*it)->retirementQueued.exchange(true, std::memory_order_acq_rel))
+                    return;
+
+                retirementHost = parent;
+                if (!retirementHost || ::IsWindow(retirementHost) == FALSE)
+                {
+                    const HWND candidate = (*it)->host_hwnd
+                        ? ::GetParent((*it)->host_hwnd)
+                        : ((*it)->hwndChild
+                            ? ::GetParent((*it)->hwndChild)
+                            : ::GetParent((*it)->hwnd));
+                    if (candidate && ::IsWindow(candidate) != FALSE)
+                        retirementHost = candidate;
+                }
+            }
+
+            bool posted = false;
+            if (retirementHost && ::IsWindow(retirementHost) != FALSE)
+            {
+                posted = ::PostMessageW(
+                    retirementHost,
+                    WM_EPOCH_RETIRE_CONTEXT_WINDOW,
+                    0,
+                    reinterpret_cast<LPARAM>(hwnd)) != FALSE;
+            }
+
+            if (!posted)
+            {
+                std::scoped_lock lock(windowsMutex);
+                auto it = std::find_if(windows.begin(), windows.end(),
+                    [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+                if (it != windows.end())
+                    (*it)->retirementQueued.store(false, std::memory_order_release);
+            }
+            return;
+        }
+
+        {
+            std::scoped_lock lock(windowsMutex, g_threadStateMutex);
             auto it = std::find_if(windows.begin(), windows.end(),
                 [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
             if (it == windows.end()) return;
@@ -3334,38 +3458,57 @@ namespace epochnamespace::core
 
             (*it)->set_should_close(true);
             (*it)->running = false;
+            (*it)->retirementQueued.store(true, std::memory_order_release);
 
             removed = std::move(*it);
             windows.erase(it);
             should_quit = windows.empty()
                 && contextReplacementHolds.load(std::memory_order_acquire) == 0;
+
+            HWND threadKey = hwnd;
+            if (!g_threads.contains(threadKey) && removed)
+            {
+                if (removed->host_hwnd && g_threads.contains(removed->host_hwnd))
+                    threadKey = removed->host_hwnd;
+                else if (removed->hwndChild && g_threads.contains(removed->hwndChild))
+                    threadKey = removed->hwndChild;
+                else if (removed->hwnd && g_threads.contains(removed->hwnd))
+                    threadKey = removed->hwnd;
+            }
+
+            auto threadIt = g_threads.find(threadKey);
+            if (threadIt != g_threads.end())
+            {
+                PendingWindowCleanup pending{};
+                pending.hwnd = threadKey;
+                pending.thread = std::move(threadIt->second);
+                pending.window = std::move(removed);
+                g_threads.erase(threadIt);
+                if (synchronousReplacementRetirement)
+                {
+                    replacementCleanup = std::move(pending);
+                    hasReplacementCleanup = true;
+                }
+                else
+                {
+                    g_pendingCleanups.emplace_back(std::move(pending));
+                }
+            }
         }
 
-        forget_native_title_frame_source(removed.get());
-
-        auto& threads = Threads();
-        HWND threadKey = hwnd;
-        if (!threads.contains(threadKey) && removed)
+        if (hasReplacementCleanup)
         {
-            if (removed->host_hwnd && threads.contains(removed->host_hwnd))
-                threadKey = removed->host_hwnd;
-            else if (removed->hwndChild && threads.contains(removed->hwndChild))
-                threadKey = removed->hwndChild;
-            else if (removed->hwnd && threads.contains(removed->hwnd))
-                threadKey = removed->hwnd;
+            // A whole-editor replacement must not overlap the old renderer's
+            // cleanup with construction of the new backend. Keep the UI
+            // message pump alive while joining so owner-thread HWND teardown
+            // and synchronous Win32 messages can complete without deadlock.
+            join_thread_with_message_pump(replacementCleanup.thread);
+            forget_native_title_frame_source(replacementCleanup.window.get());
+            cleanup_window_resources(replacementCleanup.window);
         }
-
-        if (threads.contains(threadKey))
+        else if (removed)
         {
-            PendingWindowCleanup pending{};
-            pending.hwnd = threadKey;
-            pending.thread = std::move(threads[threadKey]);
-            pending.window = std::move(removed);
-            threads.erase(threadKey);
-            g_pendingCleanups.emplace_back(std::move(pending));
-        }
-        else
-        {
+            forget_native_title_frame_source(removed.get());
             cleanup_window_resources(removed);
         }
 
@@ -3397,25 +3540,29 @@ namespace epochnamespace::core
 
     void MultiContextManager::CleanupFinishedWindows()
     {
-        if (g_pendingCleanups.empty())
-            return;
-
-        auto it = g_pendingCleanups.begin();
-        while (it != g_pendingCleanups.end())
+        std::vector<PendingWindowCleanup> finished;
         {
-            if (!thread_finished(it->thread))
+            std::scoped_lock lock(g_threadStateMutex);
+            auto it = g_pendingCleanups.begin();
+            while (it != g_pendingCleanups.end())
             {
-                ++it;
-                continue;
+                if (!thread_finished(it->thread))
+                {
+                    ++it;
+                    continue;
+                }
+
+                finished.emplace_back(std::move(*it));
+                it = g_pendingCleanups.erase(it);
             }
+        }
 
-            if (it->thread.joinable())
-                it->thread.join();
-
-            forget_native_title_frame_source(it->window.get());
-            cleanup_window_resources(it->window);
-
-            it = g_pendingCleanups.erase(it);
+        for (auto& pending : finished)
+        {
+            if (pending.thread.joinable())
+                pending.thread.join();
+            forget_native_title_frame_source(pending.window.get());
+            cleanup_window_resources(pending.window);
         }
     }
 
@@ -3669,7 +3816,15 @@ namespace epochnamespace::core
             }
         }
 
-        for (auto& [hwnd, th] : g_threads)
+        std::unordered_map<HWND, std::thread> activeThreads;
+        std::vector<PendingWindowCleanup> pendingCleanups;
+        {
+            std::scoped_lock lock(g_threadStateMutex);
+            activeThreads.swap(g_threads);
+            pendingCleanups.swap(g_pendingCleanups);
+        }
+
+        for (auto& [hwnd, th] : activeThreads)
         {
             core::ContextType joinType = core::ContextType::None;
             std::string joinTitle{};
@@ -3706,16 +3861,25 @@ namespace epochnamespace::core
                 static_cast<void*>(hwnd));
 #endif
         }
-        g_threads.clear();
 
-        for (auto& pending : g_pendingCleanups)
+        for (auto& pending : pendingCleanups)
         {
             if (pending.thread.joinable())
                 join_thread_with_message_pump(pending.thread);
             forget_native_title_frame_source(pending.window.get());
             cleanup_window_resources(pending.window);
         }
-        g_pendingCleanups.clear();
+
+        std::vector<std::unique_ptr<WindowData>> remainingWindows;
+        {
+            std::scoped_lock lock(windowsMutex);
+            remainingWindows.swap(windows);
+        }
+        for (auto& window : remainingWindows)
+        {
+            forget_native_title_frame_source(window.get());
+            cleanup_window_resources(window);
+        }
 
         if (s_activeInstance == this) s_activeInstance = nullptr;
         if (g_activeManager == this) g_activeManager = nullptr;
@@ -3762,7 +3926,7 @@ namespace epochnamespace::core
                 win.hwnd,
                 static_cast<unsigned>(ctx->width),
                 static_cast<unsigned>(ctx->height),
-                win.onResize ? win.onResize : ctx->onResize,
+                win.onResize,
                 win.titleNarrow);
 
             if (!initialized)
@@ -3821,7 +3985,9 @@ namespace epochnamespace::core
             return;
         }
 
-        const bool requiresFirstPresent = ctx->type == ContextType::RayLib;
+        const bool requiresFirstPresent =
+            ctx->type == ContextType::OpenGL
+            || ctx->type == ContextType::RayLib;
         const auto publishRenderReady = [&]()
         {
             win.set_backend_lifecycle(BackendLifecycleState::ready);
@@ -3832,9 +3998,6 @@ namespace epochnamespace::core
                 ctx->backendName,
                 static_cast<void*>(win.hwnd));
         };
-
-        if (!requiresFirstPresent)
-            publishRenderReady();
 
         epoch::perf::frame_limiter coreFrameLimiter{};
         double activeCoreFrameLimit = -1.0;
@@ -3857,6 +4020,26 @@ namespace epochnamespace::core
         {
             bool keepRunning = true;
 
+            try
+            {
+                // Native owner-thread work must finish before a backend opens
+                // its frame. In particular, a GLFW child cannot be reparented
+                // or resized between Raylib BeginDrawing/EndDrawing.
+                win.ownerThreadCommandQueue.drain();
+            }
+            catch (const std::exception& e)
+            {
+                epochnamespace::logger::get(kLogSys).logf(
+                    epochnamespace::logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Backend {} owner-thread command failed: {}",
+                    ctx->backendName,
+                    e.what());
+                win.set_backend_lifecycle(BackendLifecycleState::failed);
+                win.running = false;
+                break;
+            }
+
             {
                 const std::size_t depth = win.commandQueue.depth();
                 telemetry::emit_gauge(
@@ -3872,15 +4055,14 @@ namespace epochnamespace::core
 
             if (!keepRunning)
             {
-                if (requiresFirstPresent
-                    && win.backend_lifecycle() == BackendLifecycleState::initializing
+                if (win.backend_lifecycle() == BackendLifecycleState::initializing
                     && !win.get_should_close()
                     && running.load(std::memory_order_acquire))
                 {
                     epochnamespace::logger::get(kLogSys).logf(
                         epochnamespace::logger::LogLevel::Error,
                         std::source_location::current(),
-                        "Backend {} stopped before its first present. Rejecting the replacement window.",
+                        "Backend {} stopped before its first successful frame. Rejecting the replacement window.",
                         ctx->backendName);
                     win.set_backend_lifecycle(BackendLifecycleState::failed);
                 }
@@ -3888,9 +4070,10 @@ namespace epochnamespace::core
                 break;
             }
 
-            if (requiresFirstPresent
-                && win.backend_lifecycle() == BackendLifecycleState::initializing
-                && win.firstPresentComplete.load(std::memory_order_acquire))
+            win.successfulFrameGeneration.fetch_add(1, std::memory_order_acq_rel);
+            if (win.backend_lifecycle() == BackendLifecycleState::initializing
+                && (!requiresFirstPresent
+                    || win.firstPresentComplete.load(std::memory_order_acquire)))
             {
                 publishRenderReady();
             }
@@ -3906,6 +4089,7 @@ namespace epochnamespace::core
             coreFrameLimiter.wait_for_next_frame();
         }
 
+        win.ownerThreadCommandQueue.clear();
         if (win.running && !win.get_should_close())
             win.commandQueue.drain();
         else
@@ -3970,6 +4154,10 @@ namespace epochnamespace::core
                 static_cast<void>(mgr->CreateDetachedContextWindowOnOwnerThread(*request));
             return 0;
         }
+
+        case WM_EPOCH_RETIRE_CONTEXT_WINDOW:
+            mgr->RemoveWindow(reinterpret_cast<HWND>(lParam));
+            return 0;
 
         case WM_ERASEBKGND:
             return 1;
@@ -5017,7 +5205,18 @@ namespace epochnamespace::core
                 "Child WM_CLOSE received hwnd={} parent={}",
                 static_cast<void*>(hwnd),
                 static_cast<void*>(::GetParent(hwnd)));
-            ::DestroyWindow(hwnd);
+            if (auto* mgr = s_activeInstance;
+                mgr && mgr->findWindowByHWND(hwnd))
+            {
+                // Keep the native surface alive until the renderer has stopped
+                // and released its swapchain/context. CleanupFinishedWindows
+                // performs the final HWND destruction after joining the thread.
+                mgr->RemoveWindow(hwnd);
+            }
+            else
+            {
+                ::DestroyWindow(hwnd);
+            }
             return 0;
 
         case WM_DESTROY:

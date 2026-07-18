@@ -1813,6 +1813,27 @@ namespace epochnamespace::core
         return lifecycle == epochnamespace::core::BackendLifecycleState::ready;
     }
 
+    [[nodiscard]] constexpr bool editor_session_deferred_for_active_replacement(
+        const void* candidate,
+        const void* activeReplacement,
+        bool restorationAllowed) noexcept
+    {
+        return !restorationAllowed
+            && candidate != nullptr
+            && activeReplacement != nullptr
+            && candidate == activeReplacement;
+    }
+
+    [[nodiscard]] constexpr bool editor_restored_frame_acknowledged(
+        bool acknowledgementQueued,
+        std::uint64_t acknowledgementGeneration,
+        std::uint64_t completedFrameGeneration) noexcept
+    {
+        return acknowledgementQueued
+            && acknowledgementGeneration != 0
+            && completedFrameGeneration >= acknowledgementGeneration;
+    }
+
     [[nodiscard]] inline int run_engine_contract_self_test()
     {
         bool failed = false;
@@ -1835,6 +1856,28 @@ namespace epochnamespace::core
             && editor_session_restore_allowed(epochnamespace::core::BackendLifecycleState::ready)
             && !editor_session_restore_allowed(epochnamespace::core::BackendLifecycleState::failed)
             && !editor_session_restore_allowed(epochnamespace::core::BackendLifecycleState::stopped));
+
+        const int replacementIdentities[2]{};
+        check(
+            "context.session_replacement_ownership",
+            editor_session_deferred_for_active_replacement(
+                &replacementIdentities[0], &replacementIdentities[0], false)
+            && !editor_session_deferred_for_active_replacement(
+                &replacementIdentities[0], &replacementIdentities[0], true)
+            && !editor_session_deferred_for_active_replacement(
+                &replacementIdentities[0], &replacementIdentities[1], false)
+            && !editor_session_deferred_for_active_replacement(
+                nullptr, &replacementIdentities[0], false)
+            && !editor_session_deferred_for_active_replacement(
+                &replacementIdentities[0], nullptr, false));
+
+        check(
+            "context.session_restored_frame_acknowledgement",
+            !editor_restored_frame_acknowledged(false, 2, 2)
+            && !editor_restored_frame_acknowledged(true, 0, 2)
+            && !editor_restored_frame_acknowledged(true, 3, 2)
+            && editor_restored_frame_acknowledged(true, 3, 3)
+            && editor_restored_frame_acknowledged(true, 3, 4));
 
         auto forestProfile = epoch::forest::default_profile(epoch::forest::ForestPreset::Tree);
         forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;
@@ -5065,6 +5108,8 @@ namespace epochnamespace::core
             retire_requested = 0,
             retiring_source,
             awaiting_backend,
+            restoring_session,
+            awaiting_restored_frame,
             retiring_failed_backend
         };
 
@@ -5253,18 +5298,17 @@ namespace epochnamespace::core
                 if (pendingIt == pendingEditorSwitchSnapshots.end())
                     return PendingEditorRestoreStatus::none;
 
-                auto editorSnapshot = std::move(pendingIt->snapshot);
+                const auto& editorSnapshot = pendingIt->snapshot;
                 Context* const sourceContext = pendingIt->source_context;
                 const bool closeSourceOnRestore = pendingIt->close_source_on_restore;
                 const bool routedPanelRestore = !guiRoute.empty();
-                pendingEditorSwitchSnapshots.erase(pendingIt);
 
                 auto fail_restore = [&](std::string_view reason) -> PendingEditorRestoreStatus
                 {
                     epochnamespace::editor_set_context_selection_status(
                         targetCtx.get(),
                         std::string{ "Context switch state restore failed: " } + std::string{ reason }
-                            + "; the replacement backend remains active for recovery.");
+                            + "; the replacement backend will be retired before recovery.");
                     return PendingEditorRestoreStatus::failed;
                 };
 
@@ -5290,18 +5334,11 @@ namespace epochnamespace::core
                             std::string{ "Detached " } + std::string{ guiRoute }
                                 + " panel cloned editor state; source editor remains active.");
                     }
+                    pendingEditorSwitchSnapshots.erase(pendingIt);
                     return PendingEditorRestoreStatus::restored;
                 }
 
-                if (closeSourceOnRestore
-                    && sourceContext
-                    && sourceContext != targetCtx.get())
-                {
-                    request_context_window_close(
-                        sourceContext,
-                        "source editor context handed off after replacement restore");
-                }
-                else if (!closeSourceOnRestore
+                if (!closeSourceOnRestore
                     && sourceContext
                     && sourceContext != targetCtx.get())
                 {
@@ -5326,7 +5363,27 @@ namespace epochnamespace::core
                     std::string{ "Editor context switched to " }
                         + std::string{ context_type_label(targetCtx->type) }
                         + "; project, layout, selection, camera, and timeline state restored.");
+                pendingEditorSwitchSnapshots.erase(pendingIt);
                 return PendingEditorRestoreStatus::restored;
+            };
+
+            auto cleanup_retired_editor_context = [&](Context* retiredContext)
+            {
+                if (!retiredContext)
+                    return;
+
+                if (auto sessionIt = sessions.find(retiredContext); sessionIt != sessions.end())
+                {
+                    unload_active_scene(sessionIt->second);
+                    sessionIt->second.menu.cleanup();
+                    sessions.erase(sessionIt);
+                }
+
+                retiredContext->clear_scene_viewport();
+                retiredContext->set_scene_preview_mode(core::ScenePreviewMode::None);
+                epochnamespace::gui::cleanup_context(retiredContext);
+                epochnamespace::cleanup_chat_context(retiredContext);
+                g_preview_look_states.erase(retiredContext);
             };
 
             while (running)
@@ -5386,7 +5443,7 @@ namespace epochnamespace::core
                         eraseReplacementSnapshot(type);
                         queue_editor_switch_snapshot(
                             type,
-                            replacement.source_context.get(),
+                            nullptr,
                             replacement.snapshot,
                             true);
 
@@ -5508,13 +5565,21 @@ namespace epochnamespace::core
                     }
                     else if (replacement.phase == EditorContextReplacementPhase::retiring_source)
                     {
-                        if (mgr.IsContextRetired(replacement.source_context.get())
-                            && !openReplacement(replacement.target_type))
+                        if (mgr.IsContextRetired(replacement.source_context.get()))
                         {
-                            openFallbackOrFail();
+                            // The renderer is joined now. Dispose its GUI/font/
+                            // scene session before another backend can reuse the
+                            // same Context object or initialize a new GUI route.
+                            cleanup_retired_editor_context(replacement.source_context.get());
+                            replacement.source_context.reset();
+
+                            if (!openReplacement(replacement.target_type))
+                                openFallbackOrFail();
                         }
                     }
-                    else if (replacement.phase == EditorContextReplacementPhase::awaiting_backend)
+                    else if (replacement.phase == EditorContextReplacementPhase::awaiting_backend
+                        || replacement.phase == EditorContextReplacementPhase::restoring_session
+                        || replacement.phase == EditorContextReplacementPhase::awaiting_restored_frame)
                     {
                         auto* window = mgr.findWindowByContext(replacement.active_context);
                         const auto lifecycle = window
@@ -5528,14 +5593,36 @@ namespace epochnamespace::core
                         if (editor_session_restore_allowed(lifecycle)
                             && backendIsLive)
                         {
-                            const auto readyType = replacement.active_type;
-                            mgr.EndContextReplacement();
-                            pendingEditorContextReplacement.reset();
-                            logger::get(kEditorLog).logf(
-                                logger::LogLevel::INFO,
-                                std::source_location::current(),
-                                "Editor host completed the single-window context replacement with render-ready {}; the normal session path will restore editor state.",
-                                context_type_label(readyType));
+                            if (replacement.phase == EditorContextReplacementPhase::awaiting_backend)
+                            {
+                                replacement.phase = EditorContextReplacementPhase::restoring_session;
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::INFO,
+                                    std::source_location::current(),
+                                    "Editor host observed the first successful {} backend frame; retaining transaction ownership while the normal session path restores editor state.",
+                                    context_type_label(replacement.active_type));
+                            }
+                            else if (replacement.phase == EditorContextReplacementPhase::awaiting_restored_frame)
+                            {
+                                const auto acknowledgementGeneration =
+                                    window->editorSessionRestoreAckGeneration.load(std::memory_order_acquire);
+                                const auto completedGeneration =
+                                    window->successfulFrameGeneration.load(std::memory_order_acquire);
+                                if (editor_restored_frame_acknowledged(
+                                    window->editorSessionRestoreAckQueued.load(std::memory_order_acquire),
+                                    acknowledgementGeneration,
+                                    completedGeneration))
+                                {
+                                    const auto readyType = replacement.active_type;
+                                    mgr.EndContextReplacement();
+                                    pendingEditorContextReplacement.reset();
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::INFO,
+                                        std::source_location::current(),
+                                        "Editor host committed the single-window context replacement after the first restored {} editor frame completed.",
+                                        context_type_label(readyType));
+                                }
+                            }
                         }
                         else if (lifecycle == epochnamespace::core::BackendLifecycleState::failed
                             || lifecycle == epochnamespace::core::BackendLifecycleState::stopped
@@ -5772,6 +5859,16 @@ namespace epochnamespace::core
                 auto switch_editor_context = [&](const std::shared_ptr<Context>& sourceCtx,
                     epochnamespace::core::ContextType requestedType)
                 {
+#if defined(_WIN32)
+                    if (pendingEditorContextReplacement)
+                    {
+                        epochnamespace::editor_set_context_selection_status(
+                            sourceCtx.get(),
+                            "Context switch is already adopting a replacement backend. Wait for the restored frame.");
+                        return;
+                    }
+#endif
+
                     const auto resolvedTargetType = resolve_context_driver_type(
                         requestedType,
                         sourceCtx ? sourceCtx->type : epochnamespace::core::ContextType::OpenGL);
@@ -5795,10 +5892,24 @@ namespace epochnamespace::core
                             "Context switch failed: requested backend is not an editor context candidate.");
                         return;
                     }
-                    std::shared_ptr<Context> targetCtx;
-                    if (sourceCtx && sourceCtx->type == targetType && mgr.findWindowByContext(sourceCtx))
+                    const auto is_live_primary_editor_window = [](const auto* window) noexcept
                     {
-                        targetCtx = sourceCtx;
+                        return window
+                            && window->guiRoute.empty()
+                            && !window->isFloating
+                            && window->running.load(std::memory_order_acquire)
+                            && !window->get_should_close()
+                            && window->backend_lifecycle()
+                                == epochnamespace::core::BackendLifecycleState::ready;
+                    };
+                    std::shared_ptr<Context> targetCtx;
+                    if (sourceCtx && sourceCtx->type == targetType)
+                    {
+                        auto* sourceWindow = mgr.findWindowByContext(sourceCtx);
+                        if (is_live_primary_editor_window(sourceWindow))
+                        {
+                            targetCtx = sourceCtx;
+                        }
                     }
 
                     if (!targetCtx)
@@ -5809,7 +5920,10 @@ namespace epochnamespace::core
                                 continue;
                             for (auto& candidateCtx : contexts)
                             {
-                                if (candidateCtx && mgr.findWindowByContext(candidateCtx))
+                                auto* candidateWindow = candidateCtx
+                                    ? mgr.findWindowByContext(candidateCtx)
+                                    : nullptr;
+                                if (is_live_primary_editor_window(candidateWindow))
                                 {
                                     targetCtx = candidateCtx;
                                     break;
@@ -5833,14 +5947,6 @@ namespace epochnamespace::core
                         }
 
 #if defined(_WIN32)
-                        if (pendingEditorContextReplacement)
-                        {
-                            epochnamespace::editor_set_context_selection_status(
-                                sourceCtx.get(),
-                                "Context switch is already retiring the previous backend. Wait for the replacement frame.");
-                            return;
-                        }
-
                         if (!mgr.GetParentWindow() || ::IsWindow(mgr.GetParentWindow()) == FALSE)
                         {
                             epochnamespace::editor_set_context_selection_status(
@@ -5999,9 +6105,35 @@ namespace epochnamespace::core
                     {
                         if (!ctx) continue;
 
+#if defined(_WIN32)
+                        if (pendingEditorContextReplacement
+                            && editor_session_deferred_for_active_replacement(
+                                ctx.get(),
+                                pendingEditorContextReplacement->active_context.get(),
+                                pendingEditorContextReplacement->phase
+                                    == EditorContextReplacementPhase::restoring_session
+                                    || pendingEditorContextReplacement->phase
+                                        == EditorContextReplacementPhase::awaiting_restored_frame))
+                        {
+                            // The replacement transaction must observe backend
+                            // readiness before the generic session path can
+                            // restore GUI, font, project, and editor state.
+                            // The backend render loop remains fully active.
+                            backend_has_live_context = true;
+                            continue;
+                        }
+#endif
+
                         auto* win = mgr.findWindowByContext(ctx);
                         if (!win)
                         {
+#if defined(_WIN32)
+                            if (!mgr.IsContextRetired(ctx.get()))
+                            {
+                                backend_has_live_context = true;
+                                continue;
+                            }
+#endif
                             auto it = sessions.find(ctx.get());
                             if (it != sessions.end())
                             {
@@ -6025,6 +6157,13 @@ namespace epochnamespace::core
 
                         if (!win->running || win->get_should_close())
                         {
+#if defined(_WIN32)
+                            if (win->get_should_close() && !mgr.IsContextRetired(ctx.get()))
+                            {
+                                backend_has_live_context = true;
+                                continue;
+                            }
+#endif
                             if (!win->guiRoute.empty())
                                 epochnamespace::editor_notify_context_panel_closed(win->guiRoute);
                             auto existingSession = sessions.find(ctx.get());
@@ -6055,6 +6194,7 @@ namespace epochnamespace::core
 
                         auto [it, inserted] = sessions.try_emplace(ctx.get());
                         auto& session = it->second;
+                        auto pendingRestoreStatus = PendingEditorRestoreStatus::none;
 
                         if (inserted)
                         {
@@ -6085,7 +6225,7 @@ namespace epochnamespace::core
                                 }
                             }
 
-                            const auto pendingRestoreStatus = restore_pending_editor_switch_snapshot(ctx, session, win->guiRoute);
+                            pendingRestoreStatus = restore_pending_editor_switch_snapshot(ctx, session, win->guiRoute);
                             if (pendingRestoreStatus == PendingEditorRestoreStatus::restored)
                             {
                                 logger::get(kEditorLog).logf(
@@ -6103,6 +6243,60 @@ namespace epochnamespace::core
                                     context_type_label(ctx->type));
                             }
                         }
+
+#if defined(_WIN32)
+                        const bool ownsActiveReplacement = pendingEditorContextReplacement
+                            && pendingEditorContextReplacement->phase
+                                == EditorContextReplacementPhase::restoring_session
+                            && pendingEditorContextReplacement->active_context.get() == ctx.get();
+                        if (ownsActiveReplacement)
+                        {
+                            if (pendingRestoreStatus == PendingEditorRestoreStatus::restored)
+                            {
+                                auto& replacement = *pendingEditorContextReplacement;
+                                const auto readyType = replacement.active_type;
+                                win->editorSessionRestoreAckGeneration.store(0, std::memory_order_release);
+                                win->editorSessionRestoreAckQueued.store(false, std::memory_order_release);
+                                replacement.phase = EditorContextReplacementPhase::awaiting_restored_frame;
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::INFO,
+                                    std::source_location::current(),
+                                    "Editor host restored the {} session; retaining transaction ownership through its first restored editor frame.",
+                                    context_type_label(readyType));
+                            }
+                            else
+                            {
+                                auto& replacement = *pendingEditorContextReplacement;
+                                const auto failedType = replacement.active_type;
+                                pendingEditorSwitchSnapshots.erase(
+                                    std::remove_if(
+                                        pendingEditorSwitchSnapshots.begin(),
+                                        pendingEditorSwitchSnapshots.end(),
+                                        [failedType](const auto& item) noexcept
+                                        {
+                                            return item.target_type == failedType
+                                                && item.gui_route.empty()
+                                                && item.close_source_on_restore;
+                                        }),
+                                    pendingEditorSwitchSnapshots.end());
+                                epochnamespace::editor_set_context_selection_status(
+                                    ctx.get(),
+                                    std::string{ "Context switch to " }
+                                        + std::string{ context_type_label(failedType) }
+                                        + " could not restore editor state; retiring it before recovery.");
+                                request_context_window_close(
+                                    ctx.get(),
+                                    "retiring replacement backend after editor session restore failure");
+                                replacement.phase = EditorContextReplacementPhase::retiring_failed_backend;
+                                logger::get(kEditorLog).logf(
+                                    logger::LogLevel::Error,
+                                    std::source_location::current(),
+                                    "Editor host rejected the {} replacement because session restoration did not complete; recovery remains transaction-owned.",
+                                    context_type_label(failedType));
+                                continue;
+                            }
+                        }
+#endif
 
                         const auto now = timing::Clock::now();
                         float dt = 0.0f;
@@ -6248,6 +6442,9 @@ namespace epochnamespace::core
                                 backend_has_live_context = true;
                             else
                             {
+#if defined(_WIN32)
+                                backend_has_live_context = true;
+#else
                                 epochnamespace::editor_notify_context_panel_closed(win->guiRoute);
                                 ctx->clear_scene_viewport();
                                 ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
@@ -6255,6 +6452,7 @@ namespace epochnamespace::core
                                 epochnamespace::cleanup_chat_context(ctx.get());
                                 g_preview_look_states.erase(ctx.get());
                                 sessions.erase(ctx.get());
+#endif
                             }
                             continue;
                         }
@@ -6585,7 +6783,37 @@ namespace epochnamespace::core
 
                             gui::end_frame();
                             if (ctx_running)
+                            {
                                 ctx->present_safe();
+#if defined(_WIN32)
+                                const bool awaitsRestoredFrame = pendingEditorContextReplacement
+                                    && pendingEditorContextReplacement->phase
+                                        == EditorContextReplacementPhase::awaiting_restored_frame
+                                    && pendingEditorContextReplacement->active_context.get() == ctx.get();
+                                if (awaitsRestoredFrame
+                                    && !win->editorSessionRestoreAckQueued.exchange(
+                                        true,
+                                        std::memory_order_acq_rel))
+                                {
+                                    auto* const adoptionWindow = win;
+                                    win->commandQueue.enqueue([adoptionWindow]() noexcept
+                                    {
+                                        const auto completedGeneration =
+                                            adoptionWindow->successfulFrameGeneration.load(std::memory_order_acquire);
+                                        const auto acknowledgementGeneration =
+                                            completedGeneration + 1;
+                                        adoptionWindow->editorSessionRestoreAckGeneration.store(
+                                            acknowledgementGeneration,
+                                            std::memory_order_release);
+                                    });
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::INFO,
+                                        std::source_location::current(),
+                                        "Queued first-restored-frame acknowledgement for {}.",
+                                        context_type_label(ctx->type));
+                                }
+#endif
+                            }
                             break;
                         }
 
@@ -7130,6 +7358,14 @@ namespace epochnamespace::core
 
                         if (!ctx_running)
                         {
+#if defined(_WIN32)
+                            if (!win->get_should_close())
+                            {
+                                win->set_should_close(true);
+                                post_context_window_close(win);
+                            }
+                            backend_has_live_context = true;
+#else
                             ctx->clear_scene_viewport();
                             ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
                             unload_active_scene(session);
@@ -7138,6 +7374,7 @@ namespace epochnamespace::core
                             epochnamespace::cleanup_chat_context(ctx.get());
                             g_preview_look_states.erase(ctx.get());
                             sessions.erase(ctx.get());
+#endif
                         }
                         else
                         {
@@ -7228,6 +7465,8 @@ namespace epochnamespace::core
             }
             g_preview_look_states.clear();
 
+            mgr.StopAll();
+
             auto snapshot2 = collect_backend_contexts_shared();
             for (auto& [type, contexts] : snapshot2)
             {
@@ -7236,7 +7475,6 @@ namespace epochnamespace::core
             }
 
             epochnamespace::shutdown_chat_system();
-            mgr.StopAll();
 
             return 0;
         }

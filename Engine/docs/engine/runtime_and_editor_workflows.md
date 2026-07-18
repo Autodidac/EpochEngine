@@ -162,31 +162,62 @@ the same engine-owned path.
   cleans the old native backend, creates one docked replacement in the same
   host, adopts that exact manager-created context, and restores project, layout,
   selection, camera, timeline, GUI, and font state before normal backend
-  activation. The transaction remains held until the render thread publishes
-  backend-specific readiness. Raylib readiness additionally requires a
-  successful owner-thread GL
-  activation and completed first present; a failed activation skips drawing so
-  `BeginDrawing` never runs against another backend's context. Once adopted,
+  activation. The render thread publishes backend-specific readiness only after
+  its first successful frame, and the transaction remains held until the normal
+  session path restores the editor snapshot and a queue-ordered render-thread
+  acknowledgement proves the first restored editor frame completed. Raylib
+  readiness additionally requires a successful owner-thread GL activation and
+  completed first present; OpenGL also requires first-present evidence. A failed
+  activation skips drawing so `BeginDrawing` never runs against another
+  backend's context. Once adopted,
   Raylib's GLFW child is also reparented and resized through the render-thread
-  command queue so UI-thread layout never blocks its input subclass while the
-  manager window lock is held. The replacement
+  owner queue so UI-thread layout never blocks its input subclass while the
+  manager window lock is held. The host drains that queue before `BeginDrawing`,
+  separately from draw commands, then reapplies the authoritative owner-thread
+  viewport before each frame. A successful `EndDrawing` publishes first-present
+  evidence; replacement completion still waits for queue-ordered editor-state
+  restoration and its acknowledged frame. The replacement
   is never a second editor shell, and unavailable or failed targets remain
   visible failures rather than persisted fake selections.
 - the dropdown transaction, not the generic multicontext scan, owns replacement
   session adoption. Only that exact target is gated and excluded from generic
-  enumeration until its editor state is restored and the backend is ready;
-  unrelated multicontext windows continue normally. Raylib may complete its
-  required first present before waiting at the adoption gate.
+  enumeration until its first successful frame. It then enters the normal
+  session path while remaining transaction-owned and commits only after editor
+  state restoration and the first restored frame succeed; unrelated multicontext
+  windows continue normally. Additional switch requests are rejected throughout
+  adoption. Routed, floating, closing, failed, initializing, or stopped contexts
+  are not eligible as whole-editor targets.
 - normal editor switching owns one live backend at a time. The host keeps its
   parent window alive during the rendererless replacement gap, does not start
   the target until deferred source cleanup is complete, keeps the replacement
-  transaction held through target initialization, and recreates the source
-  backend from the same snapshot when target creation or initialization fails.
+  transaction held through target initialization and session restoration, and
+  recreates the source backend from the same preserved snapshot when target
+  creation, first-frame execution, or restoration fails.
   Backend-owned child HWNDs are closed by their renderer cleanup; the stable
   manager host remains the UI-thread lifetime control and is destroyed only
-  after its renderer thread finishes cleanup. Failed Linux thread initialization
-  also runs backend cleanup before fallback. Mixed-backend grids remain explicit
-  diagnostics and are not this workflow.
+  after its renderer thread finishes cleanup. Active windows, render threads,
+  and deferred cleanup entries transfer under one serialized retirement
+  boundary, so `IsContextRetired` cannot observe a false gap and Release builds
+  cannot race container mutation against cleanup. A backend-owned child window
+  procedure may mark its context stopped, but it must marshal active-window
+  retirement to the manager UI thread instead of mutating session-owned
+  containers from the renderer thread. Backend initialization and cleanup
+  exceptions are contained at the context lifecycle boundary, logged, and
+  converted into failed replacement evidence rather than escaping `noexcept`.
+  Once renderer retirement is proven, the old scene, menu, GUI/font, chat, and
+  preview session is destroyed before the target backend starts. The restore
+  record carries only the editor snapshot and never retains the retired source
+  context for a second close.
+  Raylib's owner-thread resize changes size without replacing the grid-assigned
+  position, restores the native GL viewport at the frame boundary, and teardown
+  clears the destroyed GLFW GL binding before another backend starts. Its
+  owner-thread redock is synchronous. A completed present is the backend's
+  readiness evidence; the session transaction independently owns parent,
+  restoration, and restored-frame acceptance. Adopted
+  Raylib/SDL/SFML child windows forward text and keyboard events to the shared
+  GUI input queue as well as preserving their backend event path. Failed Linux
+  thread initialization also runs backend cleanup before fallback. Mixed-backend
+  grids remain explicit diagnostics and are not this workflow.
 - launcher context switching is not another editor or driver shell; it only
   focuses another registered live dock and reports when none exists
 - `editor.scene.cpp` should own project profiles, script profiles, runtime
@@ -900,6 +931,9 @@ features over forcing every integration on every machine.
   readable
 - repeated identical startup/error lines should collapse instead of flooding the
   console
+- optimized GUI builds write through checked platform console handles and RAII
+  file streams; switching must not depend on unchecked CRT `stdout` or raw
+  `FILE*` lifetime
 - one tagged line per repeated condition is the goal, with subsystem/source
   context still preserved
 

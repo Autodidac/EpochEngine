@@ -30,22 +30,21 @@
  ***********************************************/
 module;
 
+#include <algorithm>
 #include "../include/_epoch.stl_types.hpp"
 #include "../src/cpp_feature_probe.hpp"
 
 #include <chrono>
 #include <cstdint>
-#include <cstdio>        // FILE, fopen/fclose/fwrite/fflush
+#include <filesystem>
+#include <fstream>
 #include <functional>    // std::hash
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <thread>
-
-#if EPOCH_HAS_STD_PRINT
-#  include <print>
-#endif
 
 #if defined(_WIN32)
 #  define WIN32_LEAN_AND_MEAN
@@ -65,7 +64,7 @@ namespace epoch::core::log
         level g_min = level::info;
         bool g_console = true;
         bool g_debugger = false;
-        std::FILE* g_file = nullptr;
+        std::ofstream g_file;
 
         constexpr epoch::string_view lvl_text(level lvl) noexcept
         {
@@ -102,24 +101,52 @@ namespace epoch::core::log
         }
 #endif
 
+        static void write_console(std::string_view line) noexcept
+        {
+#if defined(_WIN32)
+            const HANDLE output = ::GetStdHandle(STD_OUTPUT_HANDLE);
+            if (!output || output == INVALID_HANDLE_VALUE)
+                return;
+
+            const auto write_bytes = [output](std::string_view bytes) noexcept
+            {
+                std::size_t offset = 0;
+                while (offset < bytes.size())
+                {
+                    const std::size_t remaining = bytes.size() - offset;
+                    const DWORD requested = static_cast<DWORD>((std::min)(
+                        remaining,
+                        static_cast<std::size_t>((std::numeric_limits<DWORD>::max)())));
+                    DWORD written = 0;
+                    if (::WriteFile(output, bytes.data() + offset, requested, &written, nullptr) == FALSE
+                        || written == 0)
+                    {
+                        return;
+                    }
+                    offset += written;
+                }
+            };
+
+            write_bytes(line);
+            write_bytes("\n");
+#else
+            std::cout.write(line.data(), static_cast<std::streamsize>(line.size()));
+            std::cout.put('\n');
+#endif
+        }
+
         static void sink_write(epoch::string_view line)
         {
-            // Convert once; std::println wants std::string_view.
             const std::string_view sv = epoch::to_std(line);
 
-#if EPOCH_HAS_STD_PRINT
             if (g_console)
-                std::println("{}", sv);
-#else
-            if (g_console)
-                std::cout << sv << '\n';
-#endif
+                write_console(sv);
 
-            if (g_file)
+            if (g_file.is_open())
             {
-                std::fwrite(sv.data(), 1, sv.size(), g_file);
-                std::fwrite("\n", 1, 1, g_file);
-                std::fflush(g_file);
+                g_file.write(sv.data(), static_cast<std::streamsize>(sv.size()));
+                g_file.put('\n');
+                g_file.flush();
             }
 
 #if defined(_WIN32)
@@ -184,40 +211,33 @@ namespace epoch::core::log
     {
         std::lock_guard lk(g_mtx);
 
-        if (g_file)
-        {
-            std::fclose(g_file);
-            g_file = nullptr;
-        }
+        if (g_file.is_open())
+            g_file.close();
+        g_file.clear();
 
 #if defined(_WIN32)
         const std::wstring wpath = utf8_to_wide(utf8_path);
         if (wpath.empty())
             return false;
 
-        FILE* f = nullptr;
-        if (_wfopen_s(&f, wpath.c_str(), L"ab") != 0)
-            return false;
-
-        g_file = f;
-        return true;
+        g_file.open(
+            std::filesystem::path{ wpath },
+            std::ios::binary | std::ios::app);
 #else
-        // Use std::string_view boundary; do not force epoch::string constructors to accept views.
         const std::string_view sv = epoch::to_std(utf8_path);
-        std::string p(sv);
-        g_file = std::fopen(p.c_str(), "ab");
-        return g_file != nullptr;
+        g_file.open(
+            std::filesystem::path{ std::string{ sv } },
+            std::ios::binary | std::ios::app);
 #endif
+        return g_file.is_open();
     }
 
     void close_file() noexcept
     {
         std::lock_guard lk(g_mtx);
-        if (g_file)
-        {
-            std::fclose(g_file);
-            g_file = nullptr;
-        }
+        if (g_file.is_open())
+            g_file.close();
+        g_file.clear();
     }
 
     void write(level lvl, epoch::string_view tag, epoch::string_view msg)
