@@ -139,7 +139,7 @@ contracts instead of drift.
   non-empty Raylib surface before first-present readiness. MSVC Debug and
   Release editor builds plus both build-safe contract runs pass; focused
   operator Raylib visibility and repeated Release switching remain the runtime
-  acceptance gate. The `v0.88.69` source additionally keeps GUI/session state
+  acceptance gate. The `v0.88.70` source additionally keeps GUI/session state
   alive until renderer retirement is proven, makes native retirement
   notification one-shot, and synchronously joins the old renderer during a
   whole-editor replacement before the new backend is constructed. A

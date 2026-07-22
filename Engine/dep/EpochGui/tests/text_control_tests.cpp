@@ -6,7 +6,7 @@ import epoch.gui;
 
 namespace
 {
-    using namespace epochnamespace::gui_lib;
+    using namespace epochengine::gui_lib;
 
     int check(bool condition, int line)
     {

@@ -1,5 +1,11 @@
 # Epoch Changelog
 
+## [v0.88.70] - Post-release source advancement
+
+- Advance the active development source after the validated v0.88.69
+  Windows/Linux runtime release so packaged installs can detect newer source
+  without changing the sealed packaged-version defaults.
+
 ## [v0.88.69] - Perfect multicontext runtime release
 
 - Restore visible Raylib presentation across standalone, editor context
