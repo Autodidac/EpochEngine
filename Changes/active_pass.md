@@ -385,31 +385,15 @@ Durable cross-pass mission memory lives in `Changes/mission_cache.md`. Keep this
 file focused on the current gate; do not widen a source pass because the cache
 contains broader roadmap work.
 
-## v0.87.54 Release Gate
+## Temporal Architecture Boundary
 
-- Linux full-engine Release builds with current Clang 22.1.8, CMake 4.4.0,
-  Ninja 1.13.2, and vcpkg 2026.06.24.
-- OpenGL, Vulkan, SDL, SFML, Raylib, and Software configure and link together;
-  SFML is the only shared vcpkg component and is staged under `lib/`.
-- Linux CTest and the build-safe engine contract pass from an asset-bearing
-  output. Windows MSVC 2022 Release and the same contract also pass.
+`Engine/docs/engine/temporal_engine_architecture.md` and the temporal mission in
+`Changes/mission_cache.md` define the next foundational campaign. They do not
+widen this sampled-render-target pass. Temporal source work begins in a named
+future pass at `TimePoint`, stable IDs, immutable event serialization, atomic
+transactions, and exact replay tests; it must not begin with networking,
+unscripted AI, full physics, or speculative editor UI.
 
-## v0.87.54 Replacement Linux Startup Gate
-
-- Raylib's embedded GLAD 2 loader is invoked through its actual resolver ABI;
-  Linux OpenGL startup must not call it through GLAD 1's zero-argument API.
-- The packaged executable RUNPATH is exactly `$ORIGIN/lib`, and staged dynamic
-  dependencies must not resolve through vcpkg or build-machine paths.
-- SFML and Vulkan runtime libraries are packaged under `lib/`.
-- Release staging must pass the contract test and a bounded OpenGL editor
-  startup smoke from the isolated package directory.
-
-## v0.87.56 Linux Updater Registry Gate
-
-- Installed vcpkg candidates are accepted only when their checked-out registry
-  contains the source manifest baseline in its ancestry.
-- An updater that hands `build.sh` a stale checkout must recover through an
-  exact-baseline managed checkout under the updater tool cache and rebuild its
-  policy overlays from that checkout.
-- Direct developer builds fail early with a clear stale-registry message unless
-  managed toolchain bootstrap was explicitly requested.
+Renderer work in this pass must remain compatible with that direction: renderers
+consume time-addressed observations, temporal histories are explicitly keyed and
+disposable, and no backend becomes the authoritative owner of simulation time.

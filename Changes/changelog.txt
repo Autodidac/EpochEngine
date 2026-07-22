@@ -7,6 +7,8 @@
   without changing the sealed packaged-version defaults.
 - Derive hosted Linux package names and runtime checks from the canonical
   major, minor, and revision values instead of a hard-coded release series.
+- Adopt the persistent, reversible temporal-engine architecture as a durable
+  mission and reorder roadmap dependencies around its first production slice.
 
 ## [v0.88.69] - Perfect multicontext runtime release
 

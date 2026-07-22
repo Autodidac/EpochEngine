@@ -10,7 +10,9 @@
   `Changes/mission_cache.md` preserves durable cross-pass mission memory,
   `Changes/roadmap.md` is the compact planning contract,
   `Changes/changelog.txt` records version work, `Engine/docs/README.md` is the
-  docs index, `Engine/docs/engine/renderer_feature_matrix.md` owns renderer
+  docs index, `Engine/docs/engine/temporal_engine_architecture.md` owns the
+  persistent/reversible world target,
+  `Engine/docs/engine/renderer_feature_matrix.md` owns renderer
   capability truth, `Engine/docs/engine/runtime_and_editor_workflows.md` owns
   launcher/editor behavior, `Engine/docs/engine/gui_library_architecture.md`
   owns reusable GUI primitives, and

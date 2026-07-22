@@ -209,7 +209,7 @@ after choosing the current source gate from `Changes/active_pass.md`.
 - Package payloads belong under executable-local `cache/packages/` or the
   separate EpochEngineExtensions repo, not in mainline dumps.
 
-## Forest Factory, Voxel, And Time
+## Forest Factory And Voxel
 
 - Forest Factory is a core editor workspace with its own 3D scene/window,
   temporal graph growth, repo-derived asset lineage, voxel-node LOD and
@@ -222,6 +222,77 @@ after choosing the current source gate from `Changes/active_pass.md`.
 - Add universal configurable input profiles, freecam/FPS-style 3D controls,
   center/reset hotkeys, package-exportable input contracts, and project camera
   style selection.
+
+## Temporal World And Reversible Simulation
+
+- `Engine/docs/engine/temporal_engine_architecture.md` is the canonical target
+  architecture for persistent, reversible, event-driven spacetime. It governs
+  implementation ordering; it is not a claim that the complete system exists.
+- Time is a primary world coordinate. Persistent queries use timeline, branch,
+  and `TimePoint`; the renderer consumes a world observation and never owns
+  authoritative time.
+- Keep explicit real, simulation, physics, presentation, animation, effects,
+  audio, network, editor, and replay domains. Direction supports forward,
+  stopped, and backward execution without one universal `deltaTime`.
+- Authoritative mutations are immutable typed events committed through atomic
+  temporal transactions. Persistent state cannot be partially updated, and
+  exact replay tests must cover serialization, idempotence, and crash recovery.
+- The installed base world is immutable. Edits, saves, mods, predictions, and
+  alternate histories are copy-on-write branch overlays containing divergence
+  events, changed immutable pages, local checkpoints, and invalidation records.
+- The world store is content-addressed and page-based. Checkpoint manifests,
+  schema versions, bounded decoding, hashing, deduplication, reference tracking,
+  adaptive checkpoint spacing, and branch garbage collection are core storage
+  contracts rather than project-specific save hacks.
+- Temporal channels declare truth as exact, error-bounded, visual-only, or
+  disposable. Derived GPU buffers, particles, animation matrices, visibility
+  lists, navigation work queues, and caches must be reconstructible.
+- Nondeterminism is identity-keyed or recorded. Persistent simulation cannot
+  depend on global random-call order, thread scheduling, unordered containers,
+  or rerunning an AI model to rediscover an authoritative decision.
+- Continuous motion uses sparse model segments and consequence-aware correction
+  keys. Segment cuts are mandatory at teleports, impulses, collisions, parent
+  changes, route/model changes, and other authoritative discontinuities.
+- Past edits invalidate only their causal future. Dependency records identify
+  affected objects, regions, systems, and time ranges so unrelated history,
+  pages, and checkpoints remain reusable.
+- Persistent regions advance ticklessly between meaningful scheduled changes.
+  Observer demand selects exact interaction, physics, visual, audio, network,
+  editor-recording, and historical-query fidelity without erasing unloaded AI.
+- Backward rendering keys temporal history by timeline, branch, sample time,
+  direction, and camera. Timeline jumps, forks, and direction changes invalidate
+  incompatible TAA, upscaling, motion-vector, exposure, and occlusion history.
+- Grow the render graph into a demand-driven execution graph spanning CPU,
+  SIMD, GPU graphics/compute, transfer, file IO, decompression, page loading,
+  replay, and replication. A unified virtual resource fabric carries stable
+  logical handles across GPU memory, RAM, compressed cache, SSD, and approved
+  reconstruction/content sources.
+- Software is a first-class execution/render device consuming the same world
+  observations, resource handles, geometry clusters, materials, and temporal
+  contracts. It remains the deterministic reference, CI/headless, fallback,
+  remote, and offline path rather than emulating a GPU API.
+- Shared branches are signed, content-addressed packages. Foreign branches are
+  quarantined read-only seeds; a server validates and replays them in isolation
+  before creating its own authoritative branch and durable journal.
+- Clients submit validated commands, never authoritative events. Safe joins
+  begin with server-approved projections and placeholders; optional content is
+  disclosed, classified, consented to, hash-verified, quarantined, and granted
+  bounded capabilities. Native extensions never auto-download or execute.
+- External side effects cross an explicit gateway. Timeline rewind cannot
+  unsend packets, undo purchases, reverse exports, launch processes, or mutate
+  accounts; committed outcomes return as new authoritative events.
+- First production slice, in order: `TimePoint` and stable IDs; immutable event
+  journal; atomic transaction; immutable page checkpoint; local branch overlay;
+  reversible transform edit; arbitrary-time observation; sparse motion segment;
+  analytic particle effect; backward-rendering test; branch export/reimport.
+- Do not begin this campaign with multiplayer, unscripted AI, full physics, or
+  advanced rendering. The first gate must prove exact authored undo, nonlinear
+  redo, compact branching, arbitrary-time reconstruction, branch portability,
+  deterministic replay, and bounded storage growth.
+- After that vertical slice, advance through physics replay, persistent regions,
+  persistent AI, secure branch sharing/import, authoritative networking, optional
+  content negotiation, execution/resource fabric, advanced rendering, then full
+  timeline/editor/administration tools. Each phase stays capability-gated.
 
 ## OS AI And Models
 
@@ -236,7 +307,7 @@ after choosing the current source gate from `Changes/active_pass.md`.
 
 ## Sealed Updater, Release, Linux, And Source Shape
 
-- The published `v0.87.69` runtime and updater are completed, accepted, and
+- The published `v0.88.69` runtime and updater are completed, accepted, and
   untouchable unless the operator explicitly reopens the gate. The remaining
   bullets preserve the proven contract and historical source-shape rules; they
   are not permission to schedule updater, packaging, handoff-script, tag, or

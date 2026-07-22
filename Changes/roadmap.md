@@ -2,10 +2,12 @@
 
 ## Mission
 
-Build Epoch into one professional C++23 engine/editor where projects,
-renderers, GUI, scripting, packages, updates, OS AI tooling, timing, input, and
-voxel/world systems travel through one engine-owned spine instead of becoming
-disconnected experiments.
+Build Epoch into one professional C++23 persistent spacetime engine/editor
+where projects, renderers, GUI, scripting, packages, updates, OS AI tooling,
+input, storage, and simulation travel through one engine-owned spine. Worlds
+are time-addressable immutable histories plus sparse branch overlays; continuous
+detail is reconstructed only where observation, interaction, or authority
+requires it.
 
 ## Non-Negotiables
 
@@ -29,9 +31,12 @@ disconnected experiments.
 
 ## Current Working Contract
 
-The hot path is renderer-resource truth plus reusable source-library growth.
-The published runtime stays at `v0.88.69`; development source may advance
-independently without reopening or changing the sealed updater/release lane.
+The active source gate remains renderer-resource truth plus reusable
+source-library growth. The next foundational campaign is the temporal vertical
+slice described below; it must reuse the current time, scene, renderer, GUI,
+project, and persistence spines instead of forming a parallel engine. The
+published runtime stays at `v0.88.69`; development source may advance
+independently without reopening the sealed updater/release lane.
 
 The current source shape is:
 
@@ -57,36 +62,84 @@ The sealed updater contract is retained as read-only behavior documentation:
 - no active mission may modify this lane until the operator explicitly reopens
   it
 
-The current context contract is exclusive: the normal editor owns one live
-backend, captures state before a switch, fully retires the old render thread and
-native resources, then creates one docked replacement in the same host and
-restores that state. Multicontext grids are diagnostics only. Windows source now
-routes Raylib, SFML, SDL, OpenGL, Vulkan, DirectX, and Software through this
-transaction; runtime acceptance still requires repeated switch proof for state,
-focus, GUI/font refresh, and teardown before release work resumes. The operator
-has accepted SDL, SFML, OpenGL, Vulkan, DirectX, and software switching from the
-  `v0.87.71` source. Raylib's `v0.87.72` gate now requires a completed first
-  present before backend readiness, and `v0.87.73` moves adopted GLFW child layout to
-  the Raylib owner thread to remove the click-time lock inversion. The
-  `v0.87.74` post-readiness pause stalled threaded hardware targets; `v0.87.75`
-  moves exact-target session adoption into the dropdown transaction before
-  normal backend activation and leaves the generic multicontext loop responsible
-  only for unrelated windows until replacement completion. Operator testing
-  exposed source retirement inside the still-active editor frame and early
-  target activation; `v0.87.76` moves retirement to the next manager frame
-  boundary, but the replacement render pause and pre-readiness manual restore
-  still produced hardware hangs. `v0.87.77` keeps the frame boundary and exact
-  target while returning state adoption to the proven normal session path after
-  native readiness. Fresh traces showed that path could still run later in the
-  same frame before transaction completion; `v0.87.78` publishes readiness only
-  after a successful backend frame, defers only the exact replacement while its
-  renderer remains active, and commits only after normal-path state restoration
-  plus the first restored render-frame acknowledgement. Repeat requests are
-  blocked during adoption, and routed/floating/non-ready contexts are excluded
-  from primary-editor adoption. Win32 retirement now transfers window and
-  render-thread ownership atomically, joins renderer cleanup before native host
-  destruction, preserves Raylib's grid position across resize, and clears its
-  deleted GLFW GL binding. All backends require focused repeated-switch rechecks.
+The editor context contract is now the accepted `v0.88.69` baseline: normal
+operation owns one live backend, captures editor state, retires the old render
+thread and native resources, creates one docked replacement, and restores state
+without spawning a second editor. Multicontext remains an explicit diagnostic
+mode. Raylib custom frame control owns flush, buffer swap, and event polling;
+all backends retain deterministic teardown and repeated-switch evidence gates.
+
+## Temporal Engine Campaign
+
+The canonical design is
+`Engine/docs/engine/temporal_engine_architecture.md`. Its code sketches are
+conceptual; production implementation uses `epochengine::`, C++23 modules, and
+the existing source-ownership boundaries. The campaign is additive to the
+current active gate and begins only as bounded source slices with contract tests.
+
+Non-negotiable implementation rules:
+
+- persistent state is queried by timeline, branch, and `TimePoint`
+- authoritative mutation is an immutable event inside an atomic transaction
+- the installed base world is immutable and all saves/edits/mods are
+  copy-on-write branch overlays
+- nondeterminism is identity-keyed or durably recorded
+- derived state is disposable; approximation is declared and error-bounded
+- renderers observe time-addressed world state and do not own authoritative time
+- foreign branches and optional active content are quarantined and never become
+  invisible server authority
+- clients send commands; servers emit and durably commit authoritative events
+- irreversible side effects cross a policy gateway and cannot be rewound
+
+Implementation waves:
+
+1. Temporal primitives and event spine: stable IDs, explicit domains/direction,
+   canonical event serialization, atomic transactions, exact replay tests.
+2. Immutable world storage and local branches: page store, checkpoint manifests,
+   copy-on-write overlays, arbitrary-time observation, nonlinear undo/redo, GC.
+3. Reversible state: sparse motion models, correction keys, symmetry/error
+   contracts, analytic effects, animation causes, backward-rendering history.
+4. Persistent simulation: replayable physics checkpoints, scheduled tickless
+   regions, observer-driven fidelity, persistent agents, recorded AI decisions.
+5. Sharing and authority: signed branch packages, quarantine/import, server-owned
+   branches, client commands/prediction, safe content offers and capabilities.
+6. Execution and presentation: general execution graph, virtual resource fabric,
+   software parity, cluster geometry, advanced temporal rendering, timeline and
+   administration tools.
+
+First acceptance path:
+
+`TimePoint -> event journal -> transaction -> page checkpoint -> branch overlay
+-> reversible transform -> arbitrary-time observation -> sparse motion ->
+analytic effect -> backward-rendering test -> branch export/reimport`
+
+This path must prove exact authored undo, nonlinear redo, deterministic replay,
+compact portable branches, arbitrary-time reconstruction, and bounded storage
+before multiplayer, unscripted AI, full physics, or advanced rendering expands.
+
+## Current Push Order
+
+1. Preserve the sealed `v0.88.69` Windows/Linux runtime and updater baseline.
+   Source work stays on `v0.88.70` or later without touching release assets.
+2. Finish the active sampled render-to-texture gate with backend-native resource
+   truth, capability evidence, build-safe contracts, and no GUI draw regression.
+3. Start the temporal first production slice at primitives and transactions.
+   Land only build-proven vertical pieces; do not scaffold all sixteen phases.
+4. Connect immutable pages, branch overlays, reversible transform edits, and
+   arbitrary-time observation to real project-owned scene persistence.
+5. Make Video and the scene timeline consume the temporal model for scrub,
+   direction, branch, checkpoint, undo, and redo UI after the data spine exists.
+6. Continue EpochGui migration, professional docking/text/input behavior, and
+   project/editor maturity without embedding temporal authority in GUI code.
+7. Resume OS AI growth only through recorded decisions, named random streams,
+   evidence-backed tools, and explicit operator selection; no hidden autonomy.
+8. Add persistent regions, physics replay, branch sharing, networking, and
+   optional content in the documented dependency order. Server/listener and
+   active-content execution remain opt-in human-approved capabilities.
+9. Keep renderer capability truth, software reference parity, Android single-
+   context bring-up, and generated project/build metadata aligned as touched.
+10. Keep bulky optional packages in EpochEngineExtensions and reusable GUI in
+    EpochGui; synchronize dependency repos only when their owned contracts move.
 
 ## High-Output Source Strategy
 
@@ -114,11 +167,13 @@ Current split lanes:
   ownership, backend shutdown, focus evidence
 - renderer resource truth: sampled RTT, graph binding, resource devices,
   capability status/proof layers
+- temporal world: explicit domains, event journal, immutable pages, branch
+  overlays, arbitrary-time observation, sparse reversible state
 - package/project: package activation, generated project parity, scene
   persistence, cache/package boundaries
 - OS AI: selected external model control, evidence gates, no hidden autonomy
 
-## Acceptance Gates
+## Source Pass Acceptance Gates
 
 - `Changes/active_pass.md` names one source gate and its allowed source areas.
 - `Engine/docs/engine/renderer_feature_matrix.md` uses:
@@ -1637,61 +1692,7 @@ engine shape and should be treated as starting truth for the next passes:
   stable mobile renderer path over broad backend count
 - document exactly what works, what is partial, and what is still missing
 
-## Current Push Order
-
-1. Preserve the `v0.87.09` editor/resource checkpoint: Raylib, SDL, SFML,
-   Vulkan, OpenGL, and DirectX must keep real panes, visible scene previews,
-   Inspector, AI Chat, stable GUI-over-scene composition, curated command menus,
-   and modal top-layer behavior. Any remaining mismatched clear/color/depth,
-   graph, or context-opacity behavior must be captured and fixed or explicitly
-   deferred with proof.
-2. Keep GitHub/workflow reliability and local/hosted build truth aligned after
-   the headless plus Linux Clang engine split.
-3. Move Phase 5 to the front: implement the smallest real OS AI closed-loop
-   control slice using the current sandbox/evidence paths. Required parts are
-   working memory, staged goal packet, visible executor action, verifier
-   evidence, score/gate result, notes update, and no hidden autonomy.
-4. Strengthen the System Info workspace with deeper pacing diagnostics and
-   backend convergence guidance, including present/partial/missing renderer
-   feature status from the feature matrix, backend-native mesh/model allocation
-   proof, sampled-RTT descriptor contract, build graph proof, hook readiness,
-   live native allocation readiness, no-runtime refusal guards, presentation
-   proof, and mini-arcade graph parity.
-5. Carry the time spine deeper into runtime and scene ownership.
-6. Keep UI/editor maturity moving forward, especially text/input reliability,
-   shell polish, drag/drop, and backend-window stability.
-7. Complete the primitive/object system and keep it aligned with the project
-   runtime shell.
-8. Replace metadata-only `.epoch` scene shells with real project-owned
-   scene loading, editing, saving, and play/runtime handoff.
-9. Start Android with an honest single-context bring-up, touch/input
-   integration, packaging/install path, and asset-resolution discipline.
-10. Promote the first-pass file browser, script starter creator, and asset cards
-   into professional bounded editor controls with decoded thumbnails and
-   editable script/source panes.
-11. Promote the Package Manager modal from local `engine_arcade` runtime-minis
-    into a reviewable package workflow for local and downloadable source
-    packages, with explicit human approval before build/run and no auto-created
-    servers or hidden model-accessible channels.
-    The active UI direction is a reusable list/action/detail surface, not a
-    combo-box-only modal: packages should show status, provenance, install or
-    remove actions, review-gate state, and bounded progress without bleeding into
-    the scene or Console Dock.
-    Network/server packages must keep the same boundary: shared network runtime
-    contracts may be inert engine capabilities, optional authoritative
-    dedicated headless server support must be a deliberate project choice, and
-    client listen/nondedicated or future client-predicted competitive paths must
-    stay separate opt-in packages so software and single-player outputs do not
-    inherit unnecessary bloat or attack surface.
-    Bulky package source belongs in
-    `https://github.com/Autodidac/EpochEngineExtensions`; EpochEngine mainline
-    keeps descriptors, security gates, updater/cache paths, and stable API
-    contracts while downloaded/generated payloads land under
-    executable-local `cache/packages/`.
-12. Continue safe include/src restructuring and MSVC/CMake synchronization
-   whenever touched areas can be normalized without collateral damage.
-
-## Acceptance Gates
+## Product Acceptance Gates
 
 - The editor runs real projects/scenes instead of sample-launch illusions.
 - Scene/world files load, save, and drive preview/runtime state instead of
@@ -1704,8 +1705,14 @@ engine shape and should be treated as starting truth for the next passes:
 - Renderer feature support is tracked through the feature matrix and only
   marked complete after backend-specific validation or an explicit deferral
   note.
-- The engine owns one shared simulation clock and exposes real time controls
-  through Video and the bottom scene timeline strip.
+- The engine owns explicit time domains and a time-addressable world observation
+  contract. Video and the bottom scene timeline expose presentation controls but
+  do not become the authoritative state owner.
+- Exact authored undo/redo and arbitrary-time observation are not complete until
+  event transactions, immutable page checkpoints, copy-on-write branch overlays,
+  deterministic replay, and bounded-storage tests all pass.
+- Reverse rendering claims require timeline/branch/direction-keyed history and
+  explicit invalidation proof for jumps, forks, and direction changes.
 - Multicontext proof stays honest:
   all six panes are real, detached shells behave like real top-level windows,
   and helper hosts do not linger incorrectly.

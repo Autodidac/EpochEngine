@@ -46,6 +46,9 @@ Build-system reality to keep in mind:
 
 - `engine/current_engine_architecture.md` - current architecture snapshot,
   strengths, cautions, and priorities
+- `engine/temporal_engine_architecture.md` - target persistent, reversible,
+  event-driven spacetime architecture, invariants, phased campaign, and first
+  production slice
 - `engine/runtime_and_editor_workflows.md` - project-centric runtime, editor,
   scripting, systems, and updater behavior
 - `engine/gui_library_architecture.md` - shared engine GUI primitives, layout,
