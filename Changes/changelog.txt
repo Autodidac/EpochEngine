@@ -5,6 +5,8 @@
 - Advance the active development source after the validated v0.88.69
   Windows/Linux runtime release so packaged installs can detect newer source
   without changing the sealed packaged-version defaults.
+- Derive hosted Linux package names and runtime checks from the canonical
+  major, minor, and revision values instead of a hard-coded release series.
 
 ## [v0.88.69] - Perfect multicontext runtime release
 
